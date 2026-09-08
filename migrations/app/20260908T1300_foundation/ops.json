@@ -1,0 +1,2071 @@
+[
+  {
+    "id": "schema.public",
+    "label": "Create schema \"public\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [],
+    "execute": [
+      {
+        "description": "Create schema \"public\"",
+        "sql": "CREATE SCHEMA IF NOT EXISTS \"public\"",
+        "params": []
+      }
+    ],
+    "postcheck": []
+  },
+  {
+    "id": "table.account",
+    "label": "Create table \"account\"",
+    "summary": "Creates table \"account\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "account"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"account\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"account\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"account\"",
+        "sql": "CREATE TABLE \"public\".\"account\" (\n  \"accessToken\" text,\n  \"accessTokenExpiresAt\" timestamptz,\n  \"accountId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"idToken\" text,\n  \"password\" text,\n  \"providerId\" text NOT NULL,\n  \"refreshToken\" text,\n  \"refreshTokenExpiresAt\" timestamptz,\n  \"scope\" text,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"account\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"account\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.activity_event",
+    "label": "Create table \"activity_event\"",
+    "summary": "Creates table \"activity_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "activity_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"activity_event\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"activity_event\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"activity_event\"",
+        "sql": "CREATE TABLE \"public\".\"activity_event\" (\n  \"id\" text NOT NULL,\n  \"message\" text NOT NULL,\n  \"occurredAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"type\" text NOT NULL,\n  \"userId\" text,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"activity_event\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"activity_event\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.booster_access",
+    "label": "Create table \"booster_access\"",
+    "summary": "Creates table \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"booster_access\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"booster_access\"",
+        "sql": "CREATE TABLE \"public\".\"booster_access\" (\n  \"approvedAt\" timestamptz,\n  \"approvedById\" text,\n  \"characterId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"notes\" text,\n  \"role\" text NOT NULL,\n  \"status\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  \"wowClass\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"booster_access_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')),\n  CONSTRAINT \"booster_access_role_check_b1616ae6\" CHECK (\"role\" IN ('TANK', 'HEALER', 'DPS')),\n  CONSTRAINT \"booster_access_status_check_3260663c\" CHECK (\"status\" IN ('PENDING', 'APPROVED', 'REVOKED')),\n  CONSTRAINT \"booster_access_wowClass_check_8876c2a5\" CHECK (\"wowClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"booster_access\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.character",
+    "label": "Create table \"character\"",
+    "summary": "Creates table \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"character\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"character\"",
+        "sql": "CREATE TABLE \"public\".\"character\" (\n  \"blizzardCharacterId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true NOT NULL,\n  \"itemLevel\" int4 NOT NULL,\n  \"lastSyncedAt\" timestamptz,\n  \"name\" text NOT NULL,\n  \"primaryRole\" text NOT NULL,\n  \"realm\" text NOT NULL,\n  \"region\" text NOT NULL,\n  \"specialization\" text,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  \"warcraftLogsId\" text,\n  \"wowClass\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"character_primaryRole_check_1fa7067b\" CHECK (\"primaryRole\" IN ('TANK', 'HEALER', 'DPS')),\n  CONSTRAINT \"character_region_check_0ad0075e\" CHECK (\"region\" IN ('EU', 'US')),\n  CONSTRAINT \"character_wowClass_check_8876c2a5\" CHECK (\"wowClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"character\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.character_raid_lockout",
+    "label": "Create table \"character_raid_lockout\"",
+    "summary": "Creates table \"character_raid_lockout\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"character_raid_lockout\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"character_raid_lockout\"",
+        "sql": "CREATE TABLE \"public\".\"character_raid_lockout\" (\n  \"bossesDefeated\" int4 DEFAULT 0 NOT NULL,\n  \"characterId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"isComplete\" bool DEFAULT false NOT NULL,\n  \"raidId\" text NOT NULL,\n  \"resetIdentifier\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"character_raid_lockout_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"character_raid_lockout\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.raid",
+    "label": "Create table \"raid\"",
+    "summary": "Creates table \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"raid\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raid\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"raid\"",
+        "sql": "CREATE TABLE \"public\".\"raid\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true NOT NULL,\n  \"name\" text NOT NULL,\n  \"season\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"raid\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raid\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.raid_boss",
+    "label": "Create table \"raid_boss\"",
+    "summary": "Creates table \"raid_boss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "raid_boss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"raid_boss\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raid_boss\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"raid_boss\"",
+        "sql": "CREATE TABLE \"public\".\"raid_boss\" (\n  \"id\" text NOT NULL,\n  \"name\" text NOT NULL,\n  \"raidId\" text NOT NULL,\n  \"sortOrder\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"raid_boss\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raid_boss\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run",
+    "label": "Create table \"run\"",
+    "summary": "Creates table \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run\"",
+        "sql": "CREATE TABLE \"public\".\"run\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"desiredDpsCount\" int4 NOT NULL,\n  \"desiredHealerCount\" int4 NOT NULL,\n  \"desiredTankCount\" int4 NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"notes\" text,\n  \"raidId\" text NOT NULL,\n  \"raidLeadId\" text NOT NULL,\n  \"scheduledStartAt\" timestamptz NOT NULL,\n  \"signupsOpen\" bool DEFAULT false NOT NULL,\n  \"status\" text NOT NULL,\n  \"title\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')),\n  CONSTRAINT \"run_status_check_e1302b27\" CHECK (\"status\" IN ('DRAFT', 'OPEN', 'ROSTERING', 'PUBLISHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_signup",
+    "label": "Create table \"run_signup\"",
+    "summary": "Creates table \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_signup\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_signup\"",
+        "sql": "CREATE TABLE \"public\".\"run_signup\" (\n  \"characterId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"isBackup\" bool DEFAULT false NOT NULL,\n  \"lootbuddyWillPlay\" bool,\n  \"notes\" text,\n  \"participationType\" text NOT NULL,\n  \"role\" text,\n  \"runId\" text NOT NULL,\n  \"status\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_signup_participationType_check_c88ba3d2\" CHECK (\"participationType\" IN ('BOOSTER', 'LOOTBUDDY')),\n  CONSTRAINT \"run_signup_role_check_b1616ae6\" CHECK (\"role\" IN ('TANK', 'HEALER', 'DPS')),\n  CONSTRAINT \"run_signup_status_check_d46a9d36\" CHECK (\"status\" IN ('PENDING', 'SELECTED', 'NOT_SELECTED', 'WITHDRAWN'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_signup\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.session",
+    "label": "Create table \"session\"",
+    "summary": "Creates table \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"session\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"session\"",
+        "sql": "CREATE TABLE \"public\".\"session\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"ipAddress\" text,\n  \"token\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userAgent\" text,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"session\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.user",
+    "label": "Create table \"user\"",
+    "summary": "Creates table \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"user\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"user\"",
+        "sql": "CREATE TABLE \"public\".\"user\" (\n  \"accountRole\" text DEFAULT 'USER' NOT NULL,\n  \"accountStatus\" text DEFAULT 'ACTIVE' NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"discordUserId\" text,\n  \"discordUsername\" text,\n  \"email\" text,\n  \"emailVerified\" bool DEFAULT false NOT NULL,\n  \"id\" text NOT NULL,\n  \"image\" text,\n  \"name\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"user_accountRole_check_bf325bd2\" CHECK (\"accountRole\" IN ('USER', 'RAID_LEAD', 'ADMIN')),\n  CONSTRAINT \"user_accountStatus_check_1cc0af98\" CHECK (\"accountStatus\" IN ('ACTIVE', 'DISABLED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"user\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.verification",
+    "label": "Create table \"verification\"",
+    "summary": "Creates table \"verification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "verification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"verification\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"verification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"verification\"",
+        "sql": "CREATE TABLE \"public\".\"verification\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"identifier\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"value\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"verification\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"verification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.booster_access.booster_access_userId_wowClass_role_difficulty_key",
+    "label": "Add unique constraint on \"booster_access\" (userId, wowClass, role, difficulty)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "booster_access_userId_wowClass_role_difficulty_key",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_access_userId_wowClass_role_difficulty_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_userId_wowClass_role_difficulty_key",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"booster_access_userId_wowClass_role_difficulty_key\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" ADD CONSTRAINT \"booster_access_userId_wowClass_role_difficulty_key\" UNIQUE (\"userId\", \"wowClass\", \"role\", \"difficulty\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_access_userId_wowClass_role_difficulty_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_userId_wowClass_role_difficulty_key",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character_raid_lockout.character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key",
+    "label": "Add unique constraint on \"character_raid_lockout\" (characterId, raidId, difficulty, resetIdentifier)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key",
+        "table": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key",
+          "public",
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key\"",
+        "sql": "ALTER TABLE \"public\".\"character_raid_lockout\" ADD CONSTRAINT \"character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key\" UNIQUE (\"characterId\", \"raidId\", \"difficulty\", \"resetIdentifier\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_raid_lockout_characterId_raidId_difficulty_resetIdentifier_key",
+          "public",
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_signup.run_signup_runId_userId_characterId_participationType_key",
+    "label": "Add unique constraint on \"run_signup\" (runId, userId, characterId, participationType)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_signup_runId_userId_characterId_participationType_key",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_runId_userId_characterId_participationType_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_runId_userId_characterId_participationType_key",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_signup_runId_userId_characterId_participationType_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD CONSTRAINT \"run_signup_runId_userId_characterId_participationType_key\" UNIQUE (\"runId\", \"userId\", \"characterId\", \"participationType\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_runId_userId_characterId_participationType_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_runId_userId_characterId_participationType_key",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.session.session_token_key",
+    "label": "Add unique constraint on \"session\" (token)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "session_token_key",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_token_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_token_key",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"session_token_key\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_token_key\" UNIQUE (\"token\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_token_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_token_key",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.user.user_email_key",
+    "label": "Add unique constraint on \"user\" (email)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "user_email_key",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_email_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_email_key",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"user_email_key\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD CONSTRAINT \"user_email_key\" UNIQUE (\"email\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_email_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_email_key",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.user.user_discordUserId_key",
+    "label": "Add unique constraint on \"user\" (discordUserId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "user_discordUserId_key",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_discordUserId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_discordUserId_key",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"user_discordUserId_key\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD CONSTRAINT \"user_discordUserId_key\" UNIQUE (\"discordUserId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_discordUserId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_discordUserId_key",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.account.account_userId_idx_a489d58a",
+    "label": "Create index \"account_userId_idx_a489d58a\" on \"account\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "account_userId_idx_a489d58a",
+        "table": "account"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"account_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"account_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"account_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"account_userId_idx_a489d58a\" ON \"public\".\"account\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"account_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"account_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.activity_event.activity_event_occurredAt_idx_c6b89167",
+    "label": "Create index \"activity_event_occurredAt_idx_c6b89167\" on \"activity_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "activity_event_occurredAt_idx_c6b89167",
+        "table": "activity_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"activity_event_occurredAt_idx_c6b89167\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"activity_event_occurredAt_idx_c6b89167\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"activity_event_occurredAt_idx_c6b89167\"",
+        "sql": "CREATE INDEX \"activity_event_occurredAt_idx_c6b89167\" ON \"public\".\"activity_event\" (\"occurredAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"activity_event_occurredAt_idx_c6b89167\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"activity_event_occurredAt_idx_c6b89167\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.activity_event.activity_event_userId_idx_a489d58a",
+    "label": "Create index \"activity_event_userId_idx_a489d58a\" on \"activity_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "activity_event_userId_idx_a489d58a",
+        "table": "activity_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"activity_event_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"activity_event_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"activity_event_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"activity_event_userId_idx_a489d58a\" ON \"public\".\"activity_event\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"activity_event_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"activity_event_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_access.booster_access_approvedById_idx_01ef8410",
+    "label": "Create index \"booster_access_approvedById_idx_01ef8410\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_access_approvedById_idx_01ef8410",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_access_approvedById_idx_01ef8410\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_approvedById_idx_01ef8410\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_access_approvedById_idx_01ef8410\"",
+        "sql": "CREATE INDEX \"booster_access_approvedById_idx_01ef8410\" ON \"public\".\"booster_access\" (\"approvedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_access_approvedById_idx_01ef8410\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_approvedById_idx_01ef8410\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_access.booster_access_characterId_idx_2423fe9d",
+    "label": "Create index \"booster_access_characterId_idx_2423fe9d\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_access_characterId_idx_2423fe9d",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_access_characterId_idx_2423fe9d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_characterId_idx_2423fe9d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_access_characterId_idx_2423fe9d\"",
+        "sql": "CREATE INDEX \"booster_access_characterId_idx_2423fe9d\" ON \"public\".\"booster_access\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_access_characterId_idx_2423fe9d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_characterId_idx_2423fe9d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_access.booster_access_userId_idx_a489d58a",
+    "label": "Create index \"booster_access_userId_idx_a489d58a\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_access_userId_idx_a489d58a",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_access_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_access_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"booster_access_userId_idx_a489d58a\" ON \"public\".\"booster_access\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_access_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.character.character_userId_idx_a489d58a",
+    "label": "Create index \"character_userId_idx_a489d58a\" on \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "character_userId_idx_a489d58a",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"character_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"character_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"character_userId_idx_a489d58a\" ON \"public\".\"character\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"character_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.character_raid_lockout.character_raid_lockout_characterId_idx_2423fe9d",
+    "label": "Create index \"character_raid_lockout_characterId_idx_2423fe9d\" on \"character_raid_lockout\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "character_raid_lockout_characterId_idx_2423fe9d",
+        "table": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"character_raid_lockout_characterId_idx_2423fe9d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_raid_lockout_characterId_idx_2423fe9d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"character_raid_lockout_characterId_idx_2423fe9d\"",
+        "sql": "CREATE INDEX \"character_raid_lockout_characterId_idx_2423fe9d\" ON \"public\".\"character_raid_lockout\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"character_raid_lockout_characterId_idx_2423fe9d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_raid_lockout_characterId_idx_2423fe9d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.character_raid_lockout.character_raid_lockout_raidId_idx_996eeca9",
+    "label": "Create index \"character_raid_lockout_raidId_idx_996eeca9\" on \"character_raid_lockout\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "character_raid_lockout_raidId_idx_996eeca9",
+        "table": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"character_raid_lockout_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_raid_lockout_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"character_raid_lockout_raidId_idx_996eeca9\"",
+        "sql": "CREATE INDEX \"character_raid_lockout_raidId_idx_996eeca9\" ON \"public\".\"character_raid_lockout\" (\"raidId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"character_raid_lockout_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_raid_lockout_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.raid_boss.raid_boss_raidId_idx_996eeca9",
+    "label": "Create index \"raid_boss_raidId_idx_996eeca9\" on \"raid_boss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "raid_boss_raidId_idx_996eeca9",
+        "table": "raid_boss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"raid_boss_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raid_boss_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"raid_boss_raidId_idx_996eeca9\"",
+        "sql": "CREATE INDEX \"raid_boss_raidId_idx_996eeca9\" ON \"public\".\"raid_boss\" (\"raidId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"raid_boss_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raid_boss_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run.run_raidId_idx_996eeca9",
+    "label": "Create index \"run_raidId_idx_996eeca9\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_raidId_idx_996eeca9",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_raidId_idx_996eeca9\"",
+        "sql": "CREATE INDEX \"run_raidId_idx_996eeca9\" ON \"public\".\"run\" (\"raidId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run.run_raidLeadId_idx_e271c2cb",
+    "label": "Create index \"run_raidLeadId_idx_e271c2cb\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_raidLeadId_idx_e271c2cb",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_raidLeadId_idx_e271c2cb\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raidLeadId_idx_e271c2cb\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_raidLeadId_idx_e271c2cb\"",
+        "sql": "CREATE INDEX \"run_raidLeadId_idx_e271c2cb\" ON \"public\".\"run\" (\"raidLeadId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_raidLeadId_idx_e271c2cb\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raidLeadId_idx_e271c2cb\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run.run_scheduledStartAt_idx_16bf47c9",
+    "label": "Create index \"run_scheduledStartAt_idx_16bf47c9\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_scheduledStartAt_idx_16bf47c9",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_scheduledStartAt_idx_16bf47c9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_scheduledStartAt_idx_16bf47c9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_scheduledStartAt_idx_16bf47c9\"",
+        "sql": "CREATE INDEX \"run_scheduledStartAt_idx_16bf47c9\" ON \"public\".\"run\" (\"scheduledStartAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_scheduledStartAt_idx_16bf47c9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_scheduledStartAt_idx_16bf47c9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run.run_status_idx_e98638ab",
+    "label": "Create index \"run_status_idx_e98638ab\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_status_idx_e98638ab",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"run_status_idx_e98638ab\" ON \"public\".\"run\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_signup.run_signup_characterId_idx_2423fe9d",
+    "label": "Create index \"run_signup_characterId_idx_2423fe9d\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_signup_characterId_idx_2423fe9d",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_signup_characterId_idx_2423fe9d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_characterId_idx_2423fe9d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_signup_characterId_idx_2423fe9d\"",
+        "sql": "CREATE INDEX \"run_signup_characterId_idx_2423fe9d\" ON \"public\".\"run_signup\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_signup_characterId_idx_2423fe9d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_characterId_idx_2423fe9d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_signup.run_signup_runId_idx_a6016437",
+    "label": "Create index \"run_signup_runId_idx_a6016437\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_signup_runId_idx_a6016437",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_signup_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_signup_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_signup_runId_idx_a6016437\" ON \"public\".\"run_signup\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_signup_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_signup.run_signup_userId_idx_a489d58a",
+    "label": "Create index \"run_signup_userId_idx_a489d58a\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_signup_userId_idx_a489d58a",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_signup_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_signup_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"run_signup_userId_idx_a489d58a\" ON \"public\".\"run_signup\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_signup_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.session.session_userId_idx_a489d58a",
+    "label": "Create index \"session_userId_idx_a489d58a\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "session_userId_idx_a489d58a",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"session_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"session_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"session_userId_idx_a489d58a\" ON \"public\".\"session\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"session_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.account.account_userId_fkey",
+    "label": "Add foreign key \"account_userId_fkey\" on \"account\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "account_userId_fkey",
+        "table": "account"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"account_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "account_userId_fkey",
+          "public",
+          "\"public\".\"account\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"account_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"account\"\nADD CONSTRAINT \"account_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"account_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "account_userId_fkey",
+          "public",
+          "\"public\".\"account\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.activity_event.activity_event_userId_fkey",
+    "label": "Add foreign key \"activity_event_userId_fkey\" on \"activity_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "activity_event_userId_fkey",
+        "table": "activity_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"activity_event_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "activity_event_userId_fkey",
+          "public",
+          "\"public\".\"activity_event\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"activity_event_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"activity_event\"\nADD CONSTRAINT \"activity_event_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"activity_event_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "activity_event_userId_fkey",
+          "public",
+          "\"public\".\"activity_event\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_access.booster_access_userId_fkey",
+    "label": "Add foreign key \"booster_access_userId_fkey\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_access_userId_fkey",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_access_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_userId_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_access_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\"\nADD CONSTRAINT \"booster_access_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_access_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_userId_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_access.booster_access_characterId_fkey",
+    "label": "Add foreign key \"booster_access_characterId_fkey\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_access_characterId_fkey",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_access_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_characterId_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_access_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\"\nADD CONSTRAINT \"booster_access_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_access_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_characterId_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_access.booster_access_approvedById_fkey",
+    "label": "Add foreign key \"booster_access_approvedById_fkey\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_access_approvedById_fkey",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_access_approvedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_approvedById_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_access_approvedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\"\nADD CONSTRAINT \"booster_access_approvedById_fkey\"\nFOREIGN KEY (\"approvedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_access_approvedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_approvedById_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.character.character_userId_fkey",
+    "label": "Add foreign key \"character_userId_fkey\" on \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "character_userId_fkey",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"character_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_userId_fkey",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"character_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"character\"\nADD CONSTRAINT \"character_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"character_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_userId_fkey",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.character_raid_lockout.character_raid_lockout_characterId_fkey",
+    "label": "Add foreign key \"character_raid_lockout_characterId_fkey\" on \"character_raid_lockout\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "character_raid_lockout_characterId_fkey",
+        "table": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"character_raid_lockout_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_raid_lockout_characterId_fkey",
+          "public",
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"character_raid_lockout_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"character_raid_lockout\"\nADD CONSTRAINT \"character_raid_lockout_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"character_raid_lockout_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_raid_lockout_characterId_fkey",
+          "public",
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.character_raid_lockout.character_raid_lockout_raidId_fkey",
+    "label": "Add foreign key \"character_raid_lockout_raidId_fkey\" on \"character_raid_lockout\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "character_raid_lockout_raidId_fkey",
+        "table": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"character_raid_lockout_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_raid_lockout_raidId_fkey",
+          "public",
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"character_raid_lockout_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"character_raid_lockout\"\nADD CONSTRAINT \"character_raid_lockout_raidId_fkey\"\nFOREIGN KEY (\"raidId\")\nREFERENCES \"public\".\"raid\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"character_raid_lockout_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_raid_lockout_raidId_fkey",
+          "public",
+          "\"public\".\"character_raid_lockout\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.raid_boss.raid_boss_raidId_fkey",
+    "label": "Add foreign key \"raid_boss_raidId_fkey\" on \"raid_boss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "raid_boss_raidId_fkey",
+        "table": "raid_boss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"raid_boss_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "raid_boss_raidId_fkey",
+          "public",
+          "\"public\".\"raid_boss\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"raid_boss_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"raid_boss\"\nADD CONSTRAINT \"raid_boss_raidId_fkey\"\nFOREIGN KEY (\"raidId\")\nREFERENCES \"public\".\"raid\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"raid_boss_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "raid_boss_raidId_fkey",
+          "public",
+          "\"public\".\"raid_boss\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run.run_raidId_fkey",
+    "label": "Add foreign key \"run_raidId_fkey\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_raidId_fkey",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raidId_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run\"\nADD CONSTRAINT \"run_raidId_fkey\"\nFOREIGN KEY (\"raidId\")\nREFERENCES \"public\".\"raid\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raidId_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run.run_raidLeadId_fkey",
+    "label": "Add foreign key \"run_raidLeadId_fkey\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_raidLeadId_fkey",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_raidLeadId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raidLeadId_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_raidLeadId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run\"\nADD CONSTRAINT \"run_raidLeadId_fkey\"\nFOREIGN KEY (\"raidLeadId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_raidLeadId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raidLeadId_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_signup.run_signup_runId_fkey",
+    "label": "Add foreign key \"run_signup_runId_fkey\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_signup_runId_fkey",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_signup_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_runId_fkey",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_signup_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\"\nADD CONSTRAINT \"run_signup_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_signup_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_runId_fkey",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_signup.run_signup_userId_fkey",
+    "label": "Add foreign key \"run_signup_userId_fkey\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_signup_userId_fkey",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_signup_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_userId_fkey",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_signup_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\"\nADD CONSTRAINT \"run_signup_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_signup_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_userId_fkey",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_signup.run_signup_characterId_fkey",
+    "label": "Add foreign key \"run_signup_characterId_fkey\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_signup_characterId_fkey",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_signup_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_characterId_fkey",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_signup_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\"\nADD CONSTRAINT \"run_signup_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_signup_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_characterId_fkey",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.session.session_userId_fkey",
+    "label": "Add foreign key \"session_userId_fkey\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "session_userId_fkey",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"session_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_userId_fkey",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"session_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"session\"\nADD CONSTRAINT \"session_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"session_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_userId_fkey",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  }
+]

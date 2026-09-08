@@ -1,0 +1,16 @@
+---
+description: Boostting Bot must keep Model-View-Controller-Service boundaries.
+alwaysApply: true
+---
+
+# MVCS architecture
+
+Business logic belongs in Services. Controllers stay thin: authenticate, authorize, validate, call a service, return a result. Views render prepared data and must not query Prisma or encode domain state transitions.
+
+Dependency direction:
+
+```text
+View → Controller → Service → Repository / Model / Database
+```
+
+Account roles (USER, RAID_LEAD, ADMIN) are not booster/lootbuddy identities. BOOSTER and LOOTBUDDY are run participation types. Booster eligibility is granular by class, role, and difficulty. Character lockouts are scoped to character + raid + difficulty + reset.

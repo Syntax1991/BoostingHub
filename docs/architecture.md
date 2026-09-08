@@ -1,0 +1,95 @@
+# Architecture
+
+Boostting Bot is a modular Next.js application with an internal **MVCS** boundary. There is no separate backend service.
+
+## Stack
+
+- Next.js 16.3 App Router, React, TypeScript, Tailwind CSS
+- PostgreSQL 15+
+- Prisma ORM 8 for domain persistence
+- Better Auth for sessions and OAuth
+- Zod at HTTP/form boundaries
+
+MVCS is used because later boosting operations will accumulate non-trivial rules around eligibility, lockouts, rostering, attendance, and payouts. Those rules must stay testable outside React trees.
+
+## Layer responsibilities
+
+### Model
+
+Persistent domain entities, Prisma contract, relationships, and domain enums. No presentation logic.
+
+### View
+
+React pages and components: layout, tables, badges, filters, empty states. Views consume prepared data. They do not query Prisma and do not decide whether a signup transition is legal.
+
+Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
+
+### Controller
+
+Server actions, route handlers, and page loaders. Typical shape:
+
+1. Authenticate
+2. Authorize
+3. Validate input
+4. Call a service
+5. Return a result
+
+Better Auth's `/api/auth/*` handler is the authentication controller for OAuth and credential login.
+
+### Service
+
+Application and business rules: booster access matching, lockout conflict, run/signup state machines, signup eligibility, roster draft/publish, dashboard composition.
+
+### Repository
+
+Prisma 8 access lives here (`orm.Model` via `src/lib/prisma.ts`). Views and most controllers never import Prisma.
+
+## Persistence boundary
+
+```text
+View → Controller → Service → Repository → Prisma 8 (`db.orm.public`)
+                                         → PostgreSQL
+```
+
+Better Auth uses a `pg` Pool against the same database for `user`, `session`, `account`, and `verification`. Domain tables are owned by Prisma migrations. The `user` table is shared and must stay compatible with both.
+
+## Authorization boundary
+
+Cookie presence in `src/proxy.ts` is an optimistic redirect only.
+
+Server-side enforcement:
+
+- `requireUser()`
+- `requireRaidLead()`
+- `requireAdmin()`
+- `requireManagerOrRedirect()`
+- `canManageRun` / `assertCanManageRun` (raid lead owns assigned runs; admin owns all)
+
+Hidden buttons are not an authorization control.
+
+## Directory structure
+
+```text
+src/
+  app/             View routes and the Better Auth route handler
+  components/      View components
+  controllers/     Thin application boundary
+  services/        Business rules
+  repositories/    Prisma access
+  models/          Domain enumerations
+  validators/      Zod schemas
+  auth/            Auth configuration and authorization helpers
+  lib/             Cross-cutting utilities
+  prisma/          Prisma 8 contract, client, seed
+```
+
+## Rules for later contributors
+
+1. Do not put business rules in page components.
+2. Do not call Prisma from Views.
+3. Do not grow Controllers into domain engines.
+4. Keep run status and signup status separate.
+5. Keep account roles separate from BOOSTER / LOOTBUDDY participation.
+6. Keep signup eligibility in Services. Views receive evaluated options and `canWithdraw`.
+7. Keep roster draft selection off `RunSignup.status` until Publish. Views must not invent composition or publish rules.
+8. Update documentation in the same change that alters architecture or domain behavior.

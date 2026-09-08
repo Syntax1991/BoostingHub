@@ -1,0 +1,212 @@
+[
+  {
+    "id": "dropColumn.run_signup.lootbuddyWillPlay",
+    "label": "Drop column \"lootbuddyWillPlay\" from \"run_signup\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lootbuddyWillPlay",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lootbuddyWillPlay\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyWillPlay"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"lootbuddyWillPlay\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" DROP COLUMN \"lootbuddyWillPlay\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lootbuddyWillPlay\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyWillPlay"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_signup.lootbuddyMode",
+    "label": "Add column \"lootbuddyMode\" to \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lootbuddyMode",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lootbuddyMode\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyMode"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lootbuddyMode\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD COLUMN \"lootbuddyMode\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lootbuddyMode\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyMode"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_signup.lootbuddyVerification",
+    "label": "Add column \"lootbuddyVerification\" to \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lootbuddyVerification",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lootbuddyVerification\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyVerification"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lootbuddyVerification\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD COLUMN \"lootbuddyVerification\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lootbuddyVerification\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyVerification"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_signup.run_signup_lootbuddyMode_check_eaa3f64b",
+    "label": "Add check constraint \"run_signup_lootbuddyMode_check_eaa3f64b\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_lootbuddyMode_check_eaa3f64b",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_lootbuddyMode_check_eaa3f64b\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_lootbuddyMode_check_eaa3f64b",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_signup_lootbuddyMode_check_eaa3f64b\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD CONSTRAINT \"run_signup_lootbuddyMode_check_eaa3f64b\" CHECK (\"lootbuddyMode\" IN ('LOOT_ONLY', 'PLAYING'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_lootbuddyMode_check_eaa3f64b\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_lootbuddyMode_check_eaa3f64b",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_signup.run_signup_lootbuddyVerification_check_c94b2402",
+    "label": "Add check constraint \"run_signup_lootbuddyVerification_check_c94b2402\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_lootbuddyVerification_check_c94b2402",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_lootbuddyVerification_check_c94b2402\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_lootbuddyVerification_check_c94b2402",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_signup_lootbuddyVerification_check_c94b2402\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD CONSTRAINT \"run_signup_lootbuddyVerification_check_c94b2402\" CHECK (\"lootbuddyVerification\" IN ('NONE', 'ACCESS', 'TRIAL'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_lootbuddyVerification_check_c94b2402\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_lootbuddyVerification_check_c94b2402",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  }
+]

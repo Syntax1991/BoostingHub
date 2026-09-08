@@ -1,0 +1,449 @@
+[
+  {
+    "id": "table.run_roster",
+    "label": "Create table \"run_roster\"",
+    "summary": "Creates table \"run_roster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_roster\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_roster\"",
+        "sql": "CREATE TABLE \"public\".\"run_roster\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"publishedAt\" timestamptz,\n  \"publishedById\" text,\n  \"runId\" text NOT NULL,\n  \"state\" text DEFAULT 'DRAFT' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"version\" int4 DEFAULT 1 NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_roster_state_check_af9774b1\" CHECK (\"state\" IN ('DRAFT', 'PUBLISHED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_roster\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_roster_entry",
+    "label": "Create table \"run_roster_entry\"",
+    "summary": "Creates table \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_roster_entry\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_roster_entry\"",
+        "sql": "CREATE TABLE \"public\".\"run_roster_entry\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"rosterId\" text NOT NULL,\n  \"selected\" bool DEFAULT true NOT NULL,\n  \"signupId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_roster_entry\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_roster.run_roster_runId_key",
+    "label": "Add unique constraint on \"run_roster\" (runId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_roster_runId_key",
+        "table": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_roster_runId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_runId_key",
+          "public",
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_roster_runId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster\" ADD CONSTRAINT \"run_roster_runId_key\" UNIQUE (\"runId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_roster_runId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_runId_key",
+          "public",
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_roster_entry.run_roster_entry_rosterId_signupId_key",
+    "label": "Add unique constraint on \"run_roster_entry\" (rosterId, signupId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_roster_entry_rosterId_signupId_key",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_roster_entry_rosterId_signupId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_rosterId_signupId_key",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_roster_entry_rosterId_signupId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\" ADD CONSTRAINT \"run_roster_entry_rosterId_signupId_key\" UNIQUE (\"rosterId\", \"signupId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_roster_entry_rosterId_signupId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_rosterId_signupId_key",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster.run_roster_publishedById_idx_ffaf4a1d",
+    "label": "Create index \"run_roster_publishedById_idx_ffaf4a1d\" on \"run_roster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_publishedById_idx_ffaf4a1d",
+        "table": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_publishedById_idx_ffaf4a1d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_publishedById_idx_ffaf4a1d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_publishedById_idx_ffaf4a1d\"",
+        "sql": "CREATE INDEX \"run_roster_publishedById_idx_ffaf4a1d\" ON \"public\".\"run_roster\" (\"publishedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_publishedById_idx_ffaf4a1d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_publishedById_idx_ffaf4a1d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_entry.run_roster_entry_rosterId_idx_ca029c6b",
+    "label": "Create index \"run_roster_entry_rosterId_idx_ca029c6b\" on \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_entry_rosterId_idx_ca029c6b",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_entry_rosterId_idx_ca029c6b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_entry_rosterId_idx_ca029c6b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_entry_rosterId_idx_ca029c6b\"",
+        "sql": "CREATE INDEX \"run_roster_entry_rosterId_idx_ca029c6b\" ON \"public\".\"run_roster_entry\" (\"rosterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_entry_rosterId_idx_ca029c6b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_entry_rosterId_idx_ca029c6b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_roster_entry.run_roster_entry_signupId_idx_acdbc7f1",
+    "label": "Create index \"run_roster_entry_signupId_idx_acdbc7f1\" on \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_roster_entry_signupId_idx_acdbc7f1",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_roster_entry_signupId_idx_acdbc7f1\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_entry_signupId_idx_acdbc7f1\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_roster_entry_signupId_idx_acdbc7f1\"",
+        "sql": "CREATE INDEX \"run_roster_entry_signupId_idx_acdbc7f1\" ON \"public\".\"run_roster_entry\" (\"signupId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_roster_entry_signupId_idx_acdbc7f1\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_roster_entry_signupId_idx_acdbc7f1\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster.run_roster_runId_fkey",
+    "label": "Add foreign key \"run_roster_runId_fkey\" on \"run_roster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_runId_fkey",
+        "table": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_runId_fkey",
+          "public",
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster\"\nADD CONSTRAINT \"run_roster_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_runId_fkey",
+          "public",
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster.run_roster_publishedById_fkey",
+    "label": "Add foreign key \"run_roster_publishedById_fkey\" on \"run_roster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_publishedById_fkey",
+        "table": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_publishedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_publishedById_fkey",
+          "public",
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_publishedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster\"\nADD CONSTRAINT \"run_roster_publishedById_fkey\"\nFOREIGN KEY (\"publishedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_publishedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_publishedById_fkey",
+          "public",
+          "\"public\".\"run_roster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_entry.run_roster_entry_rosterId_fkey",
+    "label": "Add foreign key \"run_roster_entry_rosterId_fkey\" on \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_entry_rosterId_fkey",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_entry_rosterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_rosterId_fkey",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_entry_rosterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\"\nADD CONSTRAINT \"run_roster_entry_rosterId_fkey\"\nFOREIGN KEY (\"rosterId\")\nREFERENCES \"public\".\"run_roster\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_entry_rosterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_rosterId_fkey",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_roster_entry.run_roster_entry_signupId_fkey",
+    "label": "Add foreign key \"run_roster_entry_signupId_fkey\" on \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_roster_entry_signupId_fkey",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_roster_entry_signupId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_signupId_fkey",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_roster_entry_signupId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\"\nADD CONSTRAINT \"run_roster_entry_signupId_fkey\"\nFOREIGN KEY (\"signupId\")\nREFERENCES \"public\".\"run_signup\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_roster_entry_signupId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_signupId_fkey",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  }
+]

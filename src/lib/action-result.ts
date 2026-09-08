@@ -1,0 +1,16 @@
+import { isDomainError } from "@/lib/errors";
+import { ZodError } from "zod";
+
+export type ActionResult =
+  | { ok: true; message: string }
+  | { ok: false; code: string; message: string };
+
+export function mapActionError(error: unknown): ActionResult {
+  if (error instanceof ZodError) {
+    return { ok: false, code: "VALIDATION_FAILED", message: "Check the form and try again." };
+  }
+  if (isDomainError(error)) {
+    return { ok: false, code: error.code, message: error.message };
+  }
+  return { ok: false, code: "UNEXPECTED", message: "Something went wrong. Try again." };
+}

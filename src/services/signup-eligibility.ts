@@ -1,0 +1,236 @@
+import type { BoosterAccessRecord } from "@/models/records";
+import type {
+  CharacterRole,
+  RaidDifficulty,
+  RunStatus,
+  WowClass,
+} from "@/models/enums";
+import { boosterAccessService } from "@/services/booster-access.service";
+import { lockoutService } from "@/services/lockout.service";
+import { isSignupWindowOpen } from "@/services/run-state";
+
+export type EligibilityLockout = {
+  raidId: string;
+  difficulty: RaidDifficulty;
+  resetIdentifier: string;
+  isComplete: boolean;
+  bossesDefeated: number;
+};
+
+export type EligibilityCharacter = {
+  id: string;
+  userId: string;
+  name: string;
+  realm: string;
+  wowClass: WowClass;
+  specialization: string | null;
+  isActive: boolean;
+  boosterAccess: BoosterAccessRecord[];
+  lockouts: EligibilityLockout[];
+};
+
+export type EligibilityRun = {
+  id: string;
+  raidId: string;
+  difficulty: RaidDifficulty;
+  status: RunStatus;
+  signupsOpen: boolean;
+};
+
+export type BoosterIneligibilityReason =
+  | "INACTIVE"
+  | "NO_BOOSTER_ACCESS"
+  | "DIFFICULTY_NOT_APPROVED"
+  | "LOCKOUT_CONFLICT";
+
+export type LootbuddyIneligibilityReason = "INACTIVE" | "LOCKOUT_CONFLICT";
+
+export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
+  INACTIVE: "Character is inactive.",
+  NO_BOOSTER_ACCESS: "No approved booster access.",
+  DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
+  LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
+};
+
+export const LOOTBUDDY_INELIGIBILITY_MESSAGES: Record<LootbuddyIneligibilityReason, string> = {
+  INACTIVE: "Character is inactive.",
+  LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
+};
+
+export type EligibleBoosterOption = {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  wowClass: WowClass;
+  specialization: string | null;
+  role: CharacterRole;
+};
+
+export type IneligibleBoosterCharacter = {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  reason: BoosterIneligibilityReason;
+  message: string;
+};
+
+export type EligibleLootbuddyOption = {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  wowClass: WowClass;
+  specialization: string | null;
+};
+
+export type IneligibleLootbuddyCharacter = {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  reason: LootbuddyIneligibilityReason;
+  message: string;
+};
+
+/**
+ * Booster options are class + role + difficulty combinations, not the character's
+ * primary role. Heroic approval never implies Mythic.
+ */
+export function evaluateBoosterOptions(
+  characters: EligibilityCharacter[],
+  run: EligibilityRun,
+  resetIdentifier: string,
+): {
+  eligible: EligibleBoosterOption[];
+  ineligible: IneligibleBoosterCharacter[];
+} {
+  const eligible: EligibleBoosterOption[] = [];
+  const ineligible: IneligibleBoosterCharacter[] = [];
+
+  for (const character of characters) {
+    const pushIneligible = (reason: BoosterIneligibilityReason) => {
+      ineligible.push({
+        characterId: character.id,
+        characterName: character.name,
+        realm: character.realm,
+        reason,
+        message: BOOSTER_INELIGIBILITY_MESSAGES[reason],
+      });
+    };
+
+    if (!character.isActive) {
+      pushIneligible("INACTIVE");
+      continue;
+    }
+
+    const approvedForRun = character.boosterAccess.filter(
+      (record) =>
+        record.status === "APPROVED" &&
+        record.wowClass === character.wowClass &&
+        record.difficulty === run.difficulty,
+    );
+
+    if (approvedForRun.length === 0) {
+      const approvedOtherDifficulty = character.boosterAccess.some(
+        (record) =>
+          record.status === "APPROVED" &&
+          record.wowClass === character.wowClass &&
+          record.difficulty !== run.difficulty,
+      );
+      pushIneligible(approvedOtherDifficulty ? "DIFFICULTY_NOT_APPROVED" : "NO_BOOSTER_ACCESS");
+      continue;
+    }
+
+    if (
+      lockoutService.hasRunConflict(character.lockouts, {
+        raidId: run.raidId,
+        difficulty: run.difficulty,
+        resetIdentifier,
+      })
+    ) {
+      pushIneligible("LOCKOUT_CONFLICT");
+      continue;
+    }
+
+    for (const access of approvedForRun) {
+      if (
+        boosterAccessService.isApprovedFor(
+          character.boosterAccess,
+          character.wowClass,
+          access.role,
+          run.difficulty,
+        )
+      ) {
+        eligible.push({
+          characterId: character.id,
+          characterName: character.name,
+          realm: character.realm,
+          wowClass: character.wowClass,
+          specialization: character.specialization,
+          role: access.role,
+        });
+      }
+    }
+  }
+
+  return { eligible, ineligible };
+}
+
+/**
+ * Lootbuddy eligibility is lockout-scoped, not BoosterAccess-scoped.
+ * LOOT_ONLY and PLAYING share this check in Phase 2; PLAYING does not invent
+ * a booster-access requirement.
+ */
+export function evaluateLootbuddyOptions(
+  characters: EligibilityCharacter[],
+  run: EligibilityRun,
+  resetIdentifier: string,
+): {
+  eligible: EligibleLootbuddyOption[];
+  ineligible: IneligibleLootbuddyCharacter[];
+} {
+  const eligible: EligibleLootbuddyOption[] = [];
+  const ineligible: IneligibleLootbuddyCharacter[] = [];
+
+  for (const character of characters) {
+    if (!character.isActive) {
+      ineligible.push({
+        characterId: character.id,
+        characterName: character.name,
+        realm: character.realm,
+        reason: "INACTIVE",
+        message: LOOTBUDDY_INELIGIBILITY_MESSAGES.INACTIVE,
+      });
+      continue;
+    }
+
+    if (
+      lockoutService.hasRunConflict(character.lockouts, {
+        raidId: run.raidId,
+        difficulty: run.difficulty,
+        resetIdentifier,
+      })
+    ) {
+      ineligible.push({
+        characterId: character.id,
+        characterName: character.name,
+        realm: character.realm,
+        reason: "LOCKOUT_CONFLICT",
+        message: LOOTBUDDY_INELIGIBILITY_MESSAGES.LOCKOUT_CONFLICT,
+      });
+      continue;
+    }
+
+    eligible.push({
+      characterId: character.id,
+      characterName: character.name,
+      realm: character.realm,
+      wowClass: character.wowClass,
+      specialization: character.specialization,
+    });
+  }
+
+  return { eligible, ineligible };
+}
+
+export function assertSignupWindowOpen(run: Pick<EligibilityRun, "status" | "signupsOpen">): boolean {
+  return isSignupWindowOpen(run.status, run.signupsOpen);
+}

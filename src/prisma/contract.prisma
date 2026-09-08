@@ -1,0 +1,378 @@
+// Boostting Bot domain contract.
+// Prisma 8 stores enums as text columns with CHECK constraints, not native PG enums.
+
+enum AccountRole {
+  @@type("pg/text@1")
+  USER      = "USER"
+  RAID_LEAD = "RAID_LEAD"
+  ADMIN     = "ADMIN"
+}
+
+enum AccountStatus {
+  @@type("pg/text@1")
+  ACTIVE   = "ACTIVE"
+  DISABLED = "DISABLED"
+}
+
+enum WowClass {
+  @@type("pg/text@1")
+  DEATH_KNIGHT = "DEATH_KNIGHT"
+  DEMON_HUNTER = "DEMON_HUNTER"
+  DRUID        = "DRUID"
+  EVOKER       = "EVOKER"
+  HUNTER       = "HUNTER"
+  MAGE         = "MAGE"
+  MONK         = "MONK"
+  PALADIN      = "PALADIN"
+  PRIEST       = "PRIEST"
+  ROGUE        = "ROGUE"
+  SHAMAN       = "SHAMAN"
+  WARLOCK      = "WARLOCK"
+  WARRIOR      = "WARRIOR"
+}
+
+enum CharacterRole {
+  @@type("pg/text@1")
+  TANK   = "TANK"
+  HEALER = "HEALER"
+  DPS    = "DPS"
+}
+
+enum WowRegion {
+  @@type("pg/text@1")
+  EU = "EU"
+  US = "US"
+}
+
+enum RaidDifficulty {
+  @@type("pg/text@1")
+  NORMAL = "NORMAL"
+  HEROIC = "HEROIC"
+  MYTHIC = "MYTHIC"
+}
+
+enum BoosterAccessStatus {
+  @@type("pg/text@1")
+  PENDING  = "PENDING"
+  APPROVED = "APPROVED"
+  REVOKED  = "REVOKED"
+}
+
+enum RunStatus {
+  @@type("pg/text@1")
+  DRAFT       = "DRAFT"
+  OPEN        = "OPEN"
+  ROSTERING   = "ROSTERING"
+  PUBLISHED   = "PUBLISHED"
+  IN_PROGRESS = "IN_PROGRESS"
+  COMPLETED   = "COMPLETED"
+  CANCELLED   = "CANCELLED"
+}
+
+enum SignupStatus {
+  @@type("pg/text@1")
+  PENDING      = "PENDING"
+  SELECTED     = "SELECTED"
+  NOT_SELECTED = "NOT_SELECTED"
+  WITHDRAWN    = "WITHDRAWN"
+}
+
+enum ParticipationType {
+  @@type("pg/text@1")
+  BOOSTER   = "BOOSTER"
+  LOOTBUDDY = "LOOTBUDDY"
+}
+
+enum LootbuddyMode {
+  @@type("pg/text@1")
+  LOOT_ONLY = "LOOT_ONLY"
+  PLAYING   = "PLAYING"
+}
+
+enum LootbuddyVerification {
+  @@type("pg/text@1")
+  NONE   = "NONE"
+  ACCESS = "ACCESS"
+  TRIAL  = "TRIAL"
+}
+
+/// Draft until the first successful publish; stays PUBLISHED while a replacement draft is edited.
+enum RosterState {
+  @@type("pg/text@1")
+  DRAFT     = "DRAFT"
+  PUBLISHED = "PUBLISHED"
+}
+
+/// Application account. Also serves as the Better Auth `user` table.
+/// Account roles are permissions on the platform, not run participation type.
+model User {
+  id              String        @id @default(uuid())
+  name            String
+  email           String?       @unique
+  emailVerified   Boolean       @default(false)
+  image           String?
+  discordUserId   String?       @unique
+  discordUsername String?
+  accountStatus   AccountStatus @default(ACTIVE)
+  accountRole     AccountRole   @default(USER)
+  createdAt       TimestamptzString @default(now())
+  updatedAt       temporal.updatedAtString()
+
+  sessions      Session[]
+  accounts      Account[]
+  characters     Character[]
+  boosterAccess  BoosterAccess[] @relation("UserBoosterAccess")
+  ledRuns        Run[]           @relation("RunRaidLead")
+  signups        RunSignup[]
+  approvedAccess   BoosterAccess[] @relation("BoosterAccessApprover")
+  activity         ActivityEvent[]
+  publishedRosters RunRoster[]     @relation("RosterPublisher")
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt TimestamptzString
+  token     String   @unique
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String   @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  TimestamptzString?
+  refreshTokenExpiresAt TimestamptzString?
+  scope                 String?
+  password              String?
+  createdAt             TimestamptzString @default(now())
+  updatedAt             temporal.updatedAtString()
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  TimestamptzString
+  createdAt  TimestamptzString @default(now())
+  updatedAt  temporal.updatedAtString()
+
+  @@map("verification")
+}
+
+model Character {
+  id                   String        @id @default(uuid())
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String
+  realm                String
+  region               WowRegion
+  wowClass             WowClass
+  specialization       String?
+  primaryRole          CharacterRole
+  itemLevel            Int
+  isActive             Boolean       @default(true)
+  blizzardCharacterId  String?
+  warcraftLogsId       String?
+  lastSyncedAt         TimestamptzString?
+  createdAt            TimestamptzString @default(now())
+  updatedAt            temporal.updatedAtString()
+
+  lockouts      CharacterRaidLockout[]
+  signups       RunSignup[]
+  boosterAccess BoosterAccess[]
+
+  @@index([userId])
+  @@map("character")
+}
+
+/// Granular booster eligibility. Class + role + difficulty are independent.
+/// A Shaman Healer Heroic approval does not imply Shaman Healer Mythic.
+model BoosterAccess {
+  id           String              @id @default(uuid())
+  userId       String
+  user         User                @relation("UserBoosterAccess", fields: [userId], references: [id], onDelete: Cascade)
+  characterId  String?
+  character    Character?          @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  wowClass     WowClass
+  role         CharacterRole
+  difficulty   RaidDifficulty
+  status       BoosterAccessStatus
+  approvedAt   TimestamptzString?
+  approvedById String?
+  approvedBy   User?               @relation("BoosterAccessApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  notes        String?
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@unique([userId, wowClass, role, difficulty])
+  @@index([userId])
+  @@map("booster_access")
+}
+
+model Raid {
+  id        String   @id @default(uuid())
+  name      String
+  season    String
+  isActive  Boolean  @default(true)
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  bosses   RaidBoss[]
+  lockouts CharacterRaidLockout[]
+  runs     Run[]
+
+  @@map("raid")
+}
+
+model RaidBoss {
+  id        String @id @default(uuid())
+  raidId    String
+  raid      Raid   @relation(fields: [raidId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int
+
+  @@index([raidId])
+  @@map("raid_boss")
+}
+
+/// Lockouts are scoped to character + raid + difficulty + weekly reset.
+/// They are never stored as a boolean on the character itself.
+model CharacterRaidLockout {
+  id               String         @id @default(uuid())
+  characterId      String
+  character        Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  raidId           String
+  raid             Raid           @relation(fields: [raidId], references: [id], onDelete: Cascade)
+  difficulty       RaidDifficulty
+  resetIdentifier  String
+  bossesDefeated   Int            @default(0)
+  isComplete       Boolean        @default(false)
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
+
+  @@unique([characterId, raidId, difficulty, resetIdentifier])
+  @@index([characterId])
+  @@map("character_raid_lockout")
+}
+
+model Run {
+  id                 String         @id @default(uuid())
+  title              String
+  raidId             String
+  raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  difficulty         RaidDifficulty
+  scheduledStartAt   TimestamptzString
+  status             RunStatus
+  raidLeadId         String
+  raidLead           User           @relation("RunRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
+  notes              String?
+  desiredTankCount   Int
+  desiredHealerCount Int
+  desiredDpsCount    Int
+  signupsOpen        Boolean        @default(false)
+  createdAt          TimestamptzString @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  signups RunSignup[]
+  roster  RunRoster?
+
+  @@index([scheduledStartAt])
+  @@index([status])
+  @@map("run")
+}
+
+/// A user may offer more than one character for the same run.
+/// Duplicate prevention is per run + user + character + participation type.
+/// Withdrawn rows still occupy that unique key; a later signup of the same
+/// combination revives the row instead of inserting a second record.
+model RunSignup {
+  id                    String                 @id @default(uuid())
+  runId                 String
+  run                   Run                    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  characterId           String?
+  character             Character?             @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  participationType     ParticipationType
+  role                  CharacterRole?
+  isBackup              Boolean                @default(false)
+  status                SignupStatus
+  lootbuddyMode         LootbuddyMode?
+  lootbuddyVerification LootbuddyVerification?
+  notes                 String?
+  createdAt             TimestamptzString      @default(now())
+  updatedAt             temporal.updatedAtString()
+
+  rosterEntries RunRosterEntry[]
+
+  @@unique([runId, userId, characterId, participationType])
+  @@index([userId])
+  @@index([runId])
+  @@map("run_signup")
+}
+
+/// One persisted roster per run. Draft selection lives in RunRosterEntry and is
+/// independent of RunSignup.status until Publish copies the draft into SELECTED /
+/// NOT_SELECTED. Editing after publish mutates the draft only; the live roster
+/// stays on signup statuses until a replacement publish succeeds.
+model RunRoster {
+  id            String      @id @default(uuid())
+  runId         String      @unique
+  run           Run         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  state         RosterState @default(DRAFT)
+  version       Int         @default(1)
+  publishedAt   TimestamptzString?
+  publishedById String?
+  publishedBy   User?       @relation("RosterPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  entries RunRosterEntry[]
+
+  @@map("run_roster")
+}
+
+model RunRosterEntry {
+  id        String     @id @default(uuid())
+  rosterId  String
+  roster    RunRoster  @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  signupId  String
+  signup    RunSignup  @relation(fields: [signupId], references: [id], onDelete: Cascade)
+  selected  Boolean    @default(true)
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@unique([rosterId, signupId])
+  @@index([rosterId])
+  @@map("run_roster_entry")
+}
+
+model ActivityEvent {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type        String
+  message     String
+  occurredAt  TimestamptzString @default(now())
+
+  @@index([occurredAt])
+  @@map("activity_event")
+}
