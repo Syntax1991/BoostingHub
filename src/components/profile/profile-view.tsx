@@ -66,7 +66,7 @@ export function ProfileView({ data }: { data: Profile }) {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Participation" description="Seeded signup history, not live performance KPIs." />
+          <CardHeader title="Participation" description="Signup counts for this account. These are not performance KPIs." />
           <dl className="grid grid-cols-2 gap-3 px-4 py-4 text-sm">
             <div>
               <dt className="text-muted">Booster signups</dt>

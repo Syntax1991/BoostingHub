@@ -14,12 +14,23 @@ type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
 type SignupItem = MyRuns["pending"][number];
 
 export function MyRunsView({ data }: { data: MyRuns }) {
+  const hasAnySignup =
+    data.selected.length + data.pending.length + data.notSelected.length + data.withdrawn.length > 0;
+
   return (
     <div>
       <PageHeader
         title="My Runs"
         description="Your signup relationships, grouped by status. BOOSTER and LOOTBUDDY are participation types for a run, not account identities."
       />
+      {!hasAnySignup ? (
+        <Card>
+          <EmptyState
+            title="You have not signed up for any runs."
+            description="Signups from /runs appear here, grouped by pending, selected, not selected, and withdrawn."
+          />
+        </Card>
+      ) : (
       <div className="grid gap-4">
         <SignupGroup title="Selected" items={data.selected} empty="No selected signups." />
         <SignupGroup title="Pending" items={data.pending} empty="No pending signups." />
@@ -35,6 +46,7 @@ export function MyRunsView({ data }: { data: MyRuns }) {
           )}
         </details>
       </div>
+      )}
     </div>
   );
 }

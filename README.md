@@ -4,13 +4,14 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is **Phase 3**: foundation, real run signups, and raidlead/admin roster publishing. Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
+This repository is **Phase 4 foundation**: Git/GitHub baseline plus the transition from seed-driven demo data toward real operational users. Character Management and Run Management are **not** complete. Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
 ## Phase status
 
 - **Phase 1 — Foundation — Complete**
-- **Phase 2 — Run Signups — Complete**
+- **Phase 2 — Real Run Signup Workflow — Complete**
 - **Phase 3 — Roster Management — Complete**
+- **Phase 4 — Production Data Transition — In Progress / Foundation**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -18,7 +19,11 @@ Phase 2 makes `/runs` persist BOOSTER and LOOTBUDDY signups, with eligibility fr
 
 Phase 3 adds `/manage/runs/[runId]`: persistent draft selection, composition warnings, and transactional roster publication.
 
+Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state. A new Discord user must land on empty, non-crashing pages.
+
 Not implemented (intentionally deferred):
+- Character create/edit/deactivate
+- Run create/edit/cancel
 - Attendance, payouts, gold ledger
 - Battle.net / Blizzard API
 - Warcraft Logs API
@@ -89,7 +94,7 @@ Create an application in the Discord Developer Portal. Redirect URL:
 http://localhost:3000/api/auth/callback/discord
 ```
 
-Until those values are set, Discord login is hidden. Development identities remain available when `DEV_AUTH_ENABLED=true` and `NODE_ENV` is not `production`.
+Discord login is the real user path. Until those values are set, Discord login is hidden. Development identities remain available when `DEV_AUTH_ENABLED=true` and `NODE_ENV` is not `production`.
 
 ### Development authentication
 
@@ -145,6 +150,7 @@ Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Publi
 - [Domain model](docs/domain-model.md)
 - [Authentication](docs/authentication.md)
 - [Development](docs/development.md)
+- [Git workflow](docs/git-workflow.md)
 - [Application shell](docs/features/application-shell.md)
 - [Run signups](docs/features/run-signups.md)
 - [Roster management](docs/features/roster-management.md)

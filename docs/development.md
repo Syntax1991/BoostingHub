@@ -35,7 +35,7 @@ Queries use `db.orm.public.Model`, not Prisma 7 `prisma.model.findMany`.
 
 `npm run db:seed` wipes domain and auth rows, then inserts deterministic users, characters, access, lockouts, runs, signups, and activity.
 
-It is safe to re-run. It is not random.
+It is safe to re-run. It is not random. Seed is a fixture, not required production state; see **Seed policy** below.
 
 Default password: `dev-login-only` (override with `DEV_AUTH_PASSWORD`).
 
@@ -61,6 +61,35 @@ If `npx create-db@latest` was used, unclaimed databases expire after 24 hours. P
 ## Time display
 
 Timestamps are stored in UTC. `src/lib/datetime.ts` formats them in `Europe/Berlin` until per-user timezones exist. Month names are avoided (`Thu 10/09/2026 21:00`) because Node and browsers disagree on `en-GB` abbreviations such as `Sept` vs `Sep`.
+
+## GitHub workflow
+
+Stable branch is `main`. Feature work uses `feature/<domain-feature>`, not a branch per page.
+
+Open a pull request, validate, **squash merge** into `main`, then delete the feature branch.
+
+See [git-workflow.md](git-workflow.md) for branch naming, commit granularity, PR validation, and merge rules.
+
+## Seed policy
+
+Seed data is a development and test fixture.
+
+It is useful for local QA and deterministic Vitest runs. It is **not** required production state.
+
+The application must work when the database contains only a newly authenticated Discord user: zero characters, zero runs, zero signups, zero roster data.
+
+Do not encode seeded user IDs or seeded run titles in production services.
+
+## Discord login vs development identities
+
+Discord OAuth is the real authentication path.
+
+Development identities remain for automated tests and local QA. They use Better Auth email/password against **credential** accounts only, and only when:
+
+- `NODE_ENV !== "production"`
+- `DEV_AUTH_ENABLED === "true"`
+
+Production must never expose the identity picker. Do not remove the mechanism while tests and local QA still depend on it.
 
 ## Incremental Prisma migrations
 

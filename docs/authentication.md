@@ -12,18 +12,22 @@ http://localhost:3000/api/auth/callback/discord
 
 Email is not required. Discord profile maps into display name, avatar, `discordUserId`, and `discordUsername`.
 
-`accountRole` is server-owned (`input: false`) so OAuth cannot self-promote.
+First sign-in creates a `user` row. Prisma defaults are `accountRole=USER` and `accountStatus=ACTIVE`. Role and status are server-owned (`input: false`) so OAuth cannot self-promote.
+
+A new Discord user has no characters, signups, or roster rows. Pages must render empty states instead of assuming seed fixtures.
 
 ## Development authentication
 
-When Discord credentials are missing, local work still needs identities.
+Local tests and QA still need deterministic identities. Discord OAuth is the real user path.
 
 Development login is shown only when:
 
 - `NODE_ENV !== "production"`
 - `DEV_AUTH_ENABLED === "true"`
 
-It uses Better Auth email/password against seeded credential accounts. The login panel is labeled as development and uses warning styling so it cannot be mistaken for Discord.
+It uses Better Auth email/password against **credential** accounts only. Discord-only users are omitted from the picker because they have no password.
+
+The login panel is labeled as development and uses warning styling so it cannot be mistaken for Discord.
 
 This is not a silent production bypass. Production runtime disables the credential provider and rejects the server action.
 

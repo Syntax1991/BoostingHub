@@ -15,7 +15,10 @@ export function ManageRunsView({ runs }: { runs: Runs }) {
       />
       <Card>
         {runs.length === 0 ? (
-          <EmptyState title="No manageable runs" description="Assigned runs appear here for raid leads and admins." />
+          <EmptyState
+            title="No manageable runs yet."
+            description="Assigned runs appear here after a raid lead or admin creates them."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] text-left text-sm">

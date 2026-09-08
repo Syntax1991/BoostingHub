@@ -24,7 +24,8 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 ## Limitations
 
-- Management create/edit/roster actions are disabled with explanation
+- Character create/edit is not implemented; empty rosters are a valid production state
+- Run create/edit/cancel is not implemented
 - Blizzard refresh is not claimed to work
 - Payout panels are reserved empty, not fake finance
-- Signup and withdraw are implemented; raidlead roster selection is not
+- Signup, withdraw, and raidlead/admin roster publish are implemented

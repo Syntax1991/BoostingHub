@@ -17,7 +17,10 @@ export function RunsView({ data }: { data: RunsPage }) {
       <RunsFilters difficulty={data.filters.difficulty} status={data.filters.status} />
       <Card>
         {data.runs.length === 0 ? (
-          <EmptyState title="No runs match these filters" description="Clear filters or wait for raid leads to publish more runs." />
+          <EmptyState
+            title="No upcoming runs yet."
+            description="Clear filters if you applied any, or wait for a raid lead to create runs."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
