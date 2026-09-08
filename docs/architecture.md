@@ -93,3 +93,5 @@ src/
 6. Keep signup eligibility in Services. Views receive evaluated options and `canWithdraw`.
 7. Keep roster draft selection off `RunSignup.status` until Publish. Views must not invent composition or publish rules.
 8. Update documentation in the same change that alters architecture or domain behavior.
+9. Treat seed data as a development/test fixture, not required production state.
+10. Do not hard-code seeded user or run IDs in production services.

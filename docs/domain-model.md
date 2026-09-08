@@ -28,7 +28,7 @@ Email is optional for core behavior. Discord is the primary identity.
 
 ## Character
 
-Belongs to a user. Phase 1 data is local/seeded.
+Belongs to a user. Reads come from the live database for the current session. Create/edit is not implemented yet; seed supplies local QA characters. Blizzard character IDs are reserved for a later integration.
 
 - name, realm, region (`EU` \| `US`)
 - class, optional specialization, primary role (`TANK` \| `HEALER` \| `DPS`)
