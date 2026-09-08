@@ -22,11 +22,31 @@ export const userRepository = {
     };
   },
 
+  /**
+   * Local identity picker only. Discord-only users have no credential password,
+   * so listing every User row would show accounts that cannot email-sign-in.
+   */
   async listDevIdentities() {
-    const users = await orm.User
-      .select("id", "name", "email", "accountRole", "image")
-      .orderBy((user) => user.name.asc())
+    const accounts = await orm.Account
+      .where({ providerId: "credential" })
+      .include("user")
       .all();
+
+    const uniqueUsers = new Map<string, NonNullable<(typeof accounts)[number]["user"]>>();
+    for (const account of accounts) {
+      const user = account.user;
+      if (!user) {
+        continue;
+      }
+      if (mapAccountStatus(user.accountStatus) !== "ACTIVE") {
+        continue;
+      }
+      uniqueUsers.set(asString(user.id), user);
+    }
+
+    const users = [...uniqueUsers.values()].sort((left, right) =>
+      asString(left.name).localeCompare(asString(right.name)),
+    );
 
     return users.map((user) => ({
       id: asString(user.id),

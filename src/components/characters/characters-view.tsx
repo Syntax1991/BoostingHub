@@ -14,14 +14,14 @@ export function CharactersView({ data }: { data: Page }) {
         description="Local character records for this account. Blizzard and Warcraft Logs sync are not implemented yet."
         actions={
           <div className="flex gap-2">
-            <DisabledAction label="Add Character" reason="Character creation is deferred until Battle.net integration." />
+            <DisabledAction label="Add Character" reason="Character management is not implemented yet. Battle.net sync comes later." />
             <DisabledAction label="Refresh" reason="Blizzard sync is not implemented." />
           </div>
         }
       />
       <Card>
         {data.characters.length === 0 ? (
-          <EmptyState title="No characters yet" description="Seeded development users include characters. A live Discord account starts empty until characters are added." />
+          <EmptyState title="No characters added yet." description="This account has no roster yet. Character management is the next product feature." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-sm">

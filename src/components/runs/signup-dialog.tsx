@@ -270,7 +270,9 @@ function BoosterFields({
         <span className="mb-1 block text-muted">Character and role</span>
         {options.eligible.length === 0 ? (
           <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
-            No eligible booster characters for this run. Switch to Lootbuddy or check access and lockouts.
+            {options.ineligible.length === 0
+              ? "No characters on this account yet. Signups need a character once character management is available."
+              : "No eligible booster characters for this run. Switch to Lootbuddy or check access and lockouts."}
           </p>
         ) : (
           <select
@@ -335,7 +337,9 @@ function LootbuddyFields({
         <span className="mb-1 block text-muted">Character</span>
         {options.eligible.length === 0 ? (
           <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
-            No loot-eligible characters available for this run.
+            {options.ineligible.length === 0
+              ? "No characters on this account yet. Signups need a character once character management is available."
+              : "No loot-eligible characters available for this run."}
           </p>
         ) : (
           <select
