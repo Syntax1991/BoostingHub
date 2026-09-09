@@ -155,6 +155,7 @@ export const characterService = {
       blizzardLinked: Boolean(character.blizzardCharacterId),
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
       boosterAccess: character.boosterAccess,
+      accessPanel: boosterAccessService.buildCharacterAccessPanel(character),
       lockouts: lockoutService.summarize(character.lockouts),
     };
   },

@@ -55,6 +55,7 @@ enum BoosterAccessStatus {
   @@type("pg/text@1")
   PENDING  = "PENDING"
   APPROVED = "APPROVED"
+  REJECTED = "REJECTED"
   REVOKED  = "REVOKED"
 }
 
@@ -125,6 +126,7 @@ model User {
   ledRuns        Run[]           @relation("RunRaidLead")
   signups        RunSignup[]
   approvedAccess   BoosterAccess[] @relation("BoosterAccessApprover")
+  reviewedAccess   BoosterAccess[] @relation("BoosterAccessReviewer")
   activity         ActivityEvent[]
   publishedRosters RunRoster[]     @relation("RosterPublisher")
 
@@ -210,8 +212,11 @@ model Character {
   @@map("character")
 }
 
-/// Granular booster eligibility. Class + role + difficulty are independent.
+/// Granular booster eligibility for one user + class + role + difficulty.
 /// A Shaman Healer Heroic approval does not imply Shaman Healer Mythic.
+/// One row is reused across PENDING / APPROVED / REJECTED / REVOKED; do not
+/// delete rows to represent rejection. characterId is the requesting character
+/// context, not part of uniqueness — eligibility stays class-scoped per user.
 model BoosterAccess {
   id           String              @id @default(uuid())
   userId       String
@@ -225,12 +230,16 @@ model BoosterAccess {
   approvedAt   TimestamptzString?
   approvedById String?
   approvedBy   User?               @relation("BoosterAccessApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  reviewedAt   TimestamptzString?
+  reviewedById String?
+  reviewedBy   User?               @relation("BoosterAccessReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   notes        String?
   createdAt    TimestamptzString @default(now())
   updatedAt    temporal.updatedAtString()
 
   @@unique([userId, wowClass, role, difficulty])
   @@index([userId])
+  @@index([status])
   @@map("booster_access")
 }
 

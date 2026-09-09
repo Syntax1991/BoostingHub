@@ -24,6 +24,21 @@ export function hasAdminAccess(role: AccountRole): boolean {
   return role === "ADMIN";
 }
 
+/**
+ * BoosterAccess is a persistent platform qualification, not a per-run roster action.
+ * RAID_LEAD may see access on roster tools but cannot globally approve/reject/revoke.
+ * A later BOOSTER_ACCESS_MANAGER permission may replace this ADMIN-only gate.
+ */
+export function canReviewBoosterAccess(role: AccountRole): boolean {
+  return hasAdminAccess(role);
+}
+
+export function assertCanReviewBoosterAccess(user: AuthenticatedUser): void {
+  if (!canReviewBoosterAccess(user.accountRole)) {
+    throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to review booster access.", 403);
+  }
+}
+
 export function assertActive(user: AuthenticatedUser): void {
   if (user.accountStatus !== "ACTIVE") {
     throw new DomainError("ACCOUNT_DISABLED", "This account is disabled.", 403);

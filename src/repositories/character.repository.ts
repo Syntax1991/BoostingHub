@@ -93,10 +93,20 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     boosterAccess: access.map((row) => {
       const record = row as Record<string, unknown>;
       return {
+        id: asString(record.id),
+        userId: asString(record.userId),
+        characterId: asStringOrNull(record.characterId),
         wowClass: mapWowClass(record.wowClass),
         role: mapCharacterRole(record.role),
         difficulty: mapDifficulty(record.difficulty),
         status: mapAccessStatus(record.status),
+        notes: asStringOrNull(record.notes),
+        approvedAt: asStringOrNull(record.approvedAt),
+        approvedById: asStringOrNull(record.approvedById),
+        reviewedAt: asStringOrNull(record.reviewedAt),
+        reviewedById: asStringOrNull(record.reviewedById),
+        createdAt: asString(record.createdAt),
+        updatedAt: asString(record.updatedAt),
       };
     }),
     lockouts: lockouts.map((row) => {

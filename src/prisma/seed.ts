@@ -327,27 +327,40 @@ async function seed() {
     updatedAt: SEED_NOW,
   });
 
-  const access = [
+  const access: Array<{
+    userId: string;
+    characterId: string;
+    wowClass: "DEATH_KNIGHT" | "DEMON_HUNTER" | "DRUID" | "EVOKER" | "HUNTER" | "MAGE" | "MONK" | "PALADIN" | "PRIEST" | "ROGUE" | "SHAMAN" | "WARLOCK" | "WARRIOR";
+    role: "TANK" | "HEALER" | "DPS";
+    difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
+    status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+    notes?: string;
+  }> = [
     { userId: ids.users.kael, characterId: ids.characters.kaelResto, wowClass: "SHAMAN", role: "HEALER", difficulty: "HEROIC", status: "APPROVED" },
     { userId: ids.users.kael, characterId: ids.characters.kaelResto, wowClass: "SHAMAN", role: "HEALER", difficulty: "MYTHIC", status: "PENDING" },
     { userId: ids.users.kael, characterId: ids.characters.kaelEle, wowClass: "SHAMAN", role: "DPS", difficulty: "HEROIC", status: "APPROVED" },
+    { userId: ids.users.kael, characterId: ids.characters.kaelEle, wowClass: "SHAMAN", role: "DPS", difficulty: "MYTHIC", status: "REJECTED", notes: "Logs not yet sufficient for mythic DPS." },
+    { userId: ids.users.kael, characterId: ids.characters.kaelInactive, wowClass: "SHAMAN", role: "DPS", difficulty: "NORMAL", status: "REVOKED", notes: "Revoked while the character is inactive." },
     { userId: ids.users.brann, characterId: ids.characters.brannPaladin, wowClass: "PALADIN", role: "TANK", difficulty: "HEROIC", status: "APPROVED" },
     { userId: ids.users.brann, characterId: ids.characters.brannPaladin, wowClass: "PALADIN", role: "TANK", difficulty: "MYTHIC", status: "APPROVED" },
     { userId: ids.users.brann, characterId: ids.characters.brannHoly, wowClass: "PALADIN", role: "HEALER", difficulty: "HEROIC", status: "APPROVED" },
     { userId: ids.users.sylva, characterId: ids.characters.sylvaHunter, wowClass: "HUNTER", role: "DPS", difficulty: "NORMAL", status: "APPROVED" },
+    { userId: ids.users.sylva, characterId: ids.characters.sylvaHunter, wowClass: "HUNTER", role: "DPS", difficulty: "HEROIC", status: "PENDING" },
     { userId: ids.users.thorne, characterId: ids.characters.thorneWarrior, wowClass: "WARRIOR", role: "TANK", difficulty: "MYTHIC", status: "APPROVED" },
     { userId: ids.users.thorne, characterId: ids.characters.thorneWarrior, wowClass: "WARRIOR", role: "TANK", difficulty: "HEROIC", status: "APPROVED" },
     { userId: ids.users.aelira, characterId: ids.characters.aeliraMonk, wowClass: "MONK", role: "HEALER", difficulty: "MYTHIC", status: "APPROVED" },
     { userId: ids.users.aelira, characterId: ids.characters.aeliraMonk, wowClass: "MONK", role: "HEALER", difficulty: "HEROIC", status: "APPROVED" },
-  ] as const;
+  ];
 
   for (const item of access) {
     await orm.BoosterAccess.create({
       id: crypto.randomUUID(),
       ...item,
-      approvedAt: item.status === "APPROVED" ? SEED_NOW : null,
-      approvedById: item.status === "APPROVED" ? ids.users.aelira : null,
-      notes: item.status === "PENDING" ? "Awaiting mythic healer review." : null,
+      approvedAt: item.status === "APPROVED" || item.status === "REVOKED" ? SEED_NOW : null,
+      approvedById: item.status === "APPROVED" || item.status === "REVOKED" ? ids.users.aelira : null,
+      notes: item.notes ?? (item.status === "PENDING" ? "Awaiting review." : null),
+      reviewedAt: item.status === "PENDING" ? null : SEED_NOW,
+      reviewedById: item.status === "PENDING" ? null : ids.users.aelira,
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });

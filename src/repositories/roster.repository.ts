@@ -10,7 +10,7 @@ import type {
   SignupStatus,
   WowClass,
 } from "@/models/enums";
-import type { BoosterAccessRecord } from "@/models/records";
+import type { BoosterAccessMatch } from "@/models/records";
 import {
   asBoolean,
   asNumber,
@@ -37,7 +37,7 @@ export type RosterCharacterSnapshot = {
   primaryRole: CharacterRole;
   itemLevel: number;
   isActive: boolean;
-  boosterAccess: BoosterAccessRecord[];
+  boosterAccess: BoosterAccessMatch[];
   lockouts: Array<{
     raidId: string;
     difficulty: RaidDifficulty;

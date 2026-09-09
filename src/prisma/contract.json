@@ -107,6 +107,10 @@
                 "value": "APPROVED"
               },
               {
+                "name": "REJECTED",
+                "value": "REJECTED"
+              },
+              {
                 "name": "REVOKED",
                 "value": "REVOKED"
               }
@@ -619,6 +623,20 @@
                   "kind": "scalar"
                 }
               },
+              "reviewedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "reviewedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "role": {
                 "nullable": false,
                 "type": {
@@ -704,6 +722,21 @@
                   "namespace": "public"
                 }
               },
+              "reviewedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "reviewedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
               "user": {
                 "cardinality": "N:1",
                 "on": {
@@ -742,6 +775,12 @@
                 },
                 "notes": {
                   "column": "notes"
+                },
+                "reviewedAt": {
+                  "column": "reviewedAt"
+                },
+                "reviewedById": {
+                  "column": "reviewedById"
                 },
                 "role": {
                   "column": "role"
@@ -2351,6 +2390,21 @@
                   "namespace": "public"
                 }
               },
+              "reviewedAccess": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "reviewedById"
+                  ]
+                },
+                "to": {
+                  "model": "BoosterAccess",
+                  "namespace": "public"
+                }
+              },
               "sessions": {
                 "cardinality": "1:N",
                 "on": {
@@ -2699,8 +2753,8 @@
                   "prefix": "booster_access_role_check"
                 },
                 {
-                  "expression": "\"status\" IN ('PENDING', 'APPROVED', 'REVOKED')",
-                  "name": "booster_access_status_check_3260663c",
+                  "expression": "\"status\" IN ('PENDING', 'APPROVED', 'REJECTED', 'REVOKED')",
+                  "name": "booster_access_status_check_4f4d1767",
                   "prefix": "booster_access_status_check"
                 },
                 {
@@ -2751,6 +2805,16 @@
                   "nullable": false
                 },
                 "notes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "reviewedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "reviewedById": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
@@ -2850,6 +2914,23 @@
                     "namespaceId": "public",
                     "tableName": "user"
                   }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "reviewedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "booster_access"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
                 }
               ],
               "indexes": [
@@ -2867,6 +2948,22 @@
                   ],
                   "name": "booster_access_characterId_idx_2423fe9d",
                   "prefix": "booster_access_characterId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "reviewedById"
+                  ],
+                  "name": "booster_access_reviewedById_idx_e2835478",
+                  "prefix": "booster_access_reviewedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "booster_access_status_idx_e98638ab",
+                  "prefix": "booster_access_status_idx",
                   "unique": false
                 },
                 {
@@ -4243,6 +4340,7 @@
               "values": [
                 "PENDING",
                 "APPROVED",
+                "REJECTED",
                 "REVOKED"
               ]
             },
@@ -4343,7 +4441,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "dee9853feea3fb59f766200ac8782b6af08b55290afa6d9546016404bd84f5a3"
+    "storageHash": "dd1bc61818d0b4aeb417568d27fa6091417e19ea8d2525f6119a578233d3a0c1"
   },
   "execution": {
     "executionHash": "d5b64e043426f885ea8e3505bd5954a5f912648cb25bddee46a7208e5a8278dc",

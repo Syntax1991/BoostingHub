@@ -52,8 +52,9 @@ export const DIFFICULTY_LABELS: Record<RaidDifficulty, string> = {
 };
 
 export const ACCESS_STATUS_LABELS: Record<BoosterAccessStatus, string> = {
-  PENDING: "Pending",
+  PENDING: "Pending Review",
   APPROVED: "Approved",
+  REJECTED: "Rejected",
   REVOKED: "Revoked",
 };
 

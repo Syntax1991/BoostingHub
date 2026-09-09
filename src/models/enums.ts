@@ -35,7 +35,7 @@ export type WowRegion = (typeof WOW_REGIONS)[number];
 export const RAID_DIFFICULTIES = ["NORMAL", "HEROIC", "MYTHIC"] as const;
 export type RaidDifficulty = (typeof RAID_DIFFICULTIES)[number];
 
-export const BOOSTER_ACCESS_STATUSES = ["PENDING", "APPROVED", "REVOKED"] as const;
+export const BOOSTER_ACCESS_STATUSES = ["PENDING", "APPROVED", "REJECTED", "REVOKED"] as const;
 export type BoosterAccessStatus = (typeof BOOSTER_ACCESS_STATUSES)[number];
 
 export const RUN_STATUSES = [
