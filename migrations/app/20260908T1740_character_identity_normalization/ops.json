@@ -1,0 +1,282 @@
+[
+  {
+    "id": "column.public.character.normalizedName",
+    "label": "Add column \"normalizedName\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "normalizedName",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"normalizedName\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedName"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"normalizedName\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"normalizedName\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"normalizedName\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedName"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-character-normalizedName",
+    "label": "Data transform: backfill-character-normalizedName",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Check backfill-character-normalizedName has work to do",
+        "sql": "SELECT EXISTS (SELECT 1 FROM \"character\" WHERE \"normalizedName\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Run backfill-character-normalizedName",
+        "sql": "UPDATE \"character\" SET \"normalizedName\" = lower(btrim(regexp_replace(\"name\", '[[:space:]]+', ' ', 'g'))) WHERE \"normalizedName\" IS NULL",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Verify backfill-character-normalizedName resolved all violations",
+        "sql": "SELECT NOT EXISTS (SELECT 1 FROM \"character\" WHERE \"normalizedName\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.setNotNull.character.normalizedName",
+    "label": "Set NOT NULL on \"character\".\"normalizedName\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "normalizedName",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"normalizedName\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedName"
+        ]
+      },
+      {
+        "description": "ensure no NULL values in \"normalizedName\"",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"public\".\"character\" WHERE \"normalizedName\" IS NULL) AS \"result\"",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "set NOT NULL on \"normalizedName\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ALTER COLUMN \"normalizedName\" SET NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"normalizedName\" is NOT NULL",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedName",
+          "NO"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.character.normalizedRealm",
+    "label": "Add column \"normalizedRealm\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "normalizedRealm",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"normalizedRealm\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedRealm"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"normalizedRealm\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"normalizedRealm\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"normalizedRealm\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedRealm"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-character-normalizedRealm",
+    "label": "Data transform: backfill-character-normalizedRealm",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Check backfill-character-normalizedRealm has work to do",
+        "sql": "SELECT EXISTS (SELECT 1 FROM \"character\" WHERE \"normalizedRealm\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Run backfill-character-normalizedRealm",
+        "sql": "UPDATE \"character\" SET \"normalizedRealm\" = lower(btrim(regexp_replace(\"realm\", '[[:space:]]+', ' ', 'g'))) WHERE \"normalizedRealm\" IS NULL",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Verify backfill-character-normalizedRealm resolved all violations",
+        "sql": "SELECT NOT EXISTS (SELECT 1 FROM \"character\" WHERE \"normalizedRealm\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.setNotNull.character.normalizedRealm",
+    "label": "Set NOT NULL on \"character\".\"normalizedRealm\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "normalizedRealm",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"normalizedRealm\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedRealm"
+        ]
+      },
+      {
+        "description": "ensure no NULL values in \"normalizedRealm\"",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"public\".\"character\" WHERE \"normalizedRealm\" IS NULL) AS \"result\"",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "set NOT NULL on \"normalizedRealm\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ALTER COLUMN \"normalizedRealm\" SET NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"normalizedRealm\" is NOT NULL",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "normalizedRealm",
+          "NO"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character.character_userId_region_normalizedRealm_normalizedName_key",
+    "label": "Add unique constraint on \"character\" (userId, region, normalizedRealm, normalizedName)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_userId_region_normalizedRealm_normalizedName_key",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_userId_region_normalizedRealm_normalizedName_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_userId_region_normalizedRealm_normalizedName_key",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_userId_region_normalizedRealm_normalizedName_key\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD CONSTRAINT \"character_userId_region_normalizedRealm_normalizedName_key\" UNIQUE (\"userId\", \"region\", \"normalizedRealm\", \"normalizedName\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_userId_region_normalizedRealm_normalizedName_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_userId_region_normalizedRealm_normalizedName_key",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  }
+]

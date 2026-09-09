@@ -28,13 +28,17 @@ Email is optional for core behavior. Discord is the primary identity.
 
 ## Character
 
-Belongs to a user. Reads come from the live database for the current session. Create/edit is not implemented yet; seed supplies local QA characters. Blizzard character IDs are reserved for a later integration.
+Belongs to one user. Operators create and maintain characters locally. Blizzard identifiers are reserved for a later integration.
 
-- name, realm, region (`EU` \| `US`)
-- class, optional specialization, primary role (`TANK` \| `HEALER` \| `DPS`)
-- item level, active flag
+- display `name`, `realm`, `region` (`EU` \| `US`)
+- `normalizedName` / `normalizedRealm` for owner-scoped case-insensitive uniqueness with region
+- unique on `(userId, region, normalizedRealm, normalizedName)`
+- class, specialization, primary role (`TANK` \| `HEALER` \| `DPS`)
+- item level (manual until sync), `isActive` lifecycle (deactivate instead of delete)
 - optional Blizzard and Warcraft Logs identifiers (unused until later integrations)
 - `lastSyncedAt` (null until a real sync exists)
+
+Class is immutable after creation. `primaryRole` is derived from specialization; BoosterAccess may approve additional roles. See [character-management.md](features/character-management.md).
 
 ## BoosterAccess
 

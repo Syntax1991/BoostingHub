@@ -4,14 +4,17 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is **Phase 4 foundation**: Git/GitHub baseline plus the transition from seed-driven demo data toward real operational users. Character Management and Run Management are **not** complete. Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
+This repository is on **feature/character-management** (pending merge). Foundation through Phase 4 is complete on `main`. Character Management is implemented on this branch and is not yet the merged production baseline.
+
+Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
 ## Phase status
 
 - **Phase 1 — Foundation — Complete**
 - **Phase 2 — Real Run Signup Workflow — Complete**
 - **Phase 3 — Roster Management — Complete**
-- **Phase 4 — Production Data Transition — In Progress / Foundation**
+- **Phase 4 — Production Data Transition Foundation — Complete**
+- **Character Management — implemented on feature/character-management / pending merge**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -19,10 +22,11 @@ Phase 2 makes `/runs` persist BOOSTER and LOOTBUDDY signups, with eligibility fr
 
 Phase 3 adds `/manage/runs/[runId]`: persistent draft selection, composition warnings, and transactional roster publication.
 
-Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state. A new Discord user must land on empty, non-crashing pages.
+Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state.
+
+Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Battle.net sync is still deferred.
 
 Not implemented (intentionally deferred):
-- Character create/edit/deactivate
 - Run create/edit/cancel
 - Attendance, payouts, gold ledger
 - Battle.net / Blizzard API
@@ -59,7 +63,7 @@ Repository / Model / Database
 
 Views never call Prisma. Controllers stay thin. Business rules live in Services.
 
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, and the roster builder.
+Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, and character create/edit/lifecycle.
 
 See [docs/architecture.md](docs/architecture.md).
 
@@ -130,6 +134,17 @@ After `npm run db:seed`:
 
 Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Published Heroic Split for visual QA.
 
+### Testing character management
+
+A Discord user with zero characters can use `/characters` → **Add Character**. Seed is not required.
+
+With a development identity:
+
+- **Kael** — `/characters` lists three Shamans (one inactive). Details, edit, deactivate, and reactivate are owner-only.
+- Create a new alt, confirm Dashboard/Profile counts change, then sign the alt as lootbuddy on an open run. It must not appear as a booster without BoosterAccess.
+
+See [docs/features/character-management.md](docs/features/character-management.md).
+
 ## Main routes
 
 | Route | Access |
@@ -139,6 +154,7 @@ Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Publi
 | `/runs` | Authenticated |
 | `/my-runs` | Authenticated |
 | `/characters` | Authenticated |
+| `/characters/[characterId]` | Owner only |
 | `/profile` | Authenticated |
 | `/manage` | RAID_LEAD or ADMIN |
 | `/manage/runs` | RAID_LEAD or ADMIN |
@@ -152,6 +168,7 @@ Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Publi
 - [Development](docs/development.md)
 - [Git workflow](docs/git-workflow.md)
 - [Application shell](docs/features/application-shell.md)
+- [Character management](docs/features/character-management.md)
 - [Run signups](docs/features/run-signups.md)
 - [Roster management](docs/features/roster-management.md)
 

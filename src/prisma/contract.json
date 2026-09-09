@@ -814,6 +814,20 @@
                   "kind": "scalar"
                 }
               },
+              "normalizedName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "normalizedRealm": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "primaryRole": {
                 "nullable": false,
                 "type": {
@@ -973,6 +987,12 @@
                 },
                 "name": {
                   "column": "name"
+                },
+                "normalizedName": {
+                  "column": "normalizedName"
+                },
+                "normalizedRealm": {
+                  "column": "normalizedRealm"
                 },
                 "primaryRole": {
                   "column": "primaryRole"
@@ -2936,6 +2956,16 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "normalizedName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "normalizedRealm": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "primaryRole": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -3029,7 +3059,16 @@
                   "id"
                 ]
               },
-              "uniques": []
+              "uniques": [
+                {
+                  "columns": [
+                    "userId",
+                    "region",
+                    "normalizedRealm",
+                    "normalizedName"
+                  ]
+                }
+              ]
             },
             "character_raid_lockout": {
               "checks": [
@@ -4304,7 +4343,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "5244433c3c7cf58977b92bcb2c3d44ae1260d60893053c632bd6f0ca47e055eb"
+    "storageHash": "dee9853feea3fb59f766200ac8782b6af08b55290afa6d9546016404bd84f5a3"
   },
   "execution": {
     "executionHash": "d5b64e043426f885ea8e3505bd5954a5f912648cb25bddee46a7208e5a8278dc",

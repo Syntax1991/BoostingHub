@@ -39,7 +39,7 @@ It is safe to re-run. It is not random. Seed is a fixture, not required producti
 
 Default password: `dev-login-only` (override with `DEV_AUTH_PASSWORD`).
 
-`src/services/signup.service.test.ts` and `src/services/roster.service.test.ts` use the seeded database. Re-seed after those tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
+`src/services/signup.service.test.ts`, `src/services/roster.service.test.ts`, and `src/services/character.service.test.ts` use the seeded database. Character tests create isolated users (`cm0000000001` / `cm0000000002`) and delete them afterwards. Re-seed after roster tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
 
 ## Validation
 
@@ -96,5 +96,15 @@ Production must never expose the identity picker. Do not remove the mechanism wh
 `npx prisma migration plan --name slug` can emit a full recreate if `--from` is omitted incorrectly. Plan from the previous migration directory:
 
 ```bash
-npx prisma migration plan --name change_name --from 20260908T1443_roster_draft_publish
+npx prisma migration plan --name change_name --from 20260908T1740_character_identity_normalization
 ```
+
+## Character management QA
+
+1. Sign in with Discord (empty account) or a development identity.
+2. Open `/characters` and add a character (EU and US both valid).
+3. Open Details, edit specialization/item level, deactivate, then reactivate.
+4. Confirm Dashboard and Profile counts follow `activeCharacters` / `totalCharacters`.
+5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until approved.
+
+Do not use Refresh; Battle.net sync is deferred. Git workflow: [git-workflow.md](git-workflow.md).

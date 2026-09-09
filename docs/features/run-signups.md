@@ -6,11 +6,12 @@ Let a signed-in user persist a **booster** or **lootbuddy** signup for a specifi
 
 ## User flow
 
-1. Open `/runs`.
-2. Choose **Sign up** on an open run.
-3. Pick Booster or Lootbuddy.
-4. Submit. The row is stored as `PENDING`.
-5. Review or withdraw (when allowed) on `/my-runs`.
+1. Add at least one character on `/characters` if the account has none.
+2. Open `/runs`.
+3. Choose **Sign up** on an open run.
+4. Pick Booster or Lootbuddy.
+5. Submit. The row is stored as `PENDING`.
+6. Review or withdraw (when allowed) on `/my-runs`.
 
 ## Participation types
 

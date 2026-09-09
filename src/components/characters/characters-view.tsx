@@ -1,27 +1,64 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
-import { DIFFICULTY_LABELS } from "@/lib/labels";
+import { DIFFICULTY_LABELS, REGION_LABELS } from "@/lib/labels";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge, RoleBadge } from "@/components/ui/badges";
+import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
+import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import type { characterService } from "@/services/character.service";
 
 type Page = Awaited<ReturnType<typeof characterService.getCharacterPage>>;
+type Filter = "active" | "inactive" | "all";
 
 export function CharactersView({ data }: { data: Page }) {
+  const [filter, setFilter] = useState<Filter>("active");
+  const visible = useMemo(() => {
+    if (filter === "all") return data.characters;
+    if (filter === "active") return data.characters.filter((character) => character.isActive);
+    return data.characters.filter((character) => !character.isActive);
+  }, [data.characters, filter]);
+
   return (
     <div>
       <PageHeader
         title="Characters"
-        description="Local character records for this account. Blizzard and Warcraft Logs sync are not implemented yet."
+        description="Manually maintained World of Warcraft characters for this account. Battle.net sync is not implemented yet."
         actions={
-          <div className="flex gap-2">
-            <DisabledAction label="Add Character" reason="Character management is not implemented yet. Battle.net sync comes later." />
-            <DisabledAction label="Refresh" reason="Blizzard sync is not implemented." />
+          <div className="flex flex-wrap gap-2">
+            <CharacterFormDialog mode="create" triggerLabel="Add Character" />
+            <button
+              type="button"
+              disabled
+              title="Blizzard sync will be available in a later integration."
+              className="h-8 rounded-md border border-border px-2 text-xs text-muted"
+            >
+              Refresh
+            </button>
           </div>
         }
       />
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <FilterButton label="Active" value="active" current={filter} onSelect={setFilter} />
+        <FilterButton label="Inactive" value="inactive" current={filter} onSelect={setFilter} />
+        <FilterButton label="All" value="all" current={filter} onSelect={setFilter} />
+        <span className="text-xs text-muted">
+          {data.activeCharacters} active · {data.totalCharacters} total
+        </span>
+      </div>
       <Card>
         {data.characters.length === 0 ? (
-          <EmptyState title="No characters added yet." description="This account has no roster yet. Character management is the next product feature." />
+          <EmptyState
+            title="No characters added yet."
+            description="Add your first World of Warcraft character to start using run signups."
+          />
+        ) : visible.length === 0 ? (
+          <EmptyState
+            title={filter === "active" ? "No active characters." : "No inactive characters."}
+            description="Inactive characters stay available for history. Switch the filter to see them."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-sm">
@@ -31,20 +68,20 @@ export function CharactersView({ data }: { data: Page }) {
                   <th className="px-4 py-2 font-medium">Class / Spec</th>
                   <th className="px-4 py-2 font-medium">Role</th>
                   <th className="px-4 py-2 font-medium">iLvl</th>
-                  <th className="px-4 py-2 font-medium">Active</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Booster access</th>
                   <th className="px-4 py-2 font-medium">Lockouts ({data.currentReset})</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
-                  <th className="px-4 py-2 font-medium">Details</th>
+                  <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {data.characters.map((character) => (
+                {visible.map((character) => (
                   <tr key={character.id} className="border-t border-border align-top">
                     <td className="px-4 py-3">
                       <div className="max-w-[200px] truncate font-medium">{character.name}</div>
                       <div className="max-w-[220px] truncate text-xs text-muted">
-                        {character.realm}-{character.region}
+                        {character.realm} · {REGION_LABELS[character.region]}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -84,10 +121,34 @@ export function CharactersView({ data }: { data: Page }) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
-                      {character.lastSyncedAt ? formatDateTime(character.lastSyncedAt) : "Never synced"}
+                      {character.lastSyncedAt
+                        ? `Synced ${formatDateTime(character.lastSyncedAt)}`
+                        : formatDateTime(character.updatedAt)}
                     </td>
                     <td className="px-4 py-3">
-                      <DisabledAction label="Details" reason="Character detail pages are not in Phase 1." />
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/characters/${character.id}`}
+                          className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+                        >
+                          Details
+                        </Link>
+                        <CharacterFormDialog
+                          mode="edit"
+                          triggerLabel="Edit"
+                          triggerClassName="h-8 rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+                          initial={{
+                            id: character.id,
+                            name: character.name,
+                            realm: character.realm,
+                            region: character.region,
+                            wowClass: character.wowClass,
+                            specialization: character.specialization ?? "",
+                            itemLevel: character.itemLevel,
+                          }}
+                        />
+                        <CharacterLifecycleButton characterId={character.id} isActive={character.isActive} />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -100,13 +161,26 @@ export function CharactersView({ data }: { data: Page }) {
   );
 }
 
-function DisabledAction({ label, reason }: { label: string; reason: string }) {
+function FilterButton({
+  label,
+  value,
+  current,
+  onSelect,
+}: {
+  label: string;
+  value: Filter;
+  current: Filter;
+  onSelect: (value: Filter) => void;
+}) {
+  const selected = current === value;
   return (
     <button
       type="button"
-      disabled
-      title={reason}
-      className="h-8 rounded-md border border-border px-2 text-xs text-muted"
+      aria-pressed={selected}
+      onClick={() => onSelect(value)}
+      className={`h-8 rounded-md border px-3 text-sm ${
+        selected ? "border-accent bg-accent/15 text-accent" : "border-border text-muted hover:bg-surface-raised"
+      }`}
     >
       {label}
     </button>

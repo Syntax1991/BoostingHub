@@ -22,7 +22,7 @@ Persistent domain entities, Prisma contract, relationships, and domain enums. No
 
 React pages and components: layout, tables, badges, filters, empty states. Views consume prepared data. They do not query Prisma and do not decide whether a signup transition is legal.
 
-Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
+Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, character form, character lifecycle). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
 
 ### Controller
 
@@ -38,7 +38,7 @@ Better Auth's `/api/auth/*` handler is the authentication controller for OAuth a
 
 ### Service
 
-Application and business rules: booster access matching, lockout conflict, run/signup state machines, signup eligibility, roster draft/publish, dashboard composition.
+Application and business rules: booster access matching, lockout conflict, run/signup state machines, signup eligibility, roster draft/publish, character identity/lifecycle, dashboard composition.
 
 ### Repository
 
@@ -51,7 +51,7 @@ View → Controller → Service → Repository → Prisma 8 (`db.orm.public`)
                                          → PostgreSQL
 ```
 
-Better Auth uses a `pg` Pool against the same database for `user`, `session`, `account`, and `verification`. Domain tables are owned by Prisma migrations. The `user` table is shared and must stay compatible with both.
+Better Auth (Kysely) and Prisma 8 share one `pg.Pool` (`src/lib/pg-pool.ts`) so they cannot exhaust a small hosted connection limit against each other. Domain tables are owned by Prisma migrations. The `user` table is the shared identity record.
 
 ## Authorization boundary
 

@@ -12,6 +12,11 @@ export const characterController = {
     const user = await requireUserOrRedirect("/characters");
     return characterService.getCharacterPage(user);
   },
+
+  async getCharacterDetailsPage(characterId: string) {
+    const user = await requireUserOrRedirect("/characters");
+    return characterService.getCharacterDetails(user, characterId);
+  },
 };
 
 export const runController = {

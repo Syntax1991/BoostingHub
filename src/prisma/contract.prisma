@@ -177,6 +177,10 @@ model Verification {
   @@map("verification")
 }
 
+/// Owned WoW character. Display name/realm stay as entered; normalizedName /
+/// normalizedRealm plus region form the owner-scoped unique identity.
+/// Class is immutable after create until Blizzard sync can correct it.
+/// Deactivate instead of delete so historical signups and lockouts survive.
 model Character {
   id                   String        @id @default(uuid())
   userId               String
@@ -184,6 +188,8 @@ model Character {
   name                 String
   realm                String
   region               WowRegion
+  normalizedName       String
+  normalizedRealm      String
   wowClass             WowClass
   specialization       String?
   primaryRole          CharacterRole
@@ -199,6 +205,7 @@ model Character {
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
 
+  @@unique([userId, region, normalizedRealm, normalizedName])
   @@index([userId])
   @@map("character")
 }

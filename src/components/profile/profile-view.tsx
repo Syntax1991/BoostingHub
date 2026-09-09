@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ROLE_LABELS, DIFFICULTY_LABELS, CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge } from "@/components/ui/badges";
@@ -40,7 +41,12 @@ export function ProfileView({ data }: { data: Profile }) {
               Role: <span className="font-medium">{ROLE_LABELS[data.user.accountRole]}</span>
             </p>
             <p>Status: {data.user.accountStatus}</p>
-            <p>Characters: {data.activeCharacterCount} active / {data.characterCount} total</p>
+            <p>
+              Characters: {data.activeCharacterCount} active / {data.characterCount} total
+            </p>
+            <Link href="/characters" className="inline-block text-xs text-accent hover:underline">
+              Manage characters
+            </Link>
           </div>
         </Card>
         <Card>
