@@ -75,6 +75,9 @@ export const ATTENDANCE_STATUSES = [
 ] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+export const SETTLEMENT_STATUSES = ["DRAFT", "FINALIZED", "PAID"] as const;
+export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
 export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(
   (status) => status !== "UNMARKED",
 ) as readonly Exclude<AttendanceStatus, "UNMARKED">[];

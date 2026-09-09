@@ -7,6 +7,7 @@ import {
   mapAttendanceStatus,
   mapCharacterRole,
   mapParticipation,
+  mapRegion,
   mapWowClass,
 } from "@/lib/persistence";
 import type {
@@ -14,6 +15,7 @@ import type {
   CharacterRole,
   ParticipationType,
   WowClass,
+  WowRegion,
 } from "@/models/enums";
 
 export type AttendanceRecord = {
@@ -28,8 +30,10 @@ export type AttendanceRecord = {
   signupId: string;
   userId: string;
   userName: string;
+  characterId: string | null;
   characterName: string;
   characterRealm: string;
+  characterRegion: WowRegion | null;
   wowClass: WowClass | null;
   role: CharacterRole | null;
   participationType: ParticipationType;
@@ -56,8 +60,10 @@ function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
     signupId: asString(signup.id),
     userId: asString(signup.userId),
     userName: asString(user.name),
+    characterId: asStringOrNull(signup.characterId),
     characterName: character ? asString(character.name, "Unknown character") : "Unknown character",
     characterRealm: character ? asString(character.realm) : "",
+    characterRegion: character ? mapRegion(character.region) : null,
     wowClass: character ? mapWowClass(character.wowClass) : null,
     role: signup.role == null ? null : mapCharacterRole(signup.role),
     participationType: mapParticipation(signup.participationType),

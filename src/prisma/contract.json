@@ -40,12 +40,20 @@
       "model": "RunAttendance",
       "namespace": "public"
     },
+    "run_payout_entry": {
+      "model": "RunPayoutEntry",
+      "namespace": "public"
+    },
     "run_roster": {
       "model": "RunRoster",
       "namespace": "public"
     },
     "run_roster_entry": {
       "model": "RunRosterEntry",
+      "namespace": "public"
+    },
+    "run_settlement": {
+      "model": "RunSettlement",
       "namespace": "public"
     },
     "run_signup": {
@@ -273,6 +281,23 @@
               {
                 "name": "CANCELLED",
                 "value": "CANCELLED"
+              }
+            ]
+          },
+          "SettlementStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "DRAFT",
+                "value": "DRAFT"
+              },
+              {
+                "name": "FINALIZED",
+                "value": "FINALIZED"
+              },
+              {
+                "name": "PAID",
+                "value": "PAID"
               }
             ]
           },
@@ -1010,6 +1035,21 @@
                   "namespace": "public"
                 }
               },
+              "payoutEntries": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "characterId"
+                  ]
+                },
+                "to": {
+                  "model": "RunPayoutEntry",
+                  "namespace": "public"
+                }
+              },
               "signups": {
                 "cardinality": "1:N",
                 "on": {
@@ -1595,6 +1635,21 @@
                   "namespace": "public"
                 }
               },
+              "settlement": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunSettlement",
+                  "namespace": "public"
+                }
+              },
               "signups": {
                 "cardinality": "1:N",
                 "on": {
@@ -1748,6 +1803,21 @@
                   "namespace": "public"
                 }
               },
+              "payoutEntry": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "attendanceId"
+                  ]
+                },
+                "to": {
+                  "model": "RunPayoutEntry",
+                  "namespace": "public"
+                }
+              },
               "rosterEntry": {
                 "cardinality": "N:1",
                 "on": {
@@ -1811,6 +1881,332 @@
               },
               "namespaceId": "public",
               "table": "run_attendance"
+            }
+          },
+          "RunPayoutEntry": {
+            "fields": {
+              "adjustmentReason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "amountGold": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "attendanceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "attendanceStatus": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "AttendanceStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "characterId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "characterName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "characterRealm": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "characterRegion": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowRegion",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isBackup": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "participationType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ParticipationType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "role": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "rosterEntryId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "settlementId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "shareUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "signupId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "userDisplayName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "attendance": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "attendanceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
+              "character": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "characterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Character",
+                  "namespace": "public"
+                }
+              },
+              "rosterEntry": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "rosterEntryId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterEntry",
+                  "namespace": "public"
+                }
+              },
+              "settlement": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "settlementId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunSettlement",
+                  "namespace": "public"
+                }
+              },
+              "signup": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "signupId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunSignup",
+                  "namespace": "public"
+                }
+              },
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "adjustmentReason": {
+                  "column": "adjustmentReason"
+                },
+                "amountGold": {
+                  "column": "amountGold"
+                },
+                "attendanceId": {
+                  "column": "attendanceId"
+                },
+                "attendanceStatus": {
+                  "column": "attendanceStatus"
+                },
+                "characterId": {
+                  "column": "characterId"
+                },
+                "characterName": {
+                  "column": "characterName"
+                },
+                "characterRealm": {
+                  "column": "characterRealm"
+                },
+                "characterRegion": {
+                  "column": "characterRegion"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "isBackup": {
+                  "column": "isBackup"
+                },
+                "participationType": {
+                  "column": "participationType"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "rosterEntryId": {
+                  "column": "rosterEntryId"
+                },
+                "settlementId": {
+                  "column": "settlementId"
+                },
+                "shareUnits": {
+                  "column": "shareUnits"
+                },
+                "signupId": {
+                  "column": "signupId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "userDisplayName": {
+                  "column": "userDisplayName"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_payout_entry"
             }
           },
           "RunRoster": {
@@ -2017,6 +2413,21 @@
                   "namespace": "public"
                 }
               },
+              "payoutEntries": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "rosterEntryId"
+                  ]
+                },
+                "to": {
+                  "model": "RunPayoutEntry",
+                  "namespace": "public"
+                }
+              },
               "roster": {
                 "cardinality": "N:1",
                 "on": {
@@ -2071,6 +2482,255 @@
               },
               "namespaceId": "public",
               "table": "run_roster_entry"
+            }
+          },
+          "RunSettlement": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "difficulty": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidDifficulty",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "finalizedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "finalizedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "paidAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "paidById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "preparedById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidLeadName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runTitle": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SettlementStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "totalGold": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "entries": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "settlementId"
+                  ]
+                },
+                "to": {
+                  "model": "RunPayoutEntry",
+                  "namespace": "public"
+                }
+              },
+              "finalizedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "finalizedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "paidBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "paidById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "preparedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "preparedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "finalizedAt": {
+                  "column": "finalizedAt"
+                },
+                "finalizedById": {
+                  "column": "finalizedById"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "paidAt": {
+                  "column": "paidAt"
+                },
+                "paidById": {
+                  "column": "paidById"
+                },
+                "preparedById": {
+                  "column": "preparedById"
+                },
+                "raidLeadName": {
+                  "column": "raidLeadName"
+                },
+                "raidName": {
+                  "column": "raidName"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "runTitle": {
+                  "column": "runTitle"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "totalGold": {
+                  "column": "totalGold"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_settlement"
             }
           },
           "RunSignup": {
@@ -2210,6 +2870,21 @@
                 },
                 "to": {
                   "model": "Character",
+                  "namespace": "public"
+                }
+              },
+              "payoutEntries": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "signupId"
+                  ]
+                },
+                "to": {
+                  "model": "RunPayoutEntry",
                   "namespace": "public"
                 }
               },
@@ -2580,6 +3255,21 @@
                   "namespace": "public"
                 }
               },
+              "finalizedSettlements": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "finalizedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunSettlement",
+                  "namespace": "public"
+                }
+              },
               "ledRuns": {
                 "cardinality": "1:N",
                 "on": {
@@ -2607,6 +3297,51 @@
                 },
                 "to": {
                   "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
+              "paidSettlements": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "paidById"
+                  ]
+                },
+                "to": {
+                  "model": "RunSettlement",
+                  "namespace": "public"
+                }
+              },
+              "payoutEntries": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "RunPayoutEntry",
+                  "namespace": "public"
+                }
+              },
+              "preparedSettlements": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "preparedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunSettlement",
                   "namespace": "public"
                 }
               },
@@ -3997,6 +4732,318 @@
                 }
               ]
             },
+            "run_payout_entry": {
+              "checks": [
+                {
+                  "expression": "\"attendanceStatus\" IN ('UNMARKED', 'PRESENT', 'LATE', 'LEFT_EARLY', 'NO_SHOW', 'EXCUSED', 'STANDBY')",
+                  "name": "run_payout_entry_attendanceStatus_check_bee4e5d2",
+                  "prefix": "run_payout_entry_attendanceStatus_check"
+                },
+                {
+                  "expression": "\"characterRegion\" IN ('EU', 'US')",
+                  "name": "run_payout_entry_characterRegion_check_4f6701ca",
+                  "prefix": "run_payout_entry_characterRegion_check"
+                },
+                {
+                  "expression": "\"participationType\" IN ('BOOSTER', 'LOOTBUDDY')",
+                  "name": "run_payout_entry_participationType_check_c88ba3d2",
+                  "prefix": "run_payout_entry_participationType_check"
+                },
+                {
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_payout_entry_role_check_b1616ae6",
+                  "prefix": "run_payout_entry_role_check"
+                }
+              ],
+              "columns": {
+                "adjustmentReason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "amountGold": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "attendanceId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "attendanceStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "AttendanceStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "characterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "characterName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "characterRealm": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "characterRegion": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowRegion",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "isBackup": {
+                  "codecId": "pg/bool@1",
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "participationType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ParticipationType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "rosterEntryId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "settlementId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "shareUnits": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "signupId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "userDisplayName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "settlementId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_payout_entry"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_settlement"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "attendanceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_payout_entry"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_attendance"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "rosterEntryId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_payout_entry"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_entry"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "signupId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_payout_entry"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_signup"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_payout_entry"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "characterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_payout_entry"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "characterId"
+                  ],
+                  "name": "run_payout_entry_characterId_idx_2423fe9d",
+                  "prefix": "run_payout_entry_characterId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "rosterEntryId"
+                  ],
+                  "name": "run_payout_entry_rosterEntryId_idx_06788738",
+                  "prefix": "run_payout_entry_rosterEntryId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "settlementId"
+                  ],
+                  "name": "run_payout_entry_settlementId_idx_427ee326",
+                  "prefix": "run_payout_entry_settlementId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "signupId"
+                  ],
+                  "name": "run_payout_entry_signupId_idx_acdbc7f1",
+                  "prefix": "run_payout_entry_signupId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "run_payout_entry_userId_idx_a489d58a",
+                  "prefix": "run_payout_entry_userId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "attendanceId"
+                  ]
+                }
+              ]
+            },
             "run_roster": {
               "checks": [
                 {
@@ -4229,6 +5276,233 @@
                   "columns": [
                     "rosterId",
                     "signupId"
+                  ]
+                }
+              ]
+            },
+            "run_settlement": {
+              "checks": [
+                {
+                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
+                  "name": "run_settlement_difficulty_check_05ae26c2",
+                  "prefix": "run_settlement_difficulty_check"
+                },
+                {
+                  "expression": "\"status\" IN ('DRAFT', 'FINALIZED', 'PAID')",
+                  "name": "run_settlement_status_check_54af39d0",
+                  "prefix": "run_settlement_status_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidDifficulty",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "finalizedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "finalizedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "paidAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "paidById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "preparedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "raidLeadName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "raidName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runTitle": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "DRAFT"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SettlementStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "totalGold": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_settlement"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "preparedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_settlement"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "finalizedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_settlement"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "paidById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_settlement"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "finalizedById"
+                  ],
+                  "name": "run_settlement_finalizedById_idx_7e97fe52",
+                  "prefix": "run_settlement_finalizedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "paidById"
+                  ],
+                  "name": "run_settlement_paidById_idx_406e50ef",
+                  "prefix": "run_settlement_paidById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "preparedById"
+                  ],
+                  "name": "run_settlement_preparedById_idx_1dcf84f2",
+                  "prefix": "run_settlement_preparedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "run_settlement_status_idx_e98638ab",
+                  "prefix": "run_settlement_status_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId"
                   ]
                 }
               ]
@@ -4809,6 +6083,14 @@
                 "CANCELLED"
               ]
             },
+            "SettlementStatus": {
+              "kind": "valueSet",
+              "values": [
+                "DRAFT",
+                "FINALIZED",
+                "PAID"
+              ]
+            },
             "SignupStatus": {
               "kind": "valueSet",
               "values": [
@@ -4849,10 +6131,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "0e77d9eabd5bec25d2e415654967a9e360018316db7464e9656e8674a1ff4454"
+    "storageHash": "43267012523ddbffd0ca68a1d58943053670e814e5af38a2da9e427014dbacbd"
   },
   "execution": {
-    "executionHash": "00e54433b7579db23df0c095a544c2ac60f1d1da902b6436e7babde38e79a038",
+    "executionHash": "d76c356549172498c40306039f34810be4d1d5c28467e92d3de177d3bb07859e",
     "mutations": {
       "defaults": [
         {
@@ -5067,6 +6349,32 @@
           "ref": {
             "column": "id",
             "namespace": "public",
+            "table": "run_payout_entry"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_payout_entry"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
             "table": "run_roster"
           }
         },
@@ -5109,6 +6417,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_roster_entry"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_settlement"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_settlement"
           }
         },
         {

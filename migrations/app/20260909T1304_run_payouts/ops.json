@@ -1,0 +1,935 @@
+[
+  {
+    "id": "table.run_payout_entry",
+    "label": "Create table \"run_payout_entry\"",
+    "summary": "Creates table \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_payout_entry\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_payout_entry\"",
+        "sql": "CREATE TABLE \"public\".\"run_payout_entry\" (\n  \"adjustmentReason\" text,\n  \"amountGold\" int4 NOT NULL,\n  \"attendanceId\" text NOT NULL,\n  \"attendanceStatus\" text NOT NULL,\n  \"characterId\" text,\n  \"characterName\" text NOT NULL,\n  \"characterRealm\" text NOT NULL,\n  \"characterRegion\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"isBackup\" bool NOT NULL,\n  \"participationType\" text NOT NULL,\n  \"role\" text,\n  \"rosterEntryId\" text NOT NULL,\n  \"settlementId\" text NOT NULL,\n  \"shareUnits\" int4 NOT NULL,\n  \"signupId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userDisplayName\" text NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_payout_entry_attendanceStatus_check_bee4e5d2\" CHECK (\"attendanceStatus\" IN ('UNMARKED', 'PRESENT', 'LATE', 'LEFT_EARLY', 'NO_SHOW', 'EXCUSED', 'STANDBY')),\n  CONSTRAINT \"run_payout_entry_characterRegion_check_4f6701ca\" CHECK (\"characterRegion\" IN ('EU', 'US')),\n  CONSTRAINT \"run_payout_entry_participationType_check_c88ba3d2\" CHECK (\"participationType\" IN ('BOOSTER', 'LOOTBUDDY')),\n  CONSTRAINT \"run_payout_entry_role_check_b1616ae6\" CHECK (\"role\" IN ('TANK', 'HEALER', 'DPS'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_payout_entry\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_settlement",
+    "label": "Create table \"run_settlement\"",
+    "summary": "Creates table \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_settlement\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_settlement\"",
+        "sql": "CREATE TABLE \"public\".\"run_settlement\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"finalizedAt\" timestamptz,\n  \"finalizedById\" text,\n  \"id\" text NOT NULL,\n  \"paidAt\" timestamptz,\n  \"paidById\" text,\n  \"preparedById\" text NOT NULL,\n  \"raidLeadName\" text NOT NULL,\n  \"raidName\" text NOT NULL,\n  \"runId\" text NOT NULL,\n  \"runTitle\" text NOT NULL,\n  \"status\" text DEFAULT 'DRAFT' NOT NULL,\n  \"totalGold\" int4 NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_settlement_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')),\n  CONSTRAINT \"run_settlement_status_check_54af39d0\" CHECK (\"status\" IN ('DRAFT', 'FINALIZED', 'PAID'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_settlement\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_payout_entry.run_payout_entry_attendanceId_key",
+    "label": "Add unique constraint on \"run_payout_entry\" (attendanceId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_payout_entry_attendanceId_key",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_payout_entry_attendanceId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_attendanceId_key",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_payout_entry_attendanceId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\" ADD CONSTRAINT \"run_payout_entry_attendanceId_key\" UNIQUE (\"attendanceId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_payout_entry_attendanceId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_attendanceId_key",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_settlement.run_settlement_runId_key",
+    "label": "Add unique constraint on \"run_settlement\" (runId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_settlement_runId_key",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_settlement_runId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_runId_key",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_settlement_runId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD CONSTRAINT \"run_settlement_runId_key\" UNIQUE (\"runId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_settlement_runId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_runId_key",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_payout_entry.run_payout_entry_characterId_idx_2423fe9d",
+    "label": "Create index \"run_payout_entry_characterId_idx_2423fe9d\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_payout_entry_characterId_idx_2423fe9d",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_payout_entry_characterId_idx_2423fe9d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_characterId_idx_2423fe9d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_payout_entry_characterId_idx_2423fe9d\"",
+        "sql": "CREATE INDEX \"run_payout_entry_characterId_idx_2423fe9d\" ON \"public\".\"run_payout_entry\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_payout_entry_characterId_idx_2423fe9d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_characterId_idx_2423fe9d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_payout_entry.run_payout_entry_rosterEntryId_idx_06788738",
+    "label": "Create index \"run_payout_entry_rosterEntryId_idx_06788738\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_payout_entry_rosterEntryId_idx_06788738",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_payout_entry_rosterEntryId_idx_06788738\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_rosterEntryId_idx_06788738\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_payout_entry_rosterEntryId_idx_06788738\"",
+        "sql": "CREATE INDEX \"run_payout_entry_rosterEntryId_idx_06788738\" ON \"public\".\"run_payout_entry\" (\"rosterEntryId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_payout_entry_rosterEntryId_idx_06788738\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_rosterEntryId_idx_06788738\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_payout_entry.run_payout_entry_settlementId_idx_427ee326",
+    "label": "Create index \"run_payout_entry_settlementId_idx_427ee326\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_payout_entry_settlementId_idx_427ee326",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_payout_entry_settlementId_idx_427ee326\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_settlementId_idx_427ee326\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_payout_entry_settlementId_idx_427ee326\"",
+        "sql": "CREATE INDEX \"run_payout_entry_settlementId_idx_427ee326\" ON \"public\".\"run_payout_entry\" (\"settlementId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_payout_entry_settlementId_idx_427ee326\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_settlementId_idx_427ee326\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_payout_entry.run_payout_entry_signupId_idx_acdbc7f1",
+    "label": "Create index \"run_payout_entry_signupId_idx_acdbc7f1\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_payout_entry_signupId_idx_acdbc7f1",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_payout_entry_signupId_idx_acdbc7f1\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_signupId_idx_acdbc7f1\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_payout_entry_signupId_idx_acdbc7f1\"",
+        "sql": "CREATE INDEX \"run_payout_entry_signupId_idx_acdbc7f1\" ON \"public\".\"run_payout_entry\" (\"signupId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_payout_entry_signupId_idx_acdbc7f1\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_signupId_idx_acdbc7f1\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_payout_entry.run_payout_entry_userId_idx_a489d58a",
+    "label": "Create index \"run_payout_entry_userId_idx_a489d58a\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_payout_entry_userId_idx_a489d58a",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_payout_entry_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_payout_entry_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"run_payout_entry_userId_idx_a489d58a\" ON \"public\".\"run_payout_entry\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_payout_entry_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_payout_entry_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_settlement.run_settlement_finalizedById_idx_7e97fe52",
+    "label": "Create index \"run_settlement_finalizedById_idx_7e97fe52\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_settlement_finalizedById_idx_7e97fe52",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_settlement_finalizedById_idx_7e97fe52\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_finalizedById_idx_7e97fe52\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_settlement_finalizedById_idx_7e97fe52\"",
+        "sql": "CREATE INDEX \"run_settlement_finalizedById_idx_7e97fe52\" ON \"public\".\"run_settlement\" (\"finalizedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_settlement_finalizedById_idx_7e97fe52\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_finalizedById_idx_7e97fe52\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_settlement.run_settlement_paidById_idx_406e50ef",
+    "label": "Create index \"run_settlement_paidById_idx_406e50ef\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_settlement_paidById_idx_406e50ef",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_settlement_paidById_idx_406e50ef\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_paidById_idx_406e50ef\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_settlement_paidById_idx_406e50ef\"",
+        "sql": "CREATE INDEX \"run_settlement_paidById_idx_406e50ef\" ON \"public\".\"run_settlement\" (\"paidById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_settlement_paidById_idx_406e50ef\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_paidById_idx_406e50ef\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_settlement.run_settlement_preparedById_idx_1dcf84f2",
+    "label": "Create index \"run_settlement_preparedById_idx_1dcf84f2\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_settlement_preparedById_idx_1dcf84f2",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_settlement_preparedById_idx_1dcf84f2\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_preparedById_idx_1dcf84f2\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_settlement_preparedById_idx_1dcf84f2\"",
+        "sql": "CREATE INDEX \"run_settlement_preparedById_idx_1dcf84f2\" ON \"public\".\"run_settlement\" (\"preparedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_settlement_preparedById_idx_1dcf84f2\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_preparedById_idx_1dcf84f2\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_settlement.run_settlement_status_idx_e98638ab",
+    "label": "Create index \"run_settlement_status_idx_e98638ab\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_settlement_status_idx_e98638ab",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_settlement_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_settlement_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"run_settlement_status_idx_e98638ab\" ON \"public\".\"run_settlement\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_settlement_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_settlement_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_payout_entry.run_payout_entry_settlementId_fkey",
+    "label": "Add foreign key \"run_payout_entry_settlementId_fkey\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_payout_entry_settlementId_fkey",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_payout_entry_settlementId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_settlementId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_payout_entry_settlementId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\"\nADD CONSTRAINT \"run_payout_entry_settlementId_fkey\"\nFOREIGN KEY (\"settlementId\")\nREFERENCES \"public\".\"run_settlement\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_payout_entry_settlementId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_settlementId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_payout_entry.run_payout_entry_attendanceId_fkey",
+    "label": "Add foreign key \"run_payout_entry_attendanceId_fkey\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_payout_entry_attendanceId_fkey",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_payout_entry_attendanceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_attendanceId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_payout_entry_attendanceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\"\nADD CONSTRAINT \"run_payout_entry_attendanceId_fkey\"\nFOREIGN KEY (\"attendanceId\")\nREFERENCES \"public\".\"run_attendance\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_payout_entry_attendanceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_attendanceId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_payout_entry.run_payout_entry_rosterEntryId_fkey",
+    "label": "Add foreign key \"run_payout_entry_rosterEntryId_fkey\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_payout_entry_rosterEntryId_fkey",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_payout_entry_rosterEntryId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_rosterEntryId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_payout_entry_rosterEntryId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\"\nADD CONSTRAINT \"run_payout_entry_rosterEntryId_fkey\"\nFOREIGN KEY (\"rosterEntryId\")\nREFERENCES \"public\".\"run_roster_entry\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_payout_entry_rosterEntryId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_rosterEntryId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_payout_entry.run_payout_entry_signupId_fkey",
+    "label": "Add foreign key \"run_payout_entry_signupId_fkey\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_payout_entry_signupId_fkey",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_payout_entry_signupId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_signupId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_payout_entry_signupId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\"\nADD CONSTRAINT \"run_payout_entry_signupId_fkey\"\nFOREIGN KEY (\"signupId\")\nREFERENCES \"public\".\"run_signup\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_payout_entry_signupId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_signupId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_payout_entry.run_payout_entry_userId_fkey",
+    "label": "Add foreign key \"run_payout_entry_userId_fkey\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_payout_entry_userId_fkey",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_payout_entry_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_userId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_payout_entry_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\"\nADD CONSTRAINT \"run_payout_entry_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_payout_entry_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_userId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_payout_entry.run_payout_entry_characterId_fkey",
+    "label": "Add foreign key \"run_payout_entry_characterId_fkey\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_payout_entry_characterId_fkey",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_payout_entry_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_characterId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_payout_entry_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\"\nADD CONSTRAINT \"run_payout_entry_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_payout_entry_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_characterId_fkey",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_settlement.run_settlement_runId_fkey",
+    "label": "Add foreign key \"run_settlement_runId_fkey\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_settlement_runId_fkey",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_settlement_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_runId_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_settlement_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\"\nADD CONSTRAINT \"run_settlement_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_settlement_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_runId_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_settlement.run_settlement_preparedById_fkey",
+    "label": "Add foreign key \"run_settlement_preparedById_fkey\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_settlement_preparedById_fkey",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_settlement_preparedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_preparedById_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_settlement_preparedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\"\nADD CONSTRAINT \"run_settlement_preparedById_fkey\"\nFOREIGN KEY (\"preparedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_settlement_preparedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_preparedById_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_settlement.run_settlement_finalizedById_fkey",
+    "label": "Add foreign key \"run_settlement_finalizedById_fkey\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_settlement_finalizedById_fkey",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_settlement_finalizedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_finalizedById_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_settlement_finalizedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\"\nADD CONSTRAINT \"run_settlement_finalizedById_fkey\"\nFOREIGN KEY (\"finalizedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_settlement_finalizedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_finalizedById_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_settlement.run_settlement_paidById_fkey",
+    "label": "Add foreign key \"run_settlement_paidById_fkey\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_settlement_paidById_fkey",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_settlement_paidById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_paidById_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_settlement_paidById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\"\nADD CONSTRAINT \"run_settlement_paidById_fkey\"\nFOREIGN KEY (\"paidById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_settlement_paidById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_paidById_fkey",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  }
+]
