@@ -19,14 +19,14 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 ## Models / services / controllers
 
-- Models: User, Character, BoosterAccess, Raid, Run, RunSignup, CharacterRaidLockout, ActivityEvent
-- Services: dashboard, run (including create/lifecycle), run detail, signup, character, profile, lockout, booster access, roster
+- Models: User, Character, BoosterAccess, Raid, Run, RunSignup, CharacterRaidLockout, RunRoster, RunAttendance, RunSettlement, RunPayoutEntry, ActivityEvent
+- Services: dashboard, run (including create/lifecycle), run detail, signup, character, profile, lockout, booster access, roster, attendance, payout
 - Controllers: `dashboard.controller`, `app.controller`, `run.actions`, `auth.controller`, `auth.actions`
 
 ## Limitations
 
 - Character create/edit/deactivate/reactivate is implemented for the owning user
-- Run create/edit/open/signup-window/cancel/start/complete and attendance are implemented
+- Run create/edit/open/signup-window/cancel/start/complete, attendance, and completed-run payouts are implemented
 - Blizzard refresh is not claimed to work
-- Payout panels are reserved empty, not fake finance
+- Profile gold/wallet panels stay reserved; run payouts live on `/runs/[runId]`
 - Signup, withdraw, and raidlead/admin roster publish are implemented

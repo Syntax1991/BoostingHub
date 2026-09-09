@@ -144,7 +144,7 @@ The published roster stays live until a replacement publish succeeds. The lead m
 ## Deferred
 
 - Raid groups 1–8, parties, markers, assignments
-- Payouts / gold
+- Wallets / extra organizational cuts (see [run-payouts.md](run-payouts.md))
 - Battle.net, Warcraft Logs, Discord bot, notifications
 - Customer bookings / boost market
 - Per-user timezones

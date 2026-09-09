@@ -116,6 +116,14 @@ enum AttendanceStatus {
   STANDBY     = "STANDBY"
 }
 
+/// Bookkeeping lifecycle for one completed-run gold settlement. Not a wallet.
+enum SettlementStatus {
+  @@type("pg/text@1")
+  DRAFT     = "DRAFT"
+  FINALIZED = "FINALIZED"
+  PAID      = "PAID"
+}
+
 /// Application account. Also serves as the Better Auth `user` table.
 /// Account roles are permissions on the platform, not run participation type.
 model User {
@@ -142,6 +150,10 @@ model User {
   activity         ActivityEvent[]
   publishedRosters RunRoster[]     @relation("RosterPublisher")
   markedAttendance RunAttendance[] @relation("AttendanceMarker")
+  preparedSettlements  RunSettlement[] @relation("SettlementPreparer")
+  finalizedSettlements RunSettlement[] @relation("SettlementFinalizer")
+  paidSettlements      RunSettlement[] @relation("SettlementPayer")
+  payoutEntries        RunPayoutEntry[] @relation("PayoutRecipient")
 
   @@map("user")
 }
@@ -219,6 +231,7 @@ model Character {
   lockouts      CharacterRaidLockout[]
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
+  payoutEntries RunPayoutEntry[]
 
   @@unique([userId, region, normalizedRealm, normalizedName])
   @@index([userId])
@@ -323,6 +336,7 @@ model Run {
   signups     RunSignup[]
   roster      RunRoster?
   attendance  RunAttendance[]
+  settlement  RunSettlement?
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -352,6 +366,7 @@ model RunSignup {
   updatedAt             temporal.updatedAtString()
 
   rosterEntries RunRosterEntry[]
+  payoutEntries RunPayoutEntry[]
 
   @@unique([runId, userId, characterId, participationType])
   @@index([userId])
@@ -394,6 +409,8 @@ model RunAttendance {
   createdAt     TimestamptzString @default(now())
   updatedAt     temporal.updatedAtString()
 
+  payoutEntry RunPayoutEntry?
+
   @@index([runId])
   @@index([status])
   @@map("run_attendance")
@@ -409,11 +426,75 @@ model RunRosterEntry {
   createdAt TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
 
-  attendance RunAttendance?
+  attendance   RunAttendance?
+  payoutEntries RunPayoutEntry[]
 
   @@unique([rosterId, signupId])
   @@index([rosterId])
   @@map("run_roster_entry")
+}
+
+/// One gold settlement per completed Run. Amounts are whole WoW gold integers.
+/// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
+model RunSettlement {
+  id            String           @id @default(uuid())
+  runId         String           @unique
+  run           Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  totalGold     Int
+  status        SettlementStatus @default(DRAFT)
+  preparedById  String
+  preparedBy    User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
+  finalizedAt   TimestamptzString?
+  finalizedById String?
+  finalizedBy   User?            @relation("SettlementFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
+  paidAt        TimestamptzString?
+  paidById      String?
+  paidBy        User?            @relation("SettlementPayer", fields: [paidById], references: [id], onDelete: SetNull)
+  runTitle      String
+  raidName      String
+  difficulty    RaidDifficulty
+  raidLeadName  String
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  entries RunPayoutEntry[]
+
+  @@index([status])
+  @@map("run_settlement")
+}
+
+/// One attendance-derived payout line. Zero-share rows are kept for audit history.
+model RunPayoutEntry {
+  id                String            @id @default(uuid())
+  settlementId      String
+  settlement        RunSettlement     @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  attendanceId      String            @unique
+  attendance        RunAttendance     @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  rosterEntryId     String
+  rosterEntry       RunRosterEntry    @relation(fields: [rosterEntryId], references: [id], onDelete: Restrict)
+  signupId          String
+  signup            RunSignup         @relation(fields: [signupId], references: [id], onDelete: Restrict)
+  userId            String
+  user              User              @relation("PayoutRecipient", fields: [userId], references: [id], onDelete: Restrict)
+  characterId       String?
+  character         Character?        @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  userDisplayName   String
+  characterName     String
+  characterRealm    String
+  characterRegion   WowRegion?
+  participationType ParticipationType
+  attendanceStatus  AttendanceStatus
+  role              CharacterRole?
+  isBackup          Boolean
+  shareUnits        Int
+  amountGold        Int
+  adjustmentReason  String?
+  createdAt         TimestamptzString @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  @@index([settlementId])
+  @@index([userId])
+  @@map("run_payout_entry")
 }
 
 model ActivityEvent {

@@ -11,12 +11,14 @@ import {
   LOOTBUDDY_VERIFICATIONS,
   ROSTER_STATES,
   ATTENDANCE_STATUSES,
+  SETTLEMENT_STATUSES,
   WOW_CLASSES,
   WOW_REGIONS,
   type AccountRole,
   type AccountStatus,
   type AttendanceStatus,
   type BoosterAccessStatus,
+  type SettlementStatus,
   type CharacterRole,
   type LootbuddyMode,
   type LootbuddyVerification,
@@ -105,6 +107,10 @@ export function mapRosterState(value: unknown): RosterState {
 
 export function mapAttendanceStatus(value: unknown): AttendanceStatus {
   return asEnum(value, ATTENDANCE_STATUSES, "UNMARKED");
+}
+
+export function mapSettlementStatus(value: unknown): SettlementStatus {
+  return asEnum(value, SETTLEMENT_STATUSES, "DRAFT");
 }
 
 export {

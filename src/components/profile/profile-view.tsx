@@ -11,7 +11,7 @@ export function ProfileView({ data }: { data: Profile }) {
     <div>
       <PageHeader
         title="Profile"
-        description="Account identity, permissions, and booster eligibility. Payout and attendance remain reserved."
+        description="Account identity, permissions, and booster eligibility. Run payouts live on completed run detail."
       />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -98,7 +98,7 @@ export function ProfileView({ data }: { data: Profile }) {
           <ul className="space-y-2 px-4 py-4 text-sm text-muted">
             <li>Attendance history — deferred</li>
             <li>Availability calendar — deferred</li>
-            <li>Payout / gold balance — deferred</li>
+            <li>Profile gold wallet — deferred; completed-run payouts are on the Run Payout tab</li>
           </ul>
         </Card>
       </div>

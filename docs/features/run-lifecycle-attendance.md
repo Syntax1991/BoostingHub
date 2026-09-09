@@ -125,13 +125,13 @@ On success:
 - `signupsOpen = false`
 - attendance remains stored and becomes read-only in this feature
 
-Signup, roster, BoosterAccess, and lockout history stay intact. No payouts are computed.
+Signup, roster, BoosterAccess, and lockout history stay intact. Payouts are a later explicit settlement on the Payout tab; completion does not compute gold.
 
-Post-completion ADMIN corrections are deferred.
+Post-completion ADMIN attendance corrections are deferred.
 
 ## Canonical Run Detail Integration
 
-Attendance lives on `/runs/[runId]` as a fourth tab: Overview, Signups, Roster, Attendance.
+Attendance lives on `/runs/[runId]` as a fourth tab: Overview, Signups, Roster, Attendance. Payout is a fifth tab after completion; see [run-payouts.md](run-payouts.md).
 
 There is no `/manage/runs/[runId]/attendance` implementation.
 
@@ -179,7 +179,7 @@ No Prisma in views or controllers. No attendance transition rules in React.
 ## Deferred
 
 - attendance correction after completion
-- payout
+- wallet / escrow / payment automation
 - Discord notifications
 - Warcraft Logs
 - Blizzard

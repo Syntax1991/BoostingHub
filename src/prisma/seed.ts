@@ -50,6 +50,9 @@ const ids = {
     rosterLab: "r8888888-8888-4888-8888-888888888888",
     heroicInProgress: "r9999991-9991-4991-8991-999999999991",
     heroicCompleted: "r9999992-9992-4992-8992-999999999992",
+    payoutDraft: "r9999993-9993-4993-8993-999999999993",
+    payoutFinalized: "r9999994-9994-4994-8994-999999999994",
+    payoutPaid: "r9999995-9995-4995-8995-999999999995",
   },
   signups: {
     publishedKael: "s5555555-5555-4555-8555-555555555551",
@@ -79,16 +82,37 @@ const ids = {
     cpKael: "s9999992-9992-4992-8992-999999999991",
     cpMira: "s9999992-9992-4992-8992-999999999992",
     cpBrann: "s9999992-9992-4992-8992-999999999993",
+    pdKael: "s9999993-9993-4993-8993-999999999991",
+    pdMira: "s9999993-9993-4993-8993-999999999992",
+    pdBrann: "s9999993-9993-4993-8993-999999999993",
+    pdSylva: "s9999993-9993-4993-8993-999999999994",
+    pfKael: "s9999994-9994-4994-8994-999999999991",
+    pfMira: "s9999994-9994-4994-8994-999999999992",
+    pfBrann: "s9999994-9994-4994-8994-999999999993",
+    pfSylva: "s9999994-9994-4994-8994-999999999994",
+    ppKael: "s9999995-9995-4995-8995-999999999991",
+    ppMira: "s9999995-9995-4995-8995-999999999992",
+    ppBrann: "s9999995-9995-4995-8995-999999999993",
+    ppSylva: "s9999995-9995-4995-8995-999999999994",
   },
   rosters: {
     sunday: "o3333333-3333-4333-8333-333333333333",
     published: "o5555555-5555-4555-8555-555555555555",
     inProgress: "o9999991-9991-4991-8991-999999999991",
     completed: "o9999992-9992-4992-8992-999999999992",
+    payoutDraft: "o9999993-9993-4993-8993-999999999993",
+    payoutFinalized: "o9999994-9994-4994-8994-999999999994",
+    payoutPaid: "o9999995-9995-4995-8995-999999999995",
   },
 };
 
 async function wipe() {
+  for (const row of await orm.RunPayoutEntry.select("id").all()) {
+    await orm.RunPayoutEntry.where({ id: row.id }).delete();
+  }
+  for (const row of await orm.RunSettlement.select("id").all()) {
+    await orm.RunSettlement.where({ id: row.id }).delete();
+  }
   for (const row of await orm.RunAttendance.select("id").all()) {
     await orm.RunAttendance.where({ id: row.id }).delete();
   }
@@ -529,6 +553,42 @@ async function seed() {
       desiredDpsCount: 14,
       raidLeadId: ids.users.thorne,
     },
+    {
+      id: ids.runs.payoutDraft,
+      title: "Draft Payout Heroic",
+      difficulty: "HEROIC",
+      scheduledStartAt: "2026-09-06T19:00:00.000Z",
+      status: "COMPLETED",
+      signupsOpen: false,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      raidLeadId: ids.users.thorne,
+    },
+    {
+      id: ids.runs.payoutFinalized,
+      title: "Finalized Payout Heroic",
+      difficulty: "HEROIC",
+      scheduledStartAt: "2026-09-05T19:00:00.000Z",
+      status: "COMPLETED",
+      signupsOpen: false,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      raidLeadId: ids.users.thorne,
+    },
+    {
+      id: ids.runs.payoutPaid,
+      title: "Paid Payout Heroic",
+      difficulty: "HEROIC",
+      scheduledStartAt: "2026-09-04T19:00:00.000Z",
+      status: "COMPLETED",
+      signupsOpen: false,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      raidLeadId: ids.users.thorne,
+    },
   ] as const;
 
   for (const run of runs) {
@@ -908,6 +968,132 @@ async function seed() {
       isBackup: false,
       status: "SELECTED",
     },
+    {
+      id: ids.signups.pdKael,
+      runId: ids.runs.payoutDraft,
+      userId: ids.users.kael,
+      characterId: ids.characters.kaelEle,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.pdMira,
+      runId: ids.runs.payoutDraft,
+      userId: ids.users.mira,
+      characterId: ids.characters.miraPriest,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyMode: "LOOT_ONLY",
+      lootbuddyVerification: "ACCESS",
+    },
+    {
+      id: ids.signups.pdBrann,
+      runId: ids.runs.payoutDraft,
+      userId: ids.users.brann,
+      characterId: ids.characters.brannPaladin,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.pdSylva,
+      runId: ids.runs.payoutDraft,
+      userId: ids.users.sylva,
+      characterId: ids.characters.sylvaHunter,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: true,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.pfKael,
+      runId: ids.runs.payoutFinalized,
+      userId: ids.users.kael,
+      characterId: ids.characters.kaelEle,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.pfMira,
+      runId: ids.runs.payoutFinalized,
+      userId: ids.users.mira,
+      characterId: ids.characters.miraPriest,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyMode: "LOOT_ONLY",
+      lootbuddyVerification: "ACCESS",
+    },
+    {
+      id: ids.signups.pfBrann,
+      runId: ids.runs.payoutFinalized,
+      userId: ids.users.brann,
+      characterId: ids.characters.brannPaladin,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.pfSylva,
+      runId: ids.runs.payoutFinalized,
+      userId: ids.users.sylva,
+      characterId: ids.characters.sylvaHunter,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: true,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.ppKael,
+      runId: ids.runs.payoutPaid,
+      userId: ids.users.kael,
+      characterId: ids.characters.kaelEle,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.ppMira,
+      runId: ids.runs.payoutPaid,
+      userId: ids.users.mira,
+      characterId: ids.characters.miraPriest,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyMode: "PLAYING",
+      lootbuddyVerification: "ACCESS",
+    },
+    {
+      id: ids.signups.ppBrann,
+      runId: ids.runs.payoutPaid,
+      userId: ids.users.brann,
+      characterId: ids.characters.brannPaladin,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.ppSylva,
+      runId: ids.runs.payoutPaid,
+      userId: ids.users.sylva,
+      characterId: ids.characters.sylvaHunter,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: true,
+      status: "SELECTED",
+    },
   ] as const;
 
   for (const signup of signups) {
@@ -1047,6 +1233,209 @@ async function seed() {
       updatedAt: SEED_NOW,
     });
   }
+
+  async function seedCompletedPayoutRun(input: {
+    runId: string;
+    rosterId: string;
+    raidName: string;
+    settlementId: string;
+    status: "DRAFT" | "FINALIZED" | "PAID";
+    totalGold: number;
+    members: Array<{
+      signupId: string;
+      rosterEntryId: string;
+      attendanceId: string;
+      payoutEntryId: string;
+      userId: string;
+      userDisplayName: string;
+      characterId: string;
+      characterName: string;
+      characterRealm: string;
+      characterRegion: "EU" | "US";
+      participationType: "BOOSTER" | "LOOTBUDDY";
+      attendanceStatus: "PRESENT" | "LATE" | "NO_SHOW" | "STANDBY";
+      role: "TANK" | "HEALER" | "DPS" | null;
+      isBackup: boolean;
+      shareUnits: number;
+      amountGold: number;
+      adjustmentReason?: string | null;
+    }>;
+  }) {
+    await orm.RunRoster.create({
+      id: input.rosterId,
+      runId: input.runId,
+      state: "PUBLISHED",
+      version: 1,
+      publishedAt: SEED_NOW,
+      publishedById: ids.users.thorne,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+    for (const member of input.members) {
+      await orm.RunRosterEntry.create({
+        id: member.rosterEntryId,
+        rosterId: input.rosterId,
+        signupId: member.signupId,
+        selected: true,
+        createdAt: SEED_NOW,
+        updatedAt: SEED_NOW,
+      });
+      await orm.RunAttendance.create({
+        id: member.attendanceId,
+        runId: input.runId,
+        rosterEntryId: member.rosterEntryId,
+        status: member.attendanceStatus,
+        note: null,
+        markedAt: SEED_NOW,
+        markedById: ids.users.thorne,
+        createdAt: SEED_NOW,
+        updatedAt: SEED_NOW,
+      });
+    }
+    await orm.RunSettlement.create({
+      id: input.settlementId,
+      runId: input.runId,
+      totalGold: input.totalGold,
+      status: input.status,
+      preparedById: ids.users.thorne,
+      finalizedAt: input.status === "DRAFT" ? null : SEED_NOW,
+      finalizedById: input.status === "DRAFT" ? null : ids.users.thorne,
+      paidAt: input.status === "PAID" ? SEED_NOW : null,
+      paidById: input.status === "PAID" ? ids.users.aelira : null,
+      runTitle:
+        input.runId === ids.runs.payoutDraft
+          ? "Draft Payout Heroic"
+          : input.runId === ids.runs.payoutFinalized
+            ? "Finalized Payout Heroic"
+            : "Paid Payout Heroic",
+      raidName: input.raidName,
+      difficulty: "HEROIC",
+      raidLeadName: "Thorne Ironvein",
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+    for (const member of input.members) {
+      await orm.RunPayoutEntry.create({
+        id: member.payoutEntryId,
+        settlementId: input.settlementId,
+        attendanceId: member.attendanceId,
+        rosterEntryId: member.rosterEntryId,
+        signupId: member.signupId,
+        userId: member.userId,
+        characterId: member.characterId,
+        userDisplayName: member.userDisplayName,
+        characterName: member.characterName,
+        characterRealm: member.characterRealm,
+        characterRegion: member.characterRegion,
+        participationType: member.participationType,
+        attendanceStatus: member.attendanceStatus,
+        role: member.role,
+        isBackup: member.isBackup,
+        shareUnits: member.shareUnits,
+        amountGold: member.amountGold,
+        adjustmentReason: member.adjustmentReason ?? null,
+        createdAt: SEED_NOW,
+        updatedAt: SEED_NOW,
+      });
+    }
+  }
+
+  const raidName = WOW_RAID_CATALOG[0].name;
+  const payoutMembers = {
+    kael: {
+      userId: ids.users.kael,
+      userDisplayName: "Kael Stormhowl",
+      characterId: ids.characters.kaelEle,
+      characterName: "Stormhowl",
+      characterRealm: "Tarren Mill",
+      characterRegion: "EU" as const,
+      participationType: "BOOSTER" as const,
+      attendanceStatus: "PRESENT" as const,
+      role: "DPS" as const,
+      isBackup: false,
+    },
+    mira: {
+      userId: ids.users.mira,
+      userDisplayName: "Mira Dawnward",
+      characterId: ids.characters.miraPriest,
+      characterName: "Dawnward",
+      characterRealm: "Silvermoon",
+      characterRegion: "EU" as const,
+      participationType: "LOOTBUDDY" as const,
+      attendanceStatus: "LATE" as const,
+      role: null,
+      isBackup: false,
+    },
+    brann: {
+      userId: ids.users.brann,
+      userDisplayName: "Brann Emberforge",
+      characterId: ids.characters.brannPaladin,
+      characterName: "Emberforge",
+      characterRealm: "Kazzak",
+      characterRegion: "EU" as const,
+      participationType: "BOOSTER" as const,
+      attendanceStatus: "NO_SHOW" as const,
+      role: "TANK" as const,
+      isBackup: false,
+    },
+    sylva: {
+      userId: ids.users.sylva,
+      userDisplayName: "Sylva Windchaser",
+      characterId: ids.characters.sylvaHunter,
+      characterName: "Windchaser",
+      characterRealm: "Area 52",
+      characterRegion: "US" as const,
+      participationType: "BOOSTER" as const,
+      attendanceStatus: "STANDBY" as const,
+      role: "DPS" as const,
+      isBackup: true,
+    },
+  };
+
+  await seedCompletedPayoutRun({
+    runId: ids.runs.payoutDraft,
+    rosterId: ids.rosters.payoutDraft,
+    raidName,
+    settlementId: "t9999993-9993-4993-8993-999999999993",
+    status: "DRAFT",
+    totalGold: 10000,
+    members: [
+      { ...payoutMembers.kael, signupId: ids.signups.pdKael, rosterEntryId: "e9999993-9993-4993-8993-999999999991", attendanceId: "a9999993-9993-4993-8993-999999999991", payoutEntryId: "p9999993-9993-4993-8993-999999999991", shareUnits: 100, amountGold: 5000 },
+      { ...payoutMembers.mira, signupId: ids.signups.pdMira, rosterEntryId: "e9999993-9993-4993-8993-999999999992", attendanceId: "a9999993-9993-4993-8993-999999999992", payoutEntryId: "p9999993-9993-4993-8993-999999999992", shareUnits: 100, amountGold: 5000 },
+      { ...payoutMembers.brann, signupId: ids.signups.pdBrann, rosterEntryId: "e9999993-9993-4993-8993-999999999993", attendanceId: "a9999993-9993-4993-8993-999999999993", payoutEntryId: "p9999993-9993-4993-8993-999999999993", shareUnits: 0, amountGold: 0 },
+      { ...payoutMembers.sylva, signupId: ids.signups.pdSylva, rosterEntryId: "e9999993-9993-4993-8993-999999999994", attendanceId: "a9999993-9993-4993-8993-999999999994", payoutEntryId: "p9999993-9993-4993-8993-999999999994", shareUnits: 0, amountGold: 0 },
+    ],
+  });
+
+  await seedCompletedPayoutRun({
+    runId: ids.runs.payoutFinalized,
+    rosterId: ids.rosters.payoutFinalized,
+    raidName,
+    settlementId: "t9999994-9994-4994-8994-999999999994",
+    status: "FINALIZED",
+    totalGold: 1001,
+    members: [
+      { ...payoutMembers.kael, signupId: ids.signups.pfKael, rosterEntryId: "e9999994-9994-4994-8994-999999999991", attendanceId: "a9999994-0001-4000-8000-000000000001", payoutEntryId: "p9999994-9994-4994-8994-999999999991", shareUnits: 100, amountGold: 401 },
+      { ...payoutMembers.mira, signupId: ids.signups.pfMira, rosterEntryId: "e9999994-9994-4994-8994-999999999992", attendanceId: "a9999994-0001-4000-8000-000000000002", payoutEntryId: "p9999994-9994-4994-8994-999999999992", shareUnits: 100, amountGold: 400 },
+      { ...payoutMembers.brann, signupId: ids.signups.pfBrann, rosterEntryId: "e9999994-9994-4994-8994-999999999993", attendanceId: "a9999994-0001-4000-8000-000000000003", payoutEntryId: "p9999994-9994-4994-8994-999999999993", shareUnits: 50, amountGold: 200, attendanceStatus: "NO_SHOW", adjustmentReason: "manager half share" },
+      { ...payoutMembers.sylva, signupId: ids.signups.pfSylva, rosterEntryId: "e9999994-9994-4994-8994-999999999994", attendanceId: "a9999994-0001-4000-8000-000000000004", payoutEntryId: "p9999994-9994-4994-8994-999999999994", shareUnits: 0, amountGold: 0 },
+    ],
+  });
+
+  await seedCompletedPayoutRun({
+    runId: ids.runs.payoutPaid,
+    rosterId: ids.rosters.payoutPaid,
+    raidName,
+    settlementId: "t9999995-9995-4995-8995-999999999995",
+    status: "PAID",
+    totalGold: 9000,
+    members: [
+      { ...payoutMembers.kael, signupId: ids.signups.ppKael, rosterEntryId: "e9999995-9995-4995-8995-999999999991", attendanceId: "a9999995-9995-4995-8995-999999999991", payoutEntryId: "p9999995-9995-4995-8995-999999999991", shareUnits: 100, amountGold: 4500 },
+      { ...payoutMembers.mira, signupId: ids.signups.ppMira, rosterEntryId: "e9999995-9995-4995-8995-999999999992", attendanceId: "a9999995-9995-4995-8995-999999999992", payoutEntryId: "p9999995-9995-4995-8995-999999999992", shareUnits: 100, amountGold: 4500 },
+      { ...payoutMembers.brann, signupId: ids.signups.ppBrann, rosterEntryId: "e9999995-9995-4995-8995-999999999993", attendanceId: "a9999995-9995-4995-8995-999999999993", payoutEntryId: "p9999995-9995-4995-8995-999999999993", shareUnits: 0, amountGold: 0 },
+      { ...payoutMembers.sylva, signupId: ids.signups.ppSylva, rosterEntryId: "e9999995-9995-4995-8995-999999999994", attendanceId: "a9999995-9995-4995-8995-999999999994", payoutEntryId: "p9999995-9995-4995-8995-999999999994", shareUnits: 0, amountGold: 0 },
+    ],
+  });
 
   const activity = [
     { userId: ids.users.thorne, type: "RUN_OPENED", message: "Opened signups for Wednesday Heroic Full Clear." },

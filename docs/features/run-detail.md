@@ -56,6 +56,7 @@ May manage any Run on the same `/runs/[runId]` route.
 - **Signups** — own participation for USER; operational signup list for authorized managers
 - **Roster** — published roster for USER; existing `RosterBuilderView` for managers
 - **Attendance** — own result for USER; operational attendance for authorized managers after Start
+- **Payout** — own finalized line for USER; draft/finalize/paid settlement for authorized managers after Complete
 
 ## Manager Authorization
 
@@ -82,6 +83,7 @@ Manager reads still reuse `getRosterManagementView`, which may `ensure()` an emp
 - `SignupService` — own signups, eligibility, withdraw
 - `RosterService` — draft, publish, published snapshot, managed index
 - `AttendanceService` — snapshot, status updates, bulk present, completeness
+- `PayoutService` — completed-run settlement, share calculation, finalize, mark paid
 
 No second roster or signup implementation.
 
@@ -91,12 +93,12 @@ Architectural space only (not implemented):
 
 - Post-completion attendance correction
 - History analytics
-- Payout
+- Wallet / escrow / extra organizational cuts
 
 ## Deferred
 
 - Battle.net / Blizzard API
 - Warcraft Logs
 - Post-completion attendance corrections
-- Payouts / gold
+- Wallets, escrow, payment automation, extra Raid Lead / collector / advertiser cuts
 - Discord bot / notifications

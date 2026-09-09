@@ -52,11 +52,14 @@ describe("canonical run routes", () => {
     expect(runDetailPath(ids.weekend)).toBe(`/runs/${ids.weekend}`);
     expect(runDetailPath(ids.weekend, "roster")).toBe(`/runs/${ids.weekend}?tab=roster`);
     expect(runDetailPath(ids.weekend, "attendance")).toBe(`/runs/${ids.weekend}?tab=attendance`);
+    expect(runDetailPath(ids.weekend, "payout")).toBe(`/runs/${ids.weekend}?tab=payout`);
     expect(parseRunDetailTab(["roster"])).toBe("roster");
     expect(parseRunDetailTab("attendance")).toBe("attendance");
+    expect(parseRunDetailTab("payout")).toBe("payout");
     expect(parseRunDetailTab("unknown")).toBe("overview");
     expect(runDetailTabForManageAction("Continue Roster")).toBe("roster");
     expect(runDetailTabForManageAction("Attendance")).toBe("attendance");
+    expect(runDetailTabForManageAction("Payout")).toBe("payout");
     expect(runDetailTabForManageAction("View")).toBe("overview");
     expect(runDetailTabForManageAction("Manage")).toBe("overview");
   });
