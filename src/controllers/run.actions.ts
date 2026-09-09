@@ -87,3 +87,27 @@ export async function cancelRunAction(input: unknown): Promise<ActionResult> {
     return mapActionError(error);
   }
 }
+
+export async function startRunAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = runIdSchema.parse(input);
+    await runService.startRun(user, parsed.runId);
+    revalidateRunSurfaces(parsed.runId);
+    return { ok: true, message: "Run started. Attendance is ready to mark." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function completeRunAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = runIdSchema.parse(input);
+    await runService.completeRun(user, parsed.runId);
+    revalidateRunSurfaces(parsed.runId);
+    return { ok: true, message: "Run completed." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}

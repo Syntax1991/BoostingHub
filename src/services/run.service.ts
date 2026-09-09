@@ -13,6 +13,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
+import { attendanceService } from "@/services/attendance.service";
 import {
   emptyRunCapabilities,
   getRunLifecycleCapabilities,
@@ -422,6 +423,49 @@ export const runService = {
       userId: user.id,
       type: "RUN_CANCELLED",
       message: "Cancelled a run.",
+    });
+    return { id: run.id };
+  },
+
+  async startRun(user: AuthenticatedUser, runId: string) {
+    const run = await loadManagedRun(user, runId);
+    if (run.status === "IN_PROGRESS") {
+      throw new DomainError("RUN_ALREADY_STARTED", "This run has already started.");
+    }
+    if (run.status !== "PUBLISHED") {
+      throw new DomainError("RUN_NOT_PUBLISHED", "Only a published run can be started.");
+    }
+    const selectedSignupIds = await attendanceService.listPublishedSelectedSignupIds(run.id);
+    if (selectedSignupIds.length === 0) {
+      throw new DomainError(
+        "RUN_CANNOT_START",
+        "A published roster with at least one selected participant is required.",
+      );
+    }
+
+    await attendanceService.snapshotSelectedRoster(run.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_STARTED",
+      message: "Started a run.",
+    });
+    return { id: run.id };
+  },
+
+  async completeRun(user: AuthenticatedUser, runId: string) {
+    const run = await loadManagedRun(user, runId);
+    if (run.status === "COMPLETED") {
+      throw new DomainError("RUN_CANNOT_COMPLETE", "This run is already completed.");
+    }
+    if (run.status !== "IN_PROGRESS") {
+      throw new DomainError("RUN_CANNOT_COMPLETE", "Only an in-progress run can be completed.");
+    }
+
+    await attendanceService.completeIfFullyMarked(run.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_COMPLETED",
+      message: "Completed a run.",
     });
     return { id: run.id };
   },
