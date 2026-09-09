@@ -2,6 +2,8 @@ import { requireUserOrRedirect } from "@/auth/session";
 import { parseRunFilters } from "@/validators/run-filters";
 import { parseManageRunFilters } from "@/validators/manage-run-filters";
 import { characterService } from "@/services/character.service";
+import { battleNetService } from "@/services/battle-net.service";
+import { characterBlizzardService } from "@/services/character-blizzard.service";
 import { runService } from "@/services/run.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { signupService } from "@/services/signup.service";
@@ -9,11 +11,54 @@ import { profileService } from "@/services/profile.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
+import { isDomainError } from "@/lib/errors";
+
+function firstParam(value: string | string[] | undefined): string | null {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (Array.isArray(value) && typeof value[0] === "string" && value[0].length > 0) {
+    return value[0];
+  }
+  return null;
+}
 
 export const characterController = {
-  async getCharactersPage() {
+  async getCharactersPage(searchParams: {
+    importSession?: string | string[];
+    battlenet?: string | string[];
+    region?: string | string[];
+    code?: string | string[];
+  } = {}) {
     const user = await requireUserOrRedirect("/characters");
-    return characterService.getCharacterPage(user);
+    const page = await characterService.getCharacterPage(user);
+    const importSessionId = firstParam(searchParams.importSession);
+    const battleNet = await battleNetService.getCharacterPagePanel(user, importSessionId);
+
+    let candidates = null;
+    if (battleNet.importSession) {
+      try {
+        candidates = await characterBlizzardService.resolveImportCandidates(
+          user,
+          battleNet.importSession.id,
+        );
+      } catch (error) {
+        if (!isDomainError(error)) throw error;
+        candidates = null;
+      }
+    }
+
+    return {
+      ...page,
+      battleNet: {
+        ...battleNet,
+        candidates,
+      },
+      battleNetFlash: {
+        status: firstParam(searchParams.battlenet),
+        region: firstParam(searchParams.region),
+        code: firstParam(searchParams.code),
+        importSessionId,
+      },
+    };
   },
 
   async getCharacterDetailsPage(characterId: string) {

@@ -124,6 +124,7 @@ export const characterService = {
           lastSyncedAt: character.lastSyncedAt,
           updatedAt: character.updatedAt,
           blizzardLinked: Boolean(character.blizzardCharacterId),
+          blizzardRealmId: character.blizzardRealmId,
           warcraftLogsLinked: Boolean(character.warcraftLogsId),
           boosterAccess: access,
           lockouts,
@@ -153,6 +154,8 @@ export const characterService = {
       updatedAt: character.updatedAt,
       lastSyncedAt: character.lastSyncedAt,
       blizzardLinked: Boolean(character.blizzardCharacterId),
+      blizzardCharacterId: character.blizzardCharacterId,
+      blizzardRealmId: character.blizzardRealmId,
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
       boosterAccess: character.boosterAccess,
       accessPanel: boosterAccessService.buildCharacterAccessPanel(character),
@@ -223,12 +226,15 @@ export const characterService = {
       excludeId: character.id,
     });
 
+    // Linked characters take item level from Blizzard refresh only.
+    const itemLevel = character.blizzardCharacterId ? character.itemLevel : input.itemLevel;
+
     try {
       await characterRepository.update(character.id, {
         ...identity,
         specialization: spec.specialization,
         primaryRole: spec.primaryRole,
-        itemLevel: input.itemLevel,
+        itemLevel,
       });
     } catch (error) {
       if (uniqueViolation(error)) {

@@ -28,6 +28,7 @@ export type CharacterPageRecord = {
   isActive: boolean;
   lastSyncedAt: string | null;
   blizzardCharacterId: string | null;
+  blizzardRealmId: string | null;
   warcraftLogsId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -55,6 +56,9 @@ export type CharacterCreateInput = {
   primaryRole: CharacterRole;
   itemLevel: number;
   isActive: boolean;
+  blizzardCharacterId?: string | null;
+  blizzardRealmId?: string | null;
+  lastSyncedAt?: string | null;
 };
 
 export type CharacterUpdateInput = {
@@ -66,6 +70,20 @@ export type CharacterUpdateInput = {
   specialization: string;
   primaryRole: CharacterRole;
   itemLevel: number;
+};
+
+export type CharacterBlizzardLinkInput = {
+  blizzardCharacterId: string;
+  blizzardRealmId: string;
+  itemLevel?: number;
+  lastSyncedAt?: string | null;
+};
+
+export type CharacterBlizzardSyncInput = {
+  name: string;
+  normalizedName: string;
+  itemLevel: number;
+  lastSyncedAt: string;
 };
 
 function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
@@ -87,6 +105,7 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     isActive: asBoolean(character.isActive, true),
     lastSyncedAt: asStringOrNull(character.lastSyncedAt),
     blizzardCharacterId: asStringOrNull(character.blizzardCharacterId),
+    blizzardRealmId: asStringOrNull(character.blizzardRealmId),
     warcraftLogsId: asStringOrNull(character.warcraftLogsId),
     createdAt: asString(character.createdAt),
     updatedAt: asString(character.updatedAt),
@@ -155,6 +174,26 @@ export const characterRepository = {
   },
 
   /**
+   * Scoped Blizzard identity: region + blizzardRealmId + blizzardCharacterId.
+   */
+  async findByBlizzardIdentity(
+    region: WowRegion,
+    blizzardRealmId: string,
+    blizzardCharacterId: string,
+  ): Promise<CharacterPageRecord | null> {
+    const character = await orm.Character
+      .where({
+        region,
+        blizzardRealmId,
+        blizzardCharacterId,
+      })
+      .include("boosterAccess")
+      .include("lockouts", (lockout) => lockout.include("raid"))
+      .first();
+    return character ? mapCharacter(character as Record<string, unknown>) : null;
+  },
+
+  /**
    * Owner-scoped identity lookup. Same name/realm on another region, or the
    * same identity owned by a different user, is not a conflict.
    */
@@ -201,6 +240,9 @@ export const characterRepository = {
       primaryRole: input.primaryRole,
       itemLevel: input.itemLevel,
       isActive: input.isActive,
+      blizzardCharacterId: input.blizzardCharacterId ?? null,
+      blizzardRealmId: input.blizzardRealmId ?? null,
+      lastSyncedAt: input.lastSyncedAt ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -222,6 +264,26 @@ export const characterRepository = {
       specialization: input.specialization,
       primaryRole: input.primaryRole,
       itemLevel: input.itemLevel,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  async applyBlizzardLink(characterId: string, input: CharacterBlizzardLinkInput): Promise<void> {
+    await orm.Character.where({ id: characterId }).update({
+      blizzardCharacterId: input.blizzardCharacterId,
+      blizzardRealmId: input.blizzardRealmId,
+      ...(typeof input.itemLevel === "number" ? { itemLevel: input.itemLevel } : {}),
+      ...(input.lastSyncedAt !== undefined ? { lastSyncedAt: input.lastSyncedAt } : {}),
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  async applyBlizzardSync(characterId: string, input: CharacterBlizzardSyncInput): Promise<void> {
+    await orm.Character.where({ id: characterId }).update({
+      name: input.name,
+      normalizedName: input.normalizedName,
+      itemLevel: input.itemLevel,
+      lastSyncedAt: input.lastSyncedAt,
       updatedAt: new Date().toISOString(),
     });
   },
