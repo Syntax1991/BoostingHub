@@ -8,6 +8,7 @@ import { RunOverviewSection } from "@/components/runs/run-overview-section";
 import { RunSignupsSection } from "@/components/runs/run-signups-section";
 import { RunRosterSection } from "@/components/runs/run-roster-section";
 import { RunAttendanceSection } from "@/components/runs/run-attendance-section";
+import { RunPayoutSection } from "@/components/runs/run-payout-section";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 const TABS: Array<{ id: RunDetailTab; label: string }> = [
@@ -15,6 +16,7 @@ const TABS: Array<{ id: RunDetailTab; label: string }> = [
   { id: "signups", label: "Signups" },
   { id: "roster", label: "Roster" },
   { id: "attendance", label: "Attendance" },
+  { id: "payout", label: "Payout" },
 ];
 
 export function RunDetailTabs({
@@ -37,7 +39,7 @@ export function RunDetailTabs({
       <div
         role="tablist"
         aria-label="Run sections"
-        className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1"
+        className="-mx-1 mb-4 flex w-full max-w-full gap-1 overflow-x-auto px-1"
       >
         {TABS.map((item) => {
           const selected = tab === item.id;
@@ -89,6 +91,7 @@ export function RunDetailTabs({
         {tab === "signups" ? <RunSignupsSection data={data} /> : null}
         {tab === "roster" ? <RunRosterSection data={data} /> : null}
         {tab === "attendance" ? <RunAttendanceSection data={data} /> : null}
+        {tab === "payout" ? <RunPayoutSection data={data} /> : null}
       </div>
     </div>
   );

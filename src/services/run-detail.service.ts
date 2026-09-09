@@ -7,6 +7,7 @@ import { userRepository } from "@/repositories/user.repository";
 import { emptyRunCapabilities, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { hasAdminAccess } from "@/auth/authorization";
 import { attendanceService } from "@/services/attendance.service";
+import { payoutService } from "@/services/payout.service";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 
@@ -87,6 +88,7 @@ export const runDetailService = {
 
     const ownAttendance = manage ? [] : await attendanceService.getOwnAttendance(user, runId);
     const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
+    const payout = await payoutService.getPayoutView(user, runId);
 
     let editor: {
       hasSignupHistory: boolean;
@@ -137,6 +139,7 @@ export const runDetailService = {
         own: ownAttendance,
         manager: managerAttendance,
       },
+      payout,
     };
   },
 };
