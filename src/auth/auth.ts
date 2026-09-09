@@ -1,22 +1,16 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { Pool } from "pg";
+import { pgPool } from "@/lib/pg-pool";
 import { isDevAuthEnabled, isDiscordOAuthConfigured } from "@/auth/dev-auth";
 
 /**
  * Better Auth owns session/account rows via its built-in Kysely PostgreSQL adapter.
- * Domain queries go through Prisma 8. Both share DATABASE_URL; they must not drift
- * on the `user` table shape.
+ * Domain queries go through Prisma 8. Both use the shared `pgPool` so they cannot
+ * exhaust the hosted connection limit against each other.
  *
  * Better Auth's Prisma adapter still targets Prisma 7's client API, so it is not
  * used with Prisma 8.
  */
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
-}
-
 const discord = isDiscordOAuthConfigured()
   ? {
       discord: {
@@ -40,10 +34,7 @@ const discord = isDiscordOAuthConfigured()
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-  database: new Pool({
-    connectionString: databaseUrl,
-    ssl: databaseUrl.includes("sslmode=") ? { rejectUnauthorized: false } : undefined,
-  }),
+  database: pgPool,
   emailAndPassword: {
     enabled: isDevAuthEnabled(),
     minPasswordLength: 8,

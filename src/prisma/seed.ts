@@ -1,10 +1,20 @@
 import { hashPassword } from "better-auth/crypto";
 import { db, orm } from "@/lib/prisma";
 import { getDevAuthPassword } from "@/auth/dev-auth";
+import { normalizeCharacterIdentity } from "@/lib/character-identity";
 
 const SEED_NOW = "2026-09-08T12:00:00.000Z";
 const RESET = "2026-W37";
 const PASSWORD = getDevAuthPassword();
+
+function characterIdentity(name: string, realm: string) {
+  return {
+    name,
+    realm,
+    normalizedName: normalizeCharacterIdentity(name),
+    normalizedRealm: normalizeCharacterIdentity(realm),
+  };
+}
 
 const ids = {
   users: {
@@ -201,8 +211,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.kaelResto,
     userId: ids.users.kael,
-    name: "Stormhowl",
-    realm: "Twisting Nether",
+    ...characterIdentity("Stormhowl", "Twisting Nether"),
     region: "EU",
     wowClass: "SHAMAN",
     specialization: "Restoration",
@@ -216,8 +225,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.kaelEle,
     userId: ids.users.kael,
-    name: "Stormhowl",
-    realm: "Tarren Mill",
+    ...characterIdentity("Stormhowl", "Tarren Mill"),
     region: "EU",
     wowClass: "SHAMAN",
     specialization: "Elemental",
@@ -230,8 +238,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.kaelInactive,
     userId: ids.users.kael,
-    name: "Stormhowl",
-    realm: "Ragnaros",
+    ...characterIdentity("Stormhowl", "Ragnaros"),
     region: "EU",
     wowClass: "SHAMAN",
     specialization: "Enhancement",
@@ -244,8 +251,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.miraPriest,
     userId: ids.users.mira,
-    name: "Dawnward",
-    realm: "Silvermoon",
+    ...characterIdentity("Dawnward", "Silvermoon"),
     region: "EU",
     wowClass: "PRIEST",
     specialization: "Holy",
@@ -258,8 +264,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.thorneWarrior,
     userId: ids.users.thorne,
-    name: "Ironvein",
-    realm: "Draenor",
+    ...characterIdentity("Ironvein", "Draenor"),
     region: "EU",
     wowClass: "WARRIOR",
     specialization: "Protection",
@@ -272,8 +277,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.aeliraMonk,
     userId: ids.users.aelira,
-    name: "Nightwatch",
-    realm: "Ravencrest",
+    ...characterIdentity("Nightwatch", "Ravencrest"),
     region: "EU",
     wowClass: "MONK",
     specialization: "Mistweaver",
@@ -286,8 +290,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.brannPaladin,
     userId: ids.users.brann,
-    name: "Emberforge",
-    realm: "Kazzak",
+    ...characterIdentity("Emberforge", "Kazzak"),
     region: "EU",
     wowClass: "PALADIN",
     specialization: "Protection",
@@ -300,8 +303,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.brannHoly,
     userId: ids.users.brann,
-    name: "Emberlight",
-    realm: "Kazzak",
+    ...characterIdentity("Emberlight", "Kazzak"),
     region: "EU",
     wowClass: "PALADIN",
     specialization: "Holy",
@@ -314,8 +316,7 @@ async function seed() {
   await orm.Character.create({
     id: ids.characters.sylvaHunter,
     userId: ids.users.sylva,
-    name: "Windchaser",
-    realm: "Area 52",
+    ...characterIdentity("Windchaser", "Area 52"),
     region: "US",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
