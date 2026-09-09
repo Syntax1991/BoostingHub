@@ -1,0 +1,446 @@
+[
+  {
+    "id": "table.battle_net_connection",
+    "label": "Create table \"battle_net_connection\"",
+    "summary": "Creates table \"battle_net_connection\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "battle_net_connection"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"battle_net_connection\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_connection\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"battle_net_connection\"",
+        "sql": "CREATE TABLE \"public\".\"battle_net_connection\" (\n  \"battleNetAccountId\" text NOT NULL,\n  \"battleTag\" text,\n  \"connectedAt\" timestamptz NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastSuccessfulSyncAt\" timestamptz,\n  \"region\" text NOT NULL,\n  \"scope\" text,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"battle_net_connection_region_check_0ad0075e\" CHECK (\"region\" IN ('EU', 'US'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"battle_net_connection\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_connection\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.battle_net_import_session",
+    "label": "Create table \"battle_net_import_session\"",
+    "summary": "Creates table \"battle_net_import_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "battle_net_import_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"battle_net_import_session\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"battle_net_import_session\"",
+        "sql": "CREATE TABLE \"public\".\"battle_net_import_session\" (\n  \"charactersJson\" text NOT NULL,\n  \"consumedAt\" timestamptz,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"region\" text NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"battle_net_import_session_region_check_0ad0075e\" CHECK (\"region\" IN ('EU', 'US'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"battle_net_import_session\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.character.blizzardRealmId",
+    "label": "Add column \"blizzardRealmId\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "blizzardRealmId",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"blizzardRealmId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "blizzardRealmId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"blizzardRealmId\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"blizzardRealmId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"blizzardRealmId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "blizzardRealmId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.battle_net_connection.battle_net_connection_userId_region_key",
+    "label": "Add unique constraint on \"battle_net_connection\" (userId, region)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "battle_net_connection_userId_region_key",
+        "table": "battle_net_connection"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"battle_net_connection_userId_region_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "battle_net_connection_userId_region_key",
+          "public",
+          "\"public\".\"battle_net_connection\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"battle_net_connection_userId_region_key\"",
+        "sql": "ALTER TABLE \"public\".\"battle_net_connection\" ADD CONSTRAINT \"battle_net_connection_userId_region_key\" UNIQUE (\"userId\", \"region\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"battle_net_connection_userId_region_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "battle_net_connection_userId_region_key",
+          "public",
+          "\"public\".\"battle_net_connection\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character.character_region_blizzardRealmId_blizzardCharacterId_key",
+    "label": "Add unique constraint on \"character\" (region, blizzardRealmId, blizzardCharacterId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_region_blizzardRealmId_blizzardCharacterId_key",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_region_blizzardRealmId_blizzardCharacterId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_region_blizzardRealmId_blizzardCharacterId_key",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_region_blizzardRealmId_blizzardCharacterId_key\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD CONSTRAINT \"character_region_blizzardRealmId_blizzardCharacterId_key\" UNIQUE (\"region\", \"blizzardRealmId\", \"blizzardCharacterId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_region_blizzardRealmId_blizzardCharacterId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_region_blizzardRealmId_blizzardCharacterId_key",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.battle_net_connection.battle_net_connection_userId_idx_a489d58a",
+    "label": "Create index \"battle_net_connection_userId_idx_a489d58a\" on \"battle_net_connection\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "battle_net_connection_userId_idx_a489d58a",
+        "table": "battle_net_connection"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"battle_net_connection_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_connection_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"battle_net_connection_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"battle_net_connection_userId_idx_a489d58a\" ON \"public\".\"battle_net_connection\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"battle_net_connection_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_connection_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.battle_net_import_session.battle_net_import_session_expiresAt_idx_6b6b8c10",
+    "label": "Create index \"battle_net_import_session_expiresAt_idx_6b6b8c10\" on \"battle_net_import_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "battle_net_import_session_expiresAt_idx_6b6b8c10",
+        "table": "battle_net_import_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"battle_net_import_session_expiresAt_idx_6b6b8c10\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session_expiresAt_idx_6b6b8c10\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"battle_net_import_session_expiresAt_idx_6b6b8c10\"",
+        "sql": "CREATE INDEX \"battle_net_import_session_expiresAt_idx_6b6b8c10\" ON \"public\".\"battle_net_import_session\" (\"expiresAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"battle_net_import_session_expiresAt_idx_6b6b8c10\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session_expiresAt_idx_6b6b8c10\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.battle_net_import_session.battle_net_import_session_userId_idx_a489d58a",
+    "label": "Create index \"battle_net_import_session_userId_idx_a489d58a\" on \"battle_net_import_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "battle_net_import_session_userId_idx_a489d58a",
+        "table": "battle_net_import_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"battle_net_import_session_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"battle_net_import_session_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"battle_net_import_session_userId_idx_a489d58a\" ON \"public\".\"battle_net_import_session\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"battle_net_import_session_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.battle_net_import_session.battle_net_import_session_userId_region_idx_a8f34ae4",
+    "label": "Create index \"battle_net_import_session_userId_region_idx_a8f34ae4\" on \"battle_net_import_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "battle_net_import_session_userId_region_idx_a8f34ae4",
+        "table": "battle_net_import_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"battle_net_import_session_userId_region_idx_a8f34ae4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session_userId_region_idx_a8f34ae4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"battle_net_import_session_userId_region_idx_a8f34ae4\"",
+        "sql": "CREATE INDEX \"battle_net_import_session_userId_region_idx_a8f34ae4\" ON \"public\".\"battle_net_import_session\" (\"userId\", \"region\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"battle_net_import_session_userId_region_idx_a8f34ae4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"battle_net_import_session_userId_region_idx_a8f34ae4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.battle_net_connection.battle_net_connection_userId_fkey",
+    "label": "Add foreign key \"battle_net_connection_userId_fkey\" on \"battle_net_connection\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "battle_net_connection_userId_fkey",
+        "table": "battle_net_connection"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"battle_net_connection_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "battle_net_connection_userId_fkey",
+          "public",
+          "\"public\".\"battle_net_connection\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"battle_net_connection_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"battle_net_connection\"\nADD CONSTRAINT \"battle_net_connection_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"battle_net_connection_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "battle_net_connection_userId_fkey",
+          "public",
+          "\"public\".\"battle_net_connection\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.battle_net_import_session.battle_net_import_session_userId_fkey",
+    "label": "Add foreign key \"battle_net_import_session_userId_fkey\" on \"battle_net_import_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "battle_net_import_session_userId_fkey",
+        "table": "battle_net_import_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"battle_net_import_session_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "battle_net_import_session_userId_fkey",
+          "public",
+          "\"public\".\"battle_net_import_session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"battle_net_import_session_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"battle_net_import_session\"\nADD CONSTRAINT \"battle_net_import_session_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"battle_net_import_session_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "battle_net_import_session_userId_fkey",
+          "public",
+          "\"public\".\"battle_net_import_session\""
+        ]
+      }
+    ]
+  }
+]

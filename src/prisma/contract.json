@@ -12,6 +12,14 @@
       "model": "ActivityEvent",
       "namespace": "public"
     },
+    "battle_net_connection": {
+      "model": "BattleNetConnection",
+      "namespace": "public"
+    },
+    "battle_net_import_session": {
+      "model": "BattleNetImportSession",
+      "namespace": "public"
+    },
     "booster_access": {
       "model": "BoosterAccess",
       "namespace": "public"
@@ -628,6 +636,242 @@
               "table": "activity_event"
             }
           },
+          "BattleNetConnection": {
+            "fields": {
+              "battleNetAccountId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "battleTag": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "connectedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastSuccessfulSyncAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "region": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowRegion",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "scope": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "battleNetAccountId": {
+                  "column": "battleNetAccountId"
+                },
+                "battleTag": {
+                  "column": "battleTag"
+                },
+                "connectedAt": {
+                  "column": "connectedAt"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastSuccessfulSyncAt": {
+                  "column": "lastSuccessfulSyncAt"
+                },
+                "region": {
+                  "column": "region"
+                },
+                "scope": {
+                  "column": "scope"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "battle_net_connection"
+            }
+          },
+          "BattleNetImportSession": {
+            "fields": {
+              "charactersJson": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "consumedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "expiresAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "region": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowRegion",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "charactersJson": {
+                  "column": "charactersJson"
+                },
+                "consumedAt": {
+                  "column": "consumedAt"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "expiresAt": {
+                  "column": "expiresAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "region": {
+                  "column": "region"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "battle_net_import_session"
+            }
+          },
           "BoosterAccess": {
             "fields": {
               "approvedAt": {
@@ -873,6 +1117,13 @@
                   "kind": "scalar"
                 }
               },
+              "blizzardRealmId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -1085,6 +1336,9 @@
               "fields": {
                 "blizzardCharacterId": {
                   "column": "blizzardCharacterId"
+                },
+                "blizzardRealmId": {
+                  "column": "blizzardRealmId"
                 },
                 "createdAt": {
                   "column": "createdAt"
@@ -3225,6 +3479,36 @@
                   "namespace": "public"
                 }
               },
+              "battleNetConnections": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "BattleNetConnection",
+                  "namespace": "public"
+                }
+              },
+              "battleNetImportSessions": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "BattleNetImportSession",
+                  "namespace": "public"
+                }
+              },
               "boosterAccess": {
                 "cardinality": "1:N",
                 "on": {
@@ -3710,6 +3994,227 @@
               },
               "uniques": []
             },
+            "battle_net_connection": {
+              "checks": [
+                {
+                  "expression": "\"region\" IN ('EU', 'US')",
+                  "name": "battle_net_connection_region_check_0ad0075e",
+                  "prefix": "battle_net_connection_region_check"
+                }
+              ],
+              "columns": {
+                "battleNetAccountId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "battleTag": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "connectedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "lastSuccessfulSyncAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "region": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowRegion",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "scope": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "battle_net_connection"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "battle_net_connection_userId_idx_a489d58a",
+                  "prefix": "battle_net_connection_userId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "userId",
+                    "region"
+                  ]
+                }
+              ]
+            },
+            "battle_net_import_session": {
+              "checks": [
+                {
+                  "expression": "\"region\" IN ('EU', 'US')",
+                  "name": "battle_net_import_session_region_check_0ad0075e",
+                  "prefix": "battle_net_import_session_region_check"
+                }
+              ],
+              "columns": {
+                "charactersJson": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "consumedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "expiresAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "region": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowRegion",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "battle_net_import_session"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "expiresAt"
+                  ],
+                  "name": "battle_net_import_session_expiresAt_idx_6b6b8c10",
+                  "prefix": "battle_net_import_session_expiresAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "battle_net_import_session_userId_idx_a489d58a",
+                  "prefix": "battle_net_import_session_userId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId",
+                    "region"
+                  ],
+                  "name": "battle_net_import_session_userId_region_idx_a8f34ae4",
+                  "prefix": "battle_net_import_session_userId_region_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "booster_access": {
               "checks": [
                 {
@@ -3985,6 +4490,11 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "blizzardRealmId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -4133,6 +4643,13 @@
                     "region",
                     "normalizedRealm",
                     "normalizedName"
+                  ]
+                },
+                {
+                  "columns": [
+                    "region",
+                    "blizzardRealmId",
+                    "blizzardCharacterId"
                   ]
                 }
               ]
@@ -6131,10 +6648,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "43267012523ddbffd0ca68a1d58943053670e814e5af38a2da9e427014dbacbd"
+    "storageHash": "6feeabca45e778fead991e8b84f172094a463408f06522cc40a564bba100885a"
   },
   "execution": {
-    "executionHash": "d76c356549172498c40306039f34810be4d1d5c28467e92d3de177d3bb07859e",
+    "executionHash": "dadf0f93cb95f9b99059970e402308510e2301ea2d644655da92618d0eaafa48",
     "mutations": {
       "defaults": [
         {
@@ -6172,6 +6689,43 @@
             "column": "id",
             "namespace": "public",
             "table": "activity_event"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "battle_net_connection"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "battle_net_connection"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "battle_net_import_session"
           }
         },
         {
