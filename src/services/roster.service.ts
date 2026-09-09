@@ -12,6 +12,7 @@ import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { activityRepository } from "@/repositories/activity.repository";
 import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
+import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus } from "@/models/enums";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
@@ -78,22 +79,6 @@ function asMember(row: InspectedSignup) {
     boosterApproved: row.boosterApproved,
     lockoutConflict: row.lockoutConflict,
   };
-}
-
-function rosterActionLabel(status: RunStatus, hasRoster: boolean, publishedAt: string | null, draftCount: number) {
-  if (status === "DRAFT" || status === "CANCELLED" || status === "COMPLETED") {
-    return "View";
-  }
-  if (publishedAt) {
-    return "View/Edit Roster";
-  }
-  if (hasRoster && draftCount > 0) {
-    return "Continue Roster";
-  }
-  if (status === "ROSTERING") {
-    return "Continue Roster";
-  }
-  return "Build Roster";
 }
 
 /**

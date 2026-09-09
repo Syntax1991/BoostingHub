@@ -2,7 +2,7 @@ import { isDomainError } from "@/lib/errors";
 import { ZodError } from "zod";
 
 export type ActionResult =
-  | { ok: true; message: string }
+  | { ok: true; message: string; runId?: string }
   | { ok: false; code: string; message: string };
 
 export function mapActionError(error: unknown): ActionResult {

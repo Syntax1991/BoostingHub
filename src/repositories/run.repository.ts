@@ -1,4 +1,5 @@
-import { orm } from "@/lib/prisma";
+import { db, orm } from "@/lib/prisma";
+import { DomainError } from "@/lib/errors";
 import type { RaidDifficulty, RunStatus, SignupStatus, ParticipationType, CharacterRole } from "@/models/enums";
 import {
   asBoolean,
@@ -147,7 +148,120 @@ export const runRepository = {
     return runs.map((run) => mapRun(run as Record<string, unknown>));
   },
 
+  async countSignups(runId: string): Promise<number> {
+    const rows = await orm.RunSignup.where({ runId }).select("id").all();
+    return rows.length;
+  },
+
+  async create(input: {
+    title: string;
+    raidId: string;
+    difficulty: RaidDifficulty;
+    scheduledStartAt: string;
+    raidLeadId: string;
+    notes: string | null;
+    desiredTankCount: number;
+    desiredHealerCount: number;
+    desiredDpsCount: number;
+  }): Promise<string> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await txOrm.Run.create({
+        id,
+        title: input.title,
+        raidId: input.raidId,
+        difficulty: input.difficulty,
+        scheduledStartAt: input.scheduledStartAt,
+        status: "DRAFT",
+        raidLeadId: input.raidLeadId,
+        notes: input.notes,
+        desiredTankCount: input.desiredTankCount,
+        desiredHealerCount: input.desiredHealerCount,
+        desiredDpsCount: input.desiredDpsCount,
+        signupsOpen: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await txOrm.RunRoster.create({
+        id: crypto.randomUUID(),
+        runId: id,
+        state: "DRAFT",
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    return id;
+  },
+
+  async updateFields(
+    id: string,
+    fields: {
+      title?: string;
+      raidId?: string;
+      difficulty?: RaidDifficulty;
+      scheduledStartAt?: string;
+      raidLeadId?: string;
+      notes?: string | null;
+      desiredTankCount?: number;
+      desiredHealerCount?: number;
+      desiredDpsCount?: number;
+      status?: RunStatus;
+      signupsOpen?: boolean;
+    },
+  ) {
+    await orm.Run.where({ id }).update({
+      ...fields,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Identity fields (raid/difficulty) may change only when no RunSignup row exists,
+   * including WITHDRAWN history. The second count aborts if a signup arrives mid-write.
+   */
+  async updateIdentityIfNoSignupHistory(
+    id: string,
+    fields: {
+      title?: string;
+      raidId: string;
+      difficulty: RaidDifficulty;
+      scheduledStartAt?: string;
+      raidLeadId?: string;
+      notes?: string | null;
+      desiredTankCount?: number;
+      desiredHealerCount?: number;
+      desiredDpsCount?: number;
+    },
+  ) {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const before = await txOrm.RunSignup.where({ runId: id }).select("id").all();
+      if (before.length > 0) {
+        throw new DomainError(
+          "RUN_IDENTITY_LOCKED",
+          "Raid and difficulty cannot change after a signup has been recorded.",
+        );
+      }
+      await txOrm.Run.where({ id }).update({
+        ...fields,
+        updatedAt: new Date().toISOString(),
+      });
+      const after = await txOrm.RunSignup.where({ runId: id }).select("id").all();
+      if (after.length > 0) {
+        throw new DomainError(
+          "RUN_IDENTITY_LOCKED",
+          "Raid and difficulty cannot change after a signup has been recorded.",
+        );
+      }
+    });
+  },
+
   async updateStatus(id: string, status: RunStatus) {
-    await orm.Run.where({ id }).update({ status });
+    await orm.Run.where({ id }).update({ status, updatedAt: new Date().toISOString() });
   },
 };
+
+type TxOrm = typeof orm;
