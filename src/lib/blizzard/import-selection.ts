@@ -1,14 +1,20 @@
 import { CLASS_LABELS } from "@/lib/labels";
+import { meetsImportCharacterLevel } from "@/lib/blizzard/import-rules";
 import type { ImportCandidate, ImportCandidateStatus } from "@/lib/blizzard/types";
 
 export function isEligibleImportStatus(status: ImportCandidateStatus): boolean {
   return status === "import" || status === "link";
 }
 
+export function isSelectableImportCandidate(row: ImportCandidate): boolean {
+  return isEligibleImportStatus(row.status) && meetsImportCharacterLevel(row.level);
+}
+
 export function importStatusLabel(status: ImportCandidateStatus): string {
   if (status === "import") return "Import";
   if (status === "link") return "Link existing";
   if (status === "already_linked") return "Already linked";
+  if (status === "level_too_low") return "Requires level 90";
   return "Conflict";
 }
 
@@ -31,20 +37,23 @@ export function filterImportCandidates(
 
 export function eligibleCandidateIds(rows: ImportCandidate[]): string[] {
   return rows
-    .filter((row) => isEligibleImportStatus(row.status))
+    .filter((row) => isSelectableImportCandidate(row))
     .map((row) => row.blizzardCharacterId);
 }
 
-export function needsSpecializationFallback(
+export function resolvedSpecialization(
   row: ImportCandidate,
-  selected: boolean,
+  selectedSpec: string | undefined,
   suggestedSpecialization: string | null | undefined,
+): string {
+  return selectedSpec?.trim() || suggestedSpecialization?.trim() || "";
+}
+
+export function needsManualItemLevel(
+  selected: boolean,
+  blizzardItemLevel: number | null | undefined,
 ): boolean {
-  return (
-    selected &&
-    row.status === "import" &&
-    !suggestedSpecialization?.trim()
-  );
+  return selected && (blizzardItemLevel == null || !Number.isFinite(blizzardItemLevel));
 }
 
 export function selectionCountLabel(count: number): string {

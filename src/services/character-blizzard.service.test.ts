@@ -138,7 +138,7 @@ function ownedCharacter(overrides: Partial<OwnedBlizzardCharacter> = {}): OwnedB
     realmName: "Twisting Nether",
     realmSlug: "twisting-nether",
     wowClass: "SHAMAN",
-    level: 80,
+    level: 90,
     region: "EU",
     ...overrides,
   };
@@ -252,6 +252,15 @@ describe("characterBlizzardService.resolveImportCandidates", () => {
     expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
     expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
   });
+
+  it("classifies low-level characters as level_too_low while keeping them visible", async () => {
+    const owned = ownedCharacter({ id: "300060", name: "Bnvisible", level: 10 });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    const result = await characterBlizzardService.resolveImportCandidates(owner, session.id);
+    expect(result.candidates[0]?.status).toBe("level_too_low");
+    expect(result.candidates[0]?.level).toBe(10);
+    expect(result.candidates[0]?.name).toBe("Bnvisible");
+  });
 });
 
 describe("characterBlizzardService.linkCharacter", () => {
@@ -283,6 +292,7 @@ describe("characterBlizzardService.linkCharacter", () => {
       session.id,
       owned.id,
       manual.id,
+      { specialization: "Elemental" },
     );
     expect(linked.characterId).toBe(manual.id);
 
@@ -308,7 +318,9 @@ describe("characterBlizzardService.linkCharacter", () => {
     const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
 
     await expectDomainCode(
-      characterBlizzardService.linkCharacter(owner, session.id, owned.id, manual.id),
+      characterBlizzardService.linkCharacter(owner, session.id, owned.id, manual.id, {
+        specialization: "Arcane",
+      }),
       "BLIZZARD_IDENTITY_CONFLICT",
     );
   });
@@ -359,12 +371,12 @@ describe("characterBlizzardService.importCharacters", () => {
     mockEnrichmentPrivacyFailure();
 
     const result = await characterBlizzardService.importCharacters(owner, session.id, [
-      { blizzardCharacterId: owned.id, specialization: "Restoration" },
+      { blizzardCharacterId: owned.id, specialization: "Restoration", itemLevel: 610 },
     ]);
     createdCharacterIds.push(...result.importedCharacterIds);
 
     const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
-    expect(Number(created?.itemLevel)).toBe(0);
+    expect(Number(created?.itemLevel)).toBe(610);
     expect(created?.lastSyncedAt).toBeNull();
     expect(String(created?.blizzardCharacterId)).toBe(owned.id);
   });
@@ -421,8 +433,8 @@ describe("characterBlizzardService.applySelections", () => {
     });
 
     const result = await characterBlizzardService.applySelections(owner, session.id, [
-      { blizzardCharacterId: toImport.id },
-      { blizzardCharacterId: toLink.id },
+      { blizzardCharacterId: toImport.id, specialization: "Enhancement" },
+      { blizzardCharacterId: toLink.id, specialization: "Restoration" },
     ]);
 
     expect(result.importedCharacterIds).toHaveLength(1);
@@ -435,6 +447,9 @@ describe("characterBlizzardService.applySelections", () => {
 
     const linked = await orm.Character.where({ id: manual.id }).first();
     expect(String(linked?.blizzardCharacterId)).toBe(toLink.id);
+    expect(String(linked?.specialization)).toBe("Restoration");
+    expect(String(linked?.primaryRole)).toBe("HEALER");
+    expect(Number(linked?.itemLevel)).toBe(680);
   });
 
   it("rejects forged blizzardCharacterId not present in the session", async () => {
@@ -456,14 +471,125 @@ describe("characterBlizzardService.applySelections", () => {
 
     await expectDomainCode(
       characterBlizzardService.applySelections(owner, session.id, [
-        { blizzardCharacterId: first.id, specialization: "Enhancement" },
-        { blizzardCharacterId: second.id },
+        { blizzardCharacterId: first.id, specialization: "Enhancement", itemLevel: 600 },
+        { blizzardCharacterId: second.id, specialization: "" },
       ]),
       "INVALID_SPECIALIZATION",
     );
 
     const created = await orm.Character.where({ userId: ids.owner, name: "Bnfirst" }).all();
     expect(created).toHaveLength(0);
+  });
+
+  it("rejects characters below level 90 on import and link", async () => {
+    const lowImport = ownedCharacter({ id: "300050", name: "Bnlow", level: 89 });
+    const lowLink = ownedCharacter({ id: "300051", name: "Bnlowlink", level: 70 });
+    const manual = await characterService.createCharacter(owner, {
+      name: lowLink.name,
+      realm: lowLink.realmName,
+      region: lowLink.region,
+      wowClass: lowLink.wowClass,
+      specialization: "Elemental",
+      itemLevel: 400,
+    });
+    createdCharacterIds.push(manual.id);
+
+    const importSession = await seedConnectionAndSession(ids.owner, "EU", [lowImport]);
+    const candidates = await characterBlizzardService.resolveImportCandidates(
+      owner,
+      importSession.id,
+    );
+    expect(candidates.candidates[0]?.status).toBe("level_too_low");
+
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, importSession.id, [
+        { blizzardCharacterId: lowImport.id, specialization: "Enhancement", itemLevel: 500 },
+      ]),
+      "BLIZZARD_LEVEL_TOO_LOW",
+    );
+
+    const linkSession = await seedConnectionAndSession(ids.owner, "EU", [lowLink]);
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, linkSession.id, [
+        { blizzardCharacterId: lowLink.id, specialization: "Elemental", itemLevel: 500 },
+      ]),
+      "BLIZZARD_LEVEL_TOO_LOW",
+    );
+  });
+
+  it("allows level 90 and keeps user-chosen specialization over Blizzard prefill", async () => {
+    const owned = ownedCharacter({ id: "300052", name: "Bnchoice", level: 90 });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 318,
+      specialization: "Restoration",
+    });
+
+    const result = await characterBlizzardService.applySelections(owner, session.id, [
+      { blizzardCharacterId: owned.id, specialization: "Elemental", itemLevel: 999 },
+    ]);
+    createdCharacterIds.push(...result.importedCharacterIds);
+
+    const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
+    expect(String(created?.specialization)).toBe("Elemental");
+    expect(String(created?.primaryRole)).toBe("DPS");
+    expect(Number(created?.itemLevel)).toBe(318);
+    expect(created?.lastSyncedAt).toBeTruthy();
+  });
+
+  it("rejects invalid class specialization", async () => {
+    const owned = ownedCharacter({ id: "300053", name: "Bnbads", wowClass: "MAGE" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 400,
+    });
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, session.id, [
+        { blizzardCharacterId: owned.id, specialization: "Restoration" },
+      ]),
+      "INVALID_CLASS_SPECIALIZATION",
+    );
+  });
+
+  it("requires manual itemLevel when Blizzard profile is unavailable", async () => {
+    const owned = ownedCharacter({ id: "300054", name: "Bnmanualilvl" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentPrivacyFailure();
+
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, session.id, [
+        { blizzardCharacterId: owned.id, specialization: "Enhancement" },
+      ]),
+      "INVALID_ITEM_LEVEL",
+    );
+
+    const result = await characterBlizzardService.applySelections(owner, session.id, [
+      { blizzardCharacterId: owned.id, specialization: "Enhancement", itemLevel: 317 },
+    ]);
+    createdCharacterIds.push(...result.importedCharacterIds);
+    const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
+    expect(Number(created?.itemLevel)).toBe(317);
+    expect(created?.lastSyncedAt).toBeNull();
+  });
+
+  it("rejects negative manual itemLevel", async () => {
+    const owned = ownedCharacter({ id: "300055", name: "Bnnegilvl" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentPrivacyFailure();
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, session.id, [
+        { blizzardCharacterId: owned.id, specialization: "Enhancement", itemLevel: -1 },
+      ]),
+      "INVALID_ITEM_LEVEL",
+    );
   });
 });
 

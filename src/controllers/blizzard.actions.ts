@@ -75,6 +75,10 @@ export async function linkBattleNetCharacterAction(input: unknown): Promise<Acti
       parsed.importSessionId,
       parsed.blizzardCharacterId,
       parsed.characterId,
+      {
+        specialization: parsed.specialization,
+        ...(typeof parsed.itemLevel === "number" ? { itemLevel: parsed.itemLevel } : {}),
+      },
     );
     revalidateCharacterSurfaces(result.characterId);
     return { ok: true, message: "Character linked to Battle.net." };

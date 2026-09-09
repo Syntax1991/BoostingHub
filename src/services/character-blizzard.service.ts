@@ -12,6 +12,12 @@ import type {
   ImportCharacterSelection,
   OwnedBlizzardCharacter,
 } from "@/lib/blizzard/types";
+import {
+  assertImportCharacterLevel,
+  assertManualImportItemLevel,
+  meetsImportCharacterLevel,
+  MIN_IMPORT_CHARACTER_LEVEL,
+} from "@/lib/blizzard/import-rules";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { findSpecialization } from "@/lib/wow-specializations";
 import type { CharacterRole, WowClass } from "@/models/enums";
@@ -173,6 +179,24 @@ async function resolveCandidate(
     };
   }
 
+  if (!meetsImportCharacterLevel(owned.level)) {
+    return {
+      blizzardCharacterId: owned.id,
+      name: identity.name,
+      realm: identity.realm,
+      realmSlug: owned.realmSlug,
+      realmId: owned.realmId,
+      region: owned.region,
+      wowClass: owned.wowClass,
+      level: owned.level,
+      status: "level_too_low",
+      characterId: null,
+      conflictReason: `Requires level ${MIN_IMPORT_CHARACTER_LEVEL}.`,
+      suggestedSpecialization: null,
+      suggestedItemLevel: null,
+    };
+  }
+
   const byName = await characterRepository.findIdentityConflict({
     userId: user.id,
     region: identity.region,
@@ -281,7 +305,7 @@ export const characterBlizzardService = {
     const session = await requireLiveImportSession(user, sessionId);
     const owned = findOwnedInSession(session.characters, blizzardCharacterId);
     const candidate = await resolveCandidate(user, owned);
-    if (candidate.status !== "import") {
+    if (candidate.status !== "import" && candidate.status !== "link") {
       return {
         blizzardCharacterId,
         suggestedSpecialization: null as string | null,
@@ -298,8 +322,8 @@ export const characterBlizzardService = {
 
   /**
    * Applies a mixed import/link selection in one request.
-   * External Blizzard profile reads for imports happen before any persistence so a
-   * missing specialization fails the whole batch without partial Character creates.
+   * External Blizzard profile reads happen before persistence so missing
+   * specialization / item level fails the batch without partial creates.
    */
   async applySelections(
     user: AuthenticatedUser,
@@ -320,12 +344,14 @@ export const characterBlizzardService = {
       kind: "link";
       owned: OwnedBlizzardCharacter;
       characterId: string;
+      selection: ImportCharacterSelection;
     };
 
     const planned: Array<PlannedImport | PlannedLink> = [];
 
     for (const selection of selections) {
       const owned = findOwnedInSession(session.characters, selection.blizzardCharacterId);
+      assertImportCharacterLevel(owned.level, `${owned.name}`);
       const candidate = await resolveCandidate(user, owned);
 
       if (candidate.status === "import") {
@@ -334,8 +360,21 @@ export const characterBlizzardService = {
       }
 
       if (candidate.status === "link" && candidate.characterId) {
-        planned.push({ kind: "link", owned, characterId: candidate.characterId });
+        planned.push({
+          kind: "link",
+          owned,
+          characterId: candidate.characterId,
+          selection,
+        });
         continue;
+      }
+
+      if (candidate.status === "level_too_low") {
+        throw new DomainError(
+          "BLIZZARD_LEVEL_TOO_LOW",
+          candidate.conflictReason ??
+            `${owned.name} cannot be imported because level ${MIN_IMPORT_CHARACTER_LEVEL} is required.`,
+        );
       }
 
       throw new DomainError(
@@ -345,35 +384,59 @@ export const characterBlizzardService = {
       );
     }
 
-    type ReadyImport = PlannedImport & {
+    type ReadyRow = {
+      kind: "import" | "link";
+      owned: OwnedBlizzardCharacter;
+      characterId?: string;
       identity: ReturnType<typeof prepareImportedIdentity>;
       enrichment: Awaited<ReturnType<typeof enrichProfileBestEffort>>;
       spec: { specialization: string; primaryRole: CharacterRole };
+      itemLevel: number;
+      lastSyncedAt: string | null;
     };
 
-    const readyImports: ReadyImport[] = [];
+    const ready: ReadyRow[] = [];
+
     for (const item of planned) {
-      if (item.kind !== "import") continue;
       const identity = prepareImportedIdentity(item.owned);
-      const enrichment = await enrichProfileBestEffort(item.owned);
-      const specializationRaw =
-        item.selection.specialization?.trim() || enrichment.specialization || "";
+      const label = `${identity.name}-${identity.realm}`;
+      const specializationRaw = item.selection.specialization?.trim() ?? "";
       if (!specializationRaw) {
         throw new DomainError(
           "INVALID_SPECIALIZATION",
-          `Choose a specialization for ${identity.name}-${identity.realm}.`,
+          `Choose a specialization for ${label}.`,
         );
       }
       const spec = resolveClassSpecialization(item.owned.wowClass, specializationRaw);
-      readyImports.push({ ...item, identity, enrichment, spec });
+      const enrichment = await enrichProfileBestEffort(item.owned);
+
+      let itemLevel: number;
+      let lastSyncedAt: string | null;
+      if (typeof enrichment.itemLevel === "number") {
+        itemLevel = enrichment.itemLevel;
+        lastSyncedAt = enrichment.synced ? new Date().toISOString() : null;
+      } else {
+        itemLevel = assertManualImportItemLevel(item.selection.itemLevel, label);
+        lastSyncedAt = null;
+      }
+
+      ready.push({
+        kind: item.kind,
+        owned: item.owned,
+        characterId: item.kind === "link" ? item.characterId : undefined,
+        identity,
+        enrichment,
+        spec,
+        itemLevel,
+        lastSyncedAt,
+      });
     }
 
     const importedCharacterIds: string[] = [];
     const linkedCharacterIds: string[] = [];
 
-    for (const item of readyImports) {
-      const itemLevel = item.enrichment.itemLevel ?? 0;
-      const lastSyncedAt = item.enrichment.synced ? new Date().toISOString() : null;
+    for (const item of ready) {
+      if (item.kind !== "import") continue;
       try {
         const created = await characterRepository.create({
           id: crypto.randomUUID(),
@@ -382,11 +445,11 @@ export const characterBlizzardService = {
           wowClass: item.owned.wowClass,
           specialization: item.spec.specialization,
           primaryRole: item.spec.primaryRole,
-          itemLevel,
+          itemLevel: item.itemLevel,
           isActive: true,
           blizzardCharacterId: item.owned.id,
           blizzardRealmId: item.owned.realmId,
-          lastSyncedAt,
+          lastSyncedAt: item.lastSyncedAt,
         });
         importedCharacterIds.push(created.id);
       } catch (error) {
@@ -400,8 +463,8 @@ export const characterBlizzardService = {
       }
     }
 
-    for (const item of planned) {
-      if (item.kind !== "link") continue;
+    for (const item of ready) {
+      if (item.kind !== "link" || !item.characterId) continue;
       const character = await characterRepository.findById(item.characterId);
       if (!character) {
         throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
@@ -421,15 +484,14 @@ export const characterBlizzardService = {
         );
       }
 
-      const enrichment = await enrichProfileBestEffort(item.owned);
-      const lastSyncedAt = enrichment.synced ? new Date().toISOString() : null;
-
       try {
         await characterRepository.applyBlizzardLink(character.id, {
           blizzardCharacterId: item.owned.id,
           blizzardRealmId: item.owned.realmId,
-          ...(typeof enrichment.itemLevel === "number" ? { itemLevel: enrichment.itemLevel } : {}),
-          lastSyncedAt,
+          specialization: item.spec.specialization,
+          primaryRole: item.spec.primaryRole,
+          itemLevel: item.itemLevel,
+          lastSyncedAt: item.lastSyncedAt,
         });
       } catch (error) {
         if (uniqueViolation(error)) {
@@ -487,6 +549,7 @@ export const characterBlizzardService = {
     sessionId: string,
     blizzardCharacterId: string,
     characterId: string,
+    options: { specialization: string; itemLevel?: number },
   ) {
     const session = await requireLiveImportSession(user, sessionId);
     const owned = findOwnedInSession(session.characters, blizzardCharacterId);
@@ -498,12 +561,22 @@ export const characterBlizzardService = {
 
     if (candidate.status !== "link" || candidate.characterId !== characterId) {
       throw new DomainError(
-        candidate.status === "conflict" ? "BLIZZARD_IDENTITY_CONFLICT" : "VALIDATION_FAILED",
+        candidate.status === "conflict"
+          ? "BLIZZARD_IDENTITY_CONFLICT"
+          : candidate.status === "level_too_low"
+            ? "BLIZZARD_LEVEL_TOO_LOW"
+            : "VALIDATION_FAILED",
         candidate.conflictReason ?? "That character cannot be linked from this import session.",
       );
     }
 
-    const result = await this.applySelections(user, sessionId, [{ blizzardCharacterId }]);
+    const result = await this.applySelections(user, sessionId, [
+      {
+        blizzardCharacterId,
+        specialization: options.specialization,
+        ...(typeof options.itemLevel === "number" ? { itemLevel: options.itemLevel } : {}),
+      },
+    ]);
     return { characterId: result.linkedCharacterIds[0] ?? characterId };
   },
 

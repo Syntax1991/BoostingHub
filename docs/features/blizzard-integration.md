@@ -91,9 +91,11 @@ Disconnect clears the regional connection and import sessions. It does **not** d
 
 ## Specialization and item level
 
-Specialization from Blizzard is an **import-time prefill** (and optional user choice). After create, specialization and `primaryRole` stay BoostingHub-owned. Refresh does not rewrite specialization.
+Specialization from Blizzard is an **import-time prefill**. The import modal always lets the owner choose (or confirm) a specialization from the BoostingHub class/spec catalog before Continue. After create/link, specialization and `primaryRole` stay BoostingHub-owned. Refresh does not rewrite specialization.
 
-Item level uses Blizzard `equipped_item_level`. Refresh updates **item level** (and may apply a safe rename — see below). It does not auto-change class, realm, or specialization.
+Battle.net import/link requires character **level ≥ 90** (`MIN_IMPORT_CHARACTER_LEVEL`). Lower-level owned characters remain visible in the import modal as `level_too_low` / “Requires level 90”, but are not selectable. Manual Add Character is unchanged by this rule.
+
+Item level uses Blizzard `equipped_item_level` when the public profile is available (authoritative; client overrides are ignored). When the profile is unavailable, a validated manual item level is required and `lastSyncedAt` stays unset. Refresh updates **item level** (and may apply a safe rename — see below). It does not auto-change class, realm, or specialization.
 
 ## Privacy / profile unavailable
 

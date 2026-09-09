@@ -29,7 +29,12 @@ export type BlizzardProfileStatus = {
   isValid: boolean;
 };
 
-export type ImportCandidateStatus = "import" | "link" | "already_linked" | "conflict";
+export type ImportCandidateStatus =
+  | "import"
+  | "link"
+  | "already_linked"
+  | "conflict"
+  | "level_too_low";
 
 export type ImportCandidate = {
   blizzardCharacterId: string;
@@ -51,7 +56,13 @@ export type ImportCandidate = {
 
 export type ImportCharacterSelection = {
   blizzardCharacterId: string;
-  specialization?: string;
+  /** Required for import and link; validated against the Blizzard class. */
+  specialization: string;
+  /**
+   * Manual fallback only when Blizzard equipped_item_level is unavailable.
+   * Ignored when the server obtains an authoritative Blizzard item level.
+   */
+  itemLevel?: number;
 };
 
 export type BattleNetConnectionSummary = {

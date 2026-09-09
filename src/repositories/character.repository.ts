@@ -75,6 +75,8 @@ export type CharacterUpdateInput = {
 export type CharacterBlizzardLinkInput = {
   blizzardCharacterId: string;
   blizzardRealmId: string;
+  specialization?: string;
+  primaryRole?: CharacterRole;
   itemLevel?: number;
   lastSyncedAt?: string | null;
 };
@@ -272,6 +274,8 @@ export const characterRepository = {
     await orm.Character.where({ id: characterId }).update({
       blizzardCharacterId: input.blizzardCharacterId,
       blizzardRealmId: input.blizzardRealmId,
+      ...(input.specialization ? { specialization: input.specialization } : {}),
+      ...(input.primaryRole ? { primaryRole: input.primaryRole } : {}),
       ...(typeof input.itemLevel === "number" ? { itemLevel: input.itemLevel } : {}),
       ...(input.lastSyncedAt !== undefined ? { lastSyncedAt: input.lastSyncedAt } : {}),
       updatedAt: new Date().toISOString(),
