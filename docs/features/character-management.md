@@ -75,9 +75,7 @@ Characters may be referenced by RunSignup, roster entries, BoosterAccess, and Ch
 
 ## Booster access
 
-Character details show existing BoosterAccess rows as read-only.
-
-This feature does not implement self-approval, request workflows, or raid-lead editors.
+Character details show BoosterAccess per role and difficulty, including Not Requested / Pending / Approved / Rejected / Revoked. Owners request access from that page. ADMIN review lives in [booster-access-management.md](booster-access-management.md).
 
 A newly created character is **not** booster-eligible merely because it exists.
 
@@ -121,6 +119,5 @@ Sync should update those fields and keep `normalizedName` / `normalizedRealm` in
 
 - Battle.net / Blizzard character import
 - Warcraft Logs
-- Booster Access approval management
 - Automatic withdrawal of future signups on deactivate
 - Admin global character editing

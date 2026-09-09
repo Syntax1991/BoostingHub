@@ -42,14 +42,16 @@ Class is immutable after creation. `primaryRole` is derived from specialization;
 
 ## BoosterAccess
 
-Normalized approval, not `isBooster` and not a JSON blob.
+Normalized approval, not `isBooster` and not a JSON blob. See [booster-access-management.md](features/booster-access-management.md).
 
-- user (required), optional character
+- user (required), optional requesting character
 - class, role, difficulty
-- status: `PENDING` \| `APPROVED` \| `REVOKED`
-- approved at / approved by / notes
+- status: `PENDING` \| `APPROVED` \| `REJECTED` \| `REVOKED`
+- approved at / approved by (set while approved; last approval kept after revoke)
+- reviewed at / reviewed by (last admin decision)
+- notes: optional owner-visible reject/revoke reason
 
-Unique on `(userId, wowClass, role, difficulty)`. Heroic healer approval does not grant Mythic healer approval.
+Unique on `(userId, wowClass, role, difficulty)`. Heroic healer approval does not grant Mythic or Normal healer approval. One row is reused across the lifecycle; rejection does not delete the row.
 
 ## Raid / RaidBoss
 

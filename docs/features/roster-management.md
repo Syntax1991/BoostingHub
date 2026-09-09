@@ -86,7 +86,9 @@ Blockers include:
 - withdrawn selection
 - inactive character
 - lockout conflict (`LockoutService`, same reset as signup)
-- booster access no longer approved (`BoosterAccessService` — signup-time approval is not enough)
+- booster access no longer approved (`BoosterAccessService` — signup-time approval is not enough; revoke is a publish blocker)
+
+See [booster-access-management.md](booster-access-management.md).
 - two selected signups for one user
 
 Warnings: composition under or over target.

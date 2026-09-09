@@ -1,4 +1,4 @@
-import type { BoosterAccessRecord } from "@/models/records";
+import type { BoosterAccessMatch } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
@@ -25,7 +25,7 @@ export type EligibilityCharacter = {
   wowClass: WowClass;
   specialization: string | null;
   isActive: boolean;
-  boosterAccess: BoosterAccessRecord[];
+  boosterAccess: BoosterAccessMatch[];
   lockouts: EligibilityLockout[];
 };
 

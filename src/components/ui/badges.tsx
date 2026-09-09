@@ -125,7 +125,8 @@ export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
       className={cn(
         status === "APPROVED" && "bg-success/15 text-success",
         status === "PENDING" && "bg-warning/15 text-warning",
-        status === "REVOKED" && "bg-danger/15 text-danger",
+        status === "REJECTED" && "bg-danger/15 text-danger",
+        status === "REVOKED" && "bg-muted/20 text-muted",
       )}
     >
       {ACCESS_STATUS_LABELS[status]}

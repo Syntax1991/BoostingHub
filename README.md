@@ -4,7 +4,7 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is on **feature/character-management** (pending merge). Foundation through Phase 4 is complete on `main`. Character Management is implemented on this branch and is not yet the merged production baseline.
+This repository is on **main**. Character Management is merged. Booster Access Management is implemented on `feature/booster-access-management`.
 
 Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
@@ -14,7 +14,8 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Phase 2 — Real Run Signup Workflow — Complete**
 - **Phase 3 — Roster Management — Complete**
 - **Phase 4 — Production Data Transition Foundation — Complete**
-- **Character Management — implemented on feature/character-management / pending merge**
+- **Character Management — Complete**
+- **Booster Access Management — implemented on feature/booster-access-management / pending merge**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -25,6 +26,8 @@ Phase 3 adds `/manage/runs/[runId]`: persistent draft selection, composition war
 Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state.
 
 Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Battle.net sync is still deferred.
+
+Booster Access Management lets that user request eligibility from character details and lets an ADMIN approve, reject, or revoke it.
 
 Not implemented (intentionally deferred):
 - Run create/edit/cancel
@@ -169,6 +172,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Git workflow](docs/git-workflow.md)
 - [Application shell](docs/features/application-shell.md)
 - [Character management](docs/features/character-management.md)
+- [Booster access management](docs/features/booster-access-management.md)
 - [Run signups](docs/features/run-signups.md)
 - [Roster management](docs/features/roster-management.md)
 

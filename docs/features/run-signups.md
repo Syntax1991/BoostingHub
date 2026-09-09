@@ -83,6 +83,10 @@ Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only.
 - Controller: `src/controllers/signup.actions.ts`
 - Service: `signupService` + `signup-eligibility.ts` + `signup-state.ts`
 - Delegates: `BoosterAccessService`, `LockoutService`, `isSignupWindowOpen`
+
+Requesting and reviewing access: [booster-access-management.md](booster-access-management.md).
+
+## Deferred
 - Repository: `signup.repository.ts`
 - Model: `RunSignup`
 

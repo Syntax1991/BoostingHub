@@ -15,6 +15,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 - All app routes: authenticated `ACTIVE` user
 - `/manage*`: `RAID_LEAD` or `ADMIN`, enforced in controllers
+- `/manage/booster-access`: `ADMIN` only
 
 ## Models / services / controllers
 

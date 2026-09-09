@@ -106,5 +106,6 @@ npx prisma migration plan --name change_name --from 20260908T1740_character_iden
 3. Open Details, edit specialization/item level, deactivate, then reactivate.
 4. Confirm Dashboard and Profile counts follow `activeCharacters` / `totalCharacters`.
 5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until approved.
+6. From character details, request booster access; as ADMIN, approve it on `/manage/booster-access` and confirm booster signup becomes available.
 
 Do not use Refresh; Battle.net sync is deferred. Git workflow: [git-workflow.md](git-workflow.md).

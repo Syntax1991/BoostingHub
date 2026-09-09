@@ -100,3 +100,12 @@ export function findSpecialization(
 export function roleForSpecialization(wowClass: WowClass, specialization: string): CharacterRole | null {
   return findSpecialization(wowClass, specialization)?.role ?? null;
 }
+
+/** Roles this class can actually perform. BoosterAccess may approve any of these, not only primaryRole. */
+export function rolesForClass(wowClass: WowClass): CharacterRole[] {
+  return [...new Set(WOW_SPECIALIZATIONS[wowClass].map((entry) => entry.role))];
+}
+
+export function isRoleValidForClass(wowClass: WowClass, role: CharacterRole): boolean {
+  return rolesForClass(wowClass).includes(role);
+}

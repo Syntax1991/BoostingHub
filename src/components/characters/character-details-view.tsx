@@ -1,15 +1,30 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
-import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS, REGION_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
+import { RequestBoosterAccessDialog } from "@/components/characters/request-booster-access-dialog";
 import type { characterService } from "@/services/character.service";
+import type { BoosterAccessStatus, RaidDifficulty } from "@/models/enums";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
 
+function statusLabel(status: BoosterAccessStatus | "NONE") {
+  if (status === "NONE") return "Not Requested";
+  if (status === "PENDING") return "Pending Review";
+  if (status === "APPROVED") return "Approved";
+  if (status === "REJECTED") return "Rejected";
+  return "Revoked";
+}
+
 export function CharacterDetailsView({ data }: { data: Details }) {
+  const panel = data.accessPanel;
+  const byDifficulty = panel.difficulties.map((difficulty) => ({
+    difficulty,
+    cells: panel.cells.filter((cell) => cell.difficulty === difficulty),
+  }));
   return (
     <div>
       <PageHeader
@@ -93,22 +108,42 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         <Card>
           <CardHeader
             title="Booster access"
-            description="Read-only. Approval is a separate domain from character identity."
+            description="What this character can boost. Approval is independent of account role."
+            action={
+              <RequestBoosterAccessDialog
+                characterId={data.id}
+                cells={panel.cells}
+                disabled={!panel.canSubmitRequests}
+                disabledReason={panel.inactiveHint}
+              />
+            }
           />
-          {data.boosterAccess.length === 0 ? (
-            <EmptyState title="No booster access assigned." description="Existing characters can still sign as lootbuddy." />
-          ) : (
-            <ul className="divide-y divide-border">
-              {data.boosterAccess.map((access) => (
-                <li key={`${access.role}-${access.difficulty}-${access.status}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <span>
-                    {CHARACTER_ROLE_LABELS[access.role]} · {DIFFICULTY_LABELS[access.difficulty]}
-                  </span>
-                  <AccessBadge status={access.status} />
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="divide-y divide-border">
+            {byDifficulty.map(({ difficulty, cells }: { difficulty: RaidDifficulty; cells: typeof panel.cells }) => (
+              <div key={difficulty} className="px-4 py-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <DifficultyBadge difficulty={difficulty} />
+                </div>
+                <ul className="space-y-2 text-sm">
+                  {cells.map((cell) => (
+                    <li key={`${cell.role}-${cell.difficulty}`} className="flex flex-wrap items-center justify-between gap-2">
+                      <span>{CHARACTER_ROLE_LABELS[cell.role]}</span>
+                      <span className="flex items-center gap-2">
+                        {cell.status === "NONE" ? (
+                          <span className="text-xs text-muted">{statusLabel(cell.status)}</span>
+                        ) : (
+                          <AccessBadge status={cell.status} />
+                        )}
+                      </span>
+                      {cell.notes && (cell.status === "REJECTED" || cell.status === "REVOKED") ? (
+                        <p className="w-full text-xs text-muted">{cell.notes}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </Card>
         <Card>
           <CardHeader title="Raid lockouts" description="Stored lockouts only. Not live Blizzard data." />

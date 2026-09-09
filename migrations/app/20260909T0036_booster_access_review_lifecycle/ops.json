@@ -1,0 +1,290 @@
+[
+  {
+    "id": "dropCheckConstraint.booster_access.booster_access_status_check_3260663c",
+    "label": "Drop check constraint \"booster_access_status_check_3260663c\" on \"booster_access\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "booster_access_status_check_3260663c",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_access_status_check_3260663c\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_status_check_3260663c",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"booster_access_status_check_3260663c\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" DROP CONSTRAINT \"booster_access_status_check_3260663c\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_access_status_check_3260663c\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_status_check_3260663c",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.booster_access.reviewedAt",
+    "label": "Add column \"reviewedAt\" to \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "reviewedAt",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"reviewedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "booster_access",
+          "reviewedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"reviewedAt\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" ADD COLUMN \"reviewedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"reviewedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "booster_access",
+          "reviewedAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.booster_access.reviewedById",
+    "label": "Add column \"reviewedById\" to \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "reviewedById",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"reviewedById\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "booster_access",
+          "reviewedById"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"reviewedById\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" ADD COLUMN \"reviewedById\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"reviewedById\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "booster_access",
+          "reviewedById"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.booster_access.booster_access_status_check_4f4d1767",
+    "label": "Add check constraint \"booster_access_status_check_4f4d1767\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "booster_access_status_check_4f4d1767",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_access_status_check_4f4d1767\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_status_check_4f4d1767",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"booster_access_status_check_4f4d1767\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" ADD CONSTRAINT \"booster_access_status_check_4f4d1767\" CHECK (\"status\" IN ('PENDING', 'APPROVED', 'REJECTED', 'REVOKED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_access_status_check_4f4d1767\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_status_check_4f4d1767",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_access.booster_access_reviewedById_idx_e2835478",
+    "label": "Create index \"booster_access_reviewedById_idx_e2835478\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_access_reviewedById_idx_e2835478",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_access_reviewedById_idx_e2835478\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_reviewedById_idx_e2835478\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_access_reviewedById_idx_e2835478\"",
+        "sql": "CREATE INDEX \"booster_access_reviewedById_idx_e2835478\" ON \"public\".\"booster_access\" (\"reviewedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_access_reviewedById_idx_e2835478\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_reviewedById_idx_e2835478\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_access.booster_access_status_idx_e98638ab",
+    "label": "Create index \"booster_access_status_idx_e98638ab\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_access_status_idx_e98638ab",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_access_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_access_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"booster_access_status_idx_e98638ab\" ON \"public\".\"booster_access\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_access_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_access_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_access.booster_access_reviewedById_fkey",
+    "label": "Add foreign key \"booster_access_reviewedById_fkey\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_access_reviewedById_fkey",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_access_reviewedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_reviewedById_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_access_reviewedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\"\nADD CONSTRAINT \"booster_access_reviewedById_fkey\"\nFOREIGN KEY (\"reviewedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_access_reviewedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_reviewedById_fkey",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  }
+]
