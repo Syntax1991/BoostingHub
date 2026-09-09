@@ -1,5 +1,6 @@
 import type {
   AccountRole,
+  AttendanceStatus,
   BoosterAccessStatus,
   CharacterRole,
   LootbuddyMode,
@@ -66,6 +67,16 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   IN_PROGRESS: "In Progress",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
+};
+
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  UNMARKED: "Unmarked",
+  PRESENT: "Present",
+  LATE: "Late",
+  LEFT_EARLY: "Left early",
+  NO_SHOW: "No show",
+  EXCUSED: "Excused",
+  STANDBY: "Standby",
 };
 
 export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {

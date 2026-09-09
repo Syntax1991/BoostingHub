@@ -36,6 +36,10 @@
       "model": "Run",
       "namespace": "public"
     },
+    "run_attendance": {
+      "model": "RunAttendance",
+      "namespace": "public"
+    },
     "run_roster": {
       "model": "RunRoster",
       "namespace": "public"
@@ -92,6 +96,39 @@
               {
                 "name": "DISABLED",
                 "value": "DISABLED"
+              }
+            ]
+          },
+          "AttendanceStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "UNMARKED",
+                "value": "UNMARKED"
+              },
+              {
+                "name": "PRESENT",
+                "value": "PRESENT"
+              },
+              {
+                "name": "LATE",
+                "value": "LATE"
+              },
+              {
+                "name": "LEFT_EARLY",
+                "value": "LEFT_EARLY"
+              },
+              {
+                "name": "NO_SHOW",
+                "value": "NO_SHOW"
+              },
+              {
+                "name": "EXCUSED",
+                "value": "EXCUSED"
+              },
+              {
+                "name": "STANDBY",
+                "value": "STANDBY"
               }
             ]
           },
@@ -1498,6 +1535,21 @@
               }
             },
             "relations": {
+              "attendance": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
               "raid": {
                 "cardinality": "N:1",
                 "on": {
@@ -1606,6 +1658,159 @@
               },
               "namespaceId": "public",
               "table": "run"
+            }
+          },
+          "RunAttendance": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "markedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "markedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "note": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "rosterEntryId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "AttendanceStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "markedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "markedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "rosterEntry": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "rosterEntryId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRosterEntry",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "markedAt": {
+                  "column": "markedAt"
+                },
+                "markedById": {
+                  "column": "markedById"
+                },
+                "note": {
+                  "column": "note"
+                },
+                "rosterEntryId": {
+                  "column": "rosterEntryId"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_attendance"
             }
           },
           "RunRoster": {
@@ -1797,6 +2002,21 @@
               }
             },
             "relations": {
+              "attendance": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "rosterEntryId"
+                  ]
+                },
+                "to": {
+                  "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
               "roster": {
                 "cardinality": "N:1",
                 "on": {
@@ -2372,6 +2592,21 @@
                 },
                 "to": {
                   "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "markedAttendance": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "markedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunAttendance",
                   "namespace": "public"
                 }
               },
@@ -3601,6 +3836,167 @@
               },
               "uniques": []
             },
+            "run_attendance": {
+              "checks": [
+                {
+                  "expression": "\"status\" IN ('UNMARKED', 'PRESENT', 'LATE', 'LEFT_EARLY', 'NO_SHOW', 'EXCUSED', 'STANDBY')",
+                  "name": "run_attendance_status_check_71e1f65a",
+                  "prefix": "run_attendance_status_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "markedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "markedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "note": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "rosterEntryId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "UNMARKED"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "AttendanceStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_attendance"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "rosterEntryId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_attendance"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster_entry"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "markedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_attendance"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "markedById"
+                  ],
+                  "name": "run_attendance_markedById_idx_114ec907",
+                  "prefix": "run_attendance_markedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "run_attendance_runId_idx_a6016437",
+                  "prefix": "run_attendance_runId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "run_attendance_status_idx_e98638ab",
+                  "prefix": "run_attendance_status_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "rosterEntryId"
+                  ]
+                }
+              ]
+            },
             "run_roster": {
               "checks": [
                 {
@@ -4335,6 +4731,18 @@
                 "DISABLED"
               ]
             },
+            "AttendanceStatus": {
+              "kind": "valueSet",
+              "values": [
+                "UNMARKED",
+                "PRESENT",
+                "LATE",
+                "LEFT_EARLY",
+                "NO_SHOW",
+                "EXCUSED",
+                "STANDBY"
+              ]
+            },
             "BoosterAccessStatus": {
               "kind": "valueSet",
               "values": [
@@ -4441,10 +4849,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "dd1bc61818d0b4aeb417568d27fa6091417e19ea8d2525f6119a578233d3a0c1"
+    "storageHash": "0e77d9eabd5bec25d2e415654967a9e360018316db7464e9656e8674a1ff4454"
   },
   "execution": {
-    "executionHash": "d5b64e043426f885ea8e3505bd5954a5f912648cb25bddee46a7208e5a8278dc",
+    "executionHash": "00e54433b7579db23df0c095a544c2ac60f1d1da902b6436e7babde38e79a038",
     "mutations": {
       "defaults": [
         {
@@ -4623,6 +5031,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_attendance"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_attendance"
           }
         },
         {
