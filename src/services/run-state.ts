@@ -19,6 +19,7 @@ export const RUN_COMPOSITION_MIN = 0;
 export const RUN_COMPOSITION_MAX = 40;
 export const RUN_TITLE_MAX = 80;
 export const RUN_NOTES_MAX = 500;
+export const ATTENDANCE_NOTE_MAX = 200;
 /** New runs may be a few minutes in the past to avoid brittle clock races. */
 export const RUN_SCHEDULE_PAST_GRACE_MS = 5 * 60_000;
 
@@ -54,6 +55,9 @@ export type RunLifecycleCapabilities = {
   canCloseSignups: boolean;
   canReopenSignups: boolean;
   canCancel: boolean;
+  canStart: boolean;
+  canManageAttendance: boolean;
+  canComplete: boolean;
 };
 
 export function emptyRunCapabilities(): RunLifecycleCapabilities {
@@ -66,6 +70,9 @@ export function emptyRunCapabilities(): RunLifecycleCapabilities {
     canCloseSignups: false,
     canReopenSignups: false,
     canCancel: false,
+    canStart: false,
+    canManageAttendance: false,
+    canComplete: false,
   };
 }
 
@@ -93,6 +100,18 @@ export function canCancelRun(status: RunStatus): boolean {
   return CANCELLABLE_STATUSES.includes(status);
 }
 
+export function canStartRun(status: RunStatus): boolean {
+  return status === "PUBLISHED";
+}
+
+export function canManageAttendance(status: RunStatus): boolean {
+  return status === "IN_PROGRESS";
+}
+
+export function canCompleteRun(status: RunStatus): boolean {
+  return status === "IN_PROGRESS";
+}
+
 /**
  * Authoritative editability and lifecycle actions for an already-authorized manager.
  * Views must render these flags, not recompute them from RunStatus.
@@ -117,5 +136,8 @@ export function getRunLifecycleCapabilities(input: {
     canCloseSignups: windowToggle && input.signupsOpen,
     canReopenSignups: windowToggle && !input.signupsOpen,
     canCancel: canCancelRun(input.status),
+    canStart: canStartRun(input.status),
+    canManageAttendance: canManageAttendance(input.status),
+    canComplete: canCompleteRun(input.status),
   };
 }

@@ -154,6 +154,35 @@ export const rosterRepository = {
     return row ? mapRoster(row as Record<string, unknown>) : null;
   },
 
+  /**
+   * Live published roster participants: roster entries that are selected and whose
+   * signup is currently SELECTED. Replacement draft flags are ignored.
+   */
+  async listPublishedSelectedEntries(runId: string): Promise<Array<{ id: string; signupId: string }>> {
+    const row = await orm.RunRoster
+      .where({ runId })
+      .include("entries", (entry) => entry.include("signup"))
+      .first();
+    if (!row || !asStringOrNull((row as Record<string, unknown>).publishedAt)) {
+      return [];
+    }
+    const entries = Array.isArray((row as Record<string, unknown>).entries)
+      ? ((row as Record<string, unknown>).entries as Record<string, unknown>[])
+      : [];
+    return entries
+      .map((entry) => {
+        const signup = entry.signup as Record<string, unknown> | undefined;
+        return {
+          id: asString(entry.id),
+          signupId: asString(entry.signupId),
+          selected: asBoolean(entry.selected, true),
+          signupStatus: signup ? mapSignupStatus(signup.status) : ("PENDING" as const),
+        };
+      })
+      .filter((entry) => entry.selected && entry.signupStatus === "SELECTED")
+      .map((entry) => ({ id: entry.id, signupId: entry.signupId }));
+  },
+
   async listSignups(runId: string): Promise<RosterSignupRow[]> {
     const rows = await orm.RunSignup
       .where({ runId })

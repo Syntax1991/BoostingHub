@@ -26,7 +26,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 ## Limitations
 
 - Character create/edit/deactivate/reactivate is implemented for the owning user
-- Run create/edit/open/signup-window/cancel is implemented; attendance is not
+- Run create/edit/open/signup-window/cancel/start/complete and attendance are implemented
 - Blizzard refresh is not claimed to work
 - Payout panels are reserved empty, not fake finance
 - Signup, withdraw, and raidlead/admin roster publish are implemented

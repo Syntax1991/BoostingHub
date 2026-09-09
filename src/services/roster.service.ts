@@ -324,6 +324,9 @@ export const rosterService = {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
     }
     assertCanManageRun(user, run);
+    if (run.status === "IN_PROGRESS" || run.status === "COMPLETED" || run.status === "CANCELLED") {
+      throw new DomainError("INVALID_ROSTER_SELECTION", "This run cannot be rostered in its current state.");
+    }
 
     const roster = await rosterRepository.ensure(input.runId);
     await rosterRepository.assertVersion(roster, input.version);

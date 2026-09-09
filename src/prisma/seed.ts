@@ -48,6 +48,8 @@ const ids = {
     mythicDraft: "r6666666-6666-4666-8666-666666666666",
     heroicWeekend: "r7777777-7777-4777-8777-777777777777",
     rosterLab: "r8888888-8888-4888-8888-888888888888",
+    heroicInProgress: "r9999991-9991-4991-8991-999999999991",
+    heroicCompleted: "r9999992-9992-4992-8992-999999999992",
   },
   signups: {
     publishedKael: "s5555555-5555-4555-8555-555555555551",
@@ -69,14 +71,27 @@ const ids = {
     labSylva: "s8888888-8888-4888-8888-888888888886",
     labThorne: "s8888888-8888-4888-8888-888888888887",
     labAelira: "s8888888-8888-4888-8888-888888888888",
+    ipKael: "s9999991-9991-4991-8991-999999999991",
+    ipMira: "s9999991-9991-4991-8991-999999999992",
+    ipBrann: "s9999991-9991-4991-8991-999999999993",
+    ipSylva: "s9999991-9991-4991-8991-999999999994",
+    ipAelira: "s9999991-9991-4991-8991-999999999995",
+    cpKael: "s9999992-9992-4992-8992-999999999991",
+    cpMira: "s9999992-9992-4992-8992-999999999992",
+    cpBrann: "s9999992-9992-4992-8992-999999999993",
   },
   rosters: {
     sunday: "o3333333-3333-4333-8333-333333333333",
     published: "o5555555-5555-4555-8555-555555555555",
+    inProgress: "o9999991-9991-4991-8991-999999999991",
+    completed: "o9999992-9992-4992-8992-999999999992",
   },
 };
 
 async function wipe() {
+  for (const row of await orm.RunAttendance.select("id").all()) {
+    await orm.RunAttendance.where({ id: row.id }).delete();
+  }
   for (const row of await orm.RunRosterEntry.select("id").all()) {
     await orm.RunRosterEntry.where({ id: row.id }).delete();
   }
@@ -490,6 +505,30 @@ async function seed() {
       desiredDpsCount: 14,
       raidLeadId: ids.users.thorne,
     },
+    {
+      id: ids.runs.heroicInProgress,
+      title: "In Progress Heroic Attendance",
+      difficulty: "HEROIC",
+      scheduledStartAt: "2026-09-08T19:00:00.000Z",
+      status: "IN_PROGRESS",
+      signupsOpen: false,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      raidLeadId: ids.users.thorne,
+    },
+    {
+      id: ids.runs.heroicCompleted,
+      title: "Completed Heroic Attendance",
+      difficulty: "HEROIC",
+      scheduledStartAt: "2026-09-07T19:00:00.000Z",
+      status: "COMPLETED",
+      signupsOpen: false,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      raidLeadId: ids.users.thorne,
+    },
   ] as const;
 
   for (const run of runs) {
@@ -785,6 +824,90 @@ async function seed() {
       isBackup: true,
       status: "PENDING",
     },
+    {
+      id: ids.signups.ipKael,
+      runId: ids.runs.heroicInProgress,
+      userId: ids.users.kael,
+      characterId: ids.characters.kaelEle,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.ipMira,
+      runId: ids.runs.heroicInProgress,
+      userId: ids.users.mira,
+      characterId: ids.characters.miraPriest,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyMode: "LOOT_ONLY",
+      lootbuddyVerification: "ACCESS",
+    },
+    {
+      id: ids.signups.ipBrann,
+      runId: ids.runs.heroicInProgress,
+      userId: ids.users.brann,
+      characterId: ids.characters.brannPaladin,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.ipSylva,
+      runId: ids.runs.heroicInProgress,
+      userId: ids.users.sylva,
+      characterId: ids.characters.sylvaHunter,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: true,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.ipAelira,
+      runId: ids.runs.heroicInProgress,
+      userId: ids.users.aelira,
+      characterId: ids.characters.aeliraMonk,
+      participationType: "BOOSTER",
+      role: "HEALER",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.cpKael,
+      runId: ids.runs.heroicCompleted,
+      userId: ids.users.kael,
+      characterId: ids.characters.kaelEle,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.cpMira,
+      runId: ids.runs.heroicCompleted,
+      userId: ids.users.mira,
+      characterId: ids.characters.miraPriest,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyMode: "LOOT_ONLY",
+      lootbuddyVerification: "ACCESS",
+    },
+    {
+      id: ids.signups.cpBrann,
+      runId: ids.runs.heroicCompleted,
+      userId: ids.users.brann,
+      characterId: ids.characters.brannPaladin,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
   ] as const;
 
   for (const signup of signups) {
@@ -840,6 +963,91 @@ async function seed() {
     updatedAt: SEED_NOW,
   });
 
+  await orm.RunRoster.create({
+    id: ids.rosters.inProgress,
+    runId: ids.runs.heroicInProgress,
+    state: "PUBLISHED",
+    version: 1,
+    publishedAt: SEED_NOW,
+    publishedById: ids.users.thorne,
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+  });
+  const inProgressEntries = [
+    { id: "e9999991-9991-4991-8991-999999999991", signupId: ids.signups.ipKael },
+    { id: "e9999991-9991-4991-8991-999999999992", signupId: ids.signups.ipMira },
+    { id: "e9999991-9991-4991-8991-999999999993", signupId: ids.signups.ipBrann },
+    { id: "e9999991-9991-4991-8991-999999999994", signupId: ids.signups.ipSylva },
+    { id: "e9999991-9991-4991-8991-999999999995", signupId: ids.signups.ipAelira },
+  ];
+  for (const entry of inProgressEntries) {
+    await orm.RunRosterEntry.create({
+      id: entry.id,
+      rosterId: ids.rosters.inProgress,
+      signupId: entry.signupId,
+      selected: true,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+  const inProgressAttendance = [
+    { rosterEntryId: inProgressEntries[0].id, status: "UNMARKED", note: null },
+    { rosterEntryId: inProgressEntries[1].id, status: "UNMARKED", note: null },
+    { rosterEntryId: inProgressEntries[2].id, status: "NO_SHOW", note: "Did not show" },
+    { rosterEntryId: inProgressEntries[3].id, status: "STANDBY", note: "standby, not needed" },
+    { rosterEntryId: inProgressEntries[4].id, status: "LATE", note: "joined after boss 1" },
+  ] as const;
+  for (const row of inProgressAttendance) {
+    await orm.RunAttendance.create({
+      id: crypto.randomUUID(),
+      runId: ids.runs.heroicInProgress,
+      rosterEntryId: row.rosterEntryId,
+      status: row.status,
+      note: row.note,
+      markedAt: row.status === "UNMARKED" ? null : SEED_NOW,
+      markedById: row.status === "UNMARKED" ? null : ids.users.thorne,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+
+  await orm.RunRoster.create({
+    id: ids.rosters.completed,
+    runId: ids.runs.heroicCompleted,
+    state: "PUBLISHED",
+    version: 1,
+    publishedAt: SEED_NOW,
+    publishedById: ids.users.thorne,
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+  });
+  const completedEntries = [
+    { id: "e9999992-9992-4992-8992-999999999991", signupId: ids.signups.cpKael, status: "PRESENT" as const, note: null },
+    { id: "e9999992-9992-4992-8992-999999999992", signupId: ids.signups.cpMira, status: "LATE" as const, note: "lootbuddy joined late" },
+    { id: "e9999992-9992-4992-8992-999999999993", signupId: ids.signups.cpBrann, status: "EXCUSED" as const, note: "connection problems" },
+  ];
+  for (const entry of completedEntries) {
+    await orm.RunRosterEntry.create({
+      id: entry.id,
+      rosterId: ids.rosters.completed,
+      signupId: entry.signupId,
+      selected: true,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+    await orm.RunAttendance.create({
+      id: crypto.randomUUID(),
+      runId: ids.runs.heroicCompleted,
+      rosterEntryId: entry.id,
+      status: entry.status,
+      note: entry.note,
+      markedAt: SEED_NOW,
+      markedById: ids.users.thorne,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+
   const activity = [
     { userId: ids.users.thorne, type: "RUN_OPENED", message: "Opened signups for Wednesday Heroic Full Clear." },
     { userId: ids.users.kael, type: "SIGNUP", message: "Kael signed Stormhowl (Restoration) as Healer." },
@@ -847,6 +1055,8 @@ async function seed() {
     { userId: ids.users.mira, type: "SIGNUP", message: "Mira signed as lootbuddy for Friday Mythic." },
     { userId: ids.users.thorne, type: "ROSTERING_STARTED", message: "Started rostering Sunday Heroic Boost." },
     { userId: ids.users.thorne, type: "ROSTER_PUBLISHED", message: "Published the roster for Published Heroic Split." },
+    { userId: ids.users.thorne, type: "RUN_STARTED", message: "Started a run." },
+    { userId: ids.users.thorne, type: "RUN_COMPLETED", message: "Completed a run." },
   ];
 
   for (const [index, event] of activity.entries()) {

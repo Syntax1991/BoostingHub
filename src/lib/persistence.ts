@@ -10,10 +10,12 @@ import {
   LOOTBUDDY_MODES,
   LOOTBUDDY_VERIFICATIONS,
   ROSTER_STATES,
+  ATTENDANCE_STATUSES,
   WOW_CLASSES,
   WOW_REGIONS,
   type AccountRole,
   type AccountStatus,
+  type AttendanceStatus,
   type BoosterAccessStatus,
   type CharacterRole,
   type LootbuddyMode,
@@ -99,6 +101,10 @@ export function mapLootbuddyVerification(value: unknown): LootbuddyVerification 
 
 export function mapRosterState(value: unknown): RosterState {
   return asEnum(value, ROSTER_STATES, "DRAFT");
+}
+
+export function mapAttendanceStatus(value: unknown): AttendanceStatus {
+  return asEnum(value, ATTENDANCE_STATUSES, "UNMARKED");
 }
 
 export {

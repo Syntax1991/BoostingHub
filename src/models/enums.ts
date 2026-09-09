@@ -64,6 +64,21 @@ export type LootbuddyVerification = (typeof LOOTBUDDY_VERIFICATIONS)[number];
 export const ROSTER_STATES = ["DRAFT", "PUBLISHED"] as const;
 export type RosterState = (typeof ROSTER_STATES)[number];
 
+export const ATTENDANCE_STATUSES = [
+  "UNMARKED",
+  "PRESENT",
+  "LATE",
+  "LEFT_EARLY",
+  "NO_SHOW",
+  "EXCUSED",
+  "STANDBY",
+] as const;
+export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+
+export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(
+  (status) => status !== "UNMARKED",
+) as readonly Exclude<AttendanceStatus, "UNMARKED">[];
+
 /** Run statuses that still appear in operational "upcoming" lists. */
 export const UPCOMING_RUN_STATUSES: readonly RunStatus[] = [
   "OPEN",

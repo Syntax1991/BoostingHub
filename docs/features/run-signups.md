@@ -94,4 +94,4 @@ Requesting and reviewing access: [booster-access-management.md](booster-access-m
 
 ## Deferred
 
-Roster selection and publication: see [roster-management.md](roster-management.md). Still deferred: attendance, payouts.
+Roster selection and publication: see [roster-management.md](roster-management.md). Start, attendance, and completion: see [run-lifecycle-attendance.md](run-lifecycle-attendance.md). Still deferred: payouts.

@@ -49,7 +49,7 @@ Creation does not open or publish the run. First persisted roster selection stil
 | Create draft, edit planning, `DRAFT → OPEN`, signup window, cancel | Run Management (`RunService`) |
 | `OPEN → ROSTERING` on first persisted draft selection | Roster Management (`RosterService`) |
 | `ROSTERING → PUBLISHED` on publish | Roster Management (`RosterService`) |
-| `IN_PROGRESS` / `COMPLETED` | Deferred (attendance / completion) |
+| `PUBLISHED → IN_PROGRESS` / `IN_PROGRESS → COMPLETED` | Run lifecycle + attendance (`RunService` + `AttendanceService`) |
 
 Do not send an arbitrary status from the client. Transitions are explicit domain operations.
 
@@ -120,6 +120,7 @@ Management actions live on `/runs/[runId]`:
 - Open Run
 - Close Signups / Reopen Signups
 - Cancel Run
+- Start Run / Complete Run (see [run-lifecycle-attendance.md](run-lifecycle-attendance.md))
 
 The Run Detail DTO includes server-derived `capabilities`. USER payloads keep `editor` null and capabilities false. USER still sees lifecycle status, signup window, metadata, own participation, and published roster.
 
@@ -165,7 +166,7 @@ View → Controller → Service → Repository.
 
 ## Deferred
 
-- Attendance / start / finish (`IN_PROGRESS`, `COMPLETED`)
+- Post-completion attendance corrections
 - Payouts
 - Battle.net / Blizzard
 - Warcraft Logs

@@ -104,6 +104,18 @@ enum RosterState {
   PUBLISHED = "PUBLISHED"
 }
 
+/// Operational attendance for one published selected roster participant.
+enum AttendanceStatus {
+  @@type("pg/text@1")
+  UNMARKED    = "UNMARKED"
+  PRESENT     = "PRESENT"
+  LATE        = "LATE"
+  LEFT_EARLY  = "LEFT_EARLY"
+  NO_SHOW     = "NO_SHOW"
+  EXCUSED     = "EXCUSED"
+  STANDBY     = "STANDBY"
+}
+
 /// Application account. Also serves as the Better Auth `user` table.
 /// Account roles are permissions on the platform, not run participation type.
 model User {
@@ -129,6 +141,7 @@ model User {
   reviewedAccess   BoosterAccess[] @relation("BoosterAccessReviewer")
   activity         ActivityEvent[]
   publishedRosters RunRoster[]     @relation("RosterPublisher")
+  markedAttendance RunAttendance[] @relation("AttendanceMarker")
 
   @@map("user")
 }
@@ -307,8 +320,9 @@ model Run {
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
 
-  signups RunSignup[]
-  roster  RunRoster?
+  signups     RunSignup[]
+  roster      RunRoster?
+  attendance  RunAttendance[]
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -366,6 +380,25 @@ model RunRoster {
   @@map("run_roster")
 }
 
+model RunAttendance {
+  id            String           @id @default(uuid())
+  runId         String
+  run           Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  rosterEntryId String           @unique
+  rosterEntry   RunRosterEntry   @relation(fields: [rosterEntryId], references: [id], onDelete: Restrict)
+  status        AttendanceStatus @default(UNMARKED)
+  note          String?
+  markedAt      TimestamptzString?
+  markedById    String?
+  markedBy      User?            @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@index([runId])
+  @@index([status])
+  @@map("run_attendance")
+}
+
 model RunRosterEntry {
   id        String     @id @default(uuid())
   rosterId  String
@@ -375,6 +408,8 @@ model RunRosterEntry {
   selected  Boolean    @default(true)
   createdAt TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
+
+  attendance RunAttendance?
 
   @@unique([rosterId, signupId])
   @@index([rosterId])

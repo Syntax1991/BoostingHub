@@ -1,0 +1,326 @@
+[
+  {
+    "id": "table.run_attendance",
+    "label": "Create table \"run_attendance\"",
+    "summary": "Creates table \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_attendance\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_attendance\"",
+        "sql": "CREATE TABLE \"public\".\"run_attendance\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"markedAt\" timestamptz,\n  \"markedById\" text,\n  \"note\" text,\n  \"rosterEntryId\" text NOT NULL,\n  \"runId\" text NOT NULL,\n  \"status\" text DEFAULT 'UNMARKED' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_attendance_status_check_71e1f65a\" CHECK (\"status\" IN ('UNMARKED', 'PRESENT', 'LATE', 'LEFT_EARLY', 'NO_SHOW', 'EXCUSED', 'STANDBY'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_attendance\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_attendance.run_attendance_rosterEntryId_key",
+    "label": "Add unique constraint on \"run_attendance\" (rosterEntryId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_attendance_rosterEntryId_key",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_attendance_rosterEntryId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_rosterEntryId_key",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_attendance_rosterEntryId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_attendance\" ADD CONSTRAINT \"run_attendance_rosterEntryId_key\" UNIQUE (\"rosterEntryId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_attendance_rosterEntryId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_rosterEntryId_key",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_attendance.run_attendance_markedById_idx_114ec907",
+    "label": "Create index \"run_attendance_markedById_idx_114ec907\" on \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_attendance_markedById_idx_114ec907",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_attendance_markedById_idx_114ec907\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance_markedById_idx_114ec907\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_attendance_markedById_idx_114ec907\"",
+        "sql": "CREATE INDEX \"run_attendance_markedById_idx_114ec907\" ON \"public\".\"run_attendance\" (\"markedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_attendance_markedById_idx_114ec907\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance_markedById_idx_114ec907\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_attendance.run_attendance_runId_idx_a6016437",
+    "label": "Create index \"run_attendance_runId_idx_a6016437\" on \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_attendance_runId_idx_a6016437",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_attendance_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_attendance_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_attendance_runId_idx_a6016437\" ON \"public\".\"run_attendance\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_attendance_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_attendance.run_attendance_status_idx_e98638ab",
+    "label": "Create index \"run_attendance_status_idx_e98638ab\" on \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_attendance_status_idx_e98638ab",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_attendance_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_attendance_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"run_attendance_status_idx_e98638ab\" ON \"public\".\"run_attendance\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_attendance_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_attendance_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_attendance.run_attendance_runId_fkey",
+    "label": "Add foreign key \"run_attendance_runId_fkey\" on \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_attendance_runId_fkey",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_attendance_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_runId_fkey",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_attendance_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_attendance\"\nADD CONSTRAINT \"run_attendance_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_attendance_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_runId_fkey",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_attendance.run_attendance_rosterEntryId_fkey",
+    "label": "Add foreign key \"run_attendance_rosterEntryId_fkey\" on \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_attendance_rosterEntryId_fkey",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_attendance_rosterEntryId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_rosterEntryId_fkey",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_attendance_rosterEntryId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_attendance\"\nADD CONSTRAINT \"run_attendance_rosterEntryId_fkey\"\nFOREIGN KEY (\"rosterEntryId\")\nREFERENCES \"public\".\"run_roster_entry\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_attendance_rosterEntryId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_rosterEntryId_fkey",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_attendance.run_attendance_markedById_fkey",
+    "label": "Add foreign key \"run_attendance_markedById_fkey\" on \"run_attendance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_attendance_markedById_fkey",
+        "table": "run_attendance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_attendance_markedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_markedById_fkey",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_attendance_markedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_attendance\"\nADD CONSTRAINT \"run_attendance_markedById_fkey\"\nFOREIGN KEY (\"markedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_attendance_markedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_attendance_markedById_fkey",
+          "public",
+          "\"public\".\"run_attendance\""
+        ]
+      }
+    ]
+  }
+]

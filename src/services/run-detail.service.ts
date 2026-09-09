@@ -6,6 +6,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { emptyRunCapabilities, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { hasAdminAccess } from "@/auth/authorization";
+import { attendanceService } from "@/services/attendance.service";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 
@@ -84,6 +85,9 @@ export const runDetailService = {
       manager = await rosterService.getRosterManagementView(user, runId);
     }
 
+    const ownAttendance = manage ? [] : await attendanceService.getOwnAttendance(user, runId);
+    const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
+
     let editor: {
       hasSignupHistory: boolean;
       canAssignRaidLead: boolean;
@@ -129,6 +133,10 @@ export const runDetailService = {
       viewerSignups,
       publishedRoster,
       manager,
+      attendance: {
+        own: ownAttendance,
+        manager: managerAttendance,
+      },
     };
   },
 };

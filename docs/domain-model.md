@@ -84,7 +84,7 @@ Run statuses:
 | `COMPLETED` | Finished. |
 | `CANCELLED` | Will not happen. |
 
-`signupsOpen` is independent of status. Run Management creates drafts, opens runs, toggles the signup window, and cancels. Roster Management still owns `OPEN → ROSTERING` and publish to `PUBLISHED`. `DRAFT` is management-only; ordinary users do not discover it. See [run-management.md](features/run-management.md).
+`signupsOpen` is independent of status. Run Management creates drafts, opens runs, toggles the signup window, and cancels. Roster Management owns `OPEN → ROSTERING` and publish to `PUBLISHED`. Start/complete owns `PUBLISHED → IN_PROGRESS → COMPLETED`. `DRAFT` is management-only; ordinary users do not discover it. See [run-management.md](features/run-management.md) and [run-lifecycle-attendance.md](features/run-lifecycle-attendance.md).
 
 ## RunSignup
 
@@ -116,6 +116,16 @@ One roster document per run. Draft selection lives in `RunRosterEntry` and is in
 One selected signup per user per run is enforced in `RosterService`, not as a database constraint.
 
 See [docs/features/roster-management.md](features/roster-management.md).
+
+## RunAttendance
+
+One attendance row per published selected `RunRosterEntry` for a started Run.
+
+- unique on `rosterEntryId`
+- status: `UNMARKED` \| `PRESENT` \| `LATE` \| `LEFT_EARLY` \| `NO_SHOW` \| `EXCUSED` \| `STANDBY`
+- optional manager note, `markedAt` / `markedById`
+
+Created when a published Run starts. See [run-lifecycle-attendance.md](features/run-lifecycle-attendance.md).
 
 ## ActivityEvent
 
