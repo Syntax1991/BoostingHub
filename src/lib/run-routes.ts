@@ -4,7 +4,7 @@ import type { RunStatus } from "@/models/enums";
  * Canonical Run entity URL. Future Discord/notification links should use this
  * path, not a /manage-only URL.
  */
-export const RUN_DETAIL_TABS = ["overview", "signups", "roster"] as const;
+export const RUN_DETAIL_TABS = ["overview", "signups", "roster", "attendance"] as const;
 
 export type RunDetailTab = (typeof RUN_DETAIL_TABS)[number];
 
@@ -12,7 +12,7 @@ export function parseRunDetailTab(value: unknown): RunDetailTab {
   if (Array.isArray(value)) {
     return parseRunDetailTab(value[0]);
   }
-  if (value === "signups" || value === "roster") {
+  if (value === "signups" || value === "roster" || value === "attendance") {
     return value;
   }
   return "overview";
@@ -31,6 +31,9 @@ export function runDetailTabForManageAction(actionLabel: string): RunDetailTab {
   if (actionLabel === "View" || actionLabel === "Manage") {
     return "overview";
   }
+  if (actionLabel === "Attendance") {
+    return "attendance";
+  }
   return "roster";
 }
 
@@ -42,6 +45,9 @@ export function rosterActionLabel(
 ): string {
   if (status === "DRAFT") {
     return "Manage";
+  }
+  if (status === "IN_PROGRESS") {
+    return "Attendance";
   }
   if (status === "CANCELLED" || status === "COMPLETED") {
     return "View";

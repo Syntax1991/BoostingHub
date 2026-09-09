@@ -42,7 +42,12 @@ export function RunDetailView({
       />
       {data.permissions.canManageRun ? (
         <div className="mb-4">
-          <RunManagerActions run={data.run} capabilities={data.capabilities} editor={data.editor} />
+            <RunManagerActions
+              run={data.run}
+              capabilities={data.capabilities}
+              editor={data.editor}
+              unmarkedCount={data.attendance.manager?.summary.unmarked ?? 0}
+            />
         </div>
       ) : null}
       <Card className="mb-4">

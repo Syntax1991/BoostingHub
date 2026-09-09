@@ -7,12 +7,14 @@ import { runDetailPath, type RunDetailTab } from "@/lib/run-routes";
 import { RunOverviewSection } from "@/components/runs/run-overview-section";
 import { RunSignupsSection } from "@/components/runs/run-signups-section";
 import { RunRosterSection } from "@/components/runs/run-roster-section";
+import { RunAttendanceSection } from "@/components/runs/run-attendance-section";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 const TABS: Array<{ id: RunDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "signups", label: "Signups" },
   { id: "roster", label: "Roster" },
+  { id: "attendance", label: "Attendance" },
 ];
 
 export function RunDetailTabs({
@@ -86,6 +88,7 @@ export function RunDetailTabs({
         {tab === "overview" ? <RunOverviewSection data={data} /> : null}
         {tab === "signups" ? <RunSignupsSection data={data} /> : null}
         {tab === "roster" ? <RunRosterSection data={data} /> : null}
+        {tab === "attendance" ? <RunAttendanceSection data={data} /> : null}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { cn } from "@/lib/cn";
 import {
   ACCESS_STATUS_LABELS,
+  ATTENDANCE_STATUS_LABELS,
   CHARACTER_ROLE_LABELS,
   CLASS_COLORS,
   CLASS_LABELS,
@@ -10,6 +11,7 @@ import {
   SIGNUP_STATUS_LABELS,
 } from "@/lib/labels";
 import type {
+  AttendanceStatus,
   BoosterAccessStatus,
   CharacterRole,
   ParticipationType,
@@ -115,6 +117,24 @@ export function ParticipationBadge({ type }: { type: ParticipationType }) {
   return (
     <Badge className={type === "BOOSTER" ? "bg-accent/15 text-accent" : "bg-info/15 text-info"}>
       {PARTICIPATION_LABELS[type]}
+    </Badge>
+  );
+}
+
+export function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) {
+  return (
+    <Badge
+      className={cn(
+        status === "UNMARKED" && "bg-warning/15 text-warning",
+        status === "PRESENT" && "bg-success/15 text-success",
+        status === "LATE" && "bg-info/15 text-info",
+        status === "LEFT_EARLY" && "bg-info/15 text-info",
+        status === "NO_SHOW" && "bg-danger/15 text-danger",
+        status === "EXCUSED" && "bg-muted/20 text-muted",
+        status === "STANDBY" && "bg-accent/15 text-accent",
+      )}
+    >
+      {ATTENDANCE_STATUS_LABELS[status]}
     </Badge>
   );
 }

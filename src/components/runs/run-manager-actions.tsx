@@ -8,22 +8,28 @@ import {
 } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { RunCancelDialog } from "@/components/runs/run-cancel-dialog";
+import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
+import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 export function RunManagerActions({
   run,
   capabilities,
   editor,
+  unmarkedCount = 0,
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
   editor: RunDetailView["editor"];
+  unmarkedCount?: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
   const runId = run.id;
 
   function runAction(action: () => Promise<{ ok: boolean; message: string }>) {
@@ -43,7 +49,9 @@ export function RunManagerActions({
     capabilities.canOpen ||
     capabilities.canCloseSignups ||
     capabilities.canReopenSignups ||
-    capabilities.canCancel;
+    capabilities.canCancel ||
+    capabilities.canStart ||
+    capabilities.canComplete;
 
   if (!hasActions) {
     return null;
@@ -91,6 +99,16 @@ export function RunManagerActions({
             Cancel Run
           </Button>
         ) : null}
+        {capabilities.canStart ? (
+          <Button type="button" onClick={() => setStartOpen(true)}>
+            Start Run
+          </Button>
+        ) : null}
+        {capabilities.canComplete ? (
+          <Button type="button" onClick={() => setCompleteOpen(true)}>
+            Complete Run{unmarkedCount > 0 ? ` (${unmarkedCount} unmarked)` : ""}
+          </Button>
+        ) : null}
       </div>
       {error ? (
         <p role="alert" className="max-w-sm text-right text-xs text-danger">
@@ -101,6 +119,10 @@ export function RunManagerActions({
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
+      {startOpen ? <RunStartDialog runId={runId} onClose={() => setStartOpen(false)} /> : null}
+      {completeOpen ? (
+        <RunCompleteDialog runId={runId} unmarkedCount={unmarkedCount} onClose={() => setCompleteOpen(false)} />
+      ) : null}
     </div>
   );
 }
