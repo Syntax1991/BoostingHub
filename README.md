@@ -19,6 +19,7 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Canonical Run Detail — Complete**
 - **Run Management — Complete**
 - **Run lifecycle and attendance — Complete**
+- **Run payouts — Complete**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -38,8 +39,12 @@ Run Management lets a raid lead create a self-led draft (or an admin assign an e
 
 Run lifecycle and attendance lets the assigned raid lead or an admin start a published run, record attendance, and complete it when every participant is marked.
 
+Run payouts let the assigned raid lead or an admin prepare a gold settlement for a completed run from attendance, finalize the split, and let an admin mark it paid as bookkeeping.
+
 Not implemented (intentionally deferred):
-- Post-completion attendance corrections, payouts, gold ledger
+- Post-completion attendance corrections, wallets, escrow, payment automation
+- Extra Raid Lead / collector / advertiser cuts
+- Battle.net / Blizzard API
 - Battle.net / Blizzard API
 - Warcraft Logs API
 - Discord bot and notifications
@@ -74,7 +79,7 @@ Repository / Model / Database
 
 Views never call Prisma. Controllers stay thin. Business rules live in Services.
 
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, booster-access dialogs, and run create/edit/cancel/lifecycle actions.
+Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, booster-access dialogs, run create/edit/cancel/lifecycle actions, attendance table, and payout settlement actions.
 
 See [docs/architecture.md](docs/architecture.md).
 

@@ -167,7 +167,7 @@ View → Controller → Service → Repository.
 ## Deferred
 
 - Post-completion attendance corrections
-- Payouts
+- Wallets / extra organizational cuts (completed-run settlement is in [run-payouts.md](run-payouts.md))
 - Battle.net / Blizzard
 - Warcraft Logs
 - Discord/email notifications (activity events exist for later use)

@@ -127,6 +127,10 @@ One attendance row per published selected `RunRosterEntry` for a started Run.
 
 Created when a published Run starts. See [run-lifecycle-attendance.md](features/run-lifecycle-attendance.md).
 
+## RunSettlement / RunPayoutEntry
+
+One gold settlement per completed Run. Entries come from `RunAttendance`. Status: `DRAFT` → `FINALIZED` → `PAID`. Amounts are whole gold integers. See [run-payouts.md](features/run-payouts.md).
+
 ## ActivityEvent
 
 Development/operational activity feed for the dashboard. Not a KPI warehouse.
