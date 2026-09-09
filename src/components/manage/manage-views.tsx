@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
+import { runDetailPath, runDetailTabForManageAction } from "@/lib/run-routes";
 import type { AccountRole } from "@/models/enums";
 import type { rosterService } from "@/services/roster.service";
 
@@ -37,7 +38,9 @@ export function ManageRunsView({ runs }: { runs: Runs }) {
                 {runs.map((run) => (
                   <tr key={run.id} className="border-t border-border align-top">
                     <td className="px-4 py-3">
-                      <div className="max-w-[240px] truncate font-medium">{run.title}</div>
+                      <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">
+                        {run.title}
+                      </Link>
                       <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                         <span>{run.raidName}</span>
                         <DifficultyBadge difficulty={run.difficulty} />
@@ -58,7 +61,7 @@ export function ManageRunsView({ runs }: { runs: Runs }) {
                         {run.publishedAt ? " · published" : ""}
                       </div>
                       <Link
-                        href={`/manage/runs/${run.id}`}
+                        href={runDetailPath(run.id, runDetailTabForManageAction(run.actionLabel))}
                         className="mt-1 inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
                       >
                         {run.actionLabel}

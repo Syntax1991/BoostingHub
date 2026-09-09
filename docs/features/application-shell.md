@@ -8,7 +8,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 1. Sign in at `/` with Discord or a development identity.
 2. Land on `/dashboard`.
-3. Move between Runs, My Runs, Characters, Profile.
+3. Move between Runs, My Runs, Characters, Profile. Open a Run from those lists at `/runs/[runId]`.
 4. Raid leads and admins also see Manage.
 
 ## Permissions
@@ -20,7 +20,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 ## Models / services / controllers
 
 - Models: User, Character, BoosterAccess, Raid, Run, RunSignup, CharacterRaidLockout, ActivityEvent
-- Services: dashboard, run, signup, character, profile, lockout, booster access
+- Services: dashboard, run, run detail, signup, character, profile, lockout, booster access, roster
 - Controllers: `dashboard.controller`, `app.controller`, `auth.controller`, `auth.actions`
 
 ## Limitations

@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge, SignupStatusBadge } from "@/components/ui/badges";
 import { RunsFilters } from "@/components/runs/runs-filters";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
+import { runDetailPath } from "@/lib/run-routes";
 import type { runController } from "@/controllers/app.controller";
 
 type RunsPage = Awaited<ReturnType<typeof runController.getRunsPage>>;
@@ -39,7 +41,9 @@ export function RunsView({ data }: { data: RunsPage }) {
                 {data.runs.map((run) => (
                   <tr key={run.id} className="border-t border-border align-top">
                     <td className="px-4 py-3">
-                      <div className="max-w-[240px] truncate font-medium">{run.title}</div>
+                      <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">
+                        {run.title}
+                      </Link>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
                         <span className="max-w-[180px] truncate">{run.raidName}</span>
                         <DifficultyBadge difficulty={run.difficulty} />

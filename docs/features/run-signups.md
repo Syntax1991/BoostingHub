@@ -7,11 +7,11 @@ Let a signed-in user persist a **booster** or **lootbuddy** signup for a specifi
 ## User flow
 
 1. Add at least one character on `/characters` if the account has none.
-2. Open `/runs`.
+2. Open `/runs` or `/runs/[runId]`.
 3. Choose **Sign up** on an open run.
 4. Pick Booster or Lootbuddy.
 5. Submit. The row is stored as `PENDING`.
-6. Review or withdraw (when allowed) on `/my-runs`.
+6. Review or withdraw (when allowed) on `/my-runs` or the Run detail Signups tab.
 
 ## Participation types
 
@@ -79,7 +79,7 @@ Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only.
 
 ## Architecture
 
-- View: `/runs` dialog, `/my-runs` groups, dashboard upcoming signups
+- View: `/runs` dialog, `/runs/[runId]` Signups tab, `/my-runs` groups, dashboard upcoming signups
 - Controller: `src/controllers/signup.actions.ts`
 - Service: `signupService` + `signup-eligibility.ts` + `signup-state.ts`
 - Delegates: `BoosterAccessService`, `LockoutService`, `isSignupWindowOpen`

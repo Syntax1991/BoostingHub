@@ -4,7 +4,7 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is on **main**. Character Management is merged. Booster Access Management is implemented on `feature/booster-access-management`.
+This repository is on **main**. Character Management and Booster Access Management are merged. Canonical Run detail is implemented on `feature/run-detail`.
 
 Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
@@ -15,19 +15,22 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Phase 3 — Roster Management — Complete**
 - **Phase 4 — Production Data Transition Foundation — Complete**
 - **Character Management — Complete**
-- **Booster Access Management — implemented on feature/booster-access-management / pending merge**
+- **Booster Access Management — Complete**
+- **Canonical Run Detail — implemented on feature/run-detail / pending merge**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
 Phase 2 makes `/runs` persist BOOSTER and LOOTBUDDY signups, with eligibility from `BoosterAccessService` and `LockoutService`, and self-withdrawal on `/my-runs`.
 
-Phase 3 adds `/manage/runs/[runId]`: persistent draft selection, composition warnings, and transactional roster publication.
+Phase 3 adds persistent draft selection, composition warnings, and transactional roster publication on the canonical Run detail Roster tab.
 
 Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state.
 
 Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Battle.net sync is still deferred.
 
 Booster Access Management lets that user request eligibility from character details and lets an ADMIN approve, reject, or revoke it.
+
+Canonical Run detail puts every Run at `/runs/[runId]`, with participant data for USER and roster tools for the assigned raid lead or an ADMIN.
 
 Not implemented (intentionally deferred):
 - Run create/edit/cancel
@@ -66,7 +69,7 @@ Repository / Model / Database
 
 Views never call Prisma. Controllers stay thin. Business rules live in Services.
 
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, and character create/edit/lifecycle.
+Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, and character create/edit/lifecycle.
 
 See [docs/architecture.md](docs/architecture.md).
 
@@ -131,9 +134,9 @@ Withdraw from `/my-runs` when the service allows it. Kael’s selected DPS on **
 
 After `npm run db:seed`:
 
-- **Thorne (RAID_LEAD)** — `/manage/runs` lists assigned runs. **Sunday Heroic Boost** is already rostering with a composition-warning draft (3/4 healers). **Weekend Heroic Catch-up** is `Build Roster`. **Published Heroic Split** uses **Edit Published Roster** (live `SELECTED` rows stay until a replacement publish).
+- **Thorne (RAID_LEAD)** — `/manage/runs` lists assigned runs. Actions open `/runs/[runId]`. **Sunday Heroic Boost** is already rostering with a composition-warning draft (3/4 healers). **Weekend Heroic Catch-up** is `Build Roster`. **Published Heroic Split** uses **Edit Published Roster** (live `SELECTED` rows stay until a replacement publish).
 - **Aelira (ADMIN)** — can open **US Evening Normal Clear**, which is assigned to her, and any Thorne-led run.
-- **Kael (USER)** — `/manage` redirects to the dashboard. Direct `/manage/runs/...` URLs are rejected the same way.
+- **Kael (USER)** — `/manage` redirects to the dashboard. `/runs/[runId]` shows participant data only. Old `/manage/runs/...` URLs redirect to the canonical Run.
 
 Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Published Heroic Split for visual QA.
 
@@ -155,13 +158,14 @@ See [docs/features/character-management.md](docs/features/character-management.m
 | `/` | Public login |
 | `/dashboard` | Authenticated |
 | `/runs` | Authenticated |
+| `/runs/[runId]` | Authenticated; manager tools only when authorized |
 | `/my-runs` | Authenticated |
 | `/characters` | Authenticated |
 | `/characters/[characterId]` | Owner only |
 | `/profile` | Authenticated |
 | `/manage` | RAID_LEAD or ADMIN |
 | `/manage/runs` | RAID_LEAD or ADMIN |
-| `/manage/runs/[runId]` | RAID_LEAD (assigned run) or ADMIN |
+| `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
 
 ## Documentation
 
@@ -173,6 +177,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Application shell](docs/features/application-shell.md)
 - [Character management](docs/features/character-management.md)
 - [Booster access management](docs/features/booster-access-management.md)
+- [Canonical run detail](docs/features/run-detail.md)
 - [Run signups](docs/features/run-signups.md)
 - [Roster management](docs/features/roster-management.md)
 

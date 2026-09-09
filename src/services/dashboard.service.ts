@@ -57,6 +57,7 @@ export const dashboardService = {
       })),
       myUpcomingRuns: myUpcoming.map((signup) => ({
         id: signup.id,
+        runId: signup.run.id,
         runTitle: signup.run.title,
         raidName: signup.run.raid.name,
         difficulty: signup.run.difficulty,

@@ -29,7 +29,7 @@ import type { rosterService } from "@/services/roster.service";
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
 
-export function RosterBuilderView({ data }: { data: RosterView }) {
+export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +114,7 @@ export function RosterBuilderView({ data }: { data: RosterView }) {
           {error}
         </p>
       ) : null}
+      {embedded ? null : (
       <Card>
         <CardHeader
           title={data.run.title}
@@ -140,6 +141,7 @@ export function RosterBuilderView({ data }: { data: RosterView }) {
           </p>
         ) : null}
       </Card>
+      )}
 
       <Card>
         <CardHeader title="Composition" description="Targets come from this run. Over/under is a warning, not a hard block." />
