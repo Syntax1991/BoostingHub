@@ -22,7 +22,7 @@ Persistent domain entities, Prisma contract, relationships, and domain enums. No
 
 React pages and components: layout, tables, badges, filters, empty states. Views consume prepared data. They do not query Prisma and do not decide whether a signup transition is legal.
 
-Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, run detail tabs, character form, character lifecycle, booster access request/review dialogs). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
+Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, run detail tabs, character form, character lifecycle, booster access request/review dialogs, run create form, run edit/cancel dialogs, manager lifecycle actions). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
 
 ### Controller
 
@@ -38,7 +38,7 @@ Better Auth's `/api/auth/*` handler is the authentication controller for OAuth a
 
 ### Service
 
-Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, signup eligibility, roster draft/publish, canonical run-detail DTO shaping, character identity/lifecycle, dashboard composition.
+Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel, signup eligibility, roster draft/publish, canonical run-detail DTO shaping, character identity/lifecycle, dashboard composition.
 
 ### Repository
 

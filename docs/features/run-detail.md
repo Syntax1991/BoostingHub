@@ -14,7 +14,8 @@ This is the long-term surface for participant information and, when authorized, 
 | `/runs/[runId]` | Canonical Run entity view |
 | `/my-runs` | Current user's participation overview; each row links to canonical detail |
 | `/manage` | Global administration entry |
-| `/manage/runs` | Manager Run index. Actions link to `/runs/[runId]` |
+| `/manage/runs` | Manager Run index and create entry. Actions link to `/runs/[runId]` |
+| `/manage/runs/new` | Create Run draft |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
 | `/manage/booster-access` | Global ADMIN BoosterAccess queue (not moved onto a Run) |
 
@@ -49,7 +50,7 @@ May manage any Run on the same `/runs/[runId]` route.
 
 ## Sections
 
-- **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition
+- **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition, server-gated manager actions (edit / open / signup window / cancel)
 - **Overview** — prepared summary DTO
 - **Signups** — own participation for USER; operational signup list for authorized managers
 - **Roster** — published roster for USER; existing `RosterBuilderView` for managers
@@ -74,8 +75,8 @@ Manager reads still reuse `getRosterManagementView`, which may `ensure()` an emp
 
 ## Existing Service Reuse
 
-- `RunService` — run list
-- `RunDetailService` — viewer DTO orchestration only
+- `RunService` — run list, create/edit/open/signup window/cancel
+- `RunDetailService` — viewer DTO orchestration only, including manager capabilities
 - `SignupService` — own signups, eligibility, withdraw
 - `RosterService` — draft, publish, published snapshot, managed index
 
@@ -92,7 +93,6 @@ Architectural space only (not implemented):
 
 ## Deferred
 
-- Run create/edit/cancel (`feature/run-management`)
 - Battle.net / Blizzard API
 - Warcraft Logs
 - Attendance

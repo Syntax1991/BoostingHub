@@ -6,7 +6,7 @@ Let a **raid lead** or **admin** build a persistent draft roster for a run, vali
 
 This is internal operations tooling. It is not raid-group assignment, attendance, or payouts.
 
-Canonical Run URL: `/runs/[runId]`. See [run-detail.md](run-detail.md).
+Canonical Run URL: `/runs/[runId]`. See [run-detail.md](run-detail.md). Run create/open/cancel: [run-management.md](run-management.md).
 
 ## Roles
 
