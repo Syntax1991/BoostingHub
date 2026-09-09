@@ -19,6 +19,8 @@ npm run dev
 
 `--legacy-peer-deps` is required because Better Auth still optionally peers Prisma 5–7 while this app uses Prisma 8 for domain data.
 
+Optional Battle.net character linking uses `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` (see `.env.example`). Seed, Discord login, and manual Characters work when those are empty.
+
 ## Prisma 8 workflow
 
 1. Edit `src/prisma/contract.prisma`
@@ -78,6 +80,8 @@ It is useful for local QA and deterministic Vitest runs. It is **not** required 
 
 The application must work when the database contains only a newly authenticated Discord user: zero characters, zero runs, zero signups, zero roster data, zero payouts.
 
+Seed and local QA do **not** require Battle.net. Leave `BLIZZARD_*` empty to keep Characters on manual CRUD. Optional linking is documented in [blizzard-integration.md](features/blizzard-integration.md).
+
 Do not encode seeded user IDs or seeded run titles in production services.
 
 ## Discord login vs development identities
@@ -108,4 +112,4 @@ npx prisma migration plan --name change_name --from 20260909T1304_run_payouts
 5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until approved.
 6. From character details, request booster access; as ADMIN, approve it on `/manage/booster-access` and confirm booster signup becomes available.
 
-Do not use Refresh; Battle.net sync is deferred. Git workflow: [git-workflow.md](git-workflow.md).
+When `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` are set, use Connect on `/characters` and Refresh on linked character details. Without those vars, Refresh stays unavailable and seed still works. Git workflow: [git-workflow.md](git-workflow.md).

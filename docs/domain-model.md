@@ -26,19 +26,31 @@ Application account and Better Auth `user` row.
 
 Email is optional for core behavior. Discord is the primary identity.
 
+## BattleNetConnection
+
+Optional regional Battle.net link for a BoostingHub user. Unique on `(userId, region)` (`EU` \| `US`).
+
+Stores Battle.net account id, optional BattleTag, scope metadata, `connectedAt`, and `lastSuccessfulSyncAt`. User OAuth tokens are **never** persisted here. Discord remains login; this is a secondary game-account connection. See [blizzard-integration.md](features/blizzard-integration.md).
+
+## BattleNetImportSession
+
+Short-lived (~15 min) owned-character snapshot after OAuth. Holds JSON character candidates for import/link selection. Stores no tokens. Clients may only select ids present in this snapshot.
+
 ## Character
 
-Belongs to one user. Operators create and maintain characters locally. Blizzard identifiers are reserved for a later integration.
+Belongs to one user. Operators may create characters manually or import/link them from Battle.net. The same Character row is used either way.
 
 - display `name`, `realm`, `region` (`EU` \| `US`)
 - `normalizedName` / `normalizedRealm` for owner-scoped case-insensitive uniqueness with region
 - unique on `(userId, region, normalizedRealm, normalizedName)`
 - class, specialization, primary role (`TANK` \| `HEALER` \| `DPS`)
-- item level (manual until sync), `isActive` lifecycle (deactivate instead of delete)
-- optional Blizzard and Warcraft Logs identifiers (unused until later integrations)
-- `lastSyncedAt` (null until a real sync exists)
+- item level (manual, or from Blizzard `equipped_item_level` when linked/refreshed)
+- `isActive` lifecycle (deactivate instead of delete)
+- optional scoped Blizzard identity: `blizzardCharacterId` + `blizzardRealmId` with `region`; unique on `(region, blizzardRealmId, blizzardCharacterId)` when set
+- optional Warcraft Logs identifier (unused until later integration)
+- `lastSyncedAt` set after a successful Blizzard profile sync
 
-Class is immutable after creation. `primaryRole` is derived from specialization; BoosterAccess may approve additional roles. See [character-management.md](features/character-management.md).
+Class is immutable after creation. Specialization from Blizzard is import-time prefill only; afterward it stays BoostingHub-owned. `primaryRole` is derived from specialization; BoosterAccess may approve additional roles. Disconnecting Battle.net does not delete Characters. See [character-management.md](features/character-management.md) and [blizzard-integration.md](features/blizzard-integration.md).
 
 ## BoosterAccess
 

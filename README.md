@@ -20,6 +20,7 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Run Management — Complete**
 - **Run lifecycle and attendance — Complete**
 - **Run payouts — Complete**
+- **Battle.net character linking — Complete** (optional; requires `BLIZZARD_*`)
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -29,7 +30,7 @@ Phase 3 adds persistent draft selection, composition warnings, and transactional
 
 Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state.
 
-Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Battle.net sync is still deferred.
+Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Optional Battle.net linking can import or link the same Character rows and refresh item level when `BLIZZARD_*` is configured.
 
 Booster Access Management lets that user request eligibility from character details and lets an ADMIN approve, reject, or revoke it.
 
@@ -44,8 +45,7 @@ Run payouts let the assigned raid lead or an admin prepare a gold settlement for
 Not implemented (intentionally deferred):
 - Post-completion attendance corrections, wallets, escrow, payment automation
 - Extra Raid Lead / collector / advertiser cuts
-- Battle.net / Blizzard API
-- Battle.net / Blizzard API
+- Blizzard lockout sync and automatic realm-transfer handling
 - Warcraft Logs API
 - Discord bot and notifications
 - Customer bookings / boost market
@@ -79,7 +79,7 @@ Repository / Model / Database
 
 Views never call Prisma. Controllers stay thin. Business rules live in Services.
 
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, booster-access dialogs, run create/edit/cancel/lifecycle actions, attendance table, and payout settlement actions.
+Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, Battle.net connect/import, booster-access dialogs, run create/edit/cancel/lifecycle actions, attendance table, and payout settlement actions.
 
 See [docs/architecture.md](docs/architecture.md).
 
@@ -105,6 +105,7 @@ If you do not have local PostgreSQL, `npx create-db@latest` can provision a temp
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord OAuth. Optional until an application exists |
 | `DEV_AUTH_ENABLED` | `true` enables the development identity picker. Ignored in production |
 | `DEV_AUTH_PASSWORD` | Shared password for seeded credential accounts |
+| `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` / `BLIZZARD_REDIRECT_URI` | Optional Battle.net character linking. Leave empty to keep manual Characters only |
 
 ### Discord OAuth
 
@@ -162,7 +163,7 @@ See [docs/features/run-management.md](docs/features/run-management.md).
 
 ### Testing character management
 
-A Discord user with zero characters can use `/characters` → **Add Character**. Seed is not required.
+A Discord user with zero characters can use `/characters` → **Add Character**. Seed is not required. Battle.net is optional: when `BLIZZARD_*` is set, connect EU/US from `/characters` to import or link characters; Refresh updates item level on linked rows. See [docs/features/blizzard-integration.md](docs/features/blizzard-integration.md).
 
 With a development identity:
 
@@ -197,6 +198,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Git workflow](docs/git-workflow.md)
 - [Application shell](docs/features/application-shell.md)
 - [Character management](docs/features/character-management.md)
+- [Battle.net integration](docs/features/blizzard-integration.md)
 - [Booster access management](docs/features/booster-access-management.md)
 - [Canonical run detail](docs/features/run-detail.md)
 - [Run management](docs/features/run-management.md)

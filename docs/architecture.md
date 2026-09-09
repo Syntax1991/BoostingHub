@@ -22,7 +22,7 @@ Persistent domain entities, Prisma contract, relationships, and domain enums. No
 
 React pages and components: layout, tables, badges, filters, empty states. Views consume prepared data. They do not query Prisma and do not decide whether a signup transition is legal.
 
-Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, run detail tabs, character form, character lifecycle, booster access request/review dialogs, run create form, run edit/cancel/start/complete dialogs, attendance table, payout settlement actions, manager lifecycle actions). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
+Client components are limited to interaction islands (`AppShell` navigation, `Button`, Discord OAuth click, run filters, signup dialog, withdraw button, roster builder, run detail tabs, character form, character lifecycle, Battle.net connect/import panels, booster access request/review dialogs, run create form, run edit/cancel/start/complete dialogs, attendance table, payout settlement actions, manager lifecycle actions). Shared presentation primitives are not marked `"use client"` so tables stay server-rendered.
 
 ### Controller
 
@@ -38,11 +38,15 @@ Better Auth's `/api/auth/*` handler is the authentication controller for OAuth a
 
 ### Service
 
-Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, canonical run-detail DTO shaping, character identity/lifecycle, dashboard composition.
+Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition.
 
 ### Repository
 
 Prisma 8 access lives here (`orm.Model` via `src/lib/prisma.ts`). Views and most controllers never import Prisma.
+
+### External integrations
+
+Outbound HTTP to third parties belongs under `src/integrations/`, not in Views or Controllers. The Battle.net / Blizzard client (`src/integrations/blizzard/blizzard-api-client.ts`) is the only place that talks to Blizzard OAuth and regional profile APIs. Services call that client; they do not scatter raw `fetch` calls across the app.
 
 ## Persistence boundary
 
@@ -72,11 +76,12 @@ Hidden buttons are not an authorization control.
 
 ```text
 src/
-  app/             View routes and the Better Auth route handler
+  app/             View routes, Better Auth handler, integration route handlers
   components/      View components
   controllers/     Thin application boundary
   services/        Business rules
   repositories/    Prisma access
+  integrations/    External HTTP clients (e.g. Blizzard)
   models/          Domain enumerations
   validators/      Zod schemas
   auth/            Auth configuration and authorization helpers
