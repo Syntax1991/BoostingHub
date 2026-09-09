@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RoleBadge, SignupStatusBadge } from "@/components/ui/badges";
+import { runDetailPath } from "@/lib/run-routes";
 import type { dashboardController } from "@/controllers/dashboard.controller";
 
 type DashboardData = Awaited<ReturnType<typeof dashboardController.getDashboard>>;
@@ -32,7 +33,11 @@ export function DashboardView({ data }: { data: DashboardData }) {
                   {data.upcomingRuns.map((run) => (
                     <tr key={run.id} className="border-t border-border">
                       <td className="px-4 py-3">
-                        <div className="font-medium">{run.title}</div>
+                        <div className="font-medium">
+                          <Link href={runDetailPath(run.id)} className="text-accent hover:underline">
+                            {run.title}
+                          </Link>
+                        </div>
                         <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                           <span>{run.raidName}</span>
                           <DifficultyBadge difficulty={run.difficulty} />
@@ -106,7 +111,11 @@ export function DashboardView({ data }: { data: DashboardData }) {
               {data.myUpcomingRuns.map((signup) => (
                 <div key={signup.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <p className="font-medium">{signup.runTitle}</p>
+                    <p className="font-medium">
+                      <Link href={runDetailPath(signup.runId)} className="text-accent hover:underline">
+                        {signup.runTitle}
+                      </Link>
+                    </p>
                     <p className="text-xs text-muted">
                       {signup.characterName ?? "No character"} · {signup.participationType}
                       {signup.isBackup ? " · Backup" : ""}

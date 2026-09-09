@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { runDetailPath } from "@/lib/run-routes";
 import {
   DifficultyBadge,
   ParticipationBadge,
@@ -92,7 +94,9 @@ function SignupTable({ items }: { items: SignupItem[] }) {
           {items.map((item) => (
             <tr key={item.id} className="border-t border-border">
               <td className="px-4 py-3">
-                <div className="max-w-[220px] truncate font-medium">{item.runTitle}</div>
+                <Link href={runDetailPath(item.runId)} className="max-w-[220px] truncate font-medium text-accent hover:underline">
+                  {item.runTitle}
+                </Link>
                 <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                   <span className="max-w-[160px] truncate">{item.raidName}</span>
                   <DifficultyBadge difficulty={item.difficulty} />

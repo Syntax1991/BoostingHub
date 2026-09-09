@@ -56,6 +56,25 @@ export const signupService = {
     };
   },
 
+  /** Own signups on one run for the participant-facing Run detail Signups section. */
+  async listOwnForRun(user: AuthenticatedUser, runId: string) {
+    const signups = await signupRepository.listByRunId(runId);
+    return signups
+      .filter((signup) => signup.userId === user.id)
+      .map((signup) => ({
+        id: signup.id,
+        characterName: signup.character?.name ?? null,
+        characterRealm: signup.character?.realm ?? null,
+        role: signup.role,
+        participationType: signup.participationType,
+        isBackup: signup.isBackup,
+        status: signup.status,
+        lootbuddyMode: signup.lootbuddyMode,
+        lootbuddyVerification: signup.lootbuddyVerification,
+        canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
+      }));
+  },
+
   /**
    * Precomputed options for the signup dialog. The view must not re-evaluate
    * BoosterAccess or lockouts; submit still re-checks on the server.

@@ -132,6 +132,37 @@ export const rosterService = {
     }));
   },
 
+  /**
+   * Participant-safe published roster. Uses live SELECTED signup rows, never draft
+   * selection. Does not call ensure(), so a USER view cannot create a roster row.
+   */
+  async getPublishedRosterView(runId: string) {
+    const roster = await rosterRepository.findByRunId(runId);
+    if (!roster?.publishedAt) {
+      return null;
+    }
+
+    const signups = await rosterRepository.listSignups(runId);
+    const members = signups
+      .filter((signup) => signup.status === "SELECTED")
+      .map((signup) => ({
+        signupId: signup.id,
+        userName: signup.userName,
+        characterName: signup.character?.name ?? "Unknown character",
+        characterRealm: signup.character?.realm ?? "",
+        wowClass: signup.character?.wowClass ?? null,
+        role: signup.role,
+        participationType: signup.participationType,
+        isBackup: signup.isBackup,
+      }));
+
+    return {
+      publishedAt: roster.publishedAt,
+      publishedByName: roster.publishedByName,
+      members,
+    };
+  },
+
   async getRosterManagementView(user: AuthenticatedUser, runId: string) {
     const run = await runRepository.findById(runId);
     if (!run) {

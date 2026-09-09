@@ -2,6 +2,7 @@ import { requireUserOrRedirect } from "@/auth/session";
 import { parseRunFilters } from "@/validators/run-filters";
 import { characterService } from "@/services/character.service";
 import { runService } from "@/services/run.service";
+import { runDetailService } from "@/services/run-detail.service";
 import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
@@ -30,6 +31,11 @@ export const runController = {
       runs: await runService.listRuns(user, filters),
     };
   },
+
+  async getRunDetailPage(runId: string) {
+    const user = await requireUserOrRedirect(`/runs/${runId}`);
+    return runDetailService.getRunDetail(user, runId);
+  },
 };
 
 export const signupController = {
@@ -50,11 +56,6 @@ export const managementController = {
   async getManageRunsPage() {
     const user = await requireManagerOrRedirect();
     return rosterService.listManagedRuns(user);
-  },
-
-  async getRosterPage(runId: string) {
-    const user = await requireManagerOrRedirect();
-    return rosterService.getRosterManagementView(user, runId);
   },
 
   async getBoosterAccessPage(searchParams: {
