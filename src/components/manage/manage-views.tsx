@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
+import type { AccountRole } from "@/models/enums";
 import type { rosterService } from "@/services/roster.service";
 
 type Runs = Awaited<ReturnType<typeof rosterService.listManagedRuns>>;
@@ -74,7 +75,7 @@ export function ManageRunsView({ runs }: { runs: Runs }) {
   );
 }
 
-export function ManageHomeView() {
+export function ManageHomeView({ accountRole }: { accountRole: AccountRole }) {
   return (
     <div>
       <PageHeader
@@ -84,9 +85,16 @@ export function ManageHomeView() {
       <Card>
         <div className="px-4 py-4 text-sm">
           <p className="text-muted">Available now:</p>
-          <Link href="/manage/runs" className="mt-2 inline-flex text-accent hover:underline">
-            Manage runs
-          </Link>
+          <div className="mt-2 flex flex-col gap-2">
+            <Link href="/manage/runs" className="inline-flex text-accent hover:underline">
+              Manage runs
+            </Link>
+            {accountRole === "ADMIN" ? (
+              <Link href="/manage/booster-access" className="inline-flex text-accent hover:underline">
+                Booster access
+              </Link>
+            ) : null}
+          </div>
         </div>
       </Card>
     </div>

@@ -4,8 +4,10 @@ import { characterService } from "@/services/character.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
-import { requireManagerOrRedirect } from "@/auth/session";
+import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
 import { rosterService } from "@/services/roster.service";
+import { boosterAccessService } from "@/services/booster-access.service";
+import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
 
 export const characterController = {
   async getCharactersPage() {
@@ -53,5 +55,29 @@ export const managementController = {
   async getRosterPage(runId: string) {
     const user = await requireManagerOrRedirect();
     return rosterService.getRosterManagementView(user, runId);
+  },
+
+  async getBoosterAccessPage(searchParams: {
+    status?: string | string[];
+    difficulty?: string | string[];
+    role?: string | string[];
+    query?: string | string[];
+  }) {
+    const user = await requireAdminOrRedirect();
+    const filters = parseAdminAccessFilters(searchParams);
+    return {
+      filters: {
+        status: filters.status ?? "PENDING",
+        difficulty: filters.difficulty,
+        role: filters.role,
+        query: filters.query,
+      },
+      requests: await boosterAccessService.listAdminAccessRequests(user, {
+        status: filters.status ?? "PENDING",
+        difficulty: filters.difficulty,
+        role: filters.role,
+        query: filters.query,
+      }),
+    };
   },
 };

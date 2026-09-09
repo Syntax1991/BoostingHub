@@ -67,7 +67,8 @@ export function ProfileView({ data }: { data: Profile }) {
               </ul>
             )}
             <p className="mt-3 text-xs text-muted">
-              {data.boosterAccess.pendingCount} pending · {data.boosterAccess.revokedCount} revoked
+              {data.boosterAccess.pendingCount} pending · {data.boosterAccess.rejectedCount} rejected ·{" "}
+              {data.boosterAccess.revokedCount} revoked
             </p>
           </div>
         </Card>
