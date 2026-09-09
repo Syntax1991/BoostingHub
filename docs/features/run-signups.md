@@ -33,6 +33,8 @@ Eligibility (server, re-checked on submit):
 5. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
 6. No active duplicate for run + user + character + BOOSTER
 
+`DRAFT` runs are not listed on `/runs` and are not signable. Opening a draft is a Run Management action. See [run-management.md](run-management.md).
+
 Backup is `isBackup`, not a signup status.
 
 Multiple characters may be offered for one run. Exact duplicates are rejected. A `WITHDRAWN` row for the same combination is revived instead of inserting a second record.

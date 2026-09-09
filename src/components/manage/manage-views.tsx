@@ -3,23 +3,44 @@ import { formatDateTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { runDetailPath, runDetailTabForManageAction } from "@/lib/run-routes";
+import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
 import type { AccountRole } from "@/models/enums";
-import type { rosterService } from "@/services/roster.service";
+import type { ManagedRunsPage } from "@/services/run.service";
 
-type Runs = Awaited<ReturnType<typeof rosterService.listManagedRuns>>;
+export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
+  const filtered = Boolean(data.filters.status || data.filters.raidLeadId || data.filters.timeframe);
 
-export function ManageRunsView({ runs }: { runs: Runs }) {
   return (
     <div>
       <PageHeader
         title="Manage runs"
-        description="Raid leads manage their assigned runs. Admins can manage every run."
+        description="Create drafts, open signups, and open the canonical run page to roster. Raid leads see assigned runs. Admins see every run."
+        actions={
+          data.canCreate ? (
+            <Link
+              href="/manage/runs/new"
+              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+            >
+              Create Run
+            </Link>
+          ) : null
+        }
+      />
+      <ManageRunsFilters
+        status={data.filters.status}
+        raidLeadId={data.filters.raidLeadId}
+        timeframe={data.filters.timeframe}
+        raidLeads={data.raidLeads}
       />
       <Card>
-        {runs.length === 0 ? (
+        {data.runs.length === 0 ? (
           <EmptyState
-            title="No manageable runs yet."
-            description="Assigned runs appear here after a raid lead or admin creates them."
+            title={filtered ? "No runs match these filters." : "No runs created yet."}
+            description={
+              filtered
+                ? "Clear filters to see every run you can manage."
+                : "Create a draft, review the configuration, then open it for signups."
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -35,7 +56,7 @@ export function ManageRunsView({ runs }: { runs: Runs }) {
                 </tr>
               </thead>
               <tbody>
-                {runs.map((run) => (
+                {data.runs.map((run) => (
                   <tr key={run.id} className="border-t border-border align-top">
                     <td className="px-4 py-3">
                       <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">

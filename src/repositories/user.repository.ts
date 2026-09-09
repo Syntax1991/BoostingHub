@@ -57,4 +57,33 @@ export const userRepository = {
       accountStatus: "ACTIVE" as AccountStatus,
     }));
   },
+
+  async findById(id: string) {
+    return this.findAuthenticatedById(id);
+  },
+
+  /**
+   * RAID_LEAD and ADMIN accounts that may be assigned as a Run's raid lead.
+   * Ordinary USER accounts are never eligible.
+   */
+  async listEligibleRaidLeads() {
+    const users = await orm.User.orderBy((user) => user.name.asc()).all();
+    return users
+      .map((user) => ({
+        id: asString(user.id),
+        name: asString(user.name),
+        accountRole: mapUserRole(user.accountRole),
+        accountStatus: mapAccountStatus(user.accountStatus),
+      }))
+      .filter(
+        (user) =>
+          user.accountStatus === "ACTIVE" &&
+          (user.accountRole === "RAID_LEAD" || user.accountRole === "ADMIN"),
+      )
+      .map((user) => ({
+        id: user.id,
+        name: user.name,
+        accountRole: user.accountRole,
+      }));
+  },
 };

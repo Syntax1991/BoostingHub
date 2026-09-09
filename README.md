@@ -4,7 +4,7 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is on **main**. Character Management and Booster Access Management are merged. Canonical Run detail is implemented on `feature/run-detail`.
+This repository is on **main**. Character Management, Booster Access Management, and Canonical Run detail are merged. Run Management is implemented on `feature/run-management`.
 
 Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
@@ -16,7 +16,8 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Phase 4 — Production Data Transition Foundation — Complete**
 - **Character Management — Complete**
 - **Booster Access Management — Complete**
-- **Canonical Run Detail — implemented on feature/run-detail / pending merge**
+- **Canonical Run Detail — Complete**
+- **Run Management — implemented on feature/run-management / pending merge**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -32,8 +33,9 @@ Booster Access Management lets that user request eligibility from character deta
 
 Canonical Run detail puts every Run at `/runs/[runId]`, with participant data for USER and roster tools for the assigned raid lead or an ADMIN.
 
+Run Management lets a raid lead create a self-led draft (or an admin assign an eligible lead), edit planning fields, open the run, toggle the signup window, and cancel without deleting history.
+
 Not implemented (intentionally deferred):
-- Run create/edit/cancel
 - Attendance, payouts, gold ledger
 - Battle.net / Blizzard API
 - Warcraft Logs API
@@ -69,7 +71,7 @@ Repository / Model / Database
 
 Views never call Prisma. Controllers stay thin. Business rules live in Services.
 
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, and character create/edit/lifecycle.
+Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, booster-access dialogs, and run create/edit/cancel/lifecycle actions.
 
 See [docs/architecture.md](docs/architecture.md).
 
@@ -140,6 +142,16 @@ After `npm run db:seed`:
 
 Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Published Heroic Split for visual QA.
 
+### Testing run management with development identities
+
+Seeded runs are fixtures. A real raid lead does not need them.
+
+- **Thorne (RAID_LEAD)** — `/manage/runs` → **Create Run**. Raid lead is fixed to Thorne. The new run is a draft with signups closed. Open it from `/runs/[runId]`, then close/reopen signups. Thorne cannot reassign the lead or manage Aelira’s runs.
+- **Aelira (ADMIN)** — can assign Thorne (or herself) as raid lead, edit any run before publish, and cancel.
+- **Kael (USER)** — no Create Run. Drafts are not listed on `/runs` and draft URLs 404.
+
+See [docs/features/run-management.md](docs/features/run-management.md).
+
 ### Testing character management
 
 A Discord user with zero characters can use `/characters` → **Add Character**. Seed is not required.
@@ -165,6 +177,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 | `/profile` | Authenticated |
 | `/manage` | RAID_LEAD or ADMIN |
 | `/manage/runs` | RAID_LEAD or ADMIN |
+| `/manage/runs/new` | RAID_LEAD or ADMIN |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
 
 ## Documentation
@@ -178,6 +191,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Character management](docs/features/character-management.md)
 - [Booster access management](docs/features/booster-access-management.md)
 - [Canonical run detail](docs/features/run-detail.md)
+- [Run management](docs/features/run-management.md)
 - [Run signups](docs/features/run-signups.md)
 - [Roster management](docs/features/roster-management.md)
 

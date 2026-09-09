@@ -170,14 +170,22 @@ export const rosterRepository = {
       return existing;
     }
     const now = new Date().toISOString();
-    await orm.RunRoster.create({
-      id: crypto.randomUUID(),
-      runId,
-      state: "DRAFT",
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    try {
+      await orm.RunRoster.create({
+        id: crypto.randomUUID(),
+        runId,
+        state: "DRAFT",
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (error) {
+      const raced = await this.findByRunId(runId);
+      if (raced) {
+        return raced;
+      }
+      throw error;
+    }
     const created = await this.findByRunId(runId);
     if (!created) {
       throw new DomainError("NOT_FOUND", "Roster could not be created.");

@@ -55,7 +55,7 @@ Unique on `(userId, wowClass, role, difficulty)`. Heroic healer approval does no
 
 ## Raid / RaidBoss
 
-Reusable content. Seeded with Manaforge Omega for development. Blizzard raid ingestion is deferred.
+Reusable **reference content**, not demo users or demo Runs. Catalog: `src/lib/wow-raid-catalog.ts`. `raidRepository.ensureReferenceRaids()` upserts it idempotently (seed and Run create/edit). Dev seed still adds fixture Runs around that content. Blizzard raid ingestion is deferred.
 
 ## CharacterRaidLockout
 
@@ -83,6 +83,8 @@ Run statuses:
 | `IN_PROGRESS` | The run is happening. |
 | `COMPLETED` | Finished. |
 | `CANCELLED` | Will not happen. |
+
+`signupsOpen` is independent of status. Run Management creates drafts, opens runs, toggles the signup window, and cancels. Roster Management still owns `OPEN → ROSTERING` and publish to `PUBLISHED`. `DRAFT` is management-only; ordinary users do not discover it. See [run-management.md](features/run-management.md).
 
 ## RunSignup
 

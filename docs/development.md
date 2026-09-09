@@ -33,13 +33,13 @@ Queries use `db.orm.public.Model`, not Prisma 7 `prisma.model.findMany`.
 
 ## Seed
 
-`npm run db:seed` wipes domain and auth rows, then inserts deterministic users, characters, access, lockouts, runs, signups, and activity.
+`npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, and activity.
 
 It is safe to re-run. It is not random. Seed is a fixture, not required production state; see **Seed policy** below.
 
 Default password: `dev-login-only` (override with `DEV_AUTH_PASSWORD`).
 
-`src/services/signup.service.test.ts`, `src/services/roster.service.test.ts`, `src/services/run-detail.service.test.ts`, and `src/services/character.service.test.ts` use the seeded database. Character tests create isolated users (`cm0000000001` / `cm0000000002`) and delete them afterwards. Re-seed after roster tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
+`src/services/signup.service.test.ts`, `src/services/roster.service.test.ts`, `src/services/run-detail.service.test.ts`, and `src/services/character.service.test.ts` use the seeded database. Character tests create isolated users (`cm0000000001` / `cm0000000002`) and delete them afterwards. Run Management tests create isolated users (`rm0000000001`–`4`) and dedicated runs; they do not mutate Roster Lab. Re-seed after roster tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
 
 ## Validation
 

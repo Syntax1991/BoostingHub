@@ -1,4 +1,4 @@
-const DEFAULT_TIME_ZONE = "Europe/Berlin";
+export const DEFAULT_TIME_ZONE = "Europe/Berlin";
 
 function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
@@ -75,6 +75,43 @@ export function formatRelative(value: Date | string, now = new Date()): string {
 
   const diffDays = Math.round(diffHours / 24);
   return diffDays >= 0 ? `in ${diffDays}d` : `${Math.abs(diffDays)}d ago`;
+}
+
+/**
+ * `datetime-local` wall time in the default operations timezone, for form values.
+ */
+export function toDatetimeLocalValue(value: Date | string, timeZone = DEFAULT_TIME_ZONE): string {
+  const parts = zonedParts(asDate(value), timeZone);
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+/**
+ * Interpret a `YYYY-MM-DDTHH:mm` string as wall time in `timeZone` and return UTC ISO.
+ */
+export function fromDatetimeLocalValue(local: string, timeZone = DEFAULT_TIME_ZONE): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local.trim());
+  if (!match) {
+    throw new RangeError("Invalid datetime-local value.");
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const desiredUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+
+  let guess = desiredUtc;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = zonedParts(new Date(guess), timeZone);
+    const asZone = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
+    const delta = desiredUtc - asZone;
+    if (delta === 0) {
+      break;
+    }
+    guess += delta;
+  }
+
+  return new Date(guess).toISOString();
 }
 
 /**

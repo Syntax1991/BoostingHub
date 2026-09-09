@@ -8,7 +8,7 @@ export function RunOverviewSection({ data }: { data: RunDetailView }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader title="Run" description="Prepared summary. Lifecycle transitions are not edited here." />
+        <CardHeader title="Run" description="Status and signup window are changed through explicit manager actions, not this summary." />
         <dl className="grid grid-cols-2 gap-3 px-4 py-4 text-sm">
           <div>
             <dt className="text-muted">Content</dt>

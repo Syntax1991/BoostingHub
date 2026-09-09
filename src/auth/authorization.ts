@@ -69,6 +69,13 @@ export function canManageRun(
 
 export function assertCanManageRun(user: AuthenticatedUser, run: { raidLeadId: string }): void {
   if (!canManageRun(user, run)) {
-    throw new DomainError("RUN_NOT_MANAGEABLE", "You cannot manage the roster for this run.", 403);
+    throw new DomainError("RUN_NOT_MANAGEABLE", "You cannot manage this run.", 403);
   }
+}
+
+export function isEligibleRaidLead(user: {
+  accountRole: AccountRole;
+  accountStatus: AccountStatus;
+}): boolean {
+  return user.accountStatus === "ACTIVE" && hasRaidLeadAccess(user.accountRole);
 }

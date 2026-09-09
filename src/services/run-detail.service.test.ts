@@ -55,6 +55,7 @@ describe("canonical run routes", () => {
     expect(parseRunDetailTab("unknown")).toBe("overview");
     expect(runDetailTabForManageAction("Continue Roster")).toBe("roster");
     expect(runDetailTabForManageAction("View")).toBe("overview");
+    expect(runDetailTabForManageAction("Manage")).toBe("overview");
   });
 });
 
@@ -71,6 +72,9 @@ describe("runDetailService", () => {
     expect(view.permissions.canManageRun).toBe(false);
     expect(view.permissions.canViewManagerSignups).toBe(false);
     expect(view.manager).toBeNull();
+    expect(view.editor).toBeNull();
+    expect(view.capabilities.canEdit).toBe(false);
+    expect(view.capabilities.canOpen).toBe(false);
     expect(view.viewerSignups.some((signup) => signup.id === ids.publishedKael)).toBe(true);
     expect(view.publishedRoster?.members.some((member) => member.signupId === ids.publishedKael)).toBe(true);
     expect(view.publishedRoster?.members.every((member) => member.participationType)).toBeTruthy();
@@ -86,8 +90,8 @@ describe("runDetailService", () => {
     const after = await rosterRepository.findByRunId(ids.heroicOpen);
     expect(view.publishedRoster).toBeNull();
     expect(view.manager).toBeNull();
-    expect(Boolean(before)).toBe(Boolean(after));
-    expect(after).toBeNull();
+    expect(after?.id ?? null).toBe(before?.id ?? null);
+    expect(after?.version ?? null).toBe(before?.version ?? null);
   });
 
   it("lets a raid lead manage an assigned run and not another lead's run", async () => {
@@ -107,6 +111,21 @@ describe("runDetailService", () => {
     const view = await runDetailService.getRunDetail(aelira, ids.weekend);
     expect(view.permissions.canManageRun).toBe(true);
     expect(view.manager?.run.id).toBe(ids.weekend);
+  });
+
+  it("hides a private DRAFT from a USER", async () => {
+    await expectDomainCode(
+      runDetailService.getRunDetail(kael, "r6666666-6666-4666-8666-666666666666"),
+      "NOT_FOUND",
+    );
+  });
+
+  it("lets the assigned raid lead open a DRAFT", async () => {
+    const view = await runDetailService.getRunDetail(thorne, "r6666666-6666-4666-8666-666666666666");
+    expect(view.permissions.canManageRun).toBe(true);
+    expect(view.capabilities.canOpen).toBe(true);
+    expect(view.capabilities.canEdit).toBe(true);
+    expect(view.run.status).toBe("DRAFT");
   });
 
   it("keeps USER roster mutations rejected", async () => {

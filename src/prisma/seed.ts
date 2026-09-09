@@ -2,6 +2,8 @@ import { hashPassword } from "better-auth/crypto";
 import { db, orm } from "@/lib/prisma";
 import { getDevAuthPassword } from "@/auth/dev-auth";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
+import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { raidRepository } from "@/repositories/raid.repository";
 
 const SEED_NOW = "2026-09-08T12:00:00.000Z";
 const RESET = "2026-W37";
@@ -25,7 +27,7 @@ const ids = {
     brann: "55555555-5555-4555-8555-555555555555",
     sylva: "66666666-6666-4666-8666-666666666666",
   },
-  raid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  raid: WOW_RAID_CATALOG[0].id,
   characters: {
     kaelResto: "c1111111-1111-4111-8111-111111111111",
     kaelEle: "c1111111-1111-4111-8111-111111111112",
@@ -366,34 +368,7 @@ async function seed() {
     });
   }
 
-  await orm.Raid.create({
-    id: ids.raid,
-    name: "Manaforge Omega",
-    season: "The War Within Season 3",
-    isActive: true,
-    createdAt: SEED_NOW,
-    updatedAt: SEED_NOW,
-  });
-
-  const bosses = [
-    "Plexus Sentinel",
-    "Loom'ithar",
-    "Soulbinder Naazindhri",
-    "Forgeweaver Araz",
-    "The Soul Hunters",
-    "Fractillus",
-    "Nexus-King Salhadaar",
-    "Dimensius",
-  ];
-
-  for (const [index, name] of bosses.entries()) {
-    await orm.RaidBoss.create({
-      id: crypto.randomUUID(),
-      raidId: ids.raid,
-      name,
-      sortOrder: index + 1,
-    });
-  }
+  await raidRepository.ensureReferenceRaids(SEED_NOW);
 
   await orm.CharacterRaidLockout.create({
     id: crypto.randomUUID(),
