@@ -35,6 +35,7 @@ Must not receive:
 - unpublished roster internals
 - validation blockers/warnings
 - manager mutations
+- full attendance list, manager notes, or `markedBy`
 
 Hiding buttons in CSS is not sufficient.
 
@@ -50,10 +51,11 @@ May manage any Run on the same `/runs/[runId]` route.
 
 ## Sections
 
-- **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition, server-gated manager actions (edit / open / signup window / cancel)
+- **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition, server-gated manager actions (edit / open / signup window / cancel / start / complete)
 - **Overview** — prepared summary DTO
 - **Signups** — own participation for USER; operational signup list for authorized managers
 - **Roster** — published roster for USER; existing `RosterBuilderView` for managers
+- **Attendance** — own result for USER; operational attendance for authorized managers after Start
 
 ## Manager Authorization
 
@@ -75,10 +77,11 @@ Manager reads still reuse `getRosterManagementView`, which may `ensure()` an emp
 
 ## Existing Service Reuse
 
-- `RunService` — run list, create/edit/open/signup window/cancel
+- `RunService` — run list, create/edit/open/signup window/cancel/start/complete
 - `RunDetailService` — viewer DTO orchestration only, including manager capabilities
 - `SignupService` — own signups, eligibility, withdraw
 - `RosterService` — draft, publish, published snapshot, managed index
+- `AttendanceService` — snapshot, status updates, bulk present, completeness
 
 No second roster or signup implementation.
 
@@ -86,15 +89,14 @@ No second roster or signup implementation.
 
 Architectural space only (not implemented):
 
-- Attendance
-- Completion
-- History
+- Post-completion attendance correction
+- History analytics
 - Payout
 
 ## Deferred
 
 - Battle.net / Blizzard API
 - Warcraft Logs
-- Attendance
+- Post-completion attendance corrections
 - Payouts / gold
 - Discord bot / notifications

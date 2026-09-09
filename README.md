@@ -4,7 +4,7 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is on **main**. Character Management, Booster Access Management, and Canonical Run detail are merged. Run Management is implemented on `feature/run-management`.
+This repository is on **main**. Character Management, Booster Access Management, Canonical Run detail, Run Management, and Run lifecycle/attendance are implemented.
 
 Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
@@ -17,7 +17,8 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Character Management — Complete**
 - **Booster Access Management — Complete**
 - **Canonical Run Detail — Complete**
-- **Run Management — implemented on feature/run-management / pending merge**
+- **Run Management — Complete**
+- **Run lifecycle and attendance — Complete**
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -35,8 +36,10 @@ Canonical Run detail puts every Run at `/runs/[runId]`, with participant data fo
 
 Run Management lets a raid lead create a self-led draft (or an admin assign an eligible lead), edit planning fields, open the run, toggle the signup window, and cancel without deleting history.
 
+Run lifecycle and attendance lets the assigned raid lead or an admin start a published run, record attendance, and complete it when every participant is marked.
+
 Not implemented (intentionally deferred):
-- Attendance, payouts, gold ledger
+- Post-completion attendance corrections, payouts, gold ledger
 - Battle.net / Blizzard API
 - Warcraft Logs API
 - Discord bot and notifications
@@ -194,6 +197,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Run management](docs/features/run-management.md)
 - [Run signups](docs/features/run-signups.md)
 - [Roster management](docs/features/roster-management.md)
+- [Run lifecycle and attendance](docs/features/run-lifecycle-attendance.md)
 
 ## Scripts
 

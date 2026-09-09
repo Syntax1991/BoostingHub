@@ -4,7 +4,7 @@
 
 Let a **raid lead** or **admin** build a persistent draft roster for a run, validate it, and publish it. Publication writes final `RunSignup` statuses and moves the run to `PUBLISHED`.
 
-This is internal operations tooling. It is not raid-group assignment, attendance, or payouts.
+This is internal operations tooling. It is not raid-group assignment, payouts, or attendance marking. Attendance after Start is documented in [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
 
 Canonical Run URL: `/runs/[runId]`. See [run-detail.md](run-detail.md). Run create/open/cancel: [run-management.md](run-management.md).
 
@@ -84,7 +84,7 @@ Mismatch is a **warning**, not an automatic hard block. A lead may draft 5/4 hea
 
 Blockers include:
 
-- run not in `OPEN` / `ROSTERING` / `PUBLISHED`
+- run not in `OPEN` / `ROSTERING` / `PUBLISHED` (including frozen `IN_PROGRESS` / `COMPLETED`)
 - withdrawn selection
 - inactive character
 - lockout conflict (`LockoutService`, same reset as signup)
@@ -120,6 +120,8 @@ A published run may still receive **new** `PENDING` signups if `signupsOpen` and
 
 The published roster stays live until a replacement publish succeeds. The lead may add a newly arrived `PENDING` offer, drop someone, and republish.
 
+`IN_PROGRESS` and `COMPLETED` runs reject draft mutation, publish, and republish. See [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
+
 ## Security
 
 - Current user comes from the session, not the client body
@@ -142,7 +144,6 @@ The published roster stays live until a replacement publish succeeds. The lead m
 ## Deferred
 
 - Raid groups 1–8, parties, markers, assignments
-- Attendance
 - Payouts / gold
 - Battle.net, Warcraft Logs, Discord bot, notifications
 - Customer bookings / boost market

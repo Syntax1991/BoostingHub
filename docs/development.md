@@ -33,7 +33,7 @@ Queries use `db.orm.public.Model`, not Prisma 7 `prisma.model.findMany`.
 
 ## Seed
 
-`npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, and activity.
+`npm run db:seed` wipes domain and auth rows, then upserts reference raid content and inserts deterministic users, characters, access, lockouts, fixture runs, signups, attendance, and activity.
 
 It is safe to re-run. It is not random. Seed is a fixture, not required production state; see **Seed policy** below.
 
@@ -96,7 +96,7 @@ Production must never expose the identity picker. Do not remove the mechanism wh
 `npx prisma migration plan --name slug` can emit a full recreate if `--from` is omitted incorrectly. Plan from the previous migration directory:
 
 ```bash
-npx prisma migration plan --name change_name --from 20260908T1740_character_identity_normalization
+npx prisma migration plan --name change_name --from 20260909T1143_run_attendance
 ```
 
 ## Character management QA
