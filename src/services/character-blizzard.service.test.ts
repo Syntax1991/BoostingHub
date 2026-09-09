@@ -22,6 +22,7 @@ vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
 
 import { characterBlizzardService } from "@/services/character-blizzard.service";
 import { characterService } from "@/services/character.service";
+import { characterRepository } from "@/repositories/character.repository";
 
 const ids = {
   owner: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000011",
@@ -693,5 +694,199 @@ describe("characterBlizzardService.refreshCharacter", () => {
     expect(refreshed.blizzardCharacterId).toBe(owned.id);
     expect(refreshed.blizzardRealmId).toBe(owned.realmId);
     expect(refreshed.itemLevel).toBe(680);
+  });
+});
+
+describe("characterBlizzardService.refreshLinkedCharactersForRegion", () => {
+  const owner = asUser(ids.owner);
+  const other = asUser(ids.other, "Blizzard Other");
+
+  it("refreshes only active linked characters in the requested region", async () => {
+    const euOwned = ownedCharacter({ id: "300070", name: "Bnrefeu" });
+    const euSession = await seedConnectionAndSession(ids.owner, "EU", [euOwned]);
+    mockEnrichmentSuccess({
+      id: euOwned.id,
+      name: euOwned.name,
+      realmId: euOwned.realmId,
+      wowClass: euOwned.wowClass,
+      itemLevel: 640,
+      specialization: "Restoration",
+    });
+    const euImport = await characterBlizzardService.importCharacters(owner, euSession.id, [
+      { blizzardCharacterId: euOwned.id, specialization: "Restoration" },
+    ]);
+    const euId = euImport.importedCharacterIds[0]!;
+    createdCharacterIds.push(euId);
+
+    const usOwned = ownedCharacter({ id: "300071", name: "Bnrefus", region: "US", realmId: "57" });
+    const usSession = await seedConnectionAndSession(ids.owner, "US", [usOwned]);
+    mockEnrichmentSuccess({
+      id: usOwned.id,
+      name: usOwned.name,
+      realmId: usOwned.realmId,
+      wowClass: usOwned.wowClass,
+      itemLevel: 641,
+      specialization: "Restoration",
+    });
+    const usImport = await characterBlizzardService.importCharacters(owner, usSession.id, [
+      { blizzardCharacterId: usOwned.id, specialization: "Restoration" },
+    ]);
+    const usId = usImport.importedCharacterIds[0]!;
+    createdCharacterIds.push(usId);
+
+    const manual = await characterService.createCharacter(owner, {
+      name: "Bnmanual",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "MAGE",
+      specialization: "Arcane",
+      itemLevel: 500,
+    });
+    createdCharacterIds.push(manual.id);
+
+    const inactiveOwned = ownedCharacter({ id: "300072", name: "Bninactive" });
+    const inactiveSession = await seedConnectionAndSession(ids.owner, "EU", [inactiveOwned]);
+    mockEnrichmentSuccess({
+      id: inactiveOwned.id,
+      name: inactiveOwned.name,
+      realmId: inactiveOwned.realmId,
+      wowClass: inactiveOwned.wowClass,
+      itemLevel: 642,
+      specialization: "Enhancement",
+    });
+    const inactiveImport = await characterBlizzardService.importCharacters(owner, inactiveSession.id, [
+      { blizzardCharacterId: inactiveOwned.id, specialization: "Enhancement" },
+    ]);
+    const inactiveId = inactiveImport.importedCharacterIds[0]!;
+    createdCharacterIds.push(inactiveId);
+    await characterRepository.setActive(inactiveId, false);
+
+    await orm.Character.where({ id: euId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      specialization: "Restoration",
+      primaryRole: "HEALER",
+      itemLevel: 640,
+    });
+    await orm.Character.where({ id: usId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      itemLevel: 641,
+    });
+
+    mockEnrichmentSuccess({
+      id: euOwned.id,
+      name: euOwned.name,
+      realmId: euOwned.realmId,
+      wowClass: euOwned.wowClass,
+      itemLevel: 700,
+      specialization: "Elemental",
+    });
+
+    const result = await characterBlizzardService.refreshLinkedCharactersForRegion(owner, "EU");
+    expect(result.total).toBe(1);
+    expect(result.refreshed).toBe(1);
+    expect(result.failed).toBe(0);
+
+    const euRow = await orm.Character.where({ id: euId }).first();
+    expect(Number(euRow?.itemLevel)).toBe(700);
+    expect(String(euRow?.specialization)).toBe("Restoration");
+    expect(String(euRow?.primaryRole)).toBe("HEALER");
+    expect(euRow?.lastSyncedAt).toBeTruthy();
+
+    const usRow = await orm.Character.where({ id: usId }).first();
+    expect(Number(usRow?.itemLevel)).toBe(641);
+
+    const manualRow = await orm.Character.where({ id: manual.id }).first();
+    expect(manualRow?.blizzardCharacterId).toBeNull();
+    expect(Number(manualRow?.itemLevel)).toBe(500);
+
+    const inactiveRow = await orm.Character.where({ id: inactiveId }).first();
+    expect(Number(inactiveRow?.itemLevel)).toBe(642);
+  });
+
+  it("skips cooldown characters and keeps partial successes", async () => {
+    const cool = ownedCharacter({ id: "300080", name: "Bncool" });
+    const hot = ownedCharacter({ id: "300081", name: "Bnhot" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [cool, hot]);
+    mockEnrichmentSuccess({
+      id: cool.id,
+      name: cool.name,
+      realmId: cool.realmId,
+      wowClass: cool.wowClass,
+      itemLevel: 650,
+      specialization: "Restoration",
+    });
+    const coolImport = await characterBlizzardService.importCharacters(owner, session.id, [
+      { blizzardCharacterId: cool.id, specialization: "Restoration" },
+    ]);
+    createdCharacterIds.push(...coolImport.importedCharacterIds);
+
+    mockEnrichmentSuccess({
+      id: hot.id,
+      name: hot.name,
+      realmId: hot.realmId,
+      wowClass: hot.wowClass,
+      itemLevel: 651,
+      specialization: "Enhancement",
+    });
+    const hotImport = await characterBlizzardService.importCharacters(owner, session.id, [
+      { blizzardCharacterId: hot.id, specialization: "Enhancement" },
+    ]);
+    createdCharacterIds.push(...hotImport.importedCharacterIds);
+
+    const coolId = coolImport.importedCharacterIds[0]!;
+    const hotId = hotImport.importedCharacterIds[0]!;
+
+    await orm.Character.where({ id: coolId }).update({
+      lastSyncedAt: new Date().toISOString(),
+      itemLevel: 650,
+    });
+    await orm.Character.where({ id: hotId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      itemLevel: 651,
+    });
+
+    mockEnrichmentSuccess({
+      id: hot.id,
+      name: hot.name,
+      realmId: hot.realmId,
+      wowClass: hot.wowClass,
+      itemLevel: 710,
+      specialization: "Elemental",
+    });
+
+    const result = await characterBlizzardService.refreshLinkedCharactersForRegion(owner, "EU");
+    expect(result.total).toBe(2);
+    expect(result.skipped).toBe(1);
+    expect(result.refreshed).toBe(1);
+
+    expect(Number((await orm.Character.where({ id: coolId }).first())?.itemLevel)).toBe(650);
+    expect(Number((await orm.Character.where({ id: hotId }).first())?.itemLevel)).toBe(710);
+    expect(String((await orm.Character.where({ id: hotId }).first())?.specialization)).toBe(
+      "Enhancement",
+    );
+  });
+
+  it("does not refresh another user's characters", async () => {
+    const owned = ownedCharacter({ id: "300090", name: "Bnother" });
+    const session = await seedConnectionAndSession(ids.other, "EU", [owned]);
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 660,
+      specialization: "Restoration",
+    });
+    const imported = await characterBlizzardService.importCharacters(other, session.id, [
+      { blizzardCharacterId: owned.id, specialization: "Restoration" },
+    ]);
+    createdCharacterIds.push(...imported.importedCharacterIds);
+
+    await seedConnectionAndSession(ids.owner, "EU", []);
+    const result = await characterBlizzardService.refreshLinkedCharactersForRegion(owner, "EU");
+    expect(result.total).toBe(0);
+    expect(Number((await orm.Character.where({ id: imported.importedCharacterIds[0] }).first())?.itemLevel)).toBe(
+      660,
+    );
   });
 });

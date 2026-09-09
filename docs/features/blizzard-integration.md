@@ -85,7 +85,13 @@ Entry: `/characters` when Blizzard env vars are configured.
 
 Import creates the Character with Blizzard ids. Link only stamps Blizzard identity (and may update item level when the profile is available). Mixed import/link selections submit in one server action; the service resolves classification server-side from the import session.
 
-Character selection happens in a **modal** on `/characters`. The page itself only shows compact regional Battle.net connection cards (Connect / Reconnect / Import / Disconnect). Import opens the dialog when a live import session exists for that region; otherwise Import starts OAuth reconnect to refresh ownership.
+Character selection happens in a **modal** on `/characters`. The page itself only shows compact regional Battle.net connection cards (Connect / Reconnect / Import / Disconnect / **Refresh all** when connected). Import opens the dialog when a live import session exists for that region; otherwise Import starts OAuth reconnect to refresh ownership.
+
+The import modal supports presentation-only **Item Level** sorting (header toggle: descending first, then ascending). Unknown item levels sort last in both directions.
+
+**Refresh all** refreshes only the current user's active Blizzard-linked characters in that region, with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt; it never updates specialization, primaryRole, BoosterAccess, or CharacterRaidLockout.
+
+Missing CharacterRaidLockout rows display as **Unknown** on `/characters` (not "Clear"). Blizzard does not sync lockouts.
 
 Disconnect clears the regional connection and import sessions. It does **not** delete Characters, signups, lockouts, or history.
 

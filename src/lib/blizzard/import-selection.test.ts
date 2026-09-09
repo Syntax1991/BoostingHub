@@ -7,9 +7,13 @@ import {
   importStatusLabel,
   isEligibleImportStatus,
   isSelectableImportCandidate,
+  itemLevelSortAria,
+  itemLevelSortLabel,
   needsManualItemLevel,
+  nextItemLevelSortDirection,
   resolvedSpecialization,
   selectionCountLabel,
+  sortImportCandidatesByItemLevel,
 } from "@/lib/blizzard/import-selection";
 import {
   assertImportCharacterLevel,
@@ -114,5 +118,46 @@ describe("import-selection helpers", () => {
     expect(importStatusLabel("level_too_low")).toBe("Requires level 90");
     expect(selectionCountLabel(0)).toBe("0 selected");
     expect(continueActionLabel(5)).toBe("Continue with 5 characters");
+  });
+});
+
+describe("item level presentation sorting", () => {
+  it("first click direction is descending, second ascending", () => {
+    expect(nextItemLevelSortDirection(null)).toBe("desc");
+    expect(nextItemLevelSortDirection("desc")).toBe("asc");
+    expect(nextItemLevelSortDirection("asc")).toBe("desc");
+    expect(itemLevelSortLabel("desc")).toContain("↓");
+    expect(itemLevelSortLabel("asc")).toContain("↑");
+    expect(itemLevelSortAria("desc")).toBe("descending");
+  });
+
+  it("keeps unknown item levels last in both directions and breaks ties by name/realm", () => {
+    const rows = [
+      candidate({ name: "Beta", status: "import", realm: "A", suggestedItemLevel: 300 }),
+      candidate({ name: "Alpha", status: "import", realm: "B", suggestedItemLevel: 300 }),
+      candidate({ name: "Zed", status: "import", realm: "A", suggestedItemLevel: null }),
+      candidate({ name: "High", status: "import", realm: "A", suggestedItemLevel: 321 }),
+    ].map((row) => ({ ...row, sortItemLevel: row.suggestedItemLevel }));
+
+    const desc = sortImportCandidatesByItemLevel(rows, "desc").map((row) => row.name);
+    expect(desc).toEqual(["High", "Alpha", "Beta", "Zed"]);
+
+    const asc = sortImportCandidatesByItemLevel(rows, "asc").map((row) => row.name);
+    expect(asc).toEqual(["Alpha", "Beta", "High", "Zed"]);
+  });
+
+  it("composes with search filters without changing eligibility ids", () => {
+    const rows = [
+      candidate({ name: "SynA", status: "import", realm: "Antonidas", suggestedItemLevel: 310 }),
+      candidate({ name: "SynB", status: "import", realm: "Blackrock", suggestedItemLevel: 320 }),
+      candidate({ name: "Low", status: "level_too_low", realm: "Antonidas", level: 10 }),
+    ];
+    const filtered = filterImportCandidates(rows, "Antonidas").map((row) => ({
+      ...row,
+      sortItemLevel: row.suggestedItemLevel,
+    }));
+    const sorted = sortImportCandidatesByItemLevel(filtered, "desc");
+    expect(sorted.map((row) => row.name)).toEqual(["SynA", "Low"]);
+    expect(eligibleCandidateIds(sorted)).toEqual(["SynA"]);
   });
 });

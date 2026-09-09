@@ -220,7 +220,10 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         <Card>
           <CardHeader title="Raid lockouts" description="Stored lockouts only. Not live Blizzard data." />
           {data.lockouts.length === 0 ? (
-            <EmptyState title="No tracked raid lockouts." description="Lockouts are system state and cannot be edited here." />
+            <EmptyState
+              title="Unknown"
+              description="No stored lockout data for this character. Missing rows are not proof the character is clear."
+            />
           ) : (
             <ul className="divide-y divide-border">
               {data.lockouts.map((lockout) => (

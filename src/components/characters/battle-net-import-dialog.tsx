@@ -21,9 +21,14 @@ import {
   filterImportCandidates,
   importStatusLabel,
   isSelectableImportCandidate,
+  itemLevelSortAria,
+  itemLevelSortLabel,
   needsManualItemLevel,
+  nextItemLevelSortDirection,
   resolvedSpecialization,
   selectionCountLabel,
+  sortImportCandidatesByItemLevel,
+  type ItemLevelSortDirection,
 } from "@/lib/blizzard/import-selection";
 import type { ImportCandidate } from "@/lib/blizzard/types";
 import type { characterController } from "@/controllers/app.controller";
@@ -68,10 +73,42 @@ export function BattleNetImportDialog({
     Record<string, { specialization: string | null; itemLevel: number | null }>
   >({});
   const [enriching, setEnriching] = useState<Record<string, boolean>>({});
+  const [itemLevelSort, setItemLevelSort] = useState<ItemLevelSortDirection | null>(null);
 
   const rows = useMemo(() => candidates?.candidates ?? [], [candidates]);
   const importSessionId = candidates?.sessionId;
-  const visibleRows = useMemo(() => filterImportCandidates(rows, query), [rows, query]);
+
+  function blizzardItemLevelFor(row: ImportCandidate) {
+    return suggestions[row.blizzardCharacterId]?.itemLevel ?? row.suggestedItemLevel;
+  }
+
+  function effectiveSortItemLevel(row: ImportCandidate): number | null {
+    const blizzard = blizzardItemLevelFor(row);
+    if (typeof blizzard === "number" && Number.isFinite(blizzard)) return blizzard;
+    const manualRaw = manualItemLevels[row.blizzardCharacterId]?.trim();
+    if (!manualRaw) return null;
+    const manual = Number(manualRaw);
+    if (
+      Number.isInteger(manual) &&
+      manual >= CHARACTER_ITEM_LEVEL_MIN &&
+      manual <= CHARACTER_ITEM_LEVEL_MAX
+    ) {
+      return manual;
+    }
+    return null;
+  }
+
+  const visibleRows = useMemo(() => {
+    const filtered = filterImportCandidates(rows, query);
+    if (!itemLevelSort) return filtered;
+    const sortable = filtered.map((row) => ({
+      ...row,
+      sortItemLevel: effectiveSortItemLevel(row),
+    }));
+    return sortImportCandidatesByItemLevel(sortable, itemLevelSort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- local form maps intentionally included
+  }, [rows, query, itemLevelSort, suggestions, manualItemLevels]);
+
   const visibleEligibleIds = useMemo(
     () => eligibleCandidateIds(visibleRows),
     [visibleRows],
@@ -96,6 +133,7 @@ export function BattleNetImportDialog({
       setManualItemLevels({});
       setSuggestions({});
       setEnriching({});
+      setItemLevelSort(null);
     };
     dialog.addEventListener("close", onClose);
     queueMicrotask(() => searchRef.current?.focus());
@@ -116,10 +154,6 @@ export function BattleNetImportDialog({
     return (
       suggestions[row.blizzardCharacterId]?.specialization ?? row.suggestedSpecialization
     );
-  }
-
-  function blizzardItemLevelFor(row: ImportCandidate) {
-    return suggestions[row.blizzardCharacterId]?.itemLevel ?? row.suggestedItemLevel;
   }
 
   function requestEnrichment(row: ImportCandidate) {
@@ -340,6 +374,22 @@ export function BattleNetImportDialog({
           >
             Clear selection
           </Button>
+          <label className="flex items-center gap-2 md:hidden">
+            <span className="text-muted">Sort by</span>
+            <select
+              value={itemLevelSort ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                setItemLevelSort(value === "asc" || value === "desc" ? value : null);
+              }}
+              className="h-8 rounded-md border border-border bg-surface px-2 text-xs"
+              aria-label="Sort by item level"
+            >
+              <option value="">Session order</option>
+              <option value="desc">Item Level: High → Low</option>
+              <option value="asc">Item Level: Low → High</option>
+            </select>
+          </label>
           <span className="text-muted">
             Eligible = Import or Link existing at level {MIN_IMPORT_CHARACTER_LEVEL}+ in current results.
           </span>
@@ -369,7 +419,15 @@ export function BattleNetImportDialog({
                     <th className="px-2 py-2 font-medium">Level</th>
                     <th className="px-2 py-2 font-medium">Status</th>
                     <th className="px-2 py-2 font-medium">Specialization</th>
-                    <th className="px-2 py-2 font-medium">Item Level</th>
+                    <th className="px-2 py-2 font-medium" aria-sort={itemLevelSortAria(itemLevelSort)}>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground"
+                        onClick={() => setItemLevelSort((current) => nextItemLevelSortDirection(current))}
+                      >
+                        {itemLevelSortLabel(itemLevelSort)}
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

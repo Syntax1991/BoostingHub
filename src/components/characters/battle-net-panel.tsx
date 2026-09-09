@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { disconnectBattleNetAction } from "@/controllers/blizzard.actions";
+import { disconnectBattleNetAction, refreshAllBattleNetCharactersAction } from "@/controllers/blizzard.actions";
 import { BattleNetImportDialog } from "@/components/characters/battle-net-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
@@ -161,20 +161,42 @@ function RegionRow({
 }) {
   const router = useRouter();
   const errorId = useId();
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<"refresh" | "disconnect" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const connected = Boolean(connection);
   const connectHref = `/api/integrations/battlenet/connect?region=${region}`;
   const hasLiveSession = Boolean(candidates?.sessionId);
+  const pending = pendingAction !== null;
 
   function disconnect() {
     setError(null);
+    setSuccess(null);
+    setPendingAction("disconnect");
     startTransition(async () => {
       const result = await disconnectBattleNetAction({ region });
+      setPendingAction(null);
       if (!result.ok) {
         setError(result.message);
         return;
       }
+      router.refresh();
+    });
+  }
+
+  function refreshAll() {
+    setError(null);
+    setSuccess(null);
+    setPendingAction("refresh");
+    startTransition(async () => {
+      const result = await refreshAllBattleNetCharactersAction({ region });
+      setPendingAction(null);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setSuccess(result.message);
       router.refresh();
     });
   }
@@ -197,6 +219,17 @@ function RegionRow({
         <div className="flex flex-wrap gap-2">
           {configured ? (
             <>
+              {connected ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={refreshAll}
+                  className="h-8 px-2 text-xs"
+                >
+                  {pendingAction === "refresh" ? "Refreshing…" : "Refresh all"}
+                </Button>
+              ) : null}
               <a
                 href={connectHref}
                 className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
@@ -231,7 +264,7 @@ function RegionRow({
                     className="h-8 px-2 text-xs"
                     aria-describedby={error ? errorId : undefined}
                   >
-                    {pending ? "Disconnecting…" : "Disconnect"}
+                    {pendingAction === "disconnect" ? "Disconnecting…" : "Disconnect"}
                   </Button>
                 </>
               ) : null}
@@ -241,6 +274,11 @@ function RegionRow({
           )}
         </div>
       </div>
+      {success ? (
+        <p role="status" className="mt-2 text-xs text-success">
+          {success}
+        </p>
+      ) : null}
       {error ? (
         <p id={errorId} role="alert" className="mt-2 text-xs text-danger">
           {error}

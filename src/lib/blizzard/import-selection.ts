@@ -56,6 +56,60 @@ export function needsManualItemLevel(
   return selected && (blizzardItemLevel == null || !Number.isFinite(blizzardItemLevel));
 }
 
+export type ItemLevelSortDirection = "desc" | "asc";
+
+export type ImportCandidateSortable = ImportCandidate & {
+  /** Effective item level used for presentation sorting (Blizzard or manual). */
+  sortItemLevel: number | null;
+};
+
+function compareNameRealm(a: ImportCandidate, b: ImportCandidate): number {
+  const name = a.name.toLocaleLowerCase("en-US").localeCompare(b.name.toLocaleLowerCase("en-US"));
+  if (name !== 0) return name;
+  return a.realm.toLocaleLowerCase("en-US").localeCompare(b.realm.toLocaleLowerCase("en-US"));
+}
+
+/**
+ * Presentation-only Item Level sort.
+ * Unknown values always sort last in both directions; ties break by name then realm.
+ */
+export function sortImportCandidatesByItemLevel<T extends ImportCandidateSortable>(
+  rows: T[],
+  direction: ItemLevelSortDirection,
+): T[] {
+  const known = rows.filter((row) => typeof row.sortItemLevel === "number");
+  const unknown = rows.filter((row) => typeof row.sortItemLevel !== "number");
+
+  known.sort((a, b) => {
+    const left = a.sortItemLevel as number;
+    const right = b.sortItemLevel as number;
+    const primary = direction === "desc" ? right - left : left - right;
+    if (primary !== 0) return primary;
+    return compareNameRealm(a, b);
+  });
+
+  unknown.sort(compareNameRealm);
+  return [...known, ...unknown];
+}
+
+export function nextItemLevelSortDirection(
+  current: ItemLevelSortDirection | null,
+): ItemLevelSortDirection {
+  return current === "desc" ? "asc" : "desc";
+}
+
+export function itemLevelSortLabel(direction: ItemLevelSortDirection | null): string {
+  if (direction === "desc") return "Item Level ↓";
+  if (direction === "asc") return "Item Level ↑";
+  return "Item Level";
+}
+
+export function itemLevelSortAria(direction: ItemLevelSortDirection | null): "none" | "descending" | "ascending" {
+  if (direction === "desc") return "descending";
+  if (direction === "asc") return "ascending";
+  return "none";
+}
+
 export function selectionCountLabel(count: number): string {
   if (count === 1) return "1 selected";
   return `${count} selected`;

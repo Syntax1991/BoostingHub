@@ -99,6 +99,30 @@ export async function refreshBlizzardCharacterAction(input: unknown): Promise<Ac
   }
 }
 
+export async function refreshAllBattleNetCharactersAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = battleNetRegionSchema.parse(input);
+    const result = await characterBlizzardService.refreshLinkedCharactersForRegion(
+      user,
+      parsed.region,
+    );
+    revalidateCharacterSurfaces();
+    if (result.total === 0) {
+      return {
+        ok: true,
+        message: `No active linked ${parsed.region} characters to refresh.`,
+      };
+    }
+    return {
+      ok: true,
+      message: `Refresh all (${parsed.region}): ${result.refreshed} refreshed, ${result.skipped} skipped, ${result.failed} failed.`,
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export async function enrichImportCandidateAction(
   input: unknown,
 ): Promise<

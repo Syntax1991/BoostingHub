@@ -27,6 +27,30 @@ import { characterRepository } from "@/repositories/character.repository";
 import { battleNetService } from "@/services/battle-net.service";
 
 const REFRESH_COOLDOWN_MS = 60_000;
+const REFRESH_ALL_CONCURRENCY = 4;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]!);
+    }
+  }
+
+  const pool = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: pool }, () => runWorker()));
+  return results;
+}
 
 function uniqueViolation(error: unknown): boolean {
   return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
@@ -618,130 +642,7 @@ export const characterBlizzardService = {
       }
     }
 
-    let summary;
-    try {
-      const realmSlug = realmSlugFromDisplayName(character.realm);
-      const status = await blizzardApiClient.getCharacterProfileStatus(
-        character.region,
-        realmSlug,
-        character.name,
-      );
-      if (!status.isValid) {
-        throw new DomainError(
-          "BLIZZARD_PROFILE_UNAVAILABLE",
-          "Blizzard reports this character profile as unavailable.",
-          502,
-        );
-      }
-
-      summary = await blizzardApiClient.getCharacterProfileSummary(
-        character.region,
-        realmSlug,
-        character.name,
-      );
-    } catch (error) {
-      if (isDomainError(error)) {
-        if (
-          error.code === "BLIZZARD_CHARACTER_NOT_FOUND" ||
-          error.code === "BLIZZARD_PROFILE_UNAVAILABLE" ||
-          error.code === "BATTLENET_RATE_LIMITED" ||
-          error.code === "BATTLENET_NOT_CONFIGURED"
-        ) {
-          throw error;
-        }
-        throw new DomainError(
-          "BLIZZARD_SYNC_FAILED",
-          "Could not refresh character from Blizzard.",
-          502,
-        );
-      }
-      throw new DomainError("BLIZZARD_SYNC_FAILED", "Could not refresh character from Blizzard.", 502);
-    }
-
-    if (summary.wowClass && summary.wowClass !== character.wowClass) {
-      throw new DomainError(
-        "BLIZZARD_IDENTITY_CONFLICT",
-        "Blizzard class no longer matches this BoostingHub character.",
-      );
-    }
-
-    if (
-      summary.id &&
-      summary.id !== character.blizzardCharacterId
-    ) {
-      throw new DomainError(
-        "BLIZZARD_IDENTITY_CONFLICT",
-        "Blizzard character id no longer matches the linked identity.",
-      );
-    }
-
-    if (
-      summary.realmId &&
-      summary.realmId !== character.blizzardRealmId
-    ) {
-      throw new DomainError(
-        "BLIZZARD_IDENTITY_CONFLICT",
-        "Realm transfer detected. Automatic transfer handling is not supported.",
-      );
-    }
-
-    const nextName = prepareCharacterName(summary.name || character.name);
-    if (!isValidCharacterName(nextName)) {
-      throw new DomainError(
-        "INVALID_CHARACTER_NAME",
-        "Blizzard returned a character name that BoostingHub cannot store.",
-      );
-    }
-
-    const nextNormalizedName = normalizeCharacterIdentity(nextName);
-    if (nextNormalizedName !== character.normalizedName) {
-      const conflict = await characterRepository.findIdentityConflict({
-        userId: user.id,
-        region: character.region,
-        normalizedName: nextNormalizedName,
-        normalizedRealm: character.normalizedRealm,
-        excludeId: character.id,
-      });
-      if (conflict) {
-        throw new DomainError(
-          "CHARACTER_ALREADY_EXISTS",
-          "Cannot rename: you already have another character with that name on this realm.",
-        );
-      }
-    }
-
-    if (typeof summary.equippedItemLevel !== "number") {
-      throw new DomainError(
-        "BLIZZARD_PROFILE_UNAVAILABLE",
-        "Blizzard profile did not include item level.",
-        502,
-      );
-    }
-
-    const syncedAt = new Date().toISOString();
-    try {
-      await characterRepository.applyBlizzardSync(character.id, {
-        name: nextName,
-        normalizedName: nextNormalizedName,
-        itemLevel: summary.equippedItemLevel,
-        lastSyncedAt: syncedAt,
-      });
-    } catch (error) {
-      if (uniqueViolation(error)) {
-        throw new DomainError(
-          "CHARACTER_ALREADY_EXISTS",
-          "Cannot rename: identity conflict after Blizzard refresh.",
-        );
-      }
-      throw error;
-    }
-
-    await battleNetConnectionRepository.markSuccessfulSync(connection.id, syncedAt);
-    await activityRepository.create({
-      userId: user.id,
-      type: "BATTLENET_CHARACTER_REFRESHED",
-      message: `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard.`,
-    });
+    await refreshLinkedCharacterProfile(user, character, connection.id);
 
     const updated = await characterRepository.findById(character.id);
     if (!updated) {
@@ -749,4 +650,231 @@ export const characterBlizzardService = {
     }
     return updated;
   },
+
+  /**
+   * Bulk-refresh active Blizzard-linked characters for one owned regional connection.
+   * Partial success is kept; cooldown skips do not fail the batch.
+   */
+  async refreshLinkedCharactersForRegion(user: AuthenticatedUser, regionInput: string) {
+    const region = regionInput === "US" || regionInput === "EU" ? regionInput : null;
+    if (!region) {
+      throw new DomainError("VALIDATION_FAILED", "Region must be EU or US.");
+    }
+
+    const connection = await battleNetConnectionRepository.findByUserAndRegion(user.id, region);
+    if (!connection) {
+      throw new DomainError(
+        "BATTLENET_NOT_CONNECTED",
+        `Connect Battle.net (${region}) before refreshing.`,
+        400,
+      );
+    }
+
+    const all = await characterRepository.listByUserId(user.id);
+    const eligible = all.filter(
+      (character) =>
+        character.userId === user.id &&
+        character.region === region &&
+        character.isActive &&
+        Boolean(character.blizzardCharacterId) &&
+        Boolean(character.blizzardRealmId),
+    );
+
+    const outcome = {
+      total: eligible.length,
+      refreshed: 0,
+      skipped: 0,
+      failed: 0,
+    };
+
+    if (eligible.length === 0) {
+      return outcome;
+    }
+
+    const results = await mapWithConcurrency(eligible, REFRESH_ALL_CONCURRENCY, async (character) => {
+      if (character.lastSyncedAt) {
+        const elapsed = Date.now() - new Date(character.lastSyncedAt).getTime();
+        if (elapsed < REFRESH_COOLDOWN_MS) {
+          return "skipped" as const;
+        }
+      }
+
+      try {
+        await refreshLinkedCharacterProfile(user, character, connection.id, {
+          updateConnectionSync: false,
+          writeActivity: false,
+        });
+        return "refreshed" as const;
+      } catch (error) {
+        if (isDomainError(error) && error.code === "BLIZZARD_REFRESH_COOLDOWN") {
+          return "skipped" as const;
+        }
+        return "failed" as const;
+      }
+    });
+
+    for (const result of results) {
+      if (result === "refreshed") outcome.refreshed += 1;
+      else if (result === "skipped") outcome.skipped += 1;
+      else outcome.failed += 1;
+    }
+
+    if (outcome.refreshed > 0) {
+      await battleNetConnectionRepository.markSuccessfulSync(
+        connection.id,
+        new Date().toISOString(),
+      );
+      await activityRepository.create({
+        userId: user.id,
+        type: "BATTLENET_CHARACTERS_REFRESHED",
+        message: `Refresh all (${region}): ${outcome.refreshed} refreshed, ${outcome.skipped} skipped, ${outcome.failed} failed of ${outcome.total}.`,
+      });
+    }
+
+    return outcome;
+  },
 };
+
+async function refreshLinkedCharacterProfile(
+  user: AuthenticatedUser,
+  character: {
+    id: string;
+    userId: string;
+    name: string;
+    realm: string;
+    region: "EU" | "US";
+    normalizedName: string;
+    normalizedRealm: string;
+    wowClass: string;
+    blizzardCharacterId: string | null;
+    blizzardRealmId: string | null;
+  },
+  connectionId: string,
+  options: { updateConnectionSync?: boolean; writeActivity?: boolean } = {},
+) {
+  const updateConnectionSync = options.updateConnectionSync !== false;
+  const writeActivity = options.writeActivity !== false;
+
+  let summary;
+  try {
+    const realmSlug = realmSlugFromDisplayName(character.realm);
+    const status = await blizzardApiClient.getCharacterProfileStatus(
+      character.region,
+      realmSlug,
+      character.name,
+    );
+    if (!status.isValid) {
+      throw new DomainError(
+        "BLIZZARD_PROFILE_UNAVAILABLE",
+        "Blizzard reports this character profile as unavailable.",
+        502,
+      );
+    }
+
+    summary = await blizzardApiClient.getCharacterProfileSummary(
+      character.region,
+      realmSlug,
+      character.name,
+    );
+  } catch (error) {
+    if (isDomainError(error)) {
+      if (
+        error.code === "BLIZZARD_CHARACTER_NOT_FOUND" ||
+        error.code === "BLIZZARD_PROFILE_UNAVAILABLE" ||
+        error.code === "BATTLENET_RATE_LIMITED" ||
+        error.code === "BATTLENET_NOT_CONFIGURED"
+      ) {
+        throw error;
+      }
+      throw new DomainError(
+        "BLIZZARD_SYNC_FAILED",
+        "Could not refresh character from Blizzard.",
+        502,
+      );
+    }
+    throw new DomainError("BLIZZARD_SYNC_FAILED", "Could not refresh character from Blizzard.", 502);
+  }
+
+  if (summary.wowClass && summary.wowClass !== character.wowClass) {
+    throw new DomainError(
+      "BLIZZARD_IDENTITY_CONFLICT",
+      "Blizzard class no longer matches this BoostingHub character.",
+    );
+  }
+
+  if (summary.id && summary.id !== character.blizzardCharacterId) {
+    throw new DomainError(
+      "BLIZZARD_IDENTITY_CONFLICT",
+      "Blizzard character id no longer matches the linked identity.",
+    );
+  }
+
+  if (summary.realmId && summary.realmId !== character.blizzardRealmId) {
+    throw new DomainError(
+      "BLIZZARD_IDENTITY_CONFLICT",
+      "Realm transfer detected. Automatic transfer handling is not supported.",
+    );
+  }
+
+  const nextName = prepareCharacterName(summary.name || character.name);
+  if (!isValidCharacterName(nextName)) {
+    throw new DomainError(
+      "INVALID_CHARACTER_NAME",
+      "Blizzard returned a character name that BoostingHub cannot store.",
+    );
+  }
+
+  const nextNormalizedName = normalizeCharacterIdentity(nextName);
+  if (nextNormalizedName !== character.normalizedName) {
+    const conflict = await characterRepository.findIdentityConflict({
+      userId: user.id,
+      region: character.region,
+      normalizedName: nextNormalizedName,
+      normalizedRealm: character.normalizedRealm,
+      excludeId: character.id,
+    });
+    if (conflict) {
+      throw new DomainError(
+        "CHARACTER_ALREADY_EXISTS",
+        "Cannot rename: you already have another character with that name on this realm.",
+      );
+    }
+  }
+
+  if (typeof summary.equippedItemLevel !== "number") {
+    throw new DomainError(
+      "BLIZZARD_PROFILE_UNAVAILABLE",
+      "Blizzard profile did not include item level.",
+      502,
+    );
+  }
+
+  const syncedAt = new Date().toISOString();
+  try {
+    await characterRepository.applyBlizzardSync(character.id, {
+      name: nextName,
+      normalizedName: nextNormalizedName,
+      itemLevel: summary.equippedItemLevel,
+      lastSyncedAt: syncedAt,
+    });
+  } catch (error) {
+    if (uniqueViolation(error)) {
+      throw new DomainError(
+        "CHARACTER_ALREADY_EXISTS",
+        "Cannot rename: identity conflict after Blizzard refresh.",
+      );
+    }
+    throw error;
+  }
+
+  if (updateConnectionSync) {
+    await battleNetConnectionRepository.markSuccessfulSync(connectionId, syncedAt);
+  }
+  if (writeActivity) {
+    await activityRepository.create({
+      userId: user.id,
+      type: "BATTLENET_CHARACTER_REFRESHED",
+      message: `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard.`,
+    });
+  }
+}

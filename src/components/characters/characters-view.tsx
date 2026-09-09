@@ -98,7 +98,7 @@ export function CharactersView({ data }: { data: Page }) {
                     </td>
                     <td className="px-4 py-3 text-xs">
                       {character.lockouts.length === 0 ? (
-                        <span className="text-muted">Clear</span>
+                        <span className="text-muted">Unknown</span>
                       ) : (
                         <ul className="space-y-1">
                           {character.lockouts.map((lockout) => (
