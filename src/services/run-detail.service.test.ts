@@ -51,9 +51,12 @@ describe("canonical run routes", () => {
   it("builds /runs/[runId] as the entity URL and maps manage actions to tabs", () => {
     expect(runDetailPath(ids.weekend)).toBe(`/runs/${ids.weekend}`);
     expect(runDetailPath(ids.weekend, "roster")).toBe(`/runs/${ids.weekend}?tab=roster`);
+    expect(runDetailPath(ids.weekend, "attendance")).toBe(`/runs/${ids.weekend}?tab=attendance`);
     expect(parseRunDetailTab(["roster"])).toBe("roster");
+    expect(parseRunDetailTab("attendance")).toBe("attendance");
     expect(parseRunDetailTab("unknown")).toBe("overview");
     expect(runDetailTabForManageAction("Continue Roster")).toBe("roster");
+    expect(runDetailTabForManageAction("Attendance")).toBe("attendance");
     expect(runDetailTabForManageAction("View")).toBe("overview");
     expect(runDetailTabForManageAction("Manage")).toBe("overview");
   });
@@ -75,6 +78,9 @@ describe("runDetailService", () => {
     expect(view.editor).toBeNull();
     expect(view.capabilities.canEdit).toBe(false);
     expect(view.capabilities.canOpen).toBe(false);
+    expect(view.capabilities.canStart).toBe(false);
+    expect(view.attendance.manager).toBeNull();
+    expect(view.attendance.own.length).toBeGreaterThanOrEqual(0);
     expect(view.viewerSignups.some((signup) => signup.id === ids.publishedKael)).toBe(true);
     expect(view.publishedRoster?.members.some((member) => member.signupId === ids.publishedKael)).toBe(true);
     expect(view.publishedRoster?.members.every((member) => member.participationType)).toBeTruthy();

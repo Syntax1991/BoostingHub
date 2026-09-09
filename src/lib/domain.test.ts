@@ -101,8 +101,23 @@ describe("run and signup state machines", () => {
     });
     expect(published.canEdit).toBe(false);
     expect(published.canCancel).toBe(true);
+    expect(published.canStart).toBe(true);
+    expect(published.canComplete).toBe(false);
+    expect(published.canManageAttendance).toBe(false);
     expect(published.canReassignRaidLead).toBe(false);
     expect(published.canReopenSignups).toBe(false);
+
+    const inProgress = getRunLifecycleCapabilities({
+      status: "IN_PROGRESS",
+      signupsOpen: false,
+      hasSignupHistory: true,
+      actorIsAdmin: true,
+    });
+    expect(inProgress.canStart).toBe(false);
+    expect(inProgress.canManageAttendance).toBe(true);
+    expect(inProgress.canComplete).toBe(true);
+    expect(inProgress.canCancel).toBe(false);
+    expect(inProgress.canEdit).toBe(false);
   });
 });
 
