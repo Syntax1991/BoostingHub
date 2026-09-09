@@ -39,7 +39,7 @@ It is safe to re-run. It is not random. Seed is a fixture, not required producti
 
 Default password: `dev-login-only` (override with `DEV_AUTH_PASSWORD`).
 
-`src/services/signup.service.test.ts`, `src/services/roster.service.test.ts`, and `src/services/character.service.test.ts` use the seeded database. Character tests create isolated users (`cm0000000001` / `cm0000000002`) and delete them afterwards. Re-seed after roster tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
+`src/services/signup.service.test.ts`, `src/services/roster.service.test.ts`, `src/services/run-detail.service.test.ts`, and `src/services/character.service.test.ts` use the seeded database. Character tests create isolated users (`cm0000000001` / `cm0000000002`) and delete them afterwards. Re-seed after roster tests if you need the original demo rows. Roster tests mutate **Roster Lab Heroic**.
 
 ## Validation
 

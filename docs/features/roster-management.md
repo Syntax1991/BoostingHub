@@ -6,6 +6,8 @@ Let a **raid lead** or **admin** build a persistent draft roster for a run, vali
 
 This is internal operations tooling. It is not raid-group assignment, attendance, or payouts.
 
+Canonical Run URL: `/runs/[runId]`. See [run-detail.md](run-detail.md).
+
 ## Roles
 
 | Account role | Roster access |
@@ -43,7 +45,7 @@ Chosen over a JSON blob or a `rosterDraftSelected` column because:
 - publication metadata is relational
 - signup status stays the live published roster
 
-Opening `/manage/runs/[runId]` may create an empty `RunRoster` (`ensure`). That does **not** change `RunStatus`. The first persisted draft selection on an `OPEN` run transitions `OPEN → ROSTERING` without closing signups (`signupsOpen` stays independent).
+Opening `/runs/[runId]` as a manager may create an empty `RunRoster` (`ensure`). A USER view does **not** call `ensure`. That does **not** change `RunStatus`. The first persisted draft selection on an `OPEN` run transitions `OPEN → ROSTERING` without closing signups (`signupsOpen` stays independent).
 
 ## Roster entries
 
@@ -121,7 +123,8 @@ The published roster stays live until a replacement publish succeeds. The lead m
 ## Security
 
 - Current user comes from the session, not the client body
-- `requireManagerOrRedirect` gates `/manage/*`
+- `requireManagerOrRedirect` gates `/manage` and `/manage/runs`
+- Canonical Run detail is `/runs/[runId]`; manager payload is omitted unless `canManageRun`
 - `assertCanManageRun` gates every roster read/mutation
 - Zod validates run/signup IDs and version only — not statuses or ownership
 - Publish re-reads DB state and checks `version`
@@ -131,7 +134,7 @@ The published roster stays live until a replacement publish succeeds. The lead m
 | Layer | Roster pieces |
 | --- | --- |
 | Model | `RunRoster`, `RunRosterEntry`, `RosterState` |
-| View | `/manage/runs`, `/manage/runs/[runId]`, `roster-builder.tsx` |
+| View | `/manage/runs`, `/runs/[runId]` Roster tab, `roster-builder.tsx`. `/manage/runs/[runId]` redirects. |
 | Controller | `managementController.getRosterPage`, `toggleRosterDraftSelectionAction`, `prepareRosterEditAction`, `validateRosterAction`, `publishRosterAction` |
 | Service | `RosterService`, `roster-composition`, `roster-validation`, plus `Run` / signup / access / lockout helpers |
 | Repository | `RosterRepository` (Prisma stays here) |

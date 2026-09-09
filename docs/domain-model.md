@@ -99,7 +99,7 @@ Player-created signups start as `PENDING`. `SELECTED` / `NOT_SELECTED` remain ro
 
 Signup counts on run lists exclude `WITHDRAWN`.
 
-See [docs/features/run-signups.md](features/run-signups.md).
+See [docs/features/run-signups.md](features/run-signups.md) and [docs/features/run-detail.md](features/run-detail.md).
 
 ## RunRoster / RunRosterEntry
 
