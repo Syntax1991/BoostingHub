@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccessManagement, canManageRun, hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
+import { canAccessManagement, canManageRun, canReviewBoosterAccess, hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
 import { isDevAuthEnabled, isProductionRuntime } from "@/auth/dev-auth";
 import { formatDate, formatRelative, formatTime } from "@/lib/datetime";
 import { canTransitionRun, isSignupWindowOpen } from "@/services/run-state";
@@ -13,6 +13,8 @@ describe("account authorization", () => {
     expect(hasRaidLeadAccess("RAID_LEAD")).toBe(true);
     expect(hasRaidLeadAccess("ADMIN")).toBe(true);
     expect(hasAdminAccess("RAID_LEAD")).toBe(false);
+    expect(canReviewBoosterAccess("RAID_LEAD")).toBe(false);
+    expect(canReviewBoosterAccess("ADMIN")).toBe(true);
     expect(canAccessManagement("ADMIN")).toBe(true);
   });
 
@@ -78,10 +80,17 @@ describe("booster access", () => {
         difficulty: "HEROIC" as const,
         status: "APPROVED" as const,
       },
+      {
+        wowClass: "SHAMAN" as const,
+        role: "HEALER" as const,
+        difficulty: "NORMAL" as const,
+        status: "PENDING" as const,
+      },
     ];
 
     expect(boosterAccessService.isApprovedFor(records, "SHAMAN", "HEALER", "HEROIC")).toBe(true);
     expect(boosterAccessService.isApprovedFor(records, "SHAMAN", "HEALER", "MYTHIC")).toBe(false);
+    expect(boosterAccessService.isApprovedFor(records, "SHAMAN", "HEALER", "NORMAL")).toBe(false);
   });
 });
 
