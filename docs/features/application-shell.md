@@ -24,7 +24,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 ## Limitations
 
-- Character create/edit is not implemented; empty rosters are a valid production state
+- Character create/edit/deactivate/reactivate is implemented for the owning user
 - Run create/edit/cancel is not implemented
 - Blizzard refresh is not claimed to work
 - Payout panels are reserved empty, not fake finance

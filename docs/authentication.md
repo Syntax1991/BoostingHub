@@ -47,4 +47,4 @@ Management routes are enforced on the server. Users without `RAID_LEAD` or `ADMI
 
 ## Persistence split
 
-Better Auth uses a `pg` Pool (Kysely) because its Prisma adapter still expects Prisma 7's client. Prisma 8 owns the schema/migrations and all domain queries. The `user` table is the shared identity record.
+Better Auth uses Kysely on the shared `pg.Pool` because its Prisma adapter still expects Prisma 7's client. Prisma 8 uses the same pool for domain queries. The `user` table is the shared identity record.
