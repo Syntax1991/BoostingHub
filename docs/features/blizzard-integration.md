@@ -83,7 +83,9 @@ Entry: `/characters` when Blizzard env vars are configured.
    - `already_linked` — already on this account
    - `conflict` — owned by another account, class mismatch, or already linked elsewhere
 
-Import creates the Character with Blizzard ids. Link only stamps Blizzard identity (and may update item level when the profile is available).
+Import creates the Character with Blizzard ids. Link only stamps Blizzard identity (and may update item level when the profile is available). Mixed import/link selections submit in one server action; the service resolves classification server-side from the import session.
+
+Character selection happens in a **modal** on `/characters`. The page itself only shows compact regional Battle.net connection cards (Connect / Reconnect / Import / Disconnect). Import opens the dialog when a live import session exists for that region; otherwise Import starts OAuth reconnect to refresh ownership.
 
 Disconnect clears the regional connection and import sessions. It does **not** delete Characters, signups, lockouts, or history.
 
@@ -96,6 +98,8 @@ Item level uses Blizzard `equipped_item_level`. Refresh updates **item level** (
 ## Privacy / profile unavailable
 
 Some characters appear in the account list but have private or invalid public profiles.
+
+The owned-character candidate list on `/characters` is DB-only (import-session snapshot + local match status). Live public-profile enrichment runs only at import, link, or refresh — never while rendering the page — so a large account cannot stall the app shell.
 
 Import/link still proceeds with best-effort enrichment. Missing profile data means default/null suggestions rather than blocking the owned list. Refresh that cannot read a valid profile or equipped item level fails with a clear domain error instead of inventing values.
 
@@ -152,7 +156,7 @@ Optional. Empty values keep the Characters UI on manual CRUD only; seed and Disc
 | Layer | Location |
 | --- | --- |
 | Model | `BattleNetConnection`, `BattleNetImportSession`, Character Blizzard fields |
-| View | `/characters` panels (connect, import, link), character detail Refresh |
+| View | `/characters` Battle.net connection cards + import modal, character detail Refresh |
 | Controller | `src/app/api/integrations/battlenet/connect/route.ts`, `callback/route.ts`, `blizzard.actions.ts`, `app.controller` character page panel |
 | Service | `battleNetService`, `characterBlizzardService` |
 | Integration | `src/integrations/blizzard/blizzard-api-client.ts` (external HTTP boundary) |

@@ -48,6 +48,19 @@ export const battleNetImportSessionRepository = {
     return row ? mapSession(row as Record<string, unknown>) : null;
   },
 
+  async findLatestLiveByUserAndRegion(
+    userId: string,
+    region: WowRegion,
+  ): Promise<BattleNetImportSessionRecord | null> {
+    const rows = await orm.BattleNetImportSession.where({ userId, region }).all();
+    const now = Date.now();
+    const live = rows
+      .map((row) => mapSession(row as Record<string, unknown>))
+      .filter((session) => new Date(session.expiresAt).getTime() >= now && !session.consumedAt)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return live[0] ?? null;
+  },
+
   async create(input: {
     userId: string;
     region: WowRegion;

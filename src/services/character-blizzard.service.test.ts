@@ -234,6 +234,26 @@ afterEach(async () => {
   createdCharacterIds.length = 0;
 });
 
+describe("characterBlizzardService.resolveImportCandidates", () => {
+  const owner = asUser(ids.owner);
+
+  it("lists candidates from the session without calling live profile APIs", async () => {
+    const owned = ownedCharacter();
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    apiMocks.getCharacterProfileStatus.mockClear();
+    apiMocks.getCharacterProfileSummary.mockClear();
+
+    const result = await characterBlizzardService.resolveImportCandidates(owner, session.id);
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.status).toBe("import");
+    expect(result.candidates[0]?.suggestedSpecialization).toBeNull();
+    expect(result.candidates[0]?.suggestedItemLevel).toBeNull();
+    expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
+    expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
+  });
+});
+
 describe("characterBlizzardService.linkCharacter", () => {
   const owner = asUser(ids.owner);
 
@@ -371,6 +391,79 @@ describe("characterBlizzardService.importCharacters", () => {
       ]),
       "BLIZZARD_IDENTITY_CONFLICT",
     );
+  });
+});
+
+describe("characterBlizzardService.applySelections", () => {
+  const owner = asUser(ids.owner);
+
+  it("imports and links mixed selections in one call", async () => {
+    const toImport = ownedCharacter({ id: "300040", name: "Bnbatchimport" });
+    const toLink = ownedCharacter({ id: "300041", name: "Bnbatchlink" });
+    const manual = await characterService.createCharacter(owner, {
+      name: toLink.name,
+      realm: toLink.realmName,
+      region: toLink.region,
+      wowClass: toLink.wowClass,
+      specialization: "Elemental",
+      itemLevel: 600,
+    });
+    createdCharacterIds.push(manual.id);
+
+    const session = await seedConnectionAndSession(ids.owner, "EU", [toImport, toLink]);
+    mockEnrichmentSuccess({
+      id: toImport.id,
+      name: toImport.name,
+      realmId: toImport.realmId,
+      wowClass: toImport.wowClass,
+      itemLevel: 680,
+      specialization: "Enhancement",
+    });
+
+    const result = await characterBlizzardService.applySelections(owner, session.id, [
+      { blizzardCharacterId: toImport.id },
+      { blizzardCharacterId: toLink.id },
+    ]);
+
+    expect(result.importedCharacterIds).toHaveLength(1);
+    expect(result.linkedCharacterIds).toEqual([manual.id]);
+    createdCharacterIds.push(...result.importedCharacterIds);
+
+    const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
+    expect(String(created?.specialization)).toBe("Enhancement");
+    expect(Number(created?.itemLevel)).toBe(680);
+
+    const linked = await orm.Character.where({ id: manual.id }).first();
+    expect(String(linked?.blizzardCharacterId)).toBe(toLink.id);
+  });
+
+  it("rejects forged blizzardCharacterId not present in the session", async () => {
+    const owned = ownedCharacter({ id: "300042", name: "Bnreal" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, session.id, [
+        { blizzardCharacterId: "999999", specialization: "Restoration" },
+      ]),
+      "BLIZZARD_CHARACTER_NOT_OWNED",
+    );
+  });
+
+  it("validates missing specialization before creating any Character", async () => {
+    const first = ownedCharacter({ id: "300043", name: "Bnfirst" });
+    const second = ownedCharacter({ id: "300044", name: "Bnsecond" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [first, second]);
+    mockEnrichmentPrivacyFailure();
+
+    await expectDomainCode(
+      characterBlizzardService.applySelections(owner, session.id, [
+        { blizzardCharacterId: first.id, specialization: "Enhancement" },
+        { blizzardCharacterId: second.id },
+      ]),
+      "INVALID_SPECIALIZATION",
+    );
+
+    const created = await orm.Character.where({ userId: ids.owner, name: "Bnfirst" }).all();
+    expect(created).toHaveLength(0);
   });
 });
 

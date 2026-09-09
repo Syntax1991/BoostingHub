@@ -10,6 +10,11 @@ export const importSessionIdSchema = z.object({
   importSessionId: entityIdSchema,
 });
 
+export const enrichImportCandidateSchema = z.object({
+  importSessionId: entityIdSchema,
+  blizzardCharacterId: z.string().trim().min(1).max(32),
+});
+
 export const importBattleNetCharactersSchema = z.object({
   importSessionId: entityIdSchema,
   selections: z

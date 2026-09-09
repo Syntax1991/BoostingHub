@@ -11,6 +11,7 @@ import {
   importSessionIdSchema,
   linkBattleNetCharacterSchema,
   refreshBlizzardCharacterSchema,
+  enrichImportCandidateSchema,
 } from "@/validators/blizzard";
 
 function revalidateCharacterSurfaces(characterId?: string) {
@@ -42,15 +43,23 @@ export async function importBattleNetCharactersAction(input: unknown): Promise<A
   try {
     const user = await requireUser();
     const parsed = importBattleNetCharactersSchema.parse(input);
-    const result = await characterBlizzardService.importCharacters(
+    const result = await characterBlizzardService.applySelections(
       user,
       parsed.importSessionId,
       parsed.selections,
     );
     revalidateCharacterSurfaces();
+    const imported = result.importedCharacterIds.length;
+    const linked = result.linkedCharacterIds.length;
+    const parts: string[] = [];
+    if (imported > 0) parts.push(`imported ${imported}`);
+    if (linked > 0) parts.push(`linked ${linked}`);
     return {
       ok: true,
-      message: `Imported ${result.importedCharacterIds.length} character(s).`,
+      message:
+        parts.length > 0
+          ? `Successfully ${parts.join(" and ")} character(s).`
+          : "No characters changed.",
     };
   } catch (error) {
     return mapActionError(error);
@@ -83,6 +92,31 @@ export async function refreshBlizzardCharacterAction(input: unknown): Promise<Ac
     return { ok: true, message: "Character refreshed from Blizzard." };
   } catch (error) {
     return mapActionError(error);
+  }
+}
+
+export async function enrichImportCandidateAction(
+  input: unknown,
+): Promise<
+  ActionResult & {
+    data: {
+      blizzardCharacterId: string;
+      suggestedSpecialization: string | null;
+      suggestedItemLevel: number | null;
+    } | null;
+  }
+> {
+  try {
+    const user = await requireUser();
+    const parsed = enrichImportCandidateSchema.parse(input);
+    const data = await characterBlizzardService.enrichImportCandidate(
+      user,
+      parsed.importSessionId,
+      parsed.blizzardCharacterId,
+    );
+    return { ok: true, message: "Profile enrichment loaded.", data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
   }
 }
 

@@ -9,7 +9,6 @@ import { ClassBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { BattleNetPanel } from "@/components/characters/battle-net-panel";
-import { BattleNetImportPanel } from "@/components/characters/battle-net-import-panel";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -31,7 +30,6 @@ export function CharactersView({ data }: { data: Page }) {
         actions={<CharacterFormDialog mode="create" triggerLabel="Add Character" />}
       />
       <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
-      <BattleNetImportPanel candidates={data.battleNet.candidates} />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <FilterButton label="Active" value="active" current={filter} onSelect={setFilter} />
         <FilterButton label="Inactive" value="inactive" current={filter} onSelect={setFilter} />

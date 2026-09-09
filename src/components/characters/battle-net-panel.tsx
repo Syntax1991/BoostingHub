@@ -1,8 +1,9 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { disconnectBattleNetAction } from "@/controllers/blizzard.actions";
+import { BattleNetImportDialog } from "@/components/characters/battle-net-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { REGION_LABELS } from "@/lib/labels";
@@ -14,22 +15,30 @@ type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
 type BattleNetPanelData = Page["battleNet"];
 type BattleNetFlash = Page["battleNetFlash"];
 type Connection = BattleNetPanelData["connections"][number];
+type CandidatesPayload = NonNullable<BattleNetPanelData["candidates"]>;
 
 const REGIONS: WowRegion[] = ["EU", "US"];
 
 function flashMessage(flash: BattleNetFlash): { tone: "success" | "danger"; text: string } | null {
   if (flash.status === "connected") {
-    const region = flash.region && flash.region in REGION_LABELS
-      ? REGION_LABELS[flash.region as WowRegion]
-      : flash.region;
+    const region =
+      flash.region && flash.region in REGION_LABELS
+        ? REGION_LABELS[flash.region as WowRegion]
+        : flash.region;
     return {
       tone: "success",
       text: region
-        ? `Battle.net connected (${region}). Select characters to import or link below.`
-        : "Battle.net connected. Select characters to import or link below.",
+        ? `Battle.net connected (${region}). Use Import to choose characters.`
+        : "Battle.net connected. Use Import to choose characters.",
     };
   }
   if (flash.status === "error") {
+    if (flash.code === "BATTLENET_IMPORT_SESSION_EXPIRED") {
+      return {
+        tone: "danger",
+        text: "Battle.net character selection expired. Reconnect to refresh your owned characters.",
+      };
+    }
     return {
       tone: "danger",
       text: flash.code
@@ -44,6 +53,13 @@ function connectionFor(connections: Connection[], region: WowRegion): Connection
   return connections.find((row) => row.region === region);
 }
 
+function candidatesForRegion(
+  battleNet: BattleNetPanelData,
+  region: WowRegion,
+): CandidatesPayload | null {
+  return battleNet.candidatesByRegion?.[region] ?? null;
+}
+
 export function BattleNetPanel({
   battleNet,
   battleNetFlash,
@@ -51,12 +67,29 @@ export function BattleNetPanel({
   battleNet: BattleNetPanelData;
   battleNetFlash: BattleNetFlash;
 }) {
+  const router = useRouter();
   const flash = flashMessage(battleNetFlash);
+  const [openRegion, setOpenRegion] = useState<WowRegion | null>(null);
+  const lastImportButtonRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (battleNetFlash.status !== "connected") return;
+    const region = battleNetFlash.region;
+    if (region !== "EU" && region !== "US") return;
+    if (!candidatesForRegion(battleNet, region)) return;
+    setOpenRegion(region);
+    router.replace("/characters", { scroll: false });
+  }, [battleNet, battleNetFlash, router]);
+
+  const activeCandidates = openRegion ? candidatesForRegion(battleNet, openRegion) : null;
+  const activeConnection = openRegion
+    ? connectionFor(battleNet.connections, openRegion)
+    : undefined;
 
   return (
     <Card className="mb-4">
       <CardHeader
-        title="Battle.net"
+        title="Battle.net Accounts"
         description="Optional. Connect a region to import or link owned characters from Blizzard."
       />
       <div className="space-y-3 px-4 py-4">
@@ -84,10 +117,29 @@ export function BattleNetPanel({
               region={region}
               configured={battleNet.configured}
               connection={connectionFor(battleNet.connections, region)}
+              candidates={candidatesForRegion(battleNet, region)}
+              importButtonRef={(node) => {
+                if (openRegion === region || (!openRegion && node)) {
+                  lastImportButtonRef.current = node;
+                }
+              }}
+              onOpenImport={(button) => {
+                lastImportButtonRef.current = button;
+                setOpenRegion(region);
+              }}
             />
           ))}
         </div>
       </div>
+      <BattleNetImportDialog
+        open={Boolean(openRegion && activeCandidates)}
+        onOpenChange={(next) => {
+          if (!next) setOpenRegion(null);
+        }}
+        candidates={activeCandidates}
+        battleTag={activeConnection?.battleTag}
+        returnFocusRef={lastImportButtonRef}
+      />
     </Card>
   );
 }
@@ -96,10 +148,16 @@ function RegionRow({
   region,
   configured,
   connection,
+  candidates,
+  importButtonRef,
+  onOpenImport,
 }: {
   region: WowRegion;
   configured: boolean;
   connection: Connection | undefined;
+  candidates: CandidatesPayload | null;
+  importButtonRef: (node: HTMLButtonElement | null) => void;
+  onOpenImport: (button: HTMLButtonElement | null) => void;
 }) {
   const router = useRouter();
   const errorId = useId();
@@ -107,6 +165,7 @@ function RegionRow({
   const [error, setError] = useState<string | null>(null);
   const connected = Boolean(connection);
   const connectHref = `/api/integrations/battlenet/connect?region=${region}`;
+  const hasLiveSession = Boolean(candidates?.sessionId);
 
   function disconnect() {
     setError(null);
@@ -146,13 +205,24 @@ function RegionRow({
               </a>
               {connected ? (
                 <>
-                  <a
-                    href={connectHref}
-                    className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
-                    title="Start a fresh import session"
-                  >
-                    Import
-                  </a>
+                  {hasLiveSession ? (
+                    <button
+                      ref={importButtonRef}
+                      type="button"
+                      onClick={(event) => onOpenImport(event.currentTarget)}
+                      className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+                    >
+                      Import
+                    </button>
+                  ) : (
+                    <a
+                      href={connectHref}
+                      className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+                      title="Reconnect to refresh owned characters"
+                    >
+                      Import
+                    </a>
+                  )}
                   <Button
                     type="button"
                     variant="secondary"

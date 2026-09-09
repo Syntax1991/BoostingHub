@@ -156,27 +156,54 @@ export const battleNetService = {
 
   async getCharacterPagePanel(user: AuthenticatedUser, importSessionId?: string | null) {
     const connections = await this.listConnections(user);
-    let importSession: Awaited<ReturnType<typeof this.getImportSession>> | null = null;
+
+    let preferredSession: Awaited<ReturnType<typeof this.getImportSession>> | null = null;
     if (importSessionId) {
-      try {
-        importSession = await this.getImportSession(user, importSessionId);
-      } catch (error) {
-        if (
-          error instanceof DomainError &&
-          (error.code === "BATTLENET_IMPORT_SESSION_NOT_FOUND" ||
-            error.code === "BATTLENET_IMPORT_SESSION_EXPIRED")
-        ) {
-          importSession = null;
-        } else {
-          throw error;
-        }
-      }
+      preferredSession = await this.tryGetImportSession(user, importSessionId);
+    }
+
+    const liveSessions: NonNullable<typeof preferredSession>[] = [];
+    const seen = new Set<string>();
+
+    if (preferredSession) {
+      liveSessions.push(preferredSession);
+      seen.add(preferredSession.id);
+    }
+
+    for (const region of WOW_REGIONS) {
+      if (preferredSession?.region === region) continue;
+      const latest = await battleNetImportSessionRepository.findLatestLiveByUserAndRegion(
+        user.id,
+        region,
+      );
+      if (!latest || seen.has(latest.id)) continue;
+      const session = await this.tryGetImportSession(user, latest.id);
+      if (!session) continue;
+      liveSessions.push(session);
+      seen.add(session.id);
     }
 
     return {
       configured: isBlizzardConfigured(),
       connections,
-      importSession,
+      /** @deprecated Prefer liveSessions; kept for callers that expect a single session. */
+      importSession: preferredSession ?? liveSessions[0] ?? null,
+      liveSessions,
     };
+  },
+
+  async tryGetImportSession(user: AuthenticatedUser, importSessionId: string) {
+    try {
+      return await this.getImportSession(user, importSessionId);
+    } catch (error) {
+      if (
+        error instanceof DomainError &&
+        (error.code === "BATTLENET_IMPORT_SESSION_NOT_FOUND" ||
+          error.code === "BATTLENET_IMPORT_SESSION_EXPIRED")
+      ) {
+        return null;
+      }
+      throw error;
+    }
   },
 };

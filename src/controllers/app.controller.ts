@@ -33,24 +33,37 @@ export const characterController = {
     const importSessionId = firstParam(searchParams.importSession);
     const battleNet = await battleNetService.getCharacterPagePanel(user, importSessionId);
 
-    let candidates = null;
-    if (battleNet.importSession) {
+    const candidatesByRegion: Partial<
+      Record<
+        "EU" | "US",
+        Awaited<ReturnType<typeof characterBlizzardService.resolveImportCandidates>>
+      >
+    > = {};
+
+    for (const session of battleNet.liveSessions) {
       try {
-        candidates = await characterBlizzardService.resolveImportCandidates(
-          user,
-          battleNet.importSession.id,
-        );
+        candidatesByRegion[session.region] =
+          await characterBlizzardService.resolveImportCandidates(user, session.id);
       } catch (error) {
         if (!isDomainError(error)) throw error;
-        candidates = null;
       }
     }
+
+    const preferredRegion = battleNet.importSession?.region;
+    const candidates =
+      (preferredRegion ? candidatesByRegion[preferredRegion] : null) ??
+      Object.values(candidatesByRegion)[0] ??
+      null;
 
     return {
       ...page,
       battleNet: {
-        ...battleNet,
+        configured: battleNet.configured,
+        connections: battleNet.connections,
+        importSession: battleNet.importSession,
+        liveSessions: battleNet.liveSessions,
         candidates,
+        candidatesByRegion,
       },
       battleNetFlash: {
         status: firstParam(searchParams.battlenet),
