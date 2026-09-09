@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { canAccessManagement, canManageRun, canReviewBoosterAccess, hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
 import { isDevAuthEnabled, isProductionRuntime } from "@/auth/dev-auth";
-import { formatDate, formatRelative, formatTime } from "@/lib/datetime";
-import { canTransitionRun, isSignupWindowOpen } from "@/services/run-state";
+import { formatDate, formatRelative, formatTime, fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
+import { canTransitionRun, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { canTransitionSignup, canSelfWithdrawSignup } from "@/services/signup-state";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -69,6 +69,41 @@ describe("run and signup state machines", () => {
     expect(isSignupWindowOpen("OPEN", false)).toBe(false);
     expect(isSignupWindowOpen("PUBLISHED", true)).toBe(false);
   });
+
+  it("derives lifecycle capabilities from status and signup history", () => {
+    const draft = getRunLifecycleCapabilities({
+      status: "DRAFT",
+      signupsOpen: false,
+      hasSignupHistory: false,
+      actorIsAdmin: false,
+    });
+    expect(draft.canOpen).toBe(true);
+    expect(draft.canEditIdentity).toBe(true);
+    expect(draft.canReassignRaidLead).toBe(false);
+    expect(draft.canReopenSignups).toBe(false);
+
+    const afterSignup = getRunLifecycleCapabilities({
+      status: "OPEN",
+      signupsOpen: true,
+      hasSignupHistory: true,
+      actorIsAdmin: true,
+    });
+    expect(afterSignup.canEditIdentity).toBe(false);
+    expect(afterSignup.canEditPlanning).toBe(true);
+    expect(afterSignup.canReassignRaidLead).toBe(true);
+    expect(afterSignup.canCloseSignups).toBe(true);
+
+    const published = getRunLifecycleCapabilities({
+      status: "PUBLISHED",
+      signupsOpen: false,
+      hasSignupHistory: true,
+      actorIsAdmin: true,
+    });
+    expect(published.canEdit).toBe(false);
+    expect(published.canCancel).toBe(true);
+    expect(published.canReassignRaidLead).toBe(false);
+    expect(published.canReopenSignups).toBe(false);
+  });
 });
 
 describe("booster access", () => {
@@ -99,6 +134,12 @@ describe("datetime formatting", () => {
     const instant = "2026-09-10T19:00:00.000Z";
     expect(formatDate(instant)).toBe("Thu 10/09/2026");
     expect(formatTime(instant)).toBe("21:00");
+  });
+
+  it("round-trips Europe/Berlin datetime-local values through UTC", () => {
+    const instant = "2026-09-10T19:00:00.000Z";
+    expect(toDatetimeLocalValue(instant)).toBe("2026-09-10T21:00");
+    expect(fromDatetimeLocalValue("2026-09-10T21:00")).toBe(instant);
   });
 
   it("formats relative times from an explicit now value", () => {
