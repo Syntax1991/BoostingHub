@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RoleBadge, SignupStatusBadge } from "@/components/ui/badges";
@@ -55,9 +56,20 @@ export function DashboardView({ data }: { data: DashboardData }) {
           )}
         </Card>
         <Card>
-          <CardHeader title="Characters" description="Active roster and lockout attention this reset." />
+          <CardHeader
+            title="Characters"
+            description="Active roster and lockout attention this reset."
+            action={
+              <Link href="/characters" className="text-xs text-accent hover:underline">
+                Manage
+              </Link>
+            }
+          />
           {data.characters.totalCount === 0 ? (
-            <EmptyState title="No characters added yet." description="A new Discord account starts with an empty roster." />
+            <EmptyState
+              title="No characters added yet."
+              description="Add your first World of Warcraft character on the Characters page to start using run signups."
+            />
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 px-4 py-4 text-sm">
