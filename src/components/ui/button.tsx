@@ -15,7 +15,7 @@ export function Button({
   className?: string;
   disabled?: boolean;
   type?: "button" | "submit";
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: "primary" | "secondary" | "ghost" | "danger";
   onClick?: () => void;
 }) {
   return (
@@ -28,6 +28,7 @@ export function Button({
         variant === "primary" && "bg-accent text-black hover:bg-[#d8b436]",
         variant === "secondary" && "border border-border bg-surface-raised hover:bg-[#222a3b]",
         variant === "ghost" && "text-muted hover:bg-surface-raised hover:text-foreground",
+        variant === "danger" && "bg-danger text-white hover:opacity-90",
         className,
       )}
     >

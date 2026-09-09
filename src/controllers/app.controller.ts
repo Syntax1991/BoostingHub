@@ -1,12 +1,12 @@
 import { requireUserOrRedirect } from "@/auth/session";
 import { parseRunFilters } from "@/validators/run-filters";
+import { parseManageRunFilters } from "@/validators/manage-run-filters";
 import { characterService } from "@/services/character.service";
 import { runService } from "@/services/run.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
-import { rosterService } from "@/services/roster.service";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
 
@@ -53,9 +53,19 @@ export const profileController = {
 };
 
 export const managementController = {
-  async getManageRunsPage() {
+  async getManageRunsPage(searchParams: {
+    status?: string | string[];
+    raidLeadId?: string | string[];
+    timeframe?: string | string[];
+  } = {}) {
     const user = await requireManagerOrRedirect();
-    return rosterService.listManagedRuns(user);
+    const filters = parseManageRunFilters(searchParams);
+    return runService.getManagedRunsPage(user, filters);
+  },
+
+  async getCreateRunPage() {
+    const user = await requireManagerOrRedirect();
+    return runService.getCreateForm(user);
   },
 
   async getBoosterAccessPage(searchParams: {

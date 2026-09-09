@@ -4,6 +4,7 @@ import { Card, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
 import { RunDetailTabs } from "@/components/runs/run-detail-tabs";
+import { RunManagerActions } from "@/components/runs/run-manager-actions";
 import type { RunDetailTab } from "@/lib/run-routes";
 import type { RunDetailView as RunDetailData } from "@/services/run-detail.service";
 
@@ -21,7 +22,7 @@ export function RunDetailView({
         title={run.title}
         description={`${run.raidName} · Lead ${run.raidLeadName}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {data.permissions.canManageRun ? (
               <Link href="/manage/runs" className="text-sm text-accent hover:underline">
                 Manage runs
@@ -39,6 +40,11 @@ export function RunDetailView({
           </div>
         }
       />
+      {data.permissions.canManageRun ? (
+        <div className="mb-4">
+          <RunManagerActions run={data.run} capabilities={data.capabilities} editor={data.editor} />
+        </div>
+      ) : null}
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-2 px-4 py-3">
           <DifficultyBadge difficulty={run.difficulty} />

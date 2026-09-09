@@ -37,7 +37,10 @@ export function RunsFilters({
       <FilterSelect
         label="Run status"
         value={status ?? ""}
-        options={RUN_STATUSES.map((value) => ({ value, label: RUN_STATUS_LABELS[value] }))}
+        options={RUN_STATUSES.filter((value) => value !== "DRAFT" && value !== "CANCELLED").map((value) => ({
+          value,
+          label: RUN_STATUS_LABELS[value],
+        }))}
         onChange={(value) => updateFilter("status", value)}
       />
     </div>
