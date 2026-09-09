@@ -8,9 +8,11 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
-import type { characterService } from "@/services/character.service";
+import { BattleNetPanel } from "@/components/characters/battle-net-panel";
+import { BattleNetImportPanel } from "@/components/characters/battle-net-import-panel";
+import type { characterController } from "@/controllers/app.controller";
 
-type Page = Awaited<ReturnType<typeof characterService.getCharacterPage>>;
+type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
 type Filter = "active" | "inactive" | "all";
 
 export function CharactersView({ data }: { data: Page }) {
@@ -25,21 +27,11 @@ export function CharactersView({ data }: { data: Page }) {
     <div>
       <PageHeader
         title="Characters"
-        description="Manually maintained World of Warcraft characters for this account. Battle.net sync is not implemented yet."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <CharacterFormDialog mode="create" triggerLabel="Add Character" />
-            <button
-              type="button"
-              disabled
-              title="Blizzard sync will be available in a later integration."
-              className="h-8 rounded-md border border-border px-2 text-xs text-muted"
-            >
-              Refresh
-            </button>
-          </div>
-        }
+        description="World of Warcraft characters for this account. Add them manually, or optionally connect Battle.net to import and refresh."
+        actions={<CharacterFormDialog mode="create" triggerLabel="Add Character" />}
       />
+      <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
+      <BattleNetImportPanel candidates={data.battleNet.candidates} />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <FilterButton label="Active" value="active" current={filter} onSelect={setFilter} />
         <FilterButton label="Inactive" value="inactive" current={filter} onSelect={setFilter} />
