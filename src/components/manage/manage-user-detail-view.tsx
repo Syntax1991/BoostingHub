@@ -17,6 +17,7 @@ import {
   RoleBadge,
 } from "@/components/ui/badges";
 import { ChangeAccountRoleDialog } from "@/components/manage/change-account-role-dialog";
+import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getUserDetailPage>>;
@@ -41,7 +42,6 @@ export function ManageUserDetailView({ data }: { data: Page }) {
   const { user, characters, access, audit } = data;
   const approved = access.filter((row) => row.status === "APPROVED").length;
   const revoked = access.filter((row) => row.status === "REVOKED").length;
-  const pending = access.filter((row) => row.status === "PENDING").length;
 
   return (
     <div className="min-w-0 overflow-x-hidden">
@@ -151,21 +151,31 @@ export function ManageUserDetailView({ data }: { data: Page }) {
 
         <Card>
           <CardHeader
-            title="Booster access"
+            title="Booster qualifications"
             description={
-              approved === 0 && revoked === 0 && pending === 0
-                ? "No access rows."
-                : `${approved} approved${pending ? ` · ${pending} pending` : ""}${
-                    revoked ? ` · ${revoked} revoked` : ""
-                  }`
+              approved === 0 && revoked === 0
+                ? "No difficulty qualifications."
+                : `${approved} approved${revoked ? ` · ${revoked} revoked` : ""}`
             }
             action={
-              <Link
-                href={`/manage/booster-access?view=qualifications&userId=${encodeURIComponent(user.id)}`}
-                className="text-sm text-accent hover:underline"
-              >
-                Open queue
-              </Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <GrantBoosterAccessDialog
+                  users={[
+                    {
+                      id: user.id,
+                      name: user.name,
+                      discordUsername: user.discordUsername,
+                    },
+                  ]}
+                  defaultUserId={user.id}
+                />
+                <Link
+                  href={`/manage/booster-access?view=qualifications&userId=${encodeURIComponent(user.id)}`}
+                  className="text-sm text-accent hover:underline"
+                >
+                  Open queue
+                </Link>
+              </div>
             }
           />
           {access.length === 0 ? (
@@ -178,14 +188,12 @@ export function ManageUserDetailView({ data }: { data: Page }) {
               {access.map((row) => (
                 <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
-                    <ClassBadge wowClass={asWowClass(row.wowClass)} />
-                    <RoleBadge role={asCharacterRole(row.role)} />
                     <DifficultyBadge difficulty={asDifficulty(row.difficulty)} />
                   </div>
                   <div className="text-right">
                     <AccessBadge status={asAccessStatus(row.status)} />
-                    {row.reviewedAt ? (
-                      <p className="mt-1 text-xs text-muted">{formatDateTime(row.reviewedAt)}</p>
+                    {row.grantedAt ? (
+                      <p className="mt-1 text-xs text-muted">{formatDateTime(row.grantedAt)}</p>
                     ) : null}
                   </div>
                   {row.notes ? <p className="w-full text-xs text-muted">{row.notes}</p> : null}

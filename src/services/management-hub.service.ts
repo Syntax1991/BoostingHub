@@ -5,6 +5,7 @@ import {
   getManagementNavItems,
 } from "@/auth/authorization";
 import { boosterAccessRepository } from "@/repositories/booster-access.repository";
+import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 
@@ -52,7 +53,10 @@ export const managementHubService = {
     });
 
     if (canReviewBoosterAccess(user.accountRole)) {
-      const accessCounts = await boosterAccessRepository.countByStatus();
+      const [accessCounts, approvedQualificationCount] = await Promise.all([
+        boosterAccessRepository.countByStatus(),
+        boosterQualificationRepository.countApproved(),
+      ]);
       cards.push({
         id: "booster-access",
         title: "Booster Access",
@@ -61,7 +65,7 @@ export const managementHubService = {
         cta: "Manage Booster Access",
         metrics: [
           { label: "Legacy pending", value: accessCounts.PENDING },
-          { label: "Approved", value: accessCounts.APPROVED },
+          { label: "Approved qualifications", value: approvedQualificationCount },
         ],
       });
     }

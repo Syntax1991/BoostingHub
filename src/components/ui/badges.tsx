@@ -16,6 +16,7 @@ import type {
   AccountRole,
   AttendanceStatus,
   BoosterAccessStatus,
+  BoosterQualificationStatus,
   CharacterRole,
   ParticipationType,
   RaidDifficulty,
@@ -157,7 +158,7 @@ export function SettlementStatusBadge({ status }: { status: SettlementStatus }) 
   );
 }
 
-export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
+export function AccessBadge({ status }: { status: BoosterAccessStatus | BoosterQualificationStatus }) {
   return (
     <Badge
       className={cn(
@@ -167,7 +168,7 @@ export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
         status === "REVOKED" && "bg-muted/20 text-muted",
       )}
     >
-      {ACCESS_STATUS_LABELS[status]}
+      {ACCESS_STATUS_LABELS[status as BoosterAccessStatus]}
     </Badge>
   );
 }

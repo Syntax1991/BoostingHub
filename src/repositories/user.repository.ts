@@ -39,12 +39,10 @@ export type AdminUserCharacterSummary = {
 
 export type AdminUserAccessSummary = {
   id: string;
-  wowClass: string;
-  role: string;
   difficulty: string;
   status: string;
   notes: string | null;
-  reviewedAt: string | null;
+  grantedAt: string | null;
 };
 
 export type AdminUserAuditEvent = {
@@ -211,6 +209,7 @@ export const userRepository = {
     const users = await orm.User.orderBy((user) => user.name.asc()).all();
     const characters = await orm.Character.select("id", "userId").all();
     const accessRows = await orm.BoosterAccess.select("userId", "status").all();
+    const qualificationRows = await orm.BoosterQualification.select("userId", "status").all();
 
     const characterCountByUser = new Map<string, number>();
     for (const row of characters) {
@@ -222,14 +221,21 @@ export const userRepository = {
       string,
       { approved: number; pending: number; revoked: number }
     >();
-    for (const row of accessRows) {
+    for (const row of qualificationRows) {
       const record = row as Record<string, unknown>;
       const userId = asString(record.userId);
       const status = asString(record.status);
       const current = accessByUser.get(userId) ?? { approved: 0, pending: 0, revoked: 0 };
       if (status === "APPROVED") current.approved += 1;
-      if (status === "PENDING") current.pending += 1;
       if (status === "REVOKED") current.revoked += 1;
+      accessByUser.set(userId, current);
+    }
+    for (const row of accessRows) {
+      const record = row as Record<string, unknown>;
+      const userId = asString(record.userId);
+      const status = asString(record.status);
+      const current = accessByUser.get(userId) ?? { approved: 0, pending: 0, revoked: 0 };
+      if (status === "PENDING") current.pending += 1;
       accessByUser.set(userId, current);
     }
 
@@ -298,7 +304,7 @@ export const userRepository = {
     const auth = mapAuthUser(record);
 
     const characters = await orm.Character.where({ userId }).orderBy((row) => row.name.asc()).all();
-    const access = await orm.BoosterAccess.where({ userId }).orderBy((row) => row.updatedAt.desc()).all();
+    const access = await orm.BoosterQualification.where({ userId }).orderBy((row) => row.updatedAt.desc()).all();
     const audit = await orm.ActivityEvent
       .where({ userId })
       .include("user")
@@ -333,12 +339,10 @@ export const userRepository = {
       const item = row as Record<string, unknown>;
       return {
         id: asString(item.id),
-        wowClass: asString(item.wowClass),
-        role: asString(item.role),
         difficulty: asString(item.difficulty),
         status: asString(item.status),
         notes: asStringOrNull(item.notes),
-        reviewedAt: asStringOrNull(item.reviewedAt),
+        grantedAt: asStringOrNull(item.grantedAt),
       };
     });
 

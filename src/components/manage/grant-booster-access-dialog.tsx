@@ -4,19 +4,8 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { grantBoosterAccessAction } from "@/controllers/booster-access.actions";
 import { Button } from "@/components/ui/button";
-import {
-  CHARACTER_ROLE_LABELS,
-  CLASS_LABELS,
-  DIFFICULTY_LABELS,
-} from "@/lib/labels";
-import {
-  CHARACTER_ROLES,
-  RAID_DIFFICULTIES,
-  WOW_CLASSES,
-  type CharacterRole,
-  type RaidDifficulty,
-  type WowClass,
-} from "@/models/enums";
+import { DIFFICULTY_LABELS } from "@/lib/labels";
+import { RAID_DIFFICULTIES, type RaidDifficulty } from "@/models/enums";
 import { BOOSTER_ACCESS_REVIEW_REASON_MAX } from "@/validators/booster-access";
 
 type GrantUser = {
@@ -45,8 +34,6 @@ export function GrantBoosterAccessDialog({
       ? defaultUserId
       : (users[0]?.id ?? "");
   const [userId, setUserId] = useState(initialUserId);
-  const [wowClass, setWowClass] = useState<WowClass>("WARRIOR");
-  const [role, setRole] = useState<CharacterRole>("DPS");
   const [difficulty, setDifficulty] = useState<RaidDifficulty>("HEROIC");
   const [notes, setNotes] = useState("");
 
@@ -60,8 +47,6 @@ export function GrantBoosterAccessDialog({
       setError(null);
       setNotes("");
       setUserId(initialUserId);
-      setWowClass("WARRIOR");
-      setRole("DPS");
       setDifficulty("HEROIC");
     };
     dialog.addEventListener("close", onClose);
@@ -78,8 +63,6 @@ export function GrantBoosterAccessDialog({
     startTransition(async () => {
       const result = await grantBoosterAccessAction({
         userId,
-        wowClass,
-        role,
         difficulty,
         notes: notes.trim() || undefined,
       });
@@ -117,7 +100,8 @@ export function GrantBoosterAccessDialog({
             Grant booster access
           </h2>
           <p className="text-xs text-muted">
-            Approves eligibility for the selected class, role, and difficulty on the account.
+            Approves eligibility for the selected difficulty on the account. All valid roles for each
+            character class become available at that difficulty.
           </p>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">User</span>
@@ -126,7 +110,8 @@ export function GrantBoosterAccessDialog({
               onChange={(event) => setUserId(event.target.value)}
               aria-label="User"
               required
-              className="h-9 w-full rounded-md border border-border bg-surface px-2"
+              disabled={users.length === 1}
+              className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:opacity-80"
             >
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
@@ -137,56 +122,25 @@ export function GrantBoosterAccessDialog({
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-muted">Class</span>
+            <span className="mb-1 block text-muted">Difficulty</span>
             <select
-              value={wowClass}
-              onChange={(event) => setWowClass(event.target.value as WowClass)}
-              aria-label="Class"
+              value={difficulty}
+              onChange={(event) => setDifficulty(event.target.value as RaidDifficulty)}
+              aria-label="Difficulty"
               className="h-9 w-full rounded-md border border-border bg-surface px-2"
             >
-              {WOW_CLASSES.map((option) => (
+              {RAID_DIFFICULTIES.map((option) => (
                 <option key={option} value={option}>
-                  {CLASS_LABELS[option]}
+                  {DIFFICULTY_LABELS[option]}
                 </option>
               ))}
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted">Role</span>
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value as CharacterRole)}
-                aria-label="Role"
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              >
-                {CHARACTER_ROLES.map((option) => (
-                  <option key={option} value={option}>
-                    {CHARACTER_ROLE_LABELS[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted">Difficulty</span>
-              <select
-                value={difficulty}
-                onChange={(event) => setDifficulty(event.target.value as RaidDifficulty)}
-                aria-label="Difficulty"
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              >
-                {RAID_DIFFICULTIES.map((option) => (
-                  <option key={option} value={option}>
-                    {DIFFICULTY_LABELS[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Notes (optional)</span>
             <textarea
               id={notesId}
+              aria-label="Grant notes"
               value={notes}
               maxLength={BOOSTER_ACCESS_REVIEW_REASON_MAX}
               onChange={(event) => setNotes(event.target.value)}
@@ -203,8 +157,8 @@ export function GrantBoosterAccessDialog({
             <Button type="button" variant="ghost" onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || !userId}>
-              {pending ? "Saving…" : "Grant access"}
+            <Button type="submit" disabled={pending}>
+              {pending ? "Saving…" : "Grant"}
             </Button>
           </div>
         </form>

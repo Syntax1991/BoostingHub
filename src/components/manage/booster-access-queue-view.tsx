@@ -16,12 +16,7 @@ import type { QualificationStatusFilter } from "@/validators/booster-access-filt
 
 type Page = Awaited<ReturnType<typeof managementController.getBoosterAccessPage>>;
 
-const QUALIFICATION_TABS: QualificationStatusFilter[] = [
-  "ALL",
-  "APPROVED",
-  "REJECTED",
-  "REVOKED",
-];
+const QUALIFICATION_TABS: QualificationStatusFilter[] = ["ALL", "APPROVED", "REVOKED"];
 
 function buildHref(
   filters: Page["filters"],
@@ -35,20 +30,27 @@ function buildHref(
     if (status && status !== "PENDING") href.set("status", status);
   }
   if (filters.difficulty) href.set("difficulty", filters.difficulty);
-  if (filters.role) href.set("role", filters.role);
+  if (view === "legacy" && filters.role) href.set("role", filters.role);
   if (filters.query) href.set("query", filters.query);
   if (filters.userId) href.set("userId", filters.userId);
   return `/manage/booster-access?${href.toString()}`;
 }
 
-function historicalContext(row: Page["requests"][number]): string | null {
+function historicalContext(row: Page["legacyRequests"][number]): string | null {
   if (!row.characterName) return null;
   const realm = row.realm ? `-${row.realm}` : "";
   return `Requested via ${row.characterName}${realm}`;
 }
 
 export function BoosterAccessQueueView({ data }: { data: Page }) {
-  const { filters, requests, grantUsers, legacyPendingCount, view } = data;
+  const {
+    filters,
+    qualifications,
+    legacyRequests,
+    grantUsers,
+    legacyPendingCount,
+    view,
+  } = data;
   const isLegacy = view === "legacy";
 
   return (
@@ -87,11 +89,22 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
         </Link>
       </div>
 
+      {isLegacy ? (
+        <p className="mb-4 text-sm text-muted">
+          These applications used the previous character/class workflow. Approving one grants
+          account-wide access for that difficulty.
+        </p>
+      ) : null}
+
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3 px-4 py-3" method="get">
           <input type="hidden" name="view" value={view} />
           {!isLegacy ? (
-            <input type="hidden" name="status" value={filters.status === "PENDING" ? "ALL" : filters.status} />
+            <input
+              type="hidden"
+              name="status"
+              value={filters.status === "PENDING" ? "ALL" : filters.status}
+            />
           ) : null}
           {filters.userId ? <input type="hidden" name="userId" value={filters.userId} /> : null}
           <label className="text-xs">
@@ -110,22 +123,24 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
               ))}
             </select>
           </label>
-          <label className="text-xs">
-            <span className="mb-1 block text-muted">Role</span>
-            <select
-              name="role"
-              defaultValue={filters.role ?? ""}
-              aria-label="Filter by role"
-              className="h-9 rounded-md border border-border bg-surface px-2"
-            >
-              <option value="">All</option>
-              {CHARACTER_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {CHARACTER_ROLE_LABELS[role]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isLegacy ? (
+            <label className="text-xs">
+              <span className="mb-1 block text-muted">Role</span>
+              <select
+                name="role"
+                defaultValue={filters.role ?? ""}
+                aria-label="Filter by role"
+                className="h-9 rounded-md border border-border bg-surface px-2"
+              >
+                <option value="">All</option>
+                {CHARACTER_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {CHARACTER_ROLE_LABELS[role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="min-w-[12rem] flex-1 text-xs">
             <span className="mb-1 block text-muted">User</span>
             <input
@@ -169,7 +184,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
 
       <Card>
         {isLegacy ? (
-          requests.length === 0 ? (
+          legacyRequests.length === 0 ? (
             <EmptyState
               title="No legacy requests awaiting review."
               description="Historical in-app PENDING applications appear here. New applications go through Discord."
@@ -190,7 +205,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {requests.map((row) => (
+                    {legacyRequests.map((row) => (
                       <tr key={row.id} className="border-t border-border align-top">
                         <td className="px-4 py-3 font-medium">{row.userName}</td>
                         <td className="px-4 py-3">
@@ -218,7 +233,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                 </table>
               </div>
               <ul className="divide-y divide-border md:hidden">
-                {requests.map((row) => (
+                {legacyRequests.map((row) => (
                   <li key={row.id} className="space-y-2 px-4 py-3 text-sm">
                     <div className="font-medium">{row.userName}</div>
                     <div className="flex flex-wrap gap-2">
@@ -237,7 +252,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
               </ul>
             </>
           )
-        ) : requests.length === 0 ? (
+        ) : qualifications.length === 0 ? (
           <EmptyState
             title="No matching qualifications."
             description="Grant access after Discord review, or adjust filters."
@@ -245,29 +260,21 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[800px] text-left text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
-                    <th className="px-4 py-2 font-medium">Class</th>
-                    <th className="px-4 py-2 font-medium">Role</th>
                     <th className="px-4 py-2 font-medium">Difficulty</th>
                     <th className="px-4 py-2 font-medium">Status</th>
-                    <th className="px-4 py-2 font-medium">Context</th>
+                    <th className="px-4 py-2 font-medium">Granted by</th>
                     <th className="px-4 py-2 font-medium">Times</th>
                     <th className="px-4 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((row) => (
+                  {qualifications.map((row) => (
                     <tr key={row.id} className="border-t border-border align-top">
                       <td className="px-4 py-3 font-medium">{row.userName}</td>
-                      <td className="px-4 py-3">
-                        <ClassBadge wowClass={row.wowClass} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <RoleBadge role={row.role} />
-                      </td>
                       <td className="px-4 py-3">
                         <DifficultyBadge difficulty={row.difficulty} />
                       </td>
@@ -275,19 +282,14 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                         <AccessBadge status={row.status} />
                         {row.notes ? <p className="mt-1 max-w-48 text-xs text-muted">{row.notes}</p> : null}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted">
-                        {historicalContext(row) ?? "—"}
-                      </td>
+                      <td className="px-4 py-3 text-xs text-muted">{row.grantedByName ?? "—"}</td>
                       <td className="px-4 py-3 text-xs text-muted">
                         <div>Created {formatDateTime(row.createdAt)}</div>
-                        <div>
-                          Reviewed {row.reviewedAt ? formatDateTime(row.reviewedAt) : "—"}
-                          {row.reviewedByName ? ` · ${row.reviewedByName}` : ""}
-                        </div>
+                        <div>Granted {row.grantedAt ? formatDateTime(row.grantedAt) : "—"}</div>
                       </td>
                       <td className="px-4 py-3">
                         {row.status === "APPROVED" ? (
-                          <BoosterAccessReviewDialog accessId={row.id} mode="revoke" />
+                          <BoosterAccessReviewDialog qualificationId={row.id} mode="revoke" />
                         ) : (
                           <span className="text-xs text-muted">—</span>
                         )}
@@ -298,24 +300,21 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
               </table>
             </div>
             <ul className="divide-y divide-border md:hidden">
-              {requests.map((row) => (
+              {qualifications.map((row) => (
                 <li key={row.id} className="space-y-2 px-4 py-3 text-sm">
                   <div className="font-medium">{row.userName}</div>
                   <div className="flex flex-wrap gap-2">
-                    <ClassBadge wowClass={row.wowClass} />
-                    <RoleBadge role={row.role} />
                     <DifficultyBadge difficulty={row.difficulty} />
                     <AccessBadge status={row.status} />
                   </div>
-                  <p className="text-xs text-muted">{historicalContext(row) ?? "No character context"}</p>
                   <p className="text-xs text-muted">
-                    Reviewed {row.reviewedAt ? formatDateTime(row.reviewedAt) : "—"}
-                    {row.reviewedByName ? ` · ${row.reviewedByName}` : ""}
+                    Granted {row.grantedAt ? formatDateTime(row.grantedAt) : "—"}
+                    {row.grantedByName ? ` · ${row.grantedByName}` : ""}
                   </p>
                   {row.notes ? <p className="text-xs text-muted">{row.notes}</p> : null}
                   {row.status === "APPROVED" ? (
                     <div className="pt-1">
-                      <BoosterAccessReviewDialog accessId={row.id} mode="revoke" />
+                      <BoosterAccessReviewDialog qualificationId={row.id} mode="revoke" />
                     </div>
                   ) : null}
                 </li>
