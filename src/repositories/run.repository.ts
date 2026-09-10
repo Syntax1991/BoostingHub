@@ -148,6 +148,16 @@ export const runRepository = {
     return runs.map((run) => mapRun(run as Record<string, unknown>));
   },
 
+  async countByStatuses(): Promise<Record<string, number>> {
+    const rows = await orm.Run.select("status").all();
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const status = asString((row as Record<string, unknown>).status);
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return counts;
+  },
+
   async countSignups(runId: string): Promise<number> {
     const rows = await orm.RunSignup.where({ runId }).select("id").all();
     return rows.length;

@@ -4,7 +4,6 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { runDetailPath, runDetailTabForManageAction } from "@/lib/run-routes";
 import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
-import type { AccountRole } from "@/models/enums";
 import type { ManagedRunsPage } from "@/services/run.service";
 
 export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
@@ -94,32 +93,6 @@ export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
             </table>
           </div>
         )}
-      </Card>
-    </div>
-  );
-}
-
-export function ManageHomeView({ accountRole }: { accountRole: AccountRole }) {
-  return (
-    <div>
-      <PageHeader
-        title="Management"
-        description="Operations tools for raid leads and administrators. Only this area is role-gated."
-      />
-      <Card>
-        <div className="px-4 py-4 text-sm">
-          <p className="text-muted">Available now:</p>
-          <div className="mt-2 flex flex-col gap-2">
-            <Link href="/manage/runs" className="inline-flex text-accent hover:underline">
-              Manage runs
-            </Link>
-            {accountRole === "ADMIN" ? (
-              <Link href="/manage/booster-access" className="inline-flex text-accent hover:underline">
-                Booster access
-              </Link>
-            ) : null}
-          </div>
-        </div>
       </Card>
     </div>
   );

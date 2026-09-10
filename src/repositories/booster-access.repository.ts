@@ -133,6 +133,21 @@ export const boosterAccessRepository = {
     });
   },
 
+  async countByStatus(): Promise<Record<BoosterAccessStatus, number>> {
+    const rows = await orm.BoosterAccess.select("status").all();
+    const counts: Record<BoosterAccessStatus, number> = {
+      PENDING: 0,
+      APPROVED: 0,
+      REJECTED: 0,
+      REVOKED: 0,
+    };
+    for (const row of rows) {
+      const status = mapAccessStatus((row as Record<string, unknown>).status);
+      counts[status] += 1;
+    }
+    return counts;
+  },
+
   async listAdmin(filters: BoosterAccessAdminFilters = {}): Promise<BoosterAccessAdminRecord[]> {
     let query = orm.BoosterAccess
       .include("user")
