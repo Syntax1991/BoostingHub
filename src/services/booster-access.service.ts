@@ -90,8 +90,9 @@ function assertCharacterActive(isActive: boolean) {
 }
 
 /**
- * BoosterAccess is platform eligibility, not an account role and not a run participation type.
- * Matching is class + role + difficulty. Heroic never implies Normal or Mythic.
+ * BoosterAccess is account-level platform eligibility scoped by
+ * user + class + role + difficulty. Characters consume matching approvals;
+ * they do not own BoosterAccess rows. Heroic never implies Normal or Mythic.
  */
 export const boosterAccessService = {
   isApprovedFor(
@@ -135,7 +136,10 @@ export const boosterAccessService = {
     for (const difficulty of RAID_DIFFICULTIES) {
       for (const role of roles) {
         const existing = character.boosterAccess.find(
-          (record) => record.role === role && record.difficulty === difficulty,
+          (record) =>
+            record.wowClass === character.wowClass &&
+            record.role === role &&
+            record.difficulty === difficulty,
         );
         const status = existing?.status ?? "NONE";
         cells.push({
@@ -248,14 +252,15 @@ export const boosterAccessService = {
     assertBoosterAccessTransition(access.status, "APPROVED");
     assertRoleForClass(access.wowClass, access.role);
 
-    if (!access.characterId) {
-      throw new DomainError("CHARACTER_NOT_FOUND", "This request is not attached to a character.", 404);
+    // characterId is request context only. Approval is account-level and must not
+    // require the requesting Character to still be active.
+    let activityTarget = accessLabel(access.wowClass, access.role, access.difficulty);
+    if (access.characterId) {
+      const character = await characterRepository.findById(access.characterId);
+      if (character) {
+        activityTarget = `${activityTarget} (requested via ${characterLabel(character)})`;
+      }
     }
-    const character = await characterRepository.findById(access.characterId);
-    if (!character) {
-      throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
-    }
-    assertCharacterActive(character.isActive);
 
     const now = new Date().toISOString();
     await boosterAccessRepository.updateStatus(access.id, {
@@ -269,7 +274,7 @@ export const boosterAccessService = {
     await activityRepository.create({
       userId: admin.id,
       type: "BOOSTER_ACCESS_APPROVED",
-      message: `Approved ${accessLabel(access.wowClass, access.role, access.difficulty)} for ${characterLabel(character)}.`,
+      message: `Approved ${activityTarget}.`,
     });
   },
 

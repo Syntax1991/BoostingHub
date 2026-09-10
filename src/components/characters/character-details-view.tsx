@@ -1,11 +1,17 @@
+"use client";
+
+import { useId, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatDateTime } from "@/lib/datetime";
-import { CHARACTER_ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { RequestBoosterAccessDialog } from "@/components/characters/request-booster-access-dialog";
+import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
 import type { BoosterAccessStatus, RaidDifficulty } from "@/models/enums";
 
@@ -19,6 +25,45 @@ function statusLabel(status: BoosterAccessStatus | "NONE") {
   return "Revoked";
 }
 
+function BlizzardRefreshButton({ characterId }: { characterId: string }) {
+  const router = useRouter();
+  const errorId = useId();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function run() {
+    setError(null);
+    startTransition(async () => {
+      const result = await refreshBlizzardCharacterAction({ characterId });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <span className="inline-flex flex-col items-start gap-1">
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={pending}
+        onClick={run}
+        className="h-8 px-2 text-xs"
+        aria-describedby={error ? errorId : undefined}
+      >
+        {pending ? "Refreshing…" : "Refresh"}
+      </Button>
+      {error ? (
+        <span id={errorId} role="alert" className="max-w-48 text-xs text-danger">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function CharacterDetailsView({ data }: { data: Details }) {
   const panel = data.accessPanel;
   const byDifficulty = panel.difficulties.map((difficulty) => ({
@@ -29,7 +74,11 @@ export function CharacterDetailsView({ data }: { data: Details }) {
     <div>
       <PageHeader
         title={data.name}
-        description={`${data.realm} · ${REGION_LABELS[data.region]} · manually maintained character data.`}
+        description={
+          data.blizzardLinked
+            ? `${data.realm} · ${REGION_LABELS[data.region]} · Battle.net linked.`
+            : `${data.realm} · ${REGION_LABELS[data.region]} · manually maintained character data.`
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/characters" className="inline-flex h-8 items-center text-sm text-accent hover:underline">
@@ -38,6 +87,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             <CharacterFormDialog
               mode="edit"
               triggerLabel="Edit"
+              blizzardLinked={data.blizzardLinked}
               initial={{
                 id: data.id,
                 name: data.name,
@@ -48,6 +98,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                 itemLevel: data.itemLevel,
               }}
             />
+            {data.blizzardLinked ? <BlizzardRefreshButton characterId={data.id} /> : null}
             <CharacterLifecycleButton characterId={data.id} isActive={data.isActive} />
           </div>
         }
@@ -74,7 +125,10 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             </div>
             <div>
               <dt className="text-muted">Item level</dt>
-              <dd className="mt-1">{data.itemLevel} (manual)</dd>
+              <dd className="mt-1">
+                {data.itemLevel}{" "}
+                {data.blizzardLinked ? "(Blizzard synced)" : "(manual)"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Status</dt>
@@ -86,10 +140,23 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                 {REGION_LABELS[data.region]} · {data.realm}
               </dd>
             </div>
+            {data.blizzardLinked ? (
+              <div>
+                <dt className="text-muted">Battle.net</dt>
+                <dd className="mt-1">Battle.net Linked</dd>
+              </div>
+            ) : null}
           </dl>
         </Card>
         <Card>
-          <CardHeader title="Metadata" description="Blizzard identifiers stay empty until a later sync." />
+          <CardHeader
+            title="Metadata"
+            description={
+              data.blizzardLinked
+                ? "Linked to Battle.net. Use Refresh to pull the latest Blizzard profile."
+                : "Connect Battle.net on the Characters page and link this character to enable Blizzard refresh."
+            }
+          />
           <dl className="space-y-2 px-4 py-4 text-sm">
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Created</dt>
@@ -103,12 +170,17 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               <dt className="text-muted">Last synced</dt>
               <dd>{data.lastSyncedAt ? formatDateTime(data.lastSyncedAt) : "Never synced"}</dd>
             </div>
+            {!data.blizzardLinked ? (
+              <p className="pt-1 text-xs text-muted">
+                Refresh requires Battle.net linking from the Characters page import session.
+              </p>
+            ) : null}
           </dl>
         </Card>
         <Card>
           <CardHeader
-            title="Booster access"
-            description="What this character can boost. Approval is independent of account role."
+            title="Account booster access"
+            description={`${CLASS_LABELS[data.wowClass]} qualifications on your account. Shared by every matching ${CLASS_LABELS[data.wowClass]} character — not owned by this character.`}
             action={
               <RequestBoosterAccessDialog
                 characterId={data.id}
@@ -146,9 +218,15 @@ export function CharacterDetailsView({ data }: { data: Details }) {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Raid lockouts" description="Stored lockouts only. Not live Blizzard data." />
+          <CardHeader
+            title="Raid lockouts"
+            description={`Current reset ${data.currentReset}${data.currentLockoutRaid ? ` · ${data.currentLockoutRaid.name}` : ""}. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Missing difficulties show as unknown — never invented 0/N. Mythic is boss-kill progress only.`}
+          />
           {data.lockouts.length === 0 ? (
-            <EmptyState title="No tracked raid lockouts." description="Lockouts are system state and cannot be edited here." />
+            <EmptyState
+              title="Unknown"
+              description="No verified current-reset lockout data. Missing or stale rows are not treated as clear."
+            />
           ) : (
             <ul className="divide-y divide-border">
               {data.lockouts.map((lockout) => (
@@ -158,8 +236,8 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                     <DifficultyBadge difficulty={lockout.difficulty} />
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    {lockout.resetIdentifier} ·{" "}
-                    {lockout.isComplete ? "complete" : `${lockout.bossesDefeated} bosses`}
+                    {lockout.resetIdentifier} · {lockout.bossesDefeated}/{lockout.bossTotal}
+                    {lockout.isComplete ? " complete" : ""}
                   </p>
                 </li>
               ))}

@@ -154,8 +154,47 @@ model User {
   finalizedSettlements RunSettlement[] @relation("SettlementFinalizer")
   paidSettlements      RunSettlement[] @relation("SettlementPayer")
   payoutEntries        RunPayoutEntry[] @relation("PayoutRecipient")
+  battleNetConnections BattleNetConnection[]
+  battleNetImportSessions BattleNetImportSession[]
 
   @@map("user")
+}
+
+/// Optional Battle.net link per BoostingHub user + region.
+/// Discord remains login. User OAuth tokens are never persisted here.
+model BattleNetConnection {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region             WowRegion
+  battleNetAccountId String
+  battleTag          String?
+  scope              String?
+  connectedAt        TimestamptzString
+  lastSuccessfulSyncAt TimestamptzString?
+  createdAt          TimestamptzString @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@unique([userId, region])
+  @@index([userId])
+  @@map("battle_net_connection")
+}
+
+/// Short-lived authoritative owned-character snapshot after OAuth.
+/// Stores no OAuth tokens. Client selects by id against this snapshot only.
+model BattleNetImportSession {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region      WowRegion
+  charactersJson String
+  expiresAt   TimestamptzString
+  consumedAt  TimestamptzString?
+  createdAt   TimestamptzString @default(now())
+
+  @@index([userId, region])
+  @@index([expiresAt])
+  @@map("battle_net_import_session")
 }
 
 model Session {
@@ -222,7 +261,10 @@ model Character {
   primaryRole          CharacterRole
   itemLevel            Int
   isActive             Boolean       @default(true)
+  /// Scoped Blizzard identity is region + blizzardRealmId + blizzardCharacterId.
+  /// Not a global GUID; may change on realm transfer.
   blizzardCharacterId  String?
+  blizzardRealmId      String?
   warcraftLogsId       String?
   lastSyncedAt         TimestamptzString?
   createdAt            TimestamptzString @default(now())
@@ -234,6 +276,9 @@ model Character {
   payoutEntries RunPayoutEntry[]
 
   @@unique([userId, region, normalizedRealm, normalizedName])
+  /// One scoped Blizzard character may link to at most one BoostingHub row.
+  /// Multiple NULLs remain allowed for manual Characters.
+  @@unique([region, blizzardRealmId, blizzardCharacterId])
   @@index([userId])
   @@map("character")
 }

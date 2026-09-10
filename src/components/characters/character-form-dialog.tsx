@@ -34,11 +34,13 @@ export function CharacterFormDialog({
   initial,
   triggerLabel,
   triggerClassName,
+  blizzardLinked = false,
 }: {
   mode: FormMode;
   initial?: CharacterFormValues;
   triggerLabel: string;
   triggerClassName?: string;
+  blizzardLinked?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -145,7 +147,9 @@ export function CharacterFormDialog({
               {mode === "create" ? "Add Character" : "Edit Character"}
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Character data is manually maintained until Battle.net sync exists.
+              {blizzardLinked
+                ? "This character is linked to Battle.net. Item level is synced from Blizzard."
+                : "Add characters manually, or connect Battle.net on the Characters page to import."}
             </p>
           </div>
           <form className="space-y-3 px-4 py-4" onSubmit={submit}>
@@ -243,18 +247,25 @@ export function CharacterFormDialog({
               </span>
             </p>
             <label className="block text-sm">
-              <span className="mb-1 block text-muted">Item level (manual)</span>
+              <span className="mb-1 block text-muted">
+                {blizzardLinked ? "Item level (Blizzard synced)" : "Item level (manual)"}
+              </span>
               <input
                 name="itemLevel"
                 type="number"
                 min={0}
                 max={9999}
                 value={form.itemLevel}
+                disabled={blizzardLinked}
+                title={blizzardLinked ? "Synced from Blizzard" : undefined}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, itemLevel: Number(event.target.value) }))
                 }
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
               />
+              {blizzardLinked ? (
+                <span className="mt-1 block text-xs text-muted">Synced from Blizzard</span>
+              ) : null}
             </label>
             <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
               <Button type="button" variant="secondary" onClick={close}>

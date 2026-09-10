@@ -124,6 +124,32 @@ async function createPaladin(owner: AuthenticatedUser) {
   return character;
 }
 
+async function createShamanHealer(owner: AuthenticatedUser, name: string) {
+  const character = await characterService.createCharacter(owner, {
+    name,
+    realm: "Area 52",
+    region: "US",
+    wowClass: "SHAMAN",
+    specialization: "Restoration",
+    itemLevel: 640,
+  });
+  createdCharacterIds.push(character.id);
+  return character;
+}
+
+async function createShamanDps(owner: AuthenticatedUser, name: string) {
+  const character = await characterService.createCharacter(owner, {
+    name,
+    realm: "Area 52",
+    region: "US",
+    wowClass: "SHAMAN",
+    specialization: "Enhancement",
+    itemLevel: 640,
+  });
+  createdCharacterIds.push(character.id);
+  return character;
+}
+
 beforeAll(async () => {
   await cleanupGeneratedRows();
   await createTestUser(ids.owner, "Access Owner");
@@ -308,6 +334,51 @@ describe("boosterAccessService approval and signup", () => {
       }),
       "BOOSTER_ACCESS_ALREADY_APPROVED",
     );
+  });
+
+  it("shares account-level approval across matching Characters and excludes mismatched class/role/user", async () => {
+    const first = await createShamanHealer(owner, "Shaa");
+    const second = await createShamanHealer(owner, "Shab");
+    const dps = await createShamanDps(owner, "Shac");
+    const paladin = await createPaladin(owner);
+    const other = asUser(ids.other, "Access Other");
+    const otherShaman = await createShamanHealer(other, "Othera");
+
+    const requested = await boosterAccessService.requestAccess(owner, {
+      characterId: first.id,
+      role: "HEALER",
+      difficulty: "HEROIC",
+    });
+    createdAccessIds.push(requested.id);
+    await boosterAccessService.approveAccess(admin, requested.id);
+
+    const accessRows = await orm.BoosterAccess.where({ userId: ids.owner }).all();
+    expect(accessRows).toHaveLength(1);
+
+    const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    expect(options.booster.eligible.some((item) => item.characterId === first.id && item.role === "HEALER")).toBe(true);
+    expect(options.booster.eligible.some((item) => item.characterId === second.id && item.role === "HEALER")).toBe(
+      true,
+    );
+    // Enhancement Shaman still uses account Shaman+Healer approval when signing as HEALER;
+    // Shaman+DPS remains a separate qualification and is not inherited.
+    expect(options.booster.eligible.some((item) => item.characterId === dps.id && item.role === "HEALER")).toBe(true);
+    expect(options.booster.eligible.some((item) => item.role === "DPS")).toBe(false);
+    expect(options.booster.eligible.some((item) => item.characterId === paladin.id)).toBe(false);
+
+    const otherOptions = await signupService.getSignupOptions(other, ids.heroicOpen);
+    expect(otherOptions.booster.eligible.some((item) => item.characterId === otherShaman.id)).toBe(false);
+
+    await characterService.deactivateCharacter(owner, first.id);
+    const still = await orm.BoosterAccess.where({ id: requested.id }).first();
+    expect(String(still?.status)).toBe("APPROVED");
+    const afterDeactivate = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    expect(afterDeactivate.booster.eligible.some((item) => item.characterId === second.id)).toBe(true);
+    expect(afterDeactivate.booster.eligible.some((item) => item.characterId === first.id)).toBe(false);
+
+    const mythicOpen = "r2222222-2222-4222-8222-222222222222";
+    const mythicOptions = await signupService.getSignupOptions(owner, mythicOpen);
+    expect(mythicOptions.booster.eligible.some((item) => item.characterId === second.id)).toBe(false);
   });
 });
 

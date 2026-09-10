@@ -16,6 +16,12 @@ First sign-in creates a `user` row. Prisma defaults are `accountRole=USER` and `
 
 A new Discord user has no characters, signups, or roster rows. Pages must render empty states instead of assuming seed fixtures.
 
+## Battle.net (secondary connection)
+
+Battle.net is **not** a login provider. Discord (or a development credential identity) remains the BoostingHub session.
+
+When `BLIZZARD_*` env vars are set, an authenticated user may connect a regional Battle.net account from `/characters` to import or link WoW characters. That OAuth flow uses dedicated routes under `/api/integrations/battlenet/*`, not Better Auth. User Battle.net tokens are never persisted. See [blizzard-integration.md](features/blizzard-integration.md).
+
 ## Development authentication
 
 Local tests and QA still need deterministic identities. Discord OAuth is the real user path.
