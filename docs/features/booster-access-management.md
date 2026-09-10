@@ -2,45 +2,61 @@
 
 ## Purpose
 
-Let an ADMIN grant, approve, reject, or revoke booster eligibility after Discord review. Eligibility is **account-level**: a newly created or imported character becomes booster-eligible only when an `APPROVED` `BoosterAccess` row already exists for the matching **user + class + role + difficulty**.
+Let an ADMIN grant, approve, reject, or revoke **Booster Qualification** after Discord review.
+
+Current eligibility answers only:
+
+> Is this BoostingHub User approved to boost on this difficulty?
+
+Canonical identity:
+
+```text
+User + Raid Difficulty
+```
+
+Examples: `Simon + HEROIC`, `Aelira + MYTHIC`.
+
+It does **not** depend on Character, WoW Class, specialization, Character Role, Item Level, or Account Role.
 
 Self-service `requestAccess` is disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). Character pages show a Discord ticket CTA when `DISCORD_BOOSTER_TICKET_URL` is set.
 
-Characters do **not** own BoosterAccess. They only consume matching account qualifications.
+## Two persistence models
 
-## Why BoosterAccess is separate from user role
+### BoosterQualification (current, authoritative)
+
+- Unique on `(userId, difficulty)`
+- Statuses: `APPROVED` | `REVOKED` (no `PENDING`)
+- Exact-match difficulties: MYTHIC does not imply HEROIC or NORMAL
+- Grant / revoke / re-grant (reactivate same row) are ADMIN-only
+
+### Legacy BoosterAccess (historical request history)
+
+- Preserved rows: User + Class + Role + Difficulty (+ optional Character context)
+- Statuses: `PENDING` | `APPROVED` | `REJECTED` | `REVOKED`
+- Not the runtime eligibility source after migration
+- `characterId` is request origin only (“Requested via Synblast-Antonidas”)
+
+## Why qualification is separate from account role
 
 Account roles (`USER`, `RAID_LEAD`, `ADMIN`) are platform permissions.
 
 Run participation (`BOOSTER`, `LOOTBUDDY`) is per-run.
 
-`BoosterAccess` is granular boosting qualification. A USER can hold approved access without becoming RAID_LEAD. There is no global `isBooster` flag.
-
-A later `BOOSTER_ACCESS_MANAGER` permission may replace the current ADMIN-only review gate. This feature does not introduce a general RBAC framework.
-
-## Granularity
-
-Eligibility is unique on `(userId, wowClass, role, difficulty)`.
-
-- Class is chosen by ADMIN grant (validated against the class catalog) or inherited from historical request context; clients cannot invent unsupported classes.
-- Role must be valid for that class in `src/lib/wow-specializations.ts`. `primaryRole` is not the only grantable role.
-- Each difficulty is independent. Heroic does not imply Normal or Mythic.
-
-`characterId` may record historical request context. It is **not** part of uniqueness, approval ownership, or signup lookup. Two Shamans on the same account share Shaman + Healer + Heroic eligibility.
+`BoosterQualification` is difficulty-level boosting eligibility. ADMIN does **not** automatically receive qualifications. A later `BOOSTER_ACCESS_MANAGER` permission may replace the current ADMIN-only review gate.
 
 ## Discord application + ADMIN grant
-
-Entry point for applicants: Discord ticket URL from character details (`discordTicketUrl` / `DISCORD_BOOSTER_TICKET_URL`). The character access panel is read-only (`canRequest` / `canSubmitRequests` false, `selfRequestDisabled` true).
-
-ADMIN grants qualifications directly with `grantAccess({ userId, wowClass, role, difficulty, notes? })` from `/manage/booster-access` (and related manage surfaces). Grant creates APPROVED rows, approves historical PENDING rows, or reopens REJECTED/REVOKED through PENDING → APPROVED.
 
 Current onboarding:
 
 ```text
-User → Discord ticket → staff review → ADMIN grant
+User → Discord ticket → staff review → ADMIN grant (User + Difficulty)
 ```
 
-ADMIN does **not** automatically receive BoosterAccess. Admins may explicitly grant to USER, RAID_LEAD, ADMIN, or themselves using the same account-level model.
+Grant UI fields: User, Difficulty, Notes (optional). No Character / Class / Role / Item Level / Spec.
+
+A User may receive access with **zero Characters**. Later Characters consume the account qualification.
+
+ADMIN may grant to USER, RAID_LEAD, ADMIN, or themselves.
 
 ## Qualifications vs Legacy Requests
 
@@ -48,108 +64,54 @@ ADMIN does **not** automatically receive BoosterAccess. Admins may explicitly gr
 
 ### Qualifications (default)
 
-Current account-level authorization history. Columns are user-centric:
+Current User + Difficulty authorization.
 
-User · Class · Role · Difficulty · Status · Context · Times · Actions
+Columns: User · Difficulty · Status · Granted / Reviewed · Notes · Actions
 
-Statuses shown here: `APPROVED`, `REJECTED`, `REVOKED` (never the primary PENDING queue).
-
-Item level and specialization are **not** part of BoosterAccess and are not shown as qualification identity.
+Filters: User search, Difficulty, Status (`ALL` | `APPROVED` | `REVOKED`).
 
 ### Legacy Requests · N
 
-Unresolved historical `PENDING` rows from the former in-app self-service workflow only.
+Unresolved historical `PENDING` in-app applications only.
 
-N counts only unresolved PENDING. Approve / Reject resolve them into qualifications/history without deleting the row.
+May still show Class / Role / Character context because that is historical application data.
 
-Historical `characterId` may appear as secondary context (“Requested via Synblast-Antonidas”). It means request origin only — the Character does not own the qualification.
+Helper meaning:
 
-Empty legacy queue copy:
+> These applications used the previous character/class workflow. Approving one grants account-wide access for that difficulty.
+
+Approving a legacy PENDING row:
+
+1. Marks that row (and same-user + same-difficulty PENDING siblings) `APPROVED`
+2. Ensures one current `BoosterQualification` for that User + Difficulty
+
+Rejecting one PENDING row does not create or revoke a qualification.
+
+Empty legacy queue:
 
 > No legacy requests awaiting review.
 
-There is no “Create request” action. Normal users no longer submit in-app requests.
+## Conceptual split
 
-## Admin review flow
+| Concern | Question |
+| --- | --- |
+| Qualification | May this User boost Heroic? |
+| Character eligibility | May this Character be used in this Run? |
+| Roster composition | Do we want this Character/role on the roster? |
 
-RAID_LEAD keeps `/manage` for runs but is redirected away from this page.
+Signup and roster revalidation read **BoosterQualification** for the signup User + Run Difficulty. Character ownership, active state, valid role-for-class, lockouts, and composition rules remain separate.
 
-Historical pending rows can still be approved or rejected on Legacy Requests. Approved qualifications can be revoked on Qualifications. Optional reject/revoke reasons are stored in `notes` and shown to the owner. Reasons are omitted from global activity messages.
+## Management hub
 
-Approval is account-level and does not require a requesting Character to still be active.
+Booster Access card metrics:
 
-## State lifecycle
+- Legacy pending — unresolved historical PENDING rows
+- Approved qualifications — count of active User + Difficulty APPROVED rows
 
-One row is reused:
+## Migration / backfill
 
-```text
-NONE → PENDING → APPROVED → REVOKED → PENDING
-                ↘ REJECTED → PENDING
-```
+Forward migration creates `booster_qualification` and backfills one APPROVED qualification per unique `(userId, difficulty)` that has at least one APPROVED legacy `BoosterAccess` row. Grant metadata prefers the most recently approved/reviewed legacy row. Covered PENDING siblings for that difficulty are resolved to APPROVED without deleting history.
 
-Pending and approved combinations cannot be duplicated. Rejected or revoked combinations may be reopened by ADMIN grant (via PENDING → APPROVED).
+## Out of scope here
 
-## Authorization
-
-| Actor | Self-request | View own | Grant / approve / reject / revoke |
-| --- | --- | --- | --- |
-| USER | no (disabled) | yes | no |
-| RAID_LEAD | no (disabled) | yes; roster tools still read access | no |
-| ADMIN | no (disabled) | yes | yes |
-
-Hidden navigation is not authorization. Mutations go through `requireAdmin` and `assertCanReviewBoosterAccess`.
-
-## Revocation semantics
-
-Revoke immediately stops **new** matching booster signups.
-
-Existing signup rows are not withdrawn or deleted. Historical roster entries remain. Publish/republish still revalidates `BoosterAccessService.isApprovedFor`, so a selected booster whose access was revoked becomes a `BOOSTER_ACCESS_INVALID` blocker.
-
-## Interaction with signups
-
-Only `APPROVED` grants booster eligibility. `PENDING`, `REJECTED`, and `REVOKED` do not.
-
-Lookup is `userId + class + role + run difficulty` against account-level rows. CharacterId is never the ownership key.
-
-Lootbuddy (`LOOT_ONLY` and `PLAYING`) does not require BoosterAccess.
-
-## Interaction with rosters
-
-Roster publication already re-reads current account-level access. This feature does not duplicate that logic.
-
-## Character active state
-
-Deactivate does not revoke account-level access. Reactivate does not auto-approve. Inactive characters cannot signup, but sibling matching Characters still use the same approval. Self-service requests are disabled for all characters.
-
-## Blizzard independence
-
-Battle.net may prove character ownership, class, and item level. It does not create, approve, revoke, or character-scope BoosterAccess. Approval stays BoostingHub-owned.
-
-## Warcraft Logs independence
-
-WCL may later inform reviewers. Approval remains manual.
-
-## MVCS
-
-- Model: `BoosterAccess`, `BoosterAccessStatus` including `REJECTED`
-- View: character access panel (read-only + Discord CTA), grant dialog, `/manage/booster-access`
-- Controller: `booster-access.actions.ts`, `managementController.getBoosterAccessPage`
-- Service: `boosterAccessService`, `booster-access-state.ts`
-- Repository: `boosterAccessRepository`; Character/Roster loaders attach account-level rows by class
-
-## Security
-
-- Reviewer / granter is session-derived ADMIN
-- Self-service `requestAccess` always fails after ownership check
-- Clients cannot submit `APPROVED` or a reviewer id
-- Unique `(userId, wowClass, role, difficulty)` plus service checks stop duplicate approved rows
-- Raw unique-constraint errors map to domain messages
-- Activity events do not include sensitive Discord ticket contents beyond optional grant notes
-
-## Deferred
-
-- Warcraft Logs evidence
-- Blizzard ownership proof
-- Notifications
-- Fine-grained `BOOSTER_ACCESS_MANAGER` permission
-- Immutable audit-history tables
+Discord bot automation, mass signup, Strikes, Deducts.

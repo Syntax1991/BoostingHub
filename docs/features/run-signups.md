@@ -15,8 +15,8 @@ Let a signed-in user persist a **booster** or **lootbuddy** signup for a specifi
 
 ## Participation types
 
-- `BOOSTER` — needs approved `BoosterAccess` for class + role + run difficulty, plus no conflicting lockout.
-- `LOOTBUDDY` — needs an owned, active, lockout-free character. Does **not** require BoosterAccess.
+- `BOOSTER` — needs approved `BoosterQualification` for **this** run difficulty (User + Difficulty), plus character/lockout rules.
+- `LOOTBUDDY` — needs an owned, active, lockout-free character. Does **not** require BoosterQualification.
 
 The same user may be BOOSTER on one run and LOOTBUDDY on another.
 
@@ -28,10 +28,11 @@ Eligibility (server, re-checked on submit):
 
 1. Character belongs to the current user
 2. Character is active
-3. Approved BoosterAccess matches class, role, and **this** difficulty
-4. No progress lockout for character + raid + difficulty + reset
-5. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
-6. No active duplicate for run + user + character + BOOSTER
+3. Approved BoosterQualification matches the User + **this** run difficulty (class/role are character validation, not qualification dimensions)
+4. Selected role is valid for the character's class
+5. No progress lockout for character + raid + difficulty + reset
+6. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
+7. No active duplicate for run + user + character + BOOSTER
 
 `DRAFT` runs are not listed on `/runs` and are not signable. Opening a draft is a Run Management action. See [run-management.md](run-management.md).
 

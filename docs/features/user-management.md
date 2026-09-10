@@ -4,7 +4,7 @@
 
 Give ADMIN operators a management hub for browsing accounts, inspecting characters and booster qualifications, and assigning platform account roles (`USER`, `RAID_LEAD`, `ADMIN`). Role changes are server-owned and audited.
 
-This feature does **not** turn BOOSTER into an account role. Booster eligibility remains granular `BoosterAccess`.
+This feature does **not** turn BOOSTER into an account role. Booster eligibility is `BoosterQualification` (User + Difficulty).
 
 ## Management Hub
 
@@ -45,13 +45,13 @@ Platform permissions on `User.accountRole`:
 
 Route: `/manage/users` (ADMIN only).
 
-Lists accounts with role, Discord identity hints, character counts, and BoosterAccess status tallies. Filters/sorts are applied in `userRepository.listAdminUsers` via `userManagementService.listUsers`.
+Lists accounts with role, Discord identity hints, character counts, and difficulty-qualification tallies. Filters/sorts are applied in `userRepository.listAdminUsers` via `userManagementService.listUsers`.
 
 ## User Detail
 
 Route: `/manage/users/[userId]`.
 
-Shows identity, account role/status, characters, BoosterAccess rows, and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
+Shows identity, account role/status, characters, difficulty qualifications (with direct Grant access), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
 
 ## Role Administration
 
@@ -75,29 +75,29 @@ Error: `ROLE_CHANGE_BLOCKED_BY_ACTIVE_RUNS`.
 
 ## Discord Booster Applications
 
-Self-service creation of PENDING `BoosterAccess` is disabled. Character pages show a Discord ticket CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative qualification store.
+Self-service creation of PENDING legacy `BoosterAccess` is disabled. Character pages show a Discord ticket CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative qualification store.
 
 See [booster-access-management.md](booster-access-management.md).
 
-## BoosterAccess vs Account Role
+## BoosterQualification vs Account Role
 
 | Concern | Store | Who mutates |
 | --- | --- | --- |
 | Platform permission | `User.accountRole` | ADMIN via user management |
-| Boost qualification | `BoosterAccess` (class + role + difficulty) | ADMIN via grant/approve/reject/revoke |
+| Boost qualification | `BoosterQualification` (user + difficulty) | ADMIN via grant/revoke (and legacy approve bridge) |
 
-A USER may hold many approved BoosterAccess rows without becoming RAID_LEAD. Promoting to RAID_LEAD does not grant booster eligibility.
+A USER may hold Heroic/Mythic qualifications without becoming RAID_LEAD. Role changes do not create or revoke qualifications.
 
 ## ADMIN Direct Grant
 
-After Discord review, ADMIN grants qualifications with `boosterAccessService.grantAccess({ userId, wowClass, role, difficulty, notes? })`.
+After Discord review, ADMIN grants with `boosterQualificationService.grant({ userId, difficulty, notes? })`.
 
-`/manage/booster-access` defaults to **Qualifications** (account-level APPROVED/REJECTED/REVOKED). **Legacy Requests · N** lists only unresolved historical PENDING rows from the former in-app self-service flow. CharacterId on those rows is request context only.
+`/manage/booster-access` defaults to **Qualifications** (User + Difficulty). **Legacy Requests · N** lists only unresolved historical PENDING Class/Role applications. Approving a legacy row grants the matching difficulty qualification and resolves same-difficulty PENDING siblings.
 
-- Creates APPROVED when no row exists
-- Approves existing PENDING
-- Reopens REJECTED/REVOKED through PENDING → APPROVED
-- Duplicate APPROVED → `BOOSTER_ACCESS_ALREADY_APPROVED`
+- Creates APPROVED when no qualification exists
+- Reactivates REVOKED on the same unique row
+- Duplicate APPROVED → already-approved error
+- Character / Class / Role are not grant fields
 - Does not require Character, specialization, or item level
 - May target USER, RAID_LEAD, ADMIN, or the acting ADMIN (no automatic ADMIN bypass)
 
