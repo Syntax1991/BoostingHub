@@ -81,7 +81,6 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             <CharacterFormDialog
               mode="edit"
               triggerLabel="Edit"
-              blizzardLinked={data.blizzardLinked}
               initial={{
                 id: data.id,
                 name: data.name,
@@ -120,8 +119,8 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             <div>
               <dt className="text-muted">Item level</dt>
               <dd className="mt-1">
-                {data.itemLevel}{" "}
-                {data.blizzardLinked ? "(Blizzard synced)" : "(manual)"}
+                {typeof data.itemLevel === "number" ? data.itemLevel : "Unknown"}{" "}
+                <span className="text-xs text-muted">(Blizzard)</span>
               </dd>
             </div>
             <div>

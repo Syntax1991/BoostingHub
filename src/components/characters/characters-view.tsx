@@ -82,7 +82,9 @@ export function CharactersView({ data }: { data: Page }) {
                     <td className="px-4 py-3">
                       <RoleBadge role={character.primaryRole} />
                     </td>
-                    <td className="px-4 py-3">{character.itemLevel}</td>
+                    <td className="px-4 py-3">
+                      {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"}
+                    </td>
                     <td className="px-4 py-3 text-muted">{character.isActive ? "Active" : "Inactive"}</td>
                     <td className="px-4 py-3 text-xs">
                       {character.boosterAccess.approvals.length === 0 ? (
