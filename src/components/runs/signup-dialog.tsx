@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { formatDateTime } from "@/lib/datetime";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { roleForSpecialization } from "@/lib/wow-specializations";
 import {
   LOOTBUDDY_MODES,
   LOOTBUDDY_VERIFICATIONS,
@@ -27,6 +28,8 @@ type BoosterGroup = {
   wowClass: WowClass;
   specialization: string | null;
   roles: CharacterRole[];
+  /** The role this character is actually specced for, when that role is itself eligible. */
+  defaultRole: CharacterRole;
 };
 
 function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): BoosterGroup[] {
@@ -44,7 +47,12 @@ function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): Bo
       wowClass: option.wowClass,
       specialization: option.specialization,
       roles: [option.role],
+      defaultRole: option.role,
     });
+  }
+  for (const group of groups.values()) {
+    const specRole = group.specialization ? roleForSpecialization(group.wowClass, group.specialization) : null;
+    group.defaultRole = specRole && group.roles.includes(specRole) ? specRole : group.roles[0];
   }
   return [...groups.values()];
 }
@@ -142,7 +150,7 @@ export function RunSignupButton({
       const next = { ...roles };
       for (const group of boosterGroups) {
         if (!next[group.characterId]) {
-          next[group.characterId] = group.roles[0];
+          next[group.characterId] = group.defaultRole;
         }
       }
       return next;
@@ -363,7 +371,7 @@ function BoosterCharacterChecklist({
         <ul className="space-y-2">
           {groups.map((group) => {
             const isChecked = selected.has(group.characterId);
-            const role = roleByCharacterId[group.characterId] ?? group.roles[0];
+            const role = roleByCharacterId[group.characterId] ?? group.defaultRole;
             return (
               <li
                 key={group.characterId}
@@ -373,7 +381,7 @@ function BoosterCharacterChecklist({
                   <input
                     type="checkbox"
                     checked={isChecked}
-                    onChange={() => onToggle(group.characterId, group.roles[0])}
+                    onChange={() => onToggle(group.characterId, group.defaultRole)}
                   />
                   <span className="truncate">
                     {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}

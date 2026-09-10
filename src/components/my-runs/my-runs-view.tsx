@@ -15,6 +15,11 @@ import type { signupService } from "@/services/signup.service";
 type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
 type SignupItem = MyRuns["pending"][number];
 
+function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm">): string {
+  if (!item.characterName) return "Unknown character";
+  return item.characterRealm ? `${item.characterName}-${item.characterRealm}` : item.characterName;
+}
+
 export function MyRunsView({ data }: { data: MyRuns }) {
   const hasAnySignup =
     data.selected.length + data.pending.length + data.notSelected.length + data.withdrawn.length > 0;
@@ -127,6 +132,12 @@ function SignupTable({ items }: { items: SignupItem[] }) {
         <tbody>
           {groups.map((group) => {
             const selected = group.offers.find((offer) => offer.status === "SELECTED");
+            const stillPending = group.offers.some((offer) => offer.status === "PENDING");
+            const selectedLabel = selected
+              ? characterLabel(selected)
+              : stillPending
+                ? "Pending"
+                : "Not selected";
             return (
               <tr key={group.runId} className="border-t border-border align-top">
                 <td className="px-4 py-3">
@@ -141,12 +152,9 @@ function SignupTable({ items }: { items: SignupItem[] }) {
                 <td className="px-4 py-3 text-muted">{formatDateTime(group.scheduledStartAt)}</td>
                 <td className="px-4 py-3">
                   <p className="max-w-[240px] truncate">
-                    <span className="text-muted">Offered:</span>{" "}
-                    {group.offers.map((offer) => offer.characterName ?? "Unknown character").join(", ")}
+                    <span className="text-muted">Offered:</span> {group.offers.map(characterLabel).join(", ")}
                   </p>
-                  <p className="mt-1 max-w-[240px] truncate text-xs text-muted">
-                    Selected: {selected?.characterName ?? "Pending"}
-                  </p>
+                  <p className="mt-1 max-w-[240px] truncate text-xs text-muted">Selected: {selectedLabel}</p>
                 </td>
                 <td className="px-4 py-3">
                   <ParticipationBadge type={group.participationType} />

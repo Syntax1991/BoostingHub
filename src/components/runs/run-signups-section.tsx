@@ -28,9 +28,16 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
   return <OwnSignupList signups={data.viewerSignups} />;
 }
 
+function characterLabel(signup: { characterName: string | null; characterRealm: string | null }): string {
+  if (!signup.characterName) return "Unknown character";
+  return signup.characterRealm ? `${signup.characterName}-${signup.characterRealm}` : signup.characterName;
+}
+
 function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] }) {
   const active = signups.filter((signup) => signup.status !== "WITHDRAWN");
   const selected = active.find((signup) => signup.status === "SELECTED");
+  const stillPending = active.some((signup) => signup.status === "PENDING");
+  const selectedLabel = selected ? characterLabel(selected) : stillPending ? "Pending" : "Not selected";
 
   return (
     <Card>
@@ -48,11 +55,10 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
           {active.length > 0 ? (
             <div className="border-b border-border px-4 py-3 text-sm">
               <p>
-                <span className="text-muted">Offered:</span>{" "}
-                {active.map((signup) => signup.characterName ?? "Unknown character").join(", ")}
+                <span className="text-muted">Offered:</span> {active.map(characterLabel).join(", ")}
               </p>
               <p className="mt-1">
-                <span className="text-muted">Selected:</span> {selected?.characterName ?? "Pending"}
+                <span className="text-muted">Selected:</span> {selectedLabel}
               </p>
             </div>
           ) : null}
