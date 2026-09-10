@@ -3,7 +3,7 @@ import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { getCurrentLockoutRaid, getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 import {
   isValidCharacterName,
   isValidRealmName,
@@ -101,24 +101,35 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
     const characters = await characterRepository.listByUserId(user.id);
-    const bossTotal = defaultRaidBossTotal(WOW_RAID_CATALOG[0]?.id);
+    const currentRaid = getCurrentLockoutRaid();
+    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
+    const bossTotal = defaultRaidBossTotal(currentRaid?.id);
 
     return {
       currentResetByRegion: {
         EU: getRegionalWeeklyReset("EU").resetIdentifier,
         US: getRegionalWeeklyReset("US").resetIdentifier,
       },
+      currentLockoutRaid: currentRaid
+        ? { id: currentRaid.id, name: currentRaid.name }
+        : null,
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
       characters: characters.map((character) => {
         const access = boosterAccessService.summarize(character.boosterAccess);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
-        const lockouts = lockoutService.summarize(
-          character.lockouts.filter((lockout) => lockout.resetIdentifier === currentReset),
-        ).map((lockout) => ({
-          ...lockout,
-          bossTotal,
-        }));
+        const lockouts = lockoutService
+          .summarize(
+            character.lockouts.filter(
+              (lockout) =>
+                lockout.resetIdentifier === currentReset && currentRaidIds.has(lockout.raidId),
+            ),
+          )
+          .map((lockout) => ({
+            ...lockout,
+            bossTotal,
+            verified: true,
+          }));
 
         return {
           id: character.id,
@@ -151,12 +162,20 @@ export const characterService = {
     assertOwned(user, character);
 
     const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
-    const bossTotal = defaultRaidBossTotal(WOW_RAID_CATALOG[0]?.id);
+    const currentRaid = getCurrentLockoutRaid();
+    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
+    const bossTotal = defaultRaidBossTotal(currentRaid?.id);
     const currentLockouts = lockoutService
-      .summarize(character.lockouts.filter((lockout) => lockout.resetIdentifier === currentReset))
+      .summarize(
+        character.lockouts.filter(
+          (lockout) =>
+            lockout.resetIdentifier === currentReset && currentRaidIds.has(lockout.raidId),
+        ),
+      )
       .map((lockout) => ({
         ...lockout,
         bossTotal,
+        verified: true,
       }));
 
     return {
@@ -179,6 +198,9 @@ export const characterService = {
       boosterAccess: character.boosterAccess,
       accessPanel: boosterAccessService.buildCharacterAccessPanel(character),
       currentReset,
+      currentLockoutRaid: currentRaid
+        ? { id: currentRaid.id, name: currentRaid.name }
+        : null,
       lockouts: currentLockouts,
     };
   },

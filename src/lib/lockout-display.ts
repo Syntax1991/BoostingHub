@@ -1,6 +1,6 @@
 import type { RaidDifficulty } from "@/models/enums";
 import { COMPACT_DIFFICULTY_LABELS } from "@/lib/blizzard/raid-difficulty";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { findRaidCatalogById, getCurrentLockoutRaid } from "@/lib/wow-raid-catalog";
 
 export type LockoutDisplayRow = {
   difficulty: RaidDifficulty;
@@ -8,26 +8,30 @@ export type LockoutDisplayRow = {
   bossTotal: number;
   isComplete?: boolean;
   raidName?: string;
+  verified?: boolean;
 };
 
+const TRACKED: RaidDifficulty[] = ["NORMAL", "HEROIC", "MYTHIC"];
+
 /**
- * Compact current-reset progress line. Empty input means unverified/unknown —
- * callers must render "Unknown", never invent Clear.
+ * Compact current-reset progress. Verified difficulties show x/N; missing
+ * tracked difficulties show "?" once any difficulty is verified.
+ * Empty input → null (UI must render Unknown, never invent Clear).
  */
 export function formatCompactLockoutProgress(rows: LockoutDisplayRow[]): string | null {
   if (rows.length === 0) return null;
-  const order: RaidDifficulty[] = ["NORMAL", "HEROIC", "MYTHIC"];
-  const parts = order.flatMap((difficulty) => {
+  const parts = TRACKED.map((difficulty) => {
     const row = rows.find((item) => item.difficulty === difficulty);
-    if (!row) return [];
-    return [`${COMPACT_DIFFICULTY_LABELS[difficulty]} ${row.bossesDefeated}/${row.bossTotal}`];
+    const label = COMPACT_DIFFICULTY_LABELS[difficulty];
+    if (!row) return `${label} ?`;
+    return `${label} ${row.bossesDefeated}/${row.bossTotal}`;
   });
-  return parts.length > 0 ? parts.join(" · ") : null;
+  return parts.join(" · ");
 }
 
 export function defaultRaidBossTotal(raidId?: string): number {
-  const raid = raidId
-    ? WOW_RAID_CATALOG.find((entry) => entry.id === raidId)
-    : WOW_RAID_CATALOG[0];
-  return raid?.bosses.length ?? 0;
+  if (raidId) {
+    return findRaidCatalogById(raidId)?.bosses.length ?? 0;
+  }
+  return getCurrentLockoutRaid()?.bosses.length ?? 0;
 }

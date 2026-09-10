@@ -1,5 +1,6 @@
 import { orm } from "@/lib/prisma";
 import type { RaidDifficulty } from "@/models/enums";
+import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 
 export const lockoutRepository = {
   async listByCharacterIds(characterIds: string[]) {
@@ -30,26 +31,32 @@ export const lockoutRepository = {
   },
 
   /**
-   * Upsert Blizzard-derived current-reset aggregate lockout rows.
-   * Does not delete older resets; callers filter by resetIdentifier for display.
+   * Replace verified current-reset lockout rows for the current lockout raid.
+   * - Upserts verified difficulties only
+   * - Deletes unverified difficulties for that raid+reset (so missing modes stay Unknown)
+   * - Clears same-reset rows for non-current catalog raids (stale mapping cleanup)
    */
-  async upsertCurrentResetLockouts(
+  async replaceVerifiedCurrentResetLockouts(
     characterId: string,
-    rows: Array<{
+    input: {
       raidId: string;
-      difficulty: RaidDifficulty;
       resetIdentifier: string;
-      bossesDefeated: number;
-      isComplete: boolean;
-    }>,
-    verifiedAt: string,
+      rows: Array<{
+        difficulty: RaidDifficulty;
+        bossesDefeated: number;
+        isComplete: boolean;
+      }>;
+      verifiedAt: string;
+    },
   ): Promise<void> {
-    for (const row of rows) {
+    const verifiedDifficulties = new Set(input.rows.map((row) => row.difficulty));
+
+    for (const row of input.rows) {
       const existing = await this.findConflict({
         characterId,
-        raidId: row.raidId,
+        raidId: input.raidId,
         difficulty: row.difficulty,
-        resetIdentifier: row.resetIdentifier,
+        resetIdentifier: input.resetIdentifier,
       });
 
       if (existing) {
@@ -57,7 +64,7 @@ export const lockoutRepository = {
         await orm.CharacterRaidLockout.where({ id }).update({
           bossesDefeated: row.bossesDefeated,
           isComplete: row.isComplete,
-          updatedAt: verifiedAt,
+          updatedAt: input.verifiedAt,
         });
         continue;
       }
@@ -65,14 +72,42 @@ export const lockoutRepository = {
       await orm.CharacterRaidLockout.create({
         id: crypto.randomUUID(),
         characterId,
-        raidId: row.raidId,
+        raidId: input.raidId,
         difficulty: row.difficulty,
-        resetIdentifier: row.resetIdentifier,
+        resetIdentifier: input.resetIdentifier,
         bossesDefeated: row.bossesDefeated,
         isComplete: row.isComplete,
-        createdAt: verifiedAt,
-        updatedAt: verifiedAt,
+        createdAt: input.verifiedAt,
+        updatedAt: input.verifiedAt,
       });
+    }
+
+    const sameRaidReset = await orm.CharacterRaidLockout
+      .where({
+        characterId,
+        raidId: input.raidId,
+        resetIdentifier: input.resetIdentifier,
+      })
+      .all();
+
+    for (const existing of sameRaidReset) {
+      const difficulty = String((existing as Record<string, unknown>).difficulty) as RaidDifficulty;
+      if (verifiedDifficulties.has(difficulty)) continue;
+      await orm.CharacterRaidLockout.where({ id: String((existing as Record<string, unknown>).id) }).delete();
+    }
+
+    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
+    const sameReset = await orm.CharacterRaidLockout
+      .where({
+        characterId,
+        resetIdentifier: input.resetIdentifier,
+      })
+      .all();
+
+    for (const existing of sameReset) {
+      const raidId = String((existing as Record<string, unknown>).raidId);
+      if (currentRaidIds.has(raidId)) continue;
+      await orm.CharacterRaidLockout.where({ id: String((existing as Record<string, unknown>).id) }).delete();
     }
   },
 };

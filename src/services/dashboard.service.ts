@@ -8,6 +8,7 @@ import { boosterAccessService } from "@/services/booster-access.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 
 export const dashboardService = {
   async getDashboard(user: AuthenticatedUser) {
@@ -33,10 +34,16 @@ export const dashboardService = {
         .map((character) => character.id),
     );
 
+    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
     const lockoutAttention = characters.flatMap((character) => {
       const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
       return lockoutService
-        .summarize(character.lockouts.filter((lockout) => lockout.resetIdentifier === currentReset))
+        .summarize(
+          character.lockouts.filter(
+            (lockout) =>
+              lockout.resetIdentifier === currentReset && currentRaidIds.has(lockout.raidId),
+          ),
+        )
         .filter((lockout) => lockout.attention)
         .map((lockout) => ({
           characterName: character.name,

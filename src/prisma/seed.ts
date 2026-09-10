@@ -2,7 +2,7 @@ import { hashPassword } from "better-auth/crypto";
 import { db, orm } from "@/lib/prisma";
 import { getDevAuthPassword } from "@/auth/dev-auth";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { MANAFORGE_OMEGA_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 
 const SEED_NOW = "2026-09-08T12:00:00.000Z";
@@ -27,7 +27,7 @@ const ids = {
     brann: "55555555-5555-4555-8555-555555555555",
     sylva: "66666666-6666-4666-8666-666666666666",
   },
-  raid: WOW_RAID_CATALOG[0].id,
+  raid: MANAFORGE_OMEGA_RAID_ID,
   characters: {
     kaelResto: "c1111111-1111-4111-8111-111111111111",
     kaelEle: "c1111111-1111-4111-8111-111111111112",
@@ -1340,7 +1340,7 @@ async function seed() {
     }
   }
 
-  const raidName = WOW_RAID_CATALOG[0].name;
+  const raidName = WOW_RAID_CATALOG.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)?.name ?? "Manaforge Omega";
   const payoutMembers = {
     kael: {
       userId: ids.users.kael,

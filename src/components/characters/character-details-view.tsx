@@ -220,7 +220,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         <Card>
           <CardHeader
             title="Raid lockouts"
-            description={`Current reset ${data.currentReset}. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Mythic shows boss kills only — not instance lock-extension.`}
+            description={`Current reset ${data.currentReset}${data.currentLockoutRaid ? ` · ${data.currentLockoutRaid.name}` : ""}. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Missing difficulties show as unknown — never invented 0/N. Mythic is boss-kill progress only.`}
           />
           {data.lockouts.length === 0 ? (
             <EmptyState

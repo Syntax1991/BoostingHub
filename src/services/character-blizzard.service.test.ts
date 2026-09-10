@@ -25,7 +25,7 @@ import { characterBlizzardService } from "@/services/character-blizzard.service"
 import { characterService } from "@/services/character.service";
 import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { getCurrentLockoutRaid } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
 
@@ -711,7 +711,7 @@ describe("characterBlizzardService.refreshCharacter", () => {
 
     const reset = getRegionalWeeklyReset("EU");
     const killMs = reset.start.getTime() + 3_600_000;
-    const catalog = WOW_RAID_CATALOG[0]!;
+    const catalog = getCurrentLockoutRaid()!;
     const encounters: BlizzardCharacterRaidEncounters = {
       raids: [
         {
@@ -723,7 +723,7 @@ describe("characterBlizzardService.refreshCharacter", () => {
               progressCompleted: 8,
               progressTotal: 8,
               encounters: catalog.bosses.map((boss, index) => ({
-                encounterId: String(20_000 + index),
+                encounterId: String(boss.blizzardEncounterIds[0]),
                 encounterName: boss.name,
                 completedCount: 1,
                 lastKillTimestampMs: killMs,
@@ -733,8 +733,8 @@ describe("characterBlizzardService.refreshCharacter", () => {
               difficulty: "HEROIC",
               progressCompleted: 0,
               progressTotal: 8,
-              encounters: catalog.bosses.map((boss, index) => ({
-                encounterId: String(30_000 + index),
+              encounters: catalog.bosses.map((boss) => ({
+                encounterId: String(boss.blizzardEncounterIds[0]),
                 encounterName: boss.name,
                 completedCount: 0,
                 lastKillTimestampMs: null,
@@ -784,7 +784,7 @@ describe("characterBlizzardService.refreshCharacter", () => {
     await orm.CharacterRaidLockout.create({
       id: crypto.randomUUID(),
       characterId,
-      raidId: WOW_RAID_CATALOG[0]!.id,
+      raidId: getCurrentLockoutRaid()!.id,
       difficulty: "NORMAL",
       resetIdentifier: reset.resetIdentifier,
       bossesDefeated: 5,
@@ -903,7 +903,7 @@ describe("characterBlizzardService.refreshLinkedCharactersForRegion", () => {
     expect(result.total).toBe(1);
     expect(result.refreshed).toBe(1);
     expect(result.failed).toBe(0);
-    expect(result.lockoutsRefreshed).toBeGreaterThanOrEqual(0);
+    expect(result.lockoutsVerified).toBeGreaterThanOrEqual(0);
 
     const euRow = await orm.Character.where({ id: euId }).first();
     expect(Number(euRow?.itemLevel)).toBe(700);

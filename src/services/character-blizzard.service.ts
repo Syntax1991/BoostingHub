@@ -25,6 +25,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { lockoutRepository } from "@/repositories/lockout.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { battleNetService } from "@/services/battle-net.service";
 import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
@@ -686,7 +687,8 @@ export const characterBlizzardService = {
     const outcome = {
       total: eligible.length,
       refreshed: 0,
-      lockoutsRefreshed: 0,
+      lockoutsVerified: 0,
+      lockoutsUnavailable: 0,
       skipped: 0,
       failed: 0,
     };
@@ -720,7 +722,8 @@ export const characterBlizzardService = {
     for (const result of results) {
       if (result.status === "refreshed") {
         outcome.refreshed += 1;
-        if (result.lockoutSynced) outcome.lockoutsRefreshed += 1;
+        if (result.lockoutSynced) outcome.lockoutsVerified += 1;
+        else outcome.lockoutsUnavailable += 1;
       } else if (result.status === "skipped") outcome.skipped += 1;
       else outcome.failed += 1;
     }
@@ -733,7 +736,7 @@ export const characterBlizzardService = {
       await activityRepository.create({
         userId: user.id,
         type: "BATTLENET_CHARACTERS_REFRESHED",
-        message: `Refresh all (${region}): ${outcome.refreshed} refreshed (${outcome.lockoutsRefreshed} lockouts), ${outcome.skipped} skipped, ${outcome.failed} failed of ${outcome.total}.`,
+        message: `Refresh all (${region}): ${outcome.refreshed} profiles, ${outcome.lockoutsVerified} lockouts verified, ${outcome.lockoutsUnavailable} lockouts unavailable, ${outcome.skipped} skipped, ${outcome.failed} failed of ${outcome.total}.`,
       });
     }
 
@@ -748,6 +751,7 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
   region: "EU" | "US";
 }): Promise<boolean> {
   try {
+    await raidRepository.ensureReferenceRaids();
     const realmSlug = realmSlugFromDisplayName(character.realm);
     const encounters = await blizzardApiClient.getCharacterRaidEncounters(
       character.region,
@@ -763,17 +767,16 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
       return false;
     }
 
-    await lockoutRepository.upsertCurrentResetLockouts(
-      character.id,
-      derived.difficulties.map((row) => ({
-        raidId: row.raidId,
+    await lockoutRepository.replaceVerifiedCurrentResetLockouts(character.id, {
+      raidId: derived.currentRaidId,
+      resetIdentifier: derived.difficulties[0]!.resetIdentifier,
+      rows: derived.difficulties.map((row) => ({
         difficulty: row.difficulty,
-        resetIdentifier: row.resetIdentifier,
         bossesDefeated: row.bossesDefeated,
         isComplete: row.isComplete,
       })),
-      derived.verifiedAt,
-    );
+      verifiedAt: derived.verifiedAt,
+    });
     return true;
   } catch (error) {
     if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") {
@@ -931,8 +934,8 @@ async function refreshLinkedCharacterProfile(
       userId: user.id,
       type: "BATTLENET_CHARACTER_REFRESHED",
       message: lockoutSynced
-        ? `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile + raid lockouts).`
-        : `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile only; lockouts unchanged).`,
+        ? `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile + current-raid lockouts verified).`
+        : `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile only; lockouts not verified).`,
     });
   }
 

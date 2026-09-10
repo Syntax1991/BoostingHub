@@ -21,6 +21,7 @@ function mapRaid(row: Record<string, unknown>): RaidRecord {
 /**
  * Idempotent bootstrap of supported raid content. Independent of demo users and demo Runs.
  * Existing bosses matched by catalog id or name are updated in place so prior seed IDs stay valid.
+ * `availableForRuns` controls Raid.isActive for create-run options.
  */
 export const raidRepository = {
   async ensureReferenceRaids(now = new Date().toISOString()): Promise<void> {
@@ -30,7 +31,7 @@ export const raidRepository = {
         await orm.Raid.where({ id: raid.id }).update({
           name: raid.name,
           season: raid.season,
-          isActive: true,
+          isActive: raid.availableForRuns,
           updatedAt: now,
         });
       } else {
@@ -38,7 +39,7 @@ export const raidRepository = {
           id: raid.id,
           name: raid.name,
           season: raid.season,
-          isActive: true,
+          isActive: raid.availableForRuns,
           createdAt: now,
           updatedAt: now,
         });

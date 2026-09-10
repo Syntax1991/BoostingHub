@@ -89,9 +89,9 @@ Character selection happens in a **modal** on `/characters`. The page itself onl
 
 The import modal supports presentation-only **Item Level** sorting (header toggle: descending first, then ascending). Unknown item levels sort last in both directions.
 
-**Refresh all** refreshes only the current user's active Blizzard-linked characters in that region, with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt and, when Character Raid Encounters succeed, current-reset `CharacterRaidLockout` aggregates. It never updates specialization, primaryRole, or BoosterAccess.
+**Refresh all** refreshes only the current user's active Blizzard-linked characters in that region, with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt and, when current-raid encounters map successfully, verified current-reset `CharacterRaidLockout` rows. Aggregate messaging distinguishes profiles refreshed, lockouts verified, and lockouts unavailable. It never updates specialization, primaryRole, or BoosterAccess.
 
-Missing or stale (wrong `resetIdentifier`) CharacterRaidLockout rows display as **Unknown** on `/characters` (not "Clear"). Successful Blizzard derivation of zero boss kills for a difficulty displays as **0/N**.
+Missing or stale (wrong `resetIdentifier` / non-current raid) CharacterRaidLockout rows display as **Unknown** on `/characters` (not "Clear"). A difficulty mode present with zero current-reset kills displays as **0/N**. A tracked difficulty absent from the Blizzard response displays as **?** (unknown), never invented 0/N.
 
 Disconnect clears the regional connection and import sessions. It does **not** delete Characters, signups, lockouts, or history.
 
@@ -132,37 +132,46 @@ Blizzard does **not** expose a direct SavedInstances-style lockout endpoint. Boo
 
 using the regional `profile-{region}` namespace and server-side client-credentials auth.
 
+### Current vs historical raid references
+
+`src/lib/wow-raid-catalog.ts` holds stable BoostingHub raid UUIDs that must not be overwritten when seasons change:
+
+| Raid | Role | Journal instance id |
+| --- | --- | --- |
+| Manaforge Omega | Historical (existing Runs keep this id) | `1302` |
+| The Venomous Abyss | **Current** lockout target (`currentForLockouts: true`) | `1320` |
+
+Lockout refresh uses the explicit `currentForLockouts` flag — not array order, newest DB row, or boss count (both raids have 8 bosses). Matching prefers Blizzard journal instance + encounter ids; localized names (e.g. de_DE “Der Giftige Abgrund”) are presentation only. Tidebound Grotto (single-boss lair, instance `1317`) is not merged into Venomous Abyss lockouts.
+
+Run creation lists raids with `availableForRuns: true` via `raidRepository.ensureReferenceRaids` (both historical Manaforge and current Venomous). Historical Manaforge Runs are never rewritten to Venomous.
+
 ### Semantics
 
-- For each catalog boss and difficulty (`NORMAL` / `HEROIC` / `MYTHIC`): killed this reset iff `last_kill_timestamp` is in `[resetStart, resetEnd)`.
+- For each **verified** difficulty (`NORMAL` / `HEROIC` / `MYTHIC`): killed this reset iff `last_kill_timestamp` is in `[resetStart, resetEnd)`.
 - Do **not** treat historical `completed_count > 0` alone as current lockout.
-- Regional weekly reset windows (`src/lib/wow-weekly-reset.ts`): EU Wednesday 04:00 UTC; US Tuesday 15:00 UTC (documented community/official schedule cross-check). Identifiers use `resetIdentifierFor(resetStart)`.
-- Only raids in `src/lib/wow-raid-catalog.ts` (current production catalog) are ingested.
-- Difficulties map centrally in `src/lib/blizzard/raid-difficulty.ts` (LFR ignored for v1).
+- Regional weekly reset windows (`src/lib/wow-weekly-reset.ts`): EU Wednesday 04:00 UTC; US Tuesday 15:00 UTC. Identifiers use `resetIdentifierFor(resetStart)`.
+- Difficulties map centrally in `src/lib/blizzard/raid-difficulty.ts` (LFR / Story ignored).
 
-### Clear vs Unknown
+### Clear vs Unknown (per difficulty)
 
 | Situation | Display |
 | --- | --- |
-| Successful encounters response + mapped current raid + known reset, zero current kills | **0/N** (clear for that difficulty) |
-| API failure, privacy/unavailable profile path, malformed payload, missing raid mapping, or reset unavailable | **Unknown** — never invent Clear |
-| Persisted row with `resetIdentifier` ≠ current regional reset | **Unknown** for current week (old evidence is not reused) |
+| Current raid found + difficulty mode present + zero current-reset kills | **0/N** (verified clear for that difficulty) |
+| Current raid found + difficulty mode absent | **?** for that difficulty (not 0/N) |
+| API failure, missing current raid mapping, no supported modes | **Unknown** overall — never invent Clear |
+| Persisted row with wrong `resetIdentifier` or non-current raid | Ignored for current display |
 
-Profile/encounters data may lag until Blizzard updates the character profile (often after logout). Refresh means “latest data Blizzard returned,” not live client state. `CharacterRaidLockout.updatedAt` is the last successful verification time.
+Profile success and lockout verification are independent: itemLevel may update while lockouts stay unverified. Encounters data may lag until Blizzard publishes (often after logout). `CharacterRaidLockout.updatedAt` is last successful lockout verification time.
 
 ### Mythic limitation
 
-Mythic progress is boss-kill progress in the current reset only (e.g. `M 3/8`). This API does **not** expose Mythic saved-instance IDs or lock-extension state. Do not treat missing Mythic kills as “safe to join any Mythic instance.”
+Mythic progress is boss-kill progress in the current reset only. This API does **not** expose Mythic saved-instance IDs or lock-extension state.
 
 ### Persistence and refresh
 
-Derived aggregates upsert into existing `CharacterRaidLockout` (`bossesDefeated`, `isComplete`, `resetIdentifier`). No separate Blizzard lockout domain. Boss-level detail is computed during derivation; v1 persists difficulty aggregates (sufficient for `N 3/8` display and existing signup conflict checks).
+Verified difficulty aggregates upsert into existing `CharacterRaidLockout`. Missing modes for the current raid+reset are deleted so they remain Unknown. Same-reset rows for non-current catalog raids are cleared on successful sync. No parallel BlizzardLockout domain.
 
-Single Refresh and Refresh all fetch encounters after profile success. Encounter failure leaves prior lockout rows unchanged while still allowing itemLevel/profile updates. HTTP is never held inside a DB transaction.
-
-Signup / roster eligibility is **unchanged**: existing aggregate conflict rules (`isComplete` or `bossesDefeated > 0` for matching raid/difficulty/reset). Boss-by-boss eligibility redesign is out of scope.
-
-No Warcraft Logs, Raider.IO, or WoW addon is required for this derivation.
+Signup / roster eligibility is **unchanged**. No Warcraft Logs, Raider.IO, or addon required.
 
 ## Security
 
