@@ -29,6 +29,9 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
 }
 
 function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] }) {
+  const active = signups.filter((signup) => signup.status !== "WITHDRAWN");
+  const selected = active.find((signup) => signup.status === "SELECTED");
+
   return (
     <Card>
       <CardHeader
@@ -41,6 +44,18 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
           description="Use Sign up while the window is open. Eligibility is evaluated on submit."
         />
       ) : (
+        <>
+          {active.length > 0 ? (
+            <div className="border-b border-border px-4 py-3 text-sm">
+              <p>
+                <span className="text-muted">Offered:</span>{" "}
+                {active.map((signup) => signup.characterName ?? "Unknown character").join(", ")}
+              </p>
+              <p className="mt-1">
+                <span className="text-muted">Selected:</span> {selected?.characterName ?? "Pending"}
+              </p>
+            </div>
+          ) : null}
         <ul className="divide-y divide-border">
           {signups.map((signup) => (
             <li key={signup.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
@@ -70,86 +85,96 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
             </li>
           ))}
         </ul>
+        </>
       )}
     </Card>
   );
 }
 
+type ManagerSignupGroup = {
+  userId: string;
+  userName: string;
+  participationType: ManagerSignup["participationType"];
+  anyApproved: boolean;
+  signups: ManagerSignup[];
+};
+
+function groupSignupsByUser(signups: ManagerSignup[]): ManagerSignupGroup[] {
+  const groups: ManagerSignupGroup[] = [];
+  for (const signup of signups) {
+    let group = groups.find((item) => item.userId === signup.userId);
+    if (!group) {
+      group = {
+        userId: signup.userId,
+        userName: signup.userName,
+        participationType: signup.participationType,
+        anyApproved: false,
+        signups: [],
+      };
+      groups.push(group);
+    }
+    group.signups.push(signup);
+    if (signup.participationType === "BOOSTER" && signup.boosterApproved) {
+      group.anyApproved = true;
+    }
+  }
+  return groups;
+}
+
+/**
+ * One User may offer several Characters for the same Run (multiple RunSignup
+ * rows sharing userId). Grouped here so a User with three offers reads as one
+ * signup intent, not three unrelated rows — draft selection itself still
+ * happens per exact RunSignup row on the Roster tab.
+ */
 function ManagerSignupList({ runId, signups }: { runId: string; signups: ManagerSignup[] }) {
+  const groups = groupSignupsByUser(signups);
   return (
     <Card>
       <CardHeader
         title="Signups"
-        description="Operational list for rostering. Draft selection happens on the Roster tab."
+        description="Operational list for rostering, grouped by User. Draft selection happens on the Roster tab."
       />
-      {signups.length === 0 ? (
+      {groups.length === 0 ? (
         <EmptyState title="No signups yet." description="New offers appear while the signup window is open." />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-muted">
-              <tr>
-                <th className="px-4 py-2 font-medium">Player</th>
-                <th className="px-4 py-2 font-medium">Character</th>
-                <th className="px-4 py-2 font-medium">Offer</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {signups.map((signup) => (
-                <tr key={signup.id} className="border-t border-border align-top">
-                  <td className="px-4 py-3">{signup.userName}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span>
-                        {signup.character
-                          ? `${signup.character.name}-${signup.character.realm}`
-                          : "Unknown character"}
-                      </span>
-                      {signup.character ? <ClassBadge wowClass={signup.character.wowClass} /> : null}
-                    </div>
-                    {signup.character ? (
-                      <p className="mt-1 text-xs text-muted">
-                        {typeof signup.character.itemLevel === "number" ? signup.character.itemLevel : "Unknown"} ilvl ·{" "}
-                        {signup.character.specialization ?? signup.character.primaryRole}
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ParticipationBadge type={signup.participationType} />
-                      {signup.role ? <RoleBadge role={signup.role} /> : null}
-                      {signup.participationType === "BOOSTER" ? (
-                        <span className="text-xs text-muted">{signup.isBackup ? "Backup" : "Primary"}</span>
-                      ) : null}
-                    </div>
-                    {signup.participationType === "BOOSTER" && signup.boosterApproved ? (
-                      <div className="mt-1">
-                        <AccessBadge status="APPROVED" />
-                      </div>
-                    ) : null}
+        <ul className="divide-y divide-border">
+          {groups.map((group) => (
+            <li key={group.userId} className="px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">{group.userName}</span>
+                  <ParticipationBadge type={group.participationType} />
+                  {group.participationType === "BOOSTER" && group.anyApproved ? (
+                    <AccessBadge status="APPROVED" />
+                  ) : null}
+                </div>
+                <AddStrikeButton runId={runId} userId={group.userId} userName={group.userName} />
+              </div>
+              <ul className="mt-2 space-y-1.5">
+                {group.signups.map((signup) => (
+                  <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span>
+                      {signup.character ? `${signup.character.name}-${signup.character.realm}` : "Unknown character"}
+                    </span>
+                    {signup.character ? <ClassBadge wowClass={signup.character.wowClass} /> : null}
+                    {signup.role ? <RoleBadge role={signup.role} /> : null}
                     {signup.participationType === "LOOTBUDDY" ? (
-                      <p className="mt-1 text-xs text-muted">
+                      <span className="text-xs text-muted">
                         {signup.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[signup.lootbuddyMode] : "Lootbuddy"}
                         {signup.lootbuddyVerification && signup.lootbuddyVerification !== "NONE"
                           ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[signup.lootbuddyVerification]}`
                           : ""}
-                      </p>
+                      </span>
                     ) : null}
-                  </td>
-                  <td className="px-4 py-3">
                     <SignupStatusBadge status={signup.status} />
-                    {signup.issue ? <p className="mt-1 text-xs text-danger">{signup.issue}</p> : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    <AddStrikeButton runId={runId} userId={signup.userId} userName={signup.userName} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {signup.issue ? <span className="text-xs text-danger">{signup.issue}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

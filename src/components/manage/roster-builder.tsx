@@ -413,13 +413,28 @@ function SignupRowCard({
                 : ""}
             </span>
           ) : null}
-          {extras.map((item) => (
-            <span key={item.id}>
-              Also offered: {item.character?.name ?? "character"}{" "}
-              {item.role ? CHARACTER_ROLE_LABELS[item.role] : item.participationType}
-            </span>
-          ))}
         </div>
+        {extras.length > 0 ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">
+            <span>Also offered:</span>
+            {extras.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={!editing || pending || item.status === "WITHDRAWN"}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onToggle(item, true);
+                }}
+                className="rounded border border-border px-1.5 py-0.5 hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+                title={`Select ${item.character?.name ?? "this offer"} instead`}
+              >
+                {item.character?.name ?? "character"}
+                {item.role ? ` (${CHARACTER_ROLE_LABELS[item.role]})` : ` (${item.participationType})`}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {signup.issue ? (
           <p className="mt-1 text-xs text-danger">{signup.issue}</p>
         ) : null}
