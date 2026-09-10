@@ -112,6 +112,14 @@ export const boosterAccessRepository = {
     return row ? mapAccess(row as Record<string, unknown>) : null;
   },
 
+  async listPendingByUserDifficulty(
+    userId: string,
+    difficulty: RaidDifficulty,
+  ): Promise<BoosterAccessRecord[]> {
+    const rows = await orm.BoosterAccess.where({ userId, difficulty, status: "PENDING" }).all();
+    return rows.map((row) => mapAccess(row as Record<string, unknown>));
+  },
+
   async create(input: BoosterAccessWriteInput): Promise<BoosterAccessRecord> {
     const now = new Date().toISOString();
     await orm.BoosterAccess.create({
@@ -131,6 +139,21 @@ export const boosterAccessRepository = {
       ...patch,
       updatedAt: new Date().toISOString(),
     });
+  },
+
+  async countByStatus(): Promise<Record<BoosterAccessStatus, number>> {
+    const rows = await orm.BoosterAccess.select("status").all();
+    const counts: Record<BoosterAccessStatus, number> = {
+      PENDING: 0,
+      APPROVED: 0,
+      REJECTED: 0,
+      REVOKED: 0,
+    };
+    for (const row of rows) {
+      const status = mapAccessStatus((row as Record<string, unknown>).status);
+      counts[status] += 1;
+    }
+    return counts;
   },
 
   async listAdmin(filters: BoosterAccessAdminFilters = {}): Promise<BoosterAccessAdminRecord[]> {

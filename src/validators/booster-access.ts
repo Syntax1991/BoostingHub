@@ -27,6 +27,12 @@ export const rejectBoosterAccessSchema = z.object({
 });
 
 export const revokeBoosterAccessSchema = z.object({
-  accessId: entityIdSchema,
+  qualificationId: entityIdSchema,
   reason: reviewReasonSchema,
+});
+
+export const grantBoosterAccessSchema = z.object({
+  userId: entityIdSchema,
+  difficulty: z.enum(RAID_DIFFICULTIES),
+  notes: reviewReasonSchema,
 });

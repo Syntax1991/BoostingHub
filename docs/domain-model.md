@@ -21,7 +21,7 @@ Application account and Better Auth `user` row.
 - `id`, `name` (display name), optional `email`
 - Discord user id, username, avatar (`image`)
 - `accountStatus`: `ACTIVE` \| `DISABLED`
-- `accountRole`: `USER` \| `RAID_LEAD` \| `ADMIN`
+- `accountRole`: `USER` \| `RAID_LEAD` \| `ADMIN` (ADMIN assigns via user management; never OAuth self-promote)
 - timestamps
 
 Email is optional for core behavior. Discord is the primary identity.
@@ -50,20 +50,21 @@ Belongs to one user. Operators may create characters manually or import/link the
 - optional Warcraft Logs identifier (unused until later integration)
 - `lastSyncedAt` set after a successful Blizzard profile sync
 
-Class is immutable after creation. Specialization from Blizzard is import-time prefill only; afterward it stays BoostingHub-owned. `primaryRole` is derived from specialization; BoosterAccess may approve additional roles. Disconnecting Battle.net does not delete Characters. See [character-management.md](features/character-management.md) and [blizzard-integration.md](features/blizzard-integration.md).
+Class is immutable after creation. Specialization from Blizzard is import-time prefill only; afterward it stays BoostingHub-owned. `primaryRole` is derived from specialization; signup role must still be valid for the class. Disconnecting Battle.net does not delete Characters. See [character-management.md](features/character-management.md) and [blizzard-integration.md](features/blizzard-integration.md).
 
-## BoosterAccess
+## BoosterQualification (current)
 
-Normalized **account-level** approval, not `isBooster` and not a JSON blob. See [booster-access-management.md](features/booster-access-management.md).
+Authoritative **account-level** eligibility: User + Difficulty only. See [booster-access-management.md](features/booster-access-management.md).
 
-- user (required), optional requesting character (context only)
-- class, role, difficulty
-- status: `PENDING` \| `APPROVED` \| `REJECTED` \| `REVOKED`
-- approved at / approved by (set while approved; last approval kept after revoke)
-- reviewed at / reviewed by (last admin decision)
-- notes: optional owner-visible reject/revoke reason
+- unique on `(userId, difficulty)`
+- status: `APPROVED` \| `REVOKED`
+- granted / revoked metadata and optional notes
+- exact difficulty match (no inheritance)
+- Characters consume the account qualification; they do not own it
 
-Unique on `(userId, wowClass, role, difficulty)`. `characterId` is not part of uniqueness. Characters consume matching approvals; they do not own the row. Heroic healer approval does not grant Mythic or Normal healer approval. One row is reused across the lifecycle; rejection does not delete the row.
+## Legacy BoosterAccess (history)
+
+Preserved historical applications: User + Class + Role + Difficulty (+ optional Character context). Statuses include `PENDING` (legacy queue only). Not the runtime eligibility source after migration.
 
 ## Raid / RaidBoss
 

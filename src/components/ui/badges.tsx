@@ -7,13 +7,16 @@ import {
   CLASS_LABELS,
   DIFFICULTY_LABELS,
   PARTICIPATION_LABELS,
+  ROLE_LABELS,
   RUN_STATUS_LABELS,
   SETTLEMENT_STATUS_LABELS,
   SIGNUP_STATUS_LABELS,
 } from "@/lib/labels";
 import type {
+  AccountRole,
   AttendanceStatus,
   BoosterAccessStatus,
+  BoosterQualificationStatus,
   CharacterRole,
   ParticipationType,
   RaidDifficulty,
@@ -155,7 +158,7 @@ export function SettlementStatusBadge({ status }: { status: SettlementStatus }) 
   );
 }
 
-export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
+export function AccessBadge({ status }: { status: BoosterAccessStatus | BoosterQualificationStatus }) {
   return (
     <Badge
       className={cn(
@@ -165,7 +168,21 @@ export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
         status === "REVOKED" && "bg-muted/20 text-muted",
       )}
     >
-      {ACCESS_STATUS_LABELS[status]}
+      {ACCESS_STATUS_LABELS[status as BoosterAccessStatus]}
+    </Badge>
+  );
+}
+
+export function AccountRoleBadge({ role }: { role: AccountRole }) {
+  return (
+    <Badge
+      className={cn(
+        role === "ADMIN" && "bg-accent/15 text-accent",
+        role === "RAID_LEAD" && "bg-info/15 text-info",
+        role === "USER" && "bg-muted/20 text-muted",
+      )}
+    >
+      {ROLE_LABELS[role]}
     </Badge>
   );
 }

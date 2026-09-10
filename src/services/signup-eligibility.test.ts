@@ -34,20 +34,16 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
     wowClass: "SHAMAN",
     specialization: "Restoration",
     isActive: true,
-    boosterAccess: [
-      { wowClass: "SHAMAN", role: "HEALER", difficulty: "HEROIC", status: "APPROVED" },
-    ],
+    boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
     lockouts: [],
     ...overrides,
   };
 }
 
 describe("booster eligibility", () => {
-  it("allows a heroic-approved healer on a heroic run", () => {
+  it("allows all valid roles when heroic-qualified", () => {
     const result = evaluateBoosterOptions([shaman()], heroicRun, reset);
-    expect(result.eligible).toEqual([
-      expect.objectContaining({ characterId: "char-1", role: "HEALER" }),
-    ]);
+    expect(result.eligible.map((item) => item.role).sort()).toEqual(["DPS", "HEALER"]);
   });
 
   it("does not treat heroic approval as mythic eligibility", () => {
@@ -57,7 +53,7 @@ describe("booster eligibility", () => {
   });
 
   it("rejects missing booster access", () => {
-    const result = evaluateBoosterOptions([shaman({ boosterAccess: [] })], heroicRun, reset);
+    const result = evaluateBoosterOptions([shaman({ boosterQualifications: [] })], heroicRun, reset);
     expect(result.eligible).toHaveLength(0);
     expect(result.ineligible[0]?.reason).toBe("NO_BOOSTER_ACCESS");
   });
@@ -96,17 +92,18 @@ describe("booster eligibility", () => {
         id: "char-2",
         name: "Emberlight",
         wowClass: "PALADIN",
-        boosterAccess: [{ wowClass: "PALADIN", role: "HEALER", difficulty: "HEROIC", status: "APPROVED" }],
+        boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
       }),
     };
     const result = evaluateBoosterOptions([shaman(), second], heroicRun, reset);
-    expect(result.eligible.map((item) => item.characterId)).toEqual(["char-1", "char-2"]);
+    expect(result.eligible.map((item) => item.characterId).includes("char-1")).toBe(true);
+    expect(result.eligible.map((item) => item.characterId).includes("char-2")).toBe(true);
   });
 });
 
 describe("lootbuddy eligibility", () => {
   it("does not require booster access for loot-only or playing", () => {
-    const character = shaman({ boosterAccess: [] });
+    const character = shaman({ boosterQualifications: [] });
     const result = evaluateLootbuddyOptions([character], heroicRun, reset);
     expect(result.eligible).toHaveLength(1);
   });

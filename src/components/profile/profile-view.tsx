@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ROLE_LABELS, DIFFICULTY_LABELS, CHARACTER_ROLE_LABELS } from "@/lib/labels";
+import { ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
-import { ClassBadge } from "@/components/ui/badges";
+import { DifficultyBadge } from "@/components/ui/badges";
 import type { profileService } from "@/services/profile.service";
 
 type Profile = Awaited<ReturnType<typeof profileService.getProfile>>;
@@ -53,22 +53,18 @@ export function ProfileView({ data }: { data: Profile }) {
           <CardHeader title="Booster access" />
           <div className="px-4 py-4 text-sm">
             {data.boosterAccess.approvals.length === 0 ? (
-              <p className="text-muted">No approved booster combinations.</p>
+              <p className="text-muted">No approved booster difficulties.</p>
             ) : (
               <ul className="space-y-2">
                 {data.boosterAccess.approvals.map((approval) => (
-                  <li key={`${approval.wowClass}-${approval.role}-${approval.difficulty}`} className="flex items-center justify-between gap-2">
-                    <ClassBadge wowClass={approval.wowClass} />
-                    <span className="text-xs text-muted">
-                      {CHARACTER_ROLE_LABELS[approval.role]} · {DIFFICULTY_LABELS[approval.difficulty]}
-                    </span>
+                  <li key={approval.difficulty} className="flex items-center justify-between gap-2">
+                    <DifficultyBadge difficulty={approval.difficulty} />
                   </li>
                 ))}
               </ul>
             )}
             <p className="mt-3 text-xs text-muted">
-              {data.boosterAccess.pendingCount} pending · {data.boosterAccess.rejectedCount} rejected ·{" "}
-              {data.boosterAccess.revokedCount} revoked
+              {data.boosterAccess.approvedCount} approved · {data.boosterAccess.revokedCount} revoked
             </p>
           </div>
         </Card>

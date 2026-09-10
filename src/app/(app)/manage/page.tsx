@@ -1,7 +1,7 @@
-import { requireManagerOrRedirect } from "@/auth/session";
-import { ManageHomeView } from "@/components/manage/manage-views";
+import { managementController } from "@/controllers/app.controller";
+import { ManageHomeView } from "@/components/manage/manage-home-view";
 
 export default async function ManagePage() {
-  const user = await requireManagerOrRedirect();
-  return <ManageHomeView accountRole={user.accountRole} />;
+  const data = await managementController.getManageHomePage();
+  return <ManageHomeView cards={data.cards} />;
 }

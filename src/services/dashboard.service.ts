@@ -4,7 +4,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
-import { boosterAccessService } from "@/services/booster-access.service";
+import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
@@ -29,7 +29,7 @@ export const dashboardService = {
     const approvedCharacterIds = new Set(
       characters
         .filter((character) =>
-          boosterAccessService.summarize(character.boosterAccess).approvedCount > 0,
+          boosterQualificationService.summarize(character.boosterQualifications).approvedCount > 0,
         )
         .map((character) => character.id),
     );

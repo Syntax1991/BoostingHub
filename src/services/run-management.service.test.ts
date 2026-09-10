@@ -62,12 +62,13 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
   });
 }
 
-async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "BoosterAccess" | "Run", id: string) {
+async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "BoosterAccess" | "BoosterQualification" | "Run", id: string) {
   try {
     if (table === "User") await orm.User.where({ id }).delete();
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "BoosterAccess") await orm.BoosterAccess.where({ id }).delete();
+    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
     else await orm.Run.where({ id }).delete();
   } catch {
     // Already gone.
@@ -103,6 +104,7 @@ beforeAll(async () => {
   for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin, ids.character, ids.access]) {
     await deleteIfPresent("RunSignup", id);
     await deleteIfPresent("BoosterAccess", id);
+    await deleteIfPresent("BoosterQualification", id);
     await deleteIfPresent("Character", id);
     await deleteIfPresent("User", id);
   }
@@ -129,6 +131,7 @@ afterAll(async () => {
     await deleteIfPresent("Run", id);
   }
   await deleteIfPresent("BoosterAccess", ids.access);
+  await deleteIfPresent("BoosterQualification", ids.access);
   await deleteIfPresent("Character", ids.character);
   await deleteIfPresent("User", ids.user);
   await deleteIfPresent("User", ids.lead);
@@ -572,18 +575,16 @@ describe("opened run signup integration", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await orm.BoosterAccess.create({
+    await orm.BoosterQualification.create({
       id: ids.access,
       userId: ids.user,
-      characterId: ids.character,
-      wowClass: "PALADIN",
-      role: "TANK",
       difficulty: "HEROIC",
       status: "APPROVED",
-      approvedAt: now,
-      approvedById: ids.admin,
-      reviewedAt: now,
-      reviewedById: ids.admin,
+      notes: "Run management test grant",
+      grantedAt: now,
+      grantedById: ids.admin,
+      revokedAt: null,
+      revokedById: null,
       createdAt: now,
       updatedAt: now,
     });

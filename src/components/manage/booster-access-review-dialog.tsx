@@ -11,9 +11,11 @@ import { BOOSTER_ACCESS_REVIEW_REASON_MAX } from "@/validators/booster-access";
 
 export function BoosterAccessReviewDialog({
   accessId,
+  qualificationId,
   mode,
 }: {
-  accessId: string;
+  accessId?: string;
+  qualificationId?: string;
   mode: "reject" | "revoke";
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -48,11 +50,16 @@ export function BoosterAccessReviewDialog({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const payload = { accessId, reason: reason.trim() || undefined };
       const result =
         mode === "reject"
-          ? await rejectBoosterAccessAction(payload)
-          : await revokeBoosterAccessAction(payload);
+          ? await rejectBoosterAccessAction({
+              accessId: accessId!,
+              reason: reason.trim() || undefined,
+            })
+          : await revokeBoosterAccessAction({
+              qualificationId: qualificationId!,
+              reason: reason.trim() || undefined,
+            });
       if (!result.ok) {
         setError(result.message);
         return;
@@ -84,8 +91,8 @@ export function BoosterAccessReviewDialog({
           </h2>
           <p className="text-xs text-muted">
             {mode === "revoke"
-              ? "The character becomes ineligible for new matching booster signups. Existing signups and roster history stay."
-              : "Rejected access does not grant booster eligibility. The owner can request again later."}
+              ? "The account becomes ineligible for new booster signups at this difficulty. Existing signups and roster history stay."
+              : "Rejected access does not grant booster eligibility."}
           </p>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Reason (optional, visible to the owner)</span>

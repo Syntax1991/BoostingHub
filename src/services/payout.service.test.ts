@@ -11,7 +11,7 @@ import { payoutService } from "@/services/payout.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
-import type { AttendanceStatus, CharacterRole, ParticipationType, WowClass } from "@/models/enums";
+import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
 
 const raidId = WOW_RAID_CATALOG[0].id;
 const ids = {
@@ -76,6 +76,7 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "BoosterAccess") await orm.BoosterAccess.where({ id }).delete();
+    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
     else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).delete();
     else if (table === "RunSettlement") await orm.RunSettlement.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
@@ -116,19 +117,27 @@ async function createCharacter(input: {
   return id;
 }
 
-async function approveAccess(characterId: string, userId: string, wowClass: WowClass, role: CharacterRole) {
+async function approveAccess(_characterId: string, userId: string) {
+  const existing = await orm.BoosterQualification.where({ userId, difficulty: "HEROIC" }).first();
+  if (existing) {
+    createdAccessIds.push(String((existing as { id: string }).id));
+    return;
+  }
   const id = crypto.randomUUID();
+  const now = new Date().toISOString();
   createdAccessIds.push(id);
-  await orm.BoosterAccess.create({
+  await orm.BoosterQualification.create({
     id,
     userId,
-    characterId,
-    wowClass,
-    role,
     difficulty: "HEROIC",
     status: "APPROVED",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    notes: "Payout test grant",
+    grantedAt: now,
+    grantedById: ids.admin,
+    revokedAt: null,
+    revokedById: null,
+    createdAt: now,
+    updatedAt: now,
   });
 }
 
@@ -235,9 +244,9 @@ beforeAll(async () => {
     for (const row of signups) {
       await deleteIfPresent("RunSignup", (row as { id: string }).id);
     }
-    const access = await orm.BoosterAccess.where({ userId }).select("id").all();
+    const access = await orm.BoosterQualification.where({ userId }).select("id").all();
     for (const row of access) {
-      await deleteIfPresent("BoosterAccess", (row as { id: string }).id);
+      await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
@@ -290,10 +299,10 @@ beforeAll(async () => {
     primaryRole: "HEALER",
   });
 
-  await approveAccess(characters.user, ids.user, "SHAMAN", "DPS");
-  await approveAccess(characters.playerC, ids.playerC, "PALADIN", "TANK");
-  await approveAccess(characters.playerD, ids.playerD, "HUNTER", "DPS");
-  await approveAccess(characters.playerE, ids.playerE, "MONK", "HEALER");
+  await approveAccess(characters.user, ids.user);
+  await approveAccess(characters.playerC, ids.playerC);
+  await approveAccess(characters.playerD, ids.playerD);
+  await approveAccess(characters.playerE, ids.playerE);
 }, 60_000);
 
 afterAll(async () => {
@@ -304,7 +313,7 @@ afterAll(async () => {
     await deleteIfPresent("RunSignup", id);
   }
   for (const id of createdAccessIds) {
-    await deleteIfPresent("BoosterAccess", id);
+    await deleteIfPresent("BoosterQualification", id);
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);

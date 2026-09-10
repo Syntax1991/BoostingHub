@@ -98,7 +98,8 @@ src/
 5. Keep account roles separate from BOOSTER / LOOTBUDDY participation.
 6. Keep signup eligibility in Services. Views receive evaluated options and `canWithdraw`.
 7. Keep roster draft selection off `RunSignup.status` until Publish. Views must not invent composition or publish rules.
-8. Keep booster eligibility in `BoosterAccessService`. RAID_LEAD roster tools may read access; only ADMIN mutates it globally.
-9. Update documentation in the same change that alters architecture or domain behavior.
-10. Treat seed data as a development/test fixture, not required production state.
-11. Do not hard-code seeded user or run IDs in production services.
+8. Keep booster eligibility in `BoosterAccessService`. RAID_LEAD roster tools may read access; only ADMIN mutates it globally (including direct grant after Discord review).
+9. Keep account-role administration in `userManagementService`. Hidden Manage links are not authorization.
+10. Update documentation in the same change that alters architecture or domain behavior.
+11. Treat seed data as a development/test fixture, not required production state.
+12. Do not hard-code seeded user or run IDs in production services.

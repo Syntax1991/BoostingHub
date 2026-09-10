@@ -49,6 +49,55 @@ export function canAccessManagement(role: AccountRole): boolean {
   return hasRaidLeadAccess(role);
 }
 
+/** ADMIN-only user directory and account-role administration. */
+export function canManageUsers(role: AccountRole): boolean {
+  return hasAdminAccess(role);
+}
+
+export function assertCanManageUsers(user: AuthenticatedUser): void {
+  if (!canManageUsers(user.accountRole)) {
+    throw new DomainError(
+      "USER_MANAGEMENT_FORBIDDEN",
+      "Admin permission is required to manage users.",
+      403,
+    );
+  }
+}
+
+export type ManagementNavItem = {
+  href: string;
+  label: string;
+  module: "overview" | "runs" | "booster-access" | "users";
+};
+
+/**
+ * Management sub-navigation by account role.
+ * Hidden links are not authorization — routes still enforce server-side.
+ */
+export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
+  if (!canAccessManagement(role)) {
+    return [];
+  }
+  const items: ManagementNavItem[] = [
+    { href: "/manage", label: "Overview", module: "overview" },
+    { href: "/manage/runs", label: "Runs", module: "runs" },
+  ];
+  if (hasAdminAccess(role)) {
+    items.push(
+      { href: "/manage/booster-access", label: "Booster Access", module: "booster-access" },
+      { href: "/manage/users", label: "Users", module: "users" },
+    );
+  }
+  return items;
+}
+
+export function isManagementNavActive(pathname: string, href: string): boolean {
+  if (href === "/manage") {
+    return pathname === "/manage";
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 /**
  * RAID_LEAD may manage only assigned runs. ADMIN may manage every run.
  * Account role still has to be RAID_LEAD or ADMIN — being listed as raidLeadId

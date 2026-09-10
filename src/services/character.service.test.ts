@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { boosterAccessRepository } from "@/repositories/booster-access.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { characterService } from "@/services/character.service";
@@ -58,7 +57,10 @@ async function createTestUser(id: string, name: string) {
   });
 }
 
-async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "BoosterAccess", id: string) {
+async function deleteIfPresent(
+  table: "User" | "Character" | "RunSignup" | "BoosterAccess" | "BoosterQualification",
+  id: string,
+) {
   try {
     if (table === "User") {
       await orm.User.where({ id }).delete();
@@ -70,6 +72,10 @@ async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "Boos
     }
     if (table === "RunSignup") {
       await orm.RunSignup.where({ id }).delete();
+      return;
+    }
+    if (table === "BoosterQualification") {
+      await orm.BoosterQualification.where({ id }).delete();
       return;
     }
     await orm.BoosterAccess.where({ id }).delete();
@@ -87,7 +93,11 @@ async function cleanupGeneratedRows() {
     await deleteIfPresent("RunSignup", String(row.id));
   }
   for (const id of createdAccessIds) {
-    await deleteIfPresent("BoosterAccess", id);
+    await deleteIfPresent("BoosterQualification", id);
+  }
+  const ownerQualifications = await orm.BoosterQualification.where({ userId: ids.owner }).all();
+  for (const row of ownerQualifications) {
+    await deleteIfPresent("BoosterQualification", String(row.id));
   }
   const ownerAccess = await orm.BoosterAccess.where({ userId: ids.owner }).all();
   for (const row of ownerAccess) {
@@ -368,19 +378,22 @@ describe("characterService lifecycle and signup eligibility", () => {
       "BOOSTER_ACCESS_REQUIRED",
     );
 
-    const accessId = crypto.randomUUID();
-    await orm.BoosterAccess.create({
-      id: accessId,
+    const qualificationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await orm.BoosterQualification.create({
+      id: qualificationId,
       userId: ids.owner,
-      characterId: character.id,
-      wowClass: "DRUID",
-      role: "HEALER",
       difficulty: "HEROIC",
       status: "APPROVED",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      notes: "Test grant",
+      grantedAt: now,
+      grantedById: ids.admin,
+      revokedAt: null,
+      revokedById: null,
+      createdAt: now,
+      updatedAt: now,
     });
-    createdAccessIds.push(accessId);
+    createdAccessIds.push(qualificationId);
 
     const withAccess = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(withAccess.booster.eligible.some((item) => item.characterId === character.id && item.role === "HEALER")).toBe(
@@ -402,10 +415,14 @@ describe("characterService lifecycle and signup eligibility", () => {
     const historical = await signupRepository.findById(signup.id);
     expect(historical?.status).toBe("PENDING");
 
-    const access = await boosterAccessRepository.listByUserId(ids.owner);
-    expect(access.some((row) => row.wowClass === "DRUID" && row.role === "HEALER" && row.status === "APPROVED")).toBe(
-      true,
-    );
+    const qualifications = await orm.BoosterQualification.where({ userId: ids.owner }).all();
+    expect(
+      qualifications.some(
+        (row) =>
+          (row as { difficulty: string; status: string }).difficulty === "HEROIC" &&
+          (row as { difficulty: string; status: string }).status === "APPROVED",
+      ),
+    ).toBe(true);
 
     const inactiveOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(inactiveOptions.lootbuddy.eligible.some((item) => item.characterId === character.id)).toBe(false);

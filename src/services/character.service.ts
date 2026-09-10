@@ -14,7 +14,7 @@ import {
 import { findSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
-import { boosterAccessService } from "@/services/booster-access.service";
+import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 
 export type CharacterWriteInput = {
@@ -116,7 +116,7 @@ export const characterService = {
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
       characters: characters.map((character) => {
-        const access = boosterAccessService.summarize(character.boosterAccess);
+        const access = boosterQualificationService.summarize(character.boosterQualifications);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
         const lockouts = lockoutService
           .summarize(
@@ -195,8 +195,10 @@ export const characterService = {
       blizzardCharacterId: character.blizzardCharacterId,
       blizzardRealmId: character.blizzardRealmId,
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
-      boosterAccess: character.boosterAccess,
-      accessPanel: boosterAccessService.buildCharacterAccessPanel(character),
+      boosterQualifications: character.boosterQualifications,
+      accessPanel: boosterQualificationService.buildAccountAccessPanel(
+        character.boosterQualifications,
+      ),
       currentReset,
       currentLockoutRaid: currentRaid
         ? { id: currentRaid.id, name: currentRaid.name }

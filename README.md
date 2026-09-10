@@ -188,6 +188,8 @@ See [docs/features/character-management.md](docs/features/character-management.m
 | `/manage/runs` | RAID_LEAD or ADMIN |
 | `/manage/runs/new` | RAID_LEAD or ADMIN |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
+| `/manage/booster-access` | ADMIN |
+| `/manage/users` | ADMIN |
 
 ## Documentation
 
@@ -200,6 +202,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Character management](docs/features/character-management.md)
 - [Battle.net integration](docs/features/blizzard-integration.md)
 - [Booster access management](docs/features/booster-access-management.md)
+- [User management](docs/features/user-management.md)
 - [Canonical run detail](docs/features/run-detail.md)
 - [Run management](docs/features/run-management.md)
 - [Run signups](docs/features/run-signups.md)

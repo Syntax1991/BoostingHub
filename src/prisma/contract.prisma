@@ -59,6 +59,13 @@ enum BoosterAccessStatus {
   REVOKED  = "REVOKED"
 }
 
+/// Current BoosterQualification lifecycle. PENDING belongs only to legacy BoosterAccess.
+enum BoosterQualificationStatus {
+  @@type("pg/text@1")
+  APPROVED = "APPROVED"
+  REVOKED  = "REVOKED"
+}
+
 enum RunStatus {
   @@type("pg/text@1")
   DRAFT       = "DRAFT"
@@ -143,10 +150,13 @@ model User {
   accounts      Account[]
   characters     Character[]
   boosterAccess  BoosterAccess[] @relation("UserBoosterAccess")
+  boosterQualifications BoosterQualification[] @relation("UserBoosterQualification")
   ledRuns        Run[]           @relation("RunRaidLead")
   signups        RunSignup[]
   approvedAccess   BoosterAccess[] @relation("BoosterAccessApprover")
   reviewedAccess   BoosterAccess[] @relation("BoosterAccessReviewer")
+  grantedQualifications BoosterQualification[] @relation("BoosterQualificationGranter")
+  revokedQualifications BoosterQualification[] @relation("BoosterQualificationRevoker")
   activity         ActivityEvent[]
   publishedRosters RunRoster[]     @relation("RosterPublisher")
   markedAttendance RunAttendance[] @relation("AttendanceMarker")
@@ -283,11 +293,9 @@ model Character {
   @@map("character")
 }
 
-/// Granular booster eligibility for one user + class + role + difficulty.
-/// A Shaman Healer Heroic approval does not imply Shaman Healer Mythic.
-/// One row is reused across PENDING / APPROVED / REJECTED / REVOKED; do not
-/// delete rows to represent rejection. characterId is the requesting character
-/// context, not part of uniqueness — eligibility stays class-scoped per user.
+/// LEGACY historical booster application/history.
+/// Preserves User + Class + Role + Difficulty (+ optional Character context).
+/// NOT the authoritative current eligibility source — see BoosterQualification.
 model BoosterAccess {
   id           String              @id @default(uuid())
   userId       String
@@ -312,6 +320,31 @@ model BoosterAccess {
   @@index([userId])
   @@index([status])
   @@map("booster_access")
+}
+
+/// Authoritative current Booster eligibility: User + Difficulty only.
+/// Exact-match: MYTHIC does not imply HEROIC or NORMAL. One row per pair.
+model BoosterQualification {
+  id           String                       @id @default(uuid())
+  userId       String
+  user         User                         @relation("UserBoosterQualification", fields: [userId], references: [id], onDelete: Cascade)
+  difficulty   RaidDifficulty
+  status       BoosterQualificationStatus
+  grantedAt    TimestamptzString?
+  grantedById  String?
+  grantedBy    User?                        @relation("BoosterQualificationGranter", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedAt    TimestamptzString?
+  revokedById  String?
+  revokedBy    User?                        @relation("BoosterQualificationRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  notes        String?
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@unique([userId, difficulty])
+  @@index([userId])
+  @@index([status])
+  @@index([difficulty])
+  @@map("booster_qualification")
 }
 
 model Raid {

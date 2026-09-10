@@ -12,7 +12,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AccountRole } from "@/models/enums";
-import { canAccessManagement } from "@/auth/authorization";
+import {
+  canAccessManagement,
+  getManagementNavItems,
+  isManagementNavActive,
+} from "@/auth/authorization";
 import { ROLE_LABELS } from "@/lib/labels";
 import { signOutAction } from "@/controllers/auth.actions";
 import { Button } from "@/components/ui/button";
@@ -38,6 +42,8 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const showManage = canAccessManagement(user.accountRole);
+  const manageNav = showManage ? getManagementNavItems(user.accountRole) : [];
+  const onManageRoute = pathname.startsWith("/manage");
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -70,18 +76,40 @@ export function AppShell({
             );
           })}
           {showManage ? (
-            <Link
-              href="/manage"
-              className={cn(
-                "mt-3 flex items-center gap-2 rounded-md px-2.5 py-2 text-sm",
-                pathname.startsWith("/manage")
-                  ? "bg-accent/15 text-accent"
-                  : "text-muted hover:bg-surface-raised hover:text-foreground",
-              )}
-            >
-              <Shield className="h-4 w-4" />
-              Manage
-            </Link>
+            <div className="mt-3">
+              <Link
+                href="/manage"
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm",
+                  onManageRoute
+                    ? "bg-accent/15 text-accent"
+                    : "text-muted hover:bg-surface-raised hover:text-foreground",
+                )}
+              >
+                <Shield className="h-4 w-4" />
+                Manage
+              </Link>
+              <div className="mt-1 ml-2 flex flex-col gap-0.5 border-l border-border pl-2">
+                {manageNav.map((item) => {
+                  const active = isManagementNavActive(pathname, item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "rounded-md px-2 py-1.5 text-xs",
+                        active
+                          ? "bg-accent/10 text-accent"
+                          : "text-muted hover:bg-surface-raised hover:text-foreground",
+                      )}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           ) : null}
         </nav>
       </aside>
@@ -117,6 +145,26 @@ export function AppShell({
             </form>
           </div>
         </header>
+        {showManage && onManageRoute ? (
+          <div className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-4 py-2 md:hidden">
+            {manageNav.map((item) => {
+              const active = isManagementNavActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "shrink-0 rounded-md px-2 py-1 text-xs",
+                    active ? "bg-accent/15 text-accent" : "text-muted",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
         <main className="flex-1 overflow-x-hidden px-4 py-5 md:px-6">{children}</main>
         <nav className="grid grid-cols-5 border-t border-border bg-surface md:hidden">
           {NAV.map((item) => {

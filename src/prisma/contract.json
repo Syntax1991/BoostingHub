@@ -24,6 +24,10 @@
       "model": "BoosterAccess",
       "namespace": "public"
     },
+    "booster_qualification": {
+      "model": "BoosterQualification",
+      "namespace": "public"
+    },
     "character": {
       "model": "Character",
       "namespace": "public"
@@ -162,6 +166,19 @@
               {
                 "name": "REJECTED",
                 "value": "REJECTED"
+              },
+              {
+                "name": "REVOKED",
+                "value": "REVOKED"
+              }
+            ]
+          },
+          "BoosterQualificationStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "APPROVED",
+                "value": "APPROVED"
               },
               {
                 "name": "REVOKED",
@@ -1106,6 +1123,185 @@
               },
               "namespaceId": "public",
               "table": "booster_access"
+            }
+          },
+          "BoosterQualification": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "difficulty": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidDifficulty",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "grantedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "grantedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "notes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "revokedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "revokedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "BoosterQualificationStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "grantedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "grantedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "revokedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "revokedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "grantedAt": {
+                  "column": "grantedAt"
+                },
+                "grantedById": {
+                  "column": "grantedById"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "notes": {
+                  "column": "notes"
+                },
+                "revokedAt": {
+                  "column": "revokedAt"
+                },
+                "revokedById": {
+                  "column": "revokedById"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "booster_qualification"
             }
           },
           "Character": {
@@ -3524,6 +3720,21 @@
                   "namespace": "public"
                 }
               },
+              "boosterQualifications": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "BoosterQualification",
+                  "namespace": "public"
+                }
+              },
               "characters": {
                 "cardinality": "1:N",
                 "on": {
@@ -3551,6 +3762,21 @@
                 },
                 "to": {
                   "model": "RunSettlement",
+                  "namespace": "public"
+                }
+              },
+              "grantedQualifications": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "grantedById"
+                  ]
+                },
+                "to": {
+                  "model": "BoosterQualification",
                   "namespace": "public"
                 }
               },
@@ -3656,6 +3882,21 @@
                 },
                 "to": {
                   "model": "BoosterAccess",
+                  "namespace": "public"
+                }
+              },
+              "revokedQualifications": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "revokedById"
+                  ]
+                },
+                "to": {
+                  "model": "BoosterQualification",
                   "namespace": "public"
                 }
               },
@@ -4461,6 +4702,201 @@
                     "userId",
                     "wowClass",
                     "role",
+                    "difficulty"
+                  ]
+                }
+              ]
+            },
+            "booster_qualification": {
+              "checks": [
+                {
+                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
+                  "name": "booster_qualification_difficulty_check_05ae26c2",
+                  "prefix": "booster_qualification_difficulty_check"
+                },
+                {
+                  "expression": "\"status\" IN ('APPROVED', 'REVOKED')",
+                  "name": "booster_qualification_status_check_c670181c",
+                  "prefix": "booster_qualification_status_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidDifficulty",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "grantedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "grantedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "notes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "revokedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "revokedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "BoosterQualificationStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "booster_qualification"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "grantedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "booster_qualification"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "revokedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "booster_qualification"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "difficulty"
+                  ],
+                  "name": "booster_qualification_difficulty_idx_ab7b4a75",
+                  "prefix": "booster_qualification_difficulty_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "grantedById"
+                  ],
+                  "name": "booster_qualification_grantedById_idx_416f9b2b",
+                  "prefix": "booster_qualification_grantedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "revokedById"
+                  ],
+                  "name": "booster_qualification_revokedById_idx_ab374353",
+                  "prefix": "booster_qualification_revokedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "booster_qualification_status_idx_e98638ab",
+                  "prefix": "booster_qualification_status_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "booster_qualification_userId_idx_a489d58a",
+                  "prefix": "booster_qualification_userId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "userId",
                     "difficulty"
                   ]
                 }
@@ -6543,6 +6979,13 @@
                 "REVOKED"
               ]
             },
+            "BoosterQualificationStatus": {
+              "kind": "valueSet",
+              "values": [
+                "APPROVED",
+                "REVOKED"
+              ]
+            },
             "CharacterRole": {
               "kind": "valueSet",
               "values": [
@@ -6648,10 +7091,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6feeabca45e778fead991e8b84f172094a463408f06522cc40a564bba100885a"
+    "storageHash": "99195123b1ac9414e49fb31343a888dcb59fb8e1b9f6dca72d2a03785f3c0220"
   },
   "execution": {
-    "executionHash": "dadf0f93cb95f9b99059970e402308510e2301ea2d644655da92618d0eaafa48",
+    "executionHash": "6340080859992f5627667ca103f99d79edf424ffa921831172e3a03988a79cc8",
     "mutations": {
       "defaults": [
         {
@@ -6752,6 +7195,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "booster_access"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "booster_qualification"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "booster_qualification"
           }
         },
         {
