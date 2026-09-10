@@ -109,7 +109,8 @@ function ManagerSignupList({ signups }: { signups: ManagerSignup[] }) {
                     </div>
                     {signup.character ? (
                       <p className="mt-1 text-xs text-muted">
-                        {signup.character.itemLevel} ilvl · {signup.character.specialization ?? signup.character.primaryRole}
+                        {typeof signup.character.itemLevel === "number" ? signup.character.itemLevel : "Unknown"} ilvl ·{" "}
+                        {signup.character.specialization ?? signup.character.primaryRole}
                       </p>
                     ) : null}
                   </td>

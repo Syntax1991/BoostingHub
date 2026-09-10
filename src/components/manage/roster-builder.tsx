@@ -396,7 +396,12 @@ function SignupRowCard({
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
         </div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-          {character ? <span>{character.itemLevel} ilvl · {character.specialization ?? character.primaryRole}</span> : null}
+          {character ? (
+            <span>
+              {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"} ilvl ·{" "}
+              {character.specialization ?? character.primaryRole}
+            </span>
+          ) : null}
           {signup.participationType === "BOOSTER" && signup.boosterApproved ? (
             <AccessBadge status="APPROVED" />
           ) : null}

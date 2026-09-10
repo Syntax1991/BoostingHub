@@ -32,7 +32,8 @@ export type AdminUserCharacterSummary = {
   wowClass: string;
   specialization: string;
   primaryRole: string;
-  itemLevel: number;
+  /** Blizzard-authoritative; null when Blizzard has not supplied one. */
+  itemLevel: number | null;
   isActive: boolean;
   blizzardLinked: boolean;
 };
@@ -329,7 +330,7 @@ export const userRepository = {
         wowClass: asString(character.wowClass),
         specialization: asStringOrNull(character.specialization) ?? "—",
         primaryRole: asString(character.primaryRole),
-        itemLevel: typeof character.itemLevel === "number" ? character.itemLevel : 0,
+        itemLevel: typeof character.itemLevel === "number" ? character.itemLevel : null,
         isActive: Boolean(character.isActive),
         blizzardLinked: Boolean(asStringOrNull(character.blizzardCharacterId)),
       };
