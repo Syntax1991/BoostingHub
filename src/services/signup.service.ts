@@ -105,9 +105,15 @@ export const signupService = {
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun, resetIdentifier);
     const lootbuddy = evaluateLootbuddyOptions(characters, eligibilityRun, resetIdentifier);
-    const currentSignups = run.signups.filter(
-      (signup) => signup.userId === user.id && signup.status !== "WITHDRAWN",
-    );
+
+    const ownSignups = await signupRepository.listByRunAndUser(runId, user.id);
+    const activeSignups = ownSignups.filter((signup) => signup.status !== "WITHDRAWN");
+    const roleByCharacterId: Partial<Record<string, CharacterRole>> = {};
+    for (const signup of activeSignups) {
+      if (signup.character && signup.role) {
+        roleByCharacterId[signup.character.id] = signup.role;
+      }
+    }
 
     return {
       run: {
@@ -121,7 +127,16 @@ export const signupService = {
       },
       booster,
       lootbuddy,
-      currentSignups,
+      /** The desired-set the signup dialog should preselect on open. */
+      activeOffer: {
+        participationType: activeSignups[0]?.participationType ?? null,
+        characterIds: activeSignups
+          .map((signup) => signup.character?.id)
+          .filter((id): id is string => Boolean(id)),
+        roleByCharacterId,
+        lootbuddyMode: activeSignups[0]?.lootbuddyMode ?? null,
+        lootbuddyVerification: activeSignups[0]?.lootbuddyVerification ?? null,
+      },
     };
   },
 
