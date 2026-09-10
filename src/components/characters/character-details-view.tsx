@@ -71,7 +71,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         description={
           data.blizzardLinked
             ? `${data.realm} · ${REGION_LABELS[data.region]} · Battle.net linked.`
-            : `${data.realm} · ${REGION_LABELS[data.region]} · manually maintained character data.`
+            : `${data.realm} · ${REGION_LABELS[data.region]} · Class and Item Level from Blizzard.`
         }
         actions={
           <div className="flex flex-wrap gap-2">

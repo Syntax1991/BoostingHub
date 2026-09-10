@@ -27,7 +27,7 @@ export function CharactersView({ data }: { data: Page }) {
     <div>
       <PageHeader
         title="Characters"
-        description="World of Warcraft characters for this account. Add them manually, or optionally connect Battle.net to import and refresh."
+        description="World of Warcraft characters for this account. Add Character looks up Blizzard; optionally connect Battle.net to import and refresh."
         actions={<CharacterFormDialog mode="create" triggerLabel="Add Character" />}
       />
       <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
