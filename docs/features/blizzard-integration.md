@@ -211,7 +211,7 @@ Required for Add Character (Class/Item Level lookup has no manual fallback) and 
 | Model | `BattleNetConnection`, `BattleNetImportSession`, Character Blizzard fields |
 | View | `/characters` Battle.net connection cards + import modal, character detail Refresh |
 | Controller | `src/app/api/integrations/battlenet/connect/route.ts`, `callback/route.ts`, `blizzard.actions.ts`, `app.controller` character page panel |
-| Service | `battleNetService`, `characterBlizzardService` |
+| Service | `battleNetService`, `characterBlizzardImportService` (public lookup, import/link), `characterBlizzardSyncService` (refresh, refresh-all, lockout sync) |
 | Integration | `src/integrations/blizzard/blizzard-api-client.ts` (external HTTP boundary) |
 | Lib | `src/lib/blizzard/*`, `src/lib/wow-weekly-reset.ts`, `src/lib/lockout-display.ts`, `src/lib/wow-raid-catalog.ts` |
 | Repository | `battleNetConnectionRepository`, `battleNetImportSessionRepository`, `characterRepository`, `lockoutRepository` Blizzard helpers |
