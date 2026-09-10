@@ -144,9 +144,13 @@ async function withAccountBoosterQualifications(
 ): Promise<CharacterPageRecord[]> {
   if (characters.length === 0) return characters;
 
+  const userIds = [...new Set(characters.map((character) => character.userId))];
+  const rows = await boosterQualificationRepository.listByUserIds(userIds);
   const qualificationsByUser = new Map<string, BoosterQualificationRecord[]>();
-  for (const userId of new Set(characters.map((character) => character.userId))) {
-    qualificationsByUser.set(userId, await boosterQualificationRepository.listByUserId(userId));
+  for (const row of rows) {
+    const list = qualificationsByUser.get(row.userId) ?? [];
+    list.push(row);
+    qualificationsByUser.set(row.userId, list);
   }
 
   return characters.map((character) => ({
