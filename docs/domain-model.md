@@ -21,7 +21,7 @@ Application account and Better Auth `user` row.
 - `id`, `name` (display name), optional `email`
 - Discord user id, username, avatar (`image`)
 - `accountStatus`: `ACTIVE` \| `DISABLED`
-- `accountRole`: `USER` \| `RAID_LEAD` \| `ADMIN`
+- `accountRole`: `USER` \| `RAID_LEAD` \| `ADMIN` (ADMIN assigns via user management; never OAuth self-promote)
 - timestamps
 
 Email is optional for core behavior. Discord is the primary identity.

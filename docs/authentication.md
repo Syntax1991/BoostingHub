@@ -12,7 +12,9 @@ http://localhost:3000/api/auth/callback/discord
 
 Email is not required. Discord profile maps into display name, avatar, `discordUserId`, and `discordUsername`.
 
-First sign-in creates a `user` row. Prisma defaults are `accountRole=USER` and `accountStatus=ACTIVE`. Role and status are server-owned (`input: false`) so OAuth cannot self-promote.
+First sign-in creates a `user` row. Prisma defaults are `accountRole=USER` and `accountStatus=ACTIVE`. Role and status are server-owned (`input: false`) so OAuth cannot self-promote. ADMIN may later change `accountRole` through user management.
+
+Trusted request handlers reload the session user with `userRepository.findAuthenticatedById`, so role changes take effect on the next request without invalidating the session cookie.
 
 A new Discord user has no characters, signups, or roster rows. Pages must render empty states instead of assuming seed fixtures.
 

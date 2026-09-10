@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Let a character owner request booster eligibility and let an ADMIN approve, reject, or revoke it. Eligibility is **account-level**: a newly created or imported character becomes booster-eligible only when an `APPROVED` `BoosterAccess` row already exists for the matching **user + class + role + difficulty**.
+Let an ADMIN grant, approve, reject, or revoke booster eligibility after Discord review. Eligibility is **account-level**: a newly created or imported character becomes booster-eligible only when an `APPROVED` `BoosterAccess` row already exists for the matching **user + class + role + difficulty**.
+
+Self-service `requestAccess` is disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). Character pages show a Discord ticket CTA when `DISCORD_BOOSTER_TICKET_URL` is set.
 
 Characters do **not** own BoosterAccess. They only consume matching account qualifications.
 
@@ -20,25 +22,25 @@ A later `BOOSTER_ACCESS_MANAGER` permission may replace the current ADMIN-only r
 
 Eligibility is unique on `(userId, wowClass, role, difficulty)`.
 
-- Class comes from the requesting Character, never from the client.
-- Role must be valid for that class in `src/lib/wow-specializations.ts`. `primaryRole` is not the only requestable role.
+- Class is chosen by ADMIN grant (validated against the class catalog) or inherited from historical request context; clients cannot invent unsupported classes.
+- Role must be valid for that class in `src/lib/wow-specializations.ts`. `primaryRole` is not the only grantable role.
 - Each difficulty is independent. Heroic does not imply Normal or Mythic.
 
-`characterId` records which character opened or last reopened the request. It is **not** part of uniqueness, approval ownership, or signup lookup. Two Shamans on the same account share Shaman + Healer + Heroic eligibility.
+`characterId` may record historical request context. It is **not** part of uniqueness, approval ownership, or signup lookup. Two Shamans on the same account share Shaman + Healer + Heroic eligibility.
 
-## User request flow
+## Discord application + ADMIN grant
 
-Entry point: `/characters/[characterId]`.
+Entry point for applicants: Discord ticket URL from character details (`discordTicketUrl` / `DISCORD_BOOSTER_TICKET_URL`). The character access panel is read-only (`canRequest` / `canSubmitRequests` false, `selfRequestDisabled` true).
 
-The owner of an **active** character may request access for a valid role and difficulty. The Character is request context used to derive user/class/role. Inactive characters keep existing account rows visible but cannot submit new requests.
+ADMIN grants qualifications directly with `grantAccess({ userId, wowClass, role, difficulty, notes? })` from `/manage/booster-access` (and related manage surfaces). Grant creates APPROVED rows, approves historical PENDING rows, or reopens REJECTED/REVOKED through PENDING → APPROVED.
 
 ## Admin review flow
 
 `/manage/booster-access` is ADMIN-only. RAID_LEAD keeps `/manage` for runs but is redirected away from this queue.
 
-Pending rows can be approved or rejected. Approved rows can be revoked. Optional reject/revoke reasons are stored in `notes` and shown to the owner. Reasons are omitted from global activity messages.
+Historical pending rows can still be approved or rejected. Approved rows can be revoked. Optional reject/revoke reasons are stored in `notes` and shown to the owner. Reasons are omitted from global activity messages.
 
-Approval is account-level and does not require the requesting Character to still be active.
+Approval is account-level and does not require a requesting Character to still be active.
 
 ## State lifecycle
 
@@ -49,17 +51,17 @@ NONE → PENDING → APPROVED → REVOKED → PENDING
                 ↘ REJECTED → PENDING
 ```
 
-Pending and approved combinations cannot be duplicated. Rejected or revoked combinations may be requested again (status returns to PENDING).
+Pending and approved combinations cannot be duplicated. Rejected or revoked combinations may be reopened by ADMIN grant (via PENDING → APPROVED).
 
 ## Authorization
 
-| Actor | Request own | View own | Approve / reject / revoke |
+| Actor | Self-request | View own | Grant / approve / reject / revoke |
 | --- | --- | --- | --- |
-| USER | yes | yes | no |
-| RAID_LEAD | yes (own characters) | yes; roster tools still read access | no |
-| ADMIN | yes | yes | yes |
+| USER | no (disabled) | yes | no |
+| RAID_LEAD | no (disabled) | yes; roster tools still read access | no |
+| ADMIN | no (disabled) | yes | yes |
 
-Hidden navigation is not authorization. Mutations go through `requireUser` / `requireAdmin` and `assertCanReviewBoosterAccess`.
+Hidden navigation is not authorization. Mutations go through `requireAdmin` and `assertCanReviewBoosterAccess`.
 
 ## Revocation semantics
 
@@ -81,7 +83,7 @@ Roster publication already re-reads current account-level access. This feature d
 
 ## Character active state
 
-Deactivate does not revoke account-level access. Reactivate does not auto-approve. Inactive characters cannot request new access and cannot signup, but sibling matching Characters still use the same approval.
+Deactivate does not revoke account-level access. Reactivate does not auto-approve. Inactive characters cannot signup, but sibling matching Characters still use the same approval. Self-service requests are disabled for all characters.
 
 ## Blizzard independence
 
@@ -94,19 +96,19 @@ WCL may later inform reviewers. Approval remains manual.
 ## MVCS
 
 - Model: `BoosterAccess`, `BoosterAccessStatus` including `REJECTED`
-- View: character access panel (derived account status), request dialog, `/manage/booster-access`
+- View: character access panel (read-only + Discord CTA), grant dialog, `/manage/booster-access`
 - Controller: `booster-access.actions.ts`, `managementController.getBoosterAccessPage`
 - Service: `boosterAccessService`, `booster-access-state.ts`
 - Repository: `boosterAccessRepository`; Character/Roster loaders attach account-level rows by class
 
 ## Security
 
-- Request owner and reviewer are session-derived
-- Class is read from the Character row
+- Reviewer / granter is session-derived ADMIN
+- Self-service `requestAccess` always fails after ownership check
 - Clients cannot submit `APPROVED` or a reviewer id
-- Unique `(userId, wowClass, role, difficulty)` plus service checks stop duplicate pending/approved rows
+- Unique `(userId, wowClass, role, difficulty)` plus service checks stop duplicate approved rows
 - Raw unique-constraint errors map to domain messages
-- Activity events do not include review notes
+- Activity events do not include sensitive Discord ticket contents beyond optional grant notes
 
 ## Deferred
 

@@ -21,6 +21,8 @@ npm run dev
 
 Optional Battle.net character linking uses `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` (see `.env.example`). Seed, Discord login, and manual Characters work when those are empty.
 
+Optional `DISCORD_BOOSTER_TICKET_URL` is a public Discord channel/ticket link shown when self-service BoosterAccess requests are disabled.
+
 ## Prisma 8 workflow
 
 1. Edit `src/prisma/contract.prisma`
@@ -109,7 +111,7 @@ npx prisma migration plan --name change_name --from 20260909T1304_run_payouts
 2. Open `/characters` and add a character (EU and US both valid).
 3. Open Details, edit specialization/item level, deactivate, then reactivate.
 4. Confirm Dashboard and Profile counts follow `activeCharacters` / `totalCharacters`.
-5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until approved.
-6. From character details, request booster access; as ADMIN, approve it on `/manage/booster-access` and confirm booster signup becomes available.
+5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until an ADMIN grants matching BoosterAccess.
+6. From character details, open the Discord booster application CTA (when configured); as ADMIN, grant access on `/manage/booster-access` and confirm booster signup becomes available.
 
 When `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` are set, use Connect on `/characters` and Refresh on linked character details. Without those vars, Refresh stays unavailable and seed still works. Git workflow: [git-workflow.md](git-workflow.md).
