@@ -2,7 +2,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanManageRun, canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { resetIdentifierFor } from "@/lib/datetime";
-import { boosterAccessService } from "@/services/booster-access.service";
+import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
 import { assertSignupTransition } from "@/services/signup-state";
@@ -41,10 +41,8 @@ function inspectSignup(
   const boosterApproved =
     signup.participationType !== "BOOSTER" || !signup.role || !character
       ? signup.participationType !== "BOOSTER"
-      : boosterAccessService.isApprovedFor(
-          character.boosterAccess,
-          character.wowClass,
-          signup.role,
+      : boosterQualificationService.isApprovedFor(
+          character.boosterQualifications,
           run.difficulty,
         );
   const characterActive = character?.isActive ?? false;

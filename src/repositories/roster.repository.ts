@@ -10,7 +10,7 @@ import type {
   SignupStatus,
   WowClass,
 } from "@/models/enums";
-import type { BoosterAccessMatch } from "@/models/records";
+import type { BoosterQualificationMatch } from "@/models/records";
 import {
   asBoolean,
   asNumber,
@@ -26,7 +26,7 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
-import { boosterAccessRepository } from "@/repositories/booster-access.repository";
+import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -37,7 +37,7 @@ export type RosterCharacterSnapshot = {
   primaryRole: CharacterRole;
   itemLevel: number;
   isActive: boolean;
-  boosterAccess: BoosterAccessMatch[];
+  boosterQualifications: BoosterQualificationMatch[];
   lockouts: Array<{
     raidId: string;
     difficulty: RaidDifficulty;
@@ -83,8 +83,8 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     primaryRole: mapCharacterRole(row.primaryRole),
     itemLevel: asNumber(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
-    // Hydrated from account-level BoosterAccess after signup load.
-    boosterAccess: [],
+    // Hydrated from account-level BoosterQualification after signup load.
+    boosterQualifications: [],
     lockouts: lockouts.map((item) => {
       const record = item as Record<string, unknown>;
       return {
@@ -117,34 +117,25 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
   };
 }
 
-async function withAccountBoosterAccess(signups: RosterSignupRow[]): Promise<RosterSignupRow[]> {
+async function withAccountBoosterQualifications(signups: RosterSignupRow[]): Promise<RosterSignupRow[]> {
   const userIds = [...new Set(signups.map((signup) => signup.userId))];
   if (userIds.length === 0) return signups;
 
-  const accessByUser = new Map<string, BoosterAccessMatch[]>();
-  for (const userId of userIds) {
-    const rows = await boosterAccessRepository.listByUserId(userId);
-    accessByUser.set(
-      userId,
-      rows.map((row) => ({
-        wowClass: row.wowClass,
-        role: row.role,
-        difficulty: row.difficulty,
-        status: row.status,
-      })),
-    );
+  const rows = await boosterQualificationRepository.listByUserIds(userIds);
+  const qualificationsByUser = new Map<string, BoosterQualificationMatch[]>();
+  for (const row of rows) {
+    const list = qualificationsByUser.get(row.userId) ?? [];
+    list.push({ difficulty: row.difficulty, status: row.status });
+    qualificationsByUser.set(row.userId, list);
   }
 
   return signups.map((signup) => {
     if (!signup.character) return signup;
-    const matching = (accessByUser.get(signup.userId) ?? []).filter(
-      (row) => row.wowClass === signup.character!.wowClass,
-    );
     return {
       ...signup,
       character: {
         ...signup.character,
-        boosterAccess: matching,
+        boosterQualifications: qualificationsByUser.get(signup.userId) ?? [],
       },
     };
   });
@@ -216,7 +207,7 @@ export const rosterRepository = {
       .orderBy((signup) => signup.createdAt.asc())
       .all();
     const signups = rows.map((row) => mapSignupRow(row as Record<string, unknown>));
-    return withAccountBoosterAccess(signups);
+    return withAccountBoosterQualifications(signups);
   },
 
   async ensure(runId: string): Promise<RosterRecord> {
