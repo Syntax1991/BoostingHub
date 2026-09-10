@@ -1,0 +1,462 @@
+[
+  {
+    "id": "table.booster_qualification",
+    "label": "Create table \"booster_qualification\"",
+    "summary": "Creates table \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"booster_qualification\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"booster_qualification\"",
+        "sql": "CREATE TABLE \"public\".\"booster_qualification\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"grantedAt\" timestamptz,\n  \"grantedById\" text,\n  \"id\" text NOT NULL,\n  \"notes\" text,\n  \"revokedAt\" timestamptz,\n  \"revokedById\" text,\n  \"status\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"booster_qualification_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')),\n  CONSTRAINT \"booster_qualification_status_check_c670181c\" CHECK (\"status\" IN ('APPROVED', 'REVOKED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"booster_qualification\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.booster_qualification.booster_qualification_userId_difficulty_key",
+    "label": "Add unique constraint on \"booster_qualification\" (userId, difficulty)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "booster_qualification_userId_difficulty_key",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_qualification_userId_difficulty_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_difficulty_key",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"booster_qualification_userId_difficulty_key\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\" ADD CONSTRAINT \"booster_qualification_userId_difficulty_key\" UNIQUE (\"userId\", \"difficulty\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_qualification_userId_difficulty_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_difficulty_key",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_qualification.booster_qualification_difficulty_idx_ab7b4a75",
+    "label": "Create index \"booster_qualification_difficulty_idx_ab7b4a75\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_difficulty_idx_ab7b4a75",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_difficulty_idx_ab7b4a75\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_difficulty_idx_ab7b4a75\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_qualification_difficulty_idx_ab7b4a75\"",
+        "sql": "CREATE INDEX \"booster_qualification_difficulty_idx_ab7b4a75\" ON \"public\".\"booster_qualification\" (\"difficulty\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_difficulty_idx_ab7b4a75\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_difficulty_idx_ab7b4a75\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_qualification.booster_qualification_grantedById_idx_416f9b2b",
+    "label": "Create index \"booster_qualification_grantedById_idx_416f9b2b\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_grantedById_idx_416f9b2b",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_grantedById_idx_416f9b2b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_grantedById_idx_416f9b2b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_qualification_grantedById_idx_416f9b2b\"",
+        "sql": "CREATE INDEX \"booster_qualification_grantedById_idx_416f9b2b\" ON \"public\".\"booster_qualification\" (\"grantedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_grantedById_idx_416f9b2b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_grantedById_idx_416f9b2b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_qualification.booster_qualification_revokedById_idx_ab374353",
+    "label": "Create index \"booster_qualification_revokedById_idx_ab374353\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_revokedById_idx_ab374353",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_revokedById_idx_ab374353\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_revokedById_idx_ab374353\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_qualification_revokedById_idx_ab374353\"",
+        "sql": "CREATE INDEX \"booster_qualification_revokedById_idx_ab374353\" ON \"public\".\"booster_qualification\" (\"revokedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_revokedById_idx_ab374353\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_revokedById_idx_ab374353\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_qualification.booster_qualification_status_idx_e98638ab",
+    "label": "Create index \"booster_qualification_status_idx_e98638ab\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_status_idx_e98638ab",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_qualification_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"booster_qualification_status_idx_e98638ab\" ON \"public\".\"booster_qualification\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.booster_qualification.booster_qualification_userId_idx_a489d58a",
+    "label": "Create index \"booster_qualification_userId_idx_a489d58a\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_userId_idx_a489d58a",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"booster_qualification_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"booster_qualification_userId_idx_a489d58a\" ON \"public\".\"booster_qualification\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_qualification.booster_qualification_userId_fkey",
+    "label": "Add foreign key \"booster_qualification_userId_fkey\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_qualification_userId_fkey",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_qualification_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_fkey",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_qualification_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\"\nADD CONSTRAINT \"booster_qualification_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_qualification_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_fkey",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_qualification.booster_qualification_grantedById_fkey",
+    "label": "Add foreign key \"booster_qualification_grantedById_fkey\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_qualification_grantedById_fkey",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_qualification_grantedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_grantedById_fkey",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_qualification_grantedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\"\nADD CONSTRAINT \"booster_qualification_grantedById_fkey\"\nFOREIGN KEY (\"grantedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_qualification_grantedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_grantedById_fkey",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.booster_qualification.booster_qualification_revokedById_fkey",
+    "label": "Add foreign key \"booster_qualification_revokedById_fkey\" on \"booster_qualification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "booster_qualification_revokedById_fkey",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"booster_qualification_revokedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_revokedById_fkey",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"booster_qualification_revokedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\"\nADD CONSTRAINT \"booster_qualification_revokedById_fkey\"\nFOREIGN KEY (\"revokedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"booster_qualification_revokedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_revokedById_fkey",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-booster-qualification-from-approved-access",
+    "label": "Data transform: backfill BoosterQualification from APPROVED BoosterAccess",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow backfill (idempotent insert)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Insert one APPROVED qualification per user + difficulty",
+        "sql": "INSERT INTO \"booster_qualification\" (\"id\", \"userId\", \"difficulty\", \"status\", \"grantedAt\", \"grantedById\", \"notes\", \"createdAt\", \"updatedAt\") SELECT gen_random_uuid()::text, src.\"userId\", src.\"difficulty\", 'APPROVED', src.\"grantedAt\", src.\"grantedById\", src.\"notes\", now(), now() FROM ( SELECT DISTINCT ON (\"userId\", \"difficulty\") \"userId\", \"difficulty\", COALESCE(\"approvedAt\", \"reviewedAt\", \"createdAt\") AS \"grantedAt\", COALESCE(\"approvedById\", \"reviewedById\") AS \"grantedById\", \"notes\" FROM \"booster_access\" WHERE \"status\" = 'APPROVED' ORDER BY \"userId\", \"difficulty\", COALESCE(\"approvedAt\", \"reviewedAt\", \"createdAt\") DESC NULLS LAST, \"updatedAt\" DESC ) src WHERE NOT EXISTS ( SELECT 1 FROM \"booster_qualification\" q WHERE q.\"userId\" = src.\"userId\" AND q.\"difficulty\" = src.\"difficulty\" )",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every APPROVED legacy user+difficulty has a qualification",
+        "sql": "SELECT NOT EXISTS ( SELECT 1 FROM \"booster_access\" ba WHERE ba.\"status\" = 'APPROVED' AND NOT EXISTS ( SELECT 1 FROM \"booster_qualification\" q WHERE q.\"userId\" = ba.\"userId\" AND q.\"difficulty\" = ba.\"difficulty\" ) ) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "data_migration.resolve-pending-legacy-satisfied-by-qualification",
+    "label": "Data transform: resolve PENDING BoosterAccess covered by qualification",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow sibling resolution (idempotent update)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Mark covered PENDING legacy rows APPROVED",
+        "sql": "UPDATE \"booster_access\" AS ba SET \"status\" = 'APPROVED', \"approvedAt\" = COALESCE(ba.\"approvedAt\", q.\"grantedAt\", now()), \"approvedById\" = COALESCE(ba.\"approvedById\", q.\"grantedById\"), \"reviewedAt\" = COALESCE(ba.\"reviewedAt\", now()), \"reviewedById\" = COALESCE(ba.\"reviewedById\", q.\"grantedById\"), \"notes\" = COALESCE(ba.\"notes\", 'Resolved: account already qualified for this difficulty.'), \"updatedAt\" = now() FROM \"booster_qualification\" AS q WHERE ba.\"status\" = 'PENDING' AND ba.\"userId\" = q.\"userId\" AND ba.\"difficulty\" = q.\"difficulty\" AND q.\"status\" = 'APPROVED'",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "No PENDING legacy remains for APPROVED qualifications",
+        "sql": "SELECT NOT EXISTS ( SELECT 1 FROM \"booster_access\" ba INNER JOIN \"booster_qualification\" q ON q.\"userId\" = ba.\"userId\" AND q.\"difficulty\" = ba.\"difficulty\" AND q.\"status\" = 'APPROVED' WHERE ba.\"status\" = 'PENDING' ) AS ok",
+        "params": []
+      }
+    ]
+  }
+]

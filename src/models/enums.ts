@@ -38,6 +38,10 @@ export type RaidDifficulty = (typeof RAID_DIFFICULTIES)[number];
 export const BOOSTER_ACCESS_STATUSES = ["PENDING", "APPROVED", "REJECTED", "REVOKED"] as const;
 export type BoosterAccessStatus = (typeof BOOSTER_ACCESS_STATUSES)[number];
 
+/** Current BoosterQualification statuses. PENDING is legacy-request-only. */
+export const BOOSTER_QUALIFICATION_STATUSES = ["APPROVED", "REVOKED"] as const;
+export type BoosterQualificationStatus = (typeof BOOSTER_QUALIFICATION_STATUSES)[number];
+
 export const RUN_STATUSES = [
   "DRAFT",
   "OPEN",
