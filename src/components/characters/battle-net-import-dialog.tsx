@@ -31,6 +31,9 @@ import type { characterController } from "@/controllers/app.controller";
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
 type CandidatesPayload = NonNullable<Page["battleNet"]["candidates"]>;
 
+/** Bounded-concurrency background enrichment; avoids hammering Blizzard for accounts with many characters. */
+const ENRICHMENT_CONCURRENCY = 4;
+
 function statusBadgeClass(status: ImportCandidate["status"]): string {
   if (status === "import") return "bg-success/15 text-success";
   if (status === "link") return "bg-info/15 text-info";
@@ -68,6 +71,8 @@ export function BattleNetImportDialog({
   >({});
   const [enriching, setEnriching] = useState<Record<string, boolean>>({});
   const [itemLevelSort, setItemLevelSort] = useState<ItemLevelSortDirection | null>(null);
+  /** Synchronous dedup so the background scan and manual selection never double-request the same row. */
+  const startedEnrichmentRef = useRef<Set<string>>(new Set());
 
   const rows = useMemo(() => candidates?.candidates ?? [], [candidates]);
   const importSessionId = candidates?.sessionId;
@@ -77,7 +82,8 @@ export function BattleNetImportDialog({
   }
 
   const visibleRows = useMemo(() => {
-    const filtered = filterImportCandidates(rows, query);
+    const aboveMinLevel = rows.filter((row) => row.status !== "level_too_low");
+    const filtered = filterImportCandidates(aboveMinLevel, query);
     if (!itemLevelSort) return filtered;
     const sortable = filtered.map((row) => ({
       ...row,
@@ -111,6 +117,7 @@ export function BattleNetImportDialog({
       setSuggestions({});
       setEnriching({});
       setItemLevelSort(null);
+      startedEnrichmentRef.current = new Set();
     };
     dialog.addEventListener("close", onClose);
     queueMicrotask(() => searchRef.current?.focus());
@@ -133,13 +140,19 @@ export function BattleNetImportDialog({
     );
   }
 
-  function requestEnrichment(row: ImportCandidate) {
+  /**
+   * Fetches public profile enrichment for one row, independent of selection.
+   * `startedEnrichmentRef` guards synchronously so the background scan below
+   * and a manual toggle/select-all can never double-request the same row —
+   * React state (`suggestions`/`enriching`) updates too late for that check.
+   */
+  function enrichRow(row: ImportCandidate) {
     if (!importSessionId || !isSelectableImportCandidate(row)) return;
-    if (enriching[row.blizzardCharacterId]) return;
-    if (suggestions[row.blizzardCharacterId]) return;
+    if (startedEnrichmentRef.current.has(row.blizzardCharacterId)) return;
+    startedEnrichmentRef.current.add(row.blizzardCharacterId);
 
     setEnriching((current) => ({ ...current, [row.blizzardCharacterId]: true }));
-    void enrichImportCandidateAction({
+    return enrichImportCandidateAction({
       importSessionId,
       blizzardCharacterId: row.blizzardCharacterId,
     }).then((result) => {
@@ -169,12 +182,34 @@ export function BattleNetImportDialog({
     });
   }
 
+  /**
+   * Enriches every eligible candidate as soon as the session loads, not just
+   * selected ones, so the User sees Blizzard's Spec/Item Level before
+   * choosing. Bounded concurrency avoids firing dozens of parallel Blizzard
+   * requests for a large account.
+   */
+  useEffect(() => {
+    if (!importSessionId) return;
+    const eligible = rows.filter((row) => isSelectableImportCandidate(row));
+    if (eligible.length === 0) return;
+
+    let cursor = 0;
+    async function worker() {
+      while (cursor < eligible.length) {
+        const row = eligible[cursor++]!;
+        await enrichRow(row);
+      }
+    }
+    const workerCount = Math.min(ENRICHMENT_CONCURRENCY, eligible.length);
+    void Promise.all(Array.from({ length: workerCount }, () => worker()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enrichRow reads live state via refs/functional updates
+  }, [rows, importSessionId]);
+
   function toggle(row: ImportCandidate) {
     if (!isSelectableImportCandidate(row) || pending) return;
     const id = row.blizzardCharacterId;
     const next = !selected[id];
     setSelected((current) => ({ ...current, [id]: next }));
-    if (next) requestEnrichment(row);
   }
 
   function selectAllEligibleVisible() {
@@ -183,9 +218,6 @@ export function BattleNetImportDialog({
       for (const id of visibleEligibleIds) next[id] = true;
       return next;
     });
-    for (const row of visibleRows) {
-      if (isSelectableImportCandidate(row)) requestEnrichment(row);
-    }
   }
 
   function clearSelection() {
@@ -520,6 +552,10 @@ function ImportTableRow({
               </select>
             </label>
           )
+        ) : enriching && !suggested ? (
+          <span className="text-xs text-muted">Loading…</span>
+        ) : selectable ? (
+          <span className="text-xs text-muted">{suggested ?? "—"}</span>
         ) : (
           <span className="text-xs text-muted">—</span>
         )}
@@ -583,24 +619,35 @@ function ImportMobileCard(props: RowControls) {
               Requires level {MIN_IMPORT_CHARACTER_LEVEL}.
             </p>
           ) : null}
-          {showControls ? (
+          {selectable ? (
             <div className="mt-3 space-y-2">
-              <label className="block text-xs">
-                <span className="mb-1 block text-muted">Specialization</span>
-                <select
-                  value={effectiveSpec}
-                  disabled={pending || (enriching && !effectiveSpec)}
-                  onChange={(event) => onSpecChange(event.target.value)}
-                  className="h-8 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                >
-                  <option value="">Select…</option>
-                  {classSpecs.map((spec) => (
-                    <option key={spec.name} value={spec.name}>
-                      {spec.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {showControls ? (
+                <label className="block text-xs">
+                  <span className="mb-1 block text-muted">Specialization</span>
+                  <select
+                    value={effectiveSpec}
+                    disabled={pending || (enriching && !effectiveSpec)}
+                    onChange={(event) => onSpecChange(event.target.value)}
+                    className="h-8 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                  >
+                    <option value="">Select…</option>
+                    {classSpecs.map((spec) => (
+                      <option key={spec.name} value={spec.name}>
+                        {spec.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="text-xs">
+                  <span className="mb-1 block text-muted">Specialization</span>
+                  {enriching && !suggested ? (
+                    <span className="text-muted">Loading…</span>
+                  ) : (
+                    <span>{suggested ?? "—"}</span>
+                  )}
+                </div>
+              )}
               <div className="text-xs">
                 <span className="mb-1 block text-muted">Item Level</span>
                 {typeof blizzardItemLevel === "number" ? (
