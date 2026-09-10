@@ -141,6 +141,10 @@ No Prisma in views or controllers. No payout math in React.
 - USER payloads omit the manager list, other people's amounts, adjustment reasons, and mutation capabilities
 - Hidden buttons are not authorization
 
+## Deducts
+
+A payout entry's gross `amountGold` (and the exact-sum invariant above) is never altered by Deducts. `payoutService.getPayoutView` additionally derives, read-side only, `deductTotal`/`netAmountGold` per entry and `grossTotal`/`deductTotal`/`netTotal`/`retainedTotal` at the settlement level, batching `deductRepository.listByPayoutEntryIds(...)` once per settlement. Deducted gold is retained/unallocated, never redistributed to other participants. Deducts are mutable only while the settlement is `DRAFT`. See [strikes-and-deducts.md](strikes-and-deducts.md).
+
 ## Deferred
 
 - corrections/revisions

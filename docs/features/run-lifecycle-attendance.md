@@ -176,6 +176,10 @@ View → Controller → Service → Repository → Model
 
 No Prisma in views or controllers. No attendance transition rules in React.
 
+## Strikes
+
+Manager rows on this tab expose a manual **Add strike** action that derives `userId`/`runId` from the attendance row server-side. Marking an attendance status (including `NO_SHOW`) never creates a Strike automatically — Attendance is factual state, a Strike is a separate staff disciplinary judgment. See [strikes-and-deducts.md](strikes-and-deducts.md).
+
 ## Deferred
 
 - attendance correction after completion
