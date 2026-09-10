@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { canTransitionBoosterAccess, canRequestFromStatus } from "@/services/booster-access-state";
 import { signupService } from "@/services/signup.service";
@@ -107,6 +108,30 @@ async function cleanupGeneratedRows() {
   await deleteIfPresent("User", ids.lead);
 }
 
+async function createPendingAccess(
+  userId: string,
+  characterId: string | null,
+  wowClass: WowClass,
+  role: CharacterRole,
+  difficulty: RaidDifficulty,
+) {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await orm.BoosterAccess.create({
+    id,
+    userId,
+    characterId,
+    wowClass,
+    role,
+    difficulty,
+    status: "PENDING",
+    createdAt: now,
+    updatedAt: now,
+  });
+  createdAccessIds.push(id);
+  return id;
+}
+
 let paladinSerial = 0;
 
 async function createPaladin(owner: AuthenticatedUser) {
@@ -188,20 +213,19 @@ describe("boosterAccessService request", () => {
   const owner = asUser(ids.owner, "Access Owner");
   const other = asUser(ids.other, "Access Other");
 
-  it("creates a pending request from the session character class, not a client class", async () => {
+  it("disables self-service requests after ownership check", async () => {
     const character = await createPaladin(owner);
-    const requested = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
-      role: "HEALER",
-      difficulty: "HEROIC",
-    });
-    createdAccessIds.push(requested.id);
-    expect(requested.status).toBe("PENDING");
-    expect(requested.wowClass).toBe("PALADIN");
-    expect(requested.userId).toBe(ids.owner);
+    await expectDomainCode(
+      boosterAccessService.requestAccess(owner, {
+        characterId: character.id,
+        role: "HEALER",
+        difficulty: "HEROIC",
+      }),
+      "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
+    );
   });
 
-  it("rejects another user's character, inactive characters, and invalid roles", async () => {
+  it("rejects another user's character before the disabled gate", async () => {
     const character = await createPaladin(owner);
     await expectDomainCode(
       boosterAccessService.requestAccess(other, {
@@ -211,65 +235,117 @@ describe("boosterAccessService request", () => {
       }),
       "CHARACTER_NOT_OWNED",
     );
-    await characterService.deactivateCharacter(owner, character.id);
-    await expectDomainCode(
-      boosterAccessService.requestAccess(owner, {
-        characterId: character.id,
-        role: "TANK",
-        difficulty: "NORMAL",
-      }),
-      "CHARACTER_INACTIVE",
-    );
-    await characterService.reactivateCharacter(owner, character.id);
-    const mage = await characterService.createCharacter(owner, {
-      name: "Frostlab",
-      realm: "Area 52",
-      region: "US",
-      wowClass: "MAGE",
-      specialization: "Frost",
-      itemLevel: 620,
-    });
-    createdCharacterIds.push(mage.id);
-    await expectDomainCode(
-      boosterAccessService.requestAccess(owner, {
-        characterId: mage.id,
-        role: "TANK",
-        difficulty: "HEROIC",
-      }),
-      "BOOSTER_ACCESS_ROLE_INVALID",
-    );
   });
 
-  it("rejects duplicate pending/approved and allows a different role or difficulty", async () => {
+  it("builds a read-only access panel with Discord CTA flags", async () => {
     const character = await createPaladin(owner);
-    const first = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
+    const panel = boosterAccessService.buildCharacterAccessPanel({
+      wowClass: character.wowClass,
+      isActive: true,
+      boosterAccess: [],
+    });
+    expect(panel.canSubmitRequests).toBe(false);
+    expect(panel.selfRequestDisabled).toBe(true);
+    expect(panel.cells.every((cell) => cell.canRequest === false)).toBe(true);
+    expect("discordTicketUrl" in panel).toBe(true);
+  });
+});
+
+describe("boosterAccessService grantAccess", () => {
+  const owner = asUser(ids.owner, "Access Owner");
+  const lead = asUser(ids.lead, "Access Lead", "RAID_LEAD");
+  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
+
+  it("lets ADMIN grant new APPROVED access with reviewer metadata", async () => {
+    const granted = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
       role: "HEALER",
       difficulty: "HEROIC",
+      notes: "Reviewed in Discord ticket #12",
+    });
+    createdAccessIds.push(granted.id);
+    expect(granted.status).toBe("APPROVED");
+    expect(granted.wowClass).toBe("PALADIN");
+    expect(granted.userId).toBe(ids.owner);
+    expect(granted.notes).toBe("Reviewed in Discord ticket #12");
+    expect(granted.approvedById).toBe(ids.admin);
+    expect(granted.reviewedById).toBe(ids.admin);
+    expect(granted.approvedAt).toBeTruthy();
+    expect(granted.reviewedAt).toBeTruthy();
+  });
+
+  it("rejects duplicate APPROVED grants", async () => {
+    const first = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
+      role: "TANK",
+      difficulty: "NORMAL",
     });
     createdAccessIds.push(first.id);
     await expectDomainCode(
-      boosterAccessService.requestAccess(owner, {
-        characterId: character.id,
-        role: "HEALER",
-        difficulty: "HEROIC",
+      boosterAccessService.grantAccess(admin, {
+        userId: ids.owner,
+        wowClass: "PALADIN",
+        role: "TANK",
+        difficulty: "NORMAL",
       }),
-      "BOOSTER_ACCESS_ALREADY_PENDING",
+      "BOOSTER_ACCESS_ALREADY_APPROVED",
     );
-    const dps = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
+  });
+
+  it("approves an existing PENDING row via grant", async () => {
+    const character = await createPaladin(owner);
+    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "MYTHIC");
+    const granted = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
+      role: "HEALER",
+      difficulty: "MYTHIC",
+      notes: "Ticket approved",
+    });
+    expect(granted.id).toBe(pendingId);
+    expect(granted.status).toBe("APPROVED");
+    expect(granted.approvedById).toBe(ids.admin);
+    expect(granted.notes).toBe("Ticket approved");
+  });
+
+  it("reopens REJECTED and REVOKED rows to APPROVED via grant", async () => {
+    const character = await createPaladin(owner);
+    const rejectedId = await createPendingAccess(ids.owner, character.id, "PALADIN", "DPS", "HEROIC");
+    await boosterAccessService.rejectAccess(admin, rejectedId, "Need logs.");
+    const afterReject = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
       role: "DPS",
       difficulty: "HEROIC",
     });
-    createdAccessIds.push(dps.id);
-    const mythic = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
-      role: "HEALER",
-      difficulty: "MYTHIC",
+    expect(afterReject.id).toBe(rejectedId);
+    expect(afterReject.status).toBe("APPROVED");
+
+    await boosterAccessService.revokeAccess(admin, rejectedId, "Break.");
+    const afterRevoke = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
+      role: "DPS",
+      difficulty: "HEROIC",
+      notes: "Reinstated",
     });
-    createdAccessIds.push(mythic.id);
-    expect(dps.id).not.toBe(first.id);
-    expect(mythic.difficulty).toBe("MYTHIC");
+    expect(afterRevoke.id).toBe(rejectedId);
+    expect(afterRevoke.status).toBe("APPROVED");
+    expect(afterRevoke.notes).toBe("Reinstated");
+  });
+
+  it("does not let RAID_LEAD grant access", async () => {
+    await expectDomainCode(
+      boosterAccessService.grantAccess(lead, {
+        userId: ids.owner,
+        wowClass: "PALADIN",
+        role: "HEALER",
+        difficulty: "HEROIC",
+      }),
+      "NOT_AUTHORIZED",
+    );
   });
 });
 
@@ -280,19 +356,14 @@ describe("boosterAccessService admin authorization", () => {
 
   it("lets only ADMIN approve, reject, and revoke", async () => {
     const character = await createPaladin(owner);
-    const requested = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
-      role: "TANK",
-      difficulty: "NORMAL",
-    });
-    createdAccessIds.push(requested.id);
+    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "NORMAL");
 
-    await expectDomainCode(boosterAccessService.approveAccess(owner, requested.id), "NOT_AUTHORIZED");
-    await expectDomainCode(boosterAccessService.approveAccess(lead, requested.id), "NOT_AUTHORIZED");
-    await expectDomainCode(boosterAccessService.rejectAccess(lead, requested.id), "NOT_AUTHORIZED");
-    await boosterAccessService.approveAccess(admin, requested.id);
-    await expectDomainCode(boosterAccessService.revokeAccess(lead, requested.id), "NOT_AUTHORIZED");
-    await boosterAccessService.revokeAccess(admin, requested.id, "No longer boosting.");
+    await expectDomainCode(boosterAccessService.approveAccess(owner, pendingId), "NOT_AUTHORIZED");
+    await expectDomainCode(boosterAccessService.approveAccess(lead, pendingId), "NOT_AUTHORIZED");
+    await expectDomainCode(boosterAccessService.rejectAccess(lead, pendingId), "NOT_AUTHORIZED");
+    await boosterAccessService.approveAccess(admin, pendingId);
+    await expectDomainCode(boosterAccessService.revokeAccess(lead, pendingId), "NOT_AUTHORIZED");
+    await boosterAccessService.revokeAccess(admin, pendingId, "No longer boosting.");
   });
 });
 
@@ -302,15 +373,10 @@ describe("boosterAccessService approval and signup", () => {
 
   it("approves pending access and enables matching booster signup only", async () => {
     const character = await createPaladin(owner);
-    const requested = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
-      role: "HEALER",
-      difficulty: "HEROIC",
-    });
-    createdAccessIds.push(requested.id);
-    await boosterAccessService.approveAccess(admin, requested.id);
+    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
+    await boosterAccessService.approveAccess(admin, pendingId);
     const stored = await boosterAccessService.listAdminAccessRequests(admin, { status: "APPROVED", query: "Pally" });
-    const row = stored.find((item) => item.id === requested.id);
+    const row = stored.find((item) => item.id === pendingId);
     expect(row?.status).toBe("APPROVED");
     expect(row?.reviewedById).toBe(ids.admin);
     expect(row?.approvedById).toBe(ids.admin);
@@ -327,8 +393,9 @@ describe("boosterAccessService approval and signup", () => {
     const mythicOptions = await signupService.getSignupOptions(owner, mythicOpen);
     expect(mythicOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
     await expectDomainCode(
-      boosterAccessService.requestAccess(owner, {
-        characterId: character.id,
+      boosterAccessService.grantAccess(admin, {
+        userId: ids.owner,
+        wowClass: "PALADIN",
         role: "HEALER",
         difficulty: "HEROIC",
       }),
@@ -344,13 +411,8 @@ describe("boosterAccessService approval and signup", () => {
     const other = asUser(ids.other, "Access Other");
     const otherShaman = await createShamanHealer(other, "Othera");
 
-    const requested = await boosterAccessService.requestAccess(owner, {
-      characterId: first.id,
-      role: "HEALER",
-      difficulty: "HEROIC",
-    });
-    createdAccessIds.push(requested.id);
-    await boosterAccessService.approveAccess(admin, requested.id);
+    const pendingId = await createPendingAccess(ids.owner, first.id, "SHAMAN", "HEALER", "HEROIC");
+    await boosterAccessService.approveAccess(admin, pendingId);
 
     const accessRows = await orm.BoosterAccess.where({ userId: ids.owner }).all();
     expect(accessRows).toHaveLength(1);
@@ -370,7 +432,7 @@ describe("boosterAccessService approval and signup", () => {
     expect(otherOptions.booster.eligible.some((item) => item.characterId === otherShaman.id)).toBe(false);
 
     await characterService.deactivateCharacter(owner, first.id);
-    const still = await orm.BoosterAccess.where({ id: requested.id }).first();
+    const still = await orm.BoosterAccess.where({ id: pendingId }).first();
     expect(String(still?.status)).toBe("APPROVED");
     const afterDeactivate = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(afterDeactivate.booster.eligible.some((item) => item.characterId === second.id)).toBe(true);
@@ -386,38 +448,30 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
   const owner = asUser(ids.owner, "Access Owner");
   const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
 
-  it("rejects without granting eligibility and allows a later re-request", async () => {
+  it("rejects without granting eligibility and allows later admin grant", async () => {
     const character = await createPaladin(owner);
-    const requested = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
-      role: "HEALER",
-      difficulty: "NORMAL",
-    });
-    createdAccessIds.push(requested.id);
-    await boosterAccessService.rejectAccess(admin, requested.id, "Need more experience.");
+    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "NORMAL");
+    await boosterAccessService.rejectAccess(admin, pendingId, "Need more experience.");
     const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "HEALER")).toBe(
       false,
     );
-    const again = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
+    const again = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
       role: "HEALER",
       difficulty: "NORMAL",
+      notes: "Re-reviewed",
     });
-    expect(again.id).toBe(requested.id);
-    expect(again.status).toBe("PENDING");
-    expect(again.notes).toBeNull();
+    expect(again.id).toBe(pendingId);
+    expect(again.status).toBe("APPROVED");
+    expect(again.notes).toBe("Re-reviewed");
   });
 
   it("revokes approved access without deleting existing signups, and lootbuddy still works", async () => {
     const character = await createPaladin(owner);
-    const requested = await boosterAccessService.requestAccess(owner, {
-      characterId: character.id,
-      role: "HEALER",
-      difficulty: "HEROIC",
-    });
-    createdAccessIds.push(requested.id);
-    await boosterAccessService.approveAccess(admin, requested.id);
+    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
+    await boosterAccessService.approveAccess(admin, pendingId);
     const loot = await signupService.createLootbuddySignup(owner, {
       runId: ids.heroicOpen,
       characterId: character.id,
@@ -433,7 +487,7 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
     });
     createdSignupIds.push(booster.id);
 
-    await boosterAccessService.revokeAccess(admin, requested.id, "Break.");
+    await boosterAccessService.revokeAccess(admin, pendingId, "Break.");
     const after = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(after.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
     expect(after.lootbuddy.eligible.some((item) => item.characterId === character.id)).toBe(true);
