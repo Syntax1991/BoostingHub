@@ -28,4 +28,51 @@ export const lockoutRepository = {
       })
       .first();
   },
+
+  /**
+   * Upsert Blizzard-derived current-reset aggregate lockout rows.
+   * Does not delete older resets; callers filter by resetIdentifier for display.
+   */
+  async upsertCurrentResetLockouts(
+    characterId: string,
+    rows: Array<{
+      raidId: string;
+      difficulty: RaidDifficulty;
+      resetIdentifier: string;
+      bossesDefeated: number;
+      isComplete: boolean;
+    }>,
+    verifiedAt: string,
+  ): Promise<void> {
+    for (const row of rows) {
+      const existing = await this.findConflict({
+        characterId,
+        raidId: row.raidId,
+        difficulty: row.difficulty,
+        resetIdentifier: row.resetIdentifier,
+      });
+
+      if (existing) {
+        const id = String((existing as Record<string, unknown>).id);
+        await orm.CharacterRaidLockout.where({ id }).update({
+          bossesDefeated: row.bossesDefeated,
+          isComplete: row.isComplete,
+          updatedAt: verifiedAt,
+        });
+        continue;
+      }
+
+      await orm.CharacterRaidLockout.create({
+        id: crypto.randomUUID(),
+        characterId,
+        raidId: row.raidId,
+        difficulty: row.difficulty,
+        resetIdentifier: row.resetIdentifier,
+        bossesDefeated: row.bossesDefeated,
+        isComplete: row.isComplete,
+        createdAt: verifiedAt,
+        updatedAt: verifiedAt,
+      });
+    }
+  },
 };

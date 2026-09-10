@@ -89,9 +89,9 @@ Character selection happens in a **modal** on `/characters`. The page itself onl
 
 The import modal supports presentation-only **Item Level** sorting (header toggle: descending first, then ascending). Unknown item levels sort last in both directions.
 
-**Refresh all** refreshes only the current user's active Blizzard-linked characters in that region, with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt; it never updates specialization, primaryRole, BoosterAccess, or CharacterRaidLockout.
+**Refresh all** refreshes only the current user's active Blizzard-linked characters in that region, with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt and, when Character Raid Encounters succeed, current-reset `CharacterRaidLockout` aggregates. It never updates specialization, primaryRole, or BoosterAccess.
 
-Missing CharacterRaidLockout rows display as **Unknown** on `/characters` (not "Clear"). Blizzard does not sync lockouts.
+Missing or stale (wrong `resetIdentifier`) CharacterRaidLockout rows display as **Unknown** on `/characters` (not "Clear"). Successful Blizzard derivation of zero boss kills for a difficulty displays as **0/N**.
 
 Disconnect clears the regional connection and import sessions. It does **not** delete Characters, signups, lockouts, or history.
 
@@ -124,9 +124,45 @@ Class mismatch against the stored Character is also refused so eligibility histo
 
 Linking or importing a character does not create, approve, or revoke `BoosterAccess`. Eligibility remains an explicit BoostingHub workflow. See [booster-access-management.md](booster-access-management.md).
 
-## Lockout sync
+## Lockout derivation (Character Raid Encounters)
 
-Live Blizzard lockout sync is **not** implemented. Stored `CharacterRaidLockout` rows remain operator/seed-maintained and read-only from the character UI.
+Blizzard does **not** expose a direct SavedInstances-style lockout endpoint. BoostingHub derives **current-reset raid boss kill progress** from:
+
+`GET /profile/wow/character/{realmSlug}/{characterName}/encounters/raids`
+
+using the regional `profile-{region}` namespace and server-side client-credentials auth.
+
+### Semantics
+
+- For each catalog boss and difficulty (`NORMAL` / `HEROIC` / `MYTHIC`): killed this reset iff `last_kill_timestamp` is in `[resetStart, resetEnd)`.
+- Do **not** treat historical `completed_count > 0` alone as current lockout.
+- Regional weekly reset windows (`src/lib/wow-weekly-reset.ts`): EU Wednesday 04:00 UTC; US Tuesday 15:00 UTC (documented community/official schedule cross-check). Identifiers use `resetIdentifierFor(resetStart)`.
+- Only raids in `src/lib/wow-raid-catalog.ts` (current production catalog) are ingested.
+- Difficulties map centrally in `src/lib/blizzard/raid-difficulty.ts` (LFR ignored for v1).
+
+### Clear vs Unknown
+
+| Situation | Display |
+| --- | --- |
+| Successful encounters response + mapped current raid + known reset, zero current kills | **0/N** (clear for that difficulty) |
+| API failure, privacy/unavailable profile path, malformed payload, missing raid mapping, or reset unavailable | **Unknown** — never invent Clear |
+| Persisted row with `resetIdentifier` ≠ current regional reset | **Unknown** for current week (old evidence is not reused) |
+
+Profile/encounters data may lag until Blizzard updates the character profile (often after logout). Refresh means “latest data Blizzard returned,” not live client state. `CharacterRaidLockout.updatedAt` is the last successful verification time.
+
+### Mythic limitation
+
+Mythic progress is boss-kill progress in the current reset only (e.g. `M 3/8`). This API does **not** expose Mythic saved-instance IDs or lock-extension state. Do not treat missing Mythic kills as “safe to join any Mythic instance.”
+
+### Persistence and refresh
+
+Derived aggregates upsert into existing `CharacterRaidLockout` (`bossesDefeated`, `isComplete`, `resetIdentifier`). No separate Blizzard lockout domain. Boss-level detail is computed during derivation; v1 persists difficulty aggregates (sufficient for `N 3/8` display and existing signup conflict checks).
+
+Single Refresh and Refresh all fetch encounters after profile success. Encounter failure leaves prior lockout rows unchanged while still allowing itemLevel/profile updates. HTTP is never held inside a DB transaction.
+
+Signup / roster eligibility is **unchanged**: existing aggregate conflict rules (`isComplete` or `bossesDefeated > 0` for matching raid/difficulty/reset). Boss-by-boss eligibility redesign is out of scope.
+
+No Warcraft Logs, Raider.IO, or WoW addon is required for this derivation.
 
 ## Security
 
@@ -168,8 +204,8 @@ Optional. Empty values keep the Characters UI on manual CRUD only; seed and Disc
 | Controller | `src/app/api/integrations/battlenet/connect/route.ts`, `callback/route.ts`, `blizzard.actions.ts`, `app.controller` character page panel |
 | Service | `battleNetService`, `characterBlizzardService` |
 | Integration | `src/integrations/blizzard/blizzard-api-client.ts` (external HTTP boundary) |
-| Lib | `src/lib/blizzard/config.ts`, `oauth-state.ts`, `types.ts`, `playable-class.ts` |
-| Repository | `battleNetConnectionRepository`, `battleNetImportSessionRepository`, `characterRepository` Blizzard helpers |
+| Lib | `src/lib/blizzard/*`, `src/lib/wow-weekly-reset.ts`, `src/lib/lockout-display.ts`, `src/lib/wow-raid-catalog.ts` |
+| Repository | `battleNetConnectionRepository`, `battleNetImportSessionRepository`, `characterRepository`, `lockoutRepository` Blizzard helpers |
 | Validators | `src/validators/blizzard.ts` |
 
 Views do not call Blizzard or Prisma. Controllers authenticate, validate, and delegate.
@@ -177,7 +213,7 @@ Views do not call Blizzard or Prisma. Controllers authenticate, validate, and de
 ## Deferred
 
 - Automatic realm-transfer handling
-- Blizzard lockout / raid progress sync
+- Boss-level persisted lockout rows / signup eligibility redesign
 - Persisted user OAuth tokens or long-lived user refresh (intentionally rejected)
 - Warcraft Logs
 - Using Battle.net as app login

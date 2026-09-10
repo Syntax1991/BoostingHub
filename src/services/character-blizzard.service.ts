@@ -24,7 +24,10 @@ import type { CharacterRole, WowClass } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { lockoutRepository } from "@/repositories/lockout.repository";
 import { battleNetService } from "@/services/battle-net.service";
+import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 
 const REFRESH_COOLDOWN_MS = 60_000;
 const REFRESH_ALL_CONCURRENCY = 4;
@@ -683,6 +686,7 @@ export const characterBlizzardService = {
     const outcome = {
       total: eligible.length,
       refreshed: 0,
+      lockoutsRefreshed: 0,
       skipped: 0,
       failed: 0,
     };
@@ -695,27 +699,29 @@ export const characterBlizzardService = {
       if (character.lastSyncedAt) {
         const elapsed = Date.now() - new Date(character.lastSyncedAt).getTime();
         if (elapsed < REFRESH_COOLDOWN_MS) {
-          return "skipped" as const;
+          return { status: "skipped" as const, lockoutSynced: false };
         }
       }
 
       try {
-        await refreshLinkedCharacterProfile(user, character, connection.id, {
+        const result = await refreshLinkedCharacterProfile(user, character, connection.id, {
           updateConnectionSync: false,
           writeActivity: false,
         });
-        return "refreshed" as const;
+        return { status: "refreshed" as const, lockoutSynced: result.lockoutSynced };
       } catch (error) {
         if (isDomainError(error) && error.code === "BLIZZARD_REFRESH_COOLDOWN") {
-          return "skipped" as const;
+          return { status: "skipped" as const, lockoutSynced: false };
         }
-        return "failed" as const;
+        return { status: "failed" as const, lockoutSynced: false };
       }
     });
 
     for (const result of results) {
-      if (result === "refreshed") outcome.refreshed += 1;
-      else if (result === "skipped") outcome.skipped += 1;
+      if (result.status === "refreshed") {
+        outcome.refreshed += 1;
+        if (result.lockoutSynced) outcome.lockoutsRefreshed += 1;
+      } else if (result.status === "skipped") outcome.skipped += 1;
       else outcome.failed += 1;
     }
 
@@ -727,13 +733,56 @@ export const characterBlizzardService = {
       await activityRepository.create({
         userId: user.id,
         type: "BATTLENET_CHARACTERS_REFRESHED",
-        message: `Refresh all (${region}): ${outcome.refreshed} refreshed, ${outcome.skipped} skipped, ${outcome.failed} failed of ${outcome.total}.`,
+        message: `Refresh all (${region}): ${outcome.refreshed} refreshed (${outcome.lockoutsRefreshed} lockouts), ${outcome.skipped} skipped, ${outcome.failed} failed of ${outcome.total}.`,
       });
     }
 
     return outcome;
   },
 };
+
+async function syncCurrentRaidLockoutsFromBlizzard(character: {
+  id: string;
+  name: string;
+  realm: string;
+  region: "EU" | "US";
+}): Promise<boolean> {
+  try {
+    const realmSlug = realmSlugFromDisplayName(character.realm);
+    const encounters = await blizzardApiClient.getCharacterRaidEncounters(
+      character.region,
+      realmSlug,
+      character.name,
+    );
+    const derived = deriveCurrentResetLockouts({
+      region: character.region,
+      encounters,
+      resetWindow: getRegionalWeeklyReset(character.region),
+    });
+    if (derived.status !== "derived") {
+      return false;
+    }
+
+    await lockoutRepository.upsertCurrentResetLockouts(
+      character.id,
+      derived.difficulties.map((row) => ({
+        raidId: row.raidId,
+        difficulty: row.difficulty,
+        resetIdentifier: row.resetIdentifier,
+        bossesDefeated: row.bossesDefeated,
+        isComplete: row.isComplete,
+      })),
+      derived.verifiedAt,
+    );
+    return true;
+  } catch (error) {
+    if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") {
+      throw error;
+    }
+    // Profile refresh may still succeed; leave prior lockout rows untouched.
+    return false;
+  }
+}
 
 async function refreshLinkedCharacterProfile(
   user: AuthenticatedUser,
@@ -751,7 +800,7 @@ async function refreshLinkedCharacterProfile(
   },
   connectionId: string,
   options: { updateConnectionSync?: boolean; writeActivity?: boolean } = {},
-) {
+): Promise<{ lockoutSynced: boolean }> {
   const updateConnectionSync = options.updateConnectionSync !== false;
   const writeActivity = options.writeActivity !== false;
 
@@ -867,6 +916,13 @@ async function refreshLinkedCharacterProfile(
     throw error;
   }
 
+  const lockoutSynced = await syncCurrentRaidLockoutsFromBlizzard({
+    id: character.id,
+    name: nextName,
+    realm: character.realm,
+    region: character.region,
+  });
+
   if (updateConnectionSync) {
     await battleNetConnectionRepository.markSuccessfulSync(connectionId, syncedAt);
   }
@@ -874,7 +930,11 @@ async function refreshLinkedCharacterProfile(
     await activityRepository.create({
       userId: user.id,
       type: "BATTLENET_CHARACTER_REFRESHED",
-      message: `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard.`,
+      message: lockoutSynced
+        ? `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile + raid lockouts).`
+        : `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile only; lockouts unchanged).`,
     });
   }
+
+  return { lockoutSynced };
 }

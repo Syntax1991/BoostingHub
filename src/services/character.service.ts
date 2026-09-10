@@ -1,7 +1,9 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
-import { resetIdentifierFor } from "@/lib/datetime";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { defaultRaidBossTotal } from "@/lib/lockout-display";
+import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import {
   isValidCharacterName,
   isValidRealmName,
@@ -99,17 +101,24 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
     const characters = await characterRepository.listByUserId(user.id);
-    const currentReset = resetIdentifierFor();
+    const bossTotal = defaultRaidBossTotal(WOW_RAID_CATALOG[0]?.id);
 
     return {
-      currentReset,
+      currentResetByRegion: {
+        EU: getRegionalWeeklyReset("EU").resetIdentifier,
+        US: getRegionalWeeklyReset("US").resetIdentifier,
+      },
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
       characters: characters.map((character) => {
         const access = boosterAccessService.summarize(character.boosterAccess);
+        const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
         const lockouts = lockoutService.summarize(
           character.lockouts.filter((lockout) => lockout.resetIdentifier === currentReset),
-        );
+        ).map((lockout) => ({
+          ...lockout,
+          bossTotal,
+        }));
 
         return {
           id: character.id,
@@ -127,6 +136,7 @@ export const characterService = {
           blizzardRealmId: character.blizzardRealmId,
           warcraftLogsLinked: Boolean(character.warcraftLogsId),
           boosterAccess: access,
+          currentReset,
           lockouts,
         };
       }),
@@ -139,6 +149,15 @@ export const characterService = {
       throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
     }
     assertOwned(user, character);
+
+    const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
+    const bossTotal = defaultRaidBossTotal(WOW_RAID_CATALOG[0]?.id);
+    const currentLockouts = lockoutService
+      .summarize(character.lockouts.filter((lockout) => lockout.resetIdentifier === currentReset))
+      .map((lockout) => ({
+        ...lockout,
+        bossTotal,
+      }));
 
     return {
       id: character.id,
@@ -159,7 +178,8 @@ export const characterService = {
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
       boosterAccess: character.boosterAccess,
       accessPanel: boosterAccessService.buildCharacterAccessPanel(character),
-      lockouts: lockoutService.summarize(character.lockouts),
+      currentReset,
+      lockouts: currentLockouts,
     };
   },
 

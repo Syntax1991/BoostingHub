@@ -10,10 +10,13 @@ import {
 } from "@/lib/blizzard/config";
 import { mapPlayableClassId } from "@/lib/blizzard/playable-class";
 import type {
+  BlizzardCharacterRaidEncounters,
   BlizzardProfileStatus,
   BlizzardProfileSummary,
+  BlizzardRaidInstanceProgress,
   OwnedBlizzardCharacter,
 } from "@/lib/blizzard/types";
+import { mapBlizzardRaidDifficulty } from "@/lib/blizzard/raid-difficulty";
 import type { WowClass, WowRegion } from "@/models/enums";
 import { findSpecialization } from "@/lib/wow-specializations";
 
@@ -339,4 +342,87 @@ export const blizzardApiClient = {
       activeSpecialization: mapActiveSpecialization(wowClass, record.active_spec),
     };
   },
+
+  async getCharacterRaidEncounters(
+    region: WowRegion,
+    realmSlug: string,
+    name: string,
+  ): Promise<BlizzardCharacterRaidEncounters> {
+    const token = await this.getClientCredentialsToken();
+    const url = new URL(
+      `${blizzardApiHost(region)}/profile/wow/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(name.toLocaleLowerCase("en-US"))}/encounters/raids`,
+    );
+    url.searchParams.set("namespace", blizzardProfileNamespace(region));
+    url.searchParams.set("locale", blizzardLocale(region));
+
+    const payload = await fetchJson(
+      url.toString(),
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      "character-raid-encounters",
+    );
+
+    return { raids: mapCharacterRaidEncounters(payload) };
+  },
 };
+
+function mapCharacterRaidEncounters(payload: unknown): BlizzardRaidInstanceProgress[] {
+  const root = asRecord(payload);
+  const expansions = Array.isArray(root?.expansions) ? root.expansions : [];
+  const raids: BlizzardRaidInstanceProgress[] = [];
+
+  for (const expansion of expansions) {
+    const expansionRecord = asRecord(expansion);
+    const instances = Array.isArray(expansionRecord?.instances) ? expansionRecord.instances : [];
+    for (const instance of instances) {
+      const instanceRecord = asRecord(instance);
+      const instanceKey = nameIdKey(instanceRecord?.instance);
+      if (!instanceKey) continue;
+
+      const modes = Array.isArray(instanceRecord?.modes) ? instanceRecord.modes : [];
+      const difficulties: BlizzardRaidInstanceProgress["difficulties"] = [];
+
+      for (const mode of modes) {
+        const modeRecord = asRecord(mode);
+        const difficultyType = asString(asRecord(modeRecord?.difficulty)?.type);
+        const mapped = mapBlizzardRaidDifficulty(difficultyType);
+        if (!mapped) continue;
+
+        const progress = asRecord(modeRecord?.progress);
+        const encountersRaw = Array.isArray(progress?.encounters) ? progress.encounters : [];
+        const encounters = encountersRaw.flatMap((row) => {
+          const encounterRecord = asRecord(row);
+          if (!encounterRecord) return [];
+          const encounterKey = nameIdKey(encounterRecord.encounter);
+          if (!encounterKey) return [];
+          const lastKill = asNumber(encounterRecord.last_kill_timestamp);
+          return [
+            {
+              encounterId: String(encounterKey.id),
+              encounterName: encounterKey.name ?? `Encounter ${encounterKey.id}`,
+              completedCount: asNumber(encounterRecord.completed_count) ?? 0,
+              lastKillTimestampMs: lastKill,
+            },
+          ];
+        });
+
+        difficulties.push({
+          difficulty: mapped,
+          progressCompleted: asNumber(progress?.completed_count) ?? 0,
+          progressTotal: asNumber(progress?.total_count) ?? encounters.length,
+          encounters,
+        });
+      }
+
+      raids.push({
+        instanceId: String(instanceKey.id),
+        instanceName: instanceKey.name ?? `Instance ${instanceKey.id}`,
+        difficulties,
+      });
+    }
+  }
+
+  return raids;
+}

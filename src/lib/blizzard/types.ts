@@ -72,3 +72,28 @@ export type BattleNetConnectionSummary = {
   connectedAt: string;
   lastSuccessfulSyncAt: string | null;
 };
+
+/** Normalized Character Raids Encounters payload (no raw Blizzard shapes). */
+export type BlizzardRaidEncounterKill = {
+  encounterId: string;
+  encounterName: string;
+  completedCount: number;
+  lastKillTimestampMs: number | null;
+};
+
+export type BlizzardRaidDifficultyProgress = {
+  difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
+  progressCompleted: number;
+  progressTotal: number;
+  encounters: BlizzardRaidEncounterKill[];
+};
+
+export type BlizzardRaidInstanceProgress = {
+  instanceId: string;
+  instanceName: string;
+  difficulties: BlizzardRaidDifficultyProgress[];
+};
+
+export type BlizzardCharacterRaidEncounters = {
+  raids: BlizzardRaidInstanceProgress[];
+};

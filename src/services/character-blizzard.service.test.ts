@@ -14,6 +14,7 @@ const apiMocks = vi.hoisted(() => ({
   getClientCredentialsToken: vi.fn(),
   getCharacterProfileStatus: vi.fn(),
   getCharacterProfileSummary: vi.fn(),
+  getCharacterRaidEncounters: vi.fn(),
 }));
 
 vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
@@ -23,6 +24,10 @@ vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
 import { characterBlizzardService } from "@/services/character-blizzard.service";
 import { characterService } from "@/services/character.service";
 import { characterRepository } from "@/repositories/character.repository";
+import { raidRepository } from "@/repositories/raid.repository";
+import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
 
 const ids = {
   owner: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000011",
@@ -211,6 +216,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getClientCredentialsToken.mockResolvedValue("client-token");
+  apiMocks.getCharacterRaidEncounters.mockRejectedValue(new Error("encounters unavailable"));
 });
 
 afterEach(async () => {
@@ -695,6 +701,118 @@ describe("characterBlizzardService.refreshCharacter", () => {
     expect(refreshed.blizzardRealmId).toBe(owned.realmId);
     expect(refreshed.itemLevel).toBe(680);
   });
+
+  it("persists current-reset lockouts from Blizzard encounters without touching BoosterAccess", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const { owned, characterId } = await importLinkedShaman("300033", "Bnlockout");
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    const reset = getRegionalWeeklyReset("EU");
+    const killMs = reset.start.getTime() + 3_600_000;
+    const catalog = WOW_RAID_CATALOG[0]!;
+    const encounters: BlizzardCharacterRaidEncounters = {
+      raids: [
+        {
+          instanceId: String(catalog.blizzardInstanceId),
+          instanceName: catalog.name,
+          difficulties: [
+            {
+              difficulty: "NORMAL",
+              progressCompleted: 8,
+              progressTotal: 8,
+              encounters: catalog.bosses.map((boss, index) => ({
+                encounterId: String(20_000 + index),
+                encounterName: boss.name,
+                completedCount: 1,
+                lastKillTimestampMs: killMs,
+              })),
+            },
+            {
+              difficulty: "HEROIC",
+              progressCompleted: 0,
+              progressTotal: 8,
+              encounters: catalog.bosses.map((boss, index) => ({
+                encounterId: String(30_000 + index),
+                encounterName: boss.name,
+                completedCount: 0,
+                lastKillTimestampMs: null,
+              })),
+            },
+          ],
+        },
+      ],
+    };
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 700,
+      specialization: "Elemental",
+    });
+    apiMocks.getCharacterRaidEncounters.mockResolvedValue(encounters);
+
+    const beforeAccess = await orm.BoosterAccess.where({ characterId }).all();
+    const refreshed = await characterBlizzardService.refreshCharacter(owner, characterId);
+    expect(refreshed.itemLevel).toBe(700);
+    expect(refreshed.specialization).toBe("Restoration");
+    expect(refreshed.primaryRole).toBe("HEALER");
+
+    const lockouts = await orm.CharacterRaidLockout.where({ characterId }).all();
+    const current = lockouts.filter(
+      (row) => String(row.resetIdentifier) === reset.resetIdentifier,
+    );
+    const normal = current.find((row) => String(row.difficulty) === "NORMAL");
+    const heroic = current.find((row) => String(row.difficulty) === "HEROIC");
+    expect(Number(normal?.bossesDefeated)).toBe(8);
+    expect(Boolean(normal?.isComplete)).toBe(true);
+    expect(Number(heroic?.bossesDefeated)).toBe(0);
+    expect(Boolean(heroic?.isComplete)).toBe(false);
+
+    const afterAccess = await orm.BoosterAccess.where({ characterId }).all();
+    expect(afterAccess).toHaveLength(beforeAccess.length);
+  });
+
+  it("keeps prior lockouts when encounters fail but still updates item level", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const { owned, characterId } = await importLinkedShaman("300034", "Bnlockfail");
+    const reset = getRegionalWeeklyReset("EU");
+    const nowIso = new Date().toISOString();
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId,
+      raidId: WOW_RAID_CATALOG[0]!.id,
+      difficulty: "NORMAL",
+      resetIdentifier: reset.resetIdentifier,
+      bossesDefeated: 5,
+      isComplete: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 710,
+      specialization: "Elemental",
+    });
+    apiMocks.getCharacterRaidEncounters.mockRejectedValue(new Error("timeout"));
+
+    const refreshed = await characterBlizzardService.refreshCharacter(owner, characterId);
+    expect(refreshed.itemLevel).toBe(710);
+
+    const lockouts = await orm.CharacterRaidLockout.where({ characterId }).all();
+    expect(lockouts).toHaveLength(1);
+    expect(Number(lockouts[0]?.bossesDefeated)).toBe(5);
+  });
 });
 
 describe("characterBlizzardService.refreshLinkedCharactersForRegion", () => {
@@ -785,6 +903,7 @@ describe("characterBlizzardService.refreshLinkedCharactersForRegion", () => {
     expect(result.total).toBe(1);
     expect(result.refreshed).toBe(1);
     expect(result.failed).toBe(0);
+    expect(result.lockoutsRefreshed).toBeGreaterThanOrEqual(0);
 
     const euRow = await orm.Character.where({ id: euId }).first();
     expect(Number(euRow?.itemLevel)).toBe(700);

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
+import { formatCompactLockoutProgress } from "@/lib/lockout-display";
 import { DIFFICULTY_LABELS, REGION_LABELS } from "@/lib/labels";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge, RoleBadge } from "@/components/ui/badges";
@@ -60,7 +61,7 @@ export function CharactersView({ data }: { data: Page }) {
                   <th className="px-4 py-2 font-medium">iLvl</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Booster access</th>
-                  <th className="px-4 py-2 font-medium">Lockouts ({data.currentReset})</th>
+                  <th className="px-4 py-2 font-medium">Lockouts</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
                   <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>
@@ -97,17 +98,8 @@ export function CharactersView({ data }: { data: Page }) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      {character.lockouts.length === 0 ? (
+                      {formatCompactLockoutProgress(character.lockouts) ?? (
                         <span className="text-muted">Unknown</span>
-                      ) : (
-                        <ul className="space-y-1">
-                          {character.lockouts.map((lockout) => (
-                            <li key={`${lockout.raidName}-${lockout.difficulty}`}>
-                              {DIFFICULTY_LABELS[lockout.difficulty]} ·{" "}
-                              {lockout.isComplete ? "complete" : `${lockout.bossesDefeated} bosses`}
-                            </li>
-                          ))}
-                        </ul>
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">

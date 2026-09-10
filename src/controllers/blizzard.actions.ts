@@ -116,7 +116,7 @@ export async function refreshAllBattleNetCharactersAction(input: unknown): Promi
     }
     return {
       ok: true,
-      message: `Refresh all (${parsed.region}): ${result.refreshed} refreshed, ${result.skipped} skipped, ${result.failed} failed.`,
+      message: `Refresh all (${parsed.region}): ${result.refreshed} refreshed (${result.lockoutsRefreshed} lockouts), ${result.skipped} skipped, ${result.failed} failed.`,
     };
   } catch (error) {
     return mapActionError(error);

@@ -115,8 +115,9 @@ export function fromDatetimeLocalValue(local: string, timeZone = DEFAULT_TIME_ZO
 }
 
 /**
- * WoW lockouts are weekly. EU historically resets Wednesday 07:00 UTC;
- * the identifier is the ISO week of that reset, not a boolean on the character.
+ * WoW lockouts are weekly. Prefer `getRegionalWeeklyReset` for EU/US windows.
+ * This helper returns an ISO-week style identifier for a given instant (usually
+ * the regional reset start), not a boolean on the character.
  */
 export function resetIdentifierFor(instant: Date | string = new Date()): string {
   const date = asDate(instant);

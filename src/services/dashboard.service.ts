@@ -7,7 +7,7 @@ import { signupRepository } from "@/repositories/signup.repository";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
-import { resetIdentifierFor } from "@/lib/datetime";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 
 export const dashboardService = {
   async getDashboard(user: AuthenticatedUser) {
@@ -18,7 +18,6 @@ export const dashboardService = {
       activityRepository.listRecent(),
     ]);
 
-    const currentReset = resetIdentifierFor();
     const upcomingRuns = runs.filter((run) => UPCOMING_RUN_STATUSES.includes(run.status));
     const myUpcoming = mySignups.filter(
       (signup) =>
@@ -34,15 +33,16 @@ export const dashboardService = {
         .map((character) => character.id),
     );
 
-    const lockoutAttention = characters.flatMap((character) =>
-      lockoutService
+    const lockoutAttention = characters.flatMap((character) => {
+      const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
+      return lockoutService
         .summarize(character.lockouts.filter((lockout) => lockout.resetIdentifier === currentReset))
         .filter((lockout) => lockout.attention)
         .map((lockout) => ({
           characterName: character.name,
           ...lockout,
-        })),
-    );
+        }));
+    });
 
     return {
       upcomingRuns: upcomingRuns.map((run) => ({

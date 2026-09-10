@@ -218,11 +218,14 @@ export function CharacterDetailsView({ data }: { data: Details }) {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Raid lockouts" description="Stored lockouts only. Not live Blizzard data." />
+          <CardHeader
+            title="Raid lockouts"
+            description={`Current reset ${data.currentReset}. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Mythic shows boss kills only — not instance lock-extension.`}
+          />
           {data.lockouts.length === 0 ? (
             <EmptyState
               title="Unknown"
-              description="No stored lockout data for this character. Missing rows are not proof the character is clear."
+              description="No verified current-reset lockout data. Missing or stale rows are not treated as clear."
             />
           ) : (
             <ul className="divide-y divide-border">
@@ -233,8 +236,8 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                     <DifficultyBadge difficulty={lockout.difficulty} />
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    {lockout.resetIdentifier} ·{" "}
-                    {lockout.isComplete ? "complete" : `${lockout.bossesDefeated} bosses`}
+                    {lockout.resetIdentifier} · {lockout.bossesDefeated}/{lockout.bossTotal}
+                    {lockout.isComplete ? " complete" : ""}
                   </p>
                 </li>
               ))}
