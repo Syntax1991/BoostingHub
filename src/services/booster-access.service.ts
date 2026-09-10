@@ -2,8 +2,9 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanReviewBoosterAccess } from "@/auth/authorization";
 import type { BoosterAccessMatch, BoosterAccessRecord } from "@/models/records";
 import type { BoosterAccessStatus, CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
-import { RAID_DIFFICULTIES } from "@/models/enums";
+import { RAID_DIFFICULTIES, WOW_CLASSES } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
+import { getDiscordBoosterTicketUrl } from "@/lib/discord-config";
 import { CLASS_LABELS, CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { isRoleValidForClass, rolesForClass } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -12,9 +13,9 @@ import {
   type BoosterAccessAdminRecord,
 } from "@/repositories/booster-access.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { userRepository } from "@/repositories/user.repository";
 import {
   assertBoosterAccessTransition,
-  canRequestFromStatus,
   isApprovedAccessStatus,
 } from "@/services/booster-access-state";
 
@@ -35,6 +36,8 @@ export type CharacterAccessPanel = {
   cells: BoosterAccessCell[];
   canSubmitRequests: boolean;
   inactiveHint: string | null;
+  discordTicketUrl: string | null;
+  selfRequestDisabled: true;
 };
 
 export type AdminAccessFilters = {
@@ -42,6 +45,7 @@ export type AdminAccessFilters = {
   difficulty?: RaidDifficulty;
   role?: CharacterRole;
   query?: string;
+  userId?: string;
 };
 
 function uniqueViolation(error: unknown): boolean {
@@ -58,7 +62,11 @@ function characterLabel(character: { name: string; realm: string }) {
 
 function assertOwned(user: AuthenticatedUser, character: { userId: string }) {
   if (character.userId !== user.id) {
-    throw new DomainError("CHARACTER_NOT_OWNED", "You can only request booster access for your own characters.", 403);
+    throw new DomainError(
+      "CHARACTER_NOT_OWNED",
+      "You can only request booster access for your own characters.",
+      403,
+    );
   }
 }
 
@@ -80,19 +88,13 @@ function assertRoleForClass(wowClass: WowClass, role: CharacterRole) {
   }
 }
 
-function assertCharacterActive(isActive: boolean) {
-  if (!isActive) {
-    throw new DomainError(
-      "CHARACTER_INACTIVE",
-      "Reactivate this character before requesting or approving booster access.",
-    );
-  }
-}
-
 /**
  * BoosterAccess is account-level platform eligibility scoped by
  * user + class + role + difficulty. Characters consume matching approvals;
  * they do not own BoosterAccess rows. Heroic never implies Normal or Mythic.
+ *
+ * New self-service requests are disabled. Applications are reviewed in Discord;
+ * ADMIN grants qualifications directly after external review.
  */
 export const boosterAccessService = {
   isApprovedFor(
@@ -148,7 +150,7 @@ export const boosterAccessService = {
           status,
           accessId: existing?.id ?? null,
           notes: existing?.notes ?? null,
-          canRequest: character.isActive && canRequestFromStatus(existing?.status ?? null),
+          canRequest: false,
         });
       }
     }
@@ -157,90 +159,149 @@ export const boosterAccessService = {
       roles,
       difficulties: RAID_DIFFICULTIES,
       cells,
-      canSubmitRequests: character.isActive,
+      canSubmitRequests: false,
       inactiveHint: character.isActive
         ? null
-        : "Reactivate this character before requesting new access.",
+        : "This character is inactive. Existing account qualifications remain visible.",
+      discordTicketUrl: getDiscordBoosterTicketUrl(),
+      selfRequestDisabled: true,
     };
   },
 
+  /**
+   * Self-service creation of PENDING BoosterAccess is permanently disabled.
+   * Historical PENDING rows remain; ADMIN may still review them.
+   */
   async requestAccess(
     user: AuthenticatedUser,
     input: { characterId: string; role: CharacterRole; difficulty: RaidDifficulty },
+  ): Promise<never> {
+    await loadOwnedCharacter(user, input.characterId);
+    throw new DomainError(
+      "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
+      "Booster applications are reviewed through Discord. An admin grants access after review.",
+      403,
+    );
+  },
+
+  async grantAccess(
+    admin: AuthenticatedUser,
+    input: {
+      userId: string;
+      wowClass: WowClass;
+      role: CharacterRole;
+      difficulty: RaidDifficulty;
+      notes?: string;
+    },
   ) {
-    const character = await loadOwnedCharacter(user, input.characterId);
-    assertCharacterActive(character.isActive);
-    assertRoleForClass(character.wowClass, input.role);
+    assertCanReviewBoosterAccess(admin);
+    if (!(WOW_CLASSES as readonly string[]).includes(input.wowClass)) {
+      throw new DomainError("VALIDATION_FAILED", "Unsupported class.");
+    }
+    assertRoleForClass(input.wowClass, input.role);
+
+    const target = await userRepository.findById(input.userId);
+    if (!target) {
+      throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
+    }
 
     const existing = await boosterAccessRepository.findExact(
-      user.id,
-      character.wowClass,
+      input.userId,
+      input.wowClass,
       input.role,
       input.difficulty,
     );
 
-    if (existing?.status === "PENDING") {
-      throw new DomainError("BOOSTER_ACCESS_ALREADY_PENDING", "That access request is already pending review.");
-    }
     if (existing?.status === "APPROVED") {
-      throw new DomainError("BOOSTER_ACCESS_ALREADY_APPROVED", "That combination is already approved.");
+      throw new DomainError(
+        "BOOSTER_ACCESS_ALREADY_APPROVED",
+        "That combination is already approved.",
+      );
     }
 
-    const label = accessLabel(character.wowClass, input.role, input.difficulty);
+    const now = new Date().toISOString();
+    const notes = input.notes?.trim() || "Reviewed through Discord";
+    const label = accessLabel(input.wowClass, input.role, input.difficulty);
 
     if (!existing) {
       try {
         const created = await boosterAccessRepository.create({
           id: crypto.randomUUID(),
-          userId: user.id,
-          characterId: character.id,
-          wowClass: character.wowClass,
+          userId: input.userId,
+          characterId: null,
+          wowClass: input.wowClass,
           role: input.role,
           difficulty: input.difficulty,
-          status: "PENDING",
-          notes: null,
-          approvedAt: null,
-          approvedById: null,
-          reviewedAt: null,
-          reviewedById: null,
+          status: "APPROVED",
+          notes,
+          approvedAt: now,
+          approvedById: admin.id,
+          reviewedAt: now,
+          reviewedById: admin.id,
         });
         await activityRepository.create({
-          userId: user.id,
-          type: "BOOSTER_ACCESS_REQUESTED",
-          message: `Requested ${label} for ${characterLabel(character)}.`,
+          userId: admin.id,
+          type: "BOOSTER_ACCESS_GRANTED",
+          message: `Granted ${label} to ${target.name}.`,
         });
         return created;
       } catch (error) {
         if (uniqueViolation(error)) {
           throw new DomainError(
-            "BOOSTER_ACCESS_ALREADY_PENDING",
-            "That access request is already pending review.",
+            "BOOSTER_ACCESS_ALREADY_APPROVED",
+            "That combination is already approved.",
           );
         }
         throw error;
       }
     }
 
-    assertBoosterAccessTransition(existing.status, "PENDING");
-    await boosterAccessRepository.updateStatus(existing.id, {
-      status: "PENDING",
-      characterId: character.id,
-      notes: null,
-      approvedAt: null,
-      approvedById: null,
-      reviewedAt: null,
-      reviewedById: null,
-    });
+    if (existing.status === "PENDING") {
+      assertBoosterAccessTransition(existing.status, "APPROVED");
+      await boosterAccessRepository.updateStatus(existing.id, {
+        status: "APPROVED",
+        notes,
+        approvedAt: now,
+        approvedById: admin.id,
+        reviewedAt: now,
+        reviewedById: admin.id,
+      });
+    } else if (existing.status === "REJECTED" || existing.status === "REVOKED") {
+      assertBoosterAccessTransition(existing.status, "PENDING");
+      await boosterAccessRepository.updateStatus(existing.id, {
+        status: "PENDING",
+        notes: null,
+        approvedAt: null,
+        approvedById: null,
+        reviewedAt: null,
+        reviewedById: null,
+      });
+      assertBoosterAccessTransition("PENDING", "APPROVED");
+      await boosterAccessRepository.updateStatus(existing.id, {
+        status: "APPROVED",
+        notes,
+        approvedAt: now,
+        approvedById: admin.id,
+        reviewedAt: now,
+        reviewedById: admin.id,
+      });
+    } else {
+      throw new DomainError(
+        "BOOSTER_ACCESS_INVALID_TRANSITION",
+        `Cannot grant access from status ${existing.status}.`,
+      );
+    }
+
     await activityRepository.create({
-      userId: user.id,
-      type: "BOOSTER_ACCESS_REQUESTED",
-      message: `Requested ${label} for ${characterLabel(character)}.`,
+      userId: admin.id,
+      type: "BOOSTER_ACCESS_GRANTED",
+      message: `Granted ${label} to ${target.name}.`,
     });
-    const reopened = await boosterAccessRepository.findById(existing.id);
-    if (!reopened) {
+    const updated = await boosterAccessRepository.findById(existing.id);
+    if (!updated) {
       throw new DomainError("BOOSTER_ACCESS_NOT_FOUND", "Booster access was not found.", 404);
     }
-    return reopened;
+    return updated;
   },
 
   async approveAccess(admin: AuthenticatedUser, accessId: string) {
@@ -252,8 +313,6 @@ export const boosterAccessService = {
     assertBoosterAccessTransition(access.status, "APPROVED");
     assertRoleForClass(access.wowClass, access.role);
 
-    // characterId is request context only. Approval is account-level and must not
-    // require the requesting Character to still be active.
     let activityTarget = accessLabel(access.wowClass, access.role, access.difficulty);
     if (access.characterId) {
       const character = await characterRepository.findById(access.characterId);
@@ -334,15 +393,22 @@ export const boosterAccessService = {
       difficulty: filters.difficulty,
       role: filters.role,
     });
+    let filtered = rows;
+    if (filters.userId) {
+      filtered = filtered.filter((row) => row.userId === filters.userId);
+    }
     const query = filters.query?.trim().toLocaleLowerCase("en-US");
     if (!query) {
-      return rows;
+      return filtered;
     }
-    return rows.filter((row) => matchesAdminQuery(row, query));
+    return filtered.filter((row) => matchesAdminQuery(row, query));
   },
 };
 
 function matchesAdminQuery(row: BoosterAccessAdminRecord, query: string) {
-  const haystack = [row.userName, row.characterName, row.realm].filter(Boolean).join(" ").toLocaleLowerCase("en-US");
+  const haystack = [row.userName, row.characterName, row.realm]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("en-US");
   return haystack.includes(query);
 }

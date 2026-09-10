@@ -9,6 +9,7 @@ export default async function ManageBoosterAccessPage({
     difficulty?: string | string[];
     role?: string | string[];
     query?: string | string[];
+    userId?: string | string[];
   }>;
 }) {
   const data = await managementController.getBoosterAccessPage(await searchParams);

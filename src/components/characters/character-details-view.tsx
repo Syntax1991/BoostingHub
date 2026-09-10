@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
-import { RequestBoosterAccessDialog } from "@/components/characters/request-booster-access-dialog";
+import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
 import type { BoosterAccessStatus, RaidDifficulty } from "@/models/enums";
@@ -181,14 +181,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
           <CardHeader
             title="Account booster access"
             description={`${CLASS_LABELS[data.wowClass]} qualifications on your account. Shared by every matching ${CLASS_LABELS[data.wowClass]} character — not owned by this character.`}
-            action={
-              <RequestBoosterAccessDialog
-                characterId={data.id}
-                cells={panel.cells}
-                disabled={!panel.canSubmitRequests}
-                disabledReason={panel.inactiveHint}
-              />
-            }
+            action={<DiscordBoosterApplicationCta discordTicketUrl={panel.discordTicketUrl} />}
           />
           <div className="divide-y divide-border">
             {byDifficulty.map(({ difficulty, cells }: { difficulty: RaidDifficulty; cells: typeof panel.cells }) => (

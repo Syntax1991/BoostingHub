@@ -12,6 +12,7 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { ApproveBoosterAccessButton } from "@/components/manage/approve-booster-access-button";
 import { BoosterAccessReviewDialog } from "@/components/manage/booster-access-review-dialog";
+import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getBoosterAccessPage>>;
@@ -19,7 +20,7 @@ type Page = Awaited<ReturnType<typeof managementController.getBoosterAccessPage>
 const STATUS_TABS = ["PENDING", "APPROVED", "REJECTED", "REVOKED", "ALL"] as const;
 
 export function BoosterAccessQueueView({ data }: { data: Page }) {
-  const { filters, requests } = data;
+  const { filters, requests, grantUsers } = data;
 
   return (
     <div>
@@ -27,14 +28,18 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
         title="Booster access"
         description="Admin review of booster eligibility. Raid leads cannot approve from this queue."
         actions={
-          <Link href="/manage" className="text-sm text-accent hover:underline">
-            Management
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <GrantBoosterAccessDialog users={grantUsers} defaultUserId={filters.userId} />
+            <Link href="/manage" className="text-sm text-accent hover:underline">
+              Management
+            </Link>
+          </div>
         }
       />
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3 px-4 py-3" method="get">
           <input type="hidden" name="status" value={filters.status} />
+          {filters.userId ? <input type="hidden" name="userId" value={filters.userId} /> : null}
           <label className="text-xs">
             <span className="mb-1 block text-muted">Difficulty</span>
             <select
@@ -90,6 +95,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
             if (filters.difficulty) href.set("difficulty", filters.difficulty);
             if (filters.role) href.set("role", filters.role);
             if (filters.query) href.set("query", filters.query);
+            if (filters.userId) href.set("userId", filters.userId);
             const active = filters.status === status;
             return (
               <Link

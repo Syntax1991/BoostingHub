@@ -6,6 +6,7 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { boosterAccessService } from "@/services/booster-access.service";
 import {
   boosterAccessIdSchema,
+  grantBoosterAccessSchema,
   rejectBoosterAccessSchema,
   requestBoosterAccessSchema,
   revokeBoosterAccessSchema,
@@ -16,14 +17,17 @@ function revalidateAccessSurfaces(characterId?: string | null) {
   revalidatePath("/dashboard");
   revalidatePath("/profile");
   revalidatePath("/runs");
+  revalidatePath("/manage");
   revalidatePath("/manage/booster-access");
+  revalidatePath("/manage/users");
   if (characterId) {
     revalidatePath(`/characters/${characterId}`);
   }
 }
 
 /**
- * Request identity and class come from the session character, never the client.
+ * Self-service requests are disabled. Kept so unauthorized/direct calls still
+ * hit the domain rejection path.
  */
 export async function requestBoosterAccessAction(input: unknown): Promise<ActionResult> {
   try {
@@ -32,6 +36,19 @@ export async function requestBoosterAccessAction(input: unknown): Promise<Action
     await boosterAccessService.requestAccess(user, parsed);
     revalidateAccessSurfaces(parsed.characterId);
     return { ok: true, message: "Access request submitted." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function grantBoosterAccessAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const parsed = grantBoosterAccessSchema.parse(input);
+    await boosterAccessService.grantAccess(admin, parsed);
+    revalidateAccessSurfaces();
+    revalidatePath(`/manage/users/${parsed.userId}`);
+    return { ok: true, message: "Booster access granted." };
   } catch (error) {
     return mapActionError(error);
   }
