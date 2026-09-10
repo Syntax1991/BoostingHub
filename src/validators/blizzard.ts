@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { WOW_REGIONS } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
-import {
-  CHARACTER_ITEM_LEVEL_MAX,
-  CHARACTER_ITEM_LEVEL_MIN,
-} from "@/lib/character-identity";
 
 export const battleNetRegionSchema = z.object({
   region: z.enum(WOW_REGIONS),
@@ -19,15 +15,10 @@ export const enrichImportCandidateSchema = z.object({
   blizzardCharacterId: z.string().trim().min(1).max(32),
 });
 
+/** No itemLevel: Blizzard is authoritative and re-resolved server-side, never client-supplied. */
 const importSelectionSchema = z.object({
   blizzardCharacterId: z.string().trim().min(1).max(32),
   specialization: z.string().trim().min(1, "Choose a specialization.").max(64),
-  itemLevel: z.coerce
-    .number()
-    .int("Item level must be a whole number.")
-    .min(CHARACTER_ITEM_LEVEL_MIN, "Item level cannot be negative.")
-    .max(CHARACTER_ITEM_LEVEL_MAX, "Item level is too high.")
-    .optional(),
 });
 
 export const importBattleNetCharactersSchema = z.object({
@@ -40,12 +31,6 @@ export const linkBattleNetCharacterSchema = z.object({
   blizzardCharacterId: z.string().trim().min(1).max(32),
   characterId: entityIdSchema,
   specialization: z.string().trim().min(1, "Choose a specialization.").max(64),
-  itemLevel: z.coerce
-    .number()
-    .int("Item level must be a whole number.")
-    .min(CHARACTER_ITEM_LEVEL_MIN, "Item level cannot be negative.")
-    .max(CHARACTER_ITEM_LEVEL_MAX, "Item level is too high.")
-    .optional(),
 });
 
 export const refreshBlizzardCharacterSchema = z.object({

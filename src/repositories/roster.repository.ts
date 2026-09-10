@@ -14,6 +14,7 @@ import type { BoosterQualificationMatch } from "@/models/records";
 import {
   asBoolean,
   asNumber,
+  asNumberOrNull,
   asString,
   asStringOrNull,
   mapCharacterRole,
@@ -35,7 +36,7 @@ export type RosterCharacterSnapshot = {
   wowClass: WowClass;
   specialization: string | null;
   primaryRole: CharacterRole;
-  itemLevel: number;
+  itemLevel: number | null;
   isActive: boolean;
   boosterQualifications: BoosterQualificationMatch[];
   lockouts: Array<{
@@ -81,7 +82,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     wowClass: mapWowClass(row.wowClass),
     specialization: asStringOrNull(row.specialization),
     primaryRole: mapCharacterRole(row.primaryRole),
-    itemLevel: asNumber(row.itemLevel),
+    itemLevel: asNumberOrNull(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
     // Hydrated from account-level BoosterQualification after signup load.
     boosterQualifications: [],

@@ -287,7 +287,8 @@ async function seed() {
     wowClass: "SHAMAN",
     specialization: "Enhancement",
     primaryRole: "DPS",
-    itemLevel: 640,
+    // Unknown item level for QA: Blizzard never supplied one for this row.
+    itemLevel: null,
     isActive: false,
     createdAt: SEED_NOW,
     updatedAt: SEED_NOW,

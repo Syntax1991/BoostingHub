@@ -10,10 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badges";
 import { CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
 import { specializationsForClass } from "@/lib/wow-specializations";
-import {
-  CHARACTER_ITEM_LEVEL_MAX,
-  CHARACTER_ITEM_LEVEL_MIN,
-} from "@/lib/character-identity";
 import { MIN_IMPORT_CHARACTER_LEVEL } from "@/lib/blizzard/import-rules";
 import {
   continueActionLabel,
@@ -23,7 +19,6 @@ import {
   isSelectableImportCandidate,
   itemLevelSortAria,
   itemLevelSortLabel,
-  needsManualItemLevel,
   nextItemLevelSortDirection,
   resolvedSpecialization,
   selectionCountLabel,
@@ -35,6 +30,9 @@ import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
 type CandidatesPayload = NonNullable<Page["battleNet"]["candidates"]>;
+
+/** Bounded-concurrency background enrichment; avoids hammering Blizzard for accounts with many characters. */
+const ENRICHMENT_CONCURRENCY = 4;
 
 function statusBadgeClass(status: ImportCandidate["status"]): string {
   if (status === "import") return "bg-success/15 text-success";
@@ -68,12 +66,13 @@ export function BattleNetImportDialog({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [specs, setSpecs] = useState<Record<string, string>>({});
-  const [manualItemLevels, setManualItemLevels] = useState<Record<string, string>>({});
   const [suggestions, setSuggestions] = useState<
     Record<string, { specialization: string | null; itemLevel: number | null }>
   >({});
   const [enriching, setEnriching] = useState<Record<string, boolean>>({});
   const [itemLevelSort, setItemLevelSort] = useState<ItemLevelSortDirection | null>(null);
+  /** Synchronous dedup so the background scan and manual selection never double-request the same row. */
+  const startedEnrichmentRef = useRef<Set<string>>(new Set());
 
   const rows = useMemo(() => candidates?.candidates ?? [], [candidates]);
   const importSessionId = candidates?.sessionId;
@@ -82,32 +81,17 @@ export function BattleNetImportDialog({
     return suggestions[row.blizzardCharacterId]?.itemLevel ?? row.suggestedItemLevel;
   }
 
-  function effectiveSortItemLevel(row: ImportCandidate): number | null {
-    const blizzard = blizzardItemLevelFor(row);
-    if (typeof blizzard === "number" && Number.isFinite(blizzard)) return blizzard;
-    const manualRaw = manualItemLevels[row.blizzardCharacterId]?.trim();
-    if (!manualRaw) return null;
-    const manual = Number(manualRaw);
-    if (
-      Number.isInteger(manual) &&
-      manual >= CHARACTER_ITEM_LEVEL_MIN &&
-      manual <= CHARACTER_ITEM_LEVEL_MAX
-    ) {
-      return manual;
-    }
-    return null;
-  }
-
   const visibleRows = useMemo(() => {
-    const filtered = filterImportCandidates(rows, query);
+    const aboveMinLevel = rows.filter((row) => row.status !== "level_too_low");
+    const filtered = filterImportCandidates(aboveMinLevel, query);
     if (!itemLevelSort) return filtered;
     const sortable = filtered.map((row) => ({
       ...row,
-      sortItemLevel: effectiveSortItemLevel(row),
+      sortItemLevel: blizzardItemLevelFor(row),
     }));
     return sortImportCandidatesByItemLevel(sortable, itemLevelSort);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- local form maps intentionally included
-  }, [rows, query, itemLevelSort, suggestions, manualItemLevels]);
+  }, [rows, query, itemLevelSort, suggestions]);
 
   const visibleEligibleIds = useMemo(
     () => eligibleCandidateIds(visibleRows),
@@ -130,10 +114,10 @@ export function BattleNetImportDialog({
       setQuery("");
       setSelected({});
       setSpecs({});
-      setManualItemLevels({});
       setSuggestions({});
       setEnriching({});
       setItemLevelSort(null);
+      startedEnrichmentRef.current = new Set();
     };
     dialog.addEventListener("close", onClose);
     queueMicrotask(() => searchRef.current?.focus());
@@ -156,13 +140,19 @@ export function BattleNetImportDialog({
     );
   }
 
-  function requestEnrichment(row: ImportCandidate) {
+  /**
+   * Fetches public profile enrichment for one row, independent of selection.
+   * `startedEnrichmentRef` guards synchronously so the background scan below
+   * and a manual toggle/select-all can never double-request the same row —
+   * React state (`suggestions`/`enriching`) updates too late for that check.
+   */
+  function enrichRow(row: ImportCandidate) {
     if (!importSessionId || !isSelectableImportCandidate(row)) return;
-    if (enriching[row.blizzardCharacterId]) return;
-    if (suggestions[row.blizzardCharacterId]) return;
+    if (startedEnrichmentRef.current.has(row.blizzardCharacterId)) return;
+    startedEnrichmentRef.current.add(row.blizzardCharacterId);
 
     setEnriching((current) => ({ ...current, [row.blizzardCharacterId]: true }));
-    void enrichImportCandidateAction({
+    return enrichImportCandidateAction({
       importSessionId,
       blizzardCharacterId: row.blizzardCharacterId,
     }).then((result) => {
@@ -192,12 +182,34 @@ export function BattleNetImportDialog({
     });
   }
 
+  /**
+   * Enriches every eligible candidate as soon as the session loads, not just
+   * selected ones, so the User sees Blizzard's Spec/Item Level before
+   * choosing. Bounded concurrency avoids firing dozens of parallel Blizzard
+   * requests for a large account.
+   */
+  useEffect(() => {
+    if (!importSessionId) return;
+    const eligible = rows.filter((row) => isSelectableImportCandidate(row));
+    if (eligible.length === 0) return;
+
+    let cursor = 0;
+    async function worker() {
+      while (cursor < eligible.length) {
+        const row = eligible[cursor++]!;
+        await enrichRow(row);
+      }
+    }
+    const workerCount = Math.min(ENRICHMENT_CONCURRENCY, eligible.length);
+    void Promise.all(Array.from({ length: workerCount }, () => worker()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enrichRow reads live state via refs/functional updates
+  }, [rows, importSessionId]);
+
   function toggle(row: ImportCandidate) {
     if (!isSelectableImportCandidate(row) || pending) return;
     const id = row.blizzardCharacterId;
     const next = !selected[id];
     setSelected((current) => ({ ...current, [id]: next }));
-    if (next) requestEnrichment(row);
   }
 
   function selectAllEligibleVisible() {
@@ -206,9 +218,6 @@ export function BattleNetImportDialog({
       for (const id of visibleEligibleIds) next[id] = true;
       return next;
     });
-    for (const row of visibleRows) {
-      if (isSelectableImportCandidate(row)) requestEnrichment(row);
-    }
   }
 
   function clearSelection() {
@@ -221,15 +230,9 @@ export function BattleNetImportDialog({
       if (!isSelectableImportCandidate(row)) return false;
       const specialization = resolvedSpecialization(row, specs[row.blizzardCharacterId], suggestedFor(row));
       if (!specialization) return false;
-      const blizzardIlvl = blizzardItemLevelFor(row);
-      if (typeof blizzardIlvl === "number") return true;
-      if (enriching[row.blizzardCharacterId]) return false;
-      const manual = Number(manualItemLevels[row.blizzardCharacterId]);
-      return (
-        Number.isInteger(manual) &&
-        manual >= CHARACTER_ITEM_LEVEL_MIN &&
-        manual <= CHARACTER_ITEM_LEVEL_MAX
-      );
+      // Item level is read-only Blizzard data; still loading is the only
+      // remaining blocker — an unavailable value never blocks continuing.
+      return !enriching[row.blizzardCharacterId];
     });
   }
 
@@ -261,45 +264,18 @@ export function BattleNetImportDialog({
         setError(`Select a specialization for ${row.name}.`);
         return;
       }
-
-      const blizzardIlvl = blizzardItemLevelFor(row);
-      if (needsManualItemLevel(true, blizzardIlvl)) {
-        if (enriching[row.blizzardCharacterId]) {
-          setError(`Still loading Blizzard profile data for ${row.name}.`);
-          return;
-        }
-        const manual = Number(manualItemLevels[row.blizzardCharacterId]);
-        if (!Number.isInteger(manual)) {
-          setError(`Enter an item level for ${row.name}.`);
-          return;
-        }
-        if (manual < CHARACTER_ITEM_LEVEL_MIN || manual > CHARACTER_ITEM_LEVEL_MAX) {
-          setError(`Item level for ${row.name} is out of range.`);
-          return;
-        }
+      if (enriching[row.blizzardCharacterId]) {
+        setError(`Still loading Blizzard profile data for ${row.name}.`);
+        return;
       }
     }
 
-    const selections = selectedRows.map((row) => {
-      const specialization = resolvedSpecialization(
-        row,
-        specs[row.blizzardCharacterId],
-        suggestedFor(row),
-      );
-      const blizzardIlvl = blizzardItemLevelFor(row);
-      const payload: {
-        blizzardCharacterId: string;
-        specialization: string;
-        itemLevel?: number;
-      } = {
-        blizzardCharacterId: row.blizzardCharacterId,
-        specialization,
-      };
-      if (needsManualItemLevel(true, blizzardIlvl)) {
-        payload.itemLevel = Number(manualItemLevels[row.blizzardCharacterId]);
-      }
-      return payload;
-    });
+    // Item level is never submitted from the client — Blizzard is
+    // authoritative and the server re-resolves it from its own profile read.
+    const selections = selectedRows.map((row) => ({
+      blizzardCharacterId: row.blizzardCharacterId,
+      specialization: resolvedSpecialization(row, specs[row.blizzardCharacterId], suggestedFor(row)),
+    }));
 
     startTransition(async () => {
       const result = await importBattleNetCharactersAction({
@@ -441,16 +417,9 @@ export function BattleNetImportDialog({
                       suggested={suggestedFor(row)}
                       blizzardItemLevel={blizzardItemLevelFor(row)}
                       specValue={specs[row.blizzardCharacterId] ?? ""}
-                      manualItemLevel={manualItemLevels[row.blizzardCharacterId] ?? ""}
                       onToggle={() => toggle(row)}
                       onSpecChange={(value) =>
                         setSpecs((current) => ({ ...current, [row.blizzardCharacterId]: value }))
-                      }
-                      onManualItemLevelChange={(value) =>
-                        setManualItemLevels((current) => ({
-                          ...current,
-                          [row.blizzardCharacterId]: value,
-                        }))
                       }
                     />
                   ))}
@@ -468,16 +437,9 @@ export function BattleNetImportDialog({
                   suggested={suggestedFor(row)}
                   blizzardItemLevel={blizzardItemLevelFor(row)}
                   specValue={specs[row.blizzardCharacterId] ?? ""}
-                  manualItemLevel={manualItemLevels[row.blizzardCharacterId] ?? ""}
                   onToggle={() => toggle(row)}
                   onSpecChange={(value) =>
                     setSpecs((current) => ({ ...current, [row.blizzardCharacterId]: value }))
-                  }
-                  onManualItemLevelChange={(value) =>
-                    setManualItemLevels((current) => ({
-                      ...current,
-                      [row.blizzardCharacterId]: value,
-                    }))
                   }
                 />
               ))}
@@ -517,10 +479,8 @@ type RowControls = {
   suggested: string | null;
   blizzardItemLevel: number | null;
   specValue: string;
-  manualItemLevel: string;
   onToggle: () => void;
   onSpecChange: (value: string) => void;
-  onManualItemLevelChange: (value: string) => void;
 };
 
 function ImportTableRow({
@@ -531,10 +491,8 @@ function ImportTableRow({
   suggested,
   blizzardItemLevel,
   specValue,
-  manualItemLevel,
   onToggle,
   onSpecChange,
-  onManualItemLevelChange,
 }: RowControls) {
   const selectable = isSelectableImportCandidate(row);
   const classSpecs = specializationsForClass(row.wowClass);
@@ -594,39 +552,24 @@ function ImportTableRow({
               </select>
             </label>
           )
+        ) : enriching && !suggested ? (
+          <span className="text-xs text-muted">Loading…</span>
+        ) : selectable ? (
+          <span className="text-xs text-muted">{suggested ?? "—"}</span>
         ) : (
           <span className="text-xs text-muted">—</span>
         )}
       </td>
       <td className="px-2 py-3">
-        {showControls ? (
-          enriching && blizzardItemLevel == null && !manualItemLevel ? (
-            <span className="text-xs text-muted">Loading…</span>
-          ) : typeof blizzardItemLevel === "number" ? (
-            <div className="text-xs">
-              <span className="font-medium">{blizzardItemLevel}</span>
-              <span className="text-muted"> · Blizzard</span>
-            </div>
-          ) : (
-            <label className="block text-xs">
-              <span className="mb-1 block text-muted">Manual</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={CHARACTER_ITEM_LEVEL_MIN}
-                max={CHARACTER_ITEM_LEVEL_MAX}
-                value={manualItemLevel}
-                disabled={pending}
-                onChange={(event) => onManualItemLevelChange(event.target.value)}
-                aria-label={`Item level for ${row.name}`}
-                className="h-8 w-24 rounded-md border border-border bg-surface px-2 text-sm"
-              />
-            </label>
-          )
+        {enriching && blizzardItemLevel == null ? (
+          <span className="text-xs text-muted">Loading…</span>
         ) : typeof blizzardItemLevel === "number" ? (
-          <span className="text-xs text-muted">{blizzardItemLevel}</span>
+          <div className="text-xs">
+            <span className="font-medium">{blizzardItemLevel}</span>
+            <span className="text-muted"> · Blizzard</span>
+          </div>
         ) : (
-          <span className="text-xs text-muted">—</span>
+          <span className="text-xs text-muted">Unknown</span>
         )}
       </td>
     </tr>
@@ -642,10 +585,8 @@ function ImportMobileCard(props: RowControls) {
     suggested,
     blizzardItemLevel,
     specValue,
-    manualItemLevel,
     onToggle,
     onSpecChange,
-    onManualItemLevelChange,
   } = props;
   const selectable = isSelectableImportCandidate(row);
   const classSpecs = specializationsForClass(row.wowClass);
@@ -678,44 +619,43 @@ function ImportMobileCard(props: RowControls) {
               Requires level {MIN_IMPORT_CHARACTER_LEVEL}.
             </p>
           ) : null}
-          {showControls ? (
+          {selectable ? (
             <div className="mt-3 space-y-2">
-              <label className="block text-xs">
-                <span className="mb-1 block text-muted">Specialization</span>
-                <select
-                  value={effectiveSpec}
-                  disabled={pending || (enriching && !effectiveSpec)}
-                  onChange={(event) => onSpecChange(event.target.value)}
-                  className="h-8 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                >
-                  <option value="">Select…</option>
-                  {classSpecs.map((spec) => (
-                    <option key={spec.name} value={spec.name}>
-                      {spec.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {showControls ? (
+                <label className="block text-xs">
+                  <span className="mb-1 block text-muted">Specialization</span>
+                  <select
+                    value={effectiveSpec}
+                    disabled={pending || (enriching && !effectiveSpec)}
+                    onChange={(event) => onSpecChange(event.target.value)}
+                    className="h-8 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                  >
+                    <option value="">Select…</option>
+                    {classSpecs.map((spec) => (
+                      <option key={spec.name} value={spec.name}>
+                        {spec.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="text-xs">
+                  <span className="mb-1 block text-muted">Specialization</span>
+                  {enriching && !suggested ? (
+                    <span className="text-muted">Loading…</span>
+                  ) : (
+                    <span>{suggested ?? "—"}</span>
+                  )}
+                </div>
+              )}
               <div className="text-xs">
                 <span className="mb-1 block text-muted">Item Level</span>
                 {typeof blizzardItemLevel === "number" ? (
-                  <span>
-                    {blizzardItemLevel} · Blizzard
-                  </span>
+                  <span>{blizzardItemLevel} · Blizzard</span>
                 ) : enriching ? (
                   <span className="text-muted">Loading…</span>
                 ) : (
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={CHARACTER_ITEM_LEVEL_MIN}
-                    max={CHARACTER_ITEM_LEVEL_MAX}
-                    value={manualItemLevel}
-                    disabled={pending}
-                    onChange={(event) => onManualItemLevelChange(event.target.value)}
-                    className="h-8 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                    aria-label={`Item level for ${row.name}`}
-                  />
+                  <span className="text-muted">Unknown</span>
                 )}
               </div>
             </div>

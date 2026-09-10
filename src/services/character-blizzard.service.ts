@@ -14,7 +14,6 @@ import type {
 } from "@/lib/blizzard/types";
 import {
   assertImportCharacterLevel,
-  assertManualImportItemLevel,
   meetsImportCharacterLevel,
   MIN_IMPORT_CHARACTER_LEVEL,
 } from "@/lib/blizzard/import-rules";
@@ -124,6 +123,43 @@ function findOwnedInSession(
     );
   }
   return owned;
+}
+
+/**
+ * Public Character Profile lookup for the manual Add Character flow.
+ * Proves the character exists and returns Blizzard's authoritative Class
+ * and equipped item level — it does NOT prove BoostingHub-account ownership.
+ * Ownership is only established through the authenticated Battle.net import
+ * (battleNetService / applySelections below).
+ */
+async function lookupPublicCharacterProfile(
+  name: string,
+  realm: string,
+  region: "EU" | "US",
+): Promise<{ wowClass: WowClass; itemLevel: number | null }> {
+  const realmSlug = realmSlugFromDisplayName(realm);
+  const status = await blizzardApiClient.getCharacterProfileStatus(region, realmSlug, name);
+  if (!status.isValid) {
+    throw new DomainError(
+      "BLIZZARD_CHARACTER_NOT_FOUND",
+      `Blizzard character "${name}-${realm}" was not found.`,
+      404,
+    );
+  }
+
+  const summary = await blizzardApiClient.getCharacterProfileSummary(region, realmSlug, name);
+  if (!summary.wowClass) {
+    throw new DomainError(
+      "BLIZZARD_PROFILE_UNAVAILABLE",
+      "Blizzard did not return a class for this character.",
+      502,
+    );
+  }
+
+  return {
+    wowClass: summary.wowClass,
+    itemLevel: typeof summary.equippedItemLevel === "number" ? summary.equippedItemLevel : null,
+  };
 }
 
 async function enrichProfileBestEffort(owned: OwnedBlizzardCharacter): Promise<{
@@ -304,6 +340,8 @@ async function resolveCandidate(
 }
 
 export const characterBlizzardService = {
+  lookupPublicCharacterProfile,
+
   async resolveImportCandidates(user: AuthenticatedUser, sessionId: string) {
     const session = await requireLiveImportSession(user, sessionId);
     const candidates: ImportCandidate[] = [];
@@ -419,7 +457,8 @@ export const characterBlizzardService = {
       identity: ReturnType<typeof prepareImportedIdentity>;
       enrichment: Awaited<ReturnType<typeof enrichProfileBestEffort>>;
       spec: { specialization: string; primaryRole: CharacterRole };
-      itemLevel: number;
+      /** Blizzard-authoritative; null when Blizzard did not supply one. No manual fallback. */
+      itemLevel: number | null;
       lastSyncedAt: string | null;
     };
 
@@ -438,15 +477,8 @@ export const characterBlizzardService = {
       const spec = resolveClassSpecialization(item.owned.wowClass, specializationRaw);
       const enrichment = await enrichProfileBestEffort(item.owned);
 
-      let itemLevel: number;
-      let lastSyncedAt: string | null;
-      if (typeof enrichment.itemLevel === "number") {
-        itemLevel = enrichment.itemLevel;
-        lastSyncedAt = enrichment.synced ? new Date().toISOString() : null;
-      } else {
-        itemLevel = assertManualImportItemLevel(item.selection.itemLevel, label);
-        lastSyncedAt = null;
-      }
+      const itemLevel = typeof enrichment.itemLevel === "number" ? enrichment.itemLevel : null;
+      const lastSyncedAt = enrichment.synced ? new Date().toISOString() : null;
 
       ready.push({
         kind: item.kind,
@@ -518,7 +550,9 @@ export const characterBlizzardService = {
           blizzardRealmId: item.owned.realmId,
           specialization: item.spec.specialization,
           primaryRole: item.spec.primaryRole,
-          itemLevel: item.itemLevel,
+          // Omitted (not null) when unavailable this time, so linking never
+          // clears a previously known item level on a transient failure.
+          ...(typeof item.itemLevel === "number" ? { itemLevel: item.itemLevel } : {}),
           lastSyncedAt: item.lastSyncedAt,
         });
       } catch (error) {
@@ -577,7 +611,7 @@ export const characterBlizzardService = {
     sessionId: string,
     blizzardCharacterId: string,
     characterId: string,
-    options: { specialization: string; itemLevel?: number },
+    options: { specialization: string },
   ) {
     const session = await requireLiveImportSession(user, sessionId);
     const owned = findOwnedInSession(session.characters, blizzardCharacterId);
@@ -599,11 +633,7 @@ export const characterBlizzardService = {
     }
 
     const result = await this.applySelections(user, sessionId, [
-      {
-        blizzardCharacterId,
-        specialization: options.specialization,
-        ...(typeof options.itemLevel === "number" ? { itemLevel: options.itemLevel } : {}),
-      },
+      { blizzardCharacterId, specialization: options.specialization },
     ]);
     return { characterId: result.linkedCharacterIds[0] ?? characterId };
   },
@@ -893,20 +923,17 @@ async function refreshLinkedCharacterProfile(
     }
   }
 
-  if (typeof summary.equippedItemLevel !== "number") {
-    throw new DomainError(
-      "BLIZZARD_PROFILE_UNAVAILABLE",
-      "Blizzard profile did not include item level.",
-      502,
-    );
-  }
-
+  // Missing item level does not fail the refresh: identity/name/lockout sync
+  // still proceed, and the character's last known item level is retained
+  // rather than cleared to null or a 0 sentinel.
   const syncedAt = new Date().toISOString();
   try {
     await characterRepository.applyBlizzardSync(character.id, {
       name: nextName,
       normalizedName: nextNormalizedName,
-      itemLevel: summary.equippedItemLevel,
+      ...(typeof summary.equippedItemLevel === "number"
+        ? { itemLevel: summary.equippedItemLevel }
+        : {}),
       lastSyncedAt: syncedAt,
     });
   } catch (error) {

@@ -140,7 +140,8 @@ export function ManageUserDetailView({ data }: { data: Page }) {
                     <ClassBadge wowClass={asWowClass(character.wowClass)} />
                     <RoleBadge role={asCharacterRole(character.primaryRole)} />
                     <span className="text-xs text-muted">
-                      {character.specialization} · ilvl {character.itemLevel}
+                      {character.specialization} · ilvl{" "}
+                      {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"}
                     </span>
                   </div>
                 </li>

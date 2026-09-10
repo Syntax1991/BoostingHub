@@ -58,11 +58,6 @@ export type ImportCharacterSelection = {
   blizzardCharacterId: string;
   /** Required for import and link; validated against the Blizzard class. */
   specialization: string;
-  /**
-   * Manual fallback only when Blizzard equipped_item_level is unavailable.
-   * Ignored when the server obtains an authoritative Blizzard item level.
-   */
-  itemLevel?: number;
 };
 
 export type BattleNetConnectionSummary = {

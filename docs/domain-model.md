@@ -38,13 +38,13 @@ Short-lived (~15 min) owned-character snapshot after OAuth. Holds JSON character
 
 ## Character
 
-Belongs to one user. Operators may create characters manually or import/link them from Battle.net. The same Character row is used either way.
+Belongs to one user. Operators add characters via Blizzard lookup (Add Character) or import/link them from Battle.net. The same Character row is used either way.
 
 - display `name`, `realm`, `region` (`EU` \| `US`)
 - `normalizedName` / `normalizedRealm` for owner-scoped case-insensitive uniqueness with region
 - unique on `(userId, region, normalizedRealm, normalizedName)`
-- class, specialization, primary role (`TANK` \| `HEALER` \| `DPS`)
-- item level (manual, or from Blizzard `equipped_item_level` when linked/refreshed)
+- class (Blizzard-authoritative), specialization (BoostingHub-owned), primary role (`TANK` \| `HEALER` \| `DPS`, derived from specialization)
+- item level: `Int?`, Blizzard `equipped_item_level` when available, `null` ("Unknown") otherwise — never user-entered, never a `0` sentinel
 - `isActive` lifecycle (deactivate instead of delete)
 - optional scoped Blizzard identity: `blizzardCharacterId` + `blizzardRealmId` with `region`; unique on `(region, blizzardRealmId, blizzardCharacterId)` when set
 - optional Warcraft Logs identifier (unused until later integration)

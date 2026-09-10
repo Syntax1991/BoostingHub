@@ -27,7 +27,7 @@ export function CharactersView({ data }: { data: Page }) {
     <div>
       <PageHeader
         title="Characters"
-        description="World of Warcraft characters for this account. Add them manually, or optionally connect Battle.net to import and refresh."
+        description="World of Warcraft characters for this account. Add Character looks up Blizzard; optionally connect Battle.net to import and refresh."
         actions={<CharacterFormDialog mode="create" triggerLabel="Add Character" />}
       />
       <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
@@ -82,7 +82,9 @@ export function CharactersView({ data }: { data: Page }) {
                     <td className="px-4 py-3">
                       <RoleBadge role={character.primaryRole} />
                     </td>
-                    <td className="px-4 py-3">{character.itemLevel}</td>
+                    <td className="px-4 py-3">
+                      {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"}
+                    </td>
                     <td className="px-4 py-3 text-muted">{character.isActive ? "Active" : "Inactive"}</td>
                     <td className="px-4 py-3 text-xs">
                       {character.boosterAccess.approvals.length === 0 ? (

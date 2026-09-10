@@ -16,7 +16,7 @@ Discord remains login. Battle.net is a secondary game-account connection, not a 
 | Owned-character enumeration | No | Yes (`GET /profile/user/wow`) |
 | BoosterAccess | Unrelated | Unrelated |
 
-A user may connect EU, US, both, or neither. Manual character CRUD still works without any Battle.net connection.
+A user may connect EU, US, both, or neither — connecting an *account* is optional. Add Character itself requires `BLIZZARD_*` to be configured (there is no manual data-entry fallback), but not a Battle.net *connection*: it uses Blizzard's public Character Profile (client-credentials, no user OAuth) to resolve Class and Item Level, which proves the character exists but not that this BoostingHub account owns it. Only the authenticated Battle.net import below establishes ownership.
 
 ## Regional connection
 
@@ -99,9 +99,9 @@ Disconnect clears the regional connection and import sessions. It does **not** d
 
 Specialization from Blizzard is an **import-time prefill**. The import modal always lets the owner choose (or confirm) a specialization from the BoostingHub class/spec catalog before Continue. After create/link, specialization and `primaryRole` stay BoostingHub-owned. Refresh does not rewrite specialization.
 
-Battle.net import/link requires character **level ≥ 90** (`MIN_IMPORT_CHARACTER_LEVEL`). Lower-level owned characters remain visible in the import modal as `level_too_low` / “Requires level 90”, but are not selectable. Manual Add Character is unchanged by this rule.
+Battle.net import/link requires character **level ≥ 90** (`MIN_IMPORT_CHARACTER_LEVEL`). Lower-level owned characters remain visible in the import modal as `level_too_low` / “Requires level 90”, but are not selectable. This minimum is specific to Battle.net import/link; the public-lookup Add Character flow does not gate on level.
 
-Item level uses Blizzard `equipped_item_level` when the public profile is available (authoritative; client overrides are ignored). When the profile is unavailable, a validated manual item level is required and `lastSyncedAt` stays unset. Refresh updates **item level** (and may apply a safe rename — see below). It does not auto-change class, realm, or specialization.
+Class and item level are Blizzard-authoritative everywhere a Character is created or linked, for both flows — the client cannot submit either value; the server always re-resolves them from Blizzard. Item level uses `equipped_item_level` when the public profile returns one. When it does not, item level is stored as `null` ("Unknown") rather than a manual entry or a `0` sentinel, and this alone never blocks import, link, or Add Character. Refresh updates **item level** when Blizzard supplies one (and may apply a safe rename — see below); when a refresh's profile read succeeds but omits item level, the character's last known item level is retained rather than cleared, and name/lockout sync still proceed. It does not auto-change class, realm, or specialization.
 
 ## Privacy / profile unavailable
 
@@ -109,7 +109,7 @@ Some characters appear in the account list but have private or invalid public pr
 
 The owned-character candidate list on `/characters` is DB-only (import-session snapshot + local match status). Live public-profile enrichment runs only at import, link, or refresh — never while rendering the page — so a large account cannot stall the app shell.
 
-Import/link still proceeds with best-effort enrichment. Missing profile data means default/null suggestions rather than blocking the owned list. Refresh that cannot read a valid profile or equipped item level fails with a clear domain error instead of inventing values.
+Import/link still proceeds with best-effort enrichment. Missing profile data means default/null suggestions rather than blocking the owned list. Refresh fails with a clear domain error only when the profile itself cannot be read (not found, unavailable, rate-limited); a valid profile that simply omits equipped item level does not fail the refresh, and never becomes a 0 sentinel.
 
 ## Rename and realm transfer
 
@@ -196,7 +196,7 @@ Redirect URI must match the develop.battle.net client exactly (see env vars).
 
 ## Environment variables
 
-Optional. Empty values keep the Characters UI on manual CRUD only; seed and Discord login work without them.
+Required for Add Character (Class/Item Level lookup has no manual fallback) and for Battle.net account connect/import/link/refresh. Discord login and seed work without them; Character creation does not.
 
 | Variable | Purpose |
 | --- | --- |

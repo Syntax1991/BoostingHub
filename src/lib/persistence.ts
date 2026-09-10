@@ -45,6 +45,10 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
 }
 
+function asNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" ? value : null;
+}
+
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -122,6 +126,7 @@ export function mapSettlementStatus(value: unknown): SettlementStatus {
 export {
   asBoolean,
   asNumber,
+  asNumberOrNull,
   asString,
   asStringOrNull,
 };

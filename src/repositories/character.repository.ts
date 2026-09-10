@@ -2,6 +2,7 @@ import { orm } from "@/lib/prisma";
 import {
   asBoolean,
   asNumber,
+  asNumberOrNull,
   asString,
   asStringOrNull,
   mapCharacterRole,
@@ -24,7 +25,8 @@ export type CharacterPageRecord = {
   wowClass: ReturnType<typeof mapWowClass>;
   specialization: string | null;
   primaryRole: ReturnType<typeof mapCharacterRole>;
-  itemLevel: number;
+  /** Blizzard-authoritative equipped item level. Null when Blizzard has not supplied one. */
+  itemLevel: number | null;
   isActive: boolean;
   lastSyncedAt: string | null;
   blizzardCharacterId: string | null;
@@ -56,13 +58,15 @@ export type CharacterCreateInput = {
   wowClass: WowClass;
   specialization: string;
   primaryRole: CharacterRole;
-  itemLevel: number;
+  /** Blizzard-authoritative; null when Blizzard has not supplied one yet. */
+  itemLevel: number | null;
   isActive: boolean;
   blizzardCharacterId?: string | null;
   blizzardRealmId?: string | null;
   lastSyncedAt?: string | null;
 };
 
+/** Item level is never part of an edit — it is Blizzard-authoritative and frozen otherwise. */
 export type CharacterUpdateInput = {
   name: string;
   realm: string;
@@ -71,7 +75,6 @@ export type CharacterUpdateInput = {
   normalizedRealm: string;
   specialization: string;
   primaryRole: CharacterRole;
-  itemLevel: number;
 };
 
 export type CharacterBlizzardLinkInput = {
@@ -79,6 +82,7 @@ export type CharacterBlizzardLinkInput = {
   blizzardRealmId: string;
   specialization?: string;
   primaryRole?: CharacterRole;
+  /** Omitted (not null) when Blizzard enrichment did not return one; existing value is preserved. */
   itemLevel?: number;
   lastSyncedAt?: string | null;
 };
@@ -86,7 +90,8 @@ export type CharacterBlizzardLinkInput = {
 export type CharacterBlizzardSyncInput = {
   name: string;
   normalizedName: string;
-  itemLevel: number;
+  /** Omitted on transient Blizzard failure; existing value is preserved rather than cleared. */
+  itemLevel?: number;
   lastSyncedAt: string;
 };
 
@@ -104,7 +109,7 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     wowClass: mapWowClass(character.wowClass),
     specialization: asStringOrNull(character.specialization),
     primaryRole: mapCharacterRole(character.primaryRole),
-    itemLevel: asNumber(character.itemLevel),
+    itemLevel: asNumberOrNull(character.itemLevel),
     isActive: asBoolean(character.isActive, true),
     lastSyncedAt: asStringOrNull(character.lastSyncedAt),
     blizzardCharacterId: asStringOrNull(character.blizzardCharacterId),
@@ -281,7 +286,6 @@ export const characterRepository = {
       normalizedRealm: input.normalizedRealm,
       specialization: input.specialization,
       primaryRole: input.primaryRole,
-      itemLevel: input.itemLevel,
       updatedAt: new Date().toISOString(),
     });
   },
@@ -302,7 +306,7 @@ export const characterRepository = {
     await orm.Character.where({ id: characterId }).update({
       name: input.name,
       normalizedName: input.normalizedName,
-      itemLevel: input.itemLevel,
+      ...(typeof input.itemLevel === "number" ? { itemLevel: input.itemLevel } : {}),
       lastSyncedAt: input.lastSyncedAt,
       updatedAt: new Date().toISOString(),
     });

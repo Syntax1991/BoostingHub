@@ -49,13 +49,6 @@ export function resolvedSpecialization(
   return selectedSpec?.trim() || suggestedSpecialization?.trim() || "";
 }
 
-export function needsManualItemLevel(
-  selected: boolean,
-  blizzardItemLevel: number | null | undefined,
-): boolean {
-  return selected && (blizzardItemLevel == null || !Number.isFinite(blizzardItemLevel));
-}
-
 export type ItemLevelSortDirection = "desc" | "asc";
 
 export type ImportCandidateSortable = ImportCandidate & {
