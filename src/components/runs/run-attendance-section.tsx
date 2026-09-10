@@ -10,6 +10,7 @@ import { ATTENDANCE_STATUSES, type AttendanceStatus } from "@/models/enums";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
+import { AddStrikeFromAttendanceDialog } from "@/components/runs/add-strike-from-attendance-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 const SUMMARY_ORDER: AttendanceStatus[] = [
@@ -115,6 +116,7 @@ function ManagerAttendancePanel({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [noteRowId, setNoteRowId] = useState<string | null>(null);
+  const [strikeRowId, setStrikeRowId] = useState<string | null>(null);
   const canMutate = manager.canMutate;
   const unmarked = manager.summary.unmarked;
 
@@ -179,7 +181,7 @@ function ManagerAttendancePanel({
               <th className="px-3 py-2 font-medium">Backup</th>
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium">Note</th>
-              {canMutate ? <th className="px-4 py-2 font-medium">Action</th> : null}
+              <th className="px-4 py-2 font-medium">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -231,34 +233,42 @@ function ManagerAttendancePanel({
                 <td className="max-w-[12rem] px-3 py-2 text-xs text-muted">
                   {row.note ? row.note : "—"}
                 </td>
-                {canMutate ? (
-                  <td className="px-4 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      {row.isBackup && row.status !== "STANDBY" ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-8"
-                          disabled={pending}
-                          onClick={() =>
-                            runMutation(() =>
-                              setAttendanceAction({
-                                attendanceId: row.id,
-                                status: "STANDBY",
-                                note: row.note,
-                              }),
-                            )
-                          }
-                        >
-                          Standby
-                        </Button>
-                      ) : null}
+                <td className="px-4 py-2">
+                  <div className="flex flex-wrap gap-2">
+                    {canMutate && row.isBackup && row.status !== "STANDBY" ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="h-8"
+                        disabled={pending}
+                        onClick={() =>
+                          runMutation(() =>
+                            setAttendanceAction({
+                              attendanceId: row.id,
+                              status: "STANDBY",
+                              note: row.note,
+                            }),
+                          )
+                        }
+                      >
+                        Standby
+                      </Button>
+                    ) : null}
+                    {canMutate ? (
                       <Button type="button" variant="ghost" className="h-8" onClick={() => setNoteRowId(row.id)}>
                         Note
                       </Button>
-                    </div>
-                  </td>
-                ) : null}
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8"
+                      onClick={() => setStrikeRowId(row.id)}
+                    >
+                      Add strike
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -277,6 +287,13 @@ function ManagerAttendancePanel({
       ) : null}
       {completeOpen ? (
         <RunCompleteDialog runId={runId} unmarkedCount={unmarked} onClose={onCompleteClose} />
+      ) : null}
+      {strikeRowId ? (
+        <AddStrikeFromAttendanceDialog
+          attendanceId={strikeRowId}
+          characterName={manager.rows.find((item) => item.id === strikeRowId)?.characterName ?? "this participant"}
+          onClose={() => setStrikeRowId(null)}
+        />
       ) : null}
     </Card>
   );

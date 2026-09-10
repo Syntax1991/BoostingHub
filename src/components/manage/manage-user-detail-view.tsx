@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/badges";
 import { ChangeAccountRoleDialog } from "@/components/manage/change-account-role-dialog";
 import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
+import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
+import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getUserDetailPage>>;
@@ -39,9 +41,10 @@ function asAccessStatus(value: string): BoosterAccessStatus {
 }
 
 export function ManageUserDetailView({ data }: { data: Page }) {
-  const { user, characters, access, audit } = data;
+  const { user, characters, access, audit, strikes } = data;
   const approved = access.filter((row) => row.status === "APPROVED").length;
   const revoked = access.filter((row) => row.status === "REVOKED").length;
+  const activeStrikes = strikes.filter((row) => row.status === "ACTIVE").length;
 
   return (
     <div className="min-w-0 overflow-x-hidden">
@@ -198,6 +201,53 @@ export function ManageUserDetailView({ data }: { data: Page }) {
                     ) : null}
                   </div>
                   {row.notes ? <p className="w-full text-xs text-muted">{row.notes}</p> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader
+            title="Strikes"
+            description={
+              strikes.length === 0
+                ? "No disciplinary history."
+                : `${activeStrikes} active${strikes.length - activeStrikes > 0 ? ` · ${strikes.length - activeStrikes} revoked` : ""}`
+            }
+            action={<AddStrikeDialog userId={user.id} userName={user.name} />}
+          />
+          {strikes.length === 0 ? (
+            <EmptyState title="No strikes." description="Disciplinary history will appear here." />
+          ) : (
+            <ul className="divide-y divide-border">
+              {strikes.map((strike) => (
+                <li key={strike.id} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 text-sm">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{strike.reason}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          strike.status === "ACTIVE" ? "bg-warning/15 text-warning" : "bg-surface-raised text-muted"
+                        }`}
+                      >
+                        {strike.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      {strike.runTitle ? `${strike.runTitle} · ` : ""}
+                      Added by {strike.createdByName} · {formatDateTime(strike.createdAt)}
+                    </p>
+                    {strike.notes ? <p className="mt-1 text-xs text-muted">{strike.notes}</p> : null}
+                    {strike.status === "REVOKED" ? (
+                      <p className="mt-1 text-xs text-muted">
+                        Revoked by {strike.revokedByName ?? "Unknown"}
+                        {strike.revokedAt ? ` · ${formatDateTime(strike.revokedAt)}` : ""}
+                        {strike.revokedReason ? ` · ${strike.revokedReason}` : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                  {strike.status === "ACTIVE" ? <RevokeStrikeDialog strikeId={strike.id} /> : null}
                 </li>
               ))}
             </ul>

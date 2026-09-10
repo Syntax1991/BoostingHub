@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/labels";
-import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
+import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
 import type { profileService } from "@/services/profile.service";
 
@@ -88,6 +89,39 @@ export function ProfileView({ data }: { data: Profile }) {
               <dd className="text-lg font-semibold">{data.participation.pending}</dd>
             </div>
           </dl>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Strikes"
+            description="Your disciplinary history. Staff-internal notes are not shown here."
+          />
+          {data.strikes.length === 0 ? (
+            <EmptyState title="No strikes." description="Nothing on record." />
+          ) : (
+            <ul className="space-y-3 px-4 py-4 text-sm">
+              {data.strikes.map((strike) => (
+                <li key={strike.id}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{strike.reason}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        strike.status === "ACTIVE" ? "bg-warning/15 text-warning" : "bg-surface-raised text-muted"
+                      }`}
+                    >
+                      {strike.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">
+                    {strike.runTitle ? `${strike.runTitle} · ` : ""}
+                    {formatDateTime(strike.createdAt)}
+                  </p>
+                  {strike.status === "REVOKED" && strike.revokedReason ? (
+                    <p className="mt-1 text-xs text-muted">Revoked: {strike.revokedReason}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
         <Card>
           <CardHeader title="Reserved" description="These sections are placeholders, not fake ledgers." />
