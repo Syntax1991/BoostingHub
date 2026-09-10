@@ -111,7 +111,7 @@ Full connect/import/link/security policy: [blizzard-integration.md](blizzard-int
 - Model: `Character` plus `WowClass` / `WowRegion` / `CharacterRole`; Blizzard fields on the same row
 - View: `/characters`, `/characters/[characterId]`, add/edit dialog, lifecycle buttons, Battle.net panels, Refresh
 - Controller: `characterController`, `character.actions.ts`, `blizzard.actions.ts`
-- Service: `characterService` (ownership, identity, spec/role, lifecycle), `characterBlizzardService` (import/link/refresh)
+- Service: `characterService` (ownership, identity, spec/role, lifecycle), `characterBlizzardImportService` (public lookup, Battle.net import/link), `characterBlizzardSyncService` (refresh, refresh-all, lockout sync)
 - Repository: `characterRepository`
 
 ## Security

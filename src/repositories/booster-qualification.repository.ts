@@ -146,14 +146,12 @@ export const boosterQualificationRepository = {
     return rows.map((row) => mapAdminRow(row as Record<string, unknown>));
   },
 
+  /** One roundtrip for every roster/signup hydration path — never one query per user. */
   async listByUserIds(userIds: string[]): Promise<BoosterQualificationRecord[]> {
     const unique = [...new Set(userIds)];
     if (unique.length === 0) return [];
 
-    const results: BoosterQualificationRecord[] = [];
-    for (const userId of unique) {
-      results.push(...(await this.listByUserId(userId)));
-    }
-    return results;
+    const rows = await orm.BoosterQualification.where((q) => q.userId.in(unique)).all();
+    return rows.map((row) => mapQualification(row as Record<string, unknown>));
   },
 };

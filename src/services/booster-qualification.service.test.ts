@@ -216,3 +216,30 @@ describe("boosterQualificationService", () => {
     void adminWithoutAccess;
   });
 });
+
+describe("boosterQualificationRepository.listByUserIds", () => {
+  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
+
+  it("batches qualifications for multiple users in one call, grouped correctly per user", async () => {
+    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" });
+    await boosterQualificationService.grant(admin, { userId: ids.adminUser, difficulty: "MYTHIC" });
+
+    const rows = await boosterQualificationRepository.listByUserIds([ids.owner, ids.adminUser]);
+
+    const ownerRows = rows.filter((row) => row.userId === ids.owner);
+    const adminUserRows = rows.filter((row) => row.userId === ids.adminUser);
+    expect(ownerRows).toHaveLength(1);
+    expect(ownerRows[0]?.difficulty).toBe("HEROIC");
+    expect(adminUserRows).toHaveLength(1);
+    expect(adminUserRows[0]?.difficulty).toBe("MYTHIC");
+  });
+
+  it("de-duplicates repeated user ids and returns [] for an empty input", async () => {
+    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "NORMAL" });
+
+    const rows = await boosterQualificationRepository.listByUserIds([ids.owner, ids.owner]);
+    expect(rows.filter((row) => row.difficulty === "NORMAL")).toHaveLength(1);
+
+    expect(await boosterQualificationRepository.listByUserIds([])).toEqual([]);
+  });
+});
