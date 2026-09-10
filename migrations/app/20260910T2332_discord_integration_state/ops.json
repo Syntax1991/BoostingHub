@@ -1,0 +1,125 @@
+[
+  {
+    "id": "table.run_discord_post",
+    "label": "Create table \"run_discord_post\"",
+    "summary": "Creates table \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_discord_post\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_post\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_discord_post\"",
+        "sql": "CREATE TABLE \"public\".\"run_discord_post\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastRosterVersion\" int4,\n  \"lastSignupSignature\" text,\n  \"rosterChannelId\" text,\n  \"rosterMessageId\" text,\n  \"rosterPostedAt\" timestamptz,\n  \"runId\" text NOT NULL,\n  \"signupChannelId\" text,\n  \"signupMessageId\" text,\n  \"signupPostedAt\" timestamptz,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_discord_post\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_post\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_discord_post.run_discord_post_runId_key",
+    "label": "Add unique constraint on \"run_discord_post\" (runId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_discord_post_runId_key",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_post_runId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_post_runId_key",
+          "public",
+          "\"public\".\"run_discord_post\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_discord_post_runId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD CONSTRAINT \"run_discord_post_runId_key\" UNIQUE (\"runId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_post_runId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_post_runId_key",
+          "public",
+          "\"public\".\"run_discord_post\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_discord_post.run_discord_post_runId_fkey",
+    "label": "Add foreign key \"run_discord_post_runId_fkey\" on \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_discord_post_runId_fkey",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_discord_post_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_post_runId_fkey",
+          "public",
+          "\"public\".\"run_discord_post\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_discord_post_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\"\nADD CONSTRAINT \"run_discord_post_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_discord_post_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_post_runId_fkey",
+          "public",
+          "\"public\".\"run_discord_post\""
+        ]
+      }
+    ]
+  }
+]

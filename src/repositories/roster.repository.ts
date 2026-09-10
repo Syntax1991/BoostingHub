@@ -53,6 +53,7 @@ export type RosterSignupRow = {
   runId: string;
   userId: string;
   userName: string;
+  discordUserId: string | null;
   status: SignupStatus;
   participationType: ParticipationType;
   role: CharacterRole | null;
@@ -107,6 +108,7 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
     runId: asString(row.runId),
     userId: asString(row.userId),
     userName: asString(user.name, "Unknown"),
+    discordUserId: asStringOrNull(user.discordUserId),
     status: mapSignupStatus(row.status),
     participationType: mapParticipation(row.participationType),
     role: row.role == null ? null : mapCharacterRole(row.role),

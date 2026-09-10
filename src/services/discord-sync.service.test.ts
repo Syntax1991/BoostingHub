@@ -1,0 +1,344 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { AuthenticatedUser } from "@/auth/authorization";
+import { normalizeCharacterIdentity } from "@/lib/character-identity";
+import { orm } from "@/lib/prisma";
+import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { raidRepository } from "@/repositories/raid.repository";
+import { discordSyncService } from "@/services/discord-sync.service";
+import { rosterService } from "@/services/roster.service";
+import { runService } from "@/services/run.service";
+import type { ParticipationType, CharacterRole } from "@/models/enums";
+
+const raidId = WOW_RAID_CATALOG[0].id;
+const ids = {
+  lead: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000001",
+  tank: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000002",
+  healer: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000003",
+  melee: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000004",
+  ranged: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000005",
+  loot: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000006",
+  extra: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000007",
+};
+const createdUserIds = Object.values(ids);
+const createdRunIds: string[] = [];
+const createdCharacterIds: string[] = [];
+const createdQualificationIds: string[] = [];
+
+function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
+  return {
+    id,
+    name,
+    email: `${id}@dstest.boostting.local`,
+    image: null,
+    discordUserId: null,
+    discordUsername: null,
+    accountRole,
+    accountStatus: "ACTIVE",
+  };
+}
+
+async function createTestUser(
+  id: string,
+  name: string,
+  discordUserId: string | null,
+  accountRole: AuthenticatedUser["accountRole"] = "USER",
+) {
+  await orm.User.create({
+    id,
+    name,
+    email: `${id}@dstest.boostting.local`,
+    emailVerified: true,
+    discordUserId,
+    accountRole,
+    accountStatus: "ACTIVE",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function deleteIfPresent(table: string, id: string) {
+  try {
+    if (table === "User") await orm.User.where({ id }).delete();
+    else if (table === "Character") await orm.Character.where({ id }).delete();
+    else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
+    else if (table === "Run") await orm.Run.where({ id }).delete();
+    else if (table === "RunDiscordPost") await orm.RunDiscordPost.where({ id }).delete();
+  } catch {
+    // Already gone.
+  }
+}
+
+function futureIso(days = 10) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function grantQualification(userId: string) {
+  const id = crypto.randomUUID();
+  createdQualificationIds.push(id);
+  await orm.BoosterQualification.create({
+    id,
+    userId,
+    difficulty: "HEROIC",
+    status: "APPROVED",
+    notes: null,
+    grantedAt: new Date().toISOString(),
+    grantedById: null,
+    revokedAt: null,
+    revokedById: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function createCharacter(
+  userId: string,
+  name: string,
+  wowClass: "PALADIN" | "PRIEST" | "WARRIOR" | "MAGE" | "HUNTER",
+  specialization: string,
+  primaryRole: "TANK" | "HEALER" | "DPS",
+) {
+  const id = crypto.randomUUID();
+  createdCharacterIds.push(id);
+  await orm.Character.create({
+    id,
+    userId,
+    name,
+    realm: "Discord Lab",
+    normalizedName: normalizeCharacterIdentity(name),
+    normalizedRealm: normalizeCharacterIdentity("Discord Lab"),
+    region: "EU",
+    wowClass,
+    specialization,
+    primaryRole,
+    itemLevel: 700,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return id;
+}
+
+async function createSignup(input: {
+  runId: string;
+  userId: string;
+  characterId: string;
+  participationType: ParticipationType;
+  role: CharacterRole | null;
+}) {
+  const id = crypto.randomUUID();
+  await orm.RunSignup.create({
+    id,
+    runId: input.runId,
+    userId: input.userId,
+    characterId: input.characterId,
+    participationType: input.participationType,
+    role: input.role,
+    isBackup: false,
+    status: "PENDING",
+    lootbuddyMode: input.participationType === "LOOTBUDDY" ? "PLAYING" : null,
+    lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "NONE" : null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return id;
+}
+
+async function cleanupRun(runId: string) {
+  await deleteIfPresent("RunDiscordPost", runId);
+  await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
+  const roster = await orm.RunRoster.where({ runId }).first();
+  if (roster) {
+    const rosterId = (roster as { id: string }).id;
+    const entries = await orm.RunRosterEntry.where({ rosterId }).all();
+    for (const entry of entries) {
+      await orm.RunRosterEntry.where({ id: (entry as { id: string }).id }).delete();
+    }
+    await orm.RunRoster.where({ id: rosterId }).delete();
+  }
+  const signups = await orm.RunSignup.where({ runId }).select("id").all();
+  for (const row of signups) {
+    await deleteIfPresent("RunSignup", (row as { id: string }).id);
+  }
+  await deleteIfPresent("Run", runId);
+}
+
+const lead = asUser(ids.lead, "Discord Lead", "RAID_LEAD");
+
+let runId = "";
+let draftRunId = "";
+let tankChar = "";
+let healerChar = "";
+let meleeChar = "";
+let rangedChar = "";
+let lootChar = "";
+
+beforeAll(async () => {
+  await raidRepository.ensureReferenceRaids();
+  for (const userId of createdUserIds) {
+    const runs = await orm.Run.where({ raidLeadId: userId }).select("id").all();
+    for (const row of runs) {
+      await cleanupRun((row as { id: string }).id);
+    }
+    const chars = await orm.Character.where({ userId }).select("id").all();
+    for (const row of chars) {
+      await deleteIfPresent("Character", (row as { id: string }).id);
+    }
+    await deleteIfPresent("User", userId);
+  }
+
+  await createTestUser(ids.lead, "Discord Lead", null, "RAID_LEAD");
+  await createTestUser(ids.tank, "Discord Tank", "111111111111111111");
+  await createTestUser(ids.healer, "Discord Healer", null);
+  await createTestUser(ids.melee, "Discord Melee", "222222222222222222");
+  await createTestUser(ids.ranged, "Discord Ranged", "333333333333333333");
+  await createTestUser(ids.loot, "Discord Loot", "444444444444444444");
+  await createTestUser(ids.extra, "Discord Extra", null);
+
+  tankChar = await createCharacter(ids.tank, "Dstank", "PALADIN", "Protection", "TANK");
+  healerChar = await createCharacter(ids.healer, "Dsheal", "PRIEST", "Holy", "HEALER");
+  meleeChar = await createCharacter(ids.melee, "Dsmelee", "WARRIOR", "Fury", "DPS");
+  rangedChar = await createCharacter(ids.ranged, "Dsranged", "MAGE", "Fire", "DPS");
+  lootChar = await createCharacter(ids.loot, "Dsloot", "HUNTER", "Beast Mastery", "DPS");
+
+  await grantQualification(ids.tank);
+  await grantQualification(ids.healer);
+  await grantQualification(ids.melee);
+  await grantQualification(ids.ranged);
+
+  runId = await runService
+    .createRun(lead, {
+      raidId,
+      difficulty: "HEROIC",
+      scheduledStartAt: futureIso(),
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    })
+    .then((run) => run.id);
+  createdRunIds.push(runId);
+  await runService.openRun(lead, runId);
+
+  draftRunId = await runService
+    .createRun(lead, {
+      raidId,
+      difficulty: "HEROIC",
+      scheduledStartAt: futureIso(),
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    })
+    .then((run) => run.id);
+  createdRunIds.push(draftRunId);
+}, 60_000);
+
+afterAll(async () => {
+  for (const id of createdRunIds) {
+    await cleanupRun(id);
+  }
+  for (const id of createdQualificationIds) {
+    await orm.BoosterQualification.where({ id }).delete().catch(() => {});
+  }
+  for (const id of createdCharacterIds) {
+    await deleteIfPresent("Character", id);
+  }
+  for (const id of createdUserIds) {
+    await deleteIfPresent("User", id);
+  }
+}, 60_000);
+
+describe("discordSyncService.getSignupEmbedData", () => {
+  it("counts distinct Users, never RunSignup rows", async () => {
+    await createSignup({ runId, userId: ids.tank, characterId: tankChar, participationType: "BOOSTER", role: "TANK" });
+    await createSignup({ runId, userId: ids.healer, characterId: healerChar, participationType: "BOOSTER", role: "HEALER" });
+
+    const data = await discordSyncService.getSignupEmbedData(runId);
+    expect(data?.uniqueSignupCount).toBe(2);
+    expect(data?.signupWindowOpen).toBe(true);
+    expect(data?.runStatus).toBe("OPEN");
+  });
+
+  it("returns null for an unknown run", async () => {
+    const data = await discordSyncService.getSignupEmbedData("r0000000-0000-4000-8000-000000000000");
+    expect(data).toBeNull();
+  });
+});
+
+describe("discordSyncService.listSyncWork", () => {
+  it("excludes DRAFT runs entirely", async () => {
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === draftRunId)).toBe(false);
+    expect(work.roster.some((item) => item.runId === draftRunId)).toBe(false);
+  });
+
+  it("flags a run needing its first signup post, then clears after recording it", async () => {
+    let work = await discordSyncService.listSyncWork();
+    const before = work.signups.find((item) => item.runId === runId);
+    expect(before?.hasExistingPost).toBe(false);
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === runId)).toBe(false);
+  });
+
+  it("flags UPDATE work again once the unique signup count changes", async () => {
+    await createSignup({ runId, userId: ids.melee, characterId: meleeChar, participationType: "BOOSTER", role: "DPS" });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === runId);
+    expect(item?.hasExistingPost).toBe(true);
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
+  });
+});
+
+describe("discordSyncService.getRosterEmbedData", () => {
+  it("is null before the roster is published", async () => {
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data).toBeNull();
+  });
+
+  it("groups selected participants into tanks/healers/melee/ranged/lootbuddies with Discord mentions", async () => {
+    await createSignup({ runId, userId: ids.ranged, characterId: rangedChar, participationType: "BOOSTER", role: "DPS" });
+    await createSignup({ runId, userId: ids.loot, characterId: lootChar, participationType: "LOOTBUDDY", role: null });
+
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    const all = [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps, ...view.groups.lootbuddies];
+    let version = view.roster.version;
+    for (const signup of all) {
+      await rosterService.setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version });
+      version = (await rosterService.getRosterManagementView(lead, runId)).roster.version;
+    }
+
+    await rosterService.publishRoster(lead, { runId, version, acknowledgeWarnings: true });
+
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data).not.toBeNull();
+    expect(data?.groups.tanks.map((m) => m.userId)).toEqual([ids.tank]);
+    expect(data?.groups.tanks[0]?.discordUserId).toBe("111111111111111111");
+    expect(data?.groups.healers.map((m) => m.userId)).toEqual([ids.healer]);
+    expect(data?.groups.healers[0]?.discordUserId).toBeNull();
+    expect(data?.groups.meleeDps.map((m) => m.userId)).toEqual([ids.melee]);
+    expect(data?.groups.rangedDps.map((m) => m.userId)).toEqual([ids.ranged]);
+    expect(data?.groups.lootbuddies.map((m) => m.userId)).toEqual([ids.loot]);
+    expect(data?.totalSelected).toBe(5);
+    expect(data?.targets).toEqual({ tanks: 1, healers: 1 });
+  });
+
+  it("reports roster sync work, clears it after recording, and reopens it on republish", async () => {
+    let work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((item) => item.runId === runId && !item.hasExistingPost)).toBe(true);
+
+    await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1" });
+    work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((item) => item.runId === runId)).toBe(false);
+
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((item) => item.runId === runId && item.hasExistingPost)).toBe(true);
+  });
+});

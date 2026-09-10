@@ -52,6 +52,10 @@
       "model": "RunAttendance",
       "namespace": "public"
     },
+    "run_discord_post": {
+      "model": "RunDiscordPost",
+      "namespace": "public"
+    },
     "run_payout_entry": {
       "model": "RunPayoutEntry",
       "namespace": "public"
@@ -2057,6 +2061,21 @@
                   "namespace": "public"
                 }
               },
+              "discordPost": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunDiscordPost",
+                  "namespace": "public"
+                }
+              },
               "raid": {
                 "cardinality": "N:1",
                 "on": {
@@ -2363,6 +2382,153 @@
               },
               "namespaceId": "public",
               "table": "run_attendance"
+            }
+          },
+          "RunDiscordPost": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastRosterVersion": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastSignupSignature": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "rosterChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "rosterMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "rosterPostedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "signupChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "signupMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "signupPostedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastRosterVersion": {
+                  "column": "lastRosterVersion"
+                },
+                "lastSignupSignature": {
+                  "column": "lastSignupSignature"
+                },
+                "rosterChannelId": {
+                  "column": "rosterChannelId"
+                },
+                "rosterMessageId": {
+                  "column": "rosterMessageId"
+                },
+                "rosterPostedAt": {
+                  "column": "rosterPostedAt"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "signupChannelId": {
+                  "column": "signupChannelId"
+                },
+                "signupMessageId": {
+                  "column": "signupMessageId"
+                },
+                "signupPostedAt": {
+                  "column": "signupPostedAt"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_discord_post"
             }
           },
           "RunPayoutEntry": {
@@ -5960,6 +6126,106 @@
                 }
               ]
             },
+            "run_discord_post": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "lastRosterVersion": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "lastSignupSignature": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "rosterChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "rosterMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "rosterPostedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "signupChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "signupMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "signupPostedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_discord_post"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                }
+              ],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId"
+                  ]
+                }
+              ]
+            },
             "run_payout_entry": {
               "checks": [
                 {
@@ -7568,10 +7834,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "5205d5a2344e04022a37bb44f384e025878e28c0d7e91be9ecfc9032a2bf12aa"
+    "storageHash": "7dff7df8f540891dbd2f78ace1eb7bbc038ab04448d541c5ff0c80bc9aeccd54"
   },
   "execution": {
-    "executionHash": "f2d1367bb0f549020f8e57f8a53a4c49359052670d7fb231b085de6ca4c96c93",
+    "executionHash": "8708be34c85acf0289f559b4c580f8283c7d229e8102c2e0fec552d931217b64",
     "mutations": {
       "defaults": [
         {
@@ -7839,6 +8105,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_attendance"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_discord_post"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_discord_post"
           }
         },
         {

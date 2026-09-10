@@ -144,6 +144,15 @@ export const userRepository = {
     return this.findAuthenticatedById(id);
   },
 
+  /** Discord bot identity resolution: the immutable Discord snowflake, never username. */
+  async findByDiscordUserId(discordUserId: string): Promise<AuthenticatedUser | null> {
+    const user = await orm.User.where({ discordUserId }).first();
+    if (!user) {
+      return null;
+    }
+    return mapAuthUser(user as Record<string, unknown>);
+  },
+
   /**
    * RAID_LEAD and ADMIN accounts that may be assigned as a Run's raid lead.
    * Ordinary USER accounts are never eligible.

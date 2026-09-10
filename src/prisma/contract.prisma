@@ -429,6 +429,7 @@ model Run {
   attendance  RunAttendance[]
   settlement  RunSettlement?
   strikes     Strike[]
+  discordPost RunDiscordPost?
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -631,4 +632,30 @@ model Strike {
   @@index([userId])
   @@index([runId])
   @@map("strike")
+}
+
+/// Discord message identity for one Run's public posts. Presentation-only
+/// integration state — never authoritative Run/Signup/Roster data, which the
+/// Discord bot always re-derives from BoostingHub via the Bot API. Exists so
+/// the bot can edit its own prior post instead of spamming a new message on
+/// every sync pass, and survives a bot restart.
+model RunDiscordPost {
+  id                  String   @id @default(uuid())
+  runId               String   @unique
+  run                 Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  signupChannelId     String?
+  signupMessageId     String?
+  signupPostedAt      TimestamptzString?
+  /// Cheap fingerprint (e.g. unique signup count + window state) to detect
+  /// whether the posted signup embed is stale without re-rendering it.
+  lastSignupSignature String?
+  rosterChannelId     String?
+  rosterMessageId     String?
+  rosterPostedAt      TimestamptzString?
+  /// RunRoster.version at last successful roster post, to detect republish.
+  lastRosterVersion   Int?
+  createdAt           TimestamptzString @default(now())
+  updatedAt           temporal.updatedAtString()
+
+  @@map("run_discord_post")
 }
