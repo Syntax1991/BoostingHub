@@ -10,7 +10,11 @@ import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
 import { boosterAccessService } from "@/services/booster-access.service";
+import { managementHubService } from "@/services/management-hub.service";
+import { userManagementService } from "@/services/user-management.service";
+import { userRepository } from "@/repositories/user.repository";
 import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
+import { parseAdminUserFilters } from "@/validators/user-management";
 import { isDomainError } from "@/lib/errors";
 
 function firstParam(value: string | string[] | undefined): string | null {
@@ -111,6 +115,11 @@ export const profileController = {
 };
 
 export const managementController = {
+  async getManageHomePage() {
+    const user = await requireManagerOrRedirect();
+    return managementHubService.getOverview(user);
+  },
+
   async getManageRunsPage(searchParams: {
     status?: string | string[];
     raidLeadId?: string | string[];
@@ -131,22 +140,50 @@ export const managementController = {
     difficulty?: string | string[];
     role?: string | string[];
     query?: string | string[];
+    userId?: string | string[];
   }) {
     const user = await requireAdminOrRedirect();
     const filters = parseAdminAccessFilters(searchParams);
+    const grantCandidates = await userRepository.listAdminUsers({ sort: "name" });
     return {
       filters: {
         status: filters.status ?? "PENDING",
         difficulty: filters.difficulty,
         role: filters.role,
         query: filters.query,
+        userId: filters.userId,
       },
+      grantUsers: grantCandidates.map((row) => ({
+        id: row.id,
+        name: row.name,
+        discordUsername: row.discordUsername,
+      })),
       requests: await boosterAccessService.listAdminAccessRequests(user, {
         status: filters.status ?? "PENDING",
         difficulty: filters.difficulty,
         role: filters.role,
         query: filters.query,
+        userId: filters.userId,
       }),
     };
+  },
+
+  async getUsersPage(searchParams: {
+    query?: string | string[];
+    role?: string | string[];
+    access?: string | string[];
+    sort?: string | string[];
+  } = {}) {
+    const user = await requireAdminOrRedirect("/manage/users");
+    const filters = parseAdminUserFilters(searchParams);
+    return {
+      filters,
+      users: await userManagementService.listUsers(user, filters),
+    };
+  },
+
+  async getUserDetailPage(userId: string) {
+    const user = await requireAdminOrRedirect("/manage/users");
+    return userManagementService.getUserDetail(user, userId);
   },
 };
