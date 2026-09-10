@@ -1,4 +1,4 @@
-import { orm } from "@/lib/prisma";
+import { db, orm } from "@/lib/prisma";
 import type {
   CharacterRole,
   LootbuddyMode,
@@ -19,6 +19,7 @@ import {
   mapRunStatus,
   mapSignupStatus,
 } from "@/lib/persistence";
+import { DomainError } from "@/lib/errors";
 
 export type SignupListRecord = {
   id: string;
@@ -169,4 +170,113 @@ export const signupRepository = {
 
     return signups.map((row) => mapSignup(row as Record<string, unknown>));
   },
+
+  /** All of one User's signup rows on one Run, every status included — the full offer history. */
+  async listByRunAndUser(runId: string, userId: string): Promise<SignupListRecord[]> {
+    const signups = await orm.RunSignup
+      .where({ runId, userId })
+      .include("run", (run) => run.include("raid"))
+      .include("character")
+      .orderBy((signup) => signup.createdAt.asc())
+      .all();
+
+    return signups.map((row) => mapSignup(row as Record<string, unknown>));
+  },
+
+  /**
+   * Executes one already-authorized, already-eligibility-checked reconciliation
+   * plan atomically. Each planned mutation re-checks the row's current status
+   * against fresh in-transaction reads immediately before writing it, so a
+   * concurrent change (e.g. another request reactivating the same WITHDRAWN
+   * row) fails the whole transaction instead of corrupting state — the plan
+   * itself is not recomputed here, only defended at the row level.
+   */
+  async applyOfferPlan(input: {
+    runId: string;
+    userId: string;
+    participationType: ParticipationType;
+    toWithdraw: string[];
+    toReactivate: Array<{
+      id: string;
+      characterId: string;
+      role: CharacterRole | null;
+      lootbuddyMode: LootbuddyMode | null;
+      lootbuddyVerification: LootbuddyVerification | null;
+    }>;
+    toCreate: Array<{
+      characterId: string;
+      role: CharacterRole | null;
+      lootbuddyMode: LootbuddyMode | null;
+      lootbuddyVerification: LootbuddyVerification | null;
+    }>;
+    toUpdateRole: Array<{ id: string; role: CharacterRole | null }>;
+  }): Promise<{ created: string[]; reactivated: string[]; withdrawn: string[] }> {
+    const created: string[] = [];
+    const reactivated: string[] = [];
+    const withdrawn: string[] = [];
+
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+
+      for (const id of input.toWithdraw) {
+        const row = await txOrm.RunSignup.where({ id }).first();
+        if (!row) continue;
+        const status = mapSignupStatus((row as Record<string, unknown>).status);
+        if (status === "WITHDRAWN") continue;
+        await txOrm.RunSignup.where({ id }).update({ status: "WITHDRAWN", updatedAt: now });
+        withdrawn.push(id);
+      }
+
+      for (const offer of input.toReactivate) {
+        const row = await txOrm.RunSignup.where({ id: offer.id }).first();
+        if (!row) {
+          throw new DomainError("NOT_FOUND", "A previously offered character was removed.");
+        }
+        const status = mapSignupStatus((row as Record<string, unknown>).status);
+        if (status !== "WITHDRAWN") {
+          throw new DomainError(
+            "INVALID_STATE_TRANSITION",
+            "This offer changed since it was loaded. Please try again.",
+          );
+        }
+        await txOrm.RunSignup.where({ id: offer.id }).update({
+          status: "PENDING",
+          role: offer.role,
+          isBackup: false,
+          lootbuddyMode: offer.lootbuddyMode,
+          lootbuddyVerification: offer.lootbuddyVerification,
+          updatedAt: now,
+        });
+        reactivated.push(offer.id);
+      }
+
+      for (const offer of input.toCreate) {
+        const id = crypto.randomUUID();
+        await txOrm.RunSignup.create({
+          id,
+          runId: input.runId,
+          userId: input.userId,
+          characterId: offer.characterId,
+          participationType: input.participationType,
+          role: offer.role,
+          isBackup: false,
+          status: "PENDING",
+          lootbuddyMode: offer.lootbuddyMode,
+          lootbuddyVerification: offer.lootbuddyVerification,
+          createdAt: now,
+          updatedAt: now,
+        });
+        created.push(id);
+      }
+
+      for (const update of input.toUpdateRole) {
+        await txOrm.RunSignup.where({ id: update.id }).update({ role: update.role, updatedAt: now });
+      }
+    });
+
+    return { created, reactivated, withdrawn };
+  },
 };
+
+type TxOrm = typeof orm;

@@ -3,19 +3,27 @@ import type {
   CharacterRole,
   LootbuddyMode,
   LootbuddyVerification,
+  ParticipationType,
 } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { resetIdentifierFor } from "@/lib/datetime";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import type { EligibilityCharacter } from "@/services/signup-eligibility";
 import {
   assertSignupWindowOpen,
   evaluateBoosterOptions,
   evaluateLootbuddyOptions,
 } from "@/services/signup-eligibility";
-import { assertSignupTransition, canSelfWithdrawSignup, isBlockingDuplicate } from "@/services/signup-state";
+import {
+  assertSignupTransition,
+  canSelfWithdrawSignup,
+  isBlockingDuplicate,
+  planCharacterOfferReconciliation,
+} from "@/services/signup-state";
 
 function uniqueViolation(error: unknown): boolean {
   return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
@@ -230,6 +238,169 @@ export const signupService = {
     return record;
   },
 
+  /**
+   * The complete desired Character-offer set for one User + Run + participation
+   * type. Reuses each existing RunSignup row as a Character offer (no parent
+   * intent/offer model): rows no longer desired are withdrawn, WITHDRAWN rows
+   * matching a re-offered Character are reactivated in place, and net-new
+   * Characters get a fresh row. A User may hold only one ACTIVE participation
+   * type per Run — offers of the other type are withdrawn as part of a switch.
+   * Not additive: omitting a currently-offered Character removes it.
+   */
+  async setCharacterOffers(
+    actor: AuthenticatedUser,
+    input: {
+      runId: string;
+      participationType: ParticipationType;
+      offers: Array<{ characterId: string; role?: CharacterRole }>;
+      lootbuddyMode?: LootbuddyMode;
+      lootbuddyVerification?: LootbuddyVerification;
+    },
+  ) {
+    const seen = new Set<string>();
+    for (const offer of input.offers) {
+      if (seen.has(offer.characterId)) {
+        throw new DomainError(
+          "SIGNUP_OFFER_DUPLICATE_CHARACTER",
+          "The same character was offered twice in one request.",
+        );
+      }
+      seen.add(offer.characterId);
+    }
+    if (input.participationType === "LOOTBUDDY" && input.offers.length > 0) {
+      if (!input.lootbuddyMode || !input.lootbuddyVerification) {
+        throw new DomainError("VALIDATION_FAILED", "Lootbuddy mode and verification are required.");
+      }
+    }
+
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+
+    const { plan, currentSignups } = await buildReconciliationPlan(actor.id, run, {
+      participationType: input.participationType,
+      desiredCharacterIds: input.offers.map((offer) => offer.characterId),
+    });
+
+    const needsWindowOpen = plan.toCreate.length > 0 || plan.toReactivate.length > 0;
+    if (needsWindowOpen && !assertSignupWindowOpen(run)) {
+      throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
+    }
+
+    const characters = await characterRepository.listByUserId(actor.id);
+    const charactersById = new Map(characters.map((character) => [character.id, character]));
+    const offeredCharacters = input.offers.map((offer) => {
+      const character = charactersById.get(offer.characterId);
+      if (!character) {
+        throw new DomainError("CHARACTER_NOT_OWNED", "That character does not belong to you.");
+      }
+      return { offer, character };
+    });
+
+    const roleByCharacterId = validateOfferedCharacters(input.participationType, offeredCharacters, run);
+
+    const lootbuddyModeValue = input.participationType === "LOOTBUDDY" ? (input.lootbuddyMode ?? null) : null;
+    const lootbuddyVerificationValue =
+      input.participationType === "LOOTBUDDY" ? (input.lootbuddyVerification ?? null) : null;
+
+    const toReactivate = plan.toReactivate.map((offer) => ({
+      id: offer.id,
+      characterId: offer.characterId,
+      role: roleByCharacterId.get(offer.characterId) ?? null,
+      lootbuddyMode: lootbuddyModeValue,
+      lootbuddyVerification: lootbuddyVerificationValue,
+    }));
+    const toCreate = plan.toCreate.map((characterId) => ({
+      characterId,
+      role: roleByCharacterId.get(characterId) ?? null,
+      lootbuddyMode: lootbuddyModeValue,
+      lootbuddyVerification: lootbuddyVerificationValue,
+    }));
+
+    const currentById = new Map(currentSignups.map((signup) => [signup.id, signup]));
+    const toUpdateRole =
+      input.participationType === "BOOSTER"
+        ? plan.kept
+            .map((signupId) => {
+              const existing = currentById.get(signupId);
+              const characterId = existing?.character?.id;
+              if (!existing || !characterId) return null;
+              const desiredRole = roleByCharacterId.get(characterId) ?? null;
+              return existing.role !== desiredRole ? { id: signupId, role: desiredRole } : null;
+            })
+            .filter((item): item is { id: string; role: CharacterRole | null } => item !== null)
+        : [];
+
+    const result = await signupRepository.applyOfferPlan({
+      runId: input.runId,
+      userId: actor.id,
+      participationType: input.participationType,
+      toWithdraw: plan.toWithdraw,
+      toReactivate,
+      toCreate,
+      toUpdateRole,
+    });
+
+    await activityRepository.create({
+      userId: actor.id,
+      type: "SIGNUP",
+      message: `${actor.name} updated ${input.participationType.toLowerCase()} offers for ${run.title} (${input.offers.length} offered).`,
+    });
+
+    return {
+      runId: input.runId,
+      participationType: input.participationType,
+      created: result.created.length,
+      reactivated: result.reactivated.length,
+      withdrawn: result.withdrawn.length,
+      kept: plan.kept.length,
+    };
+  },
+
+  /**
+   * Withdraws the User's entire current active offer-set for a Run (whichever
+   * participation type is active) in one atomic, all-or-nothing operation —
+   * the domain behind a Discord "Cancel Signup" button. A no-op signup has
+   * nothing to cancel; a protected offer (roster-selected or published-locked)
+   * blocks the whole cancellation instead of partially clearing the set.
+   */
+  async cancelActiveOffers(actor: AuthenticatedUser, input: { runId: string }) {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+
+    const existingSignups = await signupRepository.listByRunAndUser(input.runId, actor.id);
+    const activeType = existingSignups.find((signup) => signup.status !== "WITHDRAWN")?.participationType;
+    if (!activeType) {
+      throw new DomainError("NOT_FOUND", "You have no active signup on this run.", 404);
+    }
+
+    const { plan } = await buildReconciliationPlan(actor.id, run, {
+      participationType: activeType,
+      desiredCharacterIds: [],
+    });
+
+    const result = await signupRepository.applyOfferPlan({
+      runId: input.runId,
+      userId: actor.id,
+      participationType: activeType,
+      toWithdraw: plan.toWithdraw,
+      toReactivate: [],
+      toCreate: [],
+      toUpdateRole: [],
+    });
+
+    await activityRepository.create({
+      userId: actor.id,
+      type: "SIGNUP_WITHDRAWN",
+      message: `${actor.name} cancelled their signup for ${run.title}.`,
+    });
+
+    return { withdrawn: result.withdrawn.length };
+  },
+
   async withdrawSignup(user: AuthenticatedUser, signupId: string) {
     const signup = await signupRepository.findById(signupId);
     if (!signup) {
@@ -315,4 +486,120 @@ async function persistSignup(input: Parameters<typeof signupRepository.create>[0
     }
     throw error;
   }
+}
+
+type LoadedRun = NonNullable<Awaited<ReturnType<typeof runRepository.findById>>>;
+
+/**
+ * Loads the User's current signup rows and the roster's draft selection, then
+ * computes the desired-set reconciliation plan. A blocked removal — protected
+ * by a live roster draft selection, or by the existing published+SELECTED
+ * lock — fails the whole call instead of returning a partial plan.
+ */
+async function buildReconciliationPlan(
+  userId: string,
+  run: LoadedRun,
+  input: { participationType: ParticipationType; desiredCharacterIds: string[] },
+) {
+  const currentSignups = await signupRepository.listByRunAndUser(run.id, userId);
+  const roster = await rosterRepository.findByRunId(run.id);
+  const rosterSelectedSignupIds = roster?.selectedSignupIds ?? [];
+
+  const { plan, blocked } = planCharacterOfferReconciliation({
+    participationType: input.participationType,
+    desiredCharacterIds: input.desiredCharacterIds,
+    currentSignups: currentSignups.map((signup) => ({
+      id: signup.id,
+      characterId: signup.character?.id ?? null,
+      participationType: signup.participationType,
+      status: signup.status,
+    })),
+    rosterSelectedSignupIds,
+    runStatus: run.status,
+  });
+
+  if (blocked.length > 0) {
+    if (blocked.some((item) => item.reason === "ROSTER_SELECTED")) {
+      throw new DomainError(
+        "SIGNUP_OFFER_ROSTER_SELECTED",
+        "A currently selected offer cannot be removed. Ask the raid lead to change the roster selection first.",
+      );
+    }
+    throw new DomainError(
+      "INVALID_STATE_TRANSITION",
+      "Selected signups cannot be withdrawn after the roster is published.",
+    );
+  }
+  if (!plan) {
+    throw new DomainError("VALIDATION_FAILED", "Could not compute an offer plan.");
+  }
+
+  return { plan, currentSignups };
+}
+
+/**
+ * Validates every offered Character against the same eligibility rules a
+ * single-Character signup already enforces (ownership already checked by the
+ * caller). Returns the resolved BOOSTER role per characterId; empty for
+ * LOOTBUDDY, which carries no per-offer role.
+ */
+function validateOfferedCharacters(
+  participationType: ParticipationType,
+  offeredCharacters: Array<{ offer: { characterId: string; role?: CharacterRole }; character: EligibilityCharacter & { primaryRole: CharacterRole; name: string } }>,
+  run: LoadedRun,
+): Map<string, CharacterRole> {
+  const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
+  const eligibilityRun = {
+    id: run.id,
+    raidId: run.raidId,
+    difficulty: run.difficulty,
+    status: run.status,
+    signupsOpen: run.signupsOpen,
+  };
+  const roleByCharacterId = new Map<string, CharacterRole>();
+
+  if (participationType === "BOOSTER") {
+    const { eligible, ineligible } = evaluateBoosterOptions(
+      offeredCharacters.map(({ character }) => character),
+      eligibilityRun,
+      resetIdentifier,
+    );
+    for (const { offer, character } of offeredCharacters) {
+      const optionsForCharacter = eligible.filter((item) => item.characterId === offer.characterId);
+      if (optionsForCharacter.length === 0) {
+        const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;
+        throw boosterRejection(reason);
+      }
+      let role = offer.role;
+      if (role) {
+        if (!optionsForCharacter.some((item) => item.role === role)) {
+          throw new DomainError("INVALID_CHARACTER_ROLE", `${character.name} cannot be offered as ${role}.`);
+        }
+      } else if (optionsForCharacter.length === 1) {
+        role = optionsForCharacter[0].role;
+      } else if (optionsForCharacter.some((item) => item.role === character.primaryRole)) {
+        role = character.primaryRole;
+      } else {
+        throw new DomainError("VALIDATION_FAILED", `A role is required for ${character.name}.`);
+      }
+      roleByCharacterId.set(offer.characterId, role);
+    }
+    return roleByCharacterId;
+  }
+
+  const { eligible, ineligible } = evaluateLootbuddyOptions(
+    offeredCharacters.map(({ character }) => character),
+    eligibilityRun,
+    resetIdentifier,
+  );
+  for (const { offer } of offeredCharacters) {
+    if (!eligible.some((item) => item.characterId === offer.characterId)) {
+      const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;
+      if (reason === "INACTIVE") {
+        throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
+      }
+      throw new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
+    }
+  }
+  return roleByCharacterId;
 }
