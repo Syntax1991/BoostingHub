@@ -53,7 +53,7 @@ Route: `/manage/users/[userId]`.
 
 Shows identity, account role/status, characters, difficulty qualifications (with direct Grant access), disciplinary Strike history (Add/Revoke), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
 
-Strikes are a separate concept from account role, qualifications, and audit — see [strikes-and-deducts.md](strikes-and-deducts.md).
+Strikes are a separate concept from account role, qualifications, and audit — see [user-strikes.md](user-strikes.md).
 
 ## Role Administration
 

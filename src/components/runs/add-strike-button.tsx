@@ -5,8 +5,22 @@ import { useRouter } from "next/navigation";
 import { addStrikeAction } from "@/controllers/strike.actions";
 import { Button } from "@/components/ui/button";
 
-/** General (not run-linked) strike creation. Run-linked strikes are added from that run's Signups tab, where the run/participant context is already known. */
-export function AddStrikeDialog({ userId, userName }: { userId: string; userName: string }) {
+/**
+ * Run-linked strike creation from the Signups tab. runId/userId come from
+ * BoostingHub's own signup row — the server re-validates the User actually
+ * has signup history on this Run (and, for a RAID_LEAD actor, that they
+ * manage it) regardless of what this dialog sends. No Attendance
+ * involvement: that operational workflow belongs to Dawn Boosting.
+ */
+export function AddStrikeButton({
+  runId,
+  userId,
+  userName,
+}: {
+  runId: string;
+  userId: string;
+  userName: string;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const errorId = useId();
@@ -22,19 +36,18 @@ export function AddStrikeDialog({ userId, userName }: { userId: string; userName
     dialogRef.current?.showModal();
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const onClose = () => {
+    const onDialogClose = () => {
       setOpen(false);
       setError(null);
       setReason("");
       setNotes("");
     };
-    dialog.addEventListener("close", onClose);
-    return () => dialog.removeEventListener("close", onClose);
+    dialog.addEventListener("close", onDialogClose);
+    return () => dialog.removeEventListener("close", onDialogClose);
   }, [open]);
 
   function close() {
     dialogRef.current?.close();
-    setOpen(false);
   }
 
   function submit() {
@@ -46,6 +59,7 @@ export function AddStrikeDialog({ userId, userName }: { userId: string; userName
     startTransition(async () => {
       const result = await addStrikeAction({
         userId,
+        runId,
         reason,
         notes: notes.trim() || undefined,
       });
@@ -60,7 +74,7 @@ export function AddStrikeDialog({ userId, userName }: { userId: string; userName
 
   return (
     <>
-      <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={() => setOpen(true)}>
+      <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setOpen(true)}>
         Add strike
       </Button>
       <dialog
@@ -78,10 +92,7 @@ export function AddStrikeDialog({ userId, userName }: { userId: string; userName
           <h2 id={titleId} className="text-sm font-semibold">
             Add strike · {userName}
           </h2>
-          <p className="text-xs text-muted">
-            Not linked to a specific run. To add a strike for a run incident, use Add Strike on that run&apos;s
-            Signups tab instead.
-          </p>
+          <p className="text-xs text-muted">Linked to this run.</p>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Reason</span>
             <input
@@ -90,7 +101,7 @@ export function AddStrikeDialog({ userId, userName }: { userId: string; userName
               onChange={(event) => setReason(event.target.value)}
               maxLength={200}
               className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              placeholder="Short, staff/user-facing reason"
+              placeholder="e.g. No-show without notice"
               autoFocus
             />
           </label>

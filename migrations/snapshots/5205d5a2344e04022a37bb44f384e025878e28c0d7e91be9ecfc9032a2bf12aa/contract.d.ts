@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'d8c135e824e8de6a6ef6df5f538d0e2da700ebad34b657023fd41f8845dd202c'>;
+  StorageHashBase<'5205d5a2344e04022a37bb44f384e025878e28c0d7e91be9ecfc9032a2bf12aa'>;
 export type ExecutionHash =
-  ExecutionHashBase<'d847b5e63ce3989fdd04b8792bd54c80dd6b239ff8d3770e20bf34a2c55b7e82'>;
+  ExecutionHashBase<'f2d1367bb0f549020f8e57f8a53a4c49359052670d7fb231b085de6ca4c96c93'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -370,21 +370,6 @@ export type FieldOutputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
-    readonly Deduct: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly payoutEntryId: CodecTypes['pg/text@1']['output'];
-      readonly amountGold: CodecTypes['pg/int4@1']['output'];
-      readonly reason: CodecTypes['pg/text@1']['output'];
-      readonly notes: CodecTypes['pg/text@1']['output'] | null;
-      readonly strikeId: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: 'ACTIVE' | 'REVOKED';
-      readonly createdById: CodecTypes['pg/text@1']['output'];
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['output'] | null;
-      readonly revokedReason: CodecTypes['pg/text@1']['output'] | null;
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
     readonly Raid: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
@@ -515,7 +500,6 @@ export type FieldOutputTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
       readonly runId: CodecTypes['pg/text@1']['output'] | null;
-      readonly attendanceId: CodecTypes['pg/text@1']['output'] | null;
       readonly reason: CodecTypes['pg/text@1']['output'];
       readonly notes: CodecTypes['pg/text@1']['output'] | null;
       readonly status: 'ACTIVE' | 'REVOKED';
@@ -680,21 +664,6 @@ export type FieldInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
-    readonly Deduct: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly payoutEntryId: CodecTypes['pg/text@1']['input'];
-      readonly amountGold: CodecTypes['pg/int4@1']['input'];
-      readonly reason: CodecTypes['pg/text@1']['input'];
-      readonly notes: CodecTypes['pg/text@1']['input'] | null;
-      readonly strikeId: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: 'ACTIVE' | 'REVOKED';
-      readonly createdById: CodecTypes['pg/text@1']['input'];
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['input'] | null;
-      readonly revokedReason: CodecTypes['pg/text@1']['input'] | null;
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
     readonly Raid: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
@@ -825,7 +794,6 @@ export type FieldInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
       readonly runId: CodecTypes['pg/text@1']['input'] | null;
-      readonly attendanceId: CodecTypes['pg/text@1']['input'] | null;
       readonly reason: CodecTypes['pg/text@1']['input'];
       readonly notes: CodecTypes['pg/text@1']['input'] | null;
       readonly status: 'ACTIVE' | 'REVOKED';
@@ -990,21 +958,6 @@ export type StorageColumnTypes = {
       readonly resetIdentifier: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
-    readonly deduct: {
-      readonly amountGold: CodecTypes['pg/int4@1']['output'];
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly createdById: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly notes: CodecTypes['pg/text@1']['output'] | null;
-      readonly payoutEntryId: CodecTypes['pg/text@1']['output'];
-      readonly reason: CodecTypes['pg/text@1']['output'];
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['output'] | null;
-      readonly revokedReason: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: 'ACTIVE' | 'REVOKED';
-      readonly strikeId: CodecTypes['pg/text@1']['output'] | null;
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
     readonly raid: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -1132,7 +1085,6 @@ export type StorageColumnTypes = {
       readonly userId: CodecTypes['pg/text@1']['output'];
     };
     readonly strike: {
-      readonly attendanceId: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly createdById: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -1300,21 +1252,6 @@ export type StorageColumnInputTypes = {
       readonly resetIdentifier: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
-    readonly deduct: {
-      readonly amountGold: CodecTypes['pg/int4@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly createdById: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly notes: CodecTypes['pg/text@1']['input'] | null;
-      readonly payoutEntryId: CodecTypes['pg/text@1']['input'];
-      readonly reason: CodecTypes['pg/text@1']['input'];
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['input'] | null;
-      readonly revokedReason: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: 'ACTIVE' | 'REVOKED';
-      readonly strikeId: CodecTypes['pg/text@1']['input'] | null;
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
     readonly raid: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -1442,7 +1379,6 @@ export type StorageColumnInputTypes = {
       readonly userId: CodecTypes['pg/text@1']['input'];
     };
     readonly strike: {
-      readonly attendanceId: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly createdById: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -2336,158 +2272,6 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'raid';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
-            };
-            readonly deduct: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly payoutEntryId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly amountGold: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                };
-                readonly reason: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly notes: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly strikeId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly status: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/text@1', 'ACTIVE'>;
-                  };
-                };
-                readonly createdById: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly revokedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: true;
-                };
-                readonly revokedById: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly revokedReason: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly createdAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: false;
-                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
-                };
-                readonly updatedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: false;
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
-              indexes: readonly [
-                {
-                  readonly name: 'deduct_payoutEntryId_idx_1183945b';
-                  readonly prefix: 'deduct_payoutEntryId_idx';
-                  readonly columns: readonly ['payoutEntryId'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'deduct_strikeId_idx_b75dd298';
-                  readonly prefix: 'deduct_strikeId_idx';
-                  readonly columns: readonly ['strikeId'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'deduct_createdById_idx_8bf640ed';
-                  readonly prefix: 'deduct_createdById_idx';
-                  readonly columns: readonly ['createdById'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'deduct_revokedById_idx_ab374353';
-                  readonly prefix: 'deduct_revokedById_idx';
-                  readonly columns: readonly ['revokedById'];
-                  readonly unique: false;
-                },
-              ];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'deduct';
-                    readonly columns: readonly ['payoutEntryId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'run_payout_entry';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'deduct';
-                    readonly columns: readonly ['strikeId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'strike';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'deduct';
-                    readonly columns: readonly ['createdById'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'deduct';
-                    readonly columns: readonly ['revokedById'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -3605,11 +3389,6 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
-                readonly attendanceId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
                 readonly reason: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3677,12 +3456,6 @@ type ContractBase = Omit<
                   readonly unique: false;
                 },
                 {
-                  readonly name: 'strike_attendanceId_idx_b259ff3f';
-                  readonly prefix: 'strike_attendanceId_idx';
-                  readonly columns: readonly ['attendanceId'];
-                  readonly unique: false;
-                },
-                {
                   readonly name: 'strike_createdById_idx_8bf640ed';
                   readonly prefix: 'strike_createdById_idx';
                   readonly columns: readonly ['createdById'];
@@ -3717,18 +3490,6 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'run';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'strike';
-                    readonly columns: readonly ['attendanceId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'run_attendance';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -3910,10 +3671,6 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['TANK', 'HEALER', 'DPS'];
             };
-            readonly DeductStatus: {
-              readonly kind: 'valueSet';
-              readonly values: readonly ['ACTIVE', 'REVOKED'];
-            };
             readonly LootbuddyMode: {
               readonly kind: 'valueSet';
               readonly values: readonly ['LOOT_ONLY', 'PLAYING'];
@@ -4051,7 +3808,6 @@ type ContractBase = Omit<
       readonly model: 'ActivityEvent';
     };
     readonly strike: { readonly namespace: 'public' & NamespaceId; readonly model: 'Strike' };
-    readonly deduct: { readonly namespace: 'public' & NamespaceId; readonly model: 'Deduct' };
   };
   readonly domain: {
     readonly namespaces: {
@@ -4825,130 +4581,6 @@ type ContractBase = Omit<
               };
             };
           };
-          readonly Deduct: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly payoutEntryId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly amountGold: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly reason: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly notes: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly strikeId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly status: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly createdById: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly revokedAt: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly revokedById: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly revokedReason: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly createdAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly updatedAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly createdBy: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['createdById'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly payoutEntry: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RunPayoutEntry';
-                };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['payoutEntryId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly revokedBy: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['revokedById'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly strike: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Strike';
-                };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['strikeId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'deduct';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly payoutEntryId: { readonly column: 'payoutEntryId' };
-                readonly amountGold: { readonly column: 'amountGold' };
-                readonly reason: { readonly column: 'reason' };
-                readonly notes: { readonly column: 'notes' };
-                readonly strikeId: { readonly column: 'strikeId' };
-                readonly status: { readonly column: 'status' };
-                readonly createdById: { readonly column: 'createdById' };
-                readonly revokedAt: { readonly column: 'revokedAt' };
-                readonly revokedById: { readonly column: 'revokedById' };
-                readonly revokedReason: { readonly column: 'revokedReason' };
-                readonly createdAt: { readonly column: 'createdAt' };
-                readonly updatedAt: { readonly column: 'updatedAt' };
-              };
-            };
-          };
           readonly Raid: {
             readonly fields: {
               readonly id: {
@@ -5316,17 +4948,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['id'];
                 };
               };
-              readonly strikes: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Strike';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['attendanceId'];
-                };
-              };
             };
             readonly storage: {
               readonly table: 'run_attendance';
@@ -5454,17 +5075,6 @@ type ContractBase = Omit<
                 readonly on: {
                   readonly localFields: readonly ['characterId'];
                   readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly deducts: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Deduct';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['payoutEntryId'];
                 };
               };
               readonly rosterEntry: {
@@ -6073,10 +5683,6 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly attendanceId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly reason: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -6124,34 +5730,12 @@ type ContractBase = Omit<
               };
             };
             readonly relations: {
-              readonly attendance: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RunAttendance';
-                };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['attendanceId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
               readonly createdBy: {
                 readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
                 readonly cardinality: 'N:1';
                 readonly on: {
                   readonly localFields: readonly ['createdById'];
                   readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly deducts: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Deduct';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['strikeId'];
                 };
               };
               readonly revokedBy: {
@@ -6186,7 +5770,6 @@ type ContractBase = Omit<
                 readonly id: { readonly column: 'id' };
                 readonly userId: { readonly column: 'userId' };
                 readonly runId: { readonly column: 'runId' };
-                readonly attendanceId: { readonly column: 'attendanceId' };
                 readonly reason: { readonly column: 'reason' };
                 readonly notes: { readonly column: 'notes' };
                 readonly status: { readonly column: 'status' };
@@ -6341,17 +5924,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['userId'];
                 };
               };
-              readonly createdDeducts: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Deduct';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['createdById'];
-                };
-              };
               readonly createdStrikes: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -6457,17 +6029,6 @@ type ContractBase = Omit<
                 readonly on: {
                   readonly localFields: readonly ['id'];
                   readonly targetFields: readonly ['reviewedById'];
-                };
-              };
-              readonly revokedDeducts: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Deduct';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['revokedById'];
                 };
               };
               readonly revokedQualifications: {
@@ -6745,13 +6306,6 @@ type ContractBase = Omit<
               { readonly name: 'REVOKED'; readonly value: 'REVOKED' },
             ];
           };
-          readonly DeductStatus: {
-            readonly codecId: 'pg/text@1';
-            readonly members: readonly [
-              { readonly name: 'ACTIVE'; readonly value: 'ACTIVE' },
-              { readonly name: 'REVOKED'; readonly value: 'REVOKED' },
-            ];
-          };
         };
       };
     };
@@ -6892,23 +6446,6 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'character_raid_lockout';
-            readonly column: 'updatedAt';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
-          readonly onUpdate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'deduct';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'deduct';
             readonly column: 'updatedAt';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };

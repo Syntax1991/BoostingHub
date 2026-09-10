@@ -146,11 +146,7 @@ One gold settlement per completed Run. Entries come from `RunAttendance`. Status
 
 ## Strike
 
-Disciplinary history record against a **User** (never a Character). Optional `runId` and `attendanceId` (when linked to Attendance, both `userId` and `runId` are derived server-side from the Attendance row, never trusted from the client). Status `ACTIVE` \| `REVOKED`; no severity, no expiry, no hard delete — revocation is the only correction path and always requires a reason. Independent of `Deduct`. See [strikes-and-deducts.md](features/strikes-and-deducts.md).
-
-## Deduct
-
-Financial reduction against one `RunPayoutEntry`'s gross `amountGold`. Not unique per entry — multiple Deducts may exist on the same entry. Fixed whole gold only; the active total per entry can never exceed that entry's gross. Mutable only while the owning `RunSettlement` is `DRAFT`; no hard delete. Optional, validated link to a `Strike` (same User, and same Run when the Strike has one). Does not alter `allocateGold()` or its exact-sum invariant — gross allocation is untouched, and deducted gold is retained/unallocated rather than redistributed. See [strikes-and-deducts.md](features/strikes-and-deducts.md).
+Disciplinary history record against a **User** (never a Character). Optional `runId`, proven against BoostingHub's own signup history — never Attendance, which belongs to the external Dawn Boosting operational workflow and is out of scope here. Status `ACTIVE` \| `REVOKED`; no severity, no expiry, no hard delete — revocation is the only correction path and always requires a reason. See [user-strikes.md](features/user-strikes.md).
 
 ## ActivityEvent
 

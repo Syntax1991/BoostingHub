@@ -1,7 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun, hasAdminAccess } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
-import { attendanceRepository } from "@/repositories/attendance.repository";
 import { activityRepository } from "@/repositories/activity.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
@@ -46,6 +45,7 @@ function assertRevokedReason(reason: string): string {
   return trimmed;
 }
 
+/** Real Run participation, from BoostingHub's own signup history — never Attendance (owned by Dawn Boosting). */
 function assertUserAssociatedWithRun(userId: string, run: RunListRecord) {
   const associated = run.signups.some((signup) => signup.userId === userId);
   if (!associated) {
@@ -78,7 +78,6 @@ function toManagerRow(row: StrikeRecord) {
     notes: row.notes,
     runId: row.runId,
     runTitle: row.runTitle,
-    attendanceId: row.attendanceId,
     status: row.status,
     createdById: row.createdById,
     createdByName: row.createdByName,
@@ -91,25 +90,25 @@ function toManagerRow(row: StrikeRecord) {
 }
 
 /**
- * Disciplinary history against a User. Independent of Deduct — creating or
- * revoking a Strike never touches payout data. Nothing here is automatic:
- * every Strike is an explicit staff action.
+ * Disciplinary history against a User. BoostingHub owns Users, Characters,
+ * Booster Qualifications, Runs, Signups, Rosters, and this Strike history.
+ * Attendance and payout/financial handling are an external, operational
+ * concern (Dawn Boosting) and are intentionally not coupled here — nothing
+ * in this service reads or writes Attendance. Every Strike is an explicit
+ * staff action; nothing here is automatic.
  */
 export const strikeService = {
   /**
    * ADMIN may create a Strike with or without a Run. RAID_LEAD may only
    * create a Run-linked Strike for a Run they manage, and only for a User
-   * who actually has signup history there — never a global disciplinary
-   * grant. When attendanceId is supplied it is the server-authoritative
-   * source for both userId and runId; client-supplied values for those two
-   * fields are ignored once resolved from Attendance.
+   * who actually has signup history there (BoostingHub's own Run
+   * participation data) — never a global disciplinary grant.
    */
   async create(
     actor: AuthenticatedUser,
     input: {
-      userId?: string;
+      userId: string;
       runId?: string;
-      attendanceId?: string;
       reason: string;
       notes?: string | null;
     },
@@ -118,22 +117,8 @@ export const strikeService = {
       throw new DomainError("STRIKE_NOT_MANAGEABLE", "You cannot create strikes.", 403);
     }
 
-    let targetUserId = input.userId ?? null;
-    let targetRunId = input.runId ?? null;
-    const attendanceId = input.attendanceId ?? null;
-
-    if (attendanceId) {
-      const attendance = await attendanceRepository.findById(attendanceId);
-      if (!attendance) {
-        throw new DomainError("STRIKE_ATTENDANCE_MISMATCH", "Attendance record was not found.", 404);
-      }
-      targetUserId = attendance.userId;
-      targetRunId = attendance.runId;
-    }
-
-    if (!targetUserId) {
-      throw new DomainError("VALIDATION_FAILED", "A target user is required.");
-    }
+    const targetUserId = input.userId;
+    const targetRunId = input.runId ?? null;
 
     const targetUser = await userRepository.findById(targetUserId);
     if (!targetUser) {
@@ -174,7 +159,6 @@ export const strikeService = {
       id: crypto.randomUUID(),
       userId: targetUserId,
       runId: targetRunId,
-      attendanceId,
       reason,
       notes,
       createdById: actor.id,

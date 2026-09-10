@@ -36,10 +36,6 @@
       "model": "CharacterRaidLockout",
       "namespace": "public"
     },
-    "deduct": {
-      "model": "Deduct",
-      "namespace": "public"
-    },
     "raid": {
       "model": "Raid",
       "namespace": "public"
@@ -208,19 +204,6 @@
               {
                 "name": "DPS",
                 "value": "DPS"
-              }
-            ]
-          },
-          "DeductStatus": {
-            "codecId": "pg/text@1",
-            "members": [
-              {
-                "name": "ACTIVE",
-                "value": "ACTIVE"
-              },
-              {
-                "name": "REVOKED",
-                "value": "REVOKED"
               }
             ]
           },
@@ -1761,214 +1744,6 @@
               "table": "character_raid_lockout"
             }
           },
-          "Deduct": {
-            "fields": {
-              "amountGold": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "createdAt": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/timestamptz-string@1",
-                  "kind": "scalar"
-                }
-              },
-              "createdById": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "id": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "notes": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "payoutEntryId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "reason": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "revokedAt": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/timestamptz-string@1",
-                  "kind": "scalar"
-                }
-              },
-              "revokedById": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "revokedReason": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "status": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                },
-                "valueSet": {
-                  "entityKind": "enum",
-                  "entityName": "DeductStatus",
-                  "namespaceId": "public",
-                  "plane": "domain"
-                }
-              },
-              "strikeId": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "updatedAt": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/timestamptz-string@1",
-                  "kind": "scalar"
-                }
-              }
-            },
-            "relations": {
-              "createdBy": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "createdById"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "User",
-                  "namespace": "public"
-                }
-              },
-              "payoutEntry": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "payoutEntryId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "RunPayoutEntry",
-                  "namespace": "public"
-                }
-              },
-              "revokedBy": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "revokedById"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "User",
-                  "namespace": "public"
-                }
-              },
-              "strike": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "strikeId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "Strike",
-                  "namespace": "public"
-                }
-              }
-            },
-            "storage": {
-              "fields": {
-                "amountGold": {
-                  "column": "amountGold"
-                },
-                "createdAt": {
-                  "column": "createdAt"
-                },
-                "createdById": {
-                  "column": "createdById"
-                },
-                "id": {
-                  "column": "id"
-                },
-                "notes": {
-                  "column": "notes"
-                },
-                "payoutEntryId": {
-                  "column": "payoutEntryId"
-                },
-                "reason": {
-                  "column": "reason"
-                },
-                "revokedAt": {
-                  "column": "revokedAt"
-                },
-                "revokedById": {
-                  "column": "revokedById"
-                },
-                "revokedReason": {
-                  "column": "revokedReason"
-                },
-                "status": {
-                  "column": "status"
-                },
-                "strikeId": {
-                  "column": "strikeId"
-                },
-                "updatedAt": {
-                  "column": "updatedAt"
-                }
-              },
-              "namespaceId": "public",
-              "table": "deduct"
-            }
-          },
           "Raid": {
             "fields": {
               "createdAt": {
@@ -2554,21 +2329,6 @@
                   "model": "Run",
                   "namespace": "public"
                 }
-              },
-              "strikes": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "attendanceId"
-                  ]
-                },
-                "to": {
-                  "model": "Strike",
-                  "namespace": "public"
-                }
               }
             },
             "storage": {
@@ -2800,21 +2560,6 @@
                 },
                 "to": {
                   "model": "Character",
-                  "namespace": "public"
-                }
-              },
-              "deducts": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "payoutEntryId"
-                  ]
-                },
-                "to": {
-                  "model": "Deduct",
                   "namespace": "public"
                 }
               },
@@ -3826,13 +3571,6 @@
           },
           "Strike": {
             "fields": {
-              "attendanceId": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -3925,21 +3663,6 @@
               }
             },
             "relations": {
-              "attendance": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "attendanceId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "RunAttendance",
-                  "namespace": "public"
-                }
-              },
               "createdBy": {
                 "cardinality": "N:1",
                 "on": {
@@ -3952,21 +3675,6 @@
                 },
                 "to": {
                   "model": "User",
-                  "namespace": "public"
-                }
-              },
-              "deducts": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "strikeId"
-                  ]
-                },
-                "to": {
-                  "model": "Deduct",
                   "namespace": "public"
                 }
               },
@@ -4018,9 +3726,6 @@
             },
             "storage": {
               "fields": {
-                "attendanceId": {
-                  "column": "attendanceId"
-                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -4275,21 +3980,6 @@
                   "namespace": "public"
                 }
               },
-              "createdDeducts": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "createdById"
-                  ]
-                },
-                "to": {
-                  "model": "Deduct",
-                  "namespace": "public"
-                }
-              },
               "createdStrikes": {
                 "cardinality": "1:N",
                 "on": {
@@ -4437,21 +4127,6 @@
                 },
                 "to": {
                   "model": "BoosterAccess",
-                  "namespace": "public"
-                }
-              },
-              "revokedDeducts": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "revokedById"
-                  ]
-                },
-                "to": {
-                  "model": "Deduct",
                   "namespace": "public"
                 }
               },
@@ -5832,206 +5507,6 @@
                   ]
                 }
               ]
-            },
-            "deduct": {
-              "checks": [
-                {
-                  "expression": "\"status\" IN ('ACTIVE', 'REVOKED')",
-                  "name": "deduct_status_check_35f03e2c",
-                  "prefix": "deduct_status_check"
-                }
-              ],
-              "columns": {
-                "amountGold": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "createdAt": {
-                  "codecId": "pg/timestamptz-string@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
-                  "nativeType": "timestamptz",
-                  "nullable": false
-                },
-                "createdById": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "id": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "notes": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
-                "payoutEntryId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "reason": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "revokedAt": {
-                  "codecId": "pg/timestamptz-string@1",
-                  "nativeType": "timestamptz",
-                  "nullable": true
-                },
-                "revokedById": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
-                "revokedReason": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
-                "status": {
-                  "codecId": "pg/text@1",
-                  "default": {
-                    "kind": "literal",
-                    "value": "ACTIVE"
-                  },
-                  "nativeType": "text",
-                  "nullable": false,
-                  "valueSet": {
-                    "entityKind": "valueSet",
-                    "entityName": "DeductStatus",
-                    "namespaceId": "public",
-                    "plane": "storage"
-                  }
-                },
-                "strikeId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
-                "updatedAt": {
-                  "codecId": "pg/timestamptz-string@1",
-                  "nativeType": "timestamptz",
-                  "nullable": false
-                }
-              },
-              "foreignKeys": [
-                {
-                  "onDelete": "restrict",
-                  "source": {
-                    "columns": [
-                      "payoutEntryId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "deduct"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "run_payout_entry"
-                  }
-                },
-                {
-                  "onDelete": "setNull",
-                  "source": {
-                    "columns": [
-                      "strikeId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "deduct"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "strike"
-                  }
-                },
-                {
-                  "onDelete": "restrict",
-                  "source": {
-                    "columns": [
-                      "createdById"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "deduct"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "user"
-                  }
-                },
-                {
-                  "onDelete": "setNull",
-                  "source": {
-                    "columns": [
-                      "revokedById"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "deduct"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "user"
-                  }
-                }
-              ],
-              "indexes": [
-                {
-                  "columns": [
-                    "createdById"
-                  ],
-                  "name": "deduct_createdById_idx_8bf640ed",
-                  "prefix": "deduct_createdById_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "payoutEntryId"
-                  ],
-                  "name": "deduct_payoutEntryId_idx_1183945b",
-                  "prefix": "deduct_payoutEntryId_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "revokedById"
-                  ],
-                  "name": "deduct_revokedById_idx_ab374353",
-                  "prefix": "deduct_revokedById_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "strikeId"
-                  ],
-                  "name": "deduct_strikeId_idx_b75dd298",
-                  "prefix": "deduct_strikeId_idx",
-                  "unique": false
-                }
-              ],
-              "primaryKey": {
-                "columns": [
-                  "id"
-                ]
-              },
-              "uniques": []
             },
             "raid": {
               "columns": {
@@ -7586,11 +7061,6 @@
                 }
               ],
               "columns": {
-                "attendanceId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -7702,23 +7172,6 @@
                   }
                 },
                 {
-                  "onDelete": "setNull",
-                  "source": {
-                    "columns": [
-                      "attendanceId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "strike"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "run_attendance"
-                  }
-                },
-                {
                   "onDelete": "restrict",
                   "source": {
                     "columns": [
@@ -7754,14 +7207,6 @@
                 }
               ],
               "indexes": [
-                {
-                  "columns": [
-                    "attendanceId"
-                  ],
-                  "name": "strike_attendanceId_idx_b259ff3f",
-                  "prefix": "strike_attendanceId_idx",
-                  "unique": false
-                },
                 {
                   "columns": [
                     "createdById"
@@ -8019,13 +7464,6 @@
                 "DPS"
               ]
             },
-            "DeductStatus": {
-              "kind": "valueSet",
-              "values": [
-                "ACTIVE",
-                "REVOKED"
-              ]
-            },
             "LootbuddyMode": {
               "kind": "valueSet",
               "values": [
@@ -8130,10 +7568,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d8c135e824e8de6a6ef6df5f538d0e2da700ebad34b657023fd41f8845dd202c"
+    "storageHash": "5205d5a2344e04022a37bb44f384e025878e28c0d7e91be9ecfc9032a2bf12aa"
   },
   "execution": {
-    "executionHash": "d847b5e63ce3989fdd04b8792bd54c80dd6b239ff8d3770e20bf34a2c55b7e82",
+    "executionHash": "f2d1367bb0f549020f8e57f8a53a4c49359052670d7fb231b085de6ca4c96c93",
     "mutations": {
       "defaults": [
         {
@@ -8312,32 +7750,6 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "character_raid_lockout"
-          }
-        },
-        {
-          "onCreate": {
-            "id": "uuidv4",
-            "kind": "generator"
-          },
-          "ref": {
-            "column": "id",
-            "namespace": "public",
-            "table": "deduct"
-          }
-        },
-        {
-          "onCreate": {
-            "id": "timestampNow",
-            "kind": "generator"
-          },
-          "onUpdate": {
-            "id": "timestampNow",
-            "kind": "generator"
-          },
-          "ref": {
-            "column": "updatedAt",
-            "namespace": "public",
-            "table": "deduct"
           }
         },
         {

@@ -139,14 +139,6 @@ enum StrikeStatus {
   REVOKED = "REVOKED"
 }
 
-/// No hard delete. REVOKED is a staff correction made only while the owning
-/// RunSettlement is still DRAFT.
-enum DeductStatus {
-  @@type("pg/text@1")
-  ACTIVE  = "ACTIVE"
-  REVOKED = "REVOKED"
-}
-
 /// Application account. Also serves as the Better Auth `user` table.
 /// Account roles are permissions on the platform, not run participation type.
 model User {
@@ -183,8 +175,6 @@ model User {
   strikes              Strike[]        @relation("StrikeSubject")
   createdStrikes       Strike[]        @relation("StrikeCreator")
   revokedStrikes       Strike[]        @relation("StrikeRevoker")
-  createdDeducts       Deduct[]        @relation("DeductCreator")
-  revokedDeducts       Deduct[]        @relation("DeductRevoker")
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
 
@@ -512,7 +502,6 @@ model RunAttendance {
   updatedAt     temporal.updatedAtString()
 
   payoutEntry RunPayoutEntry?
-  strikes     Strike[]
 
   @@index([runId])
   @@index([status])
@@ -595,8 +584,6 @@ model RunPayoutEntry {
   createdAt         TimestamptzString @default(now())
   updatedAt         temporal.updatedAtString()
 
-  deducts Deduct[]
-
   @@index([settlementId])
   @@index([userId])
   @@map("run_payout_entry")
@@ -614,20 +601,21 @@ model ActivityEvent {
   @@map("activity_event")
 }
 
-/// Disciplinary history record against a User. Independent of Deduct: a
-/// Strike never implies a financial Deduct, and one is never auto-created
-/// from Attendance — creation is always an explicit staff action. Subject is
-/// always User (never Character) so history survives role changes, Character
-/// deactivation, and BoosterQualification changes. No hard delete; REVOKED
-/// is a staff correction, not an expiry (there is no automatic expiry here).
+/// Disciplinary history record against a User. Creation is always an
+/// explicit staff action — never automatic. Subject is always User (never
+/// Character) so history survives role changes, Character deactivation, and
+/// BoosterQualification changes. No hard delete; REVOKED is a staff
+/// correction, not an expiry (there is no automatic expiry here).
+///
+/// Attendance and payout/financial-deduction handling are owned by the
+/// external Dawn Boosting operational workflow, not BoostingHub — Strike
+/// intentionally has no relation to RunAttendance or any financial record.
 model Strike {
   id            String            @id @default(uuid())
   userId        String
   user          User              @relation("StrikeSubject", fields: [userId], references: [id], onDelete: Restrict)
   runId         String?
   run           Run?              @relation(fields: [runId], references: [id], onDelete: SetNull)
-  attendanceId  String?
-  attendance    RunAttendance?    @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
   reason        String
   notes         String?
   status        StrikeStatus      @default(ACTIVE)
@@ -640,40 +628,7 @@ model Strike {
   createdAt     TimestamptzString @default(now())
   updatedAt     temporal.updatedAtString()
 
-  deducts Deduct[]
-
   @@index([userId])
   @@index([runId])
   @@map("strike")
-}
-
-/// Financial reduction against one RunPayoutEntry's gross amountGold.
-/// Independent of Strike: a Deduct never requires one. Multiple Deducts may
-/// exist per payout entry. The active total per entry is capped at that
-/// entry's gross amountGold in the service layer — never persisted as a
-/// separate net figure, and never redistributed to other entries. No hard
-/// delete; mutation (including revoke) is only permitted while the owning
-/// RunSettlement is DRAFT.
-model Deduct {
-  id            String            @id @default(uuid())
-  payoutEntryId String
-  payoutEntry   RunPayoutEntry    @relation(fields: [payoutEntryId], references: [id], onDelete: Restrict)
-  amountGold    Int
-  reason        String
-  notes         String?
-  strikeId      String?
-  strike        Strike?           @relation(fields: [strikeId], references: [id], onDelete: SetNull)
-  status        DeductStatus      @default(ACTIVE)
-  createdById   String
-  createdBy     User              @relation("DeductCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  revokedAt     TimestamptzString?
-  revokedById   String?
-  revokedBy     User?             @relation("DeductRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
-  revokedReason String?
-  createdAt     TimestamptzString @default(now())
-  updatedAt     temporal.updatedAtString()
-
-  @@index([payoutEntryId])
-  @@index([strikeId])
-  @@map("deduct")
 }

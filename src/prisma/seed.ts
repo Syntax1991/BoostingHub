@@ -107,10 +107,6 @@ const ids = {
 };
 
 async function wipe() {
-  // Deduct.payoutEntryId is Restrict; must go before RunPayoutEntry.
-  for (const row of await orm.Deduct.select("id").all()) {
-    await orm.Deduct.where({ id: row.id }).delete();
-  }
   // Strike.userId/createdById are Restrict against User; must go before Users.
   for (const row of await orm.Strike.select("id").all()) {
     await orm.Strike.where({ id: row.id }).delete();
@@ -1484,7 +1480,6 @@ async function seed() {
     id: "k1111111-1111-4111-8111-111111111111",
     userId: ids.users.kael,
     runId: null,
-    attendanceId: null,
     reason: "Late without notice on two consecutive runs",
     notes: "Discussed in Discord; no further action yet.",
     status: "ACTIVE",
@@ -1499,7 +1494,6 @@ async function seed() {
     id: "k2222222-2222-4222-8222-222222222222",
     userId: ids.users.mira,
     runId: null,
-    attendanceId: null,
     reason: "Incorrect loot rule assumption",
     notes: null,
     status: "REVOKED",
@@ -1514,62 +1508,8 @@ async function seed() {
     id: "k5555555-5555-4555-8555-555555555555",
     userId: ids.users.brann,
     runId: ids.runs.payoutFinalized,
-    attendanceId: "a9999994-0001-4000-8000-000000000003",
     reason: "No-show without notice",
     notes: "Did not respond to Discord ping before or during the run.",
-    status: "ACTIVE",
-    createdById: ids.users.thorne,
-    revokedAt: null,
-    revokedById: null,
-    revokedReason: null,
-    createdAt: SEED_NOW,
-    updatedAt: SEED_NOW,
-  });
-
-  // Deducts: financial reductions, independent of the strikes above.
-  // Draft payout (Kael entry, gross 5,000g): one ACTIVE + one REVOKED, to
-  // demonstrate multiple independent deducts per entry and that a revoked
-  // one no longer counts toward net/retained gold.
-  await orm.Deduct.create({
-    id: "d9999993-9993-4993-8993-999999999991",
-    payoutEntryId: "p9999993-9993-4993-8993-999999999991",
-    amountGold: 500,
-    reason: "Joined 15 minutes late",
-    notes: null,
-    strikeId: null,
-    status: "ACTIVE",
-    createdById: ids.users.thorne,
-    revokedAt: null,
-    revokedById: null,
-    revokedReason: null,
-    createdAt: SEED_NOW,
-    updatedAt: SEED_NOW,
-  });
-  await orm.Deduct.create({
-    id: "d9999993-9993-4993-8993-999999999992",
-    payoutEntryId: "p9999993-9993-4993-8993-999999999991",
-    amountGold: 200,
-    reason: "Preliminary adjustment, reverted",
-    notes: "Entered against the wrong participant, corrected.",
-    strikeId: null,
-    status: "REVOKED",
-    createdById: ids.users.thorne,
-    revokedAt: SEED_NOW,
-    revokedById: ids.users.thorne,
-    revokedReason: "Wrong participant, reverting.",
-    createdAt: SEED_NOW,
-    updatedAt: SEED_NOW,
-  });
-  // Finalized payout (Brann entry, gross 200g): one ACTIVE deduct linked to
-  // the run-linked strike above, so the finalized settlement shows a real
-  // net reduction and the optional Strike<->Deduct link in one example.
-  await orm.Deduct.create({
-    id: "d9999994-9994-4994-8994-999999999991",
-    payoutEntryId: "p9999994-9994-4994-8994-999999999993",
-    amountGold: 100,
-    reason: "No-show without notice",
-    notes: null,
-    strikeId: "k5555555-5555-4555-8555-555555555555",
     status: "ACTIVE",
     createdById: ids.users.thorne,
     revokedAt: null,

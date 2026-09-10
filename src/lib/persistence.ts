@@ -14,7 +14,6 @@ import {
   ATTENDANCE_STATUSES,
   SETTLEMENT_STATUSES,
   STRIKE_STATUSES,
-  DEDUCT_STATUSES,
   WOW_CLASSES,
   WOW_REGIONS,
   type AccountRole,
@@ -24,7 +23,6 @@ import {
   type BoosterQualificationStatus,
   type SettlementStatus,
   type StrikeStatus,
-  type DeductStatus,
   type CharacterRole,
   type LootbuddyMode,
   type LootbuddyVerification,
@@ -129,10 +127,6 @@ export function mapSettlementStatus(value: unknown): SettlementStatus {
 
 export function mapStrikeStatus(value: unknown): StrikeStatus {
   return asEnum(value, STRIKE_STATUSES, "ACTIVE");
-}
-
-export function mapDeductStatus(value: unknown): DeductStatus {
-  return asEnum(value, DEDUCT_STATUSES, "ACTIVE");
 }
 
 export {

@@ -7,6 +7,7 @@ import {
   AccessBadge,
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
+import { AddStrikeButton } from "@/components/runs/add-strike-button";
 import { LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
@@ -21,7 +22,7 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
       ...data.manager.groups.dps,
       ...data.manager.groups.lootbuddies,
     ];
-    return <ManagerSignupList signups={all} />;
+    return <ManagerSignupList runId={data.run.id} signups={all} />;
   }
 
   return <OwnSignupList signups={data.viewerSignups} />;
@@ -74,7 +75,7 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
   );
 }
 
-function ManagerSignupList({ signups }: { signups: ManagerSignup[] }) {
+function ManagerSignupList({ runId, signups }: { runId: string; signups: ManagerSignup[] }) {
   return (
     <Card>
       <CardHeader
@@ -92,6 +93,7 @@ function ManagerSignupList({ signups }: { signups: ManagerSignup[] }) {
                 <th className="px-4 py-2 font-medium">Character</th>
                 <th className="px-4 py-2 font-medium">Offer</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -139,6 +141,9 @@ function ManagerSignupList({ signups }: { signups: ManagerSignup[] }) {
                   <td className="px-4 py-3">
                     <SignupStatusBadge status={signup.status} />
                     {signup.issue ? <p className="mt-1 text-xs text-danger">{signup.issue}</p> : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    <AddStrikeButton runId={runId} userId={signup.userId} userName={signup.userName} />
                   </td>
                 </tr>
               ))}

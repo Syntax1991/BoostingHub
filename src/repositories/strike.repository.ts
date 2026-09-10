@@ -8,7 +8,6 @@ export type StrikeRecord = {
   userName: string;
   runId: string | null;
   runTitle: string | null;
-  attendanceId: string | null;
   reason: string;
   notes: string | null;
   status: StrikeStatus;
@@ -26,7 +25,6 @@ export type StrikeCreateInput = {
   id: string;
   userId: string;
   runId: string | null;
-  attendanceId: string | null;
   reason: string;
   notes: string | null;
   createdById: string;
@@ -43,7 +41,6 @@ function mapStrike(row: Record<string, unknown>): StrikeRecord {
     userName: asString(user.name, "Unknown"),
     runId: asStringOrNull(row.runId),
     runTitle: run ? asString(run.title) : null,
-    attendanceId: asStringOrNull(row.attendanceId),
     reason: asString(row.reason),
     notes: asStringOrNull(row.notes),
     status: mapStrikeStatus(row.status),
@@ -94,7 +91,6 @@ export const strikeRepository = {
       id: input.id,
       userId: input.userId,
       runId: input.runId,
-      attendanceId: input.attendanceId,
       reason: input.reason,
       notes: input.notes,
       status: "ACTIVE",

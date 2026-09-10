@@ -1,0 +1,365 @@
+[
+  {
+    "id": "table.strike",
+    "label": "Create table \"strike\"",
+    "summary": "Creates table \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"strike\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"strike\"",
+        "sql": "CREATE TABLE \"public\".\"strike\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdById\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"notes\" text,\n  \"reason\" text NOT NULL,\n  \"revokedAt\" timestamptz,\n  \"revokedById\" text,\n  \"revokedReason\" text,\n  \"runId\" text,\n  \"status\" text DEFAULT 'ACTIVE' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"strike_status_check_35f03e2c\" CHECK (\"status\" IN ('ACTIVE', 'REVOKED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"strike\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.strike.strike_createdById_idx_8bf640ed",
+    "label": "Create index \"strike_createdById_idx_8bf640ed\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "strike_createdById_idx_8bf640ed",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"strike_createdById_idx_8bf640ed\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_createdById_idx_8bf640ed\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"strike_createdById_idx_8bf640ed\"",
+        "sql": "CREATE INDEX \"strike_createdById_idx_8bf640ed\" ON \"public\".\"strike\" (\"createdById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"strike_createdById_idx_8bf640ed\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_createdById_idx_8bf640ed\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.strike.strike_revokedById_idx_ab374353",
+    "label": "Create index \"strike_revokedById_idx_ab374353\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "strike_revokedById_idx_ab374353",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"strike_revokedById_idx_ab374353\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_revokedById_idx_ab374353\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"strike_revokedById_idx_ab374353\"",
+        "sql": "CREATE INDEX \"strike_revokedById_idx_ab374353\" ON \"public\".\"strike\" (\"revokedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"strike_revokedById_idx_ab374353\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_revokedById_idx_ab374353\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.strike.strike_runId_idx_a6016437",
+    "label": "Create index \"strike_runId_idx_a6016437\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "strike_runId_idx_a6016437",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"strike_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"strike_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"strike_runId_idx_a6016437\" ON \"public\".\"strike\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"strike_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.strike.strike_userId_idx_a489d58a",
+    "label": "Create index \"strike_userId_idx_a489d58a\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "strike_userId_idx_a489d58a",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"strike_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"strike_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"strike_userId_idx_a489d58a\" ON \"public\".\"strike\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"strike_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"strike_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.strike.strike_userId_fkey",
+    "label": "Add foreign key \"strike_userId_fkey\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "strike_userId_fkey",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"strike_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_userId_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"strike_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"strike\"\nADD CONSTRAINT \"strike_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"strike_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_userId_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.strike.strike_runId_fkey",
+    "label": "Add foreign key \"strike_runId_fkey\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "strike_runId_fkey",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"strike_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_runId_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"strike_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"strike\"\nADD CONSTRAINT \"strike_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"strike_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_runId_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.strike.strike_createdById_fkey",
+    "label": "Add foreign key \"strike_createdById_fkey\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "strike_createdById_fkey",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"strike_createdById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_createdById_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"strike_createdById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"strike\"\nADD CONSTRAINT \"strike_createdById_fkey\"\nFOREIGN KEY (\"createdById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"strike_createdById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_createdById_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.strike.strike_revokedById_fkey",
+    "label": "Add foreign key \"strike_revokedById_fkey\" on \"strike\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "strike_revokedById_fkey",
+        "table": "strike"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"strike_revokedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_revokedById_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"strike_revokedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"strike\"\nADD CONSTRAINT \"strike_revokedById_fkey\"\nFOREIGN KEY (\"revokedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"strike_revokedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "strike_revokedById_fkey",
+          "public",
+          "\"public\".\"strike\""
+        ]
+      }
+    ]
+  }
+]

@@ -5,9 +5,7 @@ import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
-import { attendanceRepository } from "@/repositories/attendance.repository";
 import { strikeRepository } from "@/repositories/strike.repository";
-import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { strikeService } from "@/services/strike.service";
 import type { ParticipationType } from "@/models/enums";
@@ -157,7 +155,6 @@ const plainUser = asUser(ids.plainUser, "Strike Plain User");
 let labRunId = "";
 let otherRunId = "";
 let targetCharacterId = "";
-let labAttendanceId = "";
 
 beforeAll(async () => {
   await raidRepository.ensureReferenceRaids();
@@ -188,19 +185,6 @@ beforeAll(async () => {
   await createTestUser(ids.plainUser, "Strike Plain User", "USER");
 
   targetCharacterId = await createCharacter(ids.target, "Skstriketarget");
-  await orm.BoosterQualification.create({
-    id: crypto.randomUUID(),
-    userId: ids.target,
-    difficulty: "HEROIC",
-    status: "APPROVED",
-    notes: "Strike test grant",
-    grantedAt: new Date().toISOString(),
-    grantedById: ids.admin,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
 
   labRunId = await runService.createRun(lead, {
     raidId,
@@ -212,29 +196,14 @@ beforeAll(async () => {
   }).then((run) => run.id);
   createdRunIds.push(labRunId);
   await runService.openRun(lead, labRunId);
-  const signupId = await createSignup({
+  // Association is proven by BoostingHub's own signup history — no roster
+  // publish/start/attendance is needed to exercise the Strike domain.
+  await createSignup({
     runId: labRunId,
     userId: ids.target,
     characterId: targetCharacterId,
     participationType: "BOOSTER",
   });
-
-  const draft = await rosterService.getRosterManagementView(lead, labRunId);
-  await rosterService.setDraftSelection(lead, {
-    runId: labRunId,
-    signupId,
-    selected: true,
-    version: draft.roster.version,
-  });
-  const ready = await rosterService.getRosterManagementView(lead, labRunId);
-  await rosterService.publishRoster(lead, {
-    runId: labRunId,
-    version: ready.roster.version,
-    acknowledgeWarnings: true,
-  });
-  await runService.startRun(lead, labRunId);
-  const attendance = await attendanceRepository.listByRunId(labRunId);
-  labAttendanceId = attendance.find((row) => row.userId === ids.target)!.id;
 
   otherRunId = await runService.createRun(admin, {
     raidId,
@@ -342,28 +311,6 @@ describe("strikeService.create", () => {
     );
   });
 
-  it("rejects an attendance id that does not exist", async () => {
-    await expectDomainCode(
-      strikeService.create(admin, {
-        attendanceId: "00000000-0000-4000-8000-000000000000",
-        reason: "Bad attendance",
-      }),
-      "STRIKE_ATTENDANCE_MISMATCH",
-    );
-  });
-
-  it("derives userId and runId from attendance, ignoring conflicting client input", async () => {
-    const created = await strikeService.create(lead, {
-      userId: ids.unrelated,
-      runId: otherRunId,
-      attendanceId: labAttendanceId,
-      reason: "Derived from attendance",
-    });
-    createdStrikeIds.push(created.id);
-    expect(created.userId).toBe(ids.target);
-    expect(created.runId).toBe(labRunId);
-    expect(created.attendanceId).toBe(labAttendanceId);
-  });
 });
 
 describe("strikeService.revoke", () => {

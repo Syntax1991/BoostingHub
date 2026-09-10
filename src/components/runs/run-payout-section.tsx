@@ -16,7 +16,6 @@ import {
   SettlementStatusBadge,
 } from "@/components/ui/badges";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { ManageDeductsDialog } from "@/components/runs/manage-deducts-dialog";
 import { formatGold } from "@/lib/gold";
 import { ATTENDANCE_STATUS_LABELS, SETTLEMENT_STATUS_LABELS } from "@/lib/labels";
 import {
@@ -114,20 +113,9 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
               <SettlementStatusBadge status={row.settlementStatus} />
             </div>
             <p className="mt-1 text-muted">
-              Share {row.shareUnits} · Gross {formatGold(row.grossAmountGold)}
-              {row.deductTotal > 0 ? ` · Deducts ${formatGold(row.deductTotal)}` : ""} · Net{" "}
-              {formatGold(row.netAmountGold)}
+              Share {row.shareUnits} · {formatGold(row.amountGold)}
               {row.settlementStatus === "PAID" ? " · Paid" : ""}
             </p>
-            {row.deducts.length > 0 ? (
-              <ul className="mt-1 space-y-0.5 text-xs text-muted">
-                {row.deducts.map((deduct, index) => (
-                  <li key={index}>
-                    − {formatGold(deduct.amountGold)}: {deduct.reason}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
           </li>
         ))}
       </ul>
@@ -164,7 +152,6 @@ function ManagerPayoutPanel({
   const [error, setError] = useState<string | null>(null);
   const totalId = useId();
   const [totalGold, setTotalGold] = useState(String(manager.totalGold));
-  const [deductRowId, setDeductRowId] = useState<string | null>(null);
 
   function runMutation(action: () => Promise<{ ok: boolean; message: string }>) {
     setError(null);
@@ -217,14 +204,6 @@ function ManagerPayoutPanel({
         <span>Distributed {formatGold(manager.summary.distributedGold)}</span>
         <span>Remainder {formatGold(manager.summary.remainder)}</span>
       </div>
-      <div className="flex flex-wrap gap-4 border-t border-border/60 px-4 py-3 text-xs">
-        <span>Gross {formatGold(manager.summary.grossTotal)}</span>
-        <span>Deducts {formatGold(manager.summary.deductTotal)}</span>
-        <span className="font-medium">Net {formatGold(manager.summary.netTotal)}</span>
-        {manager.summary.retainedTotal > 0 ? (
-          <span className="text-muted">Retained {formatGold(manager.summary.retainedTotal)} (unallocated)</span>
-        ) : null}
-      </div>
       {canEdit ? (
         <form
           className="flex flex-wrap items-end gap-2 px-4 pb-3"
@@ -268,11 +247,8 @@ function ManagerPayoutPanel({
               <th className="px-3 py-2 font-medium">Attendance</th>
               <th className="px-3 py-2 font-medium">Backup</th>
               <th className="px-3 py-2 font-medium">Share units</th>
-              <th className="px-3 py-2 font-medium">Gross</th>
-              <th className="px-3 py-2 font-medium">Deducts</th>
-              <th className="px-3 py-2 font-medium">Net</th>
+              <th className="px-3 py-2 font-medium">Amount</th>
               {canEdit ? <th className="px-4 py-2 font-medium">Reason</th> : null}
-              <th className="px-4 py-2 font-medium">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -291,19 +267,11 @@ function ManagerPayoutPanel({
                     }),
                   )
                 }
-                onManageDeducts={() => setDeductRowId(row.id)}
               />
             ))}
           </tbody>
         </table>
       </div>
-      {deductRowId ? (
-        <ManageDeductsDialog
-          entry={manager.entries.find((item) => item.id === deductRowId)!}
-          canEdit={canEdit}
-          onClose={() => setDeductRowId(null)}
-        />
-      ) : null}
       {finalizeOpen ? (
         <FinalizePayoutDialog
           settlementId={manager.id}
@@ -322,13 +290,11 @@ function ManagerPayoutRow({
   canEdit,
   pending,
   onSave,
-  onManageDeducts,
 }: {
   row: NonNullable<RunDetailView["payout"]["manager"]>["entries"][number];
   canEdit: boolean;
   pending: boolean;
   onSave: (shareUnits: number, adjustmentReason: string | null) => void;
-  onManageDeducts: () => void;
 }) {
   const shareId = useId();
   const reasonId = useId();
@@ -381,9 +347,7 @@ function ManagerPayoutRow({
           <span>{row.shareUnits}</span>
         )}
       </td>
-      <td className="px-3 py-2 font-medium">{formatGold(row.grossAmountGold)}</td>
-      <td className="px-3 py-2">{row.deductTotal > 0 ? formatGold(row.deductTotal) : "—"}</td>
-      <td className="px-3 py-2 font-medium">{formatGold(row.netAmountGold)}</td>
+      <td className="px-3 py-2 font-medium">{formatGold(row.amountGold)}</td>
       {canEdit ? (
         <td className="px-4 py-2">
           <label htmlFor={reasonId} className="sr-only">
@@ -400,11 +364,6 @@ function ManagerPayoutRow({
           />
         </td>
       ) : null}
-      <td className="px-4 py-2">
-        <Button type="button" variant="ghost" className="h-8" onClick={onManageDeducts}>
-          Manage deducts{row.deducts.length > 0 ? ` (${row.deducts.length})` : ""}
-        </Button>
-      </td>
     </tr>
   );
 }
