@@ -158,6 +158,7 @@ export const managementController = {
     return {
       view: listed.view,
       legacyPendingCount: listed.legacyPendingCount,
+      approvedQualificationCount: listed.approvedQualificationCount,
       filters: {
         view: listed.view,
         status: listed.view === "legacy" ? "PENDING" : (filters.status ?? "ALL"),
@@ -171,7 +172,8 @@ export const managementController = {
         name: row.name,
         discordUsername: row.discordUsername,
       })),
-      requests: listed.rows,
+      qualifications: listed.qualifications,
+      legacyRequests: listed.legacyRequests,
     };
   },
 

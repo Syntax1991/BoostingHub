@@ -6,7 +6,7 @@ export const ADMIN_ACCESS_VIEWS = ["qualifications", "legacy"] as const;
 export type AdminAccessView = (typeof ADMIN_ACCESS_VIEWS)[number];
 
 /** Qualification filters never include PENDING — that belongs to Legacy Requests. */
-export const QUALIFICATION_STATUSES = ["ALL", "APPROVED", "REJECTED", "REVOKED"] as const;
+export const QUALIFICATION_STATUSES = ["ALL", "APPROVED", "REVOKED"] as const;
 export type QualificationStatusFilter = (typeof QUALIFICATION_STATUSES)[number];
 
 const adminAccessFilterSchema = z.object({

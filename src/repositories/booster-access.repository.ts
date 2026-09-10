@@ -112,6 +112,14 @@ export const boosterAccessRepository = {
     return row ? mapAccess(row as Record<string, unknown>) : null;
   },
 
+  async listPendingByUserDifficulty(
+    userId: string,
+    difficulty: RaidDifficulty,
+  ): Promise<BoosterAccessRecord[]> {
+    const rows = await orm.BoosterAccess.where({ userId, difficulty, status: "PENDING" }).all();
+    return rows.map((row) => mapAccess(row as Record<string, unknown>));
+  },
+
   async create(input: BoosterAccessWriteInput): Promise<BoosterAccessRecord> {
     const now = new Date().toISOString();
     await orm.BoosterAccess.create({

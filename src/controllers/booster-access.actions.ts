@@ -83,7 +83,7 @@ export async function revokeBoosterAccessAction(input: unknown): Promise<ActionR
   try {
     const admin = await requireAdmin();
     const parsed = revokeBoosterAccessSchema.parse(input);
-    await boosterAccessService.revokeAccess(admin, parsed.accessId, parsed.reason);
+    await boosterAccessService.revokeAccess(admin, parsed.qualificationId, parsed.reason);
     revalidateAccessSurfaces();
     return { ok: true, message: "Booster access revoked." };
   } catch (error) {

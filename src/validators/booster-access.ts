@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CHARACTER_ROLES, RAID_DIFFICULTIES, WOW_CLASSES } from "@/models/enums";
+import { CHARACTER_ROLES, RAID_DIFFICULTIES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
 
 export const BOOSTER_ACCESS_REVIEW_REASON_MAX = 280;
@@ -27,14 +27,12 @@ export const rejectBoosterAccessSchema = z.object({
 });
 
 export const revokeBoosterAccessSchema = z.object({
-  accessId: entityIdSchema,
+  qualificationId: entityIdSchema,
   reason: reviewReasonSchema,
 });
 
 export const grantBoosterAccessSchema = z.object({
   userId: entityIdSchema,
-  wowClass: z.enum(WOW_CLASSES),
-  role: z.enum(CHARACTER_ROLES),
   difficulty: z.enum(RAID_DIFFICULTIES),
   notes: reviewReasonSchema,
 });
