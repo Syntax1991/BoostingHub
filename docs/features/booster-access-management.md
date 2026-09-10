@@ -34,11 +34,47 @@ Entry point for applicants: Discord ticket URL from character details (`discordT
 
 ADMIN grants qualifications directly with `grantAccess({ userId, wowClass, role, difficulty, notes? })` from `/manage/booster-access` (and related manage surfaces). Grant creates APPROVED rows, approves historical PENDING rows, or reopens REJECTED/REVOKED through PENDING → APPROVED.
 
+Current onboarding:
+
+```text
+User → Discord ticket → staff review → ADMIN grant
+```
+
+ADMIN does **not** automatically receive BoosterAccess. Admins may explicitly grant to USER, RAID_LEAD, ADMIN, or themselves using the same account-level model.
+
+## Qualifications vs Legacy Requests
+
+`/manage/booster-access` is ADMIN-only and has two views:
+
+### Qualifications (default)
+
+Current account-level authorization history. Columns are user-centric:
+
+User · Class · Role · Difficulty · Status · Context · Times · Actions
+
+Statuses shown here: `APPROVED`, `REJECTED`, `REVOKED` (never the primary PENDING queue).
+
+Item level and specialization are **not** part of BoosterAccess and are not shown as qualification identity.
+
+### Legacy Requests · N
+
+Unresolved historical `PENDING` rows from the former in-app self-service workflow only.
+
+N counts only unresolved PENDING. Approve / Reject resolve them into qualifications/history without deleting the row.
+
+Historical `characterId` may appear as secondary context (“Requested via Synblast-Antonidas”). It means request origin only — the Character does not own the qualification.
+
+Empty legacy queue copy:
+
+> No legacy requests awaiting review.
+
+There is no “Create request” action. Normal users no longer submit in-app requests.
+
 ## Admin review flow
 
-`/manage/booster-access` is ADMIN-only. RAID_LEAD keeps `/manage` for runs but is redirected away from this queue.
+RAID_LEAD keeps `/manage` for runs but is redirected away from this page.
 
-Historical pending rows can still be approved or rejected. Approved rows can be revoked. Optional reject/revoke reasons are stored in `notes` and shown to the owner. Reasons are omitted from global activity messages.
+Historical pending rows can still be approved or rejected on Legacy Requests. Approved qualifications can be revoked on Qualifications. Optional reject/revoke reasons are stored in `notes` and shown to the owner. Reasons are omitted from global activity messages.
 
 Approval is account-level and does not require a requesting Character to still be active.
 

@@ -92,10 +92,14 @@ A USER may hold many approved BoosterAccess rows without becoming RAID_LEAD. Pro
 
 After Discord review, ADMIN grants qualifications with `boosterAccessService.grantAccess({ userId, wowClass, role, difficulty, notes? })`.
 
+`/manage/booster-access` defaults to **Qualifications** (account-level APPROVED/REJECTED/REVOKED). **Legacy Requests · N** lists only unresolved historical PENDING rows from the former in-app self-service flow. CharacterId on those rows is request context only.
+
 - Creates APPROVED when no row exists
 - Approves existing PENDING
 - Reopens REJECTED/REVOKED through PENDING → APPROVED
 - Duplicate APPROVED → `BOOSTER_ACCESS_ALREADY_APPROVED`
+- Does not require Character, specialization, or item level
+- May target USER, RAID_LEAD, ADMIN, or the acting ADMIN (no automatic ADMIN bypass)
 
 RAID_LEAD cannot grant.
 

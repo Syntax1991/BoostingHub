@@ -375,8 +375,12 @@ describe("boosterAccessService approval and signup", () => {
     const character = await createPaladin(owner);
     const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     await boosterAccessService.approveAccess(admin, pendingId);
-    const stored = await boosterAccessService.listAdminAccessRequests(admin, { status: "APPROVED", query: "Pally" });
-    const row = stored.find((item) => item.id === pendingId);
+    const stored = await boosterAccessService.listAdminAccessRequests(admin, {
+      view: "qualifications",
+      status: "APPROVED",
+      query: "Pally",
+    });
+    const row = stored.rows.find((item) => item.id === pendingId);
     expect(row?.status).toBe("APPROVED");
     expect(row?.reviewedById).toBe(ids.admin);
     expect(row?.approvedById).toBe(ids.admin);
@@ -502,6 +506,121 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
         isBackup: false,
       }),
       "BOOSTER_ACCESS_REQUIRED",
+    );
+  });
+});
+
+describe("boosterAccessService qualifications vs legacy requests", () => {
+  const owner = asUser(ids.owner, "Access Owner");
+  const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
+
+  it("defaults qualifications to non-pending rows and keeps only unresolved PENDING in legacy", async () => {
+    const character = await createPaladin(owner);
+    const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
+    const approved = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "PALADIN",
+      role: "TANK",
+      difficulty: "NORMAL",
+    });
+    createdAccessIds.push(approved.id);
+
+    const rejectedId = await createPendingAccess(ids.owner, character.id, "PALADIN", "DPS", "MYTHIC");
+    await boosterAccessService.rejectAccess(admin, rejectedId, "Not yet.");
+
+    const beforeLegacyCount = (
+      await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" })
+    ).legacyPendingCount;
+
+    const qualifications = await boosterAccessService.listAdminAccessRequests(admin, {
+      view: "qualifications",
+      userId: ids.owner,
+    });
+    expect(qualifications.view).toBe("qualifications");
+    expect(qualifications.rows.every((row) => row.status !== "PENDING")).toBe(true);
+    expect(qualifications.rows.some((row) => row.id === pendingId)).toBe(false);
+    expect(qualifications.rows.some((row) => row.id === approved.id && row.status === "APPROVED")).toBe(true);
+    expect(qualifications.rows.some((row) => row.id === rejectedId && row.status === "REJECTED")).toBe(true);
+
+    const legacy = await boosterAccessService.listAdminAccessRequests(admin, {
+      view: "legacy",
+      userId: ids.owner,
+    });
+    expect(legacy.view).toBe("legacy");
+    expect(legacy.legacyPendingCount).toBe(beforeLegacyCount);
+    expect(legacy.rows.every((row) => row.status === "PENDING")).toBe(true);
+    expect(legacy.rows.some((row) => row.id === pendingId)).toBe(true);
+    expect(legacy.rows[0]?.characterId).toBe(character.id);
+    expect(legacy.rows.some((row) => row.status === "APPROVED")).toBe(false);
+    expect(legacy.rows.some((row) => row.status === "REJECTED")).toBe(false);
+    expect(legacy.rows.some((row) => row.status === "REVOKED")).toBe(false);
+  });
+
+  it("removes PENDING from legacy after approve or reject while preserving the row", async () => {
+    const character = await createPaladin(owner);
+    const approveId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
+    const rejectId = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "NORMAL");
+    const beforeCount = (
+      await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" })
+    ).legacyPendingCount;
+
+    await boosterAccessService.approveAccess(admin, approveId);
+    let legacy = await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" });
+    expect(legacy.rows.some((row) => row.id === approveId)).toBe(false);
+    expect(legacy.legacyPendingCount).toBe(beforeCount - 1);
+
+    const preservedApproved = await orm.BoosterAccess.where({ id: approveId }).first();
+    expect(String(preservedApproved?.status)).toBe("APPROVED");
+    expect(String(preservedApproved?.characterId)).toBe(character.id);
+
+    await boosterAccessService.rejectAccess(admin, rejectId, "Declined.");
+    legacy = await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" });
+    expect(legacy.rows.some((row) => row.id === rejectId)).toBe(false);
+    expect(legacy.legacyPendingCount).toBe(beforeCount - 2);
+
+    const preservedRejected = await orm.BoosterAccess.where({ id: rejectId }).first();
+    expect(String(preservedRejected?.status)).toBe("REJECTED");
+    expect(String(preservedRejected?.characterId)).toBe(character.id);
+
+    const qualifications = await boosterAccessService.listAdminAccessRequests(admin, {
+      view: "qualifications",
+      status: "ALL",
+      userId: ids.owner,
+    });
+    expect(qualifications.rows.some((row) => row.id === approveId)).toBe(true);
+    expect(qualifications.rows.some((row) => row.id === rejectId)).toBe(true);
+  });
+
+  it("lets ADMIN grant without a Character and still rejects USER self-request", async () => {
+    const granted = await boosterAccessService.grantAccess(admin, {
+      userId: ids.owner,
+      wowClass: "SHAMAN",
+      role: "HEALER",
+      difficulty: "HEROIC",
+    });
+    createdAccessIds.push(granted.id);
+    expect(granted.status).toBe("APPROVED");
+    expect(granted.characterId).toBeNull();
+    expect(granted.approvedById).toBe(ids.admin);
+
+    const self = await boosterAccessService.grantAccess(admin, {
+      userId: ids.admin,
+      wowClass: "WARRIOR",
+      role: "TANK",
+      difficulty: "MYTHIC",
+    });
+    createdAccessIds.push(self.id);
+    expect(self.userId).toBe(ids.admin);
+    expect(self.characterId).toBeNull();
+
+    const character = await createPaladin(owner);
+    await expectDomainCode(
+      boosterAccessService.requestAccess(owner, {
+        characterId: character.id,
+        role: "HEALER",
+        difficulty: "MYTHIC",
+      }),
+      "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
     );
   });
 });

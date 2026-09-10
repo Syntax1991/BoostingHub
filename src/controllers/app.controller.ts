@@ -136,6 +136,7 @@ export const managementController = {
   },
 
   async getBoosterAccessPage(searchParams: {
+    view?: string | string[];
     status?: string | string[];
     difficulty?: string | string[];
     role?: string | string[];
@@ -144,10 +145,22 @@ export const managementController = {
   }) {
     const user = await requireAdminOrRedirect();
     const filters = parseAdminAccessFilters(searchParams);
+    const view = filters.view ?? "qualifications";
     const grantCandidates = await userRepository.listAdminUsers({ sort: "name" });
+    const listed = await boosterAccessService.listAdminAccessRequests(user, {
+      view,
+      status: filters.status,
+      difficulty: filters.difficulty,
+      role: filters.role,
+      query: filters.query,
+      userId: filters.userId,
+    });
     return {
+      view: listed.view,
+      legacyPendingCount: listed.legacyPendingCount,
       filters: {
-        status: filters.status ?? "PENDING",
+        view: listed.view,
+        status: listed.view === "legacy" ? "PENDING" : (filters.status ?? "ALL"),
         difficulty: filters.difficulty,
         role: filters.role,
         query: filters.query,
@@ -158,13 +171,7 @@ export const managementController = {
         name: row.name,
         discordUsername: row.discordUsername,
       })),
-      requests: await boosterAccessService.listAdminAccessRequests(user, {
-        status: filters.status ?? "PENDING",
-        difficulty: filters.difficulty,
-        role: filters.role,
-        query: filters.query,
-        userId: filters.userId,
-      }),
+      requests: listed.rows,
     };
   },
 

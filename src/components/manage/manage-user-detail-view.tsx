@@ -161,7 +161,7 @@ export function ManageUserDetailView({ data }: { data: Page }) {
             }
             action={
               <Link
-                href={`/manage/booster-access?userId=${encodeURIComponent(user.id)}`}
+                href={`/manage/booster-access?view=qualifications&userId=${encodeURIComponent(user.id)}`}
                 className="text-sm text-accent hover:underline"
               >
                 Open queue

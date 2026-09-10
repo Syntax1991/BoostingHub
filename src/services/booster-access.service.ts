@@ -41,6 +41,7 @@ export type CharacterAccessPanel = {
 };
 
 export type AdminAccessFilters = {
+  view?: "qualifications" | "legacy";
   status?: BoosterAccessStatus | "ALL";
   difficulty?: RaidDifficulty;
   role?: CharacterRole;
@@ -387,26 +388,52 @@ export const boosterAccessService = {
 
   async listAdminAccessRequests(admin: AuthenticatedUser, filters: AdminAccessFilters = {}) {
     assertCanReviewBoosterAccess(admin);
-    const status = filters.status && filters.status !== "ALL" ? filters.status : undefined;
-    const rows = await boosterAccessRepository.listAdmin({
+    const view = filters.view ?? "qualifications";
+    const statusCounts = await boosterAccessRepository.countByStatus();
+    const legacyPendingCount = statusCounts.PENDING;
+
+    let status: BoosterAccessStatus | undefined;
+    if (view === "legacy") {
+      status = "PENDING";
+    } else if (filters.status && filters.status !== "ALL") {
+      status = filters.status;
+    }
+
+    let rows = await boosterAccessRepository.listAdmin({
       status,
       difficulty: filters.difficulty,
       role: filters.role,
     });
-    let filtered = rows;
+
+    if (view === "qualifications" && (!filters.status || filters.status === "ALL")) {
+      rows = rows.filter((row) => row.status !== "PENDING");
+    }
+
     if (filters.userId) {
-      filtered = filtered.filter((row) => row.userId === filters.userId);
+      rows = rows.filter((row) => row.userId === filters.userId);
     }
     const query = filters.query?.trim().toLocaleLowerCase("en-US");
-    if (!query) {
-      return filtered;
+    if (query) {
+      rows = rows.filter((row) => matchesAdminQuery(row, query));
     }
-    return filtered.filter((row) => matchesAdminQuery(row, query));
+
+    return {
+      view,
+      legacyPendingCount,
+      rows,
+    };
   },
 };
 
 function matchesAdminQuery(row: BoosterAccessAdminRecord, query: string) {
-  const haystack = [row.userName, row.characterName, row.realm]
+  const haystack = [
+    row.userName,
+    row.characterName,
+    row.realm,
+    CLASS_LABELS[row.wowClass],
+    CHARACTER_ROLE_LABELS[row.role],
+    DIFFICULTY_LABELS[row.difficulty],
+  ]
     .filter(Boolean)
     .join(" ")
     .toLocaleLowerCase("en-US");

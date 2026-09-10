@@ -5,6 +5,7 @@ export default async function ManageBoosterAccessPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    view?: string | string[];
     status?: string | string[];
     difficulty?: string | string[];
     role?: string | string[];

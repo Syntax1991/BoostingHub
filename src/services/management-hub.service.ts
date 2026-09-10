@@ -60,7 +60,7 @@ export const managementHubService = {
         href: "/manage/booster-access",
         cta: "Manage Booster Access",
         metrics: [
-          { label: "Pending reviews", value: accessCounts.PENDING },
+          { label: "Legacy pending", value: accessCounts.PENDING },
           { label: "Approved", value: accessCounts.APPROVED },
         ],
       });
