@@ -372,18 +372,18 @@ describe("characterBlizzardService.importCharacters", () => {
     expect(byCharacter).toHaveLength(0);
   });
 
-  it("still imports when profile enrichment fails, without lastSyncedAt", async () => {
+  it("still imports when profile enrichment fails, with unknown item level and no lastSyncedAt", async () => {
     const owned = ownedCharacter({ id: "300021", name: "Bnprivate" });
     const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
     mockEnrichmentPrivacyFailure();
 
     const result = await characterBlizzardService.importCharacters(owner, session.id, [
-      { blizzardCharacterId: owned.id, specialization: "Restoration", itemLevel: 610 },
+      { blizzardCharacterId: owned.id, specialization: "Restoration" },
     ]);
     createdCharacterIds.push(...result.importedCharacterIds);
 
     const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
-    expect(Number(created?.itemLevel)).toBe(610);
+    expect(created?.itemLevel).toBeNull();
     expect(created?.lastSyncedAt).toBeNull();
     expect(String(created?.blizzardCharacterId)).toBe(owned.id);
   });
@@ -478,7 +478,7 @@ describe("characterBlizzardService.applySelections", () => {
 
     await expectDomainCode(
       characterBlizzardService.applySelections(owner, session.id, [
-        { blizzardCharacterId: first.id, specialization: "Enhancement", itemLevel: 600 },
+        { blizzardCharacterId: first.id, specialization: "Enhancement" },
         { blizzardCharacterId: second.id, specialization: "" },
       ]),
       "INVALID_SPECIALIZATION",
@@ -510,7 +510,7 @@ describe("characterBlizzardService.applySelections", () => {
 
     await expectDomainCode(
       characterBlizzardService.applySelections(owner, importSession.id, [
-        { blizzardCharacterId: lowImport.id, specialization: "Enhancement", itemLevel: 500 },
+        { blizzardCharacterId: lowImport.id, specialization: "Enhancement" },
       ]),
       "BLIZZARD_LEVEL_TOO_LOW",
     );
@@ -518,7 +518,7 @@ describe("characterBlizzardService.applySelections", () => {
     const linkSession = await seedConnectionAndSession(ids.owner, "EU", [lowLink]);
     await expectDomainCode(
       characterBlizzardService.applySelections(owner, linkSession.id, [
-        { blizzardCharacterId: lowLink.id, specialization: "Elemental", itemLevel: 500 },
+        { blizzardCharacterId: lowLink.id, specialization: "Elemental" },
       ]),
       "BLIZZARD_LEVEL_TOO_LOW",
     );
@@ -537,7 +537,7 @@ describe("characterBlizzardService.applySelections", () => {
     });
 
     const result = await characterBlizzardService.applySelections(owner, session.id, [
-      { blizzardCharacterId: owned.id, specialization: "Elemental", itemLevel: 999 },
+      { blizzardCharacterId: owned.id, specialization: "Elemental" },
     ]);
     createdCharacterIds.push(...result.importedCharacterIds);
 
@@ -566,37 +566,18 @@ describe("characterBlizzardService.applySelections", () => {
     );
   });
 
-  it("requires manual itemLevel when Blizzard profile is unavailable", async () => {
+  it("imports with unknown item level when Blizzard profile is unavailable — no manual prompt, not rejected", async () => {
     const owned = ownedCharacter({ id: "300054", name: "Bnmanualilvl" });
     const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
     mockEnrichmentPrivacyFailure();
 
-    await expectDomainCode(
-      characterBlizzardService.applySelections(owner, session.id, [
-        { blizzardCharacterId: owned.id, specialization: "Enhancement" },
-      ]),
-      "INVALID_ITEM_LEVEL",
-    );
-
     const result = await characterBlizzardService.applySelections(owner, session.id, [
-      { blizzardCharacterId: owned.id, specialization: "Enhancement", itemLevel: 317 },
+      { blizzardCharacterId: owned.id, specialization: "Enhancement" },
     ]);
     createdCharacterIds.push(...result.importedCharacterIds);
     const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
-    expect(Number(created?.itemLevel)).toBe(317);
+    expect(created?.itemLevel).toBeNull();
     expect(created?.lastSyncedAt).toBeNull();
-  });
-
-  it("rejects negative manual itemLevel", async () => {
-    const owned = ownedCharacter({ id: "300055", name: "Bnnegilvl" });
-    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
-    mockEnrichmentPrivacyFailure();
-    await expectDomainCode(
-      characterBlizzardService.applySelections(owner, session.id, [
-        { blizzardCharacterId: owned.id, specialization: "Enhancement", itemLevel: -1 },
-      ]),
-      "INVALID_ITEM_LEVEL",
-    );
   });
 });
 
@@ -642,6 +623,33 @@ describe("characterBlizzardService.refreshCharacter", () => {
     expect(refreshed.itemLevel).toBe(690);
     expect(refreshed.specialization).toBe("Restoration");
     expect(refreshed.primaryRole).toBe("HEALER");
+    expect(refreshed.lastSyncedAt).toBeTruthy();
+  });
+
+  it("retains the last known itemLevel when Blizzard omits it on an otherwise valid refresh", async () => {
+    const { owned, characterId } = await importLinkedShaman("300033", "Bnretain");
+
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: owned.id, isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      realmSlug: "twisting-nether",
+      realmName: "Twisting Nether",
+      wowClass: owned.wowClass,
+      equippedItemLevel: null,
+      activeSpecialization: "Restoration",
+    });
+
+    const refreshed = await characterBlizzardService.refreshCharacter(owner, characterId);
+    // Item level was 650 from the initial import; a missing value on refresh
+    // never becomes 0 or null — the last known value is preserved, and the
+    // rest of the sync (name/lastSyncedAt) still proceeds.
+    expect(refreshed.itemLevel).toBe(650);
     expect(refreshed.lastSyncedAt).toBeTruthy();
   });
 
@@ -1007,5 +1015,128 @@ describe("characterBlizzardService.refreshLinkedCharactersForRegion", () => {
     expect(Number((await orm.Character.where({ id: imported.importedCharacterIds[0] }).first())?.itemLevel)).toBe(
       660,
     );
+  });
+});
+
+describe("characterService.addCharacterFromBlizzard (public lookup, no ownership proof)", () => {
+  const owner = asUser(ids.owner);
+
+  it("ignores a forged wowClass/itemLevel and persists Blizzard's authoritative values", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400001", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400001",
+      name: "Synblast",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "SHAMAN",
+      equippedItemLevel: 326,
+      activeSpecialization: "Restoration",
+    });
+
+    // A malicious/stale browser cannot influence wowClass or itemLevel: the
+    // public payload type has no such fields, and the server re-resolves
+    // both from Blizzard regardless of anything the request body claims.
+    const created = await characterService.addCharacterFromBlizzard(owner, {
+      name: "Synblast",
+      realm: "Antonidas",
+      region: "EU",
+      specialization: "Elemental",
+    });
+    createdCharacterIds.push(created.id);
+
+    expect(created.wowClass).toBe("SHAMAN");
+    expect(created.itemLevel).toBe(326);
+    expect(created.specialization).toBe("Elemental");
+    expect(created.primaryRole).toBe("DPS");
+    expect(created.blizzardCharacterId).toBeNull();
+  });
+
+  it("resolves with unknown item level when Blizzard does not supply one", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400002", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400002",
+      name: "Nogeario",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "PRIEST",
+      equippedItemLevel: null,
+      activeSpecialization: null,
+    });
+
+    const created = await characterService.addCharacterFromBlizzard(owner, {
+      name: "Nogeario",
+      realm: "Antonidas",
+      region: "EU",
+      specialization: "Holy",
+    });
+    createdCharacterIds.push(created.id);
+
+    expect(created.itemLevel).toBeNull();
+    expect(created.wowClass).toBe("PRIEST");
+  });
+
+  it("rejects a specialization that does not belong to the Blizzard class", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400003", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400003",
+      name: "Wrongspec",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "SHAMAN",
+      equippedItemLevel: 300,
+      activeSpecialization: null,
+    });
+
+    await expectDomainCode(
+      characterService.addCharacterFromBlizzard(owner, {
+        name: "Wrongspec",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Holy",
+      }),
+      "INVALID_CLASS_SPECIALIZATION",
+    );
+  });
+
+  it("rejects lookup when Blizzard reports the character does not exist", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "", isValid: false });
+
+    await expectDomainCode(
+      characterService.addCharacterFromBlizzard(owner, {
+        name: "Ghostname",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Holy",
+      }),
+      "BLIZZARD_CHARACTER_NOT_FOUND",
+    );
+  });
+
+  it("previewCharacterFromBlizzard returns Blizzard data without persisting anything", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400004", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400004",
+      name: "Previewonly",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "WARRIOR",
+      equippedItemLevel: 450,
+      activeSpecialization: "Fury",
+    });
+
+    const preview = await characterService.previewCharacterFromBlizzard({
+      name: "Previewonly",
+      realm: "Antonidas",
+      region: "EU",
+    });
+    expect(preview.wowClass).toBe("WARRIOR");
+    expect(preview.itemLevel).toBe(450);
+
+    const stored = await orm.Character.where({ userId: ids.owner, name: "Previewonly" }).all();
+    expect(stored).toHaveLength(0);
   });
 });

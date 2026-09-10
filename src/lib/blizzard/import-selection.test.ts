@@ -9,7 +9,6 @@ import {
   isSelectableImportCandidate,
   itemLevelSortAria,
   itemLevelSortLabel,
-  needsManualItemLevel,
   nextItemLevelSortDirection,
   resolvedSpecialization,
   selectionCountLabel,
@@ -105,12 +104,6 @@ describe("import-selection helpers", () => {
     expect(resolvedSpecialization(row, "Retribution", "Holy")).toBe("Retribution");
     expect(resolvedSpecialization(row, "", "Holy")).toBe("Holy");
     expect(resolvedSpecialization(row, undefined, null)).toBe("");
-  });
-
-  it("requires manual item level only when Blizzard value is missing", () => {
-    expect(needsManualItemLevel(true, 318)).toBe(false);
-    expect(needsManualItemLevel(true, null)).toBe(true);
-    expect(needsManualItemLevel(false, null)).toBe(false);
   });
 
   it("formats status and selection labels", () => {

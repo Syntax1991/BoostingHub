@@ -293,12 +293,12 @@ describe("characterService ownership and update", () => {
       realm: "Ravencrest",
       region: "EU",
       specialization: "Retribution",
-      itemLevel: 670,
     });
     expect(updated.wowClass).toBe("PALADIN");
     expect(updated.specialization).toBe("Retribution");
     expect(updated.primaryRole).toBe("DPS");
-    expect(updated.itemLevel).toBe(670);
+    // Item level is Blizzard-authoritative and untouched by edits.
+    expect(updated.itemLevel).toBe(650);
 
     await expectDomainCode(
       characterService.updateCharacter(owner, first.id, {
@@ -306,7 +306,6 @@ describe("characterService ownership and update", () => {
         realm: "Ravencrest",
         region: "EU",
         specialization: "Retribution",
-        itemLevel: 670,
       }),
       "CHARACTER_ALREADY_EXISTS",
     );
@@ -317,7 +316,6 @@ describe("characterService ownership and update", () => {
         realm: "Draenor",
         region: "EU",
         specialization: "Arms",
-        itemLevel: 1,
       }),
       "CHARACTER_NOT_FOUND",
     );
@@ -342,7 +340,6 @@ describe("characterService ownership and update", () => {
         realm: "Kazzak",
         region: "EU",
         specialization: "Outlaw",
-        itemLevel: 611,
       }),
       "CHARACTER_NOT_OWNED",
     );
