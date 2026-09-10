@@ -10,6 +10,7 @@ import {
   type PayoutEntryWrite,
   type SettlementRecord,
 } from "@/repositories/payout.repository";
+import { deductRepository, type DeductRecord } from "@/repositories/deduct.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { allocateGold } from "@/services/payout-calculation";
 import {
@@ -47,11 +48,25 @@ function applyAmounts(totalGold: number, entries: Array<{ attendanceId: string; 
   return byAttendance;
 }
 
-function summaryFrom(settlement: SettlementRecord) {
+/** Sum of ACTIVE deducts only — revoked deducts never reduce net or count toward retained gold. */
+function activeDeductTotal(deducts: DeductRecord[]): number {
+  return deducts.filter((row) => row.status === "ACTIVE").reduce((sum, row) => sum + row.amountGold, 0);
+}
+
+/**
+ * grossTotal is the untouched allocateGold() exact-sum result (settlement.totalGold).
+ * netTotal/retainedTotal are derived read-side only — never persisted, never
+ * fed back into the gross allocation itself.
+ */
+function summaryFrom(settlement: SettlementRecord, deductsByEntry: Map<string, DeductRecord[]>) {
   const totalShareUnits = settlement.entries.reduce((sum, row) => sum + row.shareUnits, 0);
   const recipientsWithShare = settlement.entries.filter((row) => row.shareUnits > 0).length;
   const zeroShare = settlement.entries.filter((row) => row.shareUnits === 0).length;
   const distributedGold = settlement.entries.reduce((sum, row) => sum + row.amountGold, 0);
+  const deductTotal = settlement.entries.reduce(
+    (sum, row) => sum + activeDeductTotal(deductsByEntry.get(row.id) ?? []),
+    0,
+  );
   return {
     totalGold: settlement.totalGold,
     totalShareUnits,
@@ -59,10 +74,31 @@ function summaryFrom(settlement: SettlementRecord) {
     zeroShareParticipants: zeroShare,
     distributedGold,
     remainder: settlement.totalGold - distributedGold,
+    grossTotal: settlement.totalGold,
+    deductTotal,
+    netTotal: settlement.totalGold - deductTotal,
+    retainedTotal: deductTotal,
   };
 }
 
-function toManagerEntry(row: PayoutEntryRecord) {
+function toManagerDeductRow(row: DeductRecord) {
+  return {
+    id: row.id,
+    amountGold: row.amountGold,
+    reason: row.reason,
+    notes: row.notes,
+    strikeId: row.strikeId,
+    status: row.status,
+    createdByName: row.createdByName,
+    createdAt: row.createdAt,
+    revokedByName: row.revokedByName,
+    revokedAt: row.revokedAt,
+    revokedReason: row.revokedReason,
+  };
+}
+
+function toManagerEntry(row: PayoutEntryRecord, deducts: DeductRecord[]) {
+  const deductTotal = activeDeductTotal(deducts);
   return {
     id: row.id,
     attendanceId: row.attendanceId,
@@ -76,12 +112,18 @@ function toManagerEntry(row: PayoutEntryRecord) {
     role: row.role,
     isBackup: row.isBackup,
     shareUnits: row.shareUnits,
+    grossAmountGold: row.amountGold,
     amountGold: row.amountGold,
+    deductTotal,
+    netAmountGold: row.amountGold - deductTotal,
+    deducts: deducts.map(toManagerDeductRow),
     adjustmentReason: row.adjustmentReason,
   };
 }
 
-function toOwnEntry(row: PayoutEntryRecord, status: SettlementRecord["status"]) {
+function toOwnEntry(row: PayoutEntryRecord, status: SettlementRecord["status"], deducts: DeductRecord[]) {
+  const activeDeducts = deducts.filter((deduct) => deduct.status === "ACTIVE");
+  const deductTotal = activeDeductTotal(deducts);
   return {
     characterName: row.characterName,
     characterRealm: row.characterRealm,
@@ -90,7 +132,11 @@ function toOwnEntry(row: PayoutEntryRecord, status: SettlementRecord["status"]) 
     role: row.role,
     isBackup: row.isBackup,
     shareUnits: row.shareUnits,
+    grossAmountGold: row.amountGold,
     amountGold: row.amountGold,
+    deductTotal,
+    netAmountGold: row.amountGold - deductTotal,
+    deducts: activeDeducts.map((deduct) => ({ amountGold: deduct.amountGold, reason: deduct.reason })),
     settlementStatus: status,
   };
 }
@@ -185,9 +231,23 @@ export const payoutService = {
     const manage = canManageRun(user, run);
     const settlement = await payoutRepository.findByRunId(runId);
     const published = settlement && (settlement.status === "FINALIZED" || settlement.status === "PAID");
+
+    // Batched once per settlement — never one Deduct query per entry.
+    const deductsByEntry = new Map<string, DeductRecord[]>();
+    if (settlement) {
+      const deducts = await deductRepository.listByPayoutEntryIds(settlement.entries.map((row) => row.id));
+      for (const deduct of deducts) {
+        const list = deductsByEntry.get(deduct.payoutEntryId) ?? [];
+        list.push(deduct);
+        deductsByEntry.set(deduct.payoutEntryId, list);
+      }
+    }
+
     const own =
       published && !manage
-        ? settlement.entries.filter((row) => row.userId === user.id).map((row) => toOwnEntry(row, settlement.status))
+        ? settlement.entries
+            .filter((row) => row.userId === user.id)
+            .map((row) => toOwnEntry(row, settlement.status, deductsByEntry.get(row.id) ?? []))
         : [];
 
     if (!manage) {
@@ -215,11 +275,11 @@ export const payoutService = {
             raidLeadName: settlement.raidLeadName,
             finalizedAt: settlement.finalizedAt,
             paidAt: settlement.paidAt,
-            summary: summaryFrom(settlement),
+            summary: summaryFrom(settlement, deductsByEntry),
             entries: settlement.entries
               .slice()
               .sort((a, b) => (a.attendanceId < b.attendanceId ? -1 : 1))
-              .map(toManagerEntry),
+              .map((row) => toManagerEntry(row, deductsByEntry.get(row.id) ?? [])),
           }
         : null,
       capabilities: {
