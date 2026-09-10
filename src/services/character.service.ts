@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
+import type { WowClass, WowRegion } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
@@ -11,11 +11,11 @@ import {
   prepareCharacterName,
   prepareRealmName,
 } from "@/lib/character-identity";
-import { findSpecialization } from "@/lib/wow-specializations";
+import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { characterBlizzardService } from "@/services/character-blizzard.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
 
 /**
@@ -53,25 +53,6 @@ function assertOwned(user: AuthenticatedUser, character: { userId: string }) {
   if (character.userId !== user.id) {
     throw new DomainError("CHARACTER_NOT_OWNED", "You can only manage your own characters.", 403);
   }
-}
-
-/**
- * Class/spec/role rules live here so forms cannot persist impossible combinations.
- * Primary role is derived from specialization; BoosterAccess may still approve
- * additional roles later.
- */
-function resolveClassSpecialization(
-  wowClass: WowClass,
-  specialization: string,
-): { specialization: string; primaryRole: CharacterRole } {
-  const match = findSpecialization(wowClass, specialization);
-  if (!match) {
-    throw new DomainError(
-      "INVALID_CLASS_SPECIALIZATION",
-      "That specialization is not valid for the selected class.",
-    );
-  }
-  return { specialization: match.name, primaryRole: match.role };
 }
 
 function prepareIdentity(input: { name: string; realm: string; region: WowRegion }) {
@@ -273,7 +254,7 @@ export const characterService = {
    */
   async previewCharacterFromBlizzard(input: CharacterLookupInput) {
     const identity = prepareIdentity(input);
-    return characterBlizzardService.lookupPublicCharacterProfile(
+    return characterBlizzardImportService.lookupPublicCharacterProfile(
       identity.name,
       identity.realm,
       identity.region,
@@ -289,7 +270,7 @@ export const characterService = {
    */
   async addCharacterFromBlizzard(user: AuthenticatedUser, input: CharacterCreateFromBlizzardInput) {
     const identity = prepareIdentity(input);
-    const resolved = await characterBlizzardService.lookupPublicCharacterProfile(
+    const resolved = await characterBlizzardImportService.lookupPublicCharacterProfile(
       identity.name,
       identity.realm,
       identity.region,

@@ -3,7 +3,7 @@ import { parseRunFilters } from "@/validators/run-filters";
 import { parseManageRunFilters } from "@/validators/manage-run-filters";
 import { characterService } from "@/services/character.service";
 import { battleNetService } from "@/services/battle-net.service";
-import { characterBlizzardService } from "@/services/character-blizzard.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { runService } from "@/services/run.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { signupService } from "@/services/signup.service";
@@ -40,14 +40,14 @@ export const characterController = {
     const candidatesByRegion: Partial<
       Record<
         "EU" | "US",
-        Awaited<ReturnType<typeof characterBlizzardService.resolveImportCandidates>>
+        Awaited<ReturnType<typeof characterBlizzardImportService.resolveImportCandidates>>
       >
     > = {};
 
     for (const session of battleNet.liveSessions) {
       try {
         candidatesByRegion[session.region] =
-          await characterBlizzardService.resolveImportCandidates(user, session.id);
+          await characterBlizzardImportService.resolveImportCandidates(user, session.id);
       } catch (error) {
         if (!isDomainError(error)) throw error;
       }

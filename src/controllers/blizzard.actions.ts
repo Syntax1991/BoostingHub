@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { battleNetService } from "@/services/battle-net.service";
-import { characterBlizzardService } from "@/services/character-blizzard.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
+import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
 import {
   battleNetRegionSchema,
   importBattleNetCharactersSchema,
@@ -24,7 +25,7 @@ function revalidateCharacterSurfaces(characterId?: string) {
 }
 
 type ImportSessionPayload = Awaited<
-  ReturnType<typeof characterBlizzardService.resolveImportCandidates>
+  ReturnType<typeof characterBlizzardImportService.resolveImportCandidates>
 >;
 
 export async function disconnectBattleNetAction(input: unknown): Promise<ActionResult> {
@@ -43,7 +44,7 @@ export async function importBattleNetCharactersAction(input: unknown): Promise<A
   try {
     const user = await requireUser();
     const parsed = importBattleNetCharactersSchema.parse(input);
-    const result = await characterBlizzardService.applySelections(
+    const result = await characterBlizzardImportService.applySelections(
       user,
       parsed.importSessionId,
       parsed.selections,
@@ -70,7 +71,7 @@ export async function linkBattleNetCharacterAction(input: unknown): Promise<Acti
   try {
     const user = await requireUser();
     const parsed = linkBattleNetCharacterSchema.parse(input);
-    const result = await characterBlizzardService.linkCharacter(
+    const result = await characterBlizzardImportService.linkCharacter(
       user,
       parsed.importSessionId,
       parsed.blizzardCharacterId,
@@ -88,7 +89,7 @@ export async function refreshBlizzardCharacterAction(input: unknown): Promise<Ac
   try {
     const user = await requireUser();
     const parsed = refreshBlizzardCharacterSchema.parse(input);
-    await characterBlizzardService.refreshCharacter(user, parsed.characterId);
+    await characterBlizzardSyncService.refreshCharacter(user, parsed.characterId);
     revalidateCharacterSurfaces(parsed.characterId);
     return { ok: true, message: "Character refreshed from Blizzard." };
   } catch (error) {
@@ -100,7 +101,7 @@ export async function refreshAllBattleNetCharactersAction(input: unknown): Promi
   try {
     const user = await requireUser();
     const parsed = battleNetRegionSchema.parse(input);
-    const result = await characterBlizzardService.refreshLinkedCharactersForRegion(
+    const result = await characterBlizzardSyncService.refreshLinkedCharactersForRegion(
       user,
       parsed.region,
     );
@@ -134,7 +135,7 @@ export async function enrichImportCandidateAction(
   try {
     const user = await requireUser();
     const parsed = enrichImportCandidateSchema.parse(input);
-    const data = await characterBlizzardService.enrichImportCandidate(
+    const data = await characterBlizzardImportService.enrichImportCandidate(
       user,
       parsed.importSessionId,
       parsed.blizzardCharacterId,
@@ -151,7 +152,7 @@ export async function loadImportSessionAction(
   try {
     const user = await requireUser();
     const parsed = importSessionIdSchema.parse(input);
-    const data = await characterBlizzardService.resolveImportCandidates(
+    const data = await characterBlizzardImportService.resolveImportCandidates(
       user,
       parsed.importSessionId,
     );

@@ -1,5 +1,6 @@
 import type { CharacterRole, WowClass } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
+import { DomainError } from "@/lib/errors";
 
 /**
  * Retail specializations used to prevent impossible class/spec/role combinations.
@@ -99,6 +100,25 @@ export function findSpecialization(
 
 export function roleForSpecialization(wowClass: WowClass, specialization: string): CharacterRole | null {
   return findSpecialization(wowClass, specialization)?.role ?? null;
+}
+
+/**
+ * The one authoritative class/spec check: used both by plain character
+ * writes and by the Blizzard import/link flow so a specialization can never
+ * persist against a class it doesn't belong to via either path.
+ */
+export function resolveClassSpecialization(
+  wowClass: WowClass,
+  specialization: string,
+): { specialization: string; primaryRole: CharacterRole } {
+  const match = findSpecialization(wowClass, specialization);
+  if (!match) {
+    throw new DomainError(
+      "INVALID_CLASS_SPECIALIZATION",
+      "That specialization is not valid for the selected class.",
+    );
+  }
+  return { specialization: match.name, primaryRole: match.role };
 }
 
 /** Roles this class can actually perform. BoosterAccess may approve any of these, not only primaryRole. */
