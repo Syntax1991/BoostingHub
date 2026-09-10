@@ -131,6 +131,9 @@ async function wipe() {
   for (const row of await orm.BoosterAccess.select("id").all()) {
     await orm.BoosterAccess.where({ id: row.id }).delete();
   }
+  for (const row of await orm.BoosterQualification.select("id").all()) {
+    await orm.BoosterQualification.where({ id: row.id }).delete();
+  }
   for (const row of await orm.ActivityEvent.select("id").all()) {
     await orm.ActivityEvent.where({ id: row.id }).delete();
   }
@@ -402,6 +405,32 @@ async function seed() {
       notes: item.notes ?? (item.status === "PENDING" ? "Awaiting review." : null),
       reviewedAt: item.status === "PENDING" ? null : SEED_NOW,
       reviewedById: item.status === "PENDING" ? null : ids.users.aelira,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+
+  // Collapse APPROVED legacy rows into authoritative User+Difficulty qualifications.
+  // mira has zero; aelira gets HEROIC+MYTHIC only (ADMIN does not auto-get all).
+  const approvedPairs = new Map<string, { userId: string; difficulty: "NORMAL" | "HEROIC" | "MYTHIC" }>();
+  for (const item of access) {
+    if (item.status !== "APPROVED") continue;
+    approvedPairs.set(`${item.userId}:${item.difficulty}`, {
+      userId: item.userId,
+      difficulty: item.difficulty,
+    });
+  }
+  for (const pair of approvedPairs.values()) {
+    await orm.BoosterQualification.create({
+      id: crypto.randomUUID(),
+      userId: pair.userId,
+      difficulty: pair.difficulty,
+      status: "APPROVED",
+      notes: "Seeded from approved legacy access.",
+      grantedAt: SEED_NOW,
+      grantedById: ids.users.aelira,
+      revokedAt: null,
+      revokedById: null,
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
