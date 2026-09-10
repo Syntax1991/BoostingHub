@@ -131,6 +131,14 @@ enum SettlementStatus {
   PAID      = "PAID"
 }
 
+/// No hard delete. REVOKED is a staff correction, not an expiry — there is no
+/// automatic expiry status in this contract.
+enum StrikeStatus {
+  @@type("pg/text@1")
+  ACTIVE  = "ACTIVE"
+  REVOKED = "REVOKED"
+}
+
 /// Application account. Also serves as the Better Auth `user` table.
 /// Account roles are permissions on the platform, not run participation type.
 model User {
@@ -164,6 +172,9 @@ model User {
   finalizedSettlements RunSettlement[] @relation("SettlementFinalizer")
   paidSettlements      RunSettlement[] @relation("SettlementPayer")
   payoutEntries        RunPayoutEntry[] @relation("PayoutRecipient")
+  strikes              Strike[]        @relation("StrikeSubject")
+  createdStrikes       Strike[]        @relation("StrikeCreator")
+  revokedStrikes       Strike[]        @relation("StrikeRevoker")
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
 
@@ -417,6 +428,7 @@ model Run {
   roster      RunRoster?
   attendance  RunAttendance[]
   settlement  RunSettlement?
+  strikes     Strike[]
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -587,4 +599,36 @@ model ActivityEvent {
 
   @@index([occurredAt])
   @@map("activity_event")
+}
+
+/// Disciplinary history record against a User. Creation is always an
+/// explicit staff action — never automatic. Subject is always User (never
+/// Character) so history survives role changes, Character deactivation, and
+/// BoosterQualification changes. No hard delete; REVOKED is a staff
+/// correction, not an expiry (there is no automatic expiry here).
+///
+/// Attendance and payout/financial-deduction handling are owned by the
+/// external Dawn Boosting operational workflow, not BoostingHub — Strike
+/// intentionally has no relation to RunAttendance or any financial record.
+model Strike {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation("StrikeSubject", fields: [userId], references: [id], onDelete: Restrict)
+  runId         String?
+  run           Run?              @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reason        String
+  notes         String?
+  status        StrikeStatus      @default(ACTIVE)
+  createdById   String
+  createdBy     User              @relation("StrikeCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  revokedAt     TimestamptzString?
+  revokedById   String?
+  revokedBy     User?             @relation("StrikeRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  revokedReason String?
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@index([userId])
+  @@index([runId])
+  @@map("strike")
 }

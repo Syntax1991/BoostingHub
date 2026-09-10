@@ -144,6 +144,10 @@ Created when a published Run starts. See [run-lifecycle-attendance.md](features/
 
 One gold settlement per completed Run. Entries come from `RunAttendance`. Status: `DRAFT` → `FINALIZED` → `PAID`. Amounts are whole gold integers. See [run-payouts.md](features/run-payouts.md).
 
+## Strike
+
+Disciplinary history record against a **User** (never a Character). Optional `runId`, proven against BoostingHub's own signup history — never Attendance, which belongs to the external Dawn Boosting operational workflow and is out of scope here. Status `ACTIVE` \| `REVOKED`; no severity, no expiry, no hard delete — revocation is the only correction path and always requires a reason. See [user-strikes.md](features/user-strikes.md).
+
 ## ActivityEvent
 
 Development/operational activity feed for the dashboard. Not a KPI warehouse.

@@ -38,7 +38,7 @@ Better Auth's `/api/auth/*` handler is the authentication controller for OAuth a
 
 ### Service
 
-Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition.
+Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, User disciplinary strikes, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition.
 
 ### Repository
 

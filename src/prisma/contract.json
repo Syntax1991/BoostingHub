@@ -76,6 +76,10 @@
       "model": "Session",
       "namespace": "public"
     },
+    "strike": {
+      "model": "Strike",
+      "namespace": "public"
+    },
     "user": {
       "model": "User",
       "namespace": "public"
@@ -344,6 +348,19 @@
               {
                 "name": "WITHDRAWN",
                 "value": "WITHDRAWN"
+              }
+            ]
+          },
+          "StrikeStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "ACTIVE",
+                "value": "ACTIVE"
+              },
+              {
+                "name": "REVOKED",
+                "value": "REVOKED"
               }
             ]
           },
@@ -2114,6 +2131,21 @@
                   "model": "RunSignup",
                   "namespace": "public"
                 }
+              },
+              "strikes": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "Strike",
+                  "namespace": "public"
+                }
               }
             },
             "storage": {
@@ -3537,6 +3569,204 @@
               "table": "session"
             }
           },
+          "Strike": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "notes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reason": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "revokedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "revokedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "revokedReason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "StrikeStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "createdBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "createdById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "revokedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "revokedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdById": {
+                  "column": "createdById"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "notes": {
+                  "column": "notes"
+                },
+                "reason": {
+                  "column": "reason"
+                },
+                "revokedAt": {
+                  "column": "revokedAt"
+                },
+                "revokedById": {
+                  "column": "revokedById"
+                },
+                "revokedReason": {
+                  "column": "revokedReason"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "strike"
+            }
+          },
           "User": {
             "fields": {
               "accountRole": {
@@ -3750,6 +3980,21 @@
                   "namespace": "public"
                 }
               },
+              "createdStrikes": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "createdById"
+                  ]
+                },
+                "to": {
+                  "model": "Strike",
+                  "namespace": "public"
+                }
+              },
               "finalizedSettlements": {
                 "cardinality": "1:N",
                 "on": {
@@ -3900,6 +4145,21 @@
                   "namespace": "public"
                 }
               },
+              "revokedStrikes": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "revokedById"
+                  ]
+                },
+                "to": {
+                  "model": "Strike",
+                  "namespace": "public"
+                }
+              },
               "sessions": {
                 "cardinality": "1:N",
                 "on": {
@@ -3927,6 +4187,21 @@
                 },
                 "to": {
                   "model": "RunSignup",
+                  "namespace": "public"
+                }
+              },
+              "strikes": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "Strike",
                   "namespace": "public"
                 }
               }
@@ -6777,6 +7052,201 @@
                 }
               ]
             },
+            "strike": {
+              "checks": [
+                {
+                  "expression": "\"status\" IN ('ACTIVE', 'REVOKED')",
+                  "name": "strike_status_check_35f03e2c",
+                  "prefix": "strike_status_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "notes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "reason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "revokedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "revokedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "revokedReason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "ACTIVE"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "StrikeStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "strike"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "strike"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "createdById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "strike"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "revokedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "strike"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "createdById"
+                  ],
+                  "name": "strike_createdById_idx_8bf640ed",
+                  "prefix": "strike_createdById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "revokedById"
+                  ],
+                  "name": "strike_revokedById_idx_ab374353",
+                  "prefix": "strike_revokedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "strike_runId_idx_a6016437",
+                  "prefix": "strike_runId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "strike_userId_idx_a489d58a",
+                  "prefix": "strike_userId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "user": {
               "checks": [
                 {
@@ -7060,6 +7530,13 @@
                 "WITHDRAWN"
               ]
             },
+            "StrikeStatus": {
+              "kind": "valueSet",
+              "values": [
+                "ACTIVE",
+                "REVOKED"
+              ]
+            },
             "WowClass": {
               "kind": "valueSet",
               "values": [
@@ -7091,10 +7568,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d177d99e5ee7ef8c389335cfff0f322b34d28e753c2fd2afef5fad4ddc88657f"
+    "storageHash": "5205d5a2344e04022a37bb44f384e025878e28c0d7e91be9ecfc9032a2bf12aa"
   },
   "execution": {
-    "executionHash": "6340080859992f5627667ca103f99d79edf424ffa921831172e3a03988a79cc8",
+    "executionHash": "f2d1367bb0f549020f8e57f8a53a4c49359052670d7fb231b085de6ca4c96c93",
     "mutations": {
       "defaults": [
         {
@@ -7518,6 +7995,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "session"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "strike"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "strike"
           }
         },
         {

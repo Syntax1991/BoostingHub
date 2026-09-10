@@ -9,6 +9,7 @@ import { ROLE_LABELS } from "@/lib/labels";
 import { ACCOUNT_ROLES, type AccountRole } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { userRepository, type AdminUserListFilters } from "@/repositories/user.repository";
+import { strikeService } from "@/services/strike.service";
 
 function isAccountRole(value: string): value is AccountRole {
   return (ACCOUNT_ROLES as readonly string[]).includes(value);
@@ -31,7 +32,8 @@ export const userManagementService = {
     if (!detail) {
       throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
     }
-    return detail;
+    const strikes = await strikeService.listForUser(admin, userId);
+    return { ...detail, strikes };
   },
 
   async changeAccountRole(

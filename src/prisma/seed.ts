@@ -107,6 +107,10 @@ const ids = {
 };
 
 async function wipe() {
+  // Strike.userId/createdById are Restrict against User; must go before Users.
+  for (const row of await orm.Strike.select("id").all()) {
+    await orm.Strike.where({ id: row.id }).delete();
+  }
   for (const row of await orm.RunPayoutEntry.select("id").all()) {
     await orm.RunPayoutEntry.where({ id: row.id }).delete();
   }
@@ -1465,6 +1469,54 @@ async function seed() {
       { ...payoutMembers.brann, signupId: ids.signups.ppBrann, rosterEntryId: "e9999995-9995-4995-8995-999999999993", attendanceId: "a9999995-9995-4995-8995-999999999993", payoutEntryId: "p9999995-9995-4995-8995-999999999993", shareUnits: 0, amountGold: 0 },
       { ...payoutMembers.sylva, signupId: ids.signups.ppSylva, rosterEntryId: "e9999995-9995-4995-8995-999999999994", attendanceId: "a9999995-9995-4995-8995-999999999994", payoutEntryId: "p9999995-9995-4995-8995-999999999994", shareUnits: 0, amountGold: 0 },
     ],
+  });
+
+  // Strikes: disciplinary history, independent of the payout data above.
+  // Kael: one ACTIVE, general (no run). Mira: one REVOKED, general. Brann:
+  // one ACTIVE, linked to their NO_SHOW on the finalized payout run — a
+  // realistic run-linked incident. Sylva/Thorne/Aelira: no strikes, to keep
+  // "no disciplinary history" represented too.
+  await orm.Strike.create({
+    id: "k1111111-1111-4111-8111-111111111111",
+    userId: ids.users.kael,
+    runId: null,
+    reason: "Late without notice on two consecutive runs",
+    notes: "Discussed in Discord; no further action yet.",
+    status: "ACTIVE",
+    createdById: ids.users.aelira,
+    revokedAt: null,
+    revokedById: null,
+    revokedReason: null,
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+  });
+  await orm.Strike.create({
+    id: "k2222222-2222-4222-8222-222222222222",
+    userId: ids.users.mira,
+    runId: null,
+    reason: "Incorrect loot rule assumption",
+    notes: null,
+    status: "REVOKED",
+    createdById: ids.users.aelira,
+    revokedAt: SEED_NOW,
+    revokedById: ids.users.aelira,
+    revokedReason: "Staff review found the rule was followed correctly.",
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+  });
+  await orm.Strike.create({
+    id: "k5555555-5555-4555-8555-555555555555",
+    userId: ids.users.brann,
+    runId: ids.runs.payoutFinalized,
+    reason: "No-show without notice",
+    notes: "Did not respond to Discord ping before or during the run.",
+    status: "ACTIVE",
+    createdById: ids.users.thorne,
+    revokedAt: null,
+    revokedById: null,
+    revokedReason: null,
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
   });
 
   const activity = [
