@@ -79,9 +79,11 @@ Characters may be referenced by RunSignup, roster entries, BoosterAccess, and Ch
 
 ## Booster access
 
-Character details show BoosterAccess per role and difficulty, including Not Requested / Pending / Approved / Rejected / Revoked. Owners request access from that page. ADMIN review lives in [booster-access-management.md](booster-access-management.md).
+Character list/detail show **matching account** BoosterAccess for that Character's class (derived display). Approvals are owned by the User account (`userId + class + role + difficulty`), not by the Character row.
 
-A newly created or imported character is **not** booster-eligible merely because it exists or is linked to Battle.net.
+Owners may open a request from a Character page; the Character supplies class/role context only. ADMIN review lives in [booster-access-management.md](booster-access-management.md).
+
+A newly created or imported character is **not** booster-eligible merely because it exists or is linked to Battle.net. It immediately reuses any existing matching account approval.
 
 ## Lockouts
 

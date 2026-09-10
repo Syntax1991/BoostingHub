@@ -60,7 +60,7 @@ export function CharactersView({ data }: { data: Page }) {
                   <th className="px-4 py-2 font-medium">Role</th>
                   <th className="px-4 py-2 font-medium">iLvl</th>
                   <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Booster access</th>
+                  <th className="px-4 py-2 font-medium">Account access</th>
                   <th className="px-4 py-2 font-medium">Lockouts</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
                   <th className="px-4 py-2 font-medium">Actions</th>

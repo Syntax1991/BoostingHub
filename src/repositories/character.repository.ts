@@ -4,7 +4,6 @@ import {
   asNumber,
   asString,
   asStringOrNull,
-  mapAccessStatus,
   mapCharacterRole,
   mapDifficulty,
   mapRegion,
@@ -12,6 +11,7 @@ import {
 } from "@/lib/persistence";
 import type { BoosterAccessRecord } from "@/models/records";
 import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
+import { boosterAccessRepository } from "@/repositories/booster-access.repository";
 
 export type CharacterPageRecord = {
   id: string;
@@ -89,7 +89,6 @@ export type CharacterBlizzardSyncInput = {
 };
 
 function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
-  const access = Array.isArray(character.boosterAccess) ? character.boosterAccess : [];
   const lockouts = Array.isArray(character.lockouts) ? character.lockouts : [];
 
   return {
@@ -111,25 +110,8 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     warcraftLogsId: asStringOrNull(character.warcraftLogsId),
     createdAt: asString(character.createdAt),
     updatedAt: asString(character.updatedAt),
-    boosterAccess: access.map((row) => {
-      const record = row as Record<string, unknown>;
-      return {
-        id: asString(record.id),
-        userId: asString(record.userId),
-        characterId: asStringOrNull(record.characterId),
-        wowClass: mapWowClass(record.wowClass),
-        role: mapCharacterRole(record.role),
-        difficulty: mapDifficulty(record.difficulty),
-        status: mapAccessStatus(record.status),
-        notes: asStringOrNull(record.notes),
-        approvedAt: asStringOrNull(record.approvedAt),
-        approvedById: asStringOrNull(record.approvedById),
-        reviewedAt: asStringOrNull(record.reviewedAt),
-        reviewedById: asStringOrNull(record.reviewedById),
-        createdAt: asString(record.createdAt),
-        updatedAt: asString(record.updatedAt),
-      };
-    }),
+    // Account-level access is attached separately — never via Character.boosterAccess relation.
+    boosterAccess: [],
     lockouts: lockouts.map((row) => {
       const record = row as Record<string, unknown>;
       const raid = (record.raid ?? {}) as Record<string, unknown>;
@@ -145,34 +127,63 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
   };
 }
 
+/**
+ * Attach account-level BoosterAccess rows matching each Character's class.
+ * characterId on BoosterAccess is request context only and must not drive eligibility.
+ */
+async function withAccountBoosterAccess(
+  characters: CharacterPageRecord[],
+): Promise<CharacterPageRecord[]> {
+  if (characters.length === 0) return characters;
+
+  const accessByUser = new Map<string, BoosterAccessRecord[]>();
+  for (const userId of new Set(characters.map((character) => character.userId))) {
+    accessByUser.set(userId, await boosterAccessRepository.listByUserId(userId));
+  }
+
+  return characters.map((character) => ({
+    ...character,
+    boosterAccess: (accessByUser.get(character.userId) ?? []).filter(
+      (row) => row.wowClass === character.wowClass,
+    ),
+  }));
+}
+
 export const characterRepository = {
   async listByUserId(userId: string): Promise<CharacterPageRecord[]> {
     const characters = await orm.Character
       .where({ userId })
-      .include("boosterAccess")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .orderBy((character) => character.name.asc())
       .all();
 
-    return characters.map((character) => mapCharacter(character as Record<string, unknown>));
+    return withAccountBoosterAccess(
+      characters.map((character) => mapCharacter(character as Record<string, unknown>)),
+    );
   },
 
   async findById(characterId: string): Promise<CharacterPageRecord | null> {
     const character = await orm.Character
       .where({ id: characterId })
-      .include("boosterAccess")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
-    return character ? mapCharacter(character as Record<string, unknown>) : null;
+    if (!character) return null;
+    const [withAccess] = await withAccountBoosterAccess([
+      mapCharacter(character as Record<string, unknown>),
+    ]);
+    return withAccess ?? null;
   },
 
   async findOwnedById(userId: string, characterId: string): Promise<CharacterPageRecord | null> {
     const character = await orm.Character
       .where({ id: characterId, userId })
-      .include("boosterAccess")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
-    return character ? mapCharacter(character as Record<string, unknown>) : null;
+    if (!character) return null;
+    const [withAccess] = await withAccountBoosterAccess([
+      mapCharacter(character as Record<string, unknown>),
+    ]);
+    return withAccess ?? null;
   },
 
   /**
@@ -189,10 +200,13 @@ export const characterRepository = {
         blizzardRealmId,
         blizzardCharacterId,
       })
-      .include("boosterAccess")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
-    return character ? mapCharacter(character as Record<string, unknown>) : null;
+    if (!character) return null;
+    const [withAccess] = await withAccountBoosterAccess([
+      mapCharacter(character as Record<string, unknown>),
+    ]);
+    return withAccess ?? null;
   },
 
   /**

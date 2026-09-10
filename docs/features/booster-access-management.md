@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Let a character owner request booster eligibility and let an ADMIN approve, reject, or revoke it. A newly created character is not booster-eligible until an `APPROVED` `BoosterAccess` row exists for the matching class, role, and difficulty.
+Let a character owner request booster eligibility and let an ADMIN approve, reject, or revoke it. Eligibility is **account-level**: a newly created or imported character becomes booster-eligible only when an `APPROVED` `BoosterAccess` row already exists for the matching **user + class + role + difficulty**.
+
+Characters do **not** own BoosterAccess. They only consume matching account qualifications.
 
 ## Why BoosterAccess is separate from user role
 
@@ -22,19 +24,21 @@ Eligibility is unique on `(userId, wowClass, role, difficulty)`.
 - Role must be valid for that class in `src/lib/wow-specializations.ts`. `primaryRole` is not the only requestable role.
 - Each difficulty is independent. Heroic does not imply Normal or Mythic.
 
-`characterId` records which character opened or last reopened the request. It is not part of uniqueness, so two Shamans on the same account share Shaman + Healer + Heroic eligibility.
+`characterId` records which character opened or last reopened the request. It is **not** part of uniqueness, approval ownership, or signup lookup. Two Shamans on the same account share Shaman + Healer + Heroic eligibility.
 
 ## User request flow
 
 Entry point: `/characters/[characterId]`.
 
-The owner of an **active** character may request access for a valid role and difficulty. Inactive characters keep existing rows visible but cannot submit new requests.
+The owner of an **active** character may request access for a valid role and difficulty. The Character is request context used to derive user/class/role. Inactive characters keep existing account rows visible but cannot submit new requests.
 
 ## Admin review flow
 
 `/manage/booster-access` is ADMIN-only. RAID_LEAD keeps `/manage` for runs but is redirected away from this queue.
 
 Pending rows can be approved or rejected. Approved rows can be revoked. Optional reject/revoke reasons are stored in `notes` and shown to the owner. Reasons are omitted from global activity messages.
+
+Approval is account-level and does not require the requesting Character to still be active.
 
 ## State lifecycle
 
@@ -67,19 +71,21 @@ Existing signup rows are not withdrawn or deleted. Historical roster entries rem
 
 Only `APPROVED` grants booster eligibility. `PENDING`, `REJECTED`, and `REVOKED` do not.
 
+Lookup is `userId + class + role + run difficulty` against account-level rows. CharacterId is never the ownership key.
+
 Lootbuddy (`LOOT_ONLY` and `PLAYING`) does not require BoosterAccess.
 
 ## Interaction with rosters
 
-Roster publication already re-reads current access. This feature does not duplicate that logic.
+Roster publication already re-reads current account-level access. This feature does not duplicate that logic.
 
 ## Character active state
 
-Deactivate does not revoke access. Reactivate does not auto-approve. Inactive characters cannot request or be approved until they are active again.
+Deactivate does not revoke account-level access. Reactivate does not auto-approve. Inactive characters cannot request new access and cannot signup, but sibling matching Characters still use the same approval.
 
 ## Blizzard independence
 
-Battle.net may later prove character identity. It does not grant BoosterAccess. Approval stays BoostingHub-owned.
+Battle.net may prove character ownership, class, and item level. It does not create, approve, revoke, or character-scope BoosterAccess. Approval stays BoostingHub-owned.
 
 ## Warcraft Logs independence
 
@@ -88,10 +94,10 @@ WCL may later inform reviewers. Approval remains manual.
 ## MVCS
 
 - Model: `BoosterAccess`, `BoosterAccessStatus` including `REJECTED`
-- View: character access panel, request dialog, `/manage/booster-access`
+- View: character access panel (derived account status), request dialog, `/manage/booster-access`
 - Controller: `booster-access.actions.ts`, `managementController.getBoosterAccessPage`
 - Service: `boosterAccessService`, `booster-access-state.ts`
-- Repository: `boosterAccessRepository`
+- Repository: `boosterAccessRepository`; Character/Roster loaders attach account-level rows by class
 
 ## Security
 

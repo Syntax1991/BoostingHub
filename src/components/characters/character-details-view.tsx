@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDateTime } from "@/lib/datetime";
-import { CHARACTER_ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
@@ -179,8 +179,8 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         </Card>
         <Card>
           <CardHeader
-            title="Booster access"
-            description="What this character can boost. Approval is independent of account role."
+            title="Account booster access"
+            description={`${CLASS_LABELS[data.wowClass]} qualifications on your account. Shared by every matching ${CLASS_LABELS[data.wowClass]} character — not owned by this character.`}
             action={
               <RequestBoosterAccessDialog
                 characterId={data.id}

@@ -16,7 +16,6 @@ import {
   asNumber,
   asString,
   asStringOrNull,
-  mapAccessStatus,
   mapCharacterRole,
   mapDifficulty,
   mapLootbuddyMode,
@@ -27,6 +26,7 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
+import { boosterAccessRepository } from "@/repositories/booster-access.repository";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -73,7 +73,6 @@ export type RosterRecord = {
 };
 
 function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
-  const access = Array.isArray(row.boosterAccess) ? row.boosterAccess : [];
   const lockouts = Array.isArray(row.lockouts) ? row.lockouts : [];
   return {
     id: asString(row.id),
@@ -84,15 +83,8 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     primaryRole: mapCharacterRole(row.primaryRole),
     itemLevel: asNumber(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
-    boosterAccess: access.map((item) => {
-      const record = item as Record<string, unknown>;
-      return {
-        wowClass: mapWowClass(record.wowClass),
-        role: mapCharacterRole(record.role),
-        difficulty: mapDifficulty(record.difficulty),
-        status: mapAccessStatus(record.status),
-      };
-    }),
+    // Hydrated from account-level BoosterAccess after signup load.
+    boosterAccess: [],
     lockouts: lockouts.map((item) => {
       const record = item as Record<string, unknown>;
       return {
@@ -123,6 +115,39 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
       row.lootbuddyVerification == null ? null : mapLootbuddyVerification(row.lootbuddyVerification),
     character: character ? mapCharacter(character) : null,
   };
+}
+
+async function withAccountBoosterAccess(signups: RosterSignupRow[]): Promise<RosterSignupRow[]> {
+  const userIds = [...new Set(signups.map((signup) => signup.userId))];
+  if (userIds.length === 0) return signups;
+
+  const accessByUser = new Map<string, BoosterAccessMatch[]>();
+  for (const userId of userIds) {
+    const rows = await boosterAccessRepository.listByUserId(userId);
+    accessByUser.set(
+      userId,
+      rows.map((row) => ({
+        wowClass: row.wowClass,
+        role: row.role,
+        difficulty: row.difficulty,
+        status: row.status,
+      })),
+    );
+  }
+
+  return signups.map((signup) => {
+    if (!signup.character) return signup;
+    const matching = (accessByUser.get(signup.userId) ?? []).filter(
+      (row) => row.wowClass === signup.character!.wowClass,
+    );
+    return {
+      ...signup,
+      character: {
+        ...signup.character,
+        boosterAccess: matching,
+      },
+    };
+  });
 }
 
 function mapRoster(row: Record<string, unknown>): RosterRecord {
@@ -187,10 +212,11 @@ export const rosterRepository = {
     const rows = await orm.RunSignup
       .where({ runId })
       .include("user")
-      .include("character", (character) => character.include("boosterAccess").include("lockouts"))
+      .include("character", (character) => character.include("lockouts"))
       .orderBy((signup) => signup.createdAt.asc())
       .all();
-    return rows.map((row) => mapSignupRow(row as Record<string, unknown>));
+    const signups = rows.map((row) => mapSignupRow(row as Record<string, unknown>));
+    return withAccountBoosterAccess(signups);
   },
 
   async ensure(runId: string): Promise<RosterRecord> {

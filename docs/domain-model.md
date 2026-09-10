@@ -54,16 +54,16 @@ Class is immutable after creation. Specialization from Blizzard is import-time p
 
 ## BoosterAccess
 
-Normalized approval, not `isBooster` and not a JSON blob. See [booster-access-management.md](features/booster-access-management.md).
+Normalized **account-level** approval, not `isBooster` and not a JSON blob. See [booster-access-management.md](features/booster-access-management.md).
 
-- user (required), optional requesting character
+- user (required), optional requesting character (context only)
 - class, role, difficulty
 - status: `PENDING` \| `APPROVED` \| `REJECTED` \| `REVOKED`
 - approved at / approved by (set while approved; last approval kept after revoke)
 - reviewed at / reviewed by (last admin decision)
 - notes: optional owner-visible reject/revoke reason
 
-Unique on `(userId, wowClass, role, difficulty)`. Heroic healer approval does not grant Mythic or Normal healer approval. One row is reused across the lifecycle; rejection does not delete the row.
+Unique on `(userId, wowClass, role, difficulty)`. `characterId` is not part of uniqueness. Characters consume matching approvals; they do not own the row. Heroic healer approval does not grant Mythic or Normal healer approval. One row is reused across the lifecycle; rejection does not delete the row.
 
 ## Raid / RaidBoss
 
