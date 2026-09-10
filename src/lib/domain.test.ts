@@ -4,7 +4,7 @@ import { isDevAuthEnabled, isProductionRuntime } from "@/auth/dev-auth";
 import { formatDate, formatRelative, formatTime, fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { canTransitionRun, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { canTransitionSignup, canSelfWithdrawSignup } from "@/services/signup-state";
-import { boosterAccessService } from "@/services/booster-access.service";
+import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 
 describe("account authorization", () => {
@@ -125,22 +125,18 @@ describe("booster access", () => {
   it("does not imply mythic approval from heroic approval", () => {
     const records = [
       {
-        wowClass: "SHAMAN" as const,
-        role: "HEALER" as const,
         difficulty: "HEROIC" as const,
         status: "APPROVED" as const,
       },
       {
-        wowClass: "SHAMAN" as const,
-        role: "HEALER" as const,
         difficulty: "NORMAL" as const,
-        status: "PENDING" as const,
+        status: "REVOKED" as const,
       },
     ];
 
-    expect(boosterAccessService.isApprovedFor(records, "SHAMAN", "HEALER", "HEROIC")).toBe(true);
-    expect(boosterAccessService.isApprovedFor(records, "SHAMAN", "HEALER", "MYTHIC")).toBe(false);
-    expect(boosterAccessService.isApprovedFor(records, "SHAMAN", "HEALER", "NORMAL")).toBe(false);
+    expect(boosterQualificationService.isApprovedFor(records, "HEROIC")).toBe(true);
+    expect(boosterQualificationService.isApprovedFor(records, "MYTHIC")).toBe(false);
+    expect(boosterQualificationService.isApprovedFor(records, "NORMAL")).toBe(false);
   });
 });
 

@@ -1,11 +1,12 @@
-import type { BoosterAccessMatch } from "@/models/records";
+import type { BoosterQualificationMatch } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
   RunStatus,
   WowClass,
 } from "@/models/enums";
-import { boosterAccessService } from "@/services/booster-access.service";
+import { isRoleValidForClass, rolesForClass } from "@/lib/wow-specializations";
+import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 
@@ -25,7 +26,7 @@ export type EligibilityCharacter = {
   wowClass: WowClass;
   specialization: string | null;
   isActive: boolean;
-  boosterAccess: BoosterAccessMatch[];
+  boosterQualifications: BoosterQualificationMatch[];
   lockouts: EligibilityLockout[];
 };
 
@@ -91,8 +92,9 @@ export type IneligibleLootbuddyCharacter = {
 };
 
 /**
- * Booster options are class + role + difficulty combinations, not the character's
- * primary role. Heroic approval never implies Mythic.
+ * Booster options require an APPROVED BoosterQualification for the run difficulty.
+ * When approved, every role valid for the character's class is offered.
+ * Heroic approval never implies Mythic.
  */
 export function evaluateBoosterOptions(
   characters: EligibilityCharacter[],
@@ -121,19 +123,14 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    const approvedForRun = character.boosterAccess.filter(
-      (record) =>
-        record.status === "APPROVED" &&
-        record.wowClass === character.wowClass &&
-        record.difficulty === run.difficulty,
+    const approvedForRun = boosterQualificationService.isApprovedFor(
+      character.boosterQualifications,
+      run.difficulty,
     );
 
-    if (approvedForRun.length === 0) {
-      const approvedOtherDifficulty = character.boosterAccess.some(
-        (record) =>
-          record.status === "APPROVED" &&
-          record.wowClass === character.wowClass &&
-          record.difficulty !== run.difficulty,
+    if (!approvedForRun) {
+      const approvedOtherDifficulty = character.boosterQualifications.some(
+        (record) => record.status === "APPROVED" && record.difficulty !== run.difficulty,
       );
       pushIneligible(approvedOtherDifficulty ? "DIFFICULTY_NOT_APPROVED" : "NO_BOOSTER_ACCESS");
       continue;
@@ -150,24 +147,16 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    for (const access of approvedForRun) {
-      if (
-        boosterAccessService.isApprovedFor(
-          character.boosterAccess,
-          character.wowClass,
-          access.role,
-          run.difficulty,
-        )
-      ) {
-        eligible.push({
-          characterId: character.id,
-          characterName: character.name,
-          realm: character.realm,
-          wowClass: character.wowClass,
-          specialization: character.specialization,
-          role: access.role,
-        });
-      }
+    for (const role of rolesForClass(character.wowClass)) {
+      if (!isRoleValidForClass(character.wowClass, role)) continue;
+      eligible.push({
+        characterId: character.id,
+        characterName: character.name,
+        realm: character.realm,
+        wowClass: character.wowClass,
+        specialization: character.specialization,
+        role,
+      });
     }
   }
 
@@ -175,7 +164,7 @@ export function evaluateBoosterOptions(
 }
 
 /**
- * Lootbuddy eligibility is lockout-scoped, not BoosterAccess-scoped.
+ * Lootbuddy eligibility is lockout-scoped, not BoosterQualification-scoped.
  * LOOT_ONLY and PLAYING share this check in Phase 2; PLAYING does not invent
  * a booster-access requirement.
  */
