@@ -90,9 +90,7 @@ export function CharactersView({ data }: { data: Page }) {
                       ) : (
                         <ul className="space-y-1">
                           {character.boosterAccess.approvals.map((approval) => (
-                            <li key={`${approval.role}-${approval.difficulty}`}>
-                              {approval.role} · {DIFFICULTY_LABELS[approval.difficulty]}
-                            </li>
+                            <li key={approval.difficulty}>{DIFFICULTY_LABELS[approval.difficulty]}</li>
                           ))}
                         </ul>
                       )}

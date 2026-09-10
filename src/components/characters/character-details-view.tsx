@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDateTime } from "@/lib/datetime";
-import { CHARACTER_ROLE_LABELS, CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
+import { REGION_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
@@ -13,15 +13,13 @@ import { CharacterLifecycleButton } from "@/components/characters/character-life
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
-import type { BoosterAccessStatus, RaidDifficulty } from "@/models/enums";
+import type { BoosterQualificationStatus } from "@/models/enums";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
 
-function statusLabel(status: BoosterAccessStatus | "NONE") {
-  if (status === "NONE") return "Not Requested";
-  if (status === "PENDING") return "Pending Review";
+function statusLabel(status: BoosterQualificationStatus | "NONE") {
+  if (status === "NONE") return "Not granted";
   if (status === "APPROVED") return "Approved";
-  if (status === "REJECTED") return "Rejected";
   return "Revoked";
 }
 
@@ -66,10 +64,6 @@ function BlizzardRefreshButton({ characterId }: { characterId: string }) {
 
 export function CharacterDetailsView({ data }: { data: Details }) {
   const panel = data.accessPanel;
-  const byDifficulty = panel.difficulties.map((difficulty) => ({
-    difficulty,
-    cells: panel.cells.filter((cell) => cell.difficulty === difficulty),
-  }));
   return (
     <div>
       <PageHeader
@@ -180,35 +174,26 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         <Card>
           <CardHeader
             title="Account booster access"
-            description={`${CLASS_LABELS[data.wowClass]} qualifications on your account. Shared by every matching ${CLASS_LABELS[data.wowClass]} character — not owned by this character.`}
+            description="Difficulty qualifications on your account. Shared by every character — not owned by this character. Approved difficulty unlocks all valid roles for each class."
             action={<DiscordBoosterApplicationCta discordTicketUrl={panel.discordTicketUrl} />}
           />
-          <div className="divide-y divide-border">
-            {byDifficulty.map(({ difficulty, cells }: { difficulty: RaidDifficulty; cells: typeof panel.cells }) => (
-              <div key={difficulty} className="px-4 py-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <DifficultyBadge difficulty={difficulty} />
-                </div>
-                <ul className="space-y-2 text-sm">
-                  {cells.map((cell) => (
-                    <li key={`${cell.role}-${cell.difficulty}`} className="flex flex-wrap items-center justify-between gap-2">
-                      <span>{CHARACTER_ROLE_LABELS[cell.role]}</span>
-                      <span className="flex items-center gap-2">
-                        {cell.status === "NONE" ? (
-                          <span className="text-xs text-muted">{statusLabel(cell.status)}</span>
-                        ) : (
-                          <AccessBadge status={cell.status} />
-                        )}
-                      </span>
-                      {cell.notes && (cell.status === "REJECTED" || cell.status === "REVOKED") ? (
-                        <p className="w-full text-xs text-muted">{cell.notes}</p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <ul className="divide-y divide-border">
+            {panel.difficulties.map((cell) => (
+              <li key={cell.difficulty} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                <DifficultyBadge difficulty={cell.difficulty} />
+                <span className="flex items-center gap-2">
+                  {cell.status === "NONE" ? (
+                    <span className="text-xs text-muted">{statusLabel(cell.status)}</span>
+                  ) : (
+                    <AccessBadge status={cell.status} />
+                  )}
+                </span>
+                {cell.notes && cell.status === "REVOKED" ? (
+                  <p className="w-full text-xs text-muted">{cell.notes}</p>
+                ) : null}
+              </li>
             ))}
-          </div>
+          </ul>
         </Card>
         <Card>
           <CardHeader
