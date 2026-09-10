@@ -10,7 +10,7 @@ import { attendanceService } from "@/services/attendance.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
-import type { AttendanceStatus, CharacterRole, ParticipationType, WowClass } from "@/models/enums";
+import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
 
 const raidId = WOW_RAID_CATALOG[0].id;
 const ids = {
