@@ -19,7 +19,7 @@ npm run dev
 
 `--legacy-peer-deps` is required because Better Auth still optionally peers Prisma 5–7 while this app uses Prisma 8 for domain data.
 
-Optional Battle.net character linking uses `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` (see `.env.example`). Seed, Discord login, and manual Characters work when those are empty.
+`BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` (see `.env.example`) are required for Add Character — Class/Item Level come from Blizzard's public Character Profile with no manual fallback. Optional Battle.net *account* linking/import uses the same vars. Seed and Discord login work when they are empty; adding a Character does not.
 
 Optional `DISCORD_BOOSTER_TICKET_URL` is a public Discord channel/ticket link shown when self-service BoosterAccess requests are disabled.
 
@@ -82,7 +82,7 @@ It is useful for local QA and deterministic Vitest runs. It is **not** required 
 
 The application must work when the database contains only a newly authenticated Discord user: zero characters, zero runs, zero signups, zero roster data, zero payouts.
 
-Seed and local QA do **not** require Battle.net. Leave `BLIZZARD_*` empty to keep Characters on manual CRUD. Optional linking is documented in [blizzard-integration.md](features/blizzard-integration.md).
+Seed itself does not require Battle.net — it inserts Characters directly. Interactive local QA of Add Character does: `BLIZZARD_*` must be set, since Class/Item Level have no manual fallback. Battle.net *account* linking stays optional on top of that and is documented in [blizzard-integration.md](features/blizzard-integration.md).
 
 Do not encode seeded user IDs or seeded run titles in production services.
 
@@ -107,11 +107,13 @@ npx prisma migration plan --name change_name --from 20260909T1304_run_payouts
 
 ## Character management QA
 
+Requires `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` set — Add Character always looks up Blizzard's public Character Profile.
+
 1. Sign in with Discord (empty account) or a development identity.
-2. Open `/characters` and add a character (EU and US both valid).
-3. Open Details, edit specialization/item level, deactivate, then reactivate.
+2. Open `/characters` → **Add Character**, look up a real Region/Realm/Name (EU and US both valid), confirm Class and Item Level render read-only from Blizzard, then choose a specialization and add.
+3. Open Details, edit name/realm/region/specialization; confirm Class and Item Level are not editable.
 4. Confirm Dashboard and Profile counts follow `activeCharacters` / `totalCharacters`.
 5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until an ADMIN grants matching BoosterAccess.
 6. From character details, open the Discord booster application CTA (when configured); as ADMIN, grant access on `/manage/booster-access` and confirm booster signup becomes available.
 
-When `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` are set, use Connect on `/characters` and Refresh on linked character details. Without those vars, Refresh stays unavailable and seed still works. Git workflow: [git-workflow.md](git-workflow.md).
+The same vars also enable Battle.net account **Connect** on `/characters` and **Refresh** on linked character details — separately optional, ownership-verified, on top of the Add Character lookup above. Git workflow: [git-workflow.md](git-workflow.md).

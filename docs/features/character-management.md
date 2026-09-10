@@ -4,7 +4,7 @@
 
 Let an authenticated user create and manage their own World of Warcraft characters without requiring seed data.
 
-Manual CRUD remains fully supported. Optional Battle.net integration enriches the **same** Character rows (import, link, item-level refresh). It does not introduce a second character model. See [blizzard-integration.md](blizzard-integration.md).
+Add Character resolves Class and Item Level from Blizzard's public Character Profile — the owner supplies Region/Realm/Name and chooses a specialization only. Optional Battle.net account integration (OAuth-backed, ownership-verified) enriches the **same** Character rows (import, link, item-level refresh). It does not introduce a second character model. See [blizzard-integration.md](blizzard-integration.md).
 
 ## Ownership
 
@@ -89,13 +89,20 @@ A newly created or imported character is **not** booster-eligible merely because
 
 Stored `CharacterRaidLockout` rows are read-only here. Operators cannot fabricate lockouts. Live Blizzard lockout sync is deferred.
 
-## Manual and Blizzard-backed data
+## Blizzard authority vs BoostingHub ownership
 
-Manual characters: name, realm, region, specialization, and item level are operator-maintained until linked.
+Two distinct Blizzard reads exist, and only one proves account ownership:
 
-Linked characters: Refresh pulls Blizzard `equipped_item_level` and may apply a safe rename. Specialization remains BoostingHub-owned after import. `lastSyncedAt` is set when a profile sync succeeds. Realm transfer is not applied automatically.
+| Read | Used by | Proves ownership? |
+| --- | --- | --- |
+| Public Character Profile (`profile/wow/character/...`, client-credentials) | Add Character lookup, best-effort enrichment | No — only that the character exists |
+| Account Profile (`profile/user/wow`, user OAuth) | Battle.net import/link | Yes |
 
-Refresh is available for linked characters when Battle.net is configured and the matching regional connection exists. Unlinked characters keep Refresh unavailable.
+For every Character, regardless of which path created or touched it: **Blizzard is authoritative for Class and equipped Item Level**. The owner never enters either value. Item level is `null` ("Unknown") when Blizzard has not supplied one — never a manual fallback, never `0`. Specialization is always BoostingHub-owned; Blizzard's active specialization is only a prefill suggestion.
+
+Add Character (Region/Realm/Name → Blizzard lookup → owner picks specialization) does not require a Battle.net connection and does not mark the Character as Blizzard-linked (`blizzardCharacterId` stays unset) — a public lookup is not proof of ownership. If the owner later connects and imports the real Battle.net account, a matching Character is offered as `link` rather than duplicated.
+
+Blizzard-linked characters (via Battle.net import/link) additionally support Refresh, which pulls the latest `equipped_item_level` and may apply a safe rename. A refresh that reads a valid profile but gets no item level back retains the character's last known value rather than clearing it or failing the whole refresh. `lastSyncedAt` is set when a profile sync succeeds. Realm transfer is not applied automatically. Refresh is available only when Battle.net is configured, the matching regional connection exists, and the Character is linked.
 
 Full connect/import/link/security policy: [blizzard-integration.md](blizzard-integration.md).
 
@@ -113,6 +120,7 @@ Full connect/import/link/security policy: [blizzard-integration.md](blizzard-int
 - Ownership is enforced in the service
 - Duplicate identity is enforced in the service and the unique constraint
 - Class/spec/role rules are enforced in the service
+- Class and item level can never be client-supplied: `createCharacterSchema` / `updateCharacterSchema` have no such fields, and the server re-resolves both from Blizzard before persisting
 - Clients cannot forge BoosterAccess or lockouts through these actions
 - Battle.net OAuth tokens are never persisted; see [blizzard-integration.md](blizzard-integration.md)
 

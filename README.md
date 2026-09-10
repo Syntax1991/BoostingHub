@@ -30,7 +30,7 @@ Phase 3 adds persistent draft selection, composition warnings, and transactional
 
 Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not required production state.
 
-Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Optional Battle.net linking can import or link the same Character rows and refresh item level when `BLIZZARD_*` is configured.
+Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Add Character resolves Class and Item Level from Blizzard's public Character Profile; the user only picks a specialization. Optional Battle.net account linking (ownership-verified) can import or link the same Character rows and refresh item level when `BLIZZARD_*` is configured.
 
 Booster Access Management lets that user request eligibility from character details and lets an ADMIN approve, reject, or revoke it.
 
@@ -105,7 +105,7 @@ If you do not have local PostgreSQL, `npx create-db@latest` can provision a temp
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord OAuth. Optional until an application exists |
 | `DEV_AUTH_ENABLED` | `true` enables the development identity picker. Ignored in production |
 | `DEV_AUTH_PASSWORD` | Shared password for seeded credential accounts |
-| `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` / `BLIZZARD_REDIRECT_URI` | Optional Battle.net character linking. Leave empty to keep manual Characters only |
+| `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET` / `BLIZZARD_REDIRECT_URI` | Required for Add Character (Class/Item Level lookup, no manual fallback). Also enables optional Battle.net account linking |
 
 ### Discord OAuth
 
@@ -163,7 +163,7 @@ See [docs/features/run-management.md](docs/features/run-management.md).
 
 ### Testing character management
 
-A Discord user with zero characters can use `/characters` → **Add Character**. Seed is not required. Battle.net is optional: when `BLIZZARD_*` is set, connect EU/US from `/characters` to import or link characters; Refresh updates item level on linked rows. See [docs/features/blizzard-integration.md](docs/features/blizzard-integration.md).
+A Discord user with zero characters can use `/characters` → **Add Character**, look up a real character by Region/Realm/Name, and pick a specialization — Blizzard supplies Class and Item Level. This lookup requires `BLIZZARD_*` to be set (there is no manual fallback) but needs no Battle.net account connection — it uses client credentials, not user OAuth. Battle.net account linking is separately optional on top of that: when connected, EU/US from `/characters` can import or link characters with ownership verified; Refresh updates item level on linked rows. See [docs/features/blizzard-integration.md](docs/features/blizzard-integration.md).
 
 With a development identity:
 
