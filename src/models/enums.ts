@@ -82,6 +82,13 @@ export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 export const SETTLEMENT_STATUSES = ["DRAFT", "FINALIZED", "PAID"] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
 
+/** No EXPIRED status: Strikes never expire automatically in this contract. */
+export const STRIKE_STATUSES = ["ACTIVE", "REVOKED"] as const;
+export type StrikeStatus = (typeof STRIKE_STATUSES)[number];
+
+export const DEDUCT_STATUSES = ["ACTIVE", "REVOKED"] as const;
+export type DeductStatus = (typeof DEDUCT_STATUSES)[number];
+
 export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(
   (status) => status !== "UNMARKED",
 ) as readonly Exclude<AttendanceStatus, "UNMARKED">[];
