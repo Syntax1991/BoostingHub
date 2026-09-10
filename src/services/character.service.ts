@@ -15,15 +15,34 @@ import { findSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { characterBlizzardService } from "@/services/character-blizzard.service";
 import { lockoutService } from "@/services/lockout.service";
 
+/**
+ * Low-level, already-resolved creation input. Not reachable from any
+ * controller — the public Add Character flow always resolves wowClass and
+ * itemLevel from Blizzard first via addCharacterFromBlizzard below.
+ */
 export type CharacterWriteInput = {
   name: string;
   realm: string;
   region: WowRegion;
   wowClass: WowClass;
   specialization: string;
-  itemLevel: number;
+  itemLevel: number | null;
+};
+
+export type CharacterLookupInput = {
+  name: string;
+  realm: string;
+  region: WowRegion;
+};
+
+export type CharacterCreateFromBlizzardInput = {
+  name: string;
+  realm: string;
+  region: WowRegion;
+  specialization: string;
 };
 
 function uniqueViolation(error: unknown): boolean {
@@ -247,10 +266,49 @@ export const characterService = {
     }
   },
 
+  /**
+   * Read-only Blizzard preview for the Add Character lookup step. Does not
+   * touch the database and proves nothing about account ownership — it is a
+   * public Character Profile read, not the authenticated Battle.net import.
+   */
+  async previewCharacterFromBlizzard(input: CharacterLookupInput) {
+    const identity = prepareIdentity(input);
+    return characterBlizzardService.lookupPublicCharacterProfile(
+      identity.name,
+      identity.realm,
+      identity.region,
+    );
+  },
+
+  /**
+   * Public Add Character entry point. The caller only identifies which
+   * character to look up plus the BoostingHub-owned specialization; wowClass
+   * and itemLevel are re-resolved from Blizzard here, never trusted from the
+   * request, so a stale/forged client payload cannot persist a fake class or
+   * item level.
+   */
+  async addCharacterFromBlizzard(user: AuthenticatedUser, input: CharacterCreateFromBlizzardInput) {
+    const identity = prepareIdentity(input);
+    const resolved = await characterBlizzardService.lookupPublicCharacterProfile(
+      identity.name,
+      identity.realm,
+      identity.region,
+    );
+
+    return this.createCharacter(user, {
+      name: input.name,
+      realm: input.realm,
+      region: input.region,
+      wowClass: resolved.wowClass,
+      specialization: input.specialization,
+      itemLevel: resolved.itemLevel,
+    });
+  },
+
   async updateCharacter(
     user: AuthenticatedUser,
     characterId: string,
-    input: Omit<CharacterWriteInput, "wowClass">,
+    input: Omit<CharacterWriteInput, "wowClass" | "itemLevel">,
   ) {
     const character = await characterRepository.findById(characterId);
     if (!character) {
@@ -261,7 +319,8 @@ export const characterService = {
     const identity = prepareIdentity({ ...input, region: input.region });
     const spec = resolveClassSpecialization(character.wowClass, input.specialization);
     // wowClass is taken from the stored row, not the write payload, so class
-    // stays immutable even if a client forges a class field.
+    // stays immutable even if a client forges a class field. Item level is
+    // Blizzard-authoritative and is never part of an edit.
     await assertIdentityAvailable({
       userId: user.id,
       region: identity.region,
@@ -270,15 +329,11 @@ export const characterService = {
       excludeId: character.id,
     });
 
-    // Linked characters take item level from Blizzard refresh only.
-    const itemLevel = character.blizzardCharacterId ? character.itemLevel : input.itemLevel;
-
     try {
       await characterRepository.update(character.id, {
         ...identity,
         specialization: spec.specialization,
         primaryRole: spec.primaryRole,
-        itemLevel,
       });
     } catch (error) {
       if (uniqueViolation(error)) {

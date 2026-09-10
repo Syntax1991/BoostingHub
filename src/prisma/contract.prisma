@@ -269,7 +269,9 @@ model Character {
   wowClass             WowClass
   specialization       String?
   primaryRole          CharacterRole
-  itemLevel            Int
+  /// Blizzard-authoritative equipped item level. Null when Blizzard has not
+  /// supplied one yet (never a 0 sentinel; never a manual User override).
+  itemLevel            Int?
   isActive             Boolean       @default(true)
   /// Scoped Blizzard identity is region + blizzardRealmId + blizzardCharacterId.
   /// Not a global GUID; may change on realm transfer.

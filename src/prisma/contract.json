@@ -1342,7 +1342,7 @@
                 }
               },
               "itemLevel": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "pg/int4@1",
                   "kind": "scalar"
@@ -4957,7 +4957,7 @@
                 "itemLevel": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
-                  "nullable": false
+                  "nullable": true
                 },
                 "lastSyncedAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -7091,7 +7091,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "99195123b1ac9414e49fb31343a888dcb59fb8e1b9f6dca72d2a03785f3c0220"
+    "storageHash": "d177d99e5ee7ef8c389335cfff0f322b34d28e753c2fd2afef5fad4ddc88657f"
   },
   "execution": {
     "executionHash": "6340080859992f5627667ca103f99d79edf424ffa921831172e3a03988a79cc8",
