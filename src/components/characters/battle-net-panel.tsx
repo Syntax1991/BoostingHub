@@ -69,17 +69,21 @@ export function BattleNetPanel({
 }) {
   const router = useRouter();
   const flash = flashMessage(battleNetFlash);
-  const [openRegion, setOpenRegion] = useState<WowRegion | null>(null);
+  const [openRegion, setOpenRegion] = useState<WowRegion | null>(() => {
+    if (battleNetFlash.status !== "connected") return null;
+    const region = battleNetFlash.region;
+    if (region !== "EU" && region !== "US") return null;
+    if (!candidatesForRegion(battleNet, region)) return null;
+    return region;
+  });
   const lastImportButtonRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (battleNetFlash.status !== "connected") return;
     const region = battleNetFlash.region;
     if (region !== "EU" && region !== "US") return;
-    if (!candidatesForRegion(battleNet, region)) return;
-    setOpenRegion(region);
     router.replace("/characters", { scroll: false });
-  }, [battleNet, battleNetFlash, router]);
+  }, [battleNetFlash.status, battleNetFlash.region, router]);
 
   const activeCandidates = openRegion ? candidatesForRegion(battleNet, openRegion) : null;
   const activeConnection = openRegion

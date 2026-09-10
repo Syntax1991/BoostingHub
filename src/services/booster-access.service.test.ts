@@ -81,7 +81,6 @@ async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "Boos
 
 async function cleanupOwnerDomain() {
   paladinSerial = 0;
-  shamanSerial = 0;
   createdSignupIds.length = 0;
   createdAccessIds.length = 0;
   createdCharacterIds.length = 0;
@@ -109,7 +108,6 @@ async function cleanupGeneratedRows() {
 }
 
 let paladinSerial = 0;
-let shamanSerial = 0;
 
 async function createPaladin(owner: AuthenticatedUser) {
   paladinSerial += 1;
@@ -127,7 +125,6 @@ async function createPaladin(owner: AuthenticatedUser) {
 }
 
 async function createShamanHealer(owner: AuthenticatedUser, name: string) {
-  shamanSerial += 1;
   const character = await characterService.createCharacter(owner, {
     name,
     realm: "Area 52",
@@ -141,7 +138,6 @@ async function createShamanHealer(owner: AuthenticatedUser, name: string) {
 }
 
 async function createShamanDps(owner: AuthenticatedUser, name: string) {
-  shamanSerial += 1;
   const character = await characterService.createCharacter(owner, {
     name,
     realm: "Area 52",

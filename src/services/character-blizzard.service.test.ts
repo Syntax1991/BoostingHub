@@ -722,7 +722,7 @@ describe("characterBlizzardService.refreshCharacter", () => {
               difficulty: "NORMAL",
               progressCompleted: 8,
               progressTotal: 8,
-              encounters: catalog.bosses.map((boss, index) => ({
+              encounters: catalog.bosses.map((boss) => ({
                 encounterId: String(boss.blizzardEncounterIds[0]),
                 encounterName: boss.name,
                 completedCount: 1,
