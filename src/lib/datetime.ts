@@ -12,7 +12,8 @@ function pad(value: number): string {
  * Node and the browser disagree on some `en-GB` month names (`Sept` vs `Sep`).
  * Assemble display strings from numeric `formatToParts` so SSR and client hydration match.
  */
-function zonedParts(value: Date, timeZone: string) {
+/** Exported for callers that need raw weekday/hour/minute in a timezone (e.g. Discord channel naming). */
+export function zonedParts(value: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     weekday: "short",

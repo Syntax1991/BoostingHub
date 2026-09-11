@@ -643,6 +643,13 @@ model RunDiscordPost {
   id                  String   @id @default(uuid())
   runId               String   @unique
   run                 Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  /// The Run's dedicated Discord text channel, when per-Run channel
+  /// provisioning is enabled (bot-side DISCORD_RUN_CATEGORY_ID configured).
+  /// Recorded as soon as the channel is created — independent of whether a
+  /// signup message has been posted into it yet — so a crash between
+  /// creation and posting never creates a second channel on retry. Identity
+  /// is this id, never the generated name (names may be renamed later).
+  runChannelId        String?
   signupChannelId     String?
   signupMessageId     String?
   signupPostedAt      TimestamptzString?

@@ -4,6 +4,7 @@ import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
+import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
@@ -386,5 +387,105 @@ describe("discordSyncService.getRosterEmbedData", () => {
 
     work = await discordSyncService.listSyncWork();
     expect(work.roster.some((item) => item.runId === runId && item.existingMessageId === "roster-msg-1")).toBe(true);
+  });
+});
+
+describe("discordSyncService — per-Run channel provisioning", () => {
+  let channelRunId = "";
+
+  beforeAll(async () => {
+    channelRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(channelRunId);
+    await runService.openRun(lead, channelRunId);
+  }, 60_000);
+
+  it("always computes a desiredChannelName, with no channel provisioned yet", async () => {
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    expect(item?.existingRunChannelId).toBeNull();
+    expect(item?.desiredChannelName).toMatch(/^[a-z]{3}-\d{4}-hc-discord-lead$/);
+  });
+
+  it("persists the channel id as soon as it's recorded, independent of any signup message", async () => {
+    await discordSyncService.recordRunChannel({ runId: channelRunId, channelId: "run-chan-1" });
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    expect(item?.existingRunChannelId).toBe("run-chan-1");
+    // No signup message recorded yet, so this is still sync work.
+    expect(item?.existingMessageId).toBeNull();
+  });
+
+  it("repeated sync never re-provisions a channel: the same channel id is reused every pass", async () => {
+    await discordSyncService.recordSignupPost({ runId: channelRunId, channelId: "run-chan-1", messageId: "run-msg-1" });
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === channelRunId)).toBe(false);
+
+    work = await discordSyncService.listSyncWork();
+    const stillNoWork = !work.signups.some((entry) => entry.runId === channelRunId);
+    expect(stillNoWork).toBe(true);
+
+    const persisted = await runDiscordPostRepository.findByRunId(channelRunId);
+    expect(persisted?.runChannelId).toBe("run-chan-1");
+  });
+
+  it("a schedule change produces a new desiredChannelName (rename), while the persisted channel id is untouched", async () => {
+    const before = await runDiscordPostRepository.findByRunId(channelRunId);
+    const newSchedule = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+
+    await runService.updateRun(lead, {
+      runId: channelRunId,
+      title: "Channel Rename Test",
+      raidId,
+      difficulty: "HEROIC",
+      scheduledStartAt: newSchedule,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    // The desired name changed (new schedule), so this is sync work again —
+    // but the run's channel identity (existingRunChannelId) never changes:
+    // a rename edits the same channel, it does not create a replacement.
+    expect(item).toBeTruthy();
+    expect(item?.existingRunChannelId).toBe("run-chan-1");
+    expect(item?.existingRunChannelId).toBe(before?.runChannelId);
+  });
+
+  it("survives a restart: a fresh read of persisted state still finds the same channel id (no duplicate provisioning)", async () => {
+    const persisted = await runDiscordPostRepository.findByRunId(channelRunId);
+    expect(persisted?.runChannelId).toBe("run-chan-1");
+  });
+
+  it("a Run that already reached CANCELLED without ever being signup-available never gets a channel/signup post", async () => {
+    const neverOpenedRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(neverOpenedRunId);
+    await runService.cancelRun(lead, neverOpenedRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === neverOpenedRunId)).toBe(false);
+
+    const persisted = await runDiscordPostRepository.findByRunId(neverOpenedRunId);
+    expect(persisted).toBeNull();
   });
 });

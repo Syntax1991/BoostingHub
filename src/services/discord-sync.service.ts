@@ -1,4 +1,5 @@
 import type { CharacterRole, RaidDifficulty, RunStatus } from "@/models/enums";
+import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
@@ -52,15 +53,49 @@ export type RosterEmbedData = {
 /**
  * existingChannelId/existingMessageId let the bot edit its own prior post;
  * both are null when nothing has been posted for this Run yet.
+ * existingRunChannelId/desiredChannelName drive per-Run channel provisioning
+ * (bot-side DISCORD_RUN_CATEGORY_ID) — desiredChannelName is always computed
+ * so a schedule/difficulty/raid-lead change is reflected as a rename even
+ * when a bot instance is running in legacy single-channel mode and ignores it.
  */
-export type SignupSyncWorkItem = { runId: string; existingChannelId: string | null; existingMessageId: string | null };
-export type RosterSyncWorkItem = { runId: string; existingChannelId: string | null; existingMessageId: string | null };
+export type SignupSyncWorkItem = {
+  runId: string;
+  existingChannelId: string | null;
+  existingMessageId: string | null;
+  existingRunChannelId: string | null;
+  desiredChannelName: string;
+};
+export type RosterSyncWorkItem = {
+  runId: string;
+  existingChannelId: string | null;
+  existingMessageId: string | null;
+  existingRunChannelId: string | null;
+  desiredChannelName: string;
+};
 
-function signupSignature(run: { status: RunStatus; signupsOpen: boolean; signups: Array<{ userId: string; status: string }> }): string {
+function desiredChannelNameFor(run: { scheduledStartAt: string; difficulty: RaidDifficulty; raidLeadName: string }): string {
+  return buildDiscordRunChannelName({
+    scheduledStartAt: run.scheduledStartAt,
+    difficulty: run.difficulty,
+    raidLeadName: run.raidLeadName,
+  });
+}
+
+function signupSignature(run: {
+  status: RunStatus;
+  signupsOpen: boolean;
+  signups: Array<{ userId: string; status: string }>;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  raidLeadName: string;
+}): string {
   const uniqueSignupCount = new Set(
     run.signups.filter((signup) => signup.status !== "WITHDRAWN").map((signup) => signup.userId),
   ).size;
-  return `${uniqueSignupCount}:${isSignupWindowOpen(run.status, run.signupsOpen)}:${run.status}`;
+  // desiredChannelName is folded in so a schedule/difficulty/raid-lead change
+  // (which changes the desired channel name) always produces sync work, even
+  // when nothing about the signup count/window/status itself changed.
+  return `${uniqueSignupCount}:${isSignupWindowOpen(run.status, run.signupsOpen)}:${run.status}:${desiredChannelNameFor(run)}`;
 }
 
 function toMember(row: RosterSignupRow): RosterEmbedMember {
@@ -117,6 +152,8 @@ export const discordSyncService = {
             runId: run.id,
             existingChannelId: post?.signupChannelId ?? null,
             existingMessageId: post?.signupMessageId ?? null,
+            existingRunChannelId: post?.runChannelId ?? null,
+            desiredChannelName: desiredChannelNameFor(run),
           });
         }
       }
@@ -127,6 +164,8 @@ export const discordSyncService = {
             runId: run.id,
             existingChannelId: post?.rosterChannelId ?? null,
             existingMessageId: post?.rosterMessageId ?? null,
+            existingRunChannelId: post?.runChannelId ?? null,
+            desiredChannelName: desiredChannelNameFor(run),
           });
         }
       }
@@ -183,6 +222,11 @@ export const discordSyncService = {
       },
       totalSelected: selected.length,
     };
+  },
+
+  /** Recorded immediately on channel creation, before any message is posted into it. */
+  async recordRunChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await runDiscordPostRepository.recordRunChannel(input);
   },
 
   async recordSignupPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {

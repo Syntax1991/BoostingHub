@@ -3,6 +3,7 @@ import { asNumberOrNull, asString, asStringOrNull } from "@/lib/persistence";
 
 export type RunDiscordPostRecord = {
   runId: string;
+  runChannelId: string | null;
   signupChannelId: string | null;
   signupMessageId: string | null;
   signupPostedAt: string | null;
@@ -16,6 +17,7 @@ export type RunDiscordPostRecord = {
 function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
   return {
     runId: asString(row.runId),
+    runChannelId: asStringOrNull(row.runChannelId),
     signupChannelId: asStringOrNull(row.signupChannelId),
     signupMessageId: asStringOrNull(row.signupMessageId),
     signupPostedAt: asStringOrNull(row.signupPostedAt),
@@ -70,6 +72,15 @@ export const runDiscordPostRepository = {
       lastRosterVersion: input.lastRosterVersion,
     });
   },
+
+  /**
+   * Recorded as soon as the Run's dedicated channel is created — before any
+   * message is posted into it — so a crash between creation and posting
+   * never causes a retry to create a second channel.
+   */
+  async recordRunChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await upsert(input.runId, { runChannelId: input.channelId });
+  },
 };
 
 async function upsert(runId: string, patch: Record<string, unknown>): Promise<void> {
@@ -82,6 +93,7 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
   await orm.RunDiscordPost.create({
     id: crypto.randomUUID(),
     runId,
+    runChannelId: null,
     signupChannelId: null,
     signupMessageId: null,
     signupPostedAt: null,

@@ -42,8 +42,21 @@ export class BotApiClient {
 
   listSyncWork() {
     return this.request<{
-      signups: Array<{ runId: string; existingChannelId: string | null; existingMessageId: string | null; embed: unknown }>;
-      roster: Array<{ runId: string; existingChannelId: string | null; existingMessageId: string | null }>;
+      signups: Array<{
+        runId: string;
+        existingChannelId: string | null;
+        existingMessageId: string | null;
+        existingRunChannelId: string | null;
+        desiredChannelName: string;
+        embed: unknown;
+      }>;
+      roster: Array<{
+        runId: string;
+        existingChannelId: string | null;
+        existingMessageId: string | null;
+        existingRunChannelId: string | null;
+        desiredChannelName: string;
+      }>;
     }>("/api/bot/discord/sync");
   }
 
@@ -51,7 +64,12 @@ export class BotApiClient {
     return this.request<unknown>(`/api/bot/runs/${runId}/roster`);
   }
 
-  recordDiscordState(runId: string, input: { kind: "signup" | "roster"; channelId: string; messageId: string }) {
+  recordDiscordState(
+    runId: string,
+    input:
+      | { kind: "channel"; channelId: string }
+      | { kind: "signup" | "roster"; channelId: string; messageId: string },
+  ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
       method: "PUT",
       body: JSON.stringify(input),

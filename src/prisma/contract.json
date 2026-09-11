@@ -2435,6 +2435,13 @@
                   "kind": "scalar"
                 }
               },
+              "runChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "runId": {
                 "nullable": false,
                 "type": {
@@ -2510,6 +2517,9 @@
                 },
                 "rosterPostedAt": {
                   "column": "rosterPostedAt"
+                },
+                "runChannelId": {
+                  "column": "runChannelId"
                 },
                 "runId": {
                   "column": "runId"
@@ -6167,6 +6177,11 @@
                   "nativeType": "timestamptz",
                   "nullable": true
                 },
+                "runChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "runId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -7834,7 +7849,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "7dff7df8f540891dbd2f78ace1eb7bbc038ab04448d541c5ff0c80bc9aeccd54"
+    "storageHash": "a64a235b66c4f4ce4c07ae6d47fc706c5e40312723aa26aa5aa1575223f9a585"
   },
   "execution": {
     "executionHash": "8708be34c85acf0289f559b4c580f8283c7d229e8102c2e0fec552d931217b64",
