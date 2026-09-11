@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { updateRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
-import { DIFFICULTY_LABELS } from "@/lib/labels";
-import { RAID_DIFFICULTIES, type RaidDifficulty } from "@/models/enums";
+import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { buildRunTitle } from "@/lib/run-title";
+import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
+import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 export function RunEditDialog({
@@ -25,15 +27,22 @@ export function RunEditDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [title, setTitle] = useState(run.title);
   const [raidId, setRaidId] = useState(run.raidId);
   const [difficulty, setDifficulty] = useState<RaidDifficulty>(run.difficulty);
+  const [lootType, setLootType] = useState<RunLootType>(run.lootType);
   const [scheduledLocal, setScheduledLocal] = useState(toDatetimeLocalValue(run.scheduledStartAt));
   const [raidLeadId, setRaidLeadId] = useState(run.raidLeadId);
   const [notes, setNotes] = useState(run.notes ?? "");
   const [desiredTankCount, setDesiredTankCount] = useState(run.desiredTankCount);
   const [desiredHealerCount, setDesiredHealerCount] = useState(run.desiredHealerCount);
   const [desiredDpsCount, setDesiredDpsCount] = useState(run.desiredDpsCount);
+  const [plannedBossCount, setPlannedBossCount] = useState(run.plannedBossCount);
+
+  const selectedRaid = editor?.raids.find((raid) => raid.id === raidId);
+  const totalBossCount = selectedRaid?.totalBossCount ?? run.totalBossCount;
+
+  const raidLeadName =
+    editor?.raidLeads.find((lead) => lead.id === raidLeadId)?.name ?? run.raidLeadName;
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -49,6 +58,37 @@ export function RunEditDialog({
     onClose();
   }
 
+  function selectRaid(nextRaidId: string) {
+    setRaidId(nextRaidId);
+    const raid = editor?.raids.find((candidate) => candidate.id === nextRaidId);
+    if (raid) {
+      setPlannedBossCount(raid.totalBossCount);
+    }
+  }
+
+  function selectDifficulty(nextDifficulty: RaidDifficulty) {
+    setDifficulty(nextDifficulty);
+    if (!isLootTypeAllowedForDifficulty(nextDifficulty, lootType)) {
+      setLootType("UNSAVED");
+    }
+  }
+
+  const generatedTitle = useMemo(() => {
+    try {
+      const scheduledStartAt = fromDatetimeLocalValue(scheduledLocal);
+      return buildRunTitle({
+        scheduledStartAt,
+        difficulty,
+        lootType,
+        plannedBossCount,
+        totalBossCount,
+        raidLeadName,
+      });
+    } catch {
+      return "—";
+    }
+  }, [scheduledLocal, difficulty, lootType, plannedBossCount, totalBossCount, raidLeadName]);
+
   function submit(event: { preventDefault(): void }) {
     event.preventDefault();
     setError(null);
@@ -63,15 +103,16 @@ export function RunEditDialog({
 
       const result = await updateRunAction({
         runId: run.id,
-        title,
         raidId,
         difficulty,
+        lootType,
         scheduledStartAt,
         raidLeadId: capabilities.canReassignRaidLead ? raidLeadId : undefined,
         notes: notes.trim() || null,
         desiredTankCount,
         desiredHealerCount,
         desiredDpsCount,
+        plannedBossCount,
       });
       if (!result.ok) {
         setError(result.message);
@@ -109,22 +150,13 @@ export function RunEditDialog({
           </p>
         ) : null}
         <label className="block text-sm">
-          <span className="mb-1 block text-muted">Title</span>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            disabled={!capabilities.canEditPlanning}
-            className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
-          />
-        </label>
-        <label className="block text-sm">
           <span className="mb-1 block text-muted">Raid</span>
           <select
             aria-label="Raid"
             value={raidId}
             disabled={!capabilities.canEditIdentity}
             title={!capabilities.canEditIdentity ? "Raid cannot change after signup history exists." : undefined}
-            onChange={(event) => setRaidId(event.target.value)}
+            onChange={(event) => selectRaid(event.target.value)}
             className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {editor.raids.map((raid) => (
@@ -141,7 +173,7 @@ export function RunEditDialog({
             value={difficulty}
             disabled={!capabilities.canEditIdentity}
             title={!capabilities.canEditIdentity ? "Difficulty cannot change after signup history exists." : undefined}
-            onChange={(event) => setDifficulty(event.target.value as RaidDifficulty)}
+            onChange={(event) => selectDifficulty(event.target.value as RaidDifficulty)}
             className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {RAID_DIFFICULTIES.map((value) => (
@@ -152,6 +184,25 @@ export function RunEditDialog({
           </select>
         </label>
         <label className="block text-sm">
+          <span className="mb-1 block text-muted">Loot Type</span>
+          <select
+            aria-label="Loot Type"
+            value={lootType}
+            disabled={!capabilities.canEditPlanning}
+            onChange={(event) => setLootType(event.target.value as RunLootType)}
+            className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {RUN_LOOT_TYPES.map((value) => (
+              <option key={value} value={value} disabled={!isLootTypeAllowedForDifficulty(difficulty, value)}>
+                {RUN_LOOT_TYPE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+          {difficulty === "MYTHIC" ? (
+            <span className="mt-1 block text-xs text-muted">Saved runs are not available for Mythic difficulty.</span>
+          ) : null}
+        </label>
+        <label className="block text-sm">
           <span className="mb-1 block text-muted">Scheduled start (Europe/Berlin)</span>
           <input
             type="datetime-local"
@@ -160,6 +211,20 @@ export function RunEditDialog({
             onChange={(event) => setScheduledLocal(event.target.value)}
             className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-muted">Planned bosses</span>
+          <input
+            type="number"
+            min={1}
+            max={totalBossCount}
+            value={plannedBossCount}
+            disabled={!capabilities.canEditPlanning}
+            onChange={(event) => setPlannedBossCount(Number(event.target.value))}
+            className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Planned bosses"
+          />
+          <span className="mt-1 block text-xs text-muted">Out of {totalBossCount} total bosses in this raid.</span>
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted">Raid Lead</span>
@@ -239,6 +304,10 @@ export function RunEditDialog({
             className="w-full rounded-md border border-border bg-surface px-2 py-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
+        <div className="rounded-md border border-border bg-surface px-3 py-2 text-sm">
+          <span className="block text-muted">Generated title</span>
+          <span className="font-medium">{generatedTitle}</span>
+        </div>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
           <Button type="button" variant="secondary" onClick={close}>
             Close
