@@ -6,7 +6,12 @@ import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signu
 import type { RosterEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 
 type SyncWork = Awaited<ReturnType<BotApiClient["listSyncWork"]>>;
-type ChannelWorkItem = { runId: string; existingRunChannelId: string | null; desiredChannelName: string };
+type ChannelWorkItem = {
+  runId: string;
+  existingRunChannelId: string | null;
+  desiredChannelName: string;
+  archived: boolean;
+};
 
 /**
  * Starts polling GET /api/bot/discord/sync. Discord availability never
@@ -65,7 +70,43 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  *
  * Legacy mode — no category configured: always the single global channel
  * from env (`DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID`).
+ *
+ * Archive movement: an existing channel whose parent doesn't match the
+ * Run's current archived state (`item.archived`) is moved — never
+ * recreated, never renamed for this reason alone, never deleted. This is
+ * the only effect Archive/Restore has here; a Run without a channel never
+ * gets one provisioned just because it was archived or restored.
  */
+/**
+ * Moves an already-resolved channel to whichever category its Run's current
+ * archived state calls for — a no-op when it's already there. Skipped
+ * (warning only, never an error) when the target category isn't configured,
+ * so an unconfigured DISCORD_RUN_ARCHIVE_CATEGORY_ID degrades to "leave the
+ * channel where it is" rather than blocking the rest of sync.
+ */
+async function moveChannelForArchiveState(
+  channel: Awaited<ReturnType<Client["channels"]["fetch"]>>,
+  env: BotEnv,
+  item: ChannelWorkItem,
+): Promise<void> {
+  if (!channel || !("setParent" in channel) || !("parentId" in channel)) return;
+
+  const desiredParentId = item.archived ? env.discordRunArchiveCategoryId : env.discordRunCategoryId;
+  if (!desiredParentId) {
+    if (item.archived) {
+      console.warn(
+        `[discord-bot] run ${item.runId} is archived but DISCORD_RUN_ARCHIVE_CATEGORY_ID is unset — leaving its channel where it is`,
+      );
+    }
+    return;
+  }
+  if (channel.parentId === desiredParentId) return;
+
+  await (channel as { setParent: (id: string) => Promise<unknown> }).setParent(desiredParentId).catch((error: unknown) => {
+    console.error(`[discord-bot] failed to move channel for run ${item.runId} to category ${desiredParentId}`, error);
+  });
+}
+
 async function resolveRunChannel(
   client: Client,
   env: BotEnv,
@@ -86,6 +127,7 @@ async function resolveRunChannel(
           console.error(`[discord-bot] failed to rename channel for run ${item.runId}`, error);
         });
       }
+      await moveChannelForArchiveState(existing, env, item);
       return item.existingRunChannelId;
     }
     // Stored channel id no longer resolves (deleted in Discord) — fall through.

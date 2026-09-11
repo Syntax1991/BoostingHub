@@ -5,6 +5,7 @@ import { orm } from "@/lib/prisma";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import { runRepository } from "@/repositories/run.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
@@ -575,5 +576,67 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
     const work = await discordSyncService.listSyncWork();
     expect(work.roster.some((entry) => entry.runId === orphanRunId)).toBe(false);
+  });
+});
+
+describe("discordSyncService — archive category movement", () => {
+  it("flags archived:true after Archive and archived:false again after Restore, with the channel identity untouched", async () => {
+    const archiveRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(archiveRunId);
+    await runService.openRun(lead, archiveRunId);
+    await discordSyncService.recordRunChannel({ runId: archiveRunId, channelId: "archive-chan-1" });
+    await discordSyncService.recordSignupPost({ runId: archiveRunId, channelId: "archive-chan-1", messageId: "archive-msg-1" });
+
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === archiveRunId)).toBe(false);
+
+    await runRepository.updateFields(archiveRunId, { status: "CANCELLED" });
+    await runService.archiveRun(lead, archiveRunId);
+
+    work = await discordSyncService.listSyncWork();
+    const archived = work.signups.find((entry) => entry.runId === archiveRunId);
+    expect(archived?.archived).toBe(true);
+    expect(archived?.existingRunChannelId).toBe("archive-chan-1");
+
+    // The bot resyncs (same channel, same message) once it observes the new signature.
+    await discordSyncService.recordSignupPost({ runId: archiveRunId, channelId: "archive-chan-1", messageId: "archive-msg-1" });
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === archiveRunId)).toBe(false);
+
+    await runService.restoreRun(lead, archiveRunId);
+    work = await discordSyncService.listSyncWork();
+    const restored = work.signups.find((entry) => entry.runId === archiveRunId);
+    expect(restored?.archived).toBe(false);
+    expect(restored?.existingRunChannelId).toBe("archive-chan-1");
+  });
+
+  it("generates no sync work — and so requests no channel — for an archived Run that never had Discord presence", async () => {
+    const bareRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(bareRunId);
+    await runRepository.updateFields(bareRunId, { status: "CANCELLED" });
+    await runService.archiveRun(lead, bareRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === bareRunId)).toBe(false);
+    expect(work.roster.some((entry) => entry.runId === bareRunId)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(bareRunId)).toBeNull();
   });
 });

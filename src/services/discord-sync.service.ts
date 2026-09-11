@@ -65,6 +65,8 @@ export type SignupSyncWorkItem = {
   existingMessageId: string | null;
   existingRunChannelId: string | null;
   desiredChannelName: string;
+  /** Whether the Run's channel, if any, belongs in the archive category rather than the active one. */
+  archived: boolean;
 };
 export type RosterSyncWorkItem = {
   runId: string;
@@ -72,6 +74,7 @@ export type RosterSyncWorkItem = {
   existingMessageId: string | null;
   existingRunChannelId: string | null;
   desiredChannelName: string;
+  archived: boolean;
 };
 
 function desiredChannelNameFor(run: { scheduledStartAt: string; difficulty: RaidDifficulty; raidLeadName: string }): string {
@@ -89,14 +92,17 @@ function signupSignature(run: {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   raidLeadName: string;
+  archivedAt: string | null;
 }): string {
   const uniqueSignupCount = new Set(
     run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
   ).size;
-  // desiredChannelName is folded in so a schedule/difficulty/raid-lead change
-  // (which changes the desired channel name) always produces sync work, even
-  // when nothing about the signup count/window/status itself changed.
-  return `${uniqueSignupCount}:${isSignupWindowOpen(run.status, run.signupsOpen)}:${run.status}:${desiredChannelNameFor(run)}`;
+  // desiredChannelName and archived are folded in so a schedule/difficulty/
+  // raid-lead change, or an Archive/Restore, always produces sync work (the
+  // latter is how the bot notices it needs to move the Run's channel to/from
+  // the archive category) even when nothing about the signup count/window/
+  // status itself changed.
+  return `${uniqueSignupCount}:${isSignupWindowOpen(run.status, run.signupsOpen)}:${run.status}:${desiredChannelNameFor(run)}:${Boolean(run.archivedAt)}`;
 }
 
 function toMember(row: RosterSignupRow): RosterEmbedMember {
@@ -155,6 +161,7 @@ export const discordSyncService = {
             existingMessageId: post?.signupMessageId ?? null,
             existingRunChannelId: post?.runChannelId ?? null,
             desiredChannelName: desiredChannelNameFor(run),
+            archived: Boolean(run.archivedAt),
           });
         }
       }
@@ -174,6 +181,7 @@ export const discordSyncService = {
             existingMessageId: post?.rosterMessageId ?? null,
             existingRunChannelId: post?.runChannelId ?? null,
             desiredChannelName: desiredChannelNameFor(run),
+            archived: Boolean(run.archivedAt),
           });
         }
       }

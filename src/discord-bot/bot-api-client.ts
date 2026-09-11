@@ -76,6 +76,7 @@ export class BotApiClient {
         existingMessageId: string | null;
         existingRunChannelId: string | null;
         desiredChannelName: string;
+        archived: boolean;
         embed: unknown;
       }>;
       roster: Array<{
@@ -84,6 +85,7 @@ export class BotApiClient {
         existingMessageId: string | null;
         existingRunChannelId: string | null;
         desiredChannelName: string;
+        archived: boolean;
       }>;
     }>("/api/bot/discord/sync");
   }
