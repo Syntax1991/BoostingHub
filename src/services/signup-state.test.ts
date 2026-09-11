@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planCharacterOfferReconciliation, type OfferReconciliationSignup } from "@/services/signup-state";
+import { isActiveSignupOffer, planCharacterOfferReconciliation, type OfferReconciliationSignup } from "@/services/signup-state";
 
 function row(
   id: string,
@@ -9,6 +9,15 @@ function row(
 ): OfferReconciliationSignup {
   return { id, characterId, participationType, status };
 }
+
+describe("isActiveSignupOffer", () => {
+  it("is true only for PENDING and SELECTED", () => {
+    expect(isActiveSignupOffer("PENDING")).toBe(true);
+    expect(isActiveSignupOffer("SELECTED")).toBe(true);
+    expect(isActiveSignupOffer("WITHDRAWN")).toBe(false);
+    expect(isActiveSignupOffer("NOT_SELECTED")).toBe(false);
+  });
+});
 
 describe("planCharacterOfferReconciliation", () => {
   it("reconciles A+B active to B+C desired: withdraws A, keeps B, creates C", () => {

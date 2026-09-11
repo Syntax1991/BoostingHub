@@ -50,6 +50,18 @@ export function isBlockingDuplicate(status: SignupStatus): boolean {
   return status !== "WITHDRAWN";
 }
 
+/**
+ * A current, counted Character offer — PENDING or SELECTED. WITHDRAWN and
+ * NOT_SELECTED are historical outcomes: still persisted for audit, but never
+ * an active offer for signup lists, "also offered" alternates, or signup
+ * counts. Roster re-selection is a separate concern (a NOT_SELECTED row from
+ * an earlier publish remains a legitimate re-roster candidate) and does not
+ * use this predicate.
+ */
+export function isActiveSignupOffer(status: SignupStatus): boolean {
+  return status === "PENDING" || status === "SELECTED";
+}
+
 export type OfferReconciliationSignup = {
   id: string;
   characterId: string | null;

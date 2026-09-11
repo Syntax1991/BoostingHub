@@ -174,6 +174,10 @@ export const rosterService = {
     const composition = validation.composition;
     const canEdit = EDITABLE_RUN_STATUSES.includes(run.status);
     const publishedSelection = inspected.filter((item) => item.status === "SELECTED");
+    // WITHDRAWN is a dead end (no outgoing transition) and must never appear as a
+    // candidate. NOT_SELECTED stays here deliberately: a raid lead re-editing a
+    // published roster can still re-select someone who wasn't picked last time.
+    const candidates = inspected.filter((item) => item.status !== "WITHDRAWN");
 
     return {
       run: {
@@ -214,10 +218,10 @@ export const rosterService = {
       composition,
       validation,
       groups: {
-        tanks: inspected.filter((item) => item.participationType === "BOOSTER" && item.role === "TANK"),
-        healers: inspected.filter((item) => item.participationType === "BOOSTER" && item.role === "HEALER"),
-        dps: inspected.filter((item) => item.participationType === "BOOSTER" && item.role === "DPS"),
-        lootbuddies: inspected.filter((item) => item.participationType === "LOOTBUDDY"),
+        tanks: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "TANK"),
+        healers: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "HEALER"),
+        dps: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "DPS"),
+        lootbuddies: candidates.filter((item) => item.participationType === "LOOTBUDDY"),
       },
       summary: {
         tanks: composition.tanks.selected,

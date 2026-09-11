@@ -102,6 +102,18 @@ describe("rosterService authorization", () => {
   });
 });
 
+describe("rosterService groups — active offer filtering", () => {
+  it("excludes a WITHDRAWN offer from the roster candidate groups while keeping the same User's other active offer", async () => {
+    const view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    const allIds = [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps, ...view.groups.lootbuddies].map(
+      (item) => item.id,
+    );
+    // Brann has two offers on this run: labBrannTank (PENDING) and labBrannHoly (WITHDRAWN).
+    expect(allIds).not.toContain(ids.labBrannHoly);
+    expect(allIds).toContain(ids.labBrannTank);
+  });
+});
+
 describe("rosterService draft", () => {
   it("selects a pending signup, persists it, and returns it after reload", async () => {
     const before = await rosterService.getRosterManagementView(thorne, ids.lab);

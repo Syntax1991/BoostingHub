@@ -262,6 +262,46 @@ describe("discordSyncService.getSignupEmbedData", () => {
     const data = await discordSyncService.getSignupEmbedData("r0000000-0000-4000-8000-000000000000");
     expect(data).toBeNull();
   });
+
+  it("drops a User from the count once their only offer is WITHDRAWN, and never counts a NOT_SELECTED-only User", async () => {
+    // A dedicated run so mutating these signups cannot affect the shared runId
+    // that later tests in this file (and getRosterEmbedData) depend on.
+    const countRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(countRunId);
+    await runService.openRun(lead, countRunId);
+
+    const tankSignupId = await createSignup({
+      runId: countRunId,
+      userId: ids.tank,
+      characterId: tankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const healerSignupId = await createSignup({
+      runId: countRunId,
+      userId: ids.healer,
+      characterId: healerChar,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+
+    expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(2);
+
+    await orm.RunSignup.where({ id: tankSignupId }).update({ status: "WITHDRAWN" });
+    expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(1);
+
+    await orm.RunSignup.where({ id: healerSignupId }).update({ status: "NOT_SELECTED" });
+    expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(0);
+  });
 });
 
 describe("discordSyncService.listSyncWork", () => {
