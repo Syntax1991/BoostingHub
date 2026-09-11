@@ -10,6 +10,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:db:reset": "tsx scripts/test-db-reset.ts",
+    "test:full": "npm run test:db:reset && npm test",
     "db:emit": "prisma contract emit",
     "db:migrate": "prisma db migrate --yes",
     "db:seed": "tsx src/prisma/seed.ts",

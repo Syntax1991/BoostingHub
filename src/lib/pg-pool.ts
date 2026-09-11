@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Pool } from "pg";
+import { isTestRuntime, resolveTestDatabaseUrl } from "@/lib/test-database-guard";
 
 /**
  * Shared node-postgres pool for Better Auth (Kysely) and Prisma 8.
@@ -11,8 +12,17 @@ import { Pool } from "pg";
  * Keep this module a singleton (including HMR) so Next.js reloads do not leak
  * additional pools. connectionTimeoutMillis makes a saturated pool fail the
  * request instead of spinning the browser indefinitely.
+ *
+ * This is the ONLY place that reads DATABASE_URL — every repository,
+ * service, and Better Auth query goes through this one pool, so isolating
+ * automated tests onto TEST_DATABASE_URL here (rather than in each
+ * repository) makes it impossible for a test to accidentally reach the real
+ * development/QA database. isTestRuntime() is true under Vitest (which sets
+ * VITEST=true) or any explicit NODE_ENV=test — in either case this throws
+ * rather than silently falling back to DATABASE_URL if no test database is
+ * configured.
  */
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = isTestRuntime() ? resolveTestDatabaseUrl() : process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
