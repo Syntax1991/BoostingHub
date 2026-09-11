@@ -2,12 +2,15 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
-import { runDetailPath, runDetailTabForManageAction } from "@/lib/run-routes";
+import { runDetailPath } from "@/lib/run-routes";
 import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
+import { RunQuickActions } from "@/components/manage/run-quick-actions";
 import type { ManagedRunsPage } from "@/services/run.service";
 
 export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
-  const filtered = Boolean(data.filters.status || data.filters.raidLeadId || data.filters.timeframe);
+  const filtered = Boolean(
+    data.filters.status || data.filters.raidLeadId || data.filters.timeframe || data.filters.archived !== "active",
+  );
 
   return (
     <div>
@@ -29,6 +32,7 @@ export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
         status={data.filters.status}
         raidLeadId={data.filters.raidLeadId}
         timeframe={data.filters.timeframe}
+        archived={data.filters.archived}
         raidLeads={data.raidLeads}
       />
       <Card>
@@ -51,7 +55,7 @@ export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
                   <th className="px-4 py-2 font-medium">Lead</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Signups</th>
-                  <th className="px-4 py-2 font-medium">Roster</th>
+                  <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -69,23 +73,34 @@ export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
                     <td className="px-4 py-3 text-muted">{formatDateTime(run.scheduledStartAt)}</td>
                     <td className="px-4 py-3">{run.raidLeadName}</td>
                     <td className="px-4 py-3">
-                      <RunStatusBadge status={run.status} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <RunStatusBadge status={run.status} />
+                        {run.archivedAt ? (
+                          <span className="inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+                            Archived
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
                       {run.signupCount} active · {run.selectedCount} selected
                       <div>{run.signupWindowOpen ? "Open" : "Closed"}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-xs text-muted">
+                      <div className="mt-1">
                         Draft {run.draftSelectedCount}
                         {run.publishedAt ? " · published" : ""}
                       </div>
-                      <Link
-                        href={runDetailPath(run.id, runDetailTabForManageAction(run.actionLabel))}
-                        className="mt-1 inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
-                      >
-                        {run.actionLabel}
-                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <RunQuickActions
+                        run={{
+                          id: run.id,
+                          title: run.title,
+                          status: run.status,
+                          archivedAt: run.archivedAt,
+                          actionLabel: run.actionLabel,
+                          capabilities: run.capabilities,
+                        }}
+                      />
                     </td>
                   </tr>
                 ))}

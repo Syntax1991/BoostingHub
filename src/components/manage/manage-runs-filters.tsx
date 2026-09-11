@@ -8,20 +8,23 @@ export function ManageRunsFilters({
   status,
   raidLeadId,
   timeframe,
+  archived,
   raidLeads,
 }: {
   status?: string;
   raidLeadId?: string;
   timeframe?: string;
+  archived?: string;
   raidLeads: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
 
-  function push(next: { status?: string; raidLeadId?: string; timeframe?: string }) {
+  function push(next: { status?: string; raidLeadId?: string; timeframe?: string; archived?: string }) {
     const params = new URLSearchParams();
     if (next.status) params.set("status", next.status);
     if (next.raidLeadId) params.set("raidLeadId", next.raidLeadId);
     if (next.timeframe) params.set("timeframe", next.timeframe);
+    if (next.archived && next.archived !== "active") params.set("archived", next.archived);
     router.push(`/manage/runs${params.toString() ? `?${params}` : ""}`);
   }
 
@@ -32,7 +35,7 @@ export function ManageRunsFilters({
         <select
           aria-label="Run status"
           value={status ?? ""}
-          onChange={(event) => push({ status: event.target.value, raidLeadId, timeframe })}
+          onChange={(event) => push({ status: event.target.value, raidLeadId, timeframe, archived })}
           className="h-9 rounded-md border border-border bg-surface px-2"
         >
           <option value="">All</option>
@@ -48,7 +51,7 @@ export function ManageRunsFilters({
         <select
           aria-label="Schedule timeframe"
           value={timeframe ?? ""}
-          onChange={(event) => push({ status, raidLeadId, timeframe: event.target.value })}
+          onChange={(event) => push({ status, raidLeadId, timeframe: event.target.value, archived })}
           className="h-9 rounded-md border border-border bg-surface px-2"
         >
           <option value="">All</option>
@@ -62,7 +65,7 @@ export function ManageRunsFilters({
           <select
             aria-label="Raid Lead"
             value={raidLeadId ?? ""}
-            onChange={(event) => push({ status, raidLeadId: event.target.value, timeframe })}
+            onChange={(event) => push({ status, raidLeadId: event.target.value, timeframe, archived })}
             className="h-9 max-w-[12rem] rounded-md border border-border bg-surface px-2"
           >
             <option value="">All</option>
@@ -74,6 +77,19 @@ export function ManageRunsFilters({
           </select>
         </label>
       ) : null}
+      <label className="flex items-center gap-2 text-sm">
+        <span className="text-muted">Archive</span>
+        <select
+          aria-label="Archive filter"
+          value={archived ?? "active"}
+          onChange={(event) => push({ status, raidLeadId, timeframe, archived: event.target.value })}
+          className="h-9 rounded-md border border-border bg-surface px-2"
+        >
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+          <option value="all">All</option>
+        </select>
+      </label>
     </div>
   );
 }
