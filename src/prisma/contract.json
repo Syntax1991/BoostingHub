@@ -284,6 +284,23 @@
               }
             ]
           },
+          "RunLootType": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "SAVED",
+                "value": "SAVED"
+              },
+              {
+                "name": "UNSAVED",
+                "value": "UNSAVED"
+              },
+              {
+                "name": "VIP",
+                "value": "VIP"
+              }
+            ]
+          },
           "RunStatus": {
             "codecId": "pg/text@1",
             "members": [
@@ -1996,10 +2013,30 @@
                   "kind": "scalar"
                 }
               },
+              "lootType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunLootType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "notes": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "plannedBossCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
@@ -2222,8 +2259,14 @@
                 "id": {
                   "column": "id"
                 },
+                "lootType": {
+                  "column": "lootType"
+                },
                 "notes": {
                   "column": "notes"
+                },
+                "plannedBossCount": {
+                  "column": "plannedBossCount"
                 },
                 "raidId": {
                   "column": "raidId"
@@ -5836,6 +5879,11 @@
                   "prefix": "run_difficulty_check"
                 },
                 {
+                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')",
+                  "name": "run_lootType_check_3071d052",
+                  "prefix": "run_lootType_check"
+                },
+                {
                   "expression": "\"status\" IN ('DRAFT', 'OPEN', 'ROSTERING', 'PUBLISHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')",
                   "name": "run_status_check_e1302b27",
                   "prefix": "run_status_check"
@@ -5892,10 +5940,26 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "lootType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunLootType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
                 "notes": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "plannedBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
                 },
                 "raidId": {
                   "codecId": "pg/text@1",
@@ -7860,6 +7924,14 @@
                 "PUBLISHED"
               ]
             },
+            "RunLootType": {
+              "kind": "valueSet",
+              "values": [
+                "SAVED",
+                "UNSAVED",
+                "VIP"
+              ]
+            },
             "RunStatus": {
               "kind": "valueSet",
               "values": [
@@ -7927,7 +7999,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "80beca6c41b879665b85c5f02c2cdd9c849b476fa8c2936ffc80453a8ac6134c"
+    "storageHash": "d9154f982c56d940ca5cd44fa850d230c21c8cdf09024ec3105b0179d5d258b3"
   },
   "execution": {
     "executionHash": "8708be34c85acf0289f559b4c580f8283c7d229e8102c2e0fec552d931217b64",
