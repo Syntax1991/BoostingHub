@@ -44,7 +44,7 @@ Every handler: authenticate the bot service → resolve the acting Discord User 
 
 Run/Signup/Roster state never depends synchronously on Discord. `discordSyncService.listSyncWork()` (`src/services/discord-sync.service.ts`) is the single place that decides "something changed":
 
-- **Signup embed**: a cheap signature (`uniqueSignupCount:signupWindowOpen:runStatus`) is compared against `RunDiscordPost.lastSignupSignature`. DRAFT runs are never candidates.
+- **Signup embed**: a cheap signature (`uniqueSignupCount:signupWindowOpen:runStatus`) is compared against `RunDiscordPost.lastSignupSignature`. DRAFT runs are never candidates. The *first* post additionally requires signup to be genuinely available right now (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen` true) — a Run the bot first sees only after it already reached PUBLISHED/COMPLETED/CANCELLED never gets a brand-new post for a signup phase that's already over. Once a post exists, later updates are unconditional (any non-DRAFT status), so the same message keeps reflecting the Run's real state — including signups closing — all the way through completion.
 - **Roster embed**: `RunRoster.version` is compared against `RunDiscordPost.lastRosterVersion`; only runs with a published roster are candidates.
 
 `RunDiscordPost` (one additive migration, `20260910T2332_discord_integration_state`) is small, presentation-only integration state — the channel/message id the bot already posted, so a restart edits the existing message instead of reposting. It is never a second source of truth for Run/Signup/Roster data.
@@ -53,7 +53,7 @@ The bot's `sync-loop.ts` polls `GET /api/bot/discord/sync` on an interval (`DISC
 
 ## Signup embed
 
-Posted to `DISCORD_SIGNUP_CHANNEL_ID` once a Run leaves `DRAFT`. Content only — Run title, difficulty, raid, scheduled time, **unique signup count**, and status; it never lists any User's offered Characters (that stays in the ephemeral per-User reply). "Signups: 39" means 39 distinct Users with an active offer, never 39 `RunSignup` rows — a User offering three Characters still counts once.
+Posted to `DISCORD_SIGNUP_CHANNEL_ID` once a Run is actually signup-available (not merely non-`DRAFT` — see Sync architecture above). Content only — Run title, difficulty, raid, scheduled time, **unique signup count**, and status; it never lists any User's offered Characters (that stays in the ephemeral per-User reply). "Signups: 39" means 39 distinct Users with an active offer, never 39 `RunSignup` rows — a User offering three Characters still counts once.
 
 Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signup** (Danger). Signup/Lootbuddy disable once the signup window closes; Cancel stays enabled (a User may still remove a still-pending offer after the window closes, matching the Web withdraw rule). Custom ids (`src/discord-bot/custom-ids.ts`) carry only `action:runId` — never a User id — and are validated against the same id shape the server accepts before any network call is made.
 
@@ -62,8 +62,8 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 1. `interaction.deferReply({ ephemeral: true })`.
 2. `GET .../signup-options` for the acting Discord User.
 3. If the window is closed or there are no eligible Characters, say so and stop.
-4. Show an ephemeral multi-select (Discord max 25 options) preselecting the User's current active offers of that type; **role defaults server-side** to each Character's own specialization (an explicit non-default role stays a Web-only refinement for this MVP).
-5. The select menu's own submission is the confirm step — no extra round trip. `PUT .../signup` with the selected `characterId`s.
+4. Show an ephemeral multi-select preselecting the User's current active offers. For BOOSTER, each eligible **(Character, role)** pair is its own option — a hybrid class (e.g. a Paladin eligible as TANK, HEALER, or DPS) is genuinely selectable per role, exactly like the Web dialog's role picker, rather than silently defaulted to one role (`buildSelectOptions` in `signup-flow.ts`). Discord's 25-option cap applies after this per-role expansion. LOOTBUDDY has no role dimension, so it stays one option per Character.
+5. The select menu's own submission is the confirm step — no extra round trip. `PUT .../signup` with the selected `characterId`(+role for BOOSTER).
 6. Ephemeral confirmation, or the mapped domain error (`src/discord-bot/interactions/error-copy.ts` — concise copy for known codes, otherwise the server's own message verbatim; it never invents a new eligibility rule).
 
 ### Cancel Signup button
@@ -91,7 +91,7 @@ The one slash command. Read-only, ephemeral, registered per-guild (`npm run bot:
 
 ## MVCS / testing
 
-- Pure, fully unit-tested: `custom-ids.ts`, `format.ts`, `embeds/signup-embed.ts`, `embeds/roster-embed.ts`, `bot-api-client.ts` (mocked `fetch`), `interactions/error-copy.ts`, `commands/mysignups.ts`'s `formatMySignups`.
+- Pure, fully unit-tested: `custom-ids.ts`, `format.ts`, `embeds/signup-embed.ts`, `embeds/roster-embed.ts`, `bot-api-client.ts` (mocked `fetch`), `interactions/error-copy.ts`, `interactions/signup-flow.ts`'s `buildSelectOptions`/`parseSelectedOffers`, `commands/mysignups.ts`'s `formatMySignups`.
 - Bot API routes: tested by calling the exported Route Handler functions directly with constructed `NextRequest`s (`src/app/api/bot/bot-routes.test.ts`) — no live Discord credentials required.
 - `discord-sync.service.ts`: tested against the real dev database like every other Service (`src/services/discord-sync.service.test.ts`).
 - The discord.js Client wiring itself (`client.ts`, `sync-loop.ts`'s actual message send/edit calls, `register-commands.ts`) cannot be unit-tested without a live bot token — it was verified structurally (typecheck, production build, and a boot smoke test against Discord's own token validation) rather than end-to-end.

@@ -86,8 +86,18 @@ function boosterByRole(selected: RosterSignupRow[], role: CharacterRole): Roster
 export const discordSyncService = {
   /**
    * Runs whose posted (or not-yet-posted) Discord message no longer matches
-   * current BoostingHub state. DRAFT runs are never candidates — nothing is
-   * posted until a Run is actually open for signups.
+   * current BoostingHub state.
+   *
+   * The *first* signup post for a Run only happens while signup is actually
+   * available (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen`
+   * true), never merely because the Run left DRAFT: a Run the bot only sees
+   * for the first time after it already reached PUBLISHED/COMPLETED/
+   * CANCELLED (e.g. the bot was offline through its whole signup phase) must
+   * not get a brand-new "Signups: 0" post for a phase that's already over.
+   * Once a post exists, later updates are unconditional — the same message
+   * keeps reflecting the Run's real state (including signups closing) all
+   * the way through completion, which is deliberate informational
+   * continuity, not a re-trigger of the creation gate.
    */
   async listSyncWork(): Promise<{ signups: SignupSyncWorkItem[]; roster: RosterSyncWorkItem[] }> {
     const runs = await runRepository.listManaged();
@@ -98,13 +108,17 @@ export const discordSyncService = {
       if (run.status === "DRAFT") continue;
       const post = await runDiscordPostRepository.findByRunId(run.id);
 
-      const signature = signupSignature(run);
-      if (!post?.signupMessageId || post.lastSignupSignature !== signature) {
-        signups.push({
-          runId: run.id,
-          existingChannelId: post?.signupChannelId ?? null,
-          existingMessageId: post?.signupMessageId ?? null,
-        });
+      const hasExistingSignupPost = Boolean(post?.signupMessageId);
+      const canCreateSignupPost = isSignupWindowOpen(run.status, run.signupsOpen);
+      if (hasExistingSignupPost || canCreateSignupPost) {
+        const signature = signupSignature(run);
+        if (!hasExistingSignupPost || post!.lastSignupSignature !== signature) {
+          signups.push({
+            runId: run.id,
+            existingChannelId: post?.signupChannelId ?? null,
+            existingMessageId: post?.signupMessageId ?? null,
+          });
+        }
       }
 
       if (run.roster?.publishedAt) {

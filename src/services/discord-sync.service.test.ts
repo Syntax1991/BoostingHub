@@ -270,6 +270,51 @@ describe("discordSyncService.listSyncWork", () => {
     expect(work.roster.some((item) => item.runId === draftRunId)).toBe(false);
   });
 
+  it("never creates a first signup post for a non-DRAFT run that was never actually signup-available", async () => {
+    const neverOpenedRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(neverOpenedRunId);
+    await runService.cancelRun(lead, neverOpenedRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === neverOpenedRunId)).toBe(false);
+  });
+
+  it("keeps updating an already-posted signup embed through to cancellation (continuity, not a re-trigger of the creation gate)", async () => {
+    const openedThenCancelledRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(openedThenCancelledRunId);
+    await runService.openRun(lead, openedThenCancelledRunId);
+
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === openedThenCancelledRunId)).toBe(true);
+    await discordSyncService.recordSignupPost({ runId: openedThenCancelledRunId, channelId: "chan-c", messageId: "msg-c" });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((item) => item.runId === openedThenCancelledRunId)).toBe(false);
+
+    await runService.cancelRun(lead, openedThenCancelledRunId);
+    work = await discordSyncService.listSyncWork();
+    const cancelledItem = work.signups.find((item) => item.runId === openedThenCancelledRunId);
+    expect(cancelledItem?.existingMessageId).toBe("msg-c");
+  });
+
   it("flags a run needing its first signup post, then clears after recording it", async () => {
     let work = await discordSyncService.listSyncWork();
     const before = work.signups.find((item) => item.runId === runId);

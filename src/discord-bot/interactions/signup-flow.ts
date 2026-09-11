@@ -10,21 +10,73 @@ import { buildCustomId } from "@/discord-bot/custom-ids";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
 
 const MAX_SELECT_OPTIONS = 25;
+/** Separator between characterId and role in a BOOSTER option's value — id shape never contains ":". */
+const ROLE_SEPARATOR = ":";
 
 type EligibleCharacterOption = { characterId: string; characterName: string; realm: string; role?: string };
 type SignupOptionsPayload = {
   run: { title: string; signupWindowOpen: boolean };
   booster: { eligible: EligibleCharacterOption[]; ineligible: unknown[] };
   lootbuddy: { eligible: EligibleCharacterOption[]; ineligible: unknown[] };
-  activeOffer: { participationType: "BOOSTER" | "LOOTBUDDY" | null; characterIds: string[] };
+  activeOffer: { participationType: "BOOSTER" | "LOOTBUDDY" | null; characterIds: string[]; roleByCharacterId: Record<string, string> };
 };
 
 /**
+ * BOOSTER gets one option per (Character, eligible role) pair — the same
+ * approach the Web dialog's original single-select used — so a hybrid class
+ * (e.g. a Paladin eligible as TANK, HEALER, or DPS) is genuinely User-
+ * selectable rather than silently defaulted to one role. LOOTBUDDY has no
+ * role dimension, so it stays one option per Character. Discord's 25-option
+ * cap is counted after this expansion, so a run with many hybrid-eligible
+ * Characters may truncate — an accepted MVP tradeoff, not a silent one (the
+ * menu still shows exactly what's selectable).
+ */
+export function buildSelectOptions(
+  eligible: EligibleCharacterOption[],
+  participationType: "BOOSTER" | "LOOTBUDDY",
+  activeOffer: { participationType: "BOOSTER" | "LOOTBUDDY" | null; characterIds: string[]; roleByCharacterId: Record<string, string> },
+): StringSelectMenuOptionBuilder[] {
+  const isActiveType = activeOffer.participationType === participationType;
+
+  if (participationType === "LOOTBUDDY") {
+    const activeIds = new Set(isActiveType ? activeOffer.characterIds : []);
+    return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) =>
+      new StringSelectMenuOptionBuilder()
+        .setLabel(`${option.characterName}-${option.realm}`)
+        .setValue(option.characterId)
+        .setDefault(activeIds.has(option.characterId)),
+    );
+  }
+
+  return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) => {
+    const role = option.role ?? "DPS";
+    const isCurrentRole = isActiveType && activeOffer.roleByCharacterId[option.characterId] === role;
+    return new StringSelectMenuOptionBuilder()
+      .setLabel(`${option.characterName}-${option.realm} (${role})`)
+      .setValue(`${option.characterId}${ROLE_SEPARATOR}${role}`)
+      .setDefault(isCurrentRole)
+      .setDescription(`Offer as ${role}`);
+  });
+}
+
+/** Inverse of buildSelectOptions' value encoding. LOOTBUDDY values are plain characterIds. */
+export function parseSelectedOffers(
+  values: string[],
+  participationType: "BOOSTER" | "LOOTBUDDY",
+): Array<{ characterId: string; role?: string }> {
+  if (participationType === "LOOTBUDDY") {
+    return values.map((characterId) => ({ characterId }));
+  }
+  return values.map((value) => {
+    const [characterId, role] = value.split(ROLE_SEPARATOR);
+    return { characterId, role };
+  });
+}
+
+/**
  * The Signup / Sign as Lootbuddy button: shows an ephemeral multi-select of
- * eligible Characters, preselecting whatever the User already has active.
- * Role is resolved server-side to each Character's own specialization by
- * default — offering a non-default role for a hybrid class stays a Web-only
- * refinement for this MVP rather than a second Discord interaction round.
+ * eligible Characters (one option per eligible role for BOOSTER), preselecting
+ * the User's current active offers.
  */
 export async function handleSignupButton(
   interaction: ButtonInteraction,
@@ -55,29 +107,22 @@ export async function handleSignupButton(
     return;
   }
 
-  const preselected = new Set(
-    options.activeOffer.participationType === participationType ? options.activeOffer.characterIds : [],
-  );
   const action = participationType === "BOOSTER" ? "signup" : "lootbuddy";
-  const limited = eligible.slice(0, MAX_SELECT_OPTIONS);
+  const selectOptions = buildSelectOptions(eligible, participationType, options.activeOffer);
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildCustomId(action, runId))
     .setPlaceholder("Select characters to offer, then submit")
     .setMinValues(0)
-    .setMaxValues(limited.length)
-    .addOptions(
-      limited.map((option) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(`${option.characterName}-${option.realm}`)
-          .setValue(option.characterId)
-          .setDefault(preselected.has(option.characterId))
-          .setDescription(option.role ? `Offered as ${option.role}` : "Lootbuddy"),
-      ),
-    );
+    .setMaxValues(selectOptions.length)
+    .addOptions(selectOptions);
 
+  const roleNote =
+    participationType === "BOOSTER"
+      ? " A Character eligible for more than one role appears once per role — pick the one you want to offer."
+      : "";
   await interaction.editReply({
-    content: `Select the characters to offer for **${options.run.title}**, then submit. This replaces your current offers for this run.`,
+    content: `Select the characters to offer for **${options.run.title}**, then submit. This replaces your current offers for this run.${roleNote}`,
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
   });
 }
@@ -91,7 +136,7 @@ export async function handleCharacterSelect(
 ): Promise<void> {
   await interaction.deferUpdate();
 
-  const offers = interaction.values.map((characterId) => ({ characterId }));
+  const offers = parseSelectedOffers(interaction.values, participationType);
   try {
     const result = await api.setCharacterOffers(runId, interaction.user.id, {
       participationType,
