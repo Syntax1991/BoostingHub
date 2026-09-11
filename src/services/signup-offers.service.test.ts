@@ -289,6 +289,13 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
     expect(rowA?.status).toBe("PENDING");
   });
 
+  it("getSignupOptions reports the User's current active offer, for the signup dialog/bot to preselect on reopen", async () => {
+    const options = await signupService.getSignupOptions(target, mainRunId);
+    expect(options.activeOffer.participationType).toBe("BOOSTER");
+    expect(options.activeOffer.characterIds.sort()).toEqual([hunterA, hunterB, hunterC].sort());
+    expect(options.activeOffer.roleByCharacterId[hunterA]).toBe("DPS");
+  });
+
   it("is a no-op when resubmitting the exact same desired set", async () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
