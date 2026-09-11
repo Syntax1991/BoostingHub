@@ -1,4 +1,4 @@
-import type { CharacterRole, RaidDifficulty, RunStatus, SignupStatus } from "@/models/enums";
+import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus, SignupStatus } from "@/models/enums";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
@@ -12,6 +12,9 @@ export type SignupEmbedData = {
   runTitle: string;
   raidName: string;
   difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  plannedBossCount: number;
+  totalBossCount: number;
   scheduledStartAt: string;
   runStatus: RunStatus;
   signupWindowOpen: boolean;
@@ -77,10 +80,20 @@ export type RosterSyncWorkItem = {
   archived: boolean;
 };
 
-function desiredChannelNameFor(run: { scheduledStartAt: string; difficulty: RaidDifficulty; raidLeadName: string }): string {
+function desiredChannelNameFor(run: {
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  plannedBossCount: number;
+  totalBossCount: number;
+  raidLeadName: string;
+}): string {
   return buildDiscordRunChannelName({
     scheduledStartAt: run.scheduledStartAt,
     difficulty: run.difficulty,
+    lootType: run.lootType,
+    plannedBossCount: run.plannedBossCount,
+    totalBossCount: run.totalBossCount,
     raidLeadName: run.raidLeadName,
   });
 }
@@ -91,6 +104,9 @@ function signupSignature(run: {
   signups: Array<{ userId: string; status: SignupStatus }>;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  plannedBossCount: number;
+  totalBossCount: number;
   raidLeadName: string;
   archivedAt: string | null;
 }): string {
@@ -98,10 +114,10 @@ function signupSignature(run: {
     run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
   ).size;
   // desiredChannelName and archived are folded in so a schedule/difficulty/
-  // raid-lead change, or an Archive/Restore, always produces sync work (the
-  // latter is how the bot notices it needs to move the Run's channel to/from
-  // the archive category) even when nothing about the signup count/window/
-  // status itself changed.
+  // lootType/plannedBossCount/raid-lead change, or an Archive/Restore, always
+  // produces sync work (the latter is how the bot notices it needs to move
+  // the Run's channel to/from the archive category) even when nothing about
+  // the signup count/window/status itself changed.
   return `${uniqueSignupCount}:${isSignupWindowOpen(run.status, run.signupsOpen)}:${run.status}:${desiredChannelNameFor(run)}:${Boolean(run.archivedAt)}`;
 }
 
@@ -198,6 +214,9 @@ export const discordSyncService = {
       runTitle: run.title,
       raidName: run.raidName,
       difficulty: run.difficulty,
+      lootType: run.lootType,
+      plannedBossCount: run.plannedBossCount,
+      totalBossCount: run.totalBossCount,
       scheduledStartAt: run.scheduledStartAt,
       runStatus: run.status,
       signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),

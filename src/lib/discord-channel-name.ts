@@ -1,37 +1,21 @@
-import type { RaidDifficulty } from "@/models/enums";
+import type { RaidDifficulty, RunLootType } from "@/models/enums";
 import { DEFAULT_TIME_ZONE, zonedParts } from "@/lib/datetime";
+import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
 
 /**
- * Discord raid-channel naming: `{weekday}-{HHMM}-{difficulty}-{runType}-{progress}-{raidLead}`
- * (e.g. `sat-2300-hc-vip-7of9-titan`), all computed from authoritative Run
- * data — never a raw concatenation of user-provided strings.
- *
- * `runType` (e.g. "vip") and `progress` (e.g. "7of9") have no home in the
- * current Run domain — there is no product/type field and no persisted
- * boss-progression field on Run. Rather than inventing schema for channel
- * cosmetics, this builder omits those segments when not supplied and
- * produces the reduced `{weekday}-{HHMM}-{difficulty}-{raidLead}` form
- * (e.g. `sat-2300-hc-titan`). If those fields are added to the domain
- * later, pass them through unchanged — no change needed here.
+ * Discord raid-channel naming: `{weekday}-{HHMM}-{difficulty}-{lootType}-{planned}of{total}-{raidLead}`
+ * (e.g. `sat-2300-hc-vip-7of9-titan`), all computed from the same structured
+ * Run fields the derived title uses — never a raw concatenation of
+ * user-provided strings, and never parsed from `Run.title`.
  */
 export type RunChannelNameInput = {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  plannedBossCount: number;
+  totalBossCount: number;
   raidLeadName: string;
-  runType?: string;
-  progress?: string;
   timeZone?: string;
-};
-
-/**
- * All three difficulties intentionally reduce to two characters for a
- * visually consistent channel list. If the community actually uses a
- * different Mythic shorthand, change only this one map.
- */
-const DIFFICULTY_ABBREVIATIONS: Record<RaidDifficulty, string> = {
-  NORMAL: "nm",
-  HEROIC: "hc",
-  MYTHIC: "my",
 };
 
 /** Discord text channel names are capped at 100 characters. */
@@ -59,11 +43,13 @@ export function buildDiscordRunChannelName(input: RunChannelNameInput): string {
   const parts = zonedParts(new Date(input.scheduledStartAt), input.timeZone ?? DEFAULT_TIME_ZONE);
   const weekday = slugSegment(parts.weekday);
   const hhmm = `${String(parts.hour).padStart(2, "0")}${String(parts.minute).padStart(2, "0")}`;
-  const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty];
-  const runType = input.runType ? slugSegment(input.runType) : "";
-  const progress = input.progress ? slugSegment(input.progress) : "";
+  const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty].toLowerCase();
+  const lootType = input.lootType.toLowerCase();
+  const bossCoverage = `${input.plannedBossCount}of${input.totalBossCount}`;
   const raidLead = slugSegment(input.raidLeadName);
 
-  const segments = [weekday, hhmm, difficulty, runType, progress, raidLead].filter((segment) => segment.length > 0);
+  const segments = [weekday, hhmm, difficulty, lootType, bossCoverage, raidLead].filter(
+    (segment) => segment.length > 0,
+  );
   return trimHyphens(segments.join("-")).slice(0, MAX_CHANNEL_NAME_LENGTH);
 }

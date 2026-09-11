@@ -2,12 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "disc
 import type { SignupEmbedData } from "@/services/discord-sync.service";
 import { buildCustomId } from "@/discord-bot/custom-ids";
 import { discordTimestamp, pluralize } from "@/discord-bot/format";
-
-const DIFFICULTY_LABEL: Record<SignupEmbedData["difficulty"], string> = {
-  NORMAL: "Normal",
-  HEROIC: "Heroic",
-  MYTHIC: "Mythic",
-};
+import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 
 const RUN_STATUS_LABEL: Record<SignupEmbedData["runStatus"], string> = {
   DRAFT: "Draft",
@@ -26,11 +21,13 @@ const RUN_STATUS_LABEL: Record<SignupEmbedData["runStatus"], string> = {
 export function buildSignupEmbed(data: SignupEmbedData): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle(data.runTitle)
-    .setDescription(`${DIFFICULTY_LABEL[data.difficulty]} · ${data.raidName}`)
+    .setDescription(`${DIFFICULTY_LABELS[data.difficulty]} · ${data.raidName}`)
     .addFields(
       { name: "Scheduled", value: discordTimestamp(data.scheduledStartAt), inline: true },
       { name: "Signups", value: pluralize(data.uniqueSignupCount, "signup"), inline: true },
       { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
+      { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
+      { name: "Bosses", value: `${data.plannedBossCount}/${data.totalBossCount}`, inline: true },
     )
     .setColor(data.signupWindowOpen ? 0xd4af37 : 0x555555)
     .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });

@@ -8,6 +8,9 @@ const base: SignupEmbedData = {
   runTitle: "Weekend Heroic Catch-up",
   raidName: "Manaforge Omega",
   difficulty: "HEROIC",
+  lootType: "VIP",
+  plannedBossCount: 7,
+  totalBossCount: 9,
   scheduledStartAt: "2026-09-24T20:00:00.000Z",
   runStatus: "OPEN",
   signupWindowOpen: true,
@@ -26,6 +29,12 @@ describe("buildSignupEmbed", () => {
   it("reflects a closed signup window in the footer", () => {
     const embed = buildSignupEmbed({ ...base, signupWindowOpen: false }).toJSON();
     expect(embed.footer?.text).toMatch(/closed/i);
+  });
+
+  it("shows the loot type and boss coverage", () => {
+    const embed = buildSignupEmbed(base).toJSON();
+    expect(embed.fields?.find((field) => field.name === "Loot")?.value).toBe("VIP");
+    expect(embed.fields?.find((field) => field.name === "Bosses")?.value).toBe("7/9");
   });
 });
 
