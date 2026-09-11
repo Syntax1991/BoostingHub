@@ -8,6 +8,7 @@ export default async function ManageRunsPage({
     status?: string | string[];
     raidLeadId?: string | string[];
     timeframe?: string | string[];
+    archived?: string | string[];
   }>;
 }) {
   const data = await managementController.getManageRunsPage(await searchParams);

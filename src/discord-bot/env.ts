@@ -9,6 +9,13 @@ export type BotEnv = {
    * to the legacy single global channel pair below — see docs/features/discord-bot.md.
    */
   discordRunCategoryId: string | null;
+  /**
+   * Where an archived Run's channel moves to. Optional — when unset, an
+   * archived Run's channel simply stays wherever it already is (a move is
+   * skipped with a warning, never an error, and nothing else about sync
+   * fails because of it).
+   */
+  discordRunArchiveCategoryId: string | null;
   /** Legacy/test fallback, used only when discordRunCategoryId is unset. */
   discordSignupChannelId: string | null;
   discordRosterChannelId: string | null;
@@ -32,6 +39,7 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
   }
 
   const runCategoryId = env.DISCORD_RUN_CATEGORY_ID?.trim() || null;
+  const runArchiveCategoryId = env.DISCORD_RUN_ARCHIVE_CATEGORY_ID?.trim() || null;
   const signupChannelId = env.DISCORD_SIGNUP_CHANNEL_ID?.trim() || null;
   const rosterChannelId = env.DISCORD_ROSTER_CHANNEL_ID?.trim() || null;
 
@@ -46,6 +54,7 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     discordApplicationId: env.DISCORD_APPLICATION_ID!,
     discordGuildId: env.DISCORD_GUILD_ID!,
     discordRunCategoryId: runCategoryId,
+    discordRunArchiveCategoryId: runArchiveCategoryId,
     discordSignupChannelId: signupChannelId,
     discordRosterChannelId: rosterChannelId,
     apiBaseUrl: env.BOOSTINGHUB_API_BASE_URL!.replace(/\/$/, ""),

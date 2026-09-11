@@ -28,6 +28,8 @@ const IDENTITY_EDITABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN"];
 const SIGNUP_WINDOW_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING"];
 const CANCELLABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
 const RAID_LEAD_REASSIGNABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING"];
+/** Archive is administrative state, not a RunStatus — only a terminal Run may be archived. */
+const ARCHIVABLE_STATUSES: readonly RunStatus[] = ["COMPLETED", "CANCELLED"];
 
 export function canTransitionRun(from: RunStatus, to: RunStatus): boolean {
   return RUN_TRANSITIONS[from].includes(to);
@@ -58,6 +60,9 @@ export type RunLifecycleCapabilities = {
   canStart: boolean;
   canManageAttendance: boolean;
   canComplete: boolean;
+  canArchive: boolean;
+  canRestore: boolean;
+  canDelete: boolean;
 };
 
 export function emptyRunCapabilities(): RunLifecycleCapabilities {
@@ -73,6 +78,9 @@ export function emptyRunCapabilities(): RunLifecycleCapabilities {
     canStart: false,
     canManageAttendance: false,
     canComplete: false,
+    canArchive: false,
+    canRestore: false,
+    canDelete: false,
   };
 }
 
@@ -112,6 +120,24 @@ export function canCompleteRun(status: RunStatus): boolean {
   return status === "IN_PROGRESS";
 }
 
+/** Only a terminal (COMPLETED/CANCELLED) Run not already archived may be archived. */
+export function canArchiveRun(status: RunStatus, archivedAt: string | null): boolean {
+  return ARCHIVABLE_STATUSES.includes(status) && !archivedAt;
+}
+
+export function canRestoreRun(archivedAt: string | null): boolean {
+  return Boolean(archivedAt);
+}
+
+/**
+ * Visibility only — the actual delete blocks on real relation history, which
+ * requires DB access this pure function does not have. The Service remains
+ * authoritative; this only decides whether to render the button at all.
+ */
+export function canDeleteRun(status: RunStatus, actorIsAdmin: boolean): boolean {
+  return actorIsAdmin && status === "DRAFT";
+}
+
 /**
  * Authoritative editability and lifecycle actions for an already-authorized manager.
  * Views must render these flags, not recompute them from RunStatus.
@@ -121,11 +147,13 @@ export function getRunLifecycleCapabilities(input: {
   signupsOpen: boolean;
   hasSignupHistory: boolean;
   actorIsAdmin: boolean;
+  archivedAt?: string | null;
 }): RunLifecycleCapabilities {
   const identity = canEditIdentityFields(input.status, input.hasSignupHistory);
   const planning = canEditPlanningFields(input.status);
   const reassign = canReassignRaidLead(input.status, input.actorIsAdmin);
   const windowToggle = canToggleSignupWindow(input.status);
+  const archivedAt = input.archivedAt ?? null;
 
   return {
     canEditIdentity: identity,
@@ -139,5 +167,8 @@ export function getRunLifecycleCapabilities(input: {
     canStart: canStartRun(input.status),
     canManageAttendance: canManageAttendance(input.status),
     canComplete: canCompleteRun(input.status),
+    canArchive: canArchiveRun(input.status, archivedAt),
+    canRestore: canRestoreRun(archivedAt),
+    canDelete: canDeleteRun(input.status, input.actorIsAdmin),
   };
 }

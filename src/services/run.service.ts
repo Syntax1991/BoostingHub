@@ -15,6 +15,7 @@ import { runRepository } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import {
+  canArchiveRun,
   emptyRunCapabilities,
   getRunLifecycleCapabilities,
   isSignupWindowOpen,
@@ -89,7 +90,11 @@ async function loadManagedRun(user: AuthenticatedUser, runId: string) {
   return run;
 }
 
-function capabilitiesFor(user: AuthenticatedUser, run: { status: RunStatus; signupsOpen: boolean; raidLeadId: string }, hasSignupHistory: boolean): RunLifecycleCapabilities {
+function capabilitiesFor(
+  user: AuthenticatedUser,
+  run: { status: RunStatus; signupsOpen: boolean; raidLeadId: string; archivedAt?: string | null },
+  hasSignupHistory: boolean,
+): RunLifecycleCapabilities {
   if (!canManageRun(user, run)) {
     return emptyRunCapabilities();
   }
@@ -98,6 +103,7 @@ function capabilitiesFor(user: AuthenticatedUser, run: { status: RunStatus; sign
     signupsOpen: run.signupsOpen,
     hasSignupHistory,
     actorIsAdmin: hasAdminAccess(user.accountRole),
+    archivedAt: run.archivedAt,
   });
 }
 
@@ -109,6 +115,9 @@ export const runService = {
     const runs = await runRepository.listUpcoming(filters);
     const visible = runs.filter((run) => {
       if (DISCOVERY_HIDDEN_STATUSES.includes(run.status)) {
+        return false;
+      }
+      if (run.archivedAt) {
         return false;
       }
       if (!filters.status && !UPCOMING_RUN_STATUSES.includes(run.status)) {
@@ -155,6 +164,7 @@ export const runService = {
   async getManagedRunsPage(user: AuthenticatedUser, filters: ManageRunFilterInput = {}) {
     requireManagerRole(user);
     const now = Date.now();
+    const archiveFilter = filters.archived ?? "active";
     const runs = await runRepository.listManaged();
     const managed = runs.filter((run) => canManageRun(user, run)).filter((run) => {
       if (filters.status && run.status !== filters.status) {
@@ -170,6 +180,13 @@ export const runService = {
       if (filters.timeframe === "past" && start >= now) {
         return false;
       }
+      const isArchived = Boolean(run.archivedAt);
+      if (archiveFilter === "active" && isArchived) {
+        return false;
+      }
+      if (archiveFilter === "archived" && !isArchived) {
+        return false;
+      }
       return true;
     });
 
@@ -178,7 +195,7 @@ export const runService = {
 
     return {
       canCreate: true,
-      filters,
+      filters: { ...filters, archived: archiveFilter },
       raidLeads,
       runs: managed.map((run) => ({
         id: run.id,
@@ -198,12 +215,14 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        archivedAt: run.archivedAt,
         actionLabel: rosterActionLabel(
           run.status,
           Boolean(run.roster),
           run.roster?.publishedAt ?? null,
           run.roster?.draftSelectedCount ?? 0,
         ),
+        capabilities: capabilitiesFor(user, run, run.signups.length > 0),
       })),
     };
   },
@@ -466,6 +485,79 @@ export const runService = {
       userId: user.id,
       type: "RUN_COMPLETED",
       message: "Completed a run.",
+    });
+    return { id: run.id };
+  },
+
+  /**
+   * Archive is administrative visibility, never a RunStatus — status and every
+   * historical relation (signups, roster, strikes, attendance, payout, Discord
+   * state) are left completely untouched.
+   */
+  async archiveRun(user: AuthenticatedUser, runId: string) {
+    const run = await loadManagedRun(user, runId);
+    if (run.archivedAt) {
+      throw new DomainError("RUN_ALREADY_ARCHIVED", "This run is already archived.");
+    }
+    if (!canArchiveRun(run.status, run.archivedAt)) {
+      throw new DomainError("RUN_CANNOT_ARCHIVE", "Only a completed or cancelled run can be archived.");
+    }
+
+    await runRepository.archiveRun(run.id, user.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_ARCHIVED",
+      message: `Archived ${run.title}.`,
+    });
+    return { id: run.id };
+  },
+
+  async restoreRun(user: AuthenticatedUser, runId: string) {
+    const run = await loadManagedRun(user, runId);
+    if (!run.archivedAt) {
+      throw new DomainError("RUN_NOT_ARCHIVED", "This run is not archived.");
+    }
+
+    await runRepository.restoreRun(run.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_RESTORED",
+      message: `Restored ${run.title}.`,
+    });
+    return { id: run.id };
+  },
+
+  /**
+   * Permanent deletion. ADMIN-only, and only for an empty Draft — a Draft with
+   * any real relation history (signups, roster, strikes, attendance, payout,
+   * Discord state) must be cancelled/archived instead. Never relies on a bare
+   * FK failure: every blocker is checked explicitly first.
+   */
+  async deleteRun(user: AuthenticatedUser, runId: string) {
+    if (!hasAdminAccess(user.accountRole)) {
+      throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to delete a run.", 403);
+    }
+    const run = await runRepository.findById(runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    if (run.status !== "DRAFT") {
+      throw new DomainError("RUN_CANNOT_DELETE", "Only a draft run can be deleted.");
+    }
+
+    const blockers = await runRepository.getDeleteBlockers(run.id);
+    if (blockers.length > 0) {
+      throw new DomainError(
+        "RUN_CANNOT_DELETE",
+        "Runs with signup or operational history cannot be deleted. Cancel/archive this run instead.",
+      );
+    }
+
+    await runRepository.deleteRun(run.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_DELETED",
+      message: `Deleted an unused draft run: ${run.title}.`,
     });
     return { id: run.id };
   },

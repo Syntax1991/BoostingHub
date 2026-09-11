@@ -44,6 +44,8 @@ export type RunListRecord = {
   desiredHealerCount: number;
   desiredDpsCount: number;
   signupsOpen: boolean;
+  archivedAt: string | null;
+  archivedById: string | null;
   signups: SignupOnRun[];
   roster: {
     id: string;
@@ -77,6 +79,8 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     desiredHealerCount: asNumber(run.desiredHealerCount),
     desiredDpsCount: asNumber(run.desiredDpsCount),
     signupsOpen: asBoolean(run.signupsOpen),
+    archivedAt: asStringOrNull(run.archivedAt),
+    archivedById: asStringOrNull(run.archivedById),
     signups: signups.map((row) => {
       const signup = row as Record<string, unknown>;
       return {
@@ -271,6 +275,80 @@ export const runRepository = {
 
   async updateStatus(id: string, status: RunStatus) {
     await orm.Run.where({ id }).update({ status, updatedAt: new Date().toISOString() });
+  },
+
+  async archiveRun(id: string, archivedById: string) {
+    await orm.Run.where({ id }).update({
+      archivedAt: new Date().toISOString(),
+      archivedById,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  async restoreRun(id: string) {
+    await orm.Run.where({ id }).update({
+      archivedAt: null,
+      archivedById: null,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Real relation history, not just FK presence — a freshly created Draft
+   * always has an empty RunRoster row (created alongside the Run itself), so
+   * "a roster exists" alone would block every Draft. Only entries or an
+   * actual publish count as roster history.
+   */
+  async getDeleteBlockers(id: string): Promise<string[]> {
+    const blockers: string[] = [];
+
+    const signups = await orm.RunSignup.where({ runId: id }).select("id").all();
+    if (signups.length > 0) {
+      blockers.push("signup history");
+    }
+
+    const roster = await orm.RunRoster.where({ runId: id }).first();
+    if (roster) {
+      const rosterRow = roster as Record<string, unknown>;
+      const entries = await orm.RunRosterEntry.where({ rosterId: asString(rosterRow.id) }).select("id").all();
+      if (entries.length > 0 || asStringOrNull(rosterRow.publishedAt)) {
+        blockers.push("roster history");
+      }
+    }
+
+    const strikes = await orm.Strike.where({ runId: id }).select("id").all();
+    if (strikes.length > 0) {
+      blockers.push("strikes");
+    }
+
+    const attendance = await orm.RunAttendance.where({ runId: id }).select("id").all();
+    if (attendance.length > 0) {
+      blockers.push("attendance history");
+    }
+
+    const settlement = await orm.RunSettlement.where({ runId: id }).select("id").all();
+    if (settlement.length > 0) {
+      blockers.push("payout history");
+    }
+
+    const discordPost = await orm.RunDiscordPost.where({ runId: id }).first();
+    if (discordPost) {
+      blockers.push("Discord publication state");
+    }
+
+    return blockers;
+  },
+
+  /** Hard delete. Callers must already have confirmed getDeleteBlockers() is empty. */
+  async deleteRun(id: string) {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const roster = await txOrm.RunRoster.where({ runId: id }).first();
+      if (roster) {
+        await txOrm.RunRoster.where({ id: asString((roster as Record<string, unknown>).id) }).delete();
+      }
+      await txOrm.Run.where({ id }).delete();
+    });
   },
 };
 

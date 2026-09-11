@@ -111,3 +111,39 @@ export async function completeRunAction(input: unknown): Promise<ActionResult> {
     return mapActionError(error);
   }
 }
+
+export async function archiveRunAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = runIdSchema.parse(input);
+    await runService.archiveRun(user, parsed.runId);
+    revalidateRunSurfaces(parsed.runId);
+    return { ok: true, message: "Run archived." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function restoreRunAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = runIdSchema.parse(input);
+    await runService.restoreRun(user, parsed.runId);
+    revalidateRunSurfaces(parsed.runId);
+    return { ok: true, message: "Run restored." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function deleteRunAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = runIdSchema.parse(input);
+    await runService.deleteRun(user, parsed.runId);
+    revalidateRunSurfaces();
+    return { ok: true, message: "Run deleted." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}

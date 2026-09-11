@@ -613,6 +613,213 @@ describe("opened run signup integration", () => {
   });
 });
 
+describe("archive run", () => {
+  it("rejects archiving a non-terminal Run at every non-terminal status", async () => {
+    const openId = await createDraft(lead, { title: "Archive open rejected" });
+    await runService.openRun(lead, openId);
+    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+
+    await runRepository.updateFields(openId, { status: "ROSTERING" });
+    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+
+    await runRepository.updateFields(openId, { status: "PUBLISHED" });
+    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+
+    await runRepository.updateFields(openId, { status: "IN_PROGRESS" });
+    await expectDomainCode(runService.archiveRun(lead, openId), "RUN_CANNOT_ARCHIVE");
+  });
+
+  it("lets ADMIN archive a COMPLETED run and preserves status/signup/roster history", async () => {
+    const id = await createDraft(lead, { title: "Archive completed" });
+    const signupId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: signupId,
+      runId: id,
+      userId: ids.user,
+      participationType: "LOOTBUDDY",
+      isBackup: false,
+      status: "SELECTED",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    createdSignupIds.push(signupId);
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+
+    const result = await runService.archiveRun(admin, id);
+    expect(result.id).toBe(id);
+
+    const archived = await runRepository.findById(id);
+    expect(archived?.status).toBe("COMPLETED");
+    expect(archived?.archivedAt).toBeTruthy();
+    expect(archived?.archivedById).toBe(ids.admin);
+    expect(await runRepository.countSignups(id)).toBe(1);
+    const roster = await orm.RunRoster.where({ runId: id }).first();
+    expect(roster).toBeTruthy();
+
+    await expectDomainCode(runService.archiveRun(admin, id), "RUN_ALREADY_ARCHIVED");
+  });
+
+  it("lets ADMIN archive a CANCELLED run", async () => {
+    const id = await createDraft(lead, { title: "Archive cancelled" });
+    await runService.cancelRun(lead, id);
+    await runService.archiveRun(admin, id);
+    expect((await runRepository.findById(id))?.archivedAt).toBeTruthy();
+  });
+
+  it("lets a RAID_LEAD archive their own terminal Run, but not an unrelated one, and denies USER", async () => {
+    const ownId = await createDraft(lead, { title: "Own terminal run" });
+    await runRepository.updateFields(ownId, { status: "COMPLETED" });
+    await runService.archiveRun(lead, ownId);
+    expect((await runRepository.findById(ownId))?.archivedAt).toBeTruthy();
+
+    const unrelatedId = await createDraft(otherLead, { title: "Unrelated terminal run" });
+    await runRepository.updateFields(unrelatedId, { status: "COMPLETED" });
+    await expectDomainCode(runService.archiveRun(lead, unrelatedId), "RUN_NOT_MANAGEABLE");
+    await expectDomainCode(runService.archiveRun(user, unrelatedId), "RUN_NOT_MANAGEABLE");
+  });
+});
+
+describe("restore run", () => {
+  it("clears archive metadata while preserving status and history, and rejects restoring a non-archived Run", async () => {
+    const id = await createDraft(lead, { title: "Restore me" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await expectDomainCode(runService.restoreRun(admin, id), "RUN_NOT_ARCHIVED");
+
+    await runService.archiveRun(admin, id);
+    const result = await runService.restoreRun(admin, id);
+    expect(result.id).toBe(id);
+
+    const restored = await runRepository.findById(id);
+    expect(restored?.archivedAt).toBeNull();
+    expect(restored?.archivedById).toBeNull();
+    expect(restored?.status).toBe("CANCELLED");
+  });
+});
+
+describe("delete run", () => {
+  it("lets ADMIN delete an empty Draft, and rejects RAID_LEAD/USER", async () => {
+    const id = await createDraft(lead, { title: "Delete me" });
+    await expectDomainCode(runService.deleteRun(lead, id), "NOT_AUTHORIZED");
+    await expectDomainCode(runService.deleteRun(user, id), "NOT_AUTHORIZED");
+
+    await runService.deleteRun(admin, id);
+    expect(await runRepository.findById(id)).toBeNull();
+    createdRunIds.splice(createdRunIds.indexOf(id), 1);
+  });
+
+  it("rejects deleting a non-Draft Run", async () => {
+    const openId = await createDraft(lead, { title: "Delete open rejected" });
+    await runService.openRun(lead, openId);
+    await expectDomainCode(runService.deleteRun(admin, openId), "RUN_CANNOT_DELETE");
+
+    const completedId = await createDraft(lead, { title: "Delete completed rejected" });
+    await runRepository.updateFields(completedId, { status: "COMPLETED" });
+    await expectDomainCode(runService.deleteRun(admin, completedId), "RUN_CANNOT_DELETE");
+  });
+
+  it("rejects deleting a Draft with any real relation history", async () => {
+    const withSignup = await createDraft(lead, { title: "Draft with signup" });
+    const signupId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: signupId,
+      runId: withSignup,
+      userId: ids.user,
+      participationType: "LOOTBUDDY",
+      isBackup: false,
+      status: "WITHDRAWN",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    createdSignupIds.push(signupId);
+    await expectDomainCode(runService.deleteRun(admin, withSignup), "RUN_CANNOT_DELETE");
+
+    const withRosterEntry = await createDraft(lead, { title: "Draft with roster entry" });
+    const roster = await orm.RunRoster.where({ runId: withRosterEntry }).first();
+    const rosterId = (roster as { id: string }).id;
+    const entrySignupId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: entrySignupId,
+      runId: withRosterEntry,
+      userId: ids.user,
+      participationType: "LOOTBUDDY",
+      isBackup: false,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    createdSignupIds.push(entrySignupId);
+    await orm.RunRosterEntry.create({
+      id: crypto.randomUUID(),
+      rosterId,
+      signupId: entrySignupId,
+      selected: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await expectDomainCode(runService.deleteRun(admin, withRosterEntry), "RUN_CANNOT_DELETE");
+
+    const withStrike = await createDraft(lead, { title: "Draft with strike" });
+    const strikeId = crypto.randomUUID();
+    await orm.Strike.create({
+      id: strikeId,
+      userId: ids.user,
+      runId: withStrike,
+      reason: "Test strike",
+      notes: null,
+      status: "ACTIVE",
+      createdById: ids.admin,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await expectDomainCode(runService.deleteRun(admin, withStrike), "RUN_CANNOT_DELETE");
+    await orm.Strike.where({ id: strikeId }).delete();
+
+    const withDiscordPost = await createDraft(lead, { title: "Draft with Discord state" });
+    const discordPostId = crypto.randomUUID();
+    await orm.RunDiscordPost.create({
+      id: discordPostId,
+      runId: withDiscordPost,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await expectDomainCode(runService.deleteRun(admin, withDiscordPost), "RUN_CANNOT_DELETE");
+    await orm.RunDiscordPost.where({ id: discordPostId }).delete();
+  });
+});
+
+describe("manage runs archive filter", () => {
+  it("defaults to active-only, supports archived-only and all, composing with status/lead filters", async () => {
+    const activeId = await createDraft(lead, { title: "Filter active" });
+    const archivedId = await createDraft(lead, { title: "Filter archived" });
+    await runRepository.updateFields(archivedId, { status: "CANCELLED" });
+    await runService.archiveRun(admin, archivedId);
+
+    const defaultPage = await runService.getManagedRunsPage(admin, {});
+    expect(defaultPage.runs.some((run) => run.id === activeId)).toBe(true);
+    expect(defaultPage.runs.some((run) => run.id === archivedId)).toBe(false);
+
+    const archivedPage = await runService.getManagedRunsPage(admin, { archived: "archived" });
+    expect(archivedPage.runs.some((run) => run.id === activeId)).toBe(false);
+    expect(archivedPage.runs.some((run) => run.id === archivedId)).toBe(true);
+
+    const allPage = await runService.getManagedRunsPage(admin, { archived: "all" });
+    expect(allPage.runs.some((run) => run.id === activeId)).toBe(true);
+    expect(allPage.runs.some((run) => run.id === archivedId)).toBe(true);
+
+    const composed = await runService.getManagedRunsPage(admin, { archived: "archived", status: "CANCELLED" });
+    expect(composed.runs.some((run) => run.id === archivedId)).toBe(true);
+  });
+
+  it("keeps an archived Run reachable through the canonical detail page", async () => {
+    const id = await createDraft(lead, { title: "Archived but reachable" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await runService.archiveRun(admin, id);
+
+    const detail = await runDetailService.getRunDetail(admin, id);
+    expect(detail.run.id).toBe(id);
+  });
+});
+
 describe("raid reference bootstrap", () => {
   it("is idempotent and independent of demo runs", async () => {
     await raidRepository.ensureReferenceRaids();

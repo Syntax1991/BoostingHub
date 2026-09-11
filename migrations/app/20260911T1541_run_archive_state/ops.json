@@ -1,0 +1,206 @@
+[
+  {
+    "id": "column.public.run.archivedAt",
+    "label": "Add column \"archivedAt\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "archivedAt",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"archivedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "archivedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"archivedAt\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"archivedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"archivedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "archivedAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.archivedById",
+    "label": "Add column \"archivedById\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "archivedById",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"archivedById\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "archivedById"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"archivedById\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"archivedById\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"archivedById\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "archivedById"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run.run_archivedAt_idx_5fc66e5b",
+    "label": "Create index \"run_archivedAt_idx_5fc66e5b\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_archivedAt_idx_5fc66e5b",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_archivedAt_idx_5fc66e5b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_archivedAt_idx_5fc66e5b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_archivedAt_idx_5fc66e5b\"",
+        "sql": "CREATE INDEX \"run_archivedAt_idx_5fc66e5b\" ON \"public\".\"run\" (\"archivedAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_archivedAt_idx_5fc66e5b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_archivedAt_idx_5fc66e5b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run.run_archivedById_idx_d546efc6",
+    "label": "Create index \"run_archivedById_idx_d546efc6\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_archivedById_idx_d546efc6",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_archivedById_idx_d546efc6\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_archivedById_idx_d546efc6\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_archivedById_idx_d546efc6\"",
+        "sql": "CREATE INDEX \"run_archivedById_idx_d546efc6\" ON \"public\".\"run\" (\"archivedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_archivedById_idx_d546efc6\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_archivedById_idx_d546efc6\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run.run_archivedById_fkey",
+    "label": "Add foreign key \"run_archivedById_fkey\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_archivedById_fkey",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_archivedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_archivedById_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_archivedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run\"\nADD CONSTRAINT \"run_archivedById_fkey\"\nFOREIGN KEY (\"archivedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_archivedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_archivedById_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  }
+]

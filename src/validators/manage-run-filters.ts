@@ -6,6 +6,7 @@ export const manageRunFilterSchema = z.object({
   status: z.enum(RUN_STATUSES).optional(),
   raidLeadId: entityIdSchema.optional(),
   timeframe: z.enum(["upcoming", "past"]).optional(),
+  archived: z.enum(["active", "archived", "all"]).optional(),
 });
 
 export type ManageRunFilterInput = z.infer<typeof manageRunFilterSchema>;
@@ -14,12 +15,14 @@ export function parseManageRunFilters(searchParams: {
   status?: string | string[];
   raidLeadId?: string | string[];
   timeframe?: string | string[];
+  archived?: string | string[];
 }): ManageRunFilterInput {
   const first = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
   const parsed = manageRunFilterSchema.safeParse({
     status: first(searchParams.status) || undefined,
     raidLeadId: first(searchParams.raidLeadId) || undefined,
     timeframe: first(searchParams.timeframe) || undefined,
+    archived: first(searchParams.archived) || undefined,
   });
   return parsed.success ? parsed.data : {};
 }
