@@ -325,8 +325,8 @@ describe("boosterAccessService approval and signup", () => {
   const owner = asUser(ids.owner, "Access Owner");
   const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
 
-  it("approves pending access, bridges qualification, and unlocks all class roles", async () => {
-    const character = await createPaladin(owner);
+  it("approves pending access, bridges qualification, and unlocks the Character's specialization-derived role only", async () => {
+    const character = await createPaladin(owner); // specced Holy → HEALER
     const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     await boosterAccessService.approveAccess(admin, pendingId);
 
@@ -340,14 +340,17 @@ describe("boosterAccessService approval and signup", () => {
     );
 
     const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
+    // BoosterAccess approval is difficulty-scoped, not role-scoped — signup eligibility
+    // only ever offers the Character's current specialization's role, never every
+    // role the class can perform.
     expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "HEALER")).toBe(
       true,
     );
     expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "TANK")).toBe(
-      true,
+      false,
     );
     expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "DPS")).toBe(
-      true,
+      false,
     );
 
     const mythicOpen = "r2222222-2222-4222-8222-222222222222";

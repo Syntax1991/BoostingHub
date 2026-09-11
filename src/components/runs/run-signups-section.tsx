@@ -1,4 +1,5 @@
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
+import { isActiveSignupOffer } from "@/services/signup-state";
 import {
   ClassBadge,
   ParticipationBadge,
@@ -45,7 +46,7 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
         title="Your signups"
         description="Only your own participation on this run. Withdrawal follows existing signup rules."
       />
-      {signups.length === 0 ? (
+      {active.length === 0 ? (
         <EmptyState
           title="You have not signed this run."
           description="Use Sign up while the window is open. Eligibility is evaluated on submit."
@@ -63,7 +64,7 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
             </div>
           ) : null}
         <ul className="divide-y divide-border">
-          {signups.map((signup) => (
+          {active.map((signup) => (
             <li key={signup.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
               <div>
                 <p className="font-medium">
@@ -105,9 +106,16 @@ type ManagerSignupGroup = {
   signups: ManagerSignup[];
 };
 
+/**
+ * The Signups tab is a read-only operational overview, not the roster
+ * candidate pool: a NOT_SELECTED row (a past roster outcome) belongs on the
+ * Roster tab where it remains a legitimate re-selection candidate, not here
+ * as if it were a current offer.
+ */
 function groupSignupsByUser(signups: ManagerSignup[]): ManagerSignupGroup[] {
   const groups: ManagerSignupGroup[] = [];
   for (const signup of signups) {
+    if (!isActiveSignupOffer(signup.status)) continue;
     let group = groups.find((item) => item.userId === signup.userId);
     if (!group) {
       group = {

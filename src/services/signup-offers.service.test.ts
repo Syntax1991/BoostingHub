@@ -365,24 +365,33 @@ describe("signupService.setCharacterOffers — validation", () => {
     );
   });
 
-  it("defaults an omitted role to the character's primary role, and an explicit role updates a kept offer", async () => {
+  it("defaults an omitted role to the character's specialization-derived role, and rejects a conflicting explicit role", async () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
       offers: [{ characterId: paladinHybrid }],
     });
     expect(result.created).toBe(1);
-    let active = await activeRowsFor(mainRunId, ids.target);
-    expect(active[0]?.role).toBe("DPS");
+    const active = await activeRowsFor(mainRunId, ids.target);
+    expect(active[0]?.role).toBe("DPS"); // paladinHybrid is specced Retribution
 
-    const changed = await signupService.setCharacterOffers(target, {
+    // An explicit role matching the current specialization is accepted.
+    const kept = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: paladinHybrid, role: "TANK" }],
+      offers: [{ characterId: paladinHybrid, role: "DPS" }],
     });
-    expect(changed.kept).toBe(1);
-    active = await activeRowsFor(mainRunId, ids.target);
-    expect(active[0]?.role).toBe("TANK");
+    expect(kept.kept).toBe(1);
+
+    // The Character's specialization is the sole role authority — a client can never override it.
+    await expectDomainCode(
+      signupService.setCharacterOffers(target, {
+        runId: mainRunId,
+        participationType: "BOOSTER",
+        offers: [{ characterId: paladinHybrid, role: "TANK" }],
+      }),
+      "INVALID_CHARACTER_ROLE",
+    );
 
     await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
   });
@@ -705,6 +714,94 @@ describe("concurrency regression coverage", () => {
     ).rejects.toThrow();
 
     await orm.RunSignup.where({ id: rowA.id }).update({ status: "PENDING" });
+    await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
+  });
+});
+
+describe("signupService.setCharacterOffers — role authority never trusts a stale persisted role", () => {
+  async function createMonk(name: string, specialization: string) {
+    const id = crypto.randomUUID();
+    createdCharacterIds.push(id);
+    await orm.Character.create({
+      id,
+      userId: ids.target,
+      name,
+      realm: "Offer Lab",
+      normalizedName: normalizeCharacterIdentity(name),
+      normalizedRealm: normalizeCharacterIdentity("Offer Lab"),
+      region: "EU",
+      wowClass: "MONK",
+      specialization,
+      primaryRole: "HEALER",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return id;
+  }
+
+  it("reactivating a WITHDRAWN row with a stale role refreshes it from the Character's current specialization", async () => {
+    const monkId = await createMonk("Reoffermist", "Mistweaver");
+    const staleRowId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: staleRowId,
+      runId: mainRunId,
+      userId: ids.target,
+      characterId: monkId,
+      participationType: "BOOSTER",
+      role: "TANK", // stale — the exact shape of the reported Synmist bug
+      isBackup: false,
+      status: "WITHDRAWN",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const result = await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      participationType: "BOOSTER",
+      offers: [{ characterId: monkId }],
+    });
+    expect(result.reactivated).toBe(1);
+
+    const row = await signupRepository.findById(staleRowId);
+    expect(row?.id).toBe(staleRowId);
+    expect(row?.role).toBe("HEALER");
+
+    await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
+  });
+
+  it("reconciling a kept offer with a stale persisted role updates it in place, without creating a duplicate row", async () => {
+    const monkId = await createMonk("Keepmist", "Mistweaver");
+    const staleRowId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: staleRowId,
+      runId: mainRunId,
+      userId: ids.target,
+      characterId: monkId,
+      participationType: "BOOSTER",
+      role: "TANK", // stale
+      isBackup: false,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const result = await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      participationType: "BOOSTER",
+      offers: [{ characterId: monkId }],
+    });
+    expect(result.created).toBe(0);
+    expect(result.reactivated).toBe(0);
+    expect(result.kept).toBe(1);
+
+    const active = await activeRowsFor(mainRunId, ids.target);
+    const rows = active.filter((row) => row.character?.id === monkId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(staleRowId);
+    expect(rows[0]?.role).toBe("HEALER");
+
     await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
   });
 });

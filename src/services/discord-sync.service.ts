@@ -1,10 +1,11 @@
-import type { CharacterRole, RaidDifficulty, RunStatus } from "@/models/enums";
+import type { CharacterRole, RaidDifficulty, RunStatus, SignupStatus } from "@/models/enums";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { isSignupWindowOpen } from "@/services/run-state";
+import { isActiveSignupOffer } from "@/services/signup-state";
 
 export type SignupEmbedData = {
   runId: string;
@@ -14,7 +15,7 @@ export type SignupEmbedData = {
   scheduledStartAt: string;
   runStatus: RunStatus;
   signupWindowOpen: boolean;
-  /** Distinct Users with an active (non-WITHDRAWN) signup — never a row count. */
+  /** Distinct Users with an active (PENDING or SELECTED) offer — never a row count, never WITHDRAWN/NOT_SELECTED. */
   uniqueSignupCount: number;
 };
 
@@ -84,13 +85,13 @@ function desiredChannelNameFor(run: { scheduledStartAt: string; difficulty: Raid
 function signupSignature(run: {
   status: RunStatus;
   signupsOpen: boolean;
-  signups: Array<{ userId: string; status: string }>;
+  signups: Array<{ userId: string; status: SignupStatus }>;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   raidLeadName: string;
 }): string {
   const uniqueSignupCount = new Set(
-    run.signups.filter((signup) => signup.status !== "WITHDRAWN").map((signup) => signup.userId),
+    run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
   ).size;
   // desiredChannelName is folded in so a schedule/difficulty/raid-lead change
   // (which changes the desired channel name) always produces sync work, even
@@ -193,7 +194,7 @@ export const discordSyncService = {
       runStatus: run.status,
       signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
       uniqueSignupCount: new Set(
-        run.signups.filter((signup) => signup.status !== "WITHDRAWN").map((signup) => signup.userId),
+        run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
       ).size,
     };
   },

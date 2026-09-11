@@ -41,9 +41,26 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
 }
 
 describe("booster eligibility", () => {
-  it("allows all valid roles when heroic-qualified", () => {
+  it("produces exactly the role the Character's current specialization maps to, never every class-capable role", () => {
     const result = evaluateBoosterOptions([shaman()], heroicRun, reset);
-    expect(result.eligible.map((item) => item.role).sort()).toEqual(["DPS", "HEALER"]);
+    expect(result.eligible.map((item) => item.role)).toEqual(["HEALER"]);
+  });
+
+  it("derives the correct role for each Monk specialization (Mistweaver/Brewmaster/Windwalker)", () => {
+    const monk = (specialization: string) => shaman({ wowClass: "MONK", specialization });
+    expect(evaluateBoosterOptions([monk("Mistweaver")], heroicRun, reset).eligible[0]?.role).toBe("HEALER");
+    expect(evaluateBoosterOptions([monk("Brewmaster")], heroicRun, reset).eligible[0]?.role).toBe("TANK");
+    expect(evaluateBoosterOptions([monk("Windwalker")], heroicRun, reset).eligible[0]?.role).toBe("DPS");
+  });
+
+  it("does not guess a role for a missing or unrecognized specialization", () => {
+    const missing = evaluateBoosterOptions([shaman({ specialization: null })], heroicRun, reset);
+    expect(missing.eligible).toHaveLength(0);
+    expect(missing.ineligible[0]?.reason).toBe("NO_SPECIALIZATION");
+
+    const unrecognized = evaluateBoosterOptions([shaman({ specialization: "Not A Real Spec" })], heroicRun, reset);
+    expect(unrecognized.eligible).toHaveLength(0);
+    expect(unrecognized.ineligible[0]?.reason).toBe("NO_SPECIALIZATION");
   });
 
   it("does not treat heroic approval as mythic eligibility", () => {
@@ -87,17 +104,17 @@ describe("booster eligibility", () => {
   });
 
   it("can offer two eligible characters for the same run", () => {
-    const second: EligibilityCharacter = {
-      ...shaman({
-        id: "char-2",
-        name: "Emberlight",
-        wowClass: "PALADIN",
-        boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
-      }),
-    };
+    const second: EligibilityCharacter = shaman({
+      id: "char-2",
+      name: "Emberlight",
+      wowClass: "PALADIN",
+      specialization: "Holy",
+      boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
+    });
     const result = evaluateBoosterOptions([shaman(), second], heroicRun, reset);
     expect(result.eligible.map((item) => item.characterId).includes("char-1")).toBe(true);
     expect(result.eligible.map((item) => item.characterId).includes("char-2")).toBe(true);
+    expect(result.eligible.find((item) => item.characterId === "char-2")?.role).toBe("HEALER");
   });
 });
 
