@@ -6,6 +6,7 @@ import {
   CHARACTER_ROLES,
   PARTICIPATION_TYPES,
   RAID_DIFFICULTIES,
+  RUN_LOOT_TYPES,
   RUN_STATUSES,
   SIGNUP_STATUSES,
   LOOTBUDDY_MODES,
@@ -29,6 +30,7 @@ import {
   type ParticipationType,
   type RosterState,
   type RaidDifficulty,
+  type RunLootType,
   type RunStatus,
   type SignupStatus,
   type WowClass,
@@ -83,6 +85,10 @@ export function mapRegion(value: unknown): WowRegion {
 
 export function mapDifficulty(value: unknown): RaidDifficulty {
   return asEnum(value, RAID_DIFFICULTIES, "NORMAL");
+}
+
+export function mapLootType(value: unknown): RunLootType {
+  return asEnum(value, RUN_LOOT_TYPES, "UNSAVED");
 }
 
 export function mapAccessStatus(value: unknown): BoosterAccessStatus {

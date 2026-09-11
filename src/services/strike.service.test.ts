@@ -189,6 +189,8 @@ beforeAll(async () => {
   labRunId = await runService.createRun(lead, {
     raidId,
     difficulty: "HEROIC",
+    lootType: "UNSAVED",
+    plannedBossCount: 8,
     scheduledStartAt: futureIso(),
     desiredTankCount: 2,
     desiredHealerCount: 4,
@@ -208,6 +210,8 @@ beforeAll(async () => {
   otherRunId = await runService.createRun(admin, {
     raidId,
     difficulty: "HEROIC",
+    lootType: "UNSAVED",
+    plannedBossCount: 8,
     scheduledStartAt: futureIso(),
     desiredTankCount: 2,
     desiredHealerCount: 4,

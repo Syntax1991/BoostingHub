@@ -160,6 +160,8 @@ beforeAll(async () => {
     .createRun(lead, {
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 1,
       desiredHealerCount: 1,
@@ -328,6 +330,8 @@ describe("bot API domain reuse", () => {
     const mythicRun = await runService.createRun(mythicLead, {
       raidId,
       difficulty: "MYTHIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 1,
       desiredHealerCount: 1,
@@ -367,6 +371,8 @@ describe("bot API domain reuse", () => {
     const draftRun = await runService.createRun(closedLead, {
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 1,
       desiredHealerCount: 1,

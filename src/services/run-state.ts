@@ -1,4 +1,4 @@
-import type { RunStatus } from "@/models/enums";
+import type { RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 
 /**
@@ -46,6 +46,38 @@ export function assertRunTransition(from: RunStatus, to: RunStatus): void {
 
 export function isSignupWindowOpen(status: RunStatus, signupsOpen: boolean): boolean {
   return signupsOpen && (status === "OPEN" || status === "ROSTERING");
+}
+
+/**
+ * Authoritative Difficulty x LootType compatibility. MYTHIC cannot be SAVED —
+ * every other combination is allowed. This is the single source of truth for
+ * Create, Edit, the future Mass Create feature, Discord naming, and tests.
+ */
+export function isLootTypeAllowedForDifficulty(
+  difficulty: RaidDifficulty,
+  lootType: RunLootType,
+): boolean {
+  if (difficulty === "MYTHIC" && lootType === "SAVED") return false;
+  return true;
+}
+
+export function assertValidRunLootType(difficulty: RaidDifficulty, lootType: RunLootType): void {
+  if (!isLootTypeAllowedForDifficulty(difficulty, lootType)) {
+    throw new DomainError(
+      "RUN_LOOT_TYPE_INVALID",
+      "Saved runs are not available for Mythic difficulty.",
+    );
+  }
+}
+
+/** 1 <= plannedBossCount <= the raid's total boss count (RaidBoss row count). */
+export function assertValidPlannedBossCount(plannedBossCount: number, totalBossCount: number): void {
+  if (!Number.isInteger(plannedBossCount) || plannedBossCount < 1 || plannedBossCount > totalBossCount) {
+    throw new DomainError(
+      "RUN_BOSS_COUNT_INVALID",
+      `Planned boss count must be between 1 and ${totalBossCount}.`,
+    );
+  }
 }
 
 export type RunLifecycleCapabilities = {

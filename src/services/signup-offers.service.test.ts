@@ -184,6 +184,8 @@ beforeAll(async () => {
     .createRun(lead, {
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 2,
       desiredHealerCount: 4,
@@ -197,6 +199,8 @@ beforeAll(async () => {
     .createRun(lead, {
       raidId,
       difficulty: "MYTHIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 2,
       desiredHealerCount: 4,
