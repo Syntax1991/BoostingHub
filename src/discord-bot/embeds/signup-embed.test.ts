@@ -6,6 +6,7 @@ import { parseCustomId } from "@/discord-bot/custom-ids";
 const base: SignupEmbedData = {
   runId: "r7777777-7777-4777-8777-777777777777",
   runTitle: "Weekend Heroic Catch-up",
+  raidId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   raidName: "Manaforge Omega",
   difficulty: "HEROIC",
   lootType: "VIP",

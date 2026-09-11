@@ -1,15 +1,16 @@
-import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus, SignupStatus } from "@/models/enums";
+import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
-import { runRepository } from "@/repositories/run.repository";
+import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { isActiveSignupOffer } from "@/services/signup-state";
 
 export type SignupEmbedData = {
   runId: string;
   runTitle: string;
+  raidId: string;
   raidName: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -98,27 +99,58 @@ function desiredChannelNameFor(run: {
   });
 }
 
-function signupSignature(run: {
-  status: RunStatus;
-  signupsOpen: boolean;
-  signups: Array<{ userId: string; status: SignupStatus }>;
-  scheduledStartAt: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-  plannedBossCount: number;
-  totalBossCount: number;
-  raidLeadName: string;
-  archivedAt: string | null;
-}): string {
-  const uniqueSignupCount = new Set(
-    run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
-  ).size;
-  // desiredChannelName and archived are folded in so a schedule/difficulty/
-  // lootType/plannedBossCount/raid-lead change, or an Archive/Restore, always
-  // produces sync work (the latter is how the bot notices it needs to move
-  // the Run's channel to/from the archive category) even when nothing about
-  // the signup count/window/status itself changed.
-  return `${uniqueSignupCount}:${isSignupWindowOpen(run.status, run.signupsOpen)}:${run.status}:${desiredChannelNameFor(run)}:${Boolean(run.archivedAt)}`;
+/**
+ * The single normalized projection of a Run's rendered signup-embed content.
+ * `getSignupEmbedData`, `listSyncWork`, and `recordSignupPost` all derive
+ * from this one function so the rendered DTO and the change-detection
+ * signature can never drift apart the way they previously did (a raid edit
+ * changed `raidName`/`raidId` in the rendered embed but was invisible to the
+ * old hand-maintained signature field list).
+ */
+function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
+  return {
+    runId: run.id,
+    runTitle: run.title,
+    raidId: run.raidId,
+    raidName: run.raidName,
+    difficulty: run.difficulty,
+    lootType: run.lootType,
+    plannedBossCount: run.plannedBossCount,
+    totalBossCount: run.totalBossCount,
+    scheduledStartAt: run.scheduledStartAt,
+    runStatus: run.status,
+    signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
+    uniqueSignupCount: new Set(
+      run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
+    ).size,
+  };
+}
+
+/**
+ * Deterministic signature built FROM the normalized `SignupEmbedData` —
+ * every field that can change the rendered embed content is a property on
+ * `data`, so a future embed field only needs to be added to `SignupEmbedData`
+ * and this function picks it up automatically. `channelName` and `archived`
+ * are folded in on top (not part of the rendered embed content itself, but
+ * still real sync signals: a rename or an Archive/Restore) — they must never
+ * be the ONLY thing standing in for a content change.
+ */
+function buildSignupEmbedSignature(data: SignupEmbedData, extra: { channelName: string; archived: boolean }): string {
+  return JSON.stringify({
+    runTitle: data.runTitle,
+    raidId: data.raidId,
+    raidName: data.raidName,
+    difficulty: data.difficulty,
+    lootType: data.lootType,
+    plannedBossCount: data.plannedBossCount,
+    totalBossCount: data.totalBossCount,
+    scheduledStartAt: data.scheduledStartAt,
+    runStatus: data.runStatus,
+    signupWindowOpen: data.signupWindowOpen,
+    uniqueSignupCount: data.uniqueSignupCount,
+    channelName: extra.channelName,
+    archived: extra.archived,
+  });
 }
 
 function toMember(row: RosterSignupRow): RosterEmbedMember {
@@ -169,7 +201,10 @@ export const discordSyncService = {
       const hasExistingSignupPost = Boolean(post?.signupMessageId);
       const canCreateSignupPost = isSignupWindowOpen(run.status, run.signupsOpen);
       if (hasExistingSignupPost || canCreateSignupPost) {
-        const signature = signupSignature(run);
+        const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
+          channelName: desiredChannelNameFor(run),
+          archived: Boolean(run.archivedAt),
+        });
         if (!hasExistingSignupPost || post!.lastSignupSignature !== signature) {
           signups.push({
             runId: run.id,
@@ -188,6 +223,19 @@ export const discordSyncService = {
       // the bot being offline through the whole signup window) has nowhere
       // to legitimately post a roster embed, matching the same rule that
       // blocks a retroactive first signup post for a phase that's over.
+      //
+      // Sync detection here is keyed only on `roster.version`, unlike the
+      // signup embed's full content signature above — this is safe, not a
+      // gap: publishing a roster always advances `run.status` to PUBLISHED
+      // (see roster.service.ts publishRoster), and every field rendered in
+      // `RosterEmbedData` (runTitle, raidName, difficulty — see
+      // `getRosterEmbedData` below) is gated by `canEditIdentityFields`
+      // (DRAFT/OPEN only) or `canEditPlanningFields` (DRAFT/OPEN/ROSTERING
+      // only) in run-state.ts, neither of which ever includes PUBLISHED (or
+      // any later status). So none of those fields can legally change for as
+      // long as a published roster (and thus a roster post) exists — the
+      // only way `RosterEmbedData` content changes is a re-publish, which is
+      // exactly what bumps `roster.version`.
       const hasAnyDiscordPresence = Boolean(post?.runChannelId) || Boolean(post?.signupChannelId);
       if (run.roster?.publishedAt && hasAnyDiscordPresence) {
         if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
@@ -209,21 +257,7 @@ export const discordSyncService = {
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
     const run = await runRepository.findById(runId);
     if (!run) return null;
-    return {
-      runId: run.id,
-      runTitle: run.title,
-      raidName: run.raidName,
-      difficulty: run.difficulty,
-      lootType: run.lootType,
-      plannedBossCount: run.plannedBossCount,
-      totalBossCount: run.totalBossCount,
-      scheduledStartAt: run.scheduledStartAt,
-      runStatus: run.status,
-      signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
-      uniqueSignupCount: new Set(
-        run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
-      ).size,
-    };
+    return toSignupEmbedData(run);
   },
 
   /** Null when the Run has no published roster yet — there is nothing to post. */
@@ -265,15 +299,17 @@ export const discordSyncService = {
   },
 
   async recordSignupPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
-    const data = await this.getSignupEmbedData(input.runId);
-    if (!data) return;
     const run = await runRepository.findById(input.runId);
     if (!run) return;
+    const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
+      channelName: desiredChannelNameFor(run),
+      archived: Boolean(run.archivedAt),
+    });
     await runDiscordPostRepository.recordSignupPost({
       runId: input.runId,
       signupChannelId: input.channelId,
       signupMessageId: input.messageId,
-      lastSignupSignature: signupSignature(run),
+      lastSignupSignature: signature,
     });
   },
 
