@@ -7,6 +7,7 @@ import type {
 } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { resetIdentifierFor } from "@/lib/datetime";
+import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
@@ -166,11 +167,15 @@ export const signupService = {
       resetIdentifier,
     );
 
-    const option = eligible.find(
-      (item) => item.characterId === input.characterId && item.role === input.role,
-    );
+    const option = eligible.find((item) => item.characterId === input.characterId);
     if (!option) {
       throw boosterRejection(ineligible[0]?.reason);
+    }
+    if (!option.roles.includes(input.role)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_ROLE",
+        `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[input.role]}.`,
+      );
     }
 
     const record = await persistSignup({
@@ -474,12 +479,6 @@ function boosterRejection(reason: string | undefined): DomainError {
   if (reason === "LOCKOUT_CONFLICT") {
     return new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
   }
-  if (reason === "NO_SPECIALIZATION") {
-    return new DomainError(
-      "CHARACTER_NO_SPECIALIZATION",
-      "Set this character's specialization before offering it.",
-    );
-  }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");
 }
 
@@ -561,8 +560,12 @@ async function buildReconciliationPlan(
 /**
  * Validates every offered Character against the same eligibility rules a
  * single-Character signup already enforces (ownership already checked by the
- * caller). Returns the resolved BOOSTER role per characterId; empty for
- * LOOTBUDDY, which carries no per-offer role.
+ * caller). For BOOSTER, every offer must carry an explicit role that the
+ * Character's class can actually perform (`option.roles`, from
+ * `rolesForClass`) — the server never trusts an arbitrary client role, but it
+ * also no longer restricts the choice to the specialization-derived default.
+ * Returns the resolved BOOSTER role per characterId; empty for LOOTBUDDY,
+ * which carries no per-offer role.
  */
 function validateOfferedCharacters(
   participationType: ParticipationType,
@@ -591,16 +594,16 @@ function validateOfferedCharacters(
         const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;
         throw boosterRejection(reason);
       }
-      // The Character's current specialization is the sole authority for its
-      // signup role — never a client-supplied choice. A client may omit role
-      // entirely (the server derives it) but may not offer a different one.
-      if (offer.role && offer.role !== option.role) {
+      if (!offer.role) {
+        throw new DomainError("INVALID_CHARACTER_ROLE", `Choose a role for ${character.name}.`);
+      }
+      if (!option.roles.includes(offer.role)) {
         throw new DomainError(
           "INVALID_CHARACTER_ROLE",
-          `${character.name} is currently ${character.specialization ?? "unspecialized"} and must be offered as ${option.role}, not ${offer.role}.`,
+          `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[offer.role]}.`,
         );
       }
-      roleByCharacterId.set(offer.characterId, option.role);
+      roleByCharacterId.set(offer.characterId, offer.role);
     }
     return roleByCharacterId;
   }

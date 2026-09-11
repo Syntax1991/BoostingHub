@@ -5,7 +5,7 @@ import type {
   RunStatus,
   WowClass,
 } from "@/models/enums";
-import { roleForSpecialization } from "@/lib/wow-specializations";
+import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -42,8 +42,7 @@ export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
   | "DIFFICULTY_NOT_APPROVED"
-  | "LOCKOUT_CONFLICT"
-  | "NO_SPECIALIZATION";
+  | "LOCKOUT_CONFLICT";
 
 export type LootbuddyIneligibilityReason = "INACTIVE" | "LOCKOUT_CONFLICT";
 
@@ -52,7 +51,6 @@ export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, 
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
-  NO_SPECIALIZATION: "Character has no valid specialization set.",
 };
 
 export const LOOTBUDDY_INELIGIBILITY_MESSAGES: Record<LootbuddyIneligibilityReason, string> = {
@@ -66,7 +64,10 @@ export type EligibleBoosterOption = {
   realm: string;
   wowClass: WowClass;
   specialization: string | null;
-  role: CharacterRole;
+  /** Every role this Character's class can actually perform — the signup role choice is bounded to this set. */
+  roles: CharacterRole[];
+  /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
+  defaultRole: CharacterRole | null;
 };
 
 export type IneligibleBoosterCharacter = {
@@ -95,11 +96,12 @@ export type IneligibleLootbuddyCharacter = {
 
 /**
  * Booster options require an APPROVED BoosterQualification for the run difficulty.
- * A Character's role is not a choice — it is whatever role its current
- * specialization maps to (roleForSpecialization), so an eligible Character
- * produces exactly one option. A missing or unrecognized specialization is
- * NO_SPECIALIZATION, never a guessed role. Heroic approval never implies
- * Mythic.
+ * A Character's specialization determines only the DEFAULT signup role — the
+ * User may choose any role the Character's class can actually perform
+ * (`rolesForClass`), never restricted to specialization alone. A missing or
+ * unrecognized specialization does not block an otherwise-eligible Character;
+ * it just means no default is offered (`defaultRole: null`) and the User must
+ * choose explicitly. Heroic approval never implies Mythic.
  */
 export function evaluateBoosterOptions(
   characters: EligibilityCharacter[],
@@ -152,11 +154,9 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    const role = character.specialization ? roleForSpecialization(character.wowClass, character.specialization) : null;
-    if (!role) {
-      pushIneligible("NO_SPECIALIZATION");
-      continue;
-    }
+    const defaultRole = character.specialization
+      ? roleForSpecialization(character.wowClass, character.specialization)
+      : null;
 
     eligible.push({
       characterId: character.id,
@@ -164,7 +164,8 @@ export function evaluateBoosterOptions(
       realm: character.realm,
       wowClass: character.wowClass,
       specialization: character.specialization,
-      role,
+      roles: rolesForClass(character.wowClass),
+      defaultRole,
     });
   }
 

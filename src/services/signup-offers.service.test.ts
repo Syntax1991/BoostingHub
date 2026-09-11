@@ -236,7 +236,7 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }],
+      offers: [{ characterId: hunterA, role: "DPS" }],
     });
     expect(result.created).toBe(1);
     const active = await activeRowsFor(mainRunId, ids.target);
@@ -247,7 +247,7 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
     });
     expect(result.created).toBe(1);
     expect(result.kept).toBe(1);
@@ -259,7 +259,7 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterB }, { characterId: hunterC }],
+      offers: [{ characterId: hunterB, role: "DPS" }, { characterId: hunterC, role: "DPS" }],
     });
     expect(result.withdrawn).toBe(1);
     expect(result.kept).toBe(1);
@@ -282,7 +282,7 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }, { characterId: hunterC }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }, { characterId: hunterC, role: "DPS" }],
     });
     expect(result.reactivated).toBe(1);
     expect(result.created).toBe(0);
@@ -304,7 +304,7 @@ describe("signupService.setCharacterOffers — basic offer sets", () => {
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }, { characterId: hunterC }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }, { characterId: hunterC, role: "DPS" }],
     });
     expect(result.created).toBe(0);
     expect(result.reactivated).toBe(0);
@@ -330,7 +330,7 @@ describe("signupService.setCharacterOffers — validation", () => {
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         participationType: "BOOSTER",
-        offers: [{ characterId: hunterA }, { characterId: hunterA }],
+        offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterA, role: "DPS" }],
       }),
       "SIGNUP_OFFER_DUPLICATE_CHARACTER",
     );
@@ -369,33 +369,41 @@ describe("signupService.setCharacterOffers — validation", () => {
     );
   });
 
-  it("defaults an omitted role to the character's specialization-derived role, and rejects a conflicting explicit role", async () => {
-    const result = await signupService.setCharacterOffers(target, {
-      runId: mainRunId,
-      participationType: "BOOSTER",
-      offers: [{ characterId: paladinHybrid }],
-    });
-    expect(result.created).toBe(1);
-    const active = await activeRowsFor(mainRunId, ids.target);
-    expect(active[0]?.role).toBe("DPS"); // paladinHybrid is specced Retribution
-
-    // An explicit role matching the current specialization is accepted.
-    const kept = await signupService.setCharacterOffers(target, {
-      runId: mainRunId,
-      participationType: "BOOSTER",
-      offers: [{ characterId: paladinHybrid, role: "DPS" }],
-    });
-    expect(kept.kept).toBe(1);
-
-    // The Character's specialization is the sole role authority — a client can never override it.
+  it("requires an explicit role for every BOOSTER offer — an omitted role is rejected, never guessed", async () => {
     await expectDomainCode(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         participationType: "BOOSTER",
-        offers: [{ characterId: paladinHybrid, role: "TANK" }],
+        offers: [{ characterId: paladinHybrid }],
       }),
       "INVALID_CHARACTER_ROLE",
     );
+  });
+
+  it("accepts any role the character's class can perform, not only its specialization-derived default", async () => {
+    // paladinHybrid is specced Retribution (DPS default), but Paladins can also Tank or Heal —
+    // the class, not the specialization, is what bounds the choice.
+    const tanked = await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      participationType: "BOOSTER",
+      offers: [{ characterId: paladinHybrid, role: "TANK" }],
+    });
+    expect(tanked.created).toBe(1);
+    const active = await activeRowsFor(mainRunId, ids.target);
+    expect(active[0]?.role).toBe("TANK");
+    const rowId = active[0]?.id;
+
+    // Changing to a different class-valid role updates the same row — no duplicate.
+    const healed = await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      participationType: "BOOSTER",
+      offers: [{ characterId: paladinHybrid, role: "HEALER" }],
+    });
+    expect(healed.kept).toBe(1);
+    const afterChange = await activeRowsFor(mainRunId, ids.target);
+    expect(afterChange).toHaveLength(1);
+    expect(afterChange[0]?.id).toBe(rowId);
+    expect(afterChange[0]?.role).toBe("HEALER");
 
     await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
   });
@@ -405,7 +413,7 @@ describe("signupService.setCharacterOffers — validation", () => {
       signupService.setCharacterOffers(target, {
         runId: mythicRunId,
         participationType: "BOOSTER",
-        offers: [{ characterId: hunterA }],
+        offers: [{ characterId: hunterA, role: "DPS" }],
       }),
       "BOOSTER_ACCESS_DIFFICULTY_MISMATCH",
     );
@@ -415,14 +423,14 @@ describe("signupService.setCharacterOffers — validation", () => {
     await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }],
+      offers: [{ characterId: hunterA, role: "DPS" }],
     });
 
     await expectDomainCode(
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         participationType: "BOOSTER",
-        offers: [{ characterId: hunterB }, { characterId: hunterInactive }],
+        offers: [{ characterId: hunterB, role: "DPS" }, { characterId: hunterInactive }],
       }),
       "CHARACTER_INACTIVE",
     );
@@ -439,13 +447,13 @@ describe("signupService.setCharacterOffers — participation type switching", ()
     await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
     });
 
     const switched = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "LOOTBUDDY",
-      offers: [{ characterId: hunterC }],
+      offers: [{ characterId: hunterC, role: "DPS" }],
       lootbuddyMode: "LOOT_ONLY",
       lootbuddyVerification: "NONE",
     });
@@ -466,7 +474,7 @@ describe("signupService.setCharacterOffers — participation type switching", ()
     const backToBooster = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }],
+      offers: [{ characterId: hunterA, role: "DPS" }],
     });
     expect(backToBooster.withdrawn).toBe(1);
     expect(backToBooster.reactivated).toBe(1);
@@ -480,7 +488,7 @@ describe("signupService.setCharacterOffers — signup window", () => {
     await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }],
+      offers: [{ characterId: hunterA, role: "DPS" }],
     });
     await runService.setSignupWindow(lead, mainRunId, false);
 
@@ -488,7 +496,7 @@ describe("signupService.setCharacterOffers — signup window", () => {
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         participationType: "BOOSTER",
-        offers: [{ characterId: hunterA }, { characterId: hunterB }],
+        offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
       }),
       "SIGNUP_CLOSED",
     );
@@ -509,7 +517,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     const created = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
     });
     expect(created.created + created.reactivated).toBeGreaterThan(0);
 
@@ -528,7 +536,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
       signupService.setCharacterOffers(target, {
         runId: mainRunId,
         participationType: "BOOSTER",
-        offers: [{ characterId: hunterB }],
+        offers: [{ characterId: hunterB, role: "DPS" }],
       }),
       "SIGNUP_OFFER_ROSTER_SELECTED",
     );
@@ -544,7 +552,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     const released = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterB }],
+      offers: [{ characterId: hunterB, role: "DPS" }],
     });
     expect(released.withdrawn).toBe(1);
     expect(released.kept).toBe(1);
@@ -556,7 +564,7 @@ describe("signupService.setCharacterOffers — roster protection", () => {
     await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
     });
     const active = await activeRowsFor(mainRunId, ids.target);
     const rowA = active.find((row) => row.character?.id === hunterA)!;
@@ -609,7 +617,7 @@ describe("signupService.cancelActiveOffers", () => {
     await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
     });
 
     const result = await signupService.cancelActiveOffers(target, { runId: mainRunId });
@@ -626,7 +634,7 @@ describe("signupService.cancelActiveOffers", () => {
     await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }, { characterId: hunterB }],
+      offers: [{ characterId: hunterA, role: "DPS" }, { characterId: hunterB, role: "DPS" }],
     });
     const active = await activeRowsFor(mainRunId, ids.target);
     const rowA = active.find((row) => row.character?.id === hunterA)!;
@@ -663,7 +671,7 @@ describe("concurrency regression coverage", () => {
     const created = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }],
+      offers: [{ characterId: hunterA, role: "DPS" }],
     });
     expect(created.created + created.reactivated).toBeGreaterThan(0);
     await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
@@ -697,7 +705,7 @@ describe("concurrency regression coverage", () => {
     const created = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: hunterA }],
+      offers: [{ characterId: hunterA, role: "DPS" }],
     });
     expect(created.created + created.reactivated).toBeGreaterThan(0);
     const active = await activeRowsFor(mainRunId, ids.target);
@@ -722,7 +730,7 @@ describe("concurrency regression coverage", () => {
   });
 });
 
-describe("signupService.setCharacterOffers — role authority never trusts a stale persisted role", () => {
+describe("signupService.setCharacterOffers — per-Character role choice, restored", () => {
   async function createMonk(name: string, specialization: string) {
     const id = crypto.randomUUID();
     createdCharacterIds.push(id);
@@ -745,7 +753,7 @@ describe("signupService.setCharacterOffers — role authority never trusts a sta
     return id;
   }
 
-  it("reactivating a WITHDRAWN row with a stale role refreshes it from the Character's current specialization", async () => {
+  it("reactivating a WITHDRAWN row sets the role to whatever the User currently selects — never the stale historical role", async () => {
     const monkId = await createMonk("Reoffermist", "Mistweaver");
     const staleRowId = crypto.randomUUID();
     await orm.RunSignup.create({
@@ -754,7 +762,7 @@ describe("signupService.setCharacterOffers — role authority never trusts a sta
       userId: ids.target,
       characterId: monkId,
       participationType: "BOOSTER",
-      role: "TANK", // stale — the exact shape of the reported Synmist bug
+      role: "HEALER",
       isBackup: false,
       status: "WITHDRAWN",
       createdAt: new Date().toISOString(),
@@ -764,37 +772,34 @@ describe("signupService.setCharacterOffers — role authority never trusts a sta
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: monkId }],
+      offers: [{ characterId: monkId, role: "DPS" }],
     });
     expect(result.reactivated).toBe(1);
 
     const row = await signupRepository.findById(staleRowId);
     expect(row?.id).toBe(staleRowId);
-    expect(row?.role).toBe("HEALER");
+    expect(row?.status).toBe("PENDING");
+    expect(row?.role).toBe("DPS");
 
     await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
   });
 
-  it("reconciling a kept offer with a stale persisted role updates it in place, without creating a duplicate row", async () => {
+  it("changing only the role for an already-offered Character updates the same row in place — no duplicate", async () => {
     const monkId = await createMonk("Keepmist", "Mistweaver");
-    const staleRowId = crypto.randomUUID();
-    await orm.RunSignup.create({
-      id: staleRowId,
+    const created = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
-      userId: ids.target,
-      characterId: monkId,
       participationType: "BOOSTER",
-      role: "TANK", // stale
-      isBackup: false,
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      offers: [{ characterId: monkId, role: "HEALER" }],
     });
+    expect(created.created).toBe(1);
+    const originalRowId = (await activeRowsFor(mainRunId, ids.target)).find(
+      (row) => row.character?.id === monkId,
+    )?.id;
 
     const result = await signupService.setCharacterOffers(target, {
       runId: mainRunId,
       participationType: "BOOSTER",
-      offers: [{ characterId: monkId }],
+      offers: [{ characterId: monkId, role: "TANK" }],
     });
     expect(result.created).toBe(0);
     expect(result.reactivated).toBe(0);
@@ -803,8 +808,32 @@ describe("signupService.setCharacterOffers — role authority never trusts a sta
     const active = await activeRowsFor(mainRunId, ids.target);
     const rows = active.filter((row) => row.character?.id === monkId);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe(staleRowId);
-    expect(rows[0]?.role).toBe("HEALER");
+    expect(rows[0]?.id).toBe(originalRowId);
+    expect(rows[0]?.role).toBe("TANK");
+
+    await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
+  });
+
+  it("persists a different, independent role per Character in one multi-character request — no role leaks between Characters", async () => {
+    const tankMonk = await createMonk("Multitank", "Brewmaster");
+    const healMonk = await createMonk("Multiheal", "Mistweaver");
+    const dpsMonk = await createMonk("Multidps", "Windwalker");
+
+    const result = await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      participationType: "BOOSTER",
+      offers: [
+        { characterId: tankMonk, role: "TANK" },
+        { characterId: healMonk, role: "HEALER" },
+        { characterId: dpsMonk, role: "DPS" },
+      ],
+    });
+    expect(result.created).toBe(3);
+
+    const active = await activeRowsFor(mainRunId, ids.target);
+    expect(active.find((row) => row.character?.id === tankMonk)?.role).toBe("TANK");
+    expect(active.find((row) => row.character?.id === healMonk)?.role).toBe("HEALER");
+    expect(active.find((row) => row.character?.id === dpsMonk)?.role).toBe("DPS");
 
     await signupService.setCharacterOffers(target, { runId: mainRunId, participationType: "BOOSTER", offers: [] });
   });

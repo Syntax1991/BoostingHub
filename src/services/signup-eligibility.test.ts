@@ -41,26 +41,66 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
 }
 
 describe("booster eligibility", () => {
-  it("produces exactly the role the Character's current specialization maps to, never every class-capable role", () => {
+  it("exposes every role the Character's class can perform, not just the specialization-derived default", () => {
     const result = evaluateBoosterOptions([shaman()], heroicRun, reset);
-    expect(result.eligible.map((item) => item.role)).toEqual(["HEALER"]);
+    expect(result.eligible[0]?.roles).toEqual(["DPS", "HEALER"]);
+    expect(result.eligible[0]?.defaultRole).toBe("HEALER");
   });
 
-  it("derives the correct role for each Monk specialization (Mistweaver/Brewmaster/Windwalker)", () => {
+  it("derives the correct default role for each Monk specialization (Mistweaver/Brewmaster/Windwalker), never class order", () => {
     const monk = (specialization: string) => shaman({ wowClass: "MONK", specialization });
-    expect(evaluateBoosterOptions([monk("Mistweaver")], heroicRun, reset).eligible[0]?.role).toBe("HEALER");
-    expect(evaluateBoosterOptions([monk("Brewmaster")], heroicRun, reset).eligible[0]?.role).toBe("TANK");
-    expect(evaluateBoosterOptions([monk("Windwalker")], heroicRun, reset).eligible[0]?.role).toBe("DPS");
+    const mistweaver = evaluateBoosterOptions([monk("Mistweaver")], heroicRun, reset).eligible[0];
+    const brewmaster = evaluateBoosterOptions([monk("Brewmaster")], heroicRun, reset).eligible[0];
+    const windwalker = evaluateBoosterOptions([monk("Windwalker")], heroicRun, reset).eligible[0];
+    expect(mistweaver?.defaultRole).toBe("HEALER");
+    expect(brewmaster?.defaultRole).toBe("TANK");
+    expect(windwalker?.defaultRole).toBe("DPS");
+    // Every Monk option allows all three roles regardless of which spec is imported.
+    expect(mistweaver?.roles).toEqual(["TANK", "HEALER", "DPS"]);
+    expect(brewmaster?.roles).toEqual(["TANK", "HEALER", "DPS"]);
+    expect(windwalker?.roles).toEqual(["TANK", "HEALER", "DPS"]);
   });
 
-  it("does not guess a role for a missing or unrecognized specialization", () => {
+  it("allows every role Holy Paladin and Restoration Shaman's classes can perform, defaulting to HEALER", () => {
+    const paladin = evaluateBoosterOptions(
+      [shaman({ wowClass: "PALADIN", specialization: "Holy" })],
+      heroicRun,
+      reset,
+    ).eligible[0];
+    expect(paladin?.defaultRole).toBe("HEALER");
+    expect(paladin?.roles).toEqual(["HEALER", "TANK", "DPS"]);
+
+    const restoShaman = evaluateBoosterOptions([shaman()], heroicRun, reset).eligible[0];
+    expect(restoShaman?.defaultRole).toBe("HEALER");
+    expect(restoShaman?.roles).toEqual(["DPS", "HEALER"]);
+  });
+
+  it("Priest and Mage: allowed roles are bounded by class, never expanded beyond it", () => {
+    const priest = evaluateBoosterOptions(
+      [shaman({ wowClass: "PRIEST", specialization: "Holy" })],
+      heroicRun,
+      reset,
+    ).eligible[0];
+    expect(priest?.roles).toEqual(["HEALER", "DPS"]);
+    expect(priest?.roles).not.toContain("TANK");
+
+    const mage = evaluateBoosterOptions(
+      [shaman({ wowClass: "MAGE", specialization: "Frost" })],
+      heroicRun,
+      reset,
+    ).eligible[0];
+    expect(mage?.roles).toEqual(["DPS"]);
+  });
+
+  it("does not block eligibility for a missing or unrecognized specialization — it just leaves no default, so the User must choose explicitly", () => {
     const missing = evaluateBoosterOptions([shaman({ specialization: null })], heroicRun, reset);
-    expect(missing.eligible).toHaveLength(0);
-    expect(missing.ineligible[0]?.reason).toBe("NO_SPECIALIZATION");
+    expect(missing.eligible).toHaveLength(1);
+    expect(missing.eligible[0]?.defaultRole).toBeNull();
+    expect(missing.eligible[0]?.roles).toEqual(["DPS", "HEALER"]);
 
     const unrecognized = evaluateBoosterOptions([shaman({ specialization: "Not A Real Spec" })], heroicRun, reset);
-    expect(unrecognized.eligible).toHaveLength(0);
-    expect(unrecognized.ineligible[0]?.reason).toBe("NO_SPECIALIZATION");
+    expect(unrecognized.eligible).toHaveLength(1);
+    expect(unrecognized.eligible[0]?.defaultRole).toBeNull();
   });
 
   it("does not treat heroic approval as mythic eligibility", () => {
@@ -114,7 +154,7 @@ describe("booster eligibility", () => {
     const result = evaluateBoosterOptions([shaman(), second], heroicRun, reset);
     expect(result.eligible.map((item) => item.characterId).includes("char-1")).toBe(true);
     expect(result.eligible.map((item) => item.characterId).includes("char-2")).toBe(true);
-    expect(result.eligible.find((item) => item.characterId === "char-2")?.role).toBe("HEALER");
+    expect(result.eligible.find((item) => item.characterId === "char-2")?.defaultRole).toBe("HEALER");
   });
 });
 
