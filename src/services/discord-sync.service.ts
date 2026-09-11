@@ -49,8 +49,12 @@ export type RosterEmbedData = {
   totalSelected: number;
 };
 
-export type SignupSyncWorkItem = { runId: string; hasExistingPost: boolean };
-export type RosterSyncWorkItem = { runId: string; hasExistingPost: boolean };
+/**
+ * existingChannelId/existingMessageId let the bot edit its own prior post;
+ * both are null when nothing has been posted for this Run yet.
+ */
+export type SignupSyncWorkItem = { runId: string; existingChannelId: string | null; existingMessageId: string | null };
+export type RosterSyncWorkItem = { runId: string; existingChannelId: string | null; existingMessageId: string | null };
 
 function signupSignature(run: { status: RunStatus; signupsOpen: boolean; signups: Array<{ userId: string; status: string }> }): string {
   const uniqueSignupCount = new Set(
@@ -96,12 +100,20 @@ export const discordSyncService = {
 
       const signature = signupSignature(run);
       if (!post?.signupMessageId || post.lastSignupSignature !== signature) {
-        signups.push({ runId: run.id, hasExistingPost: Boolean(post?.signupMessageId) });
+        signups.push({
+          runId: run.id,
+          existingChannelId: post?.signupChannelId ?? null,
+          existingMessageId: post?.signupMessageId ?? null,
+        });
       }
 
       if (run.roster?.publishedAt) {
         if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
-          roster.push({ runId: run.id, hasExistingPost: Boolean(post?.rosterMessageId) });
+          roster.push({
+            runId: run.id,
+            existingChannelId: post?.rosterChannelId ?? null,
+            existingMessageId: post?.rosterMessageId ?? null,
+          });
         }
       }
     }

@@ -1,6 +1,6 @@
 # Architecture
 
-Boostting Bot is a modular Next.js application with an internal **MVCS** boundary. There is no separate backend service.
+Boostting Bot is a modular Next.js application with an internal **MVCS** boundary. There is no separate backend service for the Web app itself — the one exception is the Discord bot, a genuinely separate long-lived Node process that reaches BoostingHub only through a dedicated internal API (see Discord Bot API below), never through Prisma or a Repository directly.
 
 ## Stack
 
@@ -38,7 +38,7 @@ Better Auth's `/api/auth/*` handler is the authentication controller for OAuth a
 
 ### Service
 
-Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, User disciplinary strikes, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition.
+Application and business rules: booster access request/review, booster access matching, lockout conflict, run/signup state machines, run create/edit/open/signup-window/cancel/start/complete, signup eligibility, multi-character offer reconciliation, roster draft/publish, attendance snapshot/update/completeness, completed-run payout settlement, User disciplinary strikes, canonical run-detail DTO shaping, character identity/lifecycle, Battle.net connect/import/link/refresh, dashboard composition, Discord sync-work computation and embed DTO shaping.
 
 ### Repository
 
@@ -47,6 +47,10 @@ Prisma 8 access lives here (`orm.Model` via `src/lib/prisma.ts`). Views and most
 ### External integrations
 
 Outbound HTTP to third parties belongs under `src/integrations/`, not in Views or Controllers. The Battle.net / Blizzard client (`src/integrations/blizzard/blizzard-api-client.ts`) is the only place that talks to Blizzard OAuth and regional profile APIs. Services call that client; they do not scatter raw `fetch` calls across the app.
+
+### Discord Bot API
+
+`src/app/api/bot/*` Route Handlers are the only path the separate Discord bot process (`src/discord-bot/`, its own long-lived Node process) may use to reach BoostingHub — never direct Repository or Prisma access. Inbound, not outbound: the bot calls in, authenticated by a dedicated service token (`BOOSTINGHUB_BOT_API_TOKEN`, constant-time compared) that grants access to the bot surface only, never a domain-role bypass. Every mutating call still resolves a real acting User from the Discord-authenticated `discordUserId` and runs the exact same Service the Web Controllers call, so eligibility rules can never drift between the two surfaces. See [discord-bot.md](features/discord-bot.md).
 
 ## Persistence boundary
 
@@ -76,7 +80,7 @@ Hidden buttons are not an authorization control.
 
 ```text
 src/
-  app/             View routes, Better Auth handler, integration route handlers
+  app/             View routes, Better Auth handler, integration route handlers, /api/bot/* (Discord Bot API)
   components/      View components
   controllers/     Thin application boundary
   services/        Business rules
@@ -87,6 +91,7 @@ src/
   auth/            Auth configuration and authorization helpers
   lib/             Cross-cutting utilities
   prisma/          Prisma 8 contract, client, seed
+  discord-bot/     Separate long-lived process (discord.js) — calls /api/bot/* only, never Prisma/Repositories
 ```
 
 ## Rules for later contributors
@@ -103,3 +108,4 @@ src/
 10. Update documentation in the same change that alters architecture or domain behavior.
 11. Treat seed data as a development/test fixture, not required production state.
 12. Do not hard-code seeded user or run IDs in production services.
+13. The Discord bot process never imports a Service or Repository directly — it is a client of `/api/bot/*` like any other. Never let it read PostgreSQL.

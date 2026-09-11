@@ -273,7 +273,7 @@ describe("discordSyncService.listSyncWork", () => {
   it("flags a run needing its first signup post, then clears after recording it", async () => {
     let work = await discordSyncService.listSyncWork();
     const before = work.signups.find((item) => item.runId === runId);
-    expect(before?.hasExistingPost).toBe(false);
+    expect(before?.existingMessageId).toBeNull();
 
     await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
 
@@ -286,7 +286,8 @@ describe("discordSyncService.listSyncWork", () => {
 
     const work = await discordSyncService.listSyncWork();
     const item = work.signups.find((entry) => entry.runId === runId);
-    expect(item?.hasExistingPost).toBe(true);
+    expect(item?.existingMessageId).toBe("msg-1");
+    expect(item?.existingChannelId).toBe("chan-1");
 
     await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
     const settled = await discordSyncService.listSyncWork();
@@ -329,7 +330,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
 
   it("reports roster sync work, clears it after recording, and reopens it on republish", async () => {
     let work = await discordSyncService.listSyncWork();
-    expect(work.roster.some((item) => item.runId === runId && !item.hasExistingPost)).toBe(true);
+    expect(work.roster.some((item) => item.runId === runId && item.existingMessageId === null)).toBe(true);
 
     await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1" });
     work = await discordSyncService.listSyncWork();
@@ -339,6 +340,6 @@ describe("discordSyncService.getRosterEmbedData", () => {
     await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
 
     work = await discordSyncService.listSyncWork();
-    expect(work.roster.some((item) => item.runId === runId && item.hasExistingPost)).toBe(true);
+    expect(work.roster.some((item) => item.runId === runId && item.existingMessageId === "roster-msg-1")).toBe(true);
   });
 });

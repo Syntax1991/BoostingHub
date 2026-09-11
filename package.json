@@ -14,12 +14,16 @@
     "db:migrate": "prisma db migrate --yes",
     "db:seed": "tsx src/prisma/seed.ts",
     "db:verify": "prisma db verify",
-    "contract:emit": "prisma contract emit"
+    "contract:emit": "prisma contract emit",
+    "bot:dev": "tsx watch src/discord-bot/index.ts",
+    "bot:start": "tsx src/discord-bot/index.ts",
+    "bot:register-commands": "tsx src/discord-bot/register-commands.ts"
   },
   "dependencies": {
     "@prisma/orm-postgres": "^8.0.0-rc.8",
     "better-auth": "^1.7.3",
     "clsx": "^2.1.1",
+    "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.43.0",
     "next": "16.3.4",

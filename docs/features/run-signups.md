@@ -2,16 +2,29 @@
 
 ## Purpose
 
-Let a signed-in user persist a **booster** or **lootbuddy** signup for a specific run. Participation type belongs to the signup, not the account.
+Let a signed-in user persist a **booster** or **lootbuddy** signup for a specific run, offering one or more Characters. Participation type belongs to the signup, not the account. Web and Discord are both clients of the same domain — see [discord-bot.md](discord-bot.md).
 
-## User flow
+## Character offers (multi-character signup)
+
+Each `RunSignup` row is one offered Character — the schema needed no redesign to support this: the existing unique key `(runId, userId, characterId, participationType)` already allows a User to hold several rows for the same Run. `signupService.setCharacterOffers(actor, { runId, participationType, offers, lootbuddyMode?, lootbuddyVerification? })` is the single entry point for the whole desired offer-set, used by both the Web signup dialog and the Discord Signup/Lootbuddy buttons:
+
+- **Set semantics, not additive.** The `offers` array is the complete desired set. Omitting a currently-offered Character withdraws it; a `WITHDRAWN` row matching a re-offered Character is reactivated in place rather than duplicated.
+- **One active participation type per User + Run.** Switching from BOOSTER to LOOTBUDDY (or back) withdraws every active offer of the other type as part of the same atomic call.
+- **All-or-nothing.** If any offered Character fails eligibility, or any removal is currently protected (see below), the whole call is rejected and nothing changes.
+- **Role defaults to the Character's own specialization** when omitted and unambiguous; an explicit `role` is required only when a hybrid class's default isn't valid for the run (rare — `INVALID_CHARACTER_ROLE`/`VALIDATION_FAILED`).
+
+Removal protection: a `PENDING` offer may always be withdrawn while lifecycle rules allow editing. An offer currently selected on the **Roster tab's draft** cannot be silently withdrawn (`SIGNUP_OFFER_ROSTER_SELECTED` — the raid lead must change the roster selection first). A `SELECTED` offer after `PUBLISHED` follows the existing self-withdraw lock (see Withdrawal below).
+
+`signupService.cancelActiveOffers(actor, { runId })` withdraws the User's entire current active offer-set atomically — the domain behind a Discord "Cancel Signup" button — subject to the same protection rules.
+
+## User flow (Web)
 
 1. Add at least one character on `/characters` if the account has none.
 2. Open `/runs` or `/runs/[runId]`.
 3. Choose **Sign up** on an open run.
-4. Pick Booster or Lootbuddy.
-5. Submit. The row is stored as `PENDING`.
-6. Review or withdraw (when allowed) on `/my-runs` or the Run detail Signups tab.
+4. Pick Booster or Lootbuddy, then check every Character to offer (or **Select all eligible**).
+5. Submit once. `setCharacterOffers` reconciles the whole set; rows are `PENDING`.
+6. Review or edit on `/my-runs` or the Run detail Signups tab — reopening the dialog preselects the current active offer-set.
 
 ## Participation types
 
@@ -72,27 +85,26 @@ Computed by `canSelfWithdrawSignup` in `signup-state.ts`. The view only renders 
 
 Unique key: `(runId, userId, characterId, participationType)`.
 
-Role is stored on the booster row but is not a separate uniqueness dimension: one character can offer one BOOSTER signup per run. Different characters for the same user/run are allowed. The same character as BOOSTER and LOOTBUDDY is allowed.
+Role is stored on the booster row but is not a separate uniqueness dimension: one character can offer one BOOSTER signup per run. Different characters for the same user/run are allowed — that's exactly how one User's multiple offers are represented. The database key permits a BOOSTER row and a LOOTBUDDY row for the same character to coexist, but `setCharacterOffers` enforces the stronger **one active participation type per User + Run** rule at the service layer (see above) — a leftover row of the other type is always withdrawn, never left active, as part of any reconciliation.
 
 Seeded run IDs use a `r` prefix (UUID-shaped, not RFC hex). Validators accept those operational IDs instead of `z.uuid()`.
 
 ## Counts
 
-Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only.
+Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only. The Discord signup embed's count is the number of **distinct Users** with an active signup, never the number of `RunSignup` rows — see [discord-bot.md](discord-bot.md).
 
 ## Architecture
 
-- View: `/runs` dialog, `/runs/[runId]` Signups tab, `/my-runs` groups, dashboard upcoming signups
+- View: `/runs` dialog (multi-select), `/runs/[runId]` Signups tab (grouped by User), `/my-runs` (grouped by Run), dashboard upcoming signups
 - Controller: `src/controllers/signup.actions.ts`
-- Service: `signupService` + `signup-eligibility.ts` + `signup-state.ts`
+- Service: `signupService` (`setCharacterOffers`, `cancelActiveOffers`) + `signup-eligibility.ts` + `signup-state.ts` (`planCharacterOfferReconciliation`)
 - Delegates: `BoosterAccessService`, `LockoutService`, `isSignupWindowOpen`
+- Repository: `signup.repository.ts` (`applyOfferPlan` executes a reconciliation plan atomically, re-validating each row's status immediately before writing it)
+- Model: `RunSignup`
+- Discord: `src/discord-bot/*` calls the exact same `signupService` through `/api/bot/*` — see [discord-bot.md](discord-bot.md)
 
 Requesting and reviewing access: [booster-access-management.md](booster-access-management.md).
 
 ## Deferred
-- Repository: `signup.repository.ts`
-- Model: `RunSignup`
 
-## Deferred
-
-Still deferred: wallets, escrow, extra organizational cuts. Completed-run settlement: see [run-payouts.md](run-payouts.md).
+Preferred/ranked Character among offers, wallets, escrow, extra organizational cuts. Completed-run settlement: see [run-payouts.md](run-payouts.md).
