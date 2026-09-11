@@ -1,57 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { buildSelectOptions, parseSelectedOffers } from "@/discord-bot/interactions/signup-flow";
+import { buildCharacterSelectOptions, buildRoleSelectOptions, groupRolesByCharacter } from "@/discord-bot/interactions/signup-flow";
 
 const hybridPaladin = { characterId: "c-pala", characterName: "Holyfist", realm: "Tarren Mill" };
 const singleRoleHunter = { characterId: "c-hunt", characterName: "Quickshot", realm: "Tarren Mill", role: "DPS" };
 
-describe("buildSelectOptions — BOOSTER", () => {
-  it("offers one option per eligible role for a hybrid Character, never silently defaulting to one", () => {
+describe("buildCharacterSelectOptions", () => {
+  it("collapses a hybrid Character's multiple (Character, role) rows into a single option", () => {
     const eligible = [
       { ...hybridPaladin, role: "TANK" },
       { ...hybridPaladin, role: "HEALER" },
       { ...hybridPaladin, role: "DPS" },
     ];
-    const options = buildSelectOptions(eligible, "BOOSTER", {
+    const options = buildCharacterSelectOptions(eligible, "BOOSTER", {
       participationType: null,
       characterIds: [],
       roleByCharacterId: {},
     }).map((option) => option.toJSON());
 
-    expect(options).toHaveLength(3);
-    expect(options.map((option) => option.value)).toEqual(["c-pala:TANK", "c-pala:HEALER", "c-pala:DPS"]);
-    expect(options.every((option) => option.label.includes("Holyfist-Tarren Mill"))).toBe(true);
+    expect(options).toHaveLength(1);
+    expect(options[0]?.value).toBe("c-pala");
+    expect(options[0]?.label).toBe("Holyfist-Tarren Mill");
   });
 
-  it("preselects only the option matching the User's current offered role, not every role for that Character", () => {
-    const eligible = [
-      { ...hybridPaladin, role: "TANK" },
-      { ...hybridPaladin, role: "HEALER" },
-    ];
-    const options = buildSelectOptions(eligible, "BOOSTER", {
+  it("preselects a Character with an active offer of the same participation type", () => {
+    const options = buildCharacterSelectOptions([singleRoleHunter], "BOOSTER", {
       participationType: "BOOSTER",
-      characterIds: ["c-pala"],
-      roleByCharacterId: { "c-pala": "HEALER" },
+      characterIds: ["c-hunt"],
+      roleByCharacterId: { "c-hunt": "DPS" },
     }).map((option) => option.toJSON());
-
-    const tank = options.find((option) => option.value === "c-pala:TANK");
-    const healer = options.find((option) => option.value === "c-pala:HEALER");
-    expect(tank?.default).toBeFalsy();
-    expect(healer?.default).toBe(true);
+    expect(options[0]?.default).toBe(true);
   });
 
   it("does not preselect anything when the active offer is a different participation type", () => {
-    const options = buildSelectOptions([singleRoleHunter], "BOOSTER", {
+    const options = buildCharacterSelectOptions([singleRoleHunter], "BOOSTER", {
       participationType: "LOOTBUDDY",
       characterIds: ["c-hunt"],
       roleByCharacterId: {},
     }).map((option) => option.toJSON());
     expect(options[0]?.default).toBeFalsy();
   });
-});
 
-describe("buildSelectOptions — LOOTBUDDY", () => {
-  it("has no role dimension: one option per Character", () => {
-    const options = buildSelectOptions(
+  it("has no role dimension for LOOTBUDDY: one option per Character", () => {
+    const options = buildCharacterSelectOptions(
       [
         { characterId: "c-1", characterName: "A", realm: "R" },
         { characterId: "c-2", characterName: "B", realm: "R" },
@@ -63,29 +53,24 @@ describe("buildSelectOptions — LOOTBUDDY", () => {
   });
 });
 
-describe("parseSelectedOffers", () => {
-  it("splits BOOSTER values back into characterId + role", () => {
-    expect(parseSelectedOffers(["c-pala:TANK", "c-hunt:DPS"], "BOOSTER")).toEqual([
-      { characterId: "c-pala", role: "TANK" },
-      { characterId: "c-hunt", role: "DPS" },
-    ]);
-  });
-
-  it("treats LOOTBUDDY values as plain characterIds with no role", () => {
-    expect(parseSelectedOffers(["c-1", "c-2"], "LOOTBUDDY")).toEqual([{ characterId: "c-1" }, { characterId: "c-2" }]);
-  });
-
-  it("round-trips through buildSelectOptions for a hybrid Character", () => {
+describe("groupRolesByCharacter", () => {
+  it("folds flattened (Character, role) rows into one entry per Character listing all its eligible roles", () => {
     const eligible = [
       { ...hybridPaladin, role: "TANK" },
       { ...hybridPaladin, role: "HEALER" },
+      { ...singleRoleHunter },
     ];
-    const options = buildSelectOptions(eligible, "BOOSTER", {
-      participationType: null,
-      characterIds: [],
-      roleByCharacterId: {},
-    }).map((option) => option.toJSON().value);
-    const chosen = [options[1]]; // simulate the User picking the HEALER option
-    expect(parseSelectedOffers(chosen, "BOOSTER")).toEqual([{ characterId: "c-pala", role: "HEALER" }]);
+    const grouped = groupRolesByCharacter(eligible);
+    expect(grouped.get("c-pala")).toEqual({ characterName: "Holyfist", realm: "Tarren Mill", roles: ["TANK", "HEALER"] });
+    expect(grouped.get("c-hunt")).toEqual({ characterName: "Quickshot", realm: "Tarren Mill", roles: ["DPS"] });
+  });
+});
+
+describe("buildRoleSelectOptions", () => {
+  it("offers one option per role, preselecting the given default", () => {
+    const options = buildRoleSelectOptions(["TANK", "HEALER", "DPS"], "HEALER").map((option) => option.toJSON());
+    expect(options.map((option) => option.value)).toEqual(["TANK", "HEALER", "DPS"]);
+    expect(options.find((option) => option.value === "HEALER")?.default).toBe(true);
+    expect(options.find((option) => option.value === "TANK")?.default).toBeFalsy();
   });
 });
