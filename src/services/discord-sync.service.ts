@@ -158,7 +158,14 @@ export const discordSyncService = {
         }
       }
 
-      if (run.roster?.publishedAt) {
+      // A roster post reuses the Run's own channel — it never provisions one.
+      // A Run whose roster was published without the bot ever having a
+      // Discord presence for its signup phase (seeded/historical data, or
+      // the bot being offline through the whole signup window) has nowhere
+      // to legitimately post a roster embed, matching the same rule that
+      // blocks a retroactive first signup post for a phase that's over.
+      const hasAnyDiscordPresence = Boolean(post?.runChannelId) || Boolean(post?.signupChannelId);
+      if (run.roster?.publishedAt && hasAnyDiscordPresence) {
         if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
           roster.push({
             runId: run.id,

@@ -48,13 +48,20 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  * difficulty, or raid lead changed) — it never creates a replacement, and
  * the persisted channel id is the only identity that matters (never the
  * name). If the stored channel was deleted out-of-band in Discord, a fresh
- * one is created — this is self-healing, not the bot deleting anything.
+ * one is created only when `allowCreate` is true — self-healing, not the
+ * bot deleting anything.
  *
- * A Run needing both a signup update AND a fresh roster post in the same
- * pass only happens after its channel already exists (roster requires
- * PUBLISHED, which is only reachable after the Run was signup-postable,
- * which is what creates the channel) — so this is never called twice with
- * `existingRunChannelId: null` for the same Run in one pass.
+ * `allowCreate` (true for the signup path, false for the roster path) is
+ * the fix for a real bug found in live QA: the roster sync path is gated
+ * only by "has a published roster", with no `isSignupWindowOpen` check —
+ * so a Run whose roster was published without the bot ever observing its
+ * signup phase (seeded/historical data, or the bot being offline through
+ * the whole signup window) would otherwise get a channel created from
+ * scratch by the roster path alone, defeating the signup-side rule that a
+ * Run never gets retroactive Discord infrastructure for a phase that's
+ * already over. Only the signup path — itself gated by `isSignupWindowOpen`
+ * in `listSyncWork` — may create a Run's first channel; the roster path may
+ * only reuse one that already exists.
  *
  * Legacy mode — no category configured: always the single global channel
  * from env (`DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID`).
@@ -65,6 +72,7 @@ async function resolveRunChannel(
   api: BotApiClient,
   item: ChannelWorkItem,
   legacyFallbackChannelId: string | null,
+  allowCreate: boolean,
 ): Promise<string | null> {
   if (!env.discordRunCategoryId) {
     return legacyFallbackChannelId;
@@ -80,7 +88,17 @@ async function resolveRunChannel(
       }
       return item.existingRunChannelId;
     }
-    // Stored channel id no longer resolves (deleted in Discord) — fall through and recreate.
+    // Stored channel id no longer resolves (deleted in Discord) — fall through.
+  }
+
+  if (!allowCreate) {
+    // Only the signup path may provision a Run's first channel (it alone is
+    // gated by isSignupWindowOpen). A roster-only sync pass for a Run that
+    // never went through a bot-observed signup phase — e.g. historical data
+    // predating the bot, or the bot being offline through the entire signup
+    // window — must not retroactively create Discord infrastructure for it.
+    console.warn(`[discord-bot] run ${item.runId} has no channel and none may be created from the roster path — skipping`);
+    return null;
   }
 
   const category = await client.channels.fetch(env.discordRunCategoryId).catch(() => null);
@@ -105,7 +123,7 @@ async function syncSignupPost(
   item: ChannelWorkItem & { existingMessageId: string | null },
   data: SignupEmbedData,
 ): Promise<void> {
-  const channelId = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId);
+  const channelId = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true);
   if (!channelId) return;
 
   const embed = buildSignupEmbed(data);
@@ -136,7 +154,7 @@ async function syncRosterPost(
   item: ChannelWorkItem & { existingMessageId: string | null },
   data: RosterEmbedData,
 ): Promise<void> {
-  const channelId = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId);
+  const channelId = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false);
   if (!channelId) return;
 
   const embed = buildRosterEmbed(data);

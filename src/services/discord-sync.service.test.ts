@@ -488,4 +488,52 @@ describe("discordSyncService — per-Run channel provisioning", () => {
     const persisted = await runDiscordPostRepository.findByRunId(neverOpenedRunId);
     expect(persisted).toBeNull();
   });
+
+  it("never generates roster work for a published Run the bot had no Discord presence for (would otherwise let the roster path provision a channel on its own)", async () => {
+    const orphanRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 0,
+        desiredDpsCount: 0,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(orphanRunId);
+    await runService.openRun(lead, orphanRunId);
+
+    const orphanCharId = crypto.randomUUID();
+    createdCharacterIds.push(orphanCharId);
+    await orm.Character.create({
+      id: orphanCharId,
+      userId: ids.tank,
+      name: "Dsorphan",
+      realm: "Discord Lab",
+      normalizedName: normalizeCharacterIdentity("Dsorphan"),
+      normalizedRealm: normalizeCharacterIdentity("Discord Lab"),
+      region: "EU",
+      wowClass: "PALADIN",
+      specialization: "Protection",
+      primaryRole: "TANK",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await createSignup({ runId: orphanRunId, userId: ids.tank, characterId: orphanCharId, participationType: "BOOSTER", role: "TANK" });
+
+    const view = await rosterService.getRosterManagementView(lead, orphanRunId);
+    const tankSignup = view.groups.tanks[0];
+    await rosterService.setDraftSelection(lead, { runId: orphanRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
+    const afterSelect = await rosterService.getRosterManagementView(lead, orphanRunId);
+    await rosterService.publishRoster(lead, { runId: orphanRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
+
+    // The bot never recorded a channel or a signup post for this Run at any point.
+    const persisted = await runDiscordPostRepository.findByRunId(orphanRunId);
+    expect(persisted).toBeNull();
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((entry) => entry.runId === orphanRunId)).toBe(false);
+  });
 });
