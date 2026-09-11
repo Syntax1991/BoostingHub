@@ -1,9 +1,9 @@
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { BotApiClient } from "@/discord-bot/bot-api-client";
-import { parseCustomId } from "@/discord-bot/custom-ids";
+import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custom-ids";
 import type { BotEnv } from "@/discord-bot/env";
 import { handleCancelButton } from "@/discord-bot/interactions/cancel-handler";
-import { handleCharacterSelect, handleSignupButton } from "@/discord-bot/interactions/signup-flow";
+import { handleCharacterSelect, handleRoleSelect, handleSignupButton } from "@/discord-bot/interactions/signup-flow";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 
@@ -36,8 +36,14 @@ export function createBotClient(env: BotEnv): Client {
 
       if (interaction.isStringSelectMenu()) {
         const parsed = parseCustomId(interaction.customId);
-        if (!parsed || parsed.action === "cancel") return;
-        await handleCharacterSelect(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
+        if (parsed && parsed.action !== "cancel") {
+          await handleCharacterSelect(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
+          return;
+        }
+        const scoped = parseCharacterScopedCustomId(interaction.customId);
+        if (scoped) {
+          await handleRoleSelect(interaction, api, scoped.runId, scoped.characterId);
+        }
         return;
       }
 
