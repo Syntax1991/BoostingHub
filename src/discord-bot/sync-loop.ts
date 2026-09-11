@@ -102,9 +102,15 @@ async function moveChannelForArchiveState(
   }
   if (channel.parentId === desiredParentId) return;
 
-  await (channel as { setParent: (id: string) => Promise<unknown> }).setParent(desiredParentId).catch((error: unknown) => {
-    console.error(`[discord-bot] failed to move channel for run ${item.runId} to category ${desiredParentId}`, error);
-  });
+  // lockPermissions: false — a plain move, not a permission resync. Syncing
+  // permissions from the destination category needs Manage Roles as well as
+  // Manage Channels, and would silently overwrite this channel's own
+  // overwrites; Archive/Restore only ever intends to relocate the channel.
+  await (channel as { setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown> })
+    .setParent(desiredParentId, { lockPermissions: false })
+    .catch((error: unknown) => {
+      console.error(`[discord-bot] failed to move channel for run ${item.runId} to category ${desiredParentId}`, error);
+    });
 }
 
 async function resolveRunChannel(
