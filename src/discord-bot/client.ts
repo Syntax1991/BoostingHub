@@ -3,13 +3,7 @@ import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { parseCustomId } from "@/discord-bot/custom-ids";
 import type { BotEnv } from "@/discord-bot/env";
 import { handleCancelButton } from "@/discord-bot/interactions/cancel-handler";
-import {
-  handleCharacterStepSelect,
-  handleLootbuddySelect,
-  handleRoleSelect,
-  handleSignupButton,
-  handleSignupConfirm,
-} from "@/discord-bot/interactions/signup-flow";
+import { handleCharacterSelect, handleSignupButton } from "@/discord-bot/interactions/signup-flow";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 
@@ -34,9 +28,7 @@ export function createBotClient(env: BotEnv): Client {
         if (!parsed) return;
         if (parsed.action === "cancel") {
           await handleCancelButton(interaction, api, parsed.runId);
-        } else if (parsed.action === "signup-confirm") {
-          await handleSignupConfirm(interaction, api, parsed.runId);
-        } else if (parsed.action === "signup" || parsed.action === "lootbuddy") {
+        } else {
           await handleSignupButton(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
         }
         return;
@@ -44,14 +36,8 @@ export function createBotClient(env: BotEnv): Client {
 
       if (interaction.isStringSelectMenu()) {
         const parsed = parseCustomId(interaction.customId);
-        if (!parsed) return;
-        if (parsed.action === "lootbuddy") {
-          await handleLootbuddySelect(interaction, api, parsed.runId);
-        } else if (parsed.action === "signup") {
-          await handleCharacterStepSelect(interaction, api, parsed.runId);
-        } else if (parsed.action === "signup-role" && parsed.characterId) {
-          await handleRoleSelect(interaction, parsed.runId, parsed.characterId);
-        }
+        if (!parsed || parsed.action === "cancel") return;
+        await handleCharacterSelect(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
         return;
       }
 

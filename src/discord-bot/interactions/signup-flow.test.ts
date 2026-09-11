@@ -1,76 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { buildCharacterSelectOptions, buildRoleSelectOptions, groupRolesByCharacter } from "@/discord-bot/interactions/signup-flow";
+import { buildCharacterSelectOptions, describeOfferResult } from "@/discord-bot/interactions/signup-flow";
 
-const hybridPaladin = { characterId: "c-pala", characterName: "Holyfist", realm: "Tarren Mill" };
-const singleRoleHunter = { characterId: "c-hunt", characterName: "Quickshot", realm: "Tarren Mill", role: "DPS" };
+const mistweaver = { characterId: "c-mist", characterName: "Synmist", realm: "Antonidas", role: "HEALER" };
 
 describe("buildCharacterSelectOptions", () => {
-  it("collapses a hybrid Character's multiple (Character, role) rows into a single option", () => {
-    const eligible = [
-      { ...hybridPaladin, role: "TANK" },
-      { ...hybridPaladin, role: "HEALER" },
-      { ...hybridPaladin, role: "DPS" },
-    ];
-    const options = buildCharacterSelectOptions(eligible, "BOOSTER", {
+  it("offers exactly one option per Character, labeled with its single authoritative role", () => {
+    const options = buildCharacterSelectOptions([mistweaver], "BOOSTER", {
       participationType: null,
       characterIds: [],
       roleByCharacterId: {},
     }).map((option) => option.toJSON());
 
     expect(options).toHaveLength(1);
-    expect(options[0]?.value).toBe("c-pala");
-    expect(options[0]?.label).toBe("Holyfist-Tarren Mill");
+    expect(options[0]?.value).toBe("c-mist");
+    expect(options[0]?.label).toBe("Synmist-Antonidas — HEALER");
   });
 
   it("preselects a Character with an active offer of the same participation type", () => {
-    const options = buildCharacterSelectOptions([singleRoleHunter], "BOOSTER", {
+    const options = buildCharacterSelectOptions([mistweaver], "BOOSTER", {
       participationType: "BOOSTER",
-      characterIds: ["c-hunt"],
-      roleByCharacterId: { "c-hunt": "DPS" },
+      characterIds: ["c-mist"],
+      roleByCharacterId: { "c-mist": "HEALER" },
     }).map((option) => option.toJSON());
     expect(options[0]?.default).toBe(true);
   });
 
-  it("does not preselect anything when the active offer is a different participation type", () => {
-    const options = buildCharacterSelectOptions([singleRoleHunter], "BOOSTER", {
-      participationType: "LOOTBUDDY",
-      characterIds: ["c-hunt"],
-      roleByCharacterId: {},
-    }).map((option) => option.toJSON());
-    expect(options[0]?.default).toBeFalsy();
-  });
-
-  it("has no role dimension for LOOTBUDDY: one option per Character", () => {
+  it("has no role suffix for LOOTBUDDY, which carries no role dimension", () => {
     const options = buildCharacterSelectOptions(
-      [
-        { characterId: "c-1", characterName: "A", realm: "R" },
-        { characterId: "c-2", characterName: "B", realm: "R" },
-      ],
+      [{ characterId: "c-1", characterName: "A", realm: "R" }],
       "LOOTBUDDY",
       { participationType: null, characterIds: [], roleByCharacterId: {} },
     ).map((option) => option.toJSON());
-    expect(options.map((option) => option.value)).toEqual(["c-1", "c-2"]);
+    expect(options[0]?.label).toBe("A-R");
   });
 });
 
-describe("groupRolesByCharacter", () => {
-  it("folds flattened (Character, role) rows into one entry per Character listing all its eligible roles", () => {
-    const eligible = [
-      { ...hybridPaladin, role: "TANK" },
-      { ...hybridPaladin, role: "HEALER" },
-      { ...singleRoleHunter },
-    ];
-    const grouped = groupRolesByCharacter(eligible);
-    expect(grouped.get("c-pala")).toEqual({ characterName: "Holyfist", realm: "Tarren Mill", roles: ["TANK", "HEALER"] });
-    expect(grouped.get("c-hunt")).toEqual({ characterName: "Quickshot", realm: "Tarren Mill", roles: ["DPS"] });
+describe("describeOfferResult", () => {
+  it("reports the cleared offers when submitting an empty set", () => {
+    expect(describeOfferResult({ created: 0, reactivated: 0, withdrawn: 2, kept: 0 }, 0)).toBe(
+      "Your offers for this run were cleared.",
+    );
   });
-});
 
-describe("buildRoleSelectOptions", () => {
-  it("offers one option per role, preselecting the given default", () => {
-    const options = buildRoleSelectOptions(["TANK", "HEALER", "DPS"], "HEALER").map((option) => option.toJSON());
-    expect(options.map((option) => option.value)).toEqual(["TANK", "HEALER", "DPS"]);
-    expect(options.find((option) => option.value === "HEALER")?.default).toBe(true);
-    expect(options.find((option) => option.value === "TANK")?.default).toBeFalsy();
+  it("reports the active offer count otherwise", () => {
+    expect(describeOfferResult({ created: 1, reactivated: 0, withdrawn: 0, kept: 1 }, 2)).toBe(
+      "Signed up with 2 characters offered.",
+    );
   });
 });

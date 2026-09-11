@@ -474,6 +474,12 @@ function boosterRejection(reason: string | undefined): DomainError {
   if (reason === "LOCKOUT_CONFLICT") {
     return new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
   }
+  if (reason === "NO_SPECIALIZATION") {
+    return new DomainError(
+      "CHARACTER_NO_SPECIALIZATION",
+      "Set this character's specialization before offering it.",
+    );
+  }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");
 }
 
@@ -580,24 +586,21 @@ function validateOfferedCharacters(
       resetIdentifier,
     );
     for (const { offer, character } of offeredCharacters) {
-      const optionsForCharacter = eligible.filter((item) => item.characterId === offer.characterId);
-      if (optionsForCharacter.length === 0) {
+      const option = eligible.find((item) => item.characterId === offer.characterId);
+      if (!option) {
         const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;
         throw boosterRejection(reason);
       }
-      let role = offer.role;
-      if (role) {
-        if (!optionsForCharacter.some((item) => item.role === role)) {
-          throw new DomainError("INVALID_CHARACTER_ROLE", `${character.name} cannot be offered as ${role}.`);
-        }
-      } else if (optionsForCharacter.length === 1) {
-        role = optionsForCharacter[0].role;
-      } else if (optionsForCharacter.some((item) => item.role === character.primaryRole)) {
-        role = character.primaryRole;
-      } else {
-        throw new DomainError("VALIDATION_FAILED", `A role is required for ${character.name}.`);
+      // The Character's current specialization is the sole authority for its
+      // signup role — never a client-supplied choice. A client may omit role
+      // entirely (the server derives it) but may not offer a different one.
+      if (offer.role && offer.role !== option.role) {
+        throw new DomainError(
+          "INVALID_CHARACTER_ROLE",
+          `${character.name} is currently ${character.specialization ?? "unspecialized"} and must be offered as ${option.role}, not ${offer.role}.`,
+        );
       }
-      roleByCharacterId.set(offer.characterId, role);
+      roleByCharacterId.set(offer.characterId, option.role);
     }
     return roleByCharacterId;
   }

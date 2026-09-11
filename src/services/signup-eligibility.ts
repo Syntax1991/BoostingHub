@@ -5,7 +5,7 @@ import type {
   RunStatus,
   WowClass,
 } from "@/models/enums";
-import { isRoleValidForClass, rolesForClass } from "@/lib/wow-specializations";
+import { roleForSpecialization } from "@/lib/wow-specializations";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -42,7 +42,8 @@ export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
   | "DIFFICULTY_NOT_APPROVED"
-  | "LOCKOUT_CONFLICT";
+  | "LOCKOUT_CONFLICT"
+  | "NO_SPECIALIZATION";
 
 export type LootbuddyIneligibilityReason = "INACTIVE" | "LOCKOUT_CONFLICT";
 
@@ -51,6 +52,7 @@ export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, 
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
+  NO_SPECIALIZATION: "Character has no valid specialization set.",
 };
 
 export const LOOTBUDDY_INELIGIBILITY_MESSAGES: Record<LootbuddyIneligibilityReason, string> = {
@@ -93,8 +95,11 @@ export type IneligibleLootbuddyCharacter = {
 
 /**
  * Booster options require an APPROVED BoosterQualification for the run difficulty.
- * When approved, every role valid for the character's class is offered.
- * Heroic approval never implies Mythic.
+ * A Character's role is not a choice — it is whatever role its current
+ * specialization maps to (roleForSpecialization), so an eligible Character
+ * produces exactly one option. A missing or unrecognized specialization is
+ * NO_SPECIALIZATION, never a guessed role. Heroic approval never implies
+ * Mythic.
  */
 export function evaluateBoosterOptions(
   characters: EligibilityCharacter[],
@@ -147,17 +152,20 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    for (const role of rolesForClass(character.wowClass)) {
-      if (!isRoleValidForClass(character.wowClass, role)) continue;
-      eligible.push({
-        characterId: character.id,
-        characterName: character.name,
-        realm: character.realm,
-        wowClass: character.wowClass,
-        specialization: character.specialization,
-        role,
-      });
+    const role = character.specialization ? roleForSpecialization(character.wowClass, character.specialization) : null;
+    if (!role) {
+      pushIneligible("NO_SPECIALIZATION");
+      continue;
     }
+
+    eligible.push({
+      characterId: character.id,
+      characterName: character.name,
+      realm: character.realm,
+      wowClass: character.wowClass,
+      specialization: character.specialization,
+      role,
+    });
   }
 
   return { eligible, ineligible };
