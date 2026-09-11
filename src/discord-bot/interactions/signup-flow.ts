@@ -1,19 +1,29 @@
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   type ButtonInteraction,
+  type InteractionEditReplyOptions,
   type StringSelectMenuInteraction,
 } from "discord.js";
 import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { buildCharacterScopedCustomId, buildCustomId } from "@/discord-bot/custom-ids";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
+import {
+  discardSession,
+  getSession,
+  setStagedRole,
+  startSession,
+  type CharacterRole,
+  type StagedBoosterSession,
+} from "@/discord-bot/interactions/signup-staging";
 
 const MAX_SELECT_OPTIONS = 25;
-/** Discord allows at most 5 action rows per message; every row here is a per-Character role select. */
-const MAX_ROLE_SELECT_ROWS = 5;
+/** Discord allows at most 5 action rows per message; one row is reserved for the Confirm/Cancel buttons. */
+const MAX_ROLE_SELECT_ROWS = 4;
 
-type CharacterRole = "TANK" | "HEALER" | "DPS";
 const ROLE_ORDER: readonly CharacterRole[] = ["TANK", "HEALER", "DPS"];
 const ROLE_LABELS: Record<CharacterRole, string> = { TANK: "Tank", HEALER: "Healer", DPS: "DPS" };
 
@@ -42,12 +52,17 @@ type SignupOptionsPayload = {
   activeOffer: ActiveOffer;
 };
 type OfferResult = { created: number; reactivated: number; withdrawn: number; kept: number };
+/** The subset of a Discord reply-capable interaction every handler here needs — real button and select interactions both satisfy it. */
+type ReplyableInteraction = {
+  user: { id: string };
+  editReply: (payload: InteractionEditReplyOptions) => Promise<unknown>;
+};
 
 /**
  * One option per Character. For BOOSTER, the label shows the Character's
- * current or specialization-derived default role for information only — the
- * User can still change it afterward via the per-Character role select
- * rendered once the offer is submitted (see `renderRoleAdjustment`).
+ * current or specialization-derived default role for information only —
+ * selecting this menu only stages the choice (see `handleCharacterSelect`);
+ * nothing is persisted until Confirm.
  */
 export function buildCharacterSelectOptions(
   eligible: EligibleCharacterOption[],
@@ -69,12 +84,17 @@ export function buildCharacterSelectOptions(
   });
 }
 
+/** A Character whose class can perform only one role never needs a chosen default guessed — the role is a fact of its class, not a preference. */
+function singleRoleFallback(option: EligibleCharacterOption): CharacterRole | null {
+  return option.roles?.length === 1 ? option.roles[0] : null;
+}
+
 /**
  * The Signup / Sign as Lootbuddy button: shows an ephemeral multi-select of
- * eligible Characters. Submitting it applies each selected Character's
- * existing or specialization-derived default role immediately; a follow-up
- * per-Character role select (shown right after) lets the User change any of
- * them without a second round trip through this menu.
+ * eligible Characters. Nothing is persisted by opening this menu — for
+ * BOOSTER, submitting it only stages a configuration session (see
+ * `handleCharacterSelect`); for LOOTBUDDY, which has no role dimension to
+ * configure, submitting it still applies immediately.
  */
 export async function handleSignupButton(
   interaction: ButtonInteraction,
@@ -108,23 +128,30 @@ export async function handleSignupButton(
   const selectOptions = buildCharacterSelectOptions(eligible, participationType, options.activeOffer);
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildCustomId(participationType === "BOOSTER" ? "signup" : "lootbuddy", runId))
-    .setPlaceholder("Select characters to offer, then submit")
+    .setPlaceholder(
+      participationType === "BOOSTER"
+        ? "Select characters to offer, then configure roles"
+        : "Select characters to offer, then submit",
+    )
     .setMinValues(0)
     .setMaxValues(selectOptions.length)
     .addOptions(selectOptions);
 
   await interaction.editReply({
-    content: `Select the characters to offer for **${options.run.title}**, then submit. This replaces your current offers for this run.`,
+    content: `Select the characters to offer for **${options.run.title}**.${
+      participationType === "BOOSTER" ? " You'll confirm roles before anything is saved." : " This replaces your current offers for this run."
+    }`,
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
   });
 }
 
 /**
- * The Character select's submission. For BOOSTER, resolves each selected
- * Character's role as its existing offer's role, else its specialization
- * default, else omitted entirely — the server is the sole authority and
- * rejects a genuinely ambiguous Character (`INVALID_CHARACTER_ROLE`) rather
- * than this code guessing one. LOOTBUDDY carries no role dimension.
+ * The Character select's submission. LOOTBUDDY has no role dimension and
+ * still applies immediately. BOOSTER stages a configuration session instead
+ * of persisting anything — each selected Character's role resolves to its
+ * existing offer's role, else its specialization default, else (for a
+ * single-role class) the only role it can perform, else stays unresolved
+ * until the User picks one in the role editor.
  */
 export async function handleCharacterSelect(
   interaction: StringSelectMenuInteraction,
@@ -134,114 +161,153 @@ export async function handleCharacterSelect(
 ): Promise<void> {
   await interaction.deferUpdate();
 
-  let offers: Array<{ characterId: string; role?: CharacterRole }>;
-  if (participationType === "BOOSTER") {
-    let options: SignupOptionsPayload;
+  if (participationType === "LOOTBUDDY") {
+    const offers = interaction.values.map((characterId) => ({ characterId }));
     try {
-      options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
+      const result = await api.setCharacterOffers(runId, interaction.user.id, {
+        participationType: "LOOTBUDDY",
+        offers,
+        lootbuddyMode: "LOOT_ONLY",
+        lootbuddyVerification: "NONE",
+      });
+      await interaction.editReply({ content: describeOfferResult(result, offers.length), components: [] });
     } catch (error) {
       await interaction.editReply({ content: describeBotApiError(error), components: [] });
-      return;
     }
-    const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
-    offers = interaction.values.map((characterId) => {
-      const existingRole = options.activeOffer.roleByCharacterId[characterId];
-      const role = existingRole ?? byId.get(characterId)?.defaultRole ?? undefined;
-      return role ? { characterId, role } : { characterId };
-    });
-  } else {
-    offers = interaction.values.map((characterId) => ({ characterId }));
+    return;
   }
 
+  let options: SignupOptionsPayload;
   try {
-    const result = await api.setCharacterOffers(runId, interaction.user.id, {
-      participationType,
-      offers,
-      ...(participationType === "LOOTBUDDY" ? { lootbuddyMode: "LOOT_ONLY", lootbuddyVerification: "NONE" } : {}),
-    });
-
-    if (participationType === "BOOSTER" && offers.length > 0) {
-      await renderRoleAdjustment(interaction, api, runId, result, offers.length);
-      return;
-    }
-
-    await interaction.editReply({ content: describeOfferResult(result, offers.length), components: [] });
+    options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
   } catch (error) {
     await interaction.editReply({ content: describeBotApiError(error), components: [] });
+    return;
   }
+
+  const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
+  const isExistingSignup =
+    options.activeOffer.participationType === "BOOSTER" && options.activeOffer.characterIds.length > 0;
+
+  const session = startSession({
+    discordUserId: interaction.user.id,
+    runId,
+    isExistingSignup,
+    offers: interaction.values.map((characterId) => {
+      const option = byId.get(characterId);
+      const role =
+        options.activeOffer.roleByCharacterId[characterId] ??
+        option?.defaultRole ??
+        (option ? singleRoleFallback(option) : null) ??
+        null;
+      return { characterId, role };
+    }),
+  });
+
+  await renderStagingEditor(interaction, api, runId, session);
 }
 
 /**
- * Shown right after a BOOSTER offer is applied: one role select per offered
- * Character whose class can perform more than one role, each defaulted to
- * its now-current role. Fully stateless — every render re-fetches the
- * authoritative offer from the server rather than tracking anything between
- * interactions, so there is no session to expire or go stale.
+ * Renders the staging editor from session state only — never from what's
+ * persisted. One role select per staged Character whose class can perform
+ * more than one role (a longer tail points to the Web dialog rather than
+ * capping the product-wide offer count); single-role Characters are listed
+ * as read-only text since there is nothing to choose. Confirm/Cancel are
+ * always present once at least the character-select step has run, even
+ * with zero Characters staged (Confirm then clears the signup).
  */
-async function renderRoleAdjustment(
-  interaction: StringSelectMenuInteraction,
+async function renderStagingEditor(
+  interaction: ReplyableInteraction,
   api: BotApiClient,
   runId: string,
-  result: OfferResult,
-  offerCount: number,
+  session: StagedBoosterSession,
+  errorMessage?: string,
 ): Promise<void> {
   let options: SignupOptionsPayload;
   try {
     options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
-  } catch {
-    await interaction.editReply({ content: describeOfferResult(result, offerCount), components: [] });
+  } catch (error) {
+    await interaction.editReply({ content: describeBotApiError(error), components: [] });
     return;
   }
 
-  const offeredIds = new Set(
-    options.activeOffer.participationType === "BOOSTER" ? options.activeOffer.characterIds : [],
-  );
-  const hybrids = options.booster.eligible.filter(
-    (option) => offeredIds.has(option.characterId) && (option.roles?.length ?? 0) > 1,
-  );
+  const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
+  const staged = [...session.offers.entries()];
 
-  if (hybrids.length === 0) {
-    await interaction.editReply({ content: describeOfferResult(result, offerCount), components: [] });
-    return;
-  }
+  const hybrids = staged
+    .map(([characterId, role]) => ({ characterId, role, option: byId.get(characterId) }))
+    .filter((entry) => (entry.option?.roles?.length ?? 0) > 1);
+  const singleRole = staged
+    .map(([characterId, role]) => ({ characterId, role, option: byId.get(characterId) }))
+    .filter((entry) => (entry.option?.roles?.length ?? 0) <= 1);
 
-  const shown = hybrids.slice(0, MAX_ROLE_SELECT_ROWS);
-  const rows = shown.map((option) => {
-    const currentRole = options.activeOffer.roleByCharacterId[option.characterId] ?? option.defaultRole ?? undefined;
+  const shownHybrids = hybrids.slice(0, MAX_ROLE_SELECT_ROWS);
+  const roleRows = shownHybrids.map(({ characterId, role, option }) => {
     const menu = new StringSelectMenuBuilder()
-      .setCustomId(buildCharacterScopedCustomId("signup-role", runId, option.characterId))
-      .setPlaceholder(`Role for ${option.characterName}`)
+      .setCustomId(buildCharacterScopedCustomId("signup-role", runId, characterId))
+      .setPlaceholder(`Role for ${option?.characterName ?? "character"}`)
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(
-        orderedRoles(option.roles ?? []).map((role) =>
+        orderedRoles(option?.roles ?? []).map((candidate) =>
           new StringSelectMenuOptionBuilder()
-            .setLabel(`${option.characterName}-${option.realm}: ${ROLE_LABELS[role]}`)
-            .setValue(role)
-            .setDefault(role === currentRole),
+            .setLabel(`${option?.characterName}-${option?.realm}: ${ROLE_LABELS[candidate]}`)
+            .setValue(candidate)
+            .setDefault(candidate === role),
         ),
       );
     return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
   });
 
-  const remaining = hybrids.length - shown.length;
-  const truncatedNote =
-    remaining > 0
-      ? `\n${remaining} more character${remaining === 1 ? "" : "s"} can have their role changed from the Web signup dialog.`
-      : "";
+  const confirmLabel = session.isExistingSignup ? "Confirm Changes" : "Confirm Signup";
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(buildCustomId("signup-confirm", runId))
+      .setLabel(confirmLabel)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(buildCustomId("signup-discard", runId))
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  const remaining = hybrids.length - shownHybrids.length;
+  const lines: string[] = [];
+  if (errorMessage) lines.push(`⚠️ ${errorMessage}`);
+  lines.push(
+    staged.length === 0
+      ? "No characters selected — confirming will clear your signup on this run."
+      : `Configure a role for each character, then ${confirmLabel.toLowerCase()}.`,
+  );
+  if (singleRole.length > 0) {
+    lines.push(
+      singleRole
+        .map(({ characterId, option }) => {
+          const role = option?.roles?.[0];
+          return `• ${option?.characterName ?? characterId}-${option?.realm ?? ""}: ${role ? ROLE_LABELS[role] : "—"} (fixed)`;
+        })
+        .join("\n"),
+    );
+  }
+  const unresolved = staged.filter(([, role]) => !role);
+  if (unresolved.length > 0) {
+    lines.push(
+      `Choose a role for: ${unresolved
+        .map(([characterId]) => byId.get(characterId)?.characterName ?? characterId)
+        .join(", ")}.`,
+    );
+  }
+  if (remaining > 0) {
+    lines.push(`${remaining} more character${remaining === 1 ? "" : "s"} can have their role changed from the Web signup dialog.`);
+  }
 
   await interaction.editReply({
-    content: `${describeOfferResult(result, offerCount)} You can change a role below.${truncatedNote}`,
-    components: rows,
+    content: lines.join("\n"),
+    components: [...roleRows, buttonRow],
   });
 }
 
-/**
- * One per-Character role select's submission. Rebuilds the User's complete
- * current desired offer set from the server and replaces only this one
- * Character's role — `setCharacterOffers` is not additive, so every other
- * offered Character's role must be resent unchanged.
- */
+/** One per-Character role select's submission. Updates the staged session only — no Bot API mutation until Confirm. */
 export async function handleRoleSelect(
   interaction: StringSelectMenuInteraction,
   api: BotApiClient,
@@ -251,39 +317,68 @@ export async function handleRoleSelect(
   await interaction.deferUpdate();
   const role = interaction.values[0] as CharacterRole;
 
-  let options: SignupOptionsPayload;
-  try {
-    options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
-  } catch (error) {
-    await interaction.editReply({ content: describeBotApiError(error), components: [] });
-    return;
-  }
-
-  if (
-    options.activeOffer.participationType !== "BOOSTER" ||
-    !options.activeOffer.characterIds.includes(characterId)
-  ) {
+  const updated = setStagedRole(interaction.user.id, runId, characterId, role);
+  if (!updated) {
     await interaction.editReply({
-      content: "This signup has changed since this menu was shown. Click Signup again to continue.",
+      content: "This signup editor has expired. Click Signup again to continue.",
       components: [],
     });
     return;
   }
 
-  const offers = options.activeOffer.characterIds.map((id) => ({
-    characterId: id,
-    role: id === characterId ? role : options.activeOffer.roleByCharacterId[id],
-  }));
+  const session = getSession(interaction.user.id, runId)!;
+  await renderStagingEditor(interaction, api, runId, session);
+}
+
+/**
+ * Confirm: the one and only point where a staged BOOSTER configuration is
+ * persisted, via a single `setCharacterOffers` call carrying the complete
+ * staged desired set. A failed call keeps the session so the User can fix
+ * and retry rather than losing their configuration.
+ */
+export async function handleConfirmSignupButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
+  await interaction.deferUpdate();
+
+  const session = getSession(interaction.user.id, runId);
+  if (!session) {
+    await interaction.editReply({
+      content: "This signup editor has expired. Click Signup again to continue.",
+      components: [],
+    });
+    return;
+  }
+
+  const unresolved = [...session.offers.entries()].filter(([, role]) => !role);
+  if (unresolved.length > 0) {
+    await renderStagingEditor(
+      interaction,
+      api,
+      runId,
+      session,
+      "Choose a role for every character before confirming.",
+    );
+    return;
+  }
+
+  const offers = [...session.offers.entries()].map(([characterId, role]) => ({ characterId, role: role! }));
 
   try {
     const result = await api.setCharacterOffers(runId, interaction.user.id, {
       participationType: "BOOSTER",
       offers,
     });
-    await renderRoleAdjustment(interaction, api, runId, result, offers.length);
+    discardSession(interaction.user.id, runId);
+    await interaction.editReply({ content: describeOfferResult(result, offers.length), components: [] });
   } catch (error) {
-    await interaction.editReply({ content: describeBotApiError(error), components: [] });
+    await renderStagingEditor(interaction, api, runId, session, describeBotApiError(error));
   }
+}
+
+/** Cancel: discards the staged editor only. Never touches persisted signup state — this is not the "Cancel Signup" button. */
+export async function handleDiscardSignupButton(interaction: ButtonInteraction, runId: string): Promise<void> {
+  await interaction.deferUpdate();
+  discardSession(interaction.user.id, runId);
+  await interaction.editReply({ content: "Signup changes cancelled.", components: [] });
 }
 
 export function describeOfferResult(result: OfferResult, offerCount: number): string {

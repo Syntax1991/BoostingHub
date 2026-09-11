@@ -3,7 +3,13 @@ import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custom-ids";
 import type { BotEnv } from "@/discord-bot/env";
 import { handleCancelButton } from "@/discord-bot/interactions/cancel-handler";
-import { handleCharacterSelect, handleRoleSelect, handleSignupButton } from "@/discord-bot/interactions/signup-flow";
+import {
+  handleCharacterSelect,
+  handleConfirmSignupButton,
+  handleDiscardSignupButton,
+  handleRoleSelect,
+  handleSignupButton,
+} from "@/discord-bot/interactions/signup-flow";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 
@@ -28,6 +34,10 @@ export function createBotClient(env: BotEnv): Client {
         if (!parsed) return;
         if (parsed.action === "cancel") {
           await handleCancelButton(interaction, api, parsed.runId);
+        } else if (parsed.action === "signup-confirm") {
+          await handleConfirmSignupButton(interaction, api, parsed.runId);
+        } else if (parsed.action === "signup-discard") {
+          await handleDiscardSignupButton(interaction, parsed.runId);
         } else {
           await handleSignupButton(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
         }

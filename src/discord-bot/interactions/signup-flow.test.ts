@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { buildCharacterSelectOptions, describeOfferResult } from "@/discord-bot/interactions/signup-flow";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BotApiClient } from "@/discord-bot/bot-api-client";
+import {
+  buildCharacterSelectOptions,
+  describeOfferResult,
+  handleCharacterSelect,
+  handleConfirmSignupButton,
+  handleDiscardSignupButton,
+  handleRoleSelect,
+} from "@/discord-bot/interactions/signup-flow";
+import { clearAllSessionsForTests, getSession } from "@/discord-bot/interactions/signup-staging";
 
 const mistweaver: { characterId: string; characterName: string; realm: string; roles: ("TANK" | "HEALER" | "DPS")[]; defaultRole: "HEALER" | null } = {
   characterId: "c-mist",
@@ -69,6 +78,288 @@ describe("describeOfferResult", () => {
   it("reports the active offer count otherwise", () => {
     expect(describeOfferResult({ created: 1, reactivated: 0, withdrawn: 0, kept: 1 }, 2)).toBe(
       "Signed up with 2 characters offered.",
+    );
+  });
+});
+
+const RUN_ID = "r7777777-7777-4777-8777-777777777777";
+const SYNMIST = "c1111111-1111-4111-8111-111111111111"; // hybrid Monk
+const FROSTBOLT = "c2222222-2222-4222-8222-222222222222"; // single-role Mage
+
+function signupOptionsPayload(overrides: {
+  roleByCharacterId?: Record<string, string>;
+  activeCharacterIds?: string[];
+  synmistDefaultRole?: "TANK" | "HEALER" | "DPS" | null;
+} = {}) {
+  return {
+    run: { title: "Test Run", signupWindowOpen: true },
+    booster: {
+      eligible: [
+        {
+          characterId: SYNMIST,
+          characterName: "Synmist",
+          realm: "Antonidas",
+          roles: ["TANK", "HEALER", "DPS"],
+          defaultRole: overrides.synmistDefaultRole === undefined ? "HEALER" : overrides.synmistDefaultRole,
+        },
+        {
+          characterId: FROSTBOLT,
+          characterName: "Frostbolt",
+          realm: "Antonidas",
+          roles: ["DPS"],
+          defaultRole: "DPS",
+        },
+      ],
+      ineligible: [],
+    },
+    lootbuddy: { eligible: [], ineligible: [] },
+    activeOffer: {
+      participationType: overrides.activeCharacterIds?.length ? "BOOSTER" : null,
+      characterIds: overrides.activeCharacterIds ?? [],
+      roleByCharacterId: overrides.roleByCharacterId ?? {},
+    },
+  };
+}
+
+function fakeApi(input: { getSignupOptions?: unknown; setCharacterOffers?: unknown }): BotApiClient {
+  return {
+    getSignupOptions: input.getSignupOptions ?? vi.fn(),
+    setCharacterOffers: input.setCharacterOffers ?? vi.fn(),
+  } as unknown as BotApiClient;
+}
+
+type FakeInteraction = {
+  user: { id: string };
+  values: string[];
+  deferUpdate: ReturnType<typeof vi.fn>;
+  deferReply: ReturnType<typeof vi.fn>;
+  editReply: ReturnType<typeof vi.fn>;
+};
+
+function fakeInteraction(userId: string, values: string[] = []): FakeInteraction {
+  return {
+    user: { id: userId },
+    values,
+    deferUpdate: vi.fn().mockResolvedValue(undefined),
+    deferReply: vi.fn().mockResolvedValue(undefined),
+    editReply: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+// Test doubles satisfy only the subset of discord.js interaction properties
+// each handler actually reads; the real handlers are typed against the full
+// discord.js interaction classes, so calls below go through `unknown` casts.
+const characterSelect = handleCharacterSelect as unknown as (
+  interaction: FakeInteraction,
+  api: BotApiClient,
+  runId: string,
+  participationType: "BOOSTER" | "LOOTBUDDY",
+) => Promise<void>;
+const roleSelect = handleRoleSelect as unknown as (
+  interaction: FakeInteraction,
+  api: BotApiClient,
+  runId: string,
+  characterId: string,
+) => Promise<void>;
+const confirmSignup = handleConfirmSignupButton as unknown as (
+  interaction: FakeInteraction,
+  api: BotApiClient,
+  runId: string,
+) => Promise<void>;
+const discardSignup = handleDiscardSignupButton as unknown as (
+  interaction: FakeInteraction,
+  runId: string,
+) => Promise<void>;
+
+describe("BOOSTER staging flow (character select -> role select -> confirm/cancel)", () => {
+  beforeEach(() => {
+    clearAllSessionsForTests();
+  });
+
+  it("selecting characters stages a session and does NOT call setCharacterOffers", async () => {
+    const setCharacterOffers = vi.fn();
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
+    const interaction = fakeInteraction("user-a", [SYNMIST, FROSTBOLT]);
+
+    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+
+    expect(setCharacterOffers).not.toHaveBeenCalled();
+    expect(interaction.deferUpdate).toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalled();
+  });
+
+  it("new Character selection seeds the specialization-derived default, never the first class role", async () => {
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
+    const interaction = fakeInteraction("user-a", [SYNMIST]);
+
+    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+
+    const session = getSession("user-a", RUN_ID)!;
+    // Synmist's class-order first role is TANK (Brewmaster listed first); the
+    // seeded role must be its specialization default (HEALER), never that.
+    expect(session.offers.get(SYNMIST)).toBe("HEALER");
+  });
+
+  it("existing signup preselects each Character's persisted role, which wins over the specialization default", async () => {
+    const api = fakeApi({
+      getSignupOptions: vi.fn().mockResolvedValue(
+        signupOptionsPayload({ activeCharacterIds: [SYNMIST], roleByCharacterId: { [SYNMIST]: "TANK" } }),
+      ),
+    });
+    const interaction = fakeInteraction("user-a", [SYNMIST]);
+
+    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+
+    const session = getSession("user-a", RUN_ID)!;
+    expect(session.offers.get(SYNMIST)).toBe("TANK");
+    expect(session.isExistingSignup).toBe(true);
+  });
+
+  it("a single-role Character resolves its fixed role even without a valid specialization — never left unresolved", async () => {
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
+    const interaction = fakeInteraction("user-a", [FROSTBOLT]);
+
+    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+
+    expect(getSession("user-a", RUN_ID)!.offers.get(FROSTBOLT)).toBe("DPS");
+  });
+
+  it("a hybrid Character with no specialization default stays unresolved — never guessed from class order", async () => {
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })) });
+    const interaction = fakeInteraction("user-a", [SYNMIST]);
+
+    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+
+    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBeNull();
+  });
+
+  it("changing a staged role does NOT call setCharacterOffers", async () => {
+    const setCharacterOffers = vi.fn();
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+
+    const roleInteraction = fakeInteraction("user-a", ["TANK"]);
+    await roleSelect(roleInteraction, api, RUN_ID, SYNMIST);
+
+    expect(setCharacterOffers).not.toHaveBeenCalled();
+    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBe("TANK");
+  });
+
+  it("Confirm persists the full staged set exactly once, with each Character's own role", async () => {
+    const setCharacterOffers = vi.fn().mockResolvedValue({ created: 2, reactivated: 0, withdrawn: 0, kept: 0 });
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST, FROSTBOLT]), api, RUN_ID, "BOOSTER");
+    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
+
+    const confirmInteraction = fakeInteraction("user-a");
+    await confirmSignup(confirmInteraction, api, RUN_ID);
+
+    expect(setCharacterOffers).toHaveBeenCalledTimes(1);
+    const [, , body] = setCharacterOffers.mock.calls[0];
+    expect(body.offers).toEqual(
+      expect.arrayContaining([
+        { characterId: SYNMIST, role: "TANK" },
+        { characterId: FROSTBOLT, role: "DPS" },
+      ]),
+    );
+    expect(body.offers).toHaveLength(2);
+    // Confirming ends the session — it is no longer editable.
+    expect(getSession("user-a", RUN_ID)).toBeUndefined();
+  });
+
+  it("no offered Character can appear twice in the Confirm payload", async () => {
+    const setCharacterOffers = vi.fn().mockResolvedValue({ created: 1, reactivated: 0, withdrawn: 0, kept: 0 });
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
+    await roleSelect(fakeInteraction("user-a", ["HEALER"]), api, RUN_ID, SYNMIST);
+
+    await confirmSignup(fakeInteraction("user-a"), api, RUN_ID);
+
+    const [, , body] = setCharacterOffers.mock.calls[0];
+    const characterIds = body.offers.map((offer: { characterId: string }) => offer.characterId);
+    expect(new Set(characterIds).size).toBe(characterIds.length);
+    expect(body.offers).toEqual([{ characterId: SYNMIST, role: "HEALER" }]);
+  });
+
+  it("Cancel discards the session and never calls setCharacterOffers", async () => {
+    const setCharacterOffers = vi.fn();
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
+
+    const cancelInteraction = fakeInteraction("user-a");
+    await discardSignup(cancelInteraction, RUN_ID);
+
+    expect(setCharacterOffers).not.toHaveBeenCalled();
+    expect(getSession("user-a", RUN_ID)).toBeUndefined();
+    expect(cancelInteraction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "Signup changes cancelled." }),
+    );
+  });
+
+  it("a stale/expired session returns an explicit message instead of silently failing", async () => {
+    const setCharacterOffers = vi.fn();
+    const api = fakeApi({ setCharacterOffers });
+
+    const roleInteraction = fakeInteraction("user-a", ["TANK"]);
+    await roleSelect(roleInteraction, api, RUN_ID, SYNMIST);
+    expect(roleInteraction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("expired") }),
+    );
+
+    const confirmInteraction = fakeInteraction("user-a");
+    await confirmSignup(confirmInteraction, api, RUN_ID);
+    expect(confirmInteraction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("expired") }),
+    );
+
+    expect(setCharacterOffers).not.toHaveBeenCalled();
+  });
+
+  it("User B cannot read or mutate User A's staged session", async () => {
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+
+    const userBRoleSelect = fakeInteraction("user-b", ["TANK"]);
+    await roleSelect(userBRoleSelect, api, RUN_ID, SYNMIST);
+
+    expect(userBRoleSelect.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("expired") }),
+    );
+    // User A's own session is completely unaffected by User B's attempt.
+    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBe("HEALER");
+  });
+
+  it("a failed Confirm keeps the staged session so the User can retry, and mutates nothing", async () => {
+    const setCharacterOffers = vi.fn().mockRejectedValue(new Error("boom"));
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+
+    const confirmInteraction = fakeInteraction("user-a");
+    await confirmSignup(confirmInteraction, api, RUN_ID);
+
+    expect(setCharacterOffers).toHaveBeenCalledTimes(1);
+    // The session survives the failure — nothing was silently discarded.
+    expect(getSession("user-a", RUN_ID)).not.toBeUndefined();
+    expect(confirmInteraction.editReply).toHaveBeenCalled();
+  });
+
+  it("Confirm blocks and re-renders when a Character's role is still unresolved, without calling the API", async () => {
+    const setCharacterOffers = vi.fn();
+    const api = fakeApi({
+      getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })),
+      setCharacterOffers,
+    });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+
+    const confirmInteraction = fakeInteraction("user-a");
+    await confirmSignup(confirmInteraction, api, RUN_ID);
+
+    expect(setCharacterOffers).not.toHaveBeenCalled();
+    expect(getSession("user-a", RUN_ID)).not.toBeUndefined();
+    expect(confirmInteraction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("Choose a role") }),
     );
   });
 });

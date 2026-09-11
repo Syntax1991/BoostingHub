@@ -6,7 +6,7 @@
  * malformed or foreign id fails fast before any network call.
  */
 const NAMESPACE = "boostinghub";
-const ACTIONS = ["signup", "lootbuddy", "cancel"] as const;
+const ACTIONS = ["signup", "lootbuddy", "cancel", "signup-confirm", "signup-discard"] as const;
 export type ButtonAction = (typeof ACTIONS)[number];
 
 /** Scoped to one Character within a Run — carries a 4th id segment. */

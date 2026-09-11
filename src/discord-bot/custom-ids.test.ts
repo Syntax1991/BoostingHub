@@ -11,7 +11,7 @@ const CHARACTER_ID = "c1111111-1111-4111-8111-111111111111";
 
 describe("custom ids", () => {
   it("round-trips action and runId", () => {
-    for (const action of ["signup", "lootbuddy", "cancel"] as const) {
+    for (const action of ["signup", "lootbuddy", "cancel", "signup-confirm", "signup-discard"] as const) {
       const id = buildCustomId(action, RUN_ID);
       expect(parseCustomId(id)).toEqual({ action, runId: RUN_ID });
     }
