@@ -421,6 +421,9 @@ model Run {
   desiredHealerCount Int
   desiredDpsCount    Int
   signupsOpen        Boolean        @default(false)
+  archivedAt         TimestamptzString?
+  archivedById       String?
+  archivedBy         User?          @relation("RunArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
 
@@ -433,6 +436,7 @@ model Run {
 
   @@index([scheduledStartAt])
   @@index([status])
+  @@index([archivedAt])
   @@map("run")
 }
 

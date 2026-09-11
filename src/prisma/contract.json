@@ -1934,6 +1934,20 @@
           },
           "Run": {
             "fields": {
+              "archivedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "archivedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -2046,6 +2060,21 @@
               }
             },
             "relations": {
+              "archivedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "archivedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
               "attendance": {
                 "cardinality": "1:N",
                 "on": {
@@ -2169,6 +2198,12 @@
             },
             "storage": {
               "fields": {
+                "archivedAt": {
+                  "column": "archivedAt"
+                },
+                "archivedById": {
+                  "column": "archivedById"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -5807,6 +5842,16 @@
                 }
               ],
               "columns": {
+                "archivedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "archivedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -5932,9 +5977,42 @@
                     "namespaceId": "public",
                     "tableName": "user"
                   }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "archivedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
                 }
               ],
               "indexes": [
+                {
+                  "columns": [
+                    "archivedAt"
+                  ],
+                  "name": "run_archivedAt_idx_5fc66e5b",
+                  "prefix": "run_archivedAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "archivedById"
+                  ],
+                  "name": "run_archivedById_idx_d546efc6",
+                  "prefix": "run_archivedById_idx",
+                  "unique": false
+                },
                 {
                   "columns": [
                     "raidId"
@@ -7849,7 +7927,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "a64a235b66c4f4ce4c07ae6d47fc706c5e40312723aa26aa5aa1575223f9a585"
+    "storageHash": "80beca6c41b879665b85c5f02c2cdd9c849b476fa8c2936ffc80453a8ac6134c"
   },
   "execution": {
     "executionHash": "8708be34c85acf0289f559b4c580f8283c7d229e8102c2e0fec552d931217b64",

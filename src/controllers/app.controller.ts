@@ -124,6 +124,7 @@ export const managementController = {
     status?: string | string[];
     raidLeadId?: string | string[];
     timeframe?: string | string[];
+    archived?: string | string[];
   } = {}) {
     const user = await requireManagerOrRedirect();
     const filters = parseManageRunFilters(searchParams);
