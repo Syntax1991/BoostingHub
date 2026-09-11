@@ -7,6 +7,7 @@ import type {
   LootbuddyVerification,
   ParticipationType,
   RaidDifficulty,
+  RunLootType,
   RunStatus,
   SettlementStatus,
   SignupStatus,
@@ -51,6 +52,19 @@ export const DIFFICULTY_LABELS: Record<RaidDifficulty, string> = {
   NORMAL: "Normal",
   HEROIC: "Heroic",
   MYTHIC: "Mythic",
+};
+
+/** Single source of truth for both the derived Run title and the Discord channel-name slug. */
+export const DIFFICULTY_ABBREVIATIONS: Record<RaidDifficulty, string> = {
+  NORMAL: "NM",
+  HEROIC: "HC",
+  MYTHIC: "MY",
+};
+
+export const RUN_LOOT_TYPE_LABELS: Record<RunLootType, string> = {
+  SAVED: "Saved",
+  UNSAVED: "Unsaved",
+  VIP: "VIP",
 };
 
 export const ACCESS_STATUS_LABELS: Record<BoosterAccessStatus, string> = {

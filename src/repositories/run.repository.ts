@@ -1,6 +1,6 @@
 import { db, orm } from "@/lib/prisma";
 import { DomainError } from "@/lib/errors";
-import type { RaidDifficulty, RunStatus, SignupStatus, ParticipationType, CharacterRole } from "@/models/enums";
+import type { RaidDifficulty, RunLootType, RunStatus, SignupStatus, ParticipationType, CharacterRole } from "@/models/enums";
 import {
   asBoolean,
   asNumber,
@@ -8,6 +8,7 @@ import {
   asStringOrNull,
   mapCharacterRole,
   mapDifficulty,
+  mapLootType,
   mapParticipation,
   mapRunStatus,
   mapSignupStatus,
@@ -35,6 +36,7 @@ export type RunListRecord = {
   raidName: string;
   season: string;
   difficulty: RaidDifficulty;
+  lootType: RunLootType;
   scheduledStartAt: string;
   status: RunStatus;
   raidLeadId: string;
@@ -43,6 +45,8 @@ export type RunListRecord = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  plannedBossCount: number;
+  totalBossCount: number;
   signupsOpen: boolean;
   archivedAt: string | null;
   archivedById: string | null;
@@ -62,6 +66,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
   const signups = Array.isArray(run.signups) ? run.signups : [];
   const roster = run.roster ? (run.roster as Record<string, unknown>) : null;
   const rosterEntries = roster && Array.isArray(roster.entries) ? roster.entries : [];
+  const raidBosses = Array.isArray(raid.bosses) ? raid.bosses : [];
 
   return {
     id: asString(run.id),
@@ -70,6 +75,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     raidName: asString(raid.name, "Unknown raid"),
     season: asString(raid.season),
     difficulty: mapDifficulty(run.difficulty),
+    lootType: mapLootType(run.lootType),
     scheduledStartAt: asString(run.scheduledStartAt),
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
@@ -78,6 +84,8 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     desiredTankCount: asNumber(run.desiredTankCount),
     desiredHealerCount: asNumber(run.desiredHealerCount),
     desiredDpsCount: asNumber(run.desiredDpsCount),
+    plannedBossCount: asNumber(run.plannedBossCount),
+    totalBossCount: raidBosses.length,
     signupsOpen: asBoolean(run.signupsOpen),
     archivedAt: asStringOrNull(run.archivedAt),
     archivedById: asStringOrNull(run.archivedById),
@@ -108,7 +116,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
 export const runRepository = {
   async listUpcoming(filters: RunListFilters = {}): Promise<RunListRecord[]> {
     let query = orm.Run
-      .include("raid")
+      .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
       .include("signups")
       .include("roster", (roster) => roster.include("entries"))
@@ -131,7 +139,7 @@ export const runRepository = {
   async findById(id: string): Promise<RunListRecord | null> {
     const run = await orm.Run
       .where({ id })
-      .include("raid")
+      .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
       .include("signups")
       .include("roster", (roster) => roster.include("entries"))
@@ -142,7 +150,7 @@ export const runRepository = {
 
   async listManaged(): Promise<RunListRecord[]> {
     const runs = await orm.Run
-      .include("raid")
+      .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
       .include("signups")
       .include("roster", (roster) => roster.include("entries"))
@@ -171,12 +179,14 @@ export const runRepository = {
     title: string;
     raidId: string;
     difficulty: RaidDifficulty;
+    lootType: RunLootType;
     scheduledStartAt: string;
     raidLeadId: string;
     notes: string | null;
     desiredTankCount: number;
     desiredHealerCount: number;
     desiredDpsCount: number;
+    plannedBossCount: number;
   }): Promise<string> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -187,6 +197,7 @@ export const runRepository = {
         title: input.title,
         raidId: input.raidId,
         difficulty: input.difficulty,
+        lootType: input.lootType,
         scheduledStartAt: input.scheduledStartAt,
         status: "DRAFT",
         raidLeadId: input.raidLeadId,
@@ -194,6 +205,7 @@ export const runRepository = {
         desiredTankCount: input.desiredTankCount,
         desiredHealerCount: input.desiredHealerCount,
         desiredDpsCount: input.desiredDpsCount,
+        plannedBossCount: input.plannedBossCount,
         signupsOpen: false,
         createdAt: now,
         updatedAt: now,
@@ -216,12 +228,14 @@ export const runRepository = {
       title?: string;
       raidId?: string;
       difficulty?: RaidDifficulty;
+      lootType?: RunLootType;
       scheduledStartAt?: string;
       raidLeadId?: string;
       notes?: string | null;
       desiredTankCount?: number;
       desiredHealerCount?: number;
       desiredDpsCount?: number;
+      plannedBossCount?: number;
       status?: RunStatus;
       signupsOpen?: boolean;
     },
@@ -242,12 +256,14 @@ export const runRepository = {
       title?: string;
       raidId: string;
       difficulty: RaidDifficulty;
+      lootType?: RunLootType;
       scheduledStartAt?: string;
       raidLeadId?: string;
       notes?: string | null;
       desiredTankCount?: number;
       desiredHealerCount?: number;
       desiredDpsCount?: number;
+      plannedBossCount?: number;
     },
   ) {
     await db.transaction(async (tx) => {

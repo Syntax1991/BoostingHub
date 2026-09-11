@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { RAID_DIFFICULTIES } from "@/models/enums";
+import { RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
-import { RUN_COMPOSITION_MAX, RUN_COMPOSITION_MIN, RUN_NOTES_MAX, RUN_TITLE_MAX } from "@/services/run-state";
+import { RUN_COMPOSITION_MAX, RUN_COMPOSITION_MIN, RUN_NOTES_MAX } from "@/services/run-state";
 
 const compositionSchema = z.coerce
   .number()
@@ -15,12 +15,6 @@ const scheduledStartAtSchema = z
   .min(1, "Choose a scheduled start.")
   .refine((value) => !Number.isNaN(Date.parse(value)), "Enter a valid scheduled start.");
 
-const titleSchema = z
-  .string()
-  .trim()
-  .max(RUN_TITLE_MAX, "Title is too long.")
-  .optional();
-
 const notesSchema = z
   .string()
   .trim()
@@ -28,29 +22,36 @@ const notesSchema = z
   .optional()
   .nullable();
 
+/** Upper bound against the raid's actual total boss count is validated in the Service layer. */
+const plannedBossCountSchema = z.coerce.number().int("Boss count must be a whole number.").min(1, "Boss count must be at least 1.");
+
+// Title is never accepted from the client — the server always derives it via
+// buildRunTitle from the other structured fields below.
 export const createRunSchema = z.object({
-  title: titleSchema,
   raidId: entityIdSchema,
   difficulty: z.enum(RAID_DIFFICULTIES),
+  lootType: z.enum(RUN_LOOT_TYPES),
   scheduledStartAt: scheduledStartAtSchema,
   raidLeadId: entityIdSchema.optional(),
   notes: notesSchema,
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
+  plannedBossCount: plannedBossCountSchema,
 });
 
 export const updateRunSchema = z.object({
   runId: entityIdSchema,
-  title: z.string().trim().min(1, "Enter a title.").max(RUN_TITLE_MAX, "Title is too long."),
   raidId: entityIdSchema,
   difficulty: z.enum(RAID_DIFFICULTIES),
+  lootType: z.enum(RUN_LOOT_TYPES),
   scheduledStartAt: scheduledStartAtSchema,
   raidLeadId: entityIdSchema.optional(),
   notes: notesSchema,
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
+  plannedBossCount: plannedBossCountSchema,
 });
 
 export const runIdSchema = z.object({

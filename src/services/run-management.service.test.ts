@@ -83,6 +83,8 @@ async function createDraft(actor: AuthenticatedUser, extra: Record<string, unkno
   const created = await runService.createRun(actor, {
     raidId,
     difficulty: "HEROIC",
+    lootType: "UNSAVED",
+    plannedBossCount: 8,
     scheduledStartAt: futureIso(),
     desiredTankCount: 2,
     desiredHealerCount: 4,
@@ -145,6 +147,8 @@ describe("run creation authorization", () => {
       runService.createRun(user, {
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -160,7 +164,7 @@ describe("run creation authorization", () => {
     expect(run?.status).toBe("DRAFT");
     expect(run?.signupsOpen).toBe(false);
     expect(run?.raidLeadId).toBe(ids.lead);
-    expect(run?.title).toBe("Self-led draft");
+    expect(run?.title).not.toBe("Self-led draft");
     const roster = await orm.RunRoster.where({ runId: id }).first();
     expect(roster).toBeTruthy();
     expect((roster as { state: string }).state).toBe("DRAFT");
@@ -171,6 +175,8 @@ describe("run creation authorization", () => {
       runService.createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -190,6 +196,8 @@ describe("run creation authorization", () => {
       runService.createRun(admin, {
         raidId,
         difficulty: "NORMAL",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -207,6 +215,8 @@ describe("run creation domain", () => {
       runService.createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: "not-a-date",
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -218,6 +228,8 @@ describe("run creation domain", () => {
       runService.createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -229,6 +241,8 @@ describe("run creation domain", () => {
       runService.createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: -1,
         desiredHealerCount: 4,
@@ -238,12 +252,34 @@ describe("run creation domain", () => {
     );
   });
 
-  it("defaults title from raid and difficulty", async () => {
-    const id = await createDraft(lead, { title: undefined });
+  it("derives the title server-side from schedule/difficulty/lootType/bosses/raidLead — never trusts a client title", async () => {
+    const id = await createDraft(lead, { title: "This should be ignored" });
     const run = await runRepository.findById(id);
-    expect(run?.title).toContain("Manaforge Omega");
+    expect(run?.title).not.toBe("This should be ignored");
+    expect(run?.title).toContain("HC");
+    expect(run?.title).toContain("Unsaved");
+    expect(run?.title).toContain("8/8");
+    expect(run?.title).toContain("Runmgmt Lead");
     expect(run?.raidId).toBe(raidId);
     expect(run?.difficulty).toBe("HEROIC");
+  });
+
+  it("rejects MYTHIC + SAVED and accepts MYTHIC + UNSAVED / MYTHIC + VIP", async () => {
+    await expectDomainCode(
+      createDraft(lead, { difficulty: "MYTHIC", lootType: "SAVED" }),
+      "RUN_LOOT_TYPE_INVALID",
+    );
+    const unsavedId = await createDraft(lead, { difficulty: "MYTHIC", lootType: "UNSAVED" });
+    expect((await runRepository.findById(unsavedId))?.lootType).toBe("UNSAVED");
+    const vipId = await createDraft(lead, { difficulty: "MYTHIC", lootType: "VIP" });
+    expect((await runRepository.findById(vipId))?.lootType).toBe("VIP");
+  });
+
+  it("enforces plannedBossCount boundaries against the raid's total boss count", async () => {
+    await expectDomainCode(createDraft(lead, { plannedBossCount: 0 }), "RUN_BOSS_COUNT_INVALID");
+    await expectDomainCode(createDraft(lead, { plannedBossCount: 9 }), "RUN_BOSS_COUNT_INVALID");
+    const id = await createDraft(lead, { plannedBossCount: 1 });
+    expect((await runRepository.findById(id))?.plannedBossCount).toBe(1);
   });
 });
 
@@ -281,25 +317,26 @@ describe("edit run", () => {
     const id = await createDraft(lead, { title: "Editable" });
     await runService.updateRun(lead, {
       runId: id,
-      title: "Edited draft",
       raidId,
       difficulty: "MYTHIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(8),
       desiredTankCount: 3,
       desiredHealerCount: 5,
       desiredDpsCount: 12,
     });
     let run = await runRepository.findById(id);
-    expect(run?.title).toBe("Edited draft");
     expect(run?.difficulty).toBe("MYTHIC");
     expect(run?.desiredTankCount).toBe(3);
 
     await runService.openRun(lead, id);
     await runService.updateRun(lead, {
       runId: id,
-      title: "Still identity-editable",
       raidId,
       difficulty: "NORMAL",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(9),
       desiredTankCount: 2,
       desiredHealerCount: 4,
@@ -326,9 +363,10 @@ describe("edit run", () => {
     await expectDomainCode(
       runService.updateRun(lead, {
         runId: id,
-        title: "Locked identity",
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(10),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -339,16 +377,16 @@ describe("edit run", () => {
 
     await runService.updateRun(lead, {
       runId: id,
-      title: "Schedule still editable",
       raidId,
       difficulty: "NORMAL",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(11),
       desiredTankCount: 1,
       desiredHealerCount: 2,
       desiredDpsCount: 8,
     });
     run = await runRepository.findById(id);
-    expect(run?.title).toBe("Schedule still editable");
     expect(run?.difficulty).toBe("NORMAL");
     expect(run?.desiredTankCount).toBe(1);
     expect(await runRepository.countSignups(id)).toBe(1);
@@ -360,9 +398,10 @@ describe("edit run", () => {
     await expectDomainCode(
       runService.updateRun(lead, {
         runId: id,
-        title: "Nope",
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -375,9 +414,10 @@ describe("edit run", () => {
     await expectDomainCode(
       runService.updateRun(lead, {
         runId: otherId,
-        title: "Stolen",
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -388,15 +428,85 @@ describe("edit run", () => {
 
     await runService.updateRun(admin, {
       runId: otherId,
-      title: "Admin can edit",
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
     });
-    expect((await runRepository.findById(otherId))?.title).toBe("Admin can edit");
+    expect((await runRepository.findById(otherId))?.raidLeadId).toBe(ids.otherLead);
+  });
+});
+
+describe("title regeneration on update", () => {
+  it("recomputes the title whenever a title-source field changes, and rejects MYTHIC + SAVED on update", async () => {
+    const id = await createDraft(lead, { title: "Ignored on create too" });
+    const before = (await runRepository.findById(id))?.title;
+
+    await runService.updateRun(lead, {
+      runId: id,
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      plannedBossCount: 8,
+      scheduledStartAt: futureIso(3),
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
+    const afterLootTypeChange = (await runRepository.findById(id))?.title;
+    expect(afterLootTypeChange).not.toBe(before);
+    expect(afterLootTypeChange).toContain("VIP");
+
+    await runService.updateRun(lead, {
+      runId: id,
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      plannedBossCount: 5,
+      scheduledStartAt: futureIso(3),
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
+    const afterBossCountChange = (await runRepository.findById(id))?.title;
+    expect(afterBossCountChange).not.toBe(afterLootTypeChange);
+    expect(afterBossCountChange).toContain("5/8");
+
+    // A notes-only change still regenerates the title (deterministic
+    // recomputation is cheap) but produces the same string, since none of
+    // the title's own source fields changed.
+    await runService.updateRun(lead, {
+      runId: id,
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      plannedBossCount: 5,
+      scheduledStartAt: futureIso(3),
+      notes: "Just a note",
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
+    expect((await runRepository.findById(id))?.title).toBe(afterBossCountChange);
+
+    await expectDomainCode(
+      runService.updateRun(lead, {
+        runId: id,
+        raidId,
+        difficulty: "MYTHIC",
+        lootType: "SAVED",
+        plannedBossCount: 5,
+        scheduledStartAt: futureIso(3),
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+      }),
+      "RUN_LOOT_TYPE_INVALID",
+    );
   });
 });
 
@@ -407,9 +517,10 @@ describe("raid lead reassignment", () => {
     await expectDomainCode(
       runService.updateRun(lead, {
         runId: id,
-        title: "Reassign me",
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -421,9 +532,10 @@ describe("raid lead reassignment", () => {
 
     await runService.updateRun(admin, {
       runId: id,
-      title: "Reassign me",
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 2,
       desiredHealerCount: 4,
@@ -437,9 +549,10 @@ describe("raid lead reassignment", () => {
     await expectDomainCode(
       runService.updateRun(admin, {
         runId: id,
-        title: "Reassign me",
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -453,9 +566,10 @@ describe("raid lead reassignment", () => {
     await expectDomainCode(
       runService.updateRun(admin, {
         runId: id,
-        title: "Reassign me",
         raidId,
         difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 2,
         desiredHealerCount: 4,

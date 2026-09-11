@@ -211,6 +211,8 @@ beforeAll(async () => {
     .createRun(lead, {
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 1,
       desiredHealerCount: 1,
@@ -224,6 +226,8 @@ beforeAll(async () => {
     .createRun(lead, {
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: futureIso(),
       desiredTankCount: 1,
       desiredHealerCount: 1,
@@ -271,6 +275,8 @@ describe("discordSyncService.getSignupEmbedData", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -317,6 +323,8 @@ describe("discordSyncService.listSyncWork", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -335,6 +343,8 @@ describe("discordSyncService.listSyncWork", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -439,6 +449,8 @@ describe("discordSyncService — per-Run channel provisioning", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -453,7 +465,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
     const work = await discordSyncService.listSyncWork();
     const item = work.signups.find((entry) => entry.runId === channelRunId);
     expect(item?.existingRunChannelId).toBeNull();
-    expect(item?.desiredChannelName).toMatch(/^[a-z]{3}-\d{4}-hc-discord-lead$/);
+    expect(item?.desiredChannelName).toMatch(/^[a-z]{3}-\d{4}-hc-unsaved-\dof\d-discord-lead$/);
   });
 
   it("persists the channel id as soon as it's recorded, independent of any signup message", async () => {
@@ -484,9 +496,10 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
     await runService.updateRun(lead, {
       runId: channelRunId,
-      title: "Channel Rename Test",
       raidId,
       difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
       scheduledStartAt: newSchedule,
       notes: null,
       desiredTankCount: 1,
@@ -504,6 +517,31 @@ describe("discordSyncService — per-Run channel provisioning", () => {
     expect(item?.existingRunChannelId).toBe(before?.runChannelId);
   });
 
+  it("a lootType or plannedBossCount change also renames the same persisted channel", async () => {
+    const before = await runDiscordPostRepository.findByRunId(channelRunId);
+    const run = await runRepository.findById(channelRunId);
+
+    await runService.updateRun(lead, {
+      runId: channelRunId,
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      plannedBossCount: 5,
+      scheduledStartAt: run!.scheduledStartAt,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === channelRunId);
+    expect(item).toBeTruthy();
+    expect(item?.desiredChannelName).toContain("-vip-5of8-");
+    expect(item?.existingRunChannelId).toBe("run-chan-1");
+    expect(item?.existingRunChannelId).toBe(before?.runChannelId);
+  });
+
   it("survives a restart: a fresh read of persisted state still finds the same channel id (no duplicate provisioning)", async () => {
     const persisted = await runDiscordPostRepository.findByRunId(channelRunId);
     expect(persisted?.runChannelId).toBe("run-chan-1");
@@ -514,6 +552,8 @@ describe("discordSyncService — per-Run channel provisioning", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -535,6 +575,8 @@ describe("discordSyncService — per-Run channel provisioning", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 0,
@@ -585,6 +627,8 @@ describe("discordSyncService — archive category movement", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,
@@ -624,6 +668,8 @@ describe("discordSyncService — archive category movement", () => {
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
         scheduledStartAt: futureIso(),
         desiredTankCount: 1,
         desiredHealerCount: 1,

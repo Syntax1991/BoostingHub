@@ -7,14 +7,18 @@ export type RaidRecord = {
   name: string;
   season: string;
   isActive: boolean;
+  /** Computed from RaidBoss rows — never a separate stored total. */
+  totalBossCount: number;
 };
 
 function mapRaid(row: Record<string, unknown>): RaidRecord {
+  const bosses = Array.isArray(row.bosses) ? row.bosses : [];
   return {
     id: asString(row.id),
     name: asString(row.name),
     season: asString(row.season),
     isActive: asBoolean(row.isActive, true),
+    totalBossCount: bosses.length,
   };
 }
 
@@ -69,12 +73,12 @@ export const raidRepository = {
   },
 
   async listActive(): Promise<RaidRecord[]> {
-    const rows = await orm.Raid.orderBy((raid) => raid.name.asc()).all();
+    const rows = await orm.Raid.include("bosses").orderBy((raid) => raid.name.asc()).all();
     return rows.map((row) => mapRaid(row as Record<string, unknown>)).filter((raid) => raid.isActive);
   },
 
   async findById(id: string): Promise<RaidRecord | null> {
-    const row = await orm.Raid.where({ id }).first();
+    const row = await orm.Raid.where({ id }).include("bosses").first();
     return row ? mapRaid(row as Record<string, unknown>) : null;
   },
 };

@@ -51,6 +51,15 @@ enum RaidDifficulty {
   MYTHIC = "MYTHIC"
 }
 
+/// Independent of RaidDifficulty. Compatibility (e.g. MYTHIC cannot be SAVED)
+/// is a domain rule enforced in the Service layer, not a schema constraint.
+enum RunLootType {
+  @@type("pg/text@1")
+  SAVED   = "SAVED"
+  UNSAVED = "UNSAVED"
+  VIP     = "VIP"
+}
+
 enum BoosterAccessStatus {
   @@type("pg/text@1")
   PENDING  = "PENDING"
@@ -408,10 +417,14 @@ model CharacterRaidLockout {
 
 model Run {
   id                 String         @id @default(uuid())
+  /// Server-derived (buildRunTitle) from scheduledStartAt/difficulty/lootType/
+  /// plannedBossCount/raidLead — never a free-form User-authored value.
   title              String
   raidId             String
   raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
   difficulty         RaidDifficulty
+  /// Independent of difficulty; MYTHIC+SAVED is rejected at the Service layer.
+  lootType           RunLootType
   scheduledStartAt   TimestamptzString
   status             RunStatus
   raidLeadId         String
@@ -420,6 +433,8 @@ model Run {
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
+  /// 1 <= plannedBossCount <= this Run's Raid's total boss count (RaidBoss row count).
+  plannedBossCount   Int
   signupsOpen        Boolean        @default(false)
   archivedAt         TimestamptzString?
   archivedById       String?

@@ -42,6 +42,10 @@ Defaults:
 
 Creation does not open or publish the run. First persisted roster selection still transitions `OPEN → ROSTERING` through Roster Management.
 
+## Derived identity (title, loot type, boss coverage)
+
+There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, planned boss count, and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured fields. A future **Mass Create Runs** feature (batch-creating a week's worth of runs at once) is expected to reuse this same structured validation and title-generation path without duplicating it — it is not implemented yet.
+
 ## Run lifecycle responsibilities
 
 | Operation | Owner |

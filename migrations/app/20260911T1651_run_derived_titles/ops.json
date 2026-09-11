@@ -1,0 +1,298 @@
+[
+  {
+    "id": "column.public.run.lootType",
+    "label": "Add column \"lootType\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lootType",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lootType\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "lootType"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lootType\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"lootType\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lootType\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "lootType"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-run-lootType",
+    "label": "Data transform: backfill-run-lootType",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Check backfill-run-lootType has work to do",
+        "sql": "SELECT EXISTS (SELECT \"id\" AS \"id\" FROM \"public\".\"run\" WHERE \"lootType\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Run backfill-run-lootType",
+        "sql": "UPDATE \"public\".\"run\" SET \"lootType\" = $1, \"updatedAt\" = $2 WHERE \"lootType\" IS NULL",
+        "params": [
+          "UNSAVED",
+          "2026-09-11T00:00:00.000Z"
+        ]
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Verify backfill-run-lootType resolved all violations",
+        "sql": "SELECT NOT EXISTS (SELECT \"id\" AS \"id\" FROM \"public\".\"run\" WHERE \"lootType\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.setNotNull.run.lootType",
+    "label": "Set NOT NULL on \"run\".\"lootType\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lootType",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lootType\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "lootType"
+        ]
+      },
+      {
+        "description": "ensure no NULL values in \"lootType\"",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"public\".\"run\" WHERE \"lootType\" IS NULL) AS \"result\"",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "set NOT NULL on \"lootType\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ALTER COLUMN \"lootType\" SET NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lootType\" is NOT NULL",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "lootType",
+          "NO"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.plannedBossCount",
+    "label": "Add column \"plannedBossCount\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "plannedBossCount",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"plannedBossCount\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "plannedBossCount"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"plannedBossCount\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"plannedBossCount\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"plannedBossCount\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "plannedBossCount"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-run-plannedBossCount",
+    "label": "Data transform: backfill-run-plannedBossCount",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Check backfill-run-plannedBossCount has work to do",
+        "sql": "SELECT EXISTS (SELECT \"id\" AS \"id\" FROM \"public\".\"run\" WHERE \"plannedBossCount\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Run backfill-run-plannedBossCount",
+        "sql": "UPDATE \"public\".\"run\" SET \"plannedBossCount\" = $1, \"updatedAt\" = $2 WHERE (\"raidId\" = $3 AND \"plannedBossCount\" IS NULL)",
+        "params": [
+          8,
+          "2026-09-11T00:00:00.000Z",
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        ]
+      },
+      {
+        "description": "Run backfill-run-plannedBossCount",
+        "sql": "UPDATE \"public\".\"run\" SET \"plannedBossCount\" = $1, \"updatedAt\" = $2 WHERE (\"raidId\" = $3 AND \"plannedBossCount\" IS NULL)",
+        "params": [
+          8,
+          "2026-09-11T00:00:00.000Z",
+          "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        ]
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Verify backfill-run-plannedBossCount resolved all violations",
+        "sql": "SELECT NOT EXISTS (SELECT \"id\" AS \"id\" FROM \"public\".\"run\" WHERE \"plannedBossCount\" IS NULL LIMIT 1) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.setNotNull.run.plannedBossCount",
+    "label": "Set NOT NULL on \"run\".\"plannedBossCount\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "plannedBossCount",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"plannedBossCount\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "plannedBossCount"
+        ]
+      },
+      {
+        "description": "ensure no NULL values in \"plannedBossCount\"",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"public\".\"run\" WHERE \"plannedBossCount\" IS NULL) AS \"result\"",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "set NOT NULL on \"plannedBossCount\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ALTER COLUMN \"plannedBossCount\" SET NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"plannedBossCount\" is NOT NULL",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "plannedBossCount",
+          "NO"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run.run_lootType_check_3071d052",
+    "label": "Add check constraint \"run_lootType_check_3071d052\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_lootType_check_3071d052",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_lootType_check_3071d052\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_lootType_check_3071d052\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD CONSTRAINT \"run_lootType_check_3071d052\" CHECK (\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_lootType_check_3071d052\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  }
+]

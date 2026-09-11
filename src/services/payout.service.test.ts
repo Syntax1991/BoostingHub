@@ -172,6 +172,8 @@ async function createDraft(actor: AuthenticatedUser, extra: Record<string, unkno
   const created = await runService.createRun(actor, {
     raidId,
     difficulty: "HEROIC",
+    lootType: "UNSAVED",
+    plannedBossCount: 8,
     scheduledStartAt: futureIso(),
     desiredTankCount: 2,
     desiredHealerCount: 4,

@@ -7,14 +7,16 @@ import {
   isEligibleRaidLead,
 } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
-import { DIFFICULTY_LABELS } from "@/lib/labels";
-import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunStatus } from "@/models/enums";
+import { buildRunTitle } from "@/lib/run-title";
+import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import {
+  assertValidPlannedBossCount,
+  assertValidRunLootType,
   canArchiveRun,
   emptyRunCapabilities,
   getRunLifecycleCapabilities,
@@ -48,10 +50,6 @@ function assertNewRunSchedule(iso: string): void {
   if (Date.parse(iso) < Date.now() - RUN_SCHEDULE_PAST_GRACE_MS) {
     throw new DomainError("RUN_SCHEDULE_INVALID", "Scheduled start cannot be in the past.");
   }
-}
-
-function defaultTitle(raidName: string, difficulty: RaidDifficulty): string {
-  return `${raidName} ${DIFFICULTY_LABELS[difficulty]}`;
 }
 
 function notesValue(notes: string | null | undefined): string | null {
@@ -143,6 +141,7 @@ export const runService = {
         raidName: run.raidName,
         season: run.season,
         difficulty: run.difficulty,
+        lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         raidLeadName: run.raidLeadName,
@@ -150,6 +149,8 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        plannedBossCount: run.plannedBossCount,
+        totalBossCount: run.totalBossCount,
         signupsOpen: run.signupsOpen,
         signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
         signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
@@ -202,6 +203,7 @@ export const runService = {
         title: run.title,
         raidName: run.raidName,
         difficulty: run.difficulty,
+        lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         raidLeadId: run.raidLeadId,
@@ -215,6 +217,8 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        plannedBossCount: run.plannedBossCount,
+        totalBossCount: run.totalBossCount,
         archivedAt: run.archivedAt,
         actionLabel: rosterActionLabel(
           run.status,
@@ -247,6 +251,10 @@ export const runService = {
       raidLeads,
       defaults: {
         difficulty: "HEROIC" as RaidDifficulty,
+        // Never SAVED or VIP — UNSAVED is the only loot type valid for every
+        // difficulty (including MYTHIC), so it can never need a client-side
+        // override on load.
+        lootType: "UNSAVED" as RunLootType,
         scheduledStartAt,
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -272,19 +280,32 @@ export const runService = {
     if (!hasAdminAccess(user.accountRole) && input.raidLeadId && input.raidLeadId !== user.id) {
       throw new DomainError("RUN_RAID_LEAD_INVALID", "Raid leads can only create runs they lead.");
     }
-    await requireEligibleRaidLead(raidLeadId);
+    const raidLead = await requireEligibleRaidLead(raidLeadId);
 
-    const title = input.title?.trim() || defaultTitle(raid.name, input.difficulty);
+    assertValidRunLootType(input.difficulty, input.lootType);
+    assertValidPlannedBossCount(input.plannedBossCount, raid.totalBossCount);
+
+    const title = buildRunTitle({
+      scheduledStartAt,
+      difficulty: input.difficulty,
+      lootType: input.lootType,
+      plannedBossCount: input.plannedBossCount,
+      totalBossCount: raid.totalBossCount,
+      raidLeadName: raidLead.name,
+    });
+
     const id = await runRepository.create({
       title,
       raidId: raid.id,
       difficulty: input.difficulty,
+      lootType: input.lootType,
       scheduledStartAt,
       raidLeadId,
       notes: notesValue(input.notes),
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
+      plannedBossCount: input.plannedBossCount,
     });
 
     await activityRepository.create({
@@ -310,7 +331,6 @@ export const runService = {
     assertComposition(input.desiredTankCount, "Desired tanks");
     assertComposition(input.desiredHealerCount, "Desired healers");
     assertComposition(input.desiredDpsCount, "Desired DPS");
-    const nextTitle = input.title.trim();
     const nextNotes = notesValue(input.notes);
     const identityChanged = input.raidId !== run.raidId || input.difficulty !== run.difficulty;
     const leadChanged = Boolean(input.raidLeadId && input.raidLeadId !== run.raidLeadId);
@@ -326,9 +346,10 @@ export const runService = {
 
     if (!capabilities.canEditPlanning) {
       const planningChanged =
-        nextTitle !== run.title ||
         scheduledStartAt !== run.scheduledStartAt ||
         nextNotes !== run.notes ||
+        input.lootType !== run.lootType ||
+        input.plannedBossCount !== run.plannedBossCount ||
         input.desiredTankCount !== run.desiredTankCount ||
         input.desiredHealerCount !== run.desiredHealerCount ||
         input.desiredDpsCount !== run.desiredDpsCount;
@@ -338,30 +359,52 @@ export const runService = {
     }
 
     let raidLeadId = run.raidLeadId;
+    let raidLeadName = run.raidLeadName;
     if (leadChanged) {
       if (!capabilities.canReassignRaidLead) {
         throw new DomainError("RUN_RAID_LEAD_INVALID", "You cannot reassign the raid lead for this run.");
       }
-      await requireEligibleRaidLead(input.raidLeadId!);
+      const lead = await requireEligibleRaidLead(input.raidLeadId!);
       raidLeadId = input.raidLeadId!;
+      raidLeadName = lead.name;
     }
 
     let raidId = run.raidId;
     let difficulty = run.difficulty;
+    let totalBossCount = run.totalBossCount;
     if (identityChanged) {
       const raid = await requireActiveRaid(input.raidId);
       raidId = raid.id;
       difficulty = input.difficulty;
+      totalBossCount = raid.totalBossCount;
     }
 
+    assertValidRunLootType(difficulty, input.lootType);
+    assertValidPlannedBossCount(input.plannedBossCount, totalBossCount);
+
+    // Server is always the sole title authority — recomputed from the final
+    // normalized values on every update, including notes/composition-only
+    // changes (recomputation is deterministic and cheap; no need to detect
+    // whether the title's own source fields actually changed).
+    const title = buildRunTitle({
+      scheduledStartAt,
+      difficulty,
+      lootType: input.lootType,
+      plannedBossCount: input.plannedBossCount,
+      totalBossCount,
+      raidLeadName,
+    });
+
     const fields = {
-      title: nextTitle,
+      title,
+      lootType: input.lootType,
       scheduledStartAt,
       raidLeadId,
       notes: nextNotes,
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
+      plannedBossCount: input.plannedBossCount,
     };
 
     if (identityChanged) {

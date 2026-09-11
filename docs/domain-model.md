@@ -70,6 +70,8 @@ Preserved historical applications: User + Class + Role + Difficulty (+ optional 
 
 Reusable **reference content**, not demo users or demo Runs. Catalog: `src/lib/wow-raid-catalog.ts`. `raidRepository.ensureReferenceRaids()` upserts it idempotently (seed and Run create/edit). Dev seed still adds fixture Runs around that content. Blizzard raid ingestion is deferred.
 
+A Raid's **total boss count** is never a stored field — it is computed by counting that Raid's `RaidBoss` rows (`raidRepository` includes the `bosses` relation and returns `totalBossCount` as `bosses.length`). `Run.plannedBossCount` (below) is validated against this computed total, never against a duplicate stored number.
+
 ## CharacterRaidLockout
 
 Lockout is **not** `character.locked = true`.
@@ -80,10 +82,31 @@ Heroic and Mythic lockouts for the same raid week are independent.
 
 ## Run
 
-- title, raid, difficulty, scheduled start (UTC)
+- title, raid, difficulty, loot type, scheduled start (UTC)
 - status, raid lead, notes
 - desired tank / healer / DPS counts
+- planned boss count
 - `signupsOpen`
+
+### Derived title (no manual title entry)
+
+`Run.title` is **server-derived, never client-authored**. Create Run and Edit Run have no title input — they show a read-only "Generated title" preview that live-updates as the schedule/difficulty/lootType/plannedBossCount/raidLead/raid change, computed client-side with the same pure `buildRunTitle` helper (`src/lib/run-title.ts`) the server uses. `createRun`/`updateRun` always recompute and persist the title server-side from the final normalized values — a client-sent `title` is never accepted (the validators for Create/Edit Run have no `title` field at all).
+
+Format: `{weekday} {HH:mm} {difficulty} {lootType} {planned}/{total} {raidLead}` in the Europe/Berlin community timezone — e.g. `Thu 21:00 HC VIP 7/9 Titan`. Difficulty abbreviations are `NM`/`HC`/`MY`; loot-type labels are `Saved`/`Unsaved`/`VIP`. Raid Lead is always the canonical BoostingHub display name, never a Discord nickname.
+
+Historical Runs are **not** retroactively retitled — a migration backfills `lootType = UNSAVED` and `plannedBossCount = <raid's total boss count>` for existing rows, but their `title` stays whatever it already was until the Run is next edited (which always regenerates it, including for a notes-only or composition-only edit — recomputation is deterministic and cheap, so there's no "did the title's source fields actually change" check).
+
+### RunLootType
+
+`SAVED` \| `UNSAVED` \| `VIP` — independent of `RaidDifficulty`, not a combined enum. **Compatibility is a Service-layer rule, not a schema constraint**: every difficulty allows every loot type except `MYTHIC + SAVED`, which is rejected everywhere (Create, Edit, the future Mass Create feature, and Discord naming) via one central helper, `isLootTypeAllowedForDifficulty` / `assertValidRunLootType` in `src/services/run-state.ts` (throwing `RUN_LOOT_TYPE_INVALID`). New Runs default to `UNSAVED` — the only loot type valid for every difficulty including Mythic, so the default never needs a client-side override. The Create/Edit UI disables the `SAVED` option and auto-switches to `UNSAVED` when the selected difficulty is Mythic.
+
+### Planned boss count
+
+`Run.plannedBossCount` must satisfy `1 <= plannedBossCount <= <raid's total boss count>` (validated by `assertValidPlannedBossCount`, throwing `RUN_BOSS_COUNT_INVALID`). Create defaults it to the raid's full total; selecting a different raid resets it to that raid's total.
+
+### Discord channel naming
+
+Discord run-channel names are derived from the same structured fields as the title — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{planned}of{total}-{raidLead}`, e.g. `thu-2100-hc-vip-7of9-titan`. Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`), so an invalid state like `my-saved` can never render. Any change to a naming-source field (schedule, difficulty, loot type, planned boss count, or raid lead) renames the Run's existing Discord channel in place — the bot never creates a replacement channel or reposts existing messages for a rename.
 
 Run statuses:
 

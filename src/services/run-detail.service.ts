@@ -67,6 +67,7 @@ export const runDetailService = {
       raidName: run.raidName,
       season: run.season,
       difficulty: run.difficulty,
+      lootType: run.lootType,
       scheduledStartAt: run.scheduledStartAt,
       status: run.status,
       raidLeadId: run.raidLeadId,
@@ -77,6 +78,8 @@ export const runDetailService = {
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,
+      plannedBossCount: run.plannedBossCount,
+      totalBossCount: run.totalBossCount,
       activeSignupCount: activeSignups.length,
       selectedCount,
     };
@@ -93,7 +96,7 @@ export const runDetailService = {
     let editor: {
       hasSignupHistory: boolean;
       canAssignRaidLead: boolean;
-      raids: Array<{ id: string; name: string; season: string }>;
+      raids: Array<{ id: string; name: string; season: string; totalBossCount: number }>;
       raidLeads: Array<{ id: string; name: string }>;
     } | null = null;
 
