@@ -1,21 +1,61 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  createBoosterSignupAction,
-  createLootbuddySignupAction,
-  getSignupOptionsAction,
-} from "@/controllers/signup.actions";
+import { getSignupOptionsAction, setCharacterOffersAction } from "@/controllers/signup.actions";
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { formatDateTime } from "@/lib/datetime";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
-import { LOOTBUDDY_MODES, LOOTBUDDY_VERIFICATIONS, type CharacterRole, type LootbuddyMode, type LootbuddyVerification } from "@/models/enums";
+import { roleForSpecialization } from "@/lib/wow-specializations";
+import {
+  LOOTBUDDY_MODES,
+  LOOTBUDDY_VERIFICATIONS,
+  type CharacterRole,
+  type LootbuddyMode,
+  type LootbuddyVerification,
+  type WowClass,
+} from "@/models/enums";
 import type { signupService } from "@/services/signup.service";
 
 type SignupOptions = Awaited<ReturnType<typeof signupService.getSignupOptions>>;
 type Participation = "BOOSTER" | "LOOTBUDDY";
+
+type BoosterGroup = {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  wowClass: WowClass;
+  specialization: string | null;
+  roles: CharacterRole[];
+  /** The role this character is actually specced for, when that role is itself eligible. */
+  defaultRole: CharacterRole;
+};
+
+function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): BoosterGroup[] {
+  const groups = new Map<string, BoosterGroup>();
+  for (const option of eligible) {
+    const existing = groups.get(option.characterId);
+    if (existing) {
+      existing.roles.push(option.role);
+      continue;
+    }
+    groups.set(option.characterId, {
+      characterId: option.characterId,
+      characterName: option.characterName,
+      realm: option.realm,
+      wowClass: option.wowClass,
+      specialization: option.specialization,
+      roles: [option.role],
+      defaultRole: option.role,
+    });
+  }
+  for (const group of groups.values()) {
+    const specRole = group.specialization ? roleForSpecialization(group.wowClass, group.specialization) : null;
+    group.defaultRole = specRole && group.roles.includes(specRole) ? specRole : group.roles[0];
+  }
+  return [...groups.values()];
+}
 
 export function RunSignupButton({
   runId,
@@ -33,13 +73,17 @@ export function RunSignupButton({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [participation, setParticipation] = useState<Participation>("BOOSTER");
-  const [characterRole, setCharacterRole] = useState("");
-  const [lootbuddyCharacterId, setLootbuddyCharacterId] = useState("");
-  const [isBackup, setIsBackup] = useState(false);
+  const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<string>>(new Set());
+  const [roleByCharacterId, setRoleByCharacterId] = useState<Record<string, CharacterRole>>({});
   const [mode, setMode] = useState<LootbuddyMode>("LOOT_ONLY");
   const [verification, setVerification] = useState<LootbuddyVerification>("NONE");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const boosterGroups = useMemo(
+    () => (options ? groupBoosterOptions(options.booster.eligible) : []),
+    [options],
+  );
 
   async function openDialog() {
     setError(null);
@@ -51,12 +95,11 @@ export function RunSignupButton({
       return;
     }
     setOptions(result.data);
-    setCharacterRole(
-      result.data.booster.eligible[0]
-        ? `${result.data.booster.eligible[0].characterId}:${result.data.booster.eligible[0].role}`
-        : "",
-    );
-    setLootbuddyCharacterId(result.data.lootbuddy.eligible[0]?.characterId ?? "");
+    setParticipation(result.data.activeOffer.participationType ?? "BOOSTER");
+    setSelectedCharacterIds(new Set(result.data.activeOffer.characterIds));
+    setRoleByCharacterId({ ...result.data.activeOffer.roleByCharacterId } as Record<string, CharacterRole>);
+    setMode(result.data.activeOffer.lootbuddyMode ?? "LOOT_ONLY");
+    setVerification(result.data.activeOffer.lootbuddyVerification ?? "NONE");
   }
 
   function closeDialog() {
@@ -74,24 +117,68 @@ export function RunSignupButton({
       setOptions(null);
       setError(null);
       setSuccess(null);
-      setIsBackup(false);
+      setSelectedCharacterIds(new Set());
+      setRoleByCharacterId({});
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
   }, [dialogOpen]);
 
+  function switchParticipation(next: Participation) {
+    setParticipation(next);
+    setSelectedCharacterIds(new Set());
+  }
+
+  function toggleCharacter(characterId: string, defaultRole: CharacterRole | undefined) {
+    setSelectedCharacterIds((current) => {
+      const next = new Set(current);
+      if (next.has(characterId)) {
+        next.delete(characterId);
+      } else {
+        next.add(characterId);
+        if (defaultRole && !roleByCharacterId[characterId]) {
+          setRoleByCharacterId((roles) => ({ ...roles, [characterId]: defaultRole }));
+        }
+      }
+      return next;
+    });
+  }
+
+  function selectAllEligibleBooster() {
+    setSelectedCharacterIds(new Set(boosterGroups.map((group) => group.characterId)));
+    setRoleByCharacterId((roles) => {
+      const next = { ...roles };
+      for (const group of boosterGroups) {
+        if (!next[group.characterId]) {
+          next[group.characterId] = group.defaultRole;
+        }
+      }
+      return next;
+    });
+  }
+
+  function selectAllEligibleLootbuddy() {
+    if (!options) return;
+    setSelectedCharacterIds(new Set(options.lootbuddy.eligible.map((option) => option.characterId)));
+  }
+
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result =
+      const offers =
         participation === "BOOSTER"
-          ? await createBoosterSignupAction(parseBoosterSelection(characterRole, isBackup, runId))
-          : await createLootbuddySignupAction({
-              runId,
-              characterId: lootbuddyCharacterId,
-              mode,
-              verification,
-            });
+          ? [...selectedCharacterIds].map((characterId) => ({
+              characterId,
+              role: roleByCharacterId[characterId],
+            }))
+          : [...selectedCharacterIds].map((characterId) => ({ characterId }));
+
+      const result = await setCharacterOffersAction({
+        runId,
+        participationType: participation,
+        offers,
+        ...(participation === "LOOTBUDDY" ? { lootbuddyMode: mode, lootbuddyVerification: verification } : {}),
+      });
 
       if (!result.ok) {
         setError(result.message);
@@ -140,7 +227,7 @@ export function RunSignupButton({
             <div className="flex items-center gap-2">
               <DifficultyBadge difficulty={options.run.difficulty} />
               {!options.run.signupWindowOpen ? (
-                <span className="text-xs text-danger">Signups are closed.</span>
+                <span className="text-xs text-danger">Signups are closed. You may still remove offers.</span>
               ) : null}
             </div>
             <fieldset className="space-y-2">
@@ -149,34 +236,45 @@ export function RunSignupButton({
                 <ParticipationToggle
                   label="Booster"
                   selected={participation === "BOOSTER"}
-                  onSelect={() => setParticipation("BOOSTER")}
+                  onSelect={() => switchParticipation("BOOSTER")}
                 />
                 <ParticipationToggle
                   label="Lootbuddy"
                   selected={participation === "LOOTBUDDY"}
-                  onSelect={() => setParticipation("LOOTBUDDY")}
+                  onSelect={() => switchParticipation("LOOTBUDDY")}
                 />
               </div>
+              <p className="text-xs text-muted">
+                You may hold only one active participation type on this run. Switching replaces your current offers.
+              </p>
             </fieldset>
             {participation === "BOOSTER" ? (
-              <BoosterFields
-                options={options.booster}
-                value={characterRole}
-                isBackup={isBackup}
-                onValueChange={setCharacterRole}
-                onBackupChange={setIsBackup}
+              <BoosterCharacterChecklist
+                groups={boosterGroups}
+                ineligible={options.booster.ineligible}
+                selected={selectedCharacterIds}
+                roleByCharacterId={roleByCharacterId}
+                onToggle={toggleCharacter}
+                onRoleChange={(characterId, role) =>
+                  setRoleByCharacterId((roles) => ({ ...roles, [characterId]: role }))
+                }
+                onSelectAll={selectAllEligibleBooster}
               />
             ) : (
-              <LootbuddyFields
+              <LootbuddyChecklist
                 options={options.lootbuddy}
-                characterId={lootbuddyCharacterId}
+                selected={selectedCharacterIds}
+                onToggle={(characterId) => toggleCharacter(characterId, undefined)}
+                onSelectAll={selectAllEligibleLootbuddy}
                 mode={mode}
                 verification={verification}
-                onCharacterChange={setLootbuddyCharacterId}
                 onModeChange={setMode}
                 onVerificationChange={setVerification}
               />
             )}
+            {selectedCharacterIds.size === 0 ? (
+              <p className="text-xs text-muted">No characters selected — submitting will clear your signup on this run.</p>
+            ) : null}
             {error ? (
               <p role="alert" className="text-sm text-danger">
                 {error}
@@ -201,31 +299,16 @@ export function RunSignupButton({
           </Button>
           <Button
             type="button"
-            disabled={
-              pending ||
-              !options?.run.signupWindowOpen ||
-              (participation === "BOOSTER" && !characterRole) ||
-              (participation === "LOOTBUDDY" && !lootbuddyCharacterId)
-            }
+            disabled={pending || !options || (selectedCharacterIds.size > 0 && !options.run.signupWindowOpen)}
             onClick={submit}
           >
-            {pending ? "Saving…" : "Sign up"}
+            {pending ? "Saving…" : "Save offers"}
           </Button>
         </div>
       </dialog>
       ) : null}
     </>
   );
-}
-
-function parseBoosterSelection(value: string, isBackup: boolean, runId: string) {
-  const [characterId, role] = value.split(":");
-  return {
-    runId,
-    characterId,
-    role: role as CharacterRole,
-    isBackup,
-  };
 }
 
 function ParticipationToggle({
@@ -251,58 +334,86 @@ function ParticipationToggle({
   );
 }
 
-function BoosterFields({
-  options,
-  value,
-  isBackup,
-  onValueChange,
-  onBackupChange,
+function BoosterCharacterChecklist({
+  groups,
+  ineligible,
+  selected,
+  roleByCharacterId,
+  onToggle,
+  onRoleChange,
+  onSelectAll,
 }: {
-  options: SignupOptions["booster"];
-  value: string;
-  isBackup: boolean;
-  onValueChange: (value: string) => void;
-  onBackupChange: (value: boolean) => void;
+  groups: BoosterGroup[];
+  ineligible: SignupOptions["booster"]["ineligible"];
+  selected: Set<string>;
+  roleByCharacterId: Record<string, CharacterRole>;
+  onToggle: (characterId: string, defaultRole: CharacterRole | undefined) => void;
+  onRoleChange: (characterId: string, role: CharacterRole) => void;
+  onSelectAll: () => void;
 }) {
   return (
     <div className="space-y-3">
-      <label className="block text-sm">
-        <span className="mb-1 block text-muted">Character and role</span>
-        {options.eligible.length === 0 ? (
-          <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
-            {options.ineligible.length === 0
-              ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
-              : "No eligible booster characters for this run. Switch to Lootbuddy or check access and lockouts."}
-          </p>
-        ) : (
-          <select
-            aria-label="Character and role"
-            value={value}
-            onChange={(event) => onValueChange(event.target.value)}
-            className="h-9 w-full max-w-full rounded-md border border-border bg-surface px-2"
-          >
-            {options.eligible.map((option) => (
-              <option key={`${option.characterId}-${option.role}`} value={`${option.characterId}:${option.role}`}>
-                {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]} · {CHARACTER_ROLE_LABELS[option.role]}
-              </option>
-            ))}
-          </select>
-        )}
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={isBackup}
-          onChange={(event) => onBackupChange(event.target.checked)}
-          aria-label="Backup signup"
-        />
-        Backup signup
-      </label>
-      {options.ineligible.length > 0 ? (
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted">Characters to offer</span>
+        {groups.length > 1 ? (
+          <button type="button" className="text-xs text-accent hover:underline" onClick={onSelectAll}>
+            Select all eligible
+          </button>
+        ) : null}
+      </div>
+      {groups.length === 0 ? (
+        <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
+          {ineligible.length === 0
+            ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
+            : "No eligible booster characters for this run. Switch to Lootbuddy or check access and lockouts."}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {groups.map((group) => {
+            const isChecked = selected.has(group.characterId);
+            const role = roleByCharacterId[group.characterId] ?? group.defaultRole;
+            return (
+              <li
+                key={group.characterId}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2"
+              >
+                <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => onToggle(group.characterId, group.defaultRole)}
+                  />
+                  <span className="truncate">
+                    {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
+                  </span>
+                </label>
+                {group.roles.length > 1 ? (
+                  <select
+                    aria-label={`Role for ${group.characterName}`}
+                    value={role}
+                    disabled={!isChecked}
+                    onChange={(event) => onRoleChange(group.characterId, event.target.value as CharacterRole)}
+                    className="h-8 shrink-0 rounded-md border border-border bg-surface px-2 text-xs disabled:opacity-50"
+                  >
+                    {group.roles.map((option) => (
+                      <option key={option} value={option}>
+                        {CHARACTER_ROLE_LABELS[option]}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="shrink-0 text-xs text-muted">{CHARACTER_ROLE_LABELS[group.roles[0]]}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {ineligible.length > 0 ? (
         <details className="text-xs text-muted">
-          <summary>{options.ineligible.length} character{options.ineligible.length === 1 ? "" : "s"} unavailable</summary>
+          <summary>{ineligible.length} character{ineligible.length === 1 ? "" : "s"} unavailable</summary>
           <ul className="mt-2 space-y-1">
-            {options.ineligible.map((item) => (
+            {ineligible.map((item) => (
               <li key={item.characterId}>
                 {item.characterName}-{item.realm}: {item.message}
               </li>
@@ -314,48 +425,55 @@ function BoosterFields({
   );
 }
 
-function LootbuddyFields({
+function LootbuddyChecklist({
   options,
-  characterId,
+  selected,
+  onToggle,
+  onSelectAll,
   mode,
   verification,
-  onCharacterChange,
   onModeChange,
   onVerificationChange,
 }: {
   options: SignupOptions["lootbuddy"];
-  characterId: string;
+  selected: Set<string>;
+  onToggle: (characterId: string) => void;
+  onSelectAll: () => void;
   mode: LootbuddyMode;
   verification: LootbuddyVerification;
-  onCharacterChange: (value: string) => void;
   onModeChange: (value: LootbuddyMode) => void;
   onVerificationChange: (value: LootbuddyVerification) => void;
 }) {
   return (
     <div className="space-y-3">
-      <label className="block text-sm">
-        <span className="mb-1 block text-muted">Character</span>
-        {options.eligible.length === 0 ? (
-          <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
-            {options.ineligible.length === 0
-              ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
-              : "No loot-eligible characters available for this run."}
-          </p>
-        ) : (
-          <select
-            aria-label="Lootbuddy character"
-            value={characterId}
-            onChange={(event) => onCharacterChange(event.target.value)}
-            className="h-9 w-full max-w-full rounded-md border border-border bg-surface px-2"
-          >
-            {options.eligible.map((option) => (
-              <option key={option.characterId} value={option.characterId}>
-                {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
-              </option>
-            ))}
-          </select>
-        )}
-      </label>
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted">Characters to offer</span>
+        {options.eligible.length > 1 ? (
+          <button type="button" className="text-xs text-accent hover:underline" onClick={onSelectAll}>
+            Select all eligible
+          </button>
+        ) : null}
+      </div>
+      {options.eligible.length === 0 ? (
+        <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
+          {options.ineligible.length === 0
+            ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
+            : "No loot-eligible characters available for this run."}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {options.eligible.map((option) => (
+            <li key={option.characterId} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
+              <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
+                <input type="checkbox" checked={selected.has(option.characterId)} onChange={() => onToggle(option.characterId)} />
+                <span className="truncate">
+                  {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
       <label className="block text-sm">
         <span className="mb-1 block text-muted">Mode</span>
         <select

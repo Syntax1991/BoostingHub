@@ -83,6 +83,39 @@ export const WOW_SPECIALIZATIONS: Record<WowClass, readonly WowSpecialization[]>
 
 export const WOW_CLASS_OPTIONS = WOW_CLASSES;
 
+export type DpsAttackType = "MELEE" | "RANGED";
+
+/**
+ * Melee/ranged split for DPS specializations only — meaningless for TANK/HEALER.
+ * Keyed by (class, specialization) because spec names collide across classes
+ * (e.g. "Frost" is a ranged Mage spec and a melee Death Knight spec). This is
+ * the one authoritative source; presentation layers (including the Discord
+ * bot) must call attackTypeForSpecialization rather than re-deriving it.
+ */
+const DPS_ATTACK_TYPE: Record<WowClass, Record<string, DpsAttackType>> = {
+  DEATH_KNIGHT: { Frost: "MELEE", Unholy: "MELEE" },
+  DEMON_HUNTER: { Havoc: "MELEE" },
+  DRUID: { Balance: "RANGED", Feral: "MELEE" },
+  EVOKER: { Devastation: "RANGED", Augmentation: "RANGED" },
+  HUNTER: { "Beast Mastery": "RANGED", Marksmanship: "RANGED", Survival: "MELEE" },
+  MAGE: { Arcane: "RANGED", Fire: "RANGED", Frost: "RANGED" },
+  MONK: { Windwalker: "MELEE" },
+  PALADIN: { Retribution: "MELEE" },
+  PRIEST: { Shadow: "RANGED" },
+  ROGUE: { Assassination: "MELEE", Outlaw: "MELEE", Subtlety: "MELEE" },
+  SHAMAN: { Elemental: "RANGED", Enhancement: "MELEE" },
+  WARLOCK: { Affliction: "RANGED", Demonology: "RANGED", Destruction: "RANGED" },
+  WARRIOR: { Arms: "MELEE", Fury: "MELEE" },
+};
+
+/** Null for a non-DPS specialization (TANK/HEALER) or an unrecognized spec name. */
+export function attackTypeForSpecialization(wowClass: WowClass, specialization: string | null): DpsAttackType | null {
+  if (!specialization) return null;
+  const match = findSpecialization(wowClass, specialization);
+  if (!match) return null;
+  return DPS_ATTACK_TYPE[wowClass]?.[match.name] ?? null;
+}
+
 export function specializationsForClass(wowClass: WowClass): readonly WowSpecialization[] {
   return WOW_SPECIALIZATIONS[wowClass];
 }

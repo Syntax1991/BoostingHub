@@ -53,6 +53,7 @@ export type RosterSignupRow = {
   runId: string;
   userId: string;
   userName: string;
+  discordUserId: string | null;
   status: SignupStatus;
   participationType: ParticipationType;
   role: CharacterRole | null;
@@ -107,6 +108,7 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
     runId: asString(row.runId),
     userId: asString(row.userId),
     userName: asString(user.name, "Unknown"),
+    discordUserId: asStringOrNull(user.discordUserId),
     status: mapSignupStatus(row.status),
     participationType: mapParticipation(row.participationType),
     role: row.role == null ? null : mapCharacterRole(row.role),
@@ -285,6 +287,14 @@ export const rosterRepository = {
     });
   },
 
+  /**
+   * Selection is revalidated transactionally, not trusted from the caller's
+   * earlier read: immediately before writing, the signup is re-fetched fresh
+   * and rejected if it became WITHDRAWN since the caller loaded its view (a
+   * User could have withdrawn the offer between the raid lead's page load and
+   * their click). RunRoster.version alone does not close that gap — it only
+   * detects a second roster mutation, not a signup mutation.
+   */
   async setSignupSelected(input: {
     rosterId: string;
     expectedVersion: number;
@@ -292,34 +302,52 @@ export const rosterRepository = {
     selected: boolean;
     replaceSignupIds: string[];
   }) {
-    const roster = await this.findByRunIdFromId(input.rosterId);
-    await this.assertVersion(roster, input.expectedVersion);
-    const now = new Date().toISOString();
-
-    for (const signupId of input.replaceSignupIds) {
-      if (signupId !== input.signupId) {
-        await orm.RunRosterEntry.where({ rosterId: input.rosterId, signupId }).delete();
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const rosterRow = await txOrm.RunRoster.where({ id: input.rosterId }).include("entries").include("publishedBy").first();
+      if (!rosterRow) {
+        throw new DomainError("NOT_FOUND", "Roster was not found.");
       }
-    }
+      const roster = mapRoster(rosterRow as Record<string, unknown>);
+      await this.assertVersion(roster, input.expectedVersion);
+      const now = new Date().toISOString();
 
-    const existing = await orm.RunRosterEntry.where({ rosterId: input.rosterId, signupId: input.signupId }).first();
-    if (input.selected && !existing) {
-      await orm.RunRosterEntry.create({
-        id: crypto.randomUUID(),
-        rosterId: input.rosterId,
-        signupId: input.signupId,
-        selected: true,
-        createdAt: now,
+      if (input.selected) {
+        const signupRow = await txOrm.RunSignup.where({ id: input.signupId }).first();
+        if (!signupRow) {
+          throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+        }
+        const status = mapSignupStatus((signupRow as Record<string, unknown>).status);
+        if (status === "WITHDRAWN") {
+          throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+        }
+      }
+
+      for (const signupId of input.replaceSignupIds) {
+        if (signupId !== input.signupId) {
+          await txOrm.RunRosterEntry.where({ rosterId: input.rosterId, signupId }).delete();
+        }
+      }
+
+      const existing = await txOrm.RunRosterEntry.where({ rosterId: input.rosterId, signupId: input.signupId }).first();
+      if (input.selected && !existing) {
+        await txOrm.RunRosterEntry.create({
+          id: crypto.randomUUID(),
+          rosterId: input.rosterId,
+          signupId: input.signupId,
+          selected: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      if (!input.selected && existing) {
+        await txOrm.RunRosterEntry.where({ id: asString((existing as Record<string, unknown>).id) }).delete();
+      }
+
+      await txOrm.RunRoster.where({ id: input.rosterId }).update({
+        version: roster.version + 1,
         updatedAt: now,
       });
-    }
-    if (!input.selected && existing) {
-      await orm.RunRosterEntry.where({ id: asString((existing as Record<string, unknown>).id) }).delete();
-    }
-
-    await orm.RunRoster.where({ id: input.rosterId }).update({
-      version: roster.version + 1,
-      updatedAt: now,
     });
   },
 

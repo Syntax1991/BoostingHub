@@ -1,0 +1,30 @@
+# Example systemd unit for the BoostingHub Discord bot process.
+#
+# Install (as root):
+#   cp deploy/discord-bot.service /etc/systemd/system/boostinghub-discord-bot.service
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-discord-bot
+#
+# Logs: journalctl -u boostinghub-discord-bot -f
+#
+# Adjust User, WorkingDirectory, and the node/tsx path for the actual host.
+# Secrets belong in EnvironmentFile, never in this unit file or the repo.
+
+[Unit]
+Description=BoostingHub Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=boostinghub
+WorkingDirectory=/var/www/boostinghub
+EnvironmentFile=/var/www/boostinghub/.env
+ExecStart=/usr/bin/npm run bot:start
+Restart=on-failure
+RestartSec=5
+# The bot is stateless (RunDiscordPost lives in PostgreSQL) — a restart is
+# always safe and never causes duplicate Discord posts.
+
+[Install]
+WantedBy=multi-user.target

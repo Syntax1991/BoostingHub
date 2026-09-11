@@ -15,6 +15,11 @@ import type { signupService } from "@/services/signup.service";
 type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
 type SignupItem = MyRuns["pending"][number];
 
+function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm">): string {
+  if (!item.characterName) return "Unknown character";
+  return item.characterRealm ? `${item.characterName}-${item.characterRealm}` : item.characterName;
+}
+
 export function MyRunsView({ data }: { data: MyRuns }) {
   const hasAnySignup =
     data.selected.length + data.pending.length + data.notSelected.length + data.withdrawn.length > 0;
@@ -74,7 +79,44 @@ function SignupGroup({
   );
 }
 
+type RunGroup = {
+  runId: string;
+  runTitle: string;
+  raidName: string;
+  difficulty: SignupItem["difficulty"];
+  scheduledStartAt: string;
+  participationType: SignupItem["participationType"];
+  offers: SignupItem[];
+};
+
+/**
+ * A User may offer several Characters for the same Run (multiple RunSignup
+ * rows). Grouped by runId here so one Run renders as one card with all
+ * offered Characters listed together, instead of one row per Character.
+ */
+function groupByRun(items: SignupItem[]): RunGroup[] {
+  const groups: RunGroup[] = [];
+  for (const item of items) {
+    let group = groups.find((entry) => entry.runId === item.runId);
+    if (!group) {
+      group = {
+        runId: item.runId,
+        runTitle: item.runTitle,
+        raidName: item.raidName,
+        difficulty: item.difficulty,
+        scheduledStartAt: item.scheduledStartAt,
+        participationType: item.participationType,
+        offers: [],
+      };
+      groups.push(group);
+    }
+    group.offers.push(item);
+  }
+  return groups;
+}
+
 function SignupTable({ items }: { items: SignupItem[] }) {
+  const groups = groupByRun(items);
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[980px] text-left text-sm">
@@ -82,59 +124,65 @@ function SignupTable({ items }: { items: SignupItem[] }) {
           <tr>
             <th className="px-4 py-2 font-medium">Run</th>
             <th className="px-4 py-2 font-medium">Schedule</th>
-            <th className="px-4 py-2 font-medium">Character</th>
-            <th className="px-4 py-2 font-medium">Role / Mode</th>
+            <th className="px-4 py-2 font-medium">Characters</th>
             <th className="px-4 py-2 font-medium">Type</th>
-            <th className="px-4 py-2 font-medium">Backup</th>
-            <th className="px-4 py-2 font-medium">Status</th>
-            <th className="px-4 py-2 font-medium">Action</th>
+            <th className="px-4 py-2 font-medium">Offers</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
-            <tr key={item.id} className="border-t border-border">
-              <td className="px-4 py-3">
-                <Link href={runDetailPath(item.runId)} className="max-w-[220px] truncate font-medium text-accent hover:underline">
-                  {item.runTitle}
-                </Link>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                  <span className="max-w-[160px] truncate">{item.raidName}</span>
-                  <DifficultyBadge difficulty={item.difficulty} />
-                </div>
-              </td>
-              <td className="px-4 py-3 text-muted">{formatDateTime(item.scheduledStartAt)}</td>
-              <td className="px-4 py-3">
-                <div className="max-w-[180px] truncate">{item.characterName ?? "—"}</div>
-                <div className="max-w-[180px] truncate text-xs text-muted">{item.characterRealm ?? ""}</div>
-              </td>
-              <td className="px-4 py-3">
-                {item.participationType === "LOOTBUDDY" ? (
-                  <div className="text-xs text-muted">
-                    {item.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[item.lootbuddyMode] : "Lootbuddy"}
-                    {item.lootbuddyVerification && item.lootbuddyVerification !== "NONE"
-                      ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[item.lootbuddyVerification]}`
-                      : ""}
+          {groups.map((group) => {
+            const selected = group.offers.find((offer) => offer.status === "SELECTED");
+            const stillPending = group.offers.some((offer) => offer.status === "PENDING");
+            const selectedLabel = selected
+              ? characterLabel(selected)
+              : stillPending
+                ? "Pending"
+                : "Not selected";
+            return (
+              <tr key={group.runId} className="border-t border-border align-top">
+                <td className="px-4 py-3">
+                  <Link href={runDetailPath(group.runId)} className="max-w-[220px] truncate font-medium text-accent hover:underline">
+                    {group.runTitle}
+                  </Link>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                    <span className="max-w-[160px] truncate">{group.raidName}</span>
+                    <DifficultyBadge difficulty={group.difficulty} />
                   </div>
-                ) : item.role ? (
-                  <RoleBadge role={item.role} />
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <ParticipationBadge type={item.participationType} />
-              </td>
-              <td className="px-4 py-3 text-muted">
-                {item.participationType === "BOOSTER" ? (item.isBackup ? "Backup" : "Primary") : "—"}
-              </td>
-              <td className="px-4 py-3">
-                <SignupStatusBadge status={item.status} />
-              </td>
-              <td className="px-4 py-3">
-                {item.canWithdraw ? <WithdrawButton signupId={item.id} /> : <span className="text-xs text-muted">—</span>}
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="px-4 py-3 text-muted">{formatDateTime(group.scheduledStartAt)}</td>
+                <td className="px-4 py-3">
+                  <p className="max-w-[240px] truncate">
+                    <span className="text-muted">Offered:</span> {group.offers.map(characterLabel).join(", ")}
+                  </p>
+                  <p className="mt-1 max-w-[240px] truncate text-xs text-muted">Selected: {selectedLabel}</p>
+                </td>
+                <td className="px-4 py-3">
+                  <ParticipationBadge type={group.participationType} />
+                </td>
+                <td className="px-4 py-3">
+                  <ul className="space-y-1.5">
+                    {group.offers.map((offer) => (
+                      <li key={offer.id} className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted">{offer.characterName ?? "—"}</span>
+                        {offer.participationType === "LOOTBUDDY" ? (
+                          <span className="text-xs text-muted">
+                            {offer.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[offer.lootbuddyMode] : "Lootbuddy"}
+                            {offer.lootbuddyVerification && offer.lootbuddyVerification !== "NONE"
+                              ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[offer.lootbuddyVerification]}`
+                              : ""}
+                          </span>
+                        ) : offer.role ? (
+                          <RoleBadge role={offer.role} />
+                        ) : null}
+                        <SignupStatusBadge status={offer.status} />
+                        {offer.canWithdraw ? <WithdrawButton signupId={offer.id} /> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

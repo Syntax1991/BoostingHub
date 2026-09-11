@@ -148,6 +148,10 @@ One gold settlement per completed Run. Entries come from `RunAttendance`. Status
 
 Disciplinary history record against a **User** (never a Character). Optional `runId`, proven against BoostingHub's own signup history — never Attendance, which belongs to the external Dawn Boosting operational workflow and is out of scope here. Status `ACTIVE` \| `REVOKED`; no severity, no expiry, no hard delete — revocation is the only correction path and always requires a reason. See [user-strikes.md](features/user-strikes.md).
 
+## RunDiscordPost
+
+Presentation-only Discord message identity for one Run — never a second source of truth for Run/Signup/Roster data. One row per Run (`runId` unique): the signup embed's channel/message id and a cheap signature to detect drift, and the roster embed's channel/message id and last-posted `RunRoster.version`. Lets the bot edit its own prior message instead of reposting, and survives a bot restart. See [discord-bot.md](features/discord-bot.md).
+
 ## ActivityEvent
 
 Development/operational activity feed for the dashboard. Not a KPI warehouse.

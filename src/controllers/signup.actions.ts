@@ -5,7 +5,9 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { signupService } from "@/services/signup.service";
 import {
   boosterSignupSchema,
+  cancelSignupSchema,
   lootbuddySignupSchema,
+  setCharacterOffersSchema,
   signupOptionsSchema,
   withdrawSignupSchema,
 } from "@/validators/signup";
@@ -46,6 +48,40 @@ export async function createLootbuddySignupAction(input: unknown): Promise<Actio
     const parsed = lootbuddySignupSchema.parse(input);
     await signupService.createLootbuddySignup(user, parsed);
     return { ok: true, message: "Signed up as lootbuddy." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/**
+ * The complete desired Character-offer set for one Run + participation type.
+ * Replaces the granular create/withdraw actions for the Web signup dialog —
+ * one submit reconciles the whole set instead of one request per Character.
+ */
+export async function setCharacterOffersAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = setCharacterOffersSchema.parse(input);
+    await signupService.setCharacterOffers(user, parsed);
+    return {
+      ok: true,
+      message:
+        parsed.offers.length === 0
+          ? "Offers cleared."
+          : `Offers updated (${parsed.offers.length} character${parsed.offers.length === 1 ? "" : "s"} offered).`,
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** Withdraws the User's entire active offer-set for a Run in one atomic step. */
+export async function cancelSignupAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = cancelSignupSchema.parse(input);
+    await signupService.cancelActiveOffers(user, parsed);
+    return { ok: true, message: "Signup cancelled." };
   } catch (error) {
     return mapActionError(error);
   }
