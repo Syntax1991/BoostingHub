@@ -54,4 +54,46 @@ describe("BotApiClient", () => {
       expect(error).toBeInstanceOf(BotApiError);
     }
   });
+
+  it("logs (without leaking the token) and rethrows a transport-level failure (e.g. the API base URL unreachable)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const transportError = new TypeError("fetch failed");
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(transportError);
+    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
+
+    await expect(client.listSyncWork()).rejects.toBe(transportError);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("GET https://api.test/api/bot/discord/sync"),
+      transportError,
+    );
+    const loggedText = errorSpy.mock.calls.map((call) => call.join(" ")).join(" ");
+    expect(loggedText).not.toContain("secret-token");
+  });
+
+  it("logs the status/body and throws a clear error when the response is not JSON (e.g. a framework error page)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("<html>Internal Server Error</html>", { status: 500, headers: { "content-type": "text/html" } }),
+    );
+    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
+
+    await expect(client.listSyncWork()).rejects.toThrow(/non-JSON response/);
+    const loggedText = errorSpy.mock.calls.map((call) => call.join(" ")).join(" ");
+    expect(loggedText).toContain("status=500");
+    expect(loggedText).toContain("Internal Server Error");
+    expect(loggedText).not.toContain("secret-token");
+  });
+
+  it("logs and rethrows when the body claims to be JSON but fails to parse", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("{not valid json", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
+
+    await expect(client.listSyncWork()).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalled();
+    const loggedText = errorSpy.mock.calls.map((call) => call.join(" ")).join(" ");
+    expect(loggedText).not.toContain("secret-token");
+  });
 });

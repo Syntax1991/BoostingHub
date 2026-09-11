@@ -23,6 +23,8 @@ export class BotApiClient {
   constructor(private readonly env: Pick<BotEnv, "apiBaseUrl" | "botApiToken">) {}
 
   private async request<T>(path: string, init: RequestInit & { discordUserId?: string } = {}): Promise<T> {
+    const method = init.method ?? "GET";
+    const url = `${this.env.apiBaseUrl}${path}`;
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${this.env.botApiToken}`);
     if (init.discordUserId) {
@@ -32,8 +34,34 @@ export class BotApiClient {
       headers.set("content-type", "application/json");
     }
 
-    const response = await fetch(`${this.env.apiBaseUrl}${path}`, { ...init, headers });
-    const envelope = (await response.json()) as ApiEnvelope<T>;
+    // Never logs the token or any header value — only method/url/status, which
+    // is what's needed to diagnose a transport failure (e.g. the API base URL
+    // pointing at a dead port, or a dev-server hot-reload rejecting mid-request).
+    let response: Response;
+    try {
+      response = await fetch(url, { ...init, headers });
+    } catch (error) {
+      console.error(`[bot-api-client] transport error calling ${method} ${url}`, error);
+      throw error;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const bodyText = await response.text().catch(() => "<unreadable body>");
+      console.error(
+        `[bot-api-client] non-JSON response from ${method} ${url}: status=${response.status} content-type=${contentType || "<none>"} body=${bodyText.slice(0, 500)}`,
+      );
+      throw new Error(`Bot API returned a non-JSON response (status ${response.status}).`);
+    }
+
+    let envelope: ApiEnvelope<T>;
+    try {
+      envelope = (await response.json()) as ApiEnvelope<T>;
+    } catch (error) {
+      console.error(`[bot-api-client] failed to parse JSON from ${method} ${url}: status=${response.status}`, error);
+      throw error;
+    }
+
     if (!envelope.ok) {
       throw new BotApiError(response.status, envelope.code, envelope.message);
     }
