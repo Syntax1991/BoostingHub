@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { runService } from "@/services/run.service";
-import { createRunSchema, runIdSchema, updateRunSchema } from "@/validators/run";
+import { runIdSchema, updateRunSchema } from "@/validators/run";
+import { createManyRunsSchema } from "@/validators/mass-create-runs";
 
 function revalidateRunSurfaces(runId?: string) {
   revalidatePath("/runs");
@@ -16,13 +17,22 @@ function revalidateRunSurfaces(runId?: string) {
   }
 }
 
-export async function createRunAction(input: unknown): Promise<ActionResult> {
+// Note: there is no single-Run createRunAction anymore — Run creation is one
+// canonical workflow (createManyRunsAction, 1-25 rows) at /manage/runs/create.
+// runService.createRun / createRunSchema remain for internal/test use only.
+
+export type CreateManyRunsActionResult =
+  | { ok: true; message: string; runIds: string[] }
+  | { ok: false; code: string; message: string };
+
+export async function createManyRunsAction(input: unknown): Promise<CreateManyRunsActionResult> {
   try {
     const user = await requireUser();
-    const parsed = createRunSchema.parse(input);
-    const created = await runService.createRun(user, parsed);
-    revalidateRunSurfaces(created.id);
-    return { ok: true, message: "Run draft created.", runId: created.id };
+    const parsed = createManyRunsSchema.parse(input);
+    const created = await runService.createManyRuns(user, parsed);
+    revalidateRunSurfaces();
+    const count = created.ids.length;
+    return { ok: true, message: `Created ${count} run draft${count === 1 ? "" : "s"}.`, runIds: created.ids };
   } catch (error) {
     return mapActionError(error);
   }

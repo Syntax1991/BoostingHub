@@ -15,7 +15,7 @@ This is the long-term surface for participant information and, when authorized, 
 | `/my-runs` | Current user's participation overview; each row links to canonical detail |
 | `/manage` | Global administration entry |
 | `/manage/runs` | Manager Run index and create entry. Actions link to `/runs/[runId]` |
-| `/manage/runs/new` | Create Run draft |
+| `/manage/runs/create` | Create Run draft(s) — one canonical workflow, 1–25 rows (see [run-management.md § Creation](run-management.md#creation)) |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
 | `/manage/booster-access` | Global ADMIN BoosterAccess queue (not moved onto a Run) |
 

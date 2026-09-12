@@ -93,4 +93,16 @@ export const raidRepository = {
     const row = await orm.Raid.where({ id }).include("bosses").first();
     return row ? mapRaid(row as Record<string, unknown>) : null;
   },
+
+  /**
+   * Batched lookup for callers resolving several raids at once (e.g. mass Run
+   * creation) — one query regardless of how many distinct ids are requested,
+   * avoiding a findById-per-row N+1. Includes historical raids; callers that
+   * only want new-Run-eligible ones must check `availableForRuns` themselves.
+   */
+  async listByIds(ids: string[]): Promise<RaidRecord[]> {
+    if (ids.length === 0) return [];
+    const rows = await orm.Raid.where((raid) => raid.id.in(ids)).include("bosses").all();
+    return rows.map((row) => mapRaid(row as Record<string, unknown>));
+  },
 };

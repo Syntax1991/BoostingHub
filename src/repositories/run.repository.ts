@@ -222,6 +222,71 @@ export const runRepository = {
     return id;
   },
 
+  /**
+   * Atomic batch persistence for Mass Create Runs: every input's Run + its
+   * initial empty RunRoster are created inside ONE transaction, so a batch is
+   * truly all-or-nothing (a fault partway through rolls back everything
+   * already written, never leaving a partial batch). Every domain decision
+   * (raid availability, raid lead eligibility, title, effective field
+   * merging) must already be resolved by the caller — this method only
+   * persists already-prepared rows, in the order given, and returns their
+   * new ids in that same order.
+   */
+  async createManyDraftsAtomic(
+    inputs: Array<{
+      title: string;
+      raidId: string;
+      difficulty: RaidDifficulty;
+      lootType: RunLootType;
+      scheduledStartAt: string;
+      raidLeadId: string;
+      notes: string | null;
+      desiredTankCount: number;
+      desiredHealerCount: number;
+      desiredDpsCount: number;
+      plannedBossCount: number;
+    }>,
+  ): Promise<string[]> {
+    const now = new Date().toISOString();
+    const ids = inputs.map(() => crypto.randomUUID());
+
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      for (let index = 0; index < inputs.length; index += 1) {
+        const input = inputs[index]!;
+        const id = ids[index]!;
+        await txOrm.Run.create({
+          id,
+          title: input.title,
+          raidId: input.raidId,
+          difficulty: input.difficulty,
+          lootType: input.lootType,
+          scheduledStartAt: input.scheduledStartAt,
+          status: "DRAFT",
+          raidLeadId: input.raidLeadId,
+          notes: input.notes,
+          desiredTankCount: input.desiredTankCount,
+          desiredHealerCount: input.desiredHealerCount,
+          desiredDpsCount: input.desiredDpsCount,
+          plannedBossCount: input.plannedBossCount,
+          signupsOpen: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await txOrm.RunRoster.create({
+          id: crypto.randomUUID(),
+          runId: id,
+          state: "DRAFT",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+
+    return ids;
+  },
+
   async updateFields(
     id: string,
     fields: {

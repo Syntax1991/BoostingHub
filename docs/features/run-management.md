@@ -32,19 +32,31 @@ Button visibility is not authorization.
 
 ## Creation
 
-Route: `/manage/runs/new`. After success, redirect to `/runs/[runId]`.
+**One canonical workflow, 1–25 drafts.** Route: `/manage/runs/create`. There is no separate "single create" vs. "mass create" UI — the same page and the same server action handle a Raid Lead preparing one Run for tonight and an Admin preparing a whole week at once. Same authorization as every other manager action (`RAID_LEAD`/`ADMIN`, enforced server-side regardless of navigation).
 
-Defaults:
+**Model**: shared defaults (raid, difficulty, loot type, raid lead, composition, planned boss count, notes) + one row per concrete run, each with its own required `scheduledStartAt` and optional per-field overrides, submitted once. The page starts with exactly one staged row — the ordinary one-off experience — and a manager only sees more than one if they explicitly click Add Run or Duplicate. This is a convenience for preparing concrete runs — **not** a recurrence engine; there is no weekly/RRULE templating or scheduled-generation job, and each row is one specific run a manager already has in mind.
 
-- `status = DRAFT`
-- `signupsOpen = false`
-- an empty `RunRoster` row in `DRAFT` state (same as seed runs), so manager detail does not race two `ensure()` inserts
+**Bounds**: 1–25 runs per request, enforced client-side for UX and authoritatively server-side (`createManyRunsSchema`). 0 or 26+ rows are rejected with a clear message, never silently truncated.
 
-Creation does not open or publish the run. First persisted roster selection still transitions `OPEN → ROSTERING` through Roster Management.
+**Shared preparation path**: `run.service.ts` extracts `resolveRequestedRaidLeadId` (RAID_LEAD self-only vs ADMIN-must-choose) and `prepareRunDraft` (schedule/composition/loot-type/boss-count validation + server title derivation via `buildRunTitle`) into functions `createManyRuns` uses for every row — a 1-row submission and a 25-row submission both flow through the exact same `createManyRuns` → `prepareRunDraft` path, never a forked implementation for the "single" case. `title` is never accepted from the client. (`runService.createRun`/`getCreateForm` — the original single-Run methods — still exist and are exercised directly by the Service-level test suite, but no product UI calls them anymore; the canonical page always uses the generalized action, even for one row.)
+
+**Row overrides**: every field is "override present → use it, else inherit the shared default" except `notes`, which is three-valued: override key absent → inherit shared notes; override `null` → explicitly clear this row's notes even though a shared value exists; override a string → use it. A row overriding `raidId` or `difficulty` is validated against *that row's own* effective raid/difficulty — `plannedBossCount`, for example, is checked against the overridden raid's real boss total, never the shared default raid's.
+
+**Batched lookups**: raid and eligible-raid-lead resolution are each one query for the whole batch (`raidRepository.listByIds`, `userRepository.listEligibleRaidLeads`), not one query per row — the maximum is only 25, but this avoids an obvious N+1 regardless.
+
+**Validate everything, then write once**: every row is fully merged and validated before any persistence is attempted. The first invalid row aborts the whole submission with `Run <n>: <reason>` (1-based, matching the row's position in the request) — including reusing `RAID_NOT_AVAILABLE_FOR_RUNS` when any row (via defaults or an override) targets a raid with `availableForRuns: false` (see [§ Historical raid availability](#historical-raid-availability)).
+
+**Atomicity**: `runRepository.createManyDraftsAtomic` persists every row's `Run` and its initial empty `RunRoster` inside one database transaction — genuinely all-or-nothing, whether the request has 1 row or 25. A fault partway through (proven in tests by a deliberately invalid `raidId` on a later row, which trips the `Run.raidId` foreign key mid-transaction) rolls back every row already written in that same call, never leaving a partial result.
+
+**Result**: every created run is `DRAFT`, `signupsOpen: false`, not archived. No Discord infrastructure is touched (no `RunDiscordPost`, no channel, no message) — a fresh Draft is invisible to `discordSyncService.listSyncWork()` until it is opened normally, one Run at a time, from Manage Runs or the run's own page. Creation never shortcuts opening or publishing.
+
+**Activity**: one summary `RUN_CREATED` Activity row per successful submission ("Created N run draft(s)."), never one row per created run.
+
+**Legacy URL**: `/manage/runs/create-many` (this feature's route during initial development) redirects to `/manage/runs/create` rather than rendering a second form, so old links/bookmarks still work.
 
 ## Derived identity (title, loot type, boss coverage)
 
-There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, planned boss count, and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured fields. A future **Mass Create Runs** feature (batch-creating a week's worth of runs at once) is expected to reuse this same structured validation and title-generation path without duplicating it — it is not implemented yet.
+There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, planned boss count, and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured fields. Creation (above) reuses this exact same structured validation and title-generation path per row, never a duplicate implementation.
 
 ## Run lifecycle responsibilities
 
@@ -132,7 +144,7 @@ The Run Detail DTO includes server-derived `capabilities`. USER payloads keep `e
 
 `/manage/runs` is the global index and create entry:
 
-- Create Run
+- one **Create Runs** action, linking to `/manage/runs/create`
 - content, difficulty, schedule, raid lead, status, signup window, signup count, roster state
 - filters: status, upcoming/past, raid lead (admin)
 - empty state: “No runs created yet.”
@@ -161,7 +173,7 @@ This is a **distinct concept from `currentForLockouts`** (`src/lib/wow-raid-cata
 
 Where availability is enforced:
 
-- **Create Run** (`getCreateForm`, `createRun`): the raid picker only lists available raids; the server independently re-validates on submit and rejects an unavailable raid with `RAID_NOT_AVAILABLE_FOR_RUNS` ("This raid is no longer available for new runs.").
+- **Creation** (`getCreateManyForm`, `createManyRuns`, and every row of a batch): the raid picker only lists available raids; the server independently re-validates on submit and rejects an unavailable raid with `RAID_NOT_AVAILABLE_FOR_RUNS` ("This raid is no longer available for new runs.").
 - **Edit Run** (`updateRun`): only rejected when the raid is *actually changing* to a different, unavailable one. Keeping an existing (possibly historical) raid — including a difficulty-only change on that same raid, or any unrelated field edit — is never blocked by availability; that is a completely separate concern from the signup-history identity lock above. The Edit Run raid selector always represents the Run's current raid as its selected value (marked "(Historical)" and non-selectable as a fresh alternative when historical) without offering any other historical raid as a replacement.
 - **Open Run**: never re-checks raid availability — opening progresses an already-established reference, not a new selection, so a Draft created before a raid became historical can still be opened.
 

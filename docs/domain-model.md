@@ -90,7 +90,7 @@ Heroic and Mythic lockouts for the same raid week are independent.
 
 ### Derived title (no manual title entry)
 
-`Run.title` is **server-derived, never client-authored**. Create Run and Edit Run have no title input — they show a read-only "Generated title" preview that live-updates as the schedule/difficulty/lootType/plannedBossCount/raidLead/raid change, computed client-side with the same pure `buildRunTitle` helper (`src/lib/run-title.ts`) the server uses. `createRun`/`updateRun` always recompute and persist the title server-side from the final normalized values — a client-sent `title` is never accepted (the validators for Create/Edit Run have no `title` field at all).
+`Run.title` is **server-derived, never client-authored**. Run creation and Edit Run have no title input — they show a read-only "Generated title" preview that live-updates as the schedule/difficulty/lootType/plannedBossCount/raidLead/raid change, computed client-side with the same pure `buildRunTitle` helper (`src/lib/run-title.ts`) the server uses. `createManyRuns` (via `prepareRunDraft`, per row) and `updateRun` always recompute and persist the title server-side from the final normalized values — a client-sent `title` is never accepted (the validators for Create/Edit Run have no `title` field at all).
 
 Format: `{weekday} {HH:mm} {difficulty} {lootType} {planned}/{total} {raidLead}` in the Europe/Berlin community timezone — e.g. `Thu 21:00 HC VIP 7/9 Titan`. Difficulty abbreviations are `NM`/`HC`/`MY`; loot-type labels are `Saved`/`Unsaved`/`VIP`. Raid Lead is always the canonical BoostingHub display name, never a Discord nickname.
 
@@ -106,7 +106,7 @@ Historical Runs are **not** retroactively retitled — a migration backfills `lo
 
 ### Historical raid availability
 
-A raid is never deleted when superseded — `RaidRecord.availableForRuns` (catalog: `WowRaidCatalogEntry.availableForRuns`, persisted on the existing `Raid.isActive` column, no separate column) controls only whether it can be picked for a **new** Run, independent of `currentForLockouts` (the separate Blizzard lockout-derivation target). `createRun` rejects an unavailable raid with `RAID_NOT_AVAILABLE_FOR_RUNS`; `updateRun` only enforces this when the raid is actually changing to a different one — keeping an existing (possibly historical) raid, including a difficulty-only change, is never blocked. See [run-management.md § Historical raid availability](features/run-management.md#historical-raid-availability) for the full detail.
+A raid is never deleted when superseded — `RaidRecord.availableForRuns` (catalog: `WowRaidCatalogEntry.availableForRuns`, persisted on the existing `Raid.isActive` column, no separate column) controls only whether it can be picked for a **new** Run, independent of `currentForLockouts` (the separate Blizzard lockout-derivation target). `createManyRuns` (the one canonical creation path, 1–25 rows) rejects an unavailable raid with `RAID_NOT_AVAILABLE_FOR_RUNS` for any row; `updateRun` only enforces this when the raid is actually changing to a different one — keeping an existing (possibly historical) raid, including a difficulty-only change, is never blocked. See [run-management.md § Historical raid availability](features/run-management.md#historical-raid-availability) for the full detail.
 
 ### Discord channel naming
 

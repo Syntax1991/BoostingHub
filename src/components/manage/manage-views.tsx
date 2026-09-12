@@ -7,23 +7,28 @@ import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
 import { RunQuickActions } from "@/components/manage/run-quick-actions";
 import type { ManagedRunsPage } from "@/services/run.service";
 
-export function ManageRunsView({ data }: { data: ManagedRunsPage }) {
+export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPage; massCreatedCount?: number }) {
   const filtered = Boolean(
     data.filters.status || data.filters.raidLeadId || data.filters.timeframe || data.filters.archived !== "active",
   );
 
   return (
     <div>
+      {massCreatedCount ? (
+        <p className="mb-4 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm">
+          Created {massCreatedCount} run draft{massCreatedCount === 1 ? "" : "s"}.
+        </p>
+      ) : null}
       <PageHeader
         title="Manage runs"
         description="Create drafts, open signups, and open the canonical run page to roster. Raid leads see assigned runs. Admins see every run."
         actions={
           data.canCreate ? (
             <Link
-              href="/manage/runs/new"
+              href="/manage/runs/create"
               className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
             >
-              Create Run
+              Create Runs
             </Link>
           ) : null
         }
