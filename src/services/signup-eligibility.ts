@@ -1,4 +1,4 @@
-import type { BoosterQualificationMatch } from "@/models/records";
+import type { BoosterQualificationMatch, CharacterRunReservationConflict } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
@@ -28,6 +28,13 @@ export type EligibilityCharacter = {
   isActive: boolean;
   boosterQualifications: BoosterQualificationMatch[];
   lockouts: EligibilityLockout[];
+  /**
+   * Non-null when this Character is already reserved — draft-selected into
+   * another Run's roster, or SELECTED there — on a different Run scheduled
+   * at the exact same time. Populated by the caller before evaluation (a
+   * cross-Run scheduling rule, never derived from lockouts).
+   */
+  reservationConflict: CharacterRunReservationConflict | null;
 };
 
 export type EligibilityRun = {
@@ -42,7 +49,8 @@ export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
   | "DIFFICULTY_NOT_APPROVED"
-  | "LOCKOUT_CONFLICT";
+  | "LOCKOUT_CONFLICT"
+  | "ALREADY_SELECTED_OTHER_RUN";
 
 export type LootbuddyIneligibilityReason = "INACTIVE" | "LOCKOUT_CONFLICT";
 
@@ -51,6 +59,7 @@ export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, 
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
+  ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
 };
 
 export const LOOTBUDDY_INELIGIBILITY_MESSAGES: Record<LootbuddyIneligibilityReason, string> = {
@@ -76,6 +85,10 @@ export type IneligibleBoosterCharacter = {
   realm: string;
   reason: BoosterIneligibilityReason;
   message: string;
+  /** Present only when reason is ALREADY_SELECTED_OTHER_RUN. */
+  conflictingRunId?: string;
+  conflictingRunTitle?: string;
+  conflictingScheduledStartAt?: string;
 };
 
 export type EligibleLootbuddyOption = {
@@ -115,18 +128,37 @@ export function evaluateBoosterOptions(
   const ineligible: IneligibleBoosterCharacter[] = [];
 
   for (const character of characters) {
-    const pushIneligible = (reason: BoosterIneligibilityReason) => {
+    const pushIneligible = (
+      reason: BoosterIneligibilityReason,
+      extra?: Pick<IneligibleBoosterCharacter, "conflictingRunId" | "conflictingRunTitle" | "conflictingScheduledStartAt">,
+    ) => {
       ineligible.push({
         characterId: character.id,
         characterName: character.name,
         realm: character.realm,
         reason,
-        message: BOOSTER_INELIGIBILITY_MESSAGES[reason],
+        message:
+          reason === "ALREADY_SELECTED_OTHER_RUN" && extra?.conflictingRunTitle
+            ? `Already selected for ${extra.conflictingRunTitle}.`
+            : BOOSTER_INELIGIBILITY_MESSAGES[reason],
+        ...extra,
       });
     };
 
     if (!character.isActive) {
       pushIneligible("INACTIVE");
+      continue;
+    }
+
+    // Cross-Run scheduling conflict — independent of booster access, lockouts,
+    // and role choice (the same Character cannot be reserved on two colliding
+    // Runs regardless of which role it would play).
+    if (character.reservationConflict) {
+      pushIneligible("ALREADY_SELECTED_OTHER_RUN", {
+        conflictingRunId: character.reservationConflict.runId,
+        conflictingRunTitle: character.reservationConflict.runTitle,
+        conflictingScheduledStartAt: character.reservationConflict.scheduledStartAt,
+      });
       continue;
     }
 

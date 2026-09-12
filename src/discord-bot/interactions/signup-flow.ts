@@ -40,6 +40,15 @@ type EligibleCharacterOption = {
   /** Specialization-derived default, or null when specialization is missing/unrecognized. Absent for LOOTBUDDY. */
   defaultRole?: CharacterRole | null;
 };
+export type IneligibleCharacterOption = {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  reason: string;
+  message: string;
+  /** Present only when reason is "ALREADY_SELECTED_OTHER_RUN". */
+  conflictingRunTitle?: string;
+};
 type ActiveOffer = {
   participationType: "BOOSTER" | "LOOTBUDDY" | null;
   characterIds: string[];
@@ -47,10 +56,23 @@ type ActiveOffer = {
 };
 type SignupOptionsPayload = {
   run: { title: string; signupWindowOpen: boolean };
-  booster: { eligible: EligibleCharacterOption[]; ineligible: unknown[] };
-  lootbuddy: { eligible: EligibleCharacterOption[]; ineligible: unknown[] };
+  booster: { eligible: EligibleCharacterOption[]; ineligible: IneligibleCharacterOption[] };
+  lootbuddy: { eligible: EligibleCharacterOption[]; ineligible: IneligibleCharacterOption[] };
   activeOffer: ActiveOffer;
 };
+
+/** Rendered once, right after the character-select step — the User should see which of their characters is double-booked, and where, before choosing. */
+function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): string[] {
+  const blocked = ineligible.filter((item) => item.reason === "ALREADY_SELECTED_OTHER_RUN");
+  if (blocked.length === 0) return [];
+  return [
+    "",
+    "Unavailable characters:",
+    ...blocked.map(
+      (item) => `• ${item.characterName}-${item.realm}: already selected for ${item.conflictingRunTitle ?? "another run"}.`,
+    ),
+  ];
+}
 type OfferResult = { created: number; reactivated: number; withdrawn: number; kept: number };
 /** The subset of a Discord reply-capable interaction every handler here needs — real button and select interactions both satisfy it. */
 type ReplyableInteraction = {
@@ -117,10 +139,13 @@ export async function handleSignupButton(
     return;
   }
 
+  const ineligible = participationType === "BOOSTER" ? options.booster.ineligible : options.lootbuddy.ineligible;
   const eligible = participationType === "BOOSTER" ? options.booster.eligible : options.lootbuddy.eligible;
+  const reservationLines = describeReservationBlocked(ineligible);
+
   if (eligible.length === 0) {
     await interaction.editReply({
-      content: "You have no eligible characters for this offer type on this run.",
+      content: ["You have no eligible characters for this offer type on this run.", ...reservationLines].join("\n"),
     });
     return;
   }
@@ -138,9 +163,12 @@ export async function handleSignupButton(
     .addOptions(selectOptions);
 
   await interaction.editReply({
-    content: `Select the characters to offer for **${options.run.title}**.${
-      participationType === "BOOSTER" ? " You'll confirm roles before anything is saved." : " This replaces your current offers for this run."
-    }`,
+    content: [
+      `Select the characters to offer for **${options.run.title}**.${
+        participationType === "BOOSTER" ? " You'll confirm roles before anything is saved." : " This replaces your current offers for this run."
+      }`,
+      ...reservationLines,
+    ].join("\n"),
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
   });
 }

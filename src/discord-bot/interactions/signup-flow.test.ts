@@ -7,6 +7,8 @@ import {
   handleConfirmSignupButton,
   handleDiscardSignupButton,
   handleRoleSelect,
+  handleSignupButton,
+  type IneligibleCharacterOption,
 } from "@/discord-bot/interactions/signup-flow";
 import { clearAllSessionsForTests, getSession } from "@/discord-bot/interactions/signup-staging";
 
@@ -110,9 +112,9 @@ function signupOptionsPayload(overrides: {
           defaultRole: "DPS",
         },
       ],
-      ineligible: [],
+      ineligible: [] as IneligibleCharacterOption[],
     },
-    lootbuddy: { eligible: [], ineligible: [] },
+    lootbuddy: { eligible: [], ineligible: [] as IneligibleCharacterOption[] },
     activeOffer: {
       participationType: overrides.activeCharacterIds?.length ? "BOOSTER" : null,
       characterIds: overrides.activeCharacterIds ?? [],
@@ -361,5 +363,73 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     expect(confirmInteraction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining("Choose a role") }),
     );
+  });
+});
+
+const signupButton = handleSignupButton as unknown as (
+  interaction: FakeInteraction,
+  api: BotApiClient,
+  runId: string,
+  participationType: "BOOSTER" | "LOOTBUDDY",
+) => Promise<void>;
+
+describe("cross-Run reservation conflicts in the Discord signup flow", () => {
+  it("excludes a reservation-blocked character from the select menu but lists it as unavailable", async () => {
+    const payload = signupOptionsPayload();
+    payload.booster.eligible = [payload.booster.eligible[1]!]; // Frostbolt only — Synmist is reserved elsewhere
+    payload.booster.ineligible = [
+      {
+        characterId: SYNMIST,
+        characterName: "Synmist",
+        realm: "Antonidas",
+        reason: "ALREADY_SELECTED_OTHER_RUN",
+        message: "Already selected for Sat 20:00 HC VIP 8/8 Aelira Nightwatch.",
+        conflictingRunTitle: "Sat 20:00 HC VIP 8/8 Aelira Nightwatch",
+      },
+    ];
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
+
+    const interaction = fakeInteraction("user-a");
+    await signupButton(interaction, api, RUN_ID, "BOOSTER");
+
+    const call = interaction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toContain("Unavailable characters");
+    expect(call.content).toContain("Synmist-Antonidas");
+    expect(call.content).toContain("Sat 20:00 HC VIP 8/8 Aelira Nightwatch");
+    const menu = call.components[0].components[0].toJSON();
+    expect(menu.options.map((option: { value: string }) => option.value)).toEqual([FROSTBOLT]);
+  });
+
+  it("shows a clear explanation instead of an empty selector when every character is reservation-blocked", async () => {
+    const payload = signupOptionsPayload();
+    payload.booster.eligible = [];
+    payload.booster.ineligible = [
+      {
+        characterId: SYNMIST,
+        characterName: "Synmist",
+        realm: "Antonidas",
+        reason: "ALREADY_SELECTED_OTHER_RUN",
+        message: "Already selected for another run.",
+        conflictingRunTitle: "Sat 20:00 HC VIP 8/8 Aelira Nightwatch",
+      },
+      {
+        characterId: FROSTBOLT,
+        characterName: "Frostbolt",
+        realm: "Antonidas",
+        reason: "ALREADY_SELECTED_OTHER_RUN",
+        message: "Already selected for another run.",
+        conflictingRunTitle: "Sat 20:00 HC VIP 8/8 Aelira Nightwatch",
+      },
+    ];
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
+
+    const interaction = fakeInteraction("user-a");
+    await signupButton(interaction, api, RUN_ID, "BOOSTER");
+
+    const call = interaction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toContain("no eligible characters");
+    expect(call.content).toContain("Unavailable characters");
+    expect(call.content).toContain("Frostbolt-Antonidas");
+    expect(call.components).toBeUndefined();
   });
 });

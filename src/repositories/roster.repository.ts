@@ -28,6 +28,7 @@ import {
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
+import { queryReservationConflicts } from "@/repositories/signup.repository";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -301,6 +302,10 @@ export const rosterRepository = {
     signupId: string;
     selected: boolean;
     replaceSignupIds: string[];
+    /** Null when the signup's Character was deleted — no reservation is possible for it. */
+    characterId: string | null;
+    targetRunId: string;
+    scheduledStartAt: string;
   }) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
@@ -320,6 +325,23 @@ export const rosterRepository = {
         const status = mapSignupStatus((signupRow as Record<string, unknown>).status);
         if (status === "WITHDRAWN") {
           throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+        }
+
+        // Race-safety net: the caller already checked cross-Run reservation
+        // before opening this transaction, but another raid lead could have
+        // reserved the same Character elsewhere in between.
+        if (input.characterId) {
+          const conflicts = await queryReservationConflicts(txOrm, {
+            characterIds: [input.characterId],
+            targetRunId: input.targetRunId,
+            scheduledStartAt: input.scheduledStartAt,
+          });
+          if (conflicts.length > 0) {
+            throw new DomainError(
+              "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+              `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
+            );
+          }
         }
       }
 
@@ -368,6 +390,9 @@ export const rosterRepository = {
     rosterId: string;
     expectedVersion: number;
     selectedSignupIds: string[];
+    /** Characters behind selectedSignupIds — re-verified for cross-Run reservation immediately before publish. */
+    selectedCharacterIds: string[];
+    scheduledStartAt: string;
     notSelectedSignupIds: string[];
     runStatus: RunStatus;
     fromStatus: RunStatus;
@@ -385,6 +410,23 @@ export const rosterRepository = {
           "ROSTER_ALREADY_CHANGED",
           "This roster changed since you loaded it. Refresh and try again.",
         );
+      }
+
+      // Race-safety net: the caller already checked cross-Run reservation
+      // before opening this transaction, but another Run could have reserved
+      // one of these Characters in between.
+      if (input.selectedCharacterIds.length > 0) {
+        const conflicts = await queryReservationConflicts(txOrm, {
+          characterIds: input.selectedCharacterIds,
+          targetRunId: input.runId,
+          scheduledStartAt: input.scheduledStartAt,
+        });
+        if (conflicts.length > 0) {
+          throw new DomainError(
+            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+            "One or more selected characters were just reserved for another run at the same time. Refresh and try again.",
+          );
+        }
       }
 
       const now = new Date().toISOString();

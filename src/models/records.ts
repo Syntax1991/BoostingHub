@@ -47,3 +47,14 @@ export type BoosterQualificationRecord = {
 
 /** Enough for eligibility matching. */
 export type BoosterQualificationMatch = Pick<BoosterQualificationRecord, "difficulty" | "status">;
+
+/**
+ * A Character already reserved — draft-selected into another Run's roster, or
+ * SELECTED there — on a different Run scheduled at the exact same time. A
+ * cross-Run scheduling conflict, distinct from a raid lockout.
+ */
+export type CharacterRunReservationConflict = {
+  runId: string;
+  runTitle: string;
+  scheduledStartAt: string;
+};

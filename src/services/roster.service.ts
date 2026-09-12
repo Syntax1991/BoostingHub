@@ -267,6 +267,23 @@ export const rosterService = {
       throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
     }
 
+    // Cross-Run Character reservation, BOOSTER only (see the LOOTBUDDY audit
+    // note in signup.service.ts). Deselecting never needs this check — that
+    // is exactly how a reservation is released for another colliding Run.
+    if (input.selected && signup.participationType === "BOOSTER" && signup.character) {
+      const conflicts = await signupRepository.findReservationConflicts({
+        characterIds: [signup.character.id],
+        targetRunId: input.runId,
+        scheduledStartAt: run.scheduledStartAt,
+      });
+      if (conflicts.length > 0) {
+        throw new DomainError(
+          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+          `${signup.character.name} is already selected for ${conflicts[0].runTitle}.`,
+        );
+      }
+    }
+
     /**
      * One selected participation per user per run. Selecting a second offer
      * replaces the previous draft row instead of stacking two slots.
@@ -281,6 +298,9 @@ export const rosterService = {
       signupId: input.signupId,
       selected: input.selected,
       replaceSignupIds,
+      characterId: signup.participationType === "BOOSTER" ? (signup.character?.id ?? null) : null,
+      targetRunId: input.runId,
+      scheduledStartAt: run.scheduledStartAt,
     });
 
     if (run.status === "OPEN") {
@@ -364,6 +384,31 @@ export const rosterService = {
     }
 
     const selectedIds = selected.map((item) => item.id);
+
+    // Cross-Run Character reservation, BOOSTER only (see the LOOTBUDDY audit
+    // note in signup.service.ts). Booster access and lockouts are already
+    // re-checked above via inspectSignup for the same reason: eligibility
+    // can drift between signup time and publish time.
+    const selectedCharacterIds = selected
+      .filter((item) => item.participationType === "BOOSTER")
+      .map((item) => item.character?.id)
+      .filter((id): id is string => Boolean(id));
+    if (selectedCharacterIds.length > 0) {
+      const conflicts = await signupRepository.findReservationConflicts({
+        characterIds: selectedCharacterIds,
+        targetRunId: input.runId,
+        scheduledStartAt: run.scheduledStartAt,
+      });
+      if (conflicts.length > 0) {
+        const conflict = conflicts[0];
+        const conflictingName = selected.find((item) => item.character?.id === conflict.characterId)?.character?.name;
+        throw new DomainError(
+          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+          `${conflictingName ?? "A selected character"} is already selected for ${conflict.runTitle}. Resolve the conflict before publishing.`,
+        );
+      }
+    }
+
     const publishedSelection = inspected.filter((item) => item.status === "SELECTED");
     if (
       roster.publishedAt &&
@@ -406,6 +451,8 @@ export const rosterService = {
       rosterId: roster.id,
       expectedVersion: input.version,
       selectedSignupIds: selectedIds,
+      selectedCharacterIds,
+      scheduledStartAt: run.scheduledStartAt,
       notSelectedSignupIds: notSelectedIds,
       fromStatus: run.status,
       runStatus: nextStatus,

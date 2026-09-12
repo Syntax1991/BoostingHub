@@ -5,15 +5,17 @@ import type {
   LootbuddyVerification,
   ParticipationType,
 } from "@/models/enums";
+import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
 import { resetIdentifierFor } from "@/lib/datetime";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { activityRepository } from "@/repositories/activity.repository";
+import type { CharacterPageRecord } from "@/repositories/character.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
-import type { EligibilityCharacter } from "@/services/signup-eligibility";
+import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import {
   assertSignupWindowOpen,
   evaluateBoosterOptions,
@@ -25,6 +27,34 @@ import {
   isBlockingDuplicate,
   planCharacterOfferReconciliation,
 } from "@/services/signup-state";
+
+/**
+ * Attaches cross-Run reservation info to a batch of Characters in one query
+ * (never N+1 per Character). BOOSTER-only concern: LOOTBUDDY characters are
+ * never checked here — see the `validateOfferedCharacters`/`evaluateLootbuddyOptions`
+ * call sites, which set `reservationConflict: null` directly instead.
+ */
+async function withReservationConflicts<T extends { id: string }>(
+  characters: T[],
+  targetRunId: string,
+  scheduledStartAt: string,
+): Promise<Array<T & { reservationConflict: CharacterRunReservationConflict | null }>> {
+  if (characters.length === 0) {
+    return [];
+  }
+  const conflicts = await signupRepository.findReservationConflicts({
+    characterIds: characters.map((character) => character.id),
+    targetRunId,
+    scheduledStartAt,
+  });
+  const byId = new Map(
+    conflicts.map((row) => [
+      row.characterId,
+      { runId: row.runId, runTitle: row.runTitle, scheduledStartAt: row.scheduledStartAt },
+    ]),
+  );
+  return characters.map((character) => ({ ...character, reservationConflict: byId.get(character.id) ?? null }));
+}
 
 function uniqueViolation(error: unknown): boolean {
   return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
@@ -94,7 +124,8 @@ export const signupService = {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
     }
 
-    const characters = await characterRepository.listByUserId(user.id);
+    const rawCharacters = await characterRepository.listByUserId(user.id);
+    const characters = await withReservationConflicts(rawCharacters, run.id, run.scheduledStartAt);
     const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
     const eligibilityRun = {
       id: run.id,
@@ -155,8 +186,9 @@ export const signupService = {
       throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
     }
 
+    const [enrichedCharacter] = await withReservationConflicts([character], run.id, run.scheduledStartAt);
     const { eligible, ineligible } = evaluateBoosterOptions(
-      [character],
+      [enrichedCharacter],
       {
         id: run.id,
         raidId: run.raidId,
@@ -169,7 +201,7 @@ export const signupService = {
 
     const option = eligible.find((item) => item.characterId === input.characterId);
     if (!option) {
-      throw boosterRejection(ineligible[0]?.reason);
+      throw boosterRejection(ineligible[0]);
     }
     if (!option.roles.includes(input.role)) {
       throw new DomainError(
@@ -218,8 +250,10 @@ export const signupService = {
       throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
     }
 
+    // LOOTBUDDY is not subject to cross-Run reservation (see the audit note on
+    // validateOfferedCharacters) — reservationConflict is always null here.
     const { eligible, ineligible } = evaluateLootbuddyOptions(
-      [character],
+      [{ ...character, reservationConflict: null }],
       {
         id: run.id,
         raidId: run.raidId,
@@ -318,7 +352,7 @@ export const signupService = {
       return { offer, character };
     });
 
-    const roleByCharacterId = validateOfferedCharacters(input.participationType, offeredCharacters, run);
+    const roleByCharacterId = await validateOfferedCharacters(input.participationType, offeredCharacters, run);
 
     const lootbuddyModeValue = input.participationType === "LOOTBUDDY" ? (input.lootbuddyMode ?? null) : null;
     const lootbuddyVerificationValue =
@@ -356,6 +390,7 @@ export const signupService = {
       runId: input.runId,
       userId: actor.id,
       participationType: input.participationType,
+      scheduledStartAt: run.scheduledStartAt,
       toWithdraw: plan.toWithdraw,
       toReactivate,
       toCreate,
@@ -406,6 +441,7 @@ export const signupService = {
       runId: input.runId,
       userId: actor.id,
       participationType: activeType,
+      scheduledStartAt: run.scheduledStartAt,
       toWithdraw: plan.toWithdraw,
       toReactivate: [],
       toCreate: [],
@@ -466,7 +502,8 @@ async function loadSignupContext(userId: string, runId: string, characterId: str
   };
 }
 
-function boosterRejection(reason: string | undefined): DomainError {
+function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): DomainError {
+  const reason = ineligible?.reason;
   if (reason === "INACTIVE") {
     return new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
   }
@@ -478,6 +515,14 @@ function boosterRejection(reason: string | undefined): DomainError {
   }
   if (reason === "LOCKOUT_CONFLICT") {
     return new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
+  }
+  if (reason === "ALREADY_SELECTED_OTHER_RUN") {
+    return new DomainError(
+      "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+      ineligible?.conflictingRunTitle
+        ? `${ineligible.characterName} is already selected for ${ineligible.conflictingRunTitle}.`
+        : "That character is already selected for another run at the same time.",
+    );
   }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");
 }
@@ -564,14 +609,27 @@ async function buildReconciliationPlan(
  * Character's class can actually perform (`option.roles`, from
  * `rolesForClass`) — the server never trusts an arbitrary client role, but it
  * also no longer restricts the choice to the specialization-derived default.
+ * Also the Confirm-time cross-Run reservation revalidation boundary (BOOSTER
+ * only — see the LOOTBUDDY audit note below): eligibility-time and Confirm-
+ * time can disagree if another Run reserved the same Character in between,
+ * so this re-queries fresh immediately before the caller's atomic write
+ * rather than trusting the read the User's client loaded earlier.
+ *
+ * LOOTBUDDY audit: a LOOTBUDDY offer is just as Character-backed as a
+ * BOOSTER one and could in principle double-book the same way. This is
+ * deliberately NOT enforced here — the reservation rule stays scoped to
+ * BOOSTER per the current requirement — so `reservationConflict` is always
+ * set to null for the LOOTBUDDY branch below rather than computed. Revisit
+ * if LOOTBUDDY double-booking turns out to be a real operational problem.
+ *
  * Returns the resolved BOOSTER role per characterId; empty for LOOTBUDDY,
  * which carries no per-offer role.
  */
-function validateOfferedCharacters(
+async function validateOfferedCharacters(
   participationType: ParticipationType,
-  offeredCharacters: Array<{ offer: { characterId: string; role?: CharacterRole }; character: EligibilityCharacter & { primaryRole: CharacterRole; name: string } }>,
+  offeredCharacters: Array<{ offer: { characterId: string; role?: CharacterRole }; character: CharacterPageRecord }>,
   run: LoadedRun,
-): Map<string, CharacterRole> {
+): Promise<Map<string, CharacterRole>> {
   const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
   const eligibilityRun = {
     id: run.id,
@@ -583,16 +641,16 @@ function validateOfferedCharacters(
   const roleByCharacterId = new Map<string, CharacterRole>();
 
   if (participationType === "BOOSTER") {
-    const { eligible, ineligible } = evaluateBoosterOptions(
+    const enrichedCharacters = await withReservationConflicts(
       offeredCharacters.map(({ character }) => character),
-      eligibilityRun,
-      resetIdentifier,
+      run.id,
+      run.scheduledStartAt,
     );
+    const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun, resetIdentifier);
     for (const { offer, character } of offeredCharacters) {
       const option = eligible.find((item) => item.characterId === offer.characterId);
       if (!option) {
-        const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;
-        throw boosterRejection(reason);
+        throw boosterRejection(ineligible.find((item) => item.characterId === offer.characterId));
       }
       if (!offer.role) {
         throw new DomainError("INVALID_CHARACTER_ROLE", `Choose a role for ${character.name}.`);
@@ -608,11 +666,8 @@ function validateOfferedCharacters(
     return roleByCharacterId;
   }
 
-  const { eligible, ineligible } = evaluateLootbuddyOptions(
-    offeredCharacters.map(({ character }) => character),
-    eligibilityRun,
-    resetIdentifier,
-  );
+  const lootbuddyCharacters = offeredCharacters.map(({ character }) => ({ ...character, reservationConflict: null }));
+  const { eligible, ineligible } = evaluateLootbuddyOptions(lootbuddyCharacters, eligibilityRun, resetIdentifier);
   for (const { offer } of offeredCharacters) {
     if (!eligible.some((item) => item.characterId === offer.characterId)) {
       const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;

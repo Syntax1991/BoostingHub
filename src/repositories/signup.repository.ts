@@ -8,9 +8,11 @@ import type {
   RunStatus,
   SignupStatus,
 } from "@/models/enums";
+import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import {
   asBoolean,
   asString,
+  asStringOrNull,
   mapCharacterRole,
   mapDifficulty,
   mapLootbuddyMode,
@@ -74,6 +76,74 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
   };
 }
 
+export type ReservationConflictRow = {
+  characterId: string;
+  runId: string;
+  runTitle: string;
+  scheduledStartAt: string;
+};
+
+/**
+ * Cross-Run Character reservation (double-booking) check. A Character is
+ * reserved on a Run when either its signup is draft-selected into that Run's
+ * roster (a RunRosterEntry with `selected: true`) or its RunSignup.status is
+ * SELECTED — the same underlying business rule, never counted twice for the
+ * same Run. Only Runs still occupying a real scheduling slot
+ * (UPCOMING_RUN_STATUSES) can hold a reservation; the target Run itself is
+ * always excluded (editing an existing signup is never a conflict with
+ * itself). Collision is MVP-exact: same `scheduledStartAt` instant, compared
+ * by parsed time rather than raw string equality since the Run model has no
+ * authoritative end time yet.
+ *
+ * Exported (not a `signupRepository` method) so `roster.repository.ts` can
+ * re-run the same check with a transaction's own `txOrm` for a race-safe
+ * re-verification immediately before a write, exactly like the existing
+ * WITHDRAWN-race checks in this file's `applyOfferPlan`.
+ */
+export async function queryReservationConflicts(
+  ormLike: TxOrm,
+  input: { characterIds: string[]; targetRunId: string; scheduledStartAt: string },
+): Promise<ReservationConflictRow[]> {
+  if (input.characterIds.length === 0) {
+    return [];
+  }
+  const targetTime = new Date(input.scheduledStartAt).getTime();
+
+  const rows = await ormLike.RunSignup
+    .where((f) => f.characterId.in(input.characterIds))
+    .include("run")
+    .include("rosterEntries")
+    .all();
+
+  const conflicts = new Map<string, ReservationConflictRow>();
+  for (const raw of rows as Record<string, unknown>[]) {
+    const characterId = asStringOrNull(raw.characterId);
+    if (!characterId || conflicts.has(characterId)) continue;
+
+    const run = (raw.run ?? {}) as Record<string, unknown>;
+    const runId = asString(run.id);
+    if (runId === input.targetRunId) continue;
+    if (new Date(asString(run.scheduledStartAt)).getTime() !== targetTime) continue;
+    if (!UPCOMING_RUN_STATUSES.includes(mapRunStatus(run.status))) continue;
+
+    const status = mapSignupStatus(raw.status);
+    if (status === "WITHDRAWN") continue;
+
+    const rosterEntries = Array.isArray(raw.rosterEntries) ? (raw.rosterEntries as Record<string, unknown>[]) : [];
+    const draftSelected = rosterEntries.some((entry) => asBoolean(entry.selected, true));
+    if (status !== "SELECTED" && !draftSelected) continue;
+
+    conflicts.set(characterId, {
+      characterId,
+      runId,
+      runTitle: asString(run.title),
+      scheduledStartAt: asString(run.scheduledStartAt),
+    });
+  }
+
+  return [...conflicts.values()];
+}
+
 export type SignupWriteInput = {
   runId: string;
   userId: string;
@@ -87,6 +157,14 @@ export type SignupWriteInput = {
 };
 
 export const signupRepository = {
+  async findReservationConflicts(input: {
+    characterIds: string[];
+    targetRunId: string;
+    scheduledStartAt: string;
+  }): Promise<ReservationConflictRow[]> {
+    return queryReservationConflicts(orm, input);
+  },
+
   async listByUserId(userId: string): Promise<SignupListRecord[]> {
     const signups = await orm.RunSignup
       .where({ userId })
@@ -195,6 +273,8 @@ export const signupRepository = {
     runId: string;
     userId: string;
     participationType: ParticipationType;
+    /** Required only to re-verify cross-Run reservation for BOOSTER offers newly becoming active. */
+    scheduledStartAt: string;
     toWithdraw: string[];
     toReactivate: Array<{
       id: string;
@@ -218,6 +298,37 @@ export const signupRepository = {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
       const now = new Date().toISOString();
+
+      /**
+       * Race-safety net immediately before the write: the caller already
+       * checked cross-Run reservation (with a richer, per-Character error)
+       * before opening this transaction, but another request could have
+       * reserved the same Character elsewhere in between. Only Characters
+       * newly becoming active (reactivated or created) can newly conflict —
+       * a `kept` row that already existed is not creating a new reservation
+       * here. BOOSTER only, matching the eligibility check this mirrors.
+       */
+      if (input.participationType === "BOOSTER") {
+        const activatingCharacterIds = [
+          ...input.toReactivate.map((offer) => offer.characterId),
+          ...input.toCreate.map((offer) => offer.characterId),
+        ];
+        if (activatingCharacterIds.length > 0) {
+          const conflicts = await queryReservationConflicts(txOrm, {
+            characterIds: activatingCharacterIds,
+            targetRunId: input.runId,
+            scheduledStartAt: input.scheduledStartAt,
+          });
+          if (conflicts.length > 0) {
+            throw new DomainError(
+              "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+              conflicts.length === 1
+                ? `That character was just selected for ${conflicts[0].runTitle}. Please try again.`
+                : "Those characters were just selected for other runs. Please try again.",
+            );
+          }
+        }
+      }
 
       for (const id of input.toWithdraw) {
         const row = await txOrm.RunSignup.where({ id }).first();

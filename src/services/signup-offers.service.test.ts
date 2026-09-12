@@ -6,6 +6,7 @@ import { orm } from "@/lib/prisma";
 import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
+import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
@@ -685,11 +686,13 @@ describe("concurrency regression coverage", () => {
     // the plan blindly.
     await orm.RunSignup.where({ id: withdrawnRow.id }).update({ status: "PENDING" });
 
+    const mainRun = await runRepository.findById(mainRunId);
     await expectDomainCode(
       signupRepository.applyOfferPlan({
         runId: mainRunId,
         userId: ids.target,
         participationType: "BOOSTER",
+        scheduledStartAt: mainRun!.scheduledStartAt,
         toWithdraw: [],
         toReactivate: [{ id: withdrawnRow.id, characterId: hunterA, role: "DPS", lootbuddyMode: null, lootbuddyVerification: null }],
         toCreate: [],
@@ -715,6 +718,7 @@ describe("concurrency regression coverage", () => {
     // Simulate the User withdrawing between the raid lead's read and their click.
     await orm.RunSignup.where({ id: rowA.id }).update({ status: "WITHDRAWN" });
 
+    const mainRun = await runRepository.findById(mainRunId);
     await expect(
       rosterRepository.setSignupSelected({
         rosterId: roster!.id,
@@ -722,6 +726,9 @@ describe("concurrency regression coverage", () => {
         signupId: rowA.id,
         selected: true,
         replaceSignupIds: [],
+        characterId: hunterA,
+        targetRunId: mainRunId,
+        scheduledStartAt: mainRun!.scheduledStartAt,
       }),
     ).rejects.toThrow();
 
