@@ -170,6 +170,9 @@ model User {
   boosterQualifications BoosterQualification[] @relation("UserBoosterQualification")
   ledRuns        Run[]           @relation("RunRaidLead")
   signups        RunSignup[]
+  ownedRunTemplates    RunTemplate[] @relation("RunTemplateRaidLead")
+  createdRunTemplates  RunTemplate[] @relation("RunTemplateCreator")
+  updatedRunTemplates  RunTemplate[] @relation("RunTemplateUpdater")
   approvedAccess   BoosterAccess[] @relation("BoosterAccessApprover")
   reviewedAccess   BoosterAccess[] @relation("BoosterAccessReviewer")
   grantedQualifications BoosterQualification[] @relation("BoosterQualificationGranter")
@@ -380,6 +383,7 @@ model Raid {
   bosses   RaidBoss[]
   lockouts CharacterRaidLockout[]
   runs     Run[]
+  templates RunTemplate[]
 
   @@map("raid")
 }
@@ -453,6 +457,47 @@ model Run {
   @@index([status])
   @@index([archivedAt])
   @@map("run")
+}
+
+/// A reusable Run-planning preset, always owned by one specific Raid Lead
+/// (raidLeadId) — never merely metadata. When a template is used during Run
+/// creation, its raidLeadId is the authoritative Raid Lead for every Run
+/// created from it, regardless of who applied the template. createdById/
+/// updatedById are separate mutation-audit fields (e.g. an ADMIN may create
+/// or edit a template owned by a different Raid Lead).
+///
+/// Deliberately has no relation to Run: applying a template only copies its
+/// current field values into a new Run's own concrete planning fields at
+/// creation time. A later template edit, deactivation, or reassignment never
+/// rewrites any Run created from it — there is no Run.templateId anywhere.
+/// Stores planning defaults only (raid/difficulty/lootType/composition/
+/// plannedBossCount/notes) — never a schedule, status, or Discord state; a
+/// concrete schedule belongs to a Run, never a template.
+model RunTemplate {
+  id                 String         @id @default(uuid())
+  name               String
+  raidLeadId         String
+  raidLead           User           @relation("RunTemplateRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
+  raidId             String
+  raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  difficulty         RaidDifficulty
+  lootType           RunLootType
+  plannedBossCount   Int
+  desiredTankCount   Int
+  desiredHealerCount Int
+  desiredDpsCount    Int
+  notes              String?
+  isActive           Boolean        @default(true)
+  createdById        String
+  createdBy          User           @relation("RunTemplateCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById        String
+  updatedBy          User           @relation("RunTemplateUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt          TimestamptzString @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@index([raidLeadId, isActive])
+  @@index([raidId])
+  @@map("run_template")
 }
 
 /// A user may offer more than one character for the same run.

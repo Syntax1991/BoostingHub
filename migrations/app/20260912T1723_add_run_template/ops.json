@@ -1,0 +1,404 @@
+[
+  {
+    "id": "table.run_template",
+    "label": "Create table \"run_template\"",
+    "summary": "Creates table \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_template\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_template\"",
+        "sql": "CREATE TABLE \"public\".\"run_template\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdById\" text NOT NULL,\n  \"desiredDpsCount\" int4 NOT NULL,\n  \"desiredHealerCount\" int4 NOT NULL,\n  \"desiredTankCount\" int4 NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true NOT NULL,\n  \"lootType\" text NOT NULL,\n  \"name\" text NOT NULL,\n  \"notes\" text,\n  \"plannedBossCount\" int4 NOT NULL,\n  \"raidId\" text NOT NULL,\n  \"raidLeadId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"updatedById\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_template_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')),\n  CONSTRAINT \"run_template_lootType_check_3071d052\" CHECK (\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_template\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_template.run_template_createdById_idx_8bf640ed",
+    "label": "Create index \"run_template_createdById_idx_8bf640ed\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_createdById_idx_8bf640ed",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_createdById_idx_8bf640ed\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_createdById_idx_8bf640ed\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_template_createdById_idx_8bf640ed\"",
+        "sql": "CREATE INDEX \"run_template_createdById_idx_8bf640ed\" ON \"public\".\"run_template\" (\"createdById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_createdById_idx_8bf640ed\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_createdById_idx_8bf640ed\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_template.run_template_raidId_idx_996eeca9",
+    "label": "Create index \"run_template_raidId_idx_996eeca9\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_raidId_idx_996eeca9",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_template_raidId_idx_996eeca9\"",
+        "sql": "CREATE INDEX \"run_template_raidId_idx_996eeca9\" ON \"public\".\"run_template\" (\"raidId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_template.run_template_raidLeadId_idx_e271c2cb",
+    "label": "Create index \"run_template_raidLeadId_idx_e271c2cb\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_raidLeadId_idx_e271c2cb",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_raidLeadId_idx_e271c2cb\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_idx_e271c2cb\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_template_raidLeadId_idx_e271c2cb\"",
+        "sql": "CREATE INDEX \"run_template_raidLeadId_idx_e271c2cb\" ON \"public\".\"run_template\" (\"raidLeadId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_raidLeadId_idx_e271c2cb\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_idx_e271c2cb\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_template.run_template_raidLeadId_isActive_idx_584288ab",
+    "label": "Create index \"run_template_raidLeadId_isActive_idx_584288ab\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_raidLeadId_isActive_idx_584288ab",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_raidLeadId_isActive_idx_584288ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_isActive_idx_584288ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_template_raidLeadId_isActive_idx_584288ab\"",
+        "sql": "CREATE INDEX \"run_template_raidLeadId_isActive_idx_584288ab\" ON \"public\".\"run_template\" (\"raidLeadId\", \"isActive\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_raidLeadId_isActive_idx_584288ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_isActive_idx_584288ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_template.run_template_updatedById_idx_d0517c24",
+    "label": "Create index \"run_template_updatedById_idx_d0517c24\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_updatedById_idx_d0517c24",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_updatedById_idx_d0517c24\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_updatedById_idx_d0517c24\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_template_updatedById_idx_d0517c24\"",
+        "sql": "CREATE INDEX \"run_template_updatedById_idx_d0517c24\" ON \"public\".\"run_template\" (\"updatedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_updatedById_idx_d0517c24\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_updatedById_idx_d0517c24\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_template.run_template_raidLeadId_fkey",
+    "label": "Add foreign key \"run_template_raidLeadId_fkey\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_template_raidLeadId_fkey",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_template_raidLeadId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_raidLeadId_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_template_raidLeadId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\"\nADD CONSTRAINT \"run_template_raidLeadId_fkey\"\nFOREIGN KEY (\"raidLeadId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_template_raidLeadId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_raidLeadId_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_template.run_template_raidId_fkey",
+    "label": "Add foreign key \"run_template_raidId_fkey\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_template_raidId_fkey",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_template_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_raidId_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_template_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\"\nADD CONSTRAINT \"run_template_raidId_fkey\"\nFOREIGN KEY (\"raidId\")\nREFERENCES \"public\".\"raid\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_template_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_raidId_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_template.run_template_createdById_fkey",
+    "label": "Add foreign key \"run_template_createdById_fkey\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_template_createdById_fkey",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_template_createdById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_createdById_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_template_createdById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\"\nADD CONSTRAINT \"run_template_createdById_fkey\"\nFOREIGN KEY (\"createdById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_template_createdById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_createdById_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_template.run_template_updatedById_fkey",
+    "label": "Add foreign key \"run_template_updatedById_fkey\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_template_updatedById_fkey",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_template_updatedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_updatedById_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_template_updatedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\"\nADD CONSTRAINT \"run_template_updatedById_fkey\"\nFOREIGN KEY (\"updatedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_template_updatedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_updatedById_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  }
+]

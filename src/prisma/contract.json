@@ -76,6 +76,10 @@
       "model": "RunSignup",
       "namespace": "public"
     },
+    "run_template": {
+      "model": "RunTemplate",
+      "namespace": "public"
+    },
     "session": {
       "model": "Session",
       "namespace": "public"
@@ -1853,6 +1857,21 @@
                 },
                 "to": {
                   "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "templates": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidId"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplate",
                   "namespace": "public"
                 }
               }
@@ -3716,6 +3735,250 @@
               "table": "run_signup"
             }
           },
+          "RunTemplate": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredDpsCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredHealerCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredTankCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "difficulty": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidDifficulty",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isActive": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "lootType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunLootType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "notes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "plannedBossCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidLeadId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "createdBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "createdById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "raid": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Raid",
+                  "namespace": "public"
+                }
+              },
+              "raidLead": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidLeadId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "updatedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "updatedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdById": {
+                  "column": "createdById"
+                },
+                "desiredDpsCount": {
+                  "column": "desiredDpsCount"
+                },
+                "desiredHealerCount": {
+                  "column": "desiredHealerCount"
+                },
+                "desiredTankCount": {
+                  "column": "desiredTankCount"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "isActive": {
+                  "column": "isActive"
+                },
+                "lootType": {
+                  "column": "lootType"
+                },
+                "name": {
+                  "column": "name"
+                },
+                "notes": {
+                  "column": "notes"
+                },
+                "plannedBossCount": {
+                  "column": "plannedBossCount"
+                },
+                "raidId": {
+                  "column": "raidId"
+                },
+                "raidLeadId": {
+                  "column": "raidLeadId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "updatedById": {
+                  "column": "updatedById"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_template"
+            }
+          },
           "Session": {
             "fields": {
               "createdAt": {
@@ -4234,6 +4497,21 @@
                   "namespace": "public"
                 }
               },
+              "createdRunTemplates": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "createdById"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplate",
+                  "namespace": "public"
+                }
+              },
               "createdStrikes": {
                 "cardinality": "1:N",
                 "on": {
@@ -4306,6 +4584,21 @@
                 },
                 "to": {
                   "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
+              "ownedRunTemplates": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidLeadId"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplate",
                   "namespace": "public"
                 }
               },
@@ -4456,6 +4749,21 @@
                 },
                 "to": {
                   "model": "Strike",
+                  "namespace": "public"
+                }
+              },
+              "updatedRunTemplates": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "updatedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplate",
                   "namespace": "public"
                 }
               }
@@ -7386,6 +7694,241 @@
                 }
               ]
             },
+            "run_template": {
+              "checks": [
+                {
+                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
+                  "name": "run_template_difficulty_check_05ae26c2",
+                  "prefix": "run_template_difficulty_check"
+                },
+                {
+                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')",
+                  "name": "run_template_lootType_check_3071d052",
+                  "prefix": "run_template_lootType_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "desiredDpsCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "desiredHealerCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "desiredTankCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidDifficulty",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "isActive": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "lootType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunLootType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "notes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "plannedBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "raidId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "raidLeadId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "updatedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "raidLeadId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "raidId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "raid"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "createdById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "updatedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "createdById"
+                  ],
+                  "name": "run_template_createdById_idx_8bf640ed",
+                  "prefix": "run_template_createdById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidId"
+                  ],
+                  "name": "run_template_raidId_idx_996eeca9",
+                  "prefix": "run_template_raidId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidLeadId"
+                  ],
+                  "name": "run_template_raidLeadId_idx_e271c2cb",
+                  "prefix": "run_template_raidLeadId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidLeadId",
+                    "isActive"
+                  ],
+                  "name": "run_template_raidLeadId_isActive_idx_584288ab",
+                  "prefix": "run_template_raidLeadId_isActive_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "updatedById"
+                  ],
+                  "name": "run_template_updatedById_idx_d0517c24",
+                  "prefix": "run_template_updatedById_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "session": {
               "columns": {
                 "createdAt": {
@@ -7999,10 +8542,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d9154f982c56d940ca5cd44fa850d230c21c8cdf09024ec3105b0179d5d258b3"
+    "storageHash": "3169e897c3da55d7b45d8993dcb94df970eba052cb8fdf00478fbc6c962e5f79"
   },
   "execution": {
-    "executionHash": "8708be34c85acf0289f559b4c580f8283c7d229e8102c2e0fec552d931217b64",
+    "executionHash": "3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b",
     "mutations": {
       "defaults": [
         {
@@ -8426,6 +8969,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_signup"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_template"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_template"
           }
         },
         {
