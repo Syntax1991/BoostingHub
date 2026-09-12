@@ -54,6 +54,8 @@ Button visibility is not authorization.
 
 **Legacy URL**: `/manage/runs/create-many` (this feature's route during initial development) redirects to `/manage/runs/create` rather than rendering a second form, so old links/bookmarks still work.
 
+**Templates**: a Raid Lead may optionally apply a saved planning preset from the template selector above Shared Defaults instead of re-entering raid/difficulty/loot type/composition by hand. Applying a template also locks the effective Raid Lead to the template's owner — the server always re-resolves the template fresh at submit time and rejects a forged Raid Lead override rather than silently overriding it. See [run-templates.md](run-templates.md) for the full ownership model, usability rules, and the Raid Lead authority guarantee.
+
 ## Derived identity (title, loot type, boss coverage)
 
 There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, planned boss count, and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured fields. Creation (above) reuses this exact same structured validation and title-generation path per row, never a duplicate implementation.
