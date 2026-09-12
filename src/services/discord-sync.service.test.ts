@@ -687,6 +687,126 @@ describe("discordSyncService — archive category movement", () => {
   });
 });
 
+describe("discordSyncService.listSyncWork — channel reconciliation is independent of message state", () => {
+  async function createOpenRunWithChannel(channelId: string) {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId });
+    return id;
+  }
+
+  it("CORE REGRESSION: a Run with a settled signup post and an archive-state change still gets a channels[] item, with no signups/roster work forced", async () => {
+    const id = await createOpenRunWithChannel("core-regr-chan-1");
+    await discordSyncService.recordSignupPost({ runId: id, channelId: "core-regr-chan-1", messageId: "core-regr-msg-1" });
+
+    // Settle the signup message before archiving, then archive and resettle
+    // once more — the pre-existing signature still embeds `archived`, so one
+    // resync is expected to clear it. The point of this test is what
+    // happens AFTER that: at steady state (signup message fully caught up),
+    // channels[] must still carry the Run so the bot keeps checking its
+    // live Discord category every poll — it must never depend on the
+    // signup/roster lanes waking it up again.
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+    await discordSyncService.recordSignupPost({ runId: id, channelId: "core-regr-chan-1", messageId: "core-regr-msg-1" });
+
+    const work = await discordSyncService.listSyncWork();
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem).toBeTruthy();
+    expect(channelItem?.existingRunChannelId).toBe("core-regr-chan-1");
+    expect(channelItem?.archived).toBe(true);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
+  });
+
+  it("RESTORE: the channels[] item reflects archived:false immediately after Restore, independent of message settlement", async () => {
+    const id = await createOpenRunWithChannel("restore-chan-1");
+    await discordSyncService.recordSignupPost({ runId: id, channelId: "restore-chan-1", messageId: "restore-msg-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+    await runService.restoreRun(lead, id);
+
+    // Deliberately NOT resyncing the signup message here — the whole point
+    // is that channels[] must report the correct archived state on its own,
+    // whether or not the (separate, still-coupled-by-design) signup
+    // signature has caught up yet.
+    const work = await discordSyncService.listSyncWork();
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem).toBeTruthy();
+    expect(channelItem?.archived).toBe(false);
+    expect(channelItem?.existingRunChannelId).toBe("restore-chan-1");
+  });
+
+  it("NO CHANNEL: an archived Run with no persisted runChannelId never appears in channels[]", async () => {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.channels.some((entry) => entry.runId === id)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("TERMINAL RUN: a COMPLETED Run with an existing channel still appears in channels[]", async () => {
+    const id = await createOpenRunWithChannel("terminal-chan-1");
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+
+    const work = await discordSyncService.listSyncWork();
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem).toBeTruthy();
+    expect(channelItem?.existingRunChannelId).toBe("terminal-chan-1");
+  });
+
+  it("a DRAFT Run with a (legacy/abnormal) persisted channel is still reconcilable, but gets no signup/roster work", async () => {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    // Never opened — still DRAFT. Recording a channel here simulates an
+    // abnormal legacy row; listSyncWork must not provision anything new for
+    // it, but the existing stored channel identity remains reconcilable.
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "draft-chan-1" });
+
+    const work = await discordSyncService.listSyncWork();
+    expect(work.channels.some((entry) => entry.runId === id)).toBe(true);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
+  });
+});
+
 describe("discordSyncService — raid identity invalidation (embed content signature)", () => {
   let raidEditRunId = "";
 

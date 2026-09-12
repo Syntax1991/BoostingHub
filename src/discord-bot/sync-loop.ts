@@ -3,6 +3,11 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
+import {
+  reconcileChannels,
+  type ChannelFetcher,
+  type ReconcilableChannel,
+} from "@/discord-bot/channel-reconciliation";
 import type { RosterEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 
 type SyncWork = Awaited<ReturnType<BotApiClient["listSyncWork"]>>;
@@ -28,18 +33,61 @@ export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): N
   return setInterval(runOnce, env.syncIntervalMs);
 }
 
+/**
+ * Resolves a channel id to the narrow shape channel-reconciliation.ts needs,
+ * or null if it doesn't resolve to a compatible (settable name/parent)
+ * Discord channel. Cache-first (`client.channels.cache`) to avoid an
+ * unnecessary REST call on every poll; falls back to `fetch` on a cache miss.
+ */
+function makeChannelFetcher(client: Client): ChannelFetcher {
+  return async (channelId) => {
+    const cached = client.channels.cache.get(channelId);
+    const channel = cached ?? (await client.channels.fetch(channelId).catch(() => null));
+    if (!channel || !("setName" in channel) || !("setParent" in channel) || !("parentId" in channel)) {
+      return null;
+    }
+    const typed = channel as unknown as {
+      id: string;
+      name: string;
+      parentId: string | null;
+      setName: (name: string) => Promise<unknown>;
+      setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown>;
+    };
+    const reconcilable: ReconcilableChannel = {
+      id: typed.id,
+      name: typed.name,
+      parentId: typed.parentId,
+      setName: (name) => typed.setName(name),
+      setParent: (id, options) => typed.setParent(id, options),
+    };
+    return reconcilable;
+  };
+}
+
 async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
   const work: SyncWork = await api.listSyncWork();
 
+  // Channel reconciliation (name + archive/active category) runs first and
+  // independently of message state — a Run's channel should already be in
+  // its correct place before any new signup/roster message work is applied.
+  // The resulting map lets the message paths below reuse the same resolved
+  // channel instead of re-resolving (and potentially re-renaming/re-moving)
+  // it a second time within the same pass.
+  const resolvedChannels = await reconcileChannels(
+    makeChannelFetcher(client),
+    { discordRunCategoryId: env.discordRunCategoryId, discordRunArchiveCategoryId: env.discordRunArchiveCategoryId },
+    work.channels,
+  );
+
   for (const item of work.signups) {
     if (!item.embed) continue;
-    await syncSignupPost(client, env, api, item, item.embed as SignupEmbedData);
+    await syncSignupPost(client, env, api, item, item.embed as SignupEmbedData, resolvedChannels);
   }
 
   for (const item of work.roster) {
     const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
     if (!data) continue;
-    await syncRosterPost(client, env, api, item, data);
+    await syncRosterPost(client, env, api, item, data, resolvedChannels);
   }
 }
 
@@ -48,13 +96,15 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  *
  * Preferred (per-Run) mode — `DISCORD_RUN_CATEGORY_ID` configured: creates
  * the Run's own dedicated text channel once (recorded immediately via the
- * "channel" discord-state kind, before any message is posted) and renames
- * that same channel in place whenever the desired name drifts (schedule,
- * difficulty, or raid lead changed) — it never creates a replacement, and
- * the persisted channel id is the only identity that matters (never the
- * name). If the stored channel was deleted out-of-band in Discord, a fresh
- * one is created only when `allowCreate` is true — self-healing, not the
- * bot deleting anything.
+ * "channel" discord-state kind, before any message is posted). Renaming and
+ * archive/active category movement for an already-existing channel are no
+ * longer this function's job — they happen unconditionally and independently
+ * via `channel-reconciliation.ts`/`reconcileChannels`, before this function
+ * ever runs (see `syncOnce`). This function only needs to know the resolved
+ * channel id — reusing it from `resolvedChannels` when available — and,
+ * failing that, whether the stored id still resolves at all (if the channel
+ * was deleted out-of-band in Discord, a fresh one is created only when
+ * `allowCreate` is true — self-healing, not the bot deleting anything).
  *
  * `allowCreate` (true for the signup path, false for the roster path) is
  * the fix for a real bug found in live QA: the roster sync path is gated
@@ -70,49 +120,7 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  *
  * Legacy mode — no category configured: always the single global channel
  * from env (`DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID`).
- *
- * Archive movement: an existing channel whose parent doesn't match the
- * Run's current archived state (`item.archived`) is moved — never
- * recreated, never renamed for this reason alone, never deleted. This is
- * the only effect Archive/Restore has here; a Run without a channel never
- * gets one provisioned just because it was archived or restored.
  */
-/**
- * Moves an already-resolved channel to whichever category its Run's current
- * archived state calls for — a no-op when it's already there. Skipped
- * (warning only, never an error) when the target category isn't configured,
- * so an unconfigured DISCORD_RUN_ARCHIVE_CATEGORY_ID degrades to "leave the
- * channel where it is" rather than blocking the rest of sync.
- */
-async function moveChannelForArchiveState(
-  channel: Awaited<ReturnType<Client["channels"]["fetch"]>>,
-  env: BotEnv,
-  item: ChannelWorkItem,
-): Promise<void> {
-  if (!channel || !("setParent" in channel) || !("parentId" in channel)) return;
-
-  const desiredParentId = item.archived ? env.discordRunArchiveCategoryId : env.discordRunCategoryId;
-  if (!desiredParentId) {
-    if (item.archived) {
-      console.warn(
-        `[discord-bot] run ${item.runId} is archived but DISCORD_RUN_ARCHIVE_CATEGORY_ID is unset — leaving its channel where it is`,
-      );
-    }
-    return;
-  }
-  if (channel.parentId === desiredParentId) return;
-
-  // lockPermissions: false — a plain move, not a permission resync. Syncing
-  // permissions from the destination category needs Manage Roles as well as
-  // Manage Channels, and would silently overwrite this channel's own
-  // overwrites; Archive/Restore only ever intends to relocate the channel.
-  await (channel as { setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown> })
-    .setParent(desiredParentId, { lockPermissions: false })
-    .catch((error: unknown) => {
-      console.error(`[discord-bot] failed to move channel for run ${item.runId} to category ${desiredParentId}`, error);
-    });
-}
-
 async function resolveRunChannel(
   client: Client,
   env: BotEnv,
@@ -120,22 +128,24 @@ async function resolveRunChannel(
   item: ChannelWorkItem,
   legacyFallbackChannelId: string | null,
   allowCreate: boolean,
+  resolvedChannels: Map<string, string>,
 ): Promise<string | null> {
   if (!env.discordRunCategoryId) {
     return legacyFallbackChannelId;
   }
 
   if (item.existingRunChannelId) {
+    const reconciled = resolvedChannels.get(item.runId);
+    if (reconciled) return reconciled;
+
+    // Not reconciled this pass — defensive only; every Run with a persisted
+    // runChannelId is always included in work.channels, so this should
+    // never actually be reached. Just verify the id still resolves; name
+    // and category reconciliation are reconcileChannels' job, never
+    // repeated here, so the same channel is never renamed/moved twice in
+    // one pass.
     const existing = await client.channels.fetch(item.existingRunChannelId).catch(() => null);
-    if (existing) {
-      if ("setName" in existing && existing.name !== item.desiredChannelName) {
-        await existing.setName(item.desiredChannelName).catch((error: unknown) => {
-          console.error(`[discord-bot] failed to rename channel for run ${item.runId}`, error);
-        });
-      }
-      await moveChannelForArchiveState(existing, env, item);
-      return item.existingRunChannelId;
-    }
+    if (existing) return item.existingRunChannelId;
     // Stored channel id no longer resolves (deleted in Discord) — fall through.
   }
 
@@ -170,8 +180,9 @@ async function syncSignupPost(
   api: BotApiClient,
   item: ChannelWorkItem & { existingMessageId: string | null },
   data: SignupEmbedData,
+  resolvedChannels: Map<string, string>,
 ): Promise<void> {
-  const channelId = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true);
+  const channelId = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
   if (!channelId) return;
 
   const embed = buildSignupEmbed(data);
@@ -201,8 +212,9 @@ async function syncRosterPost(
   api: BotApiClient,
   item: ChannelWorkItem & { existingMessageId: string | null },
   data: RosterEmbedData,
+  resolvedChannels: Map<string, string>,
 ): Promise<void> {
-  const channelId = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false);
+  const channelId = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
   if (!channelId) return;
 
   const embed = buildRosterEmbed(data);

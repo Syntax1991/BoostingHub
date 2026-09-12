@@ -70,6 +70,12 @@ export class BotApiClient {
 
   listSyncWork() {
     return this.request<{
+      channels: Array<{
+        runId: string;
+        existingRunChannelId: string;
+        desiredChannelName: string;
+        archived: boolean;
+      }>;
       signups: Array<{
         runId: string;
         existingChannelId: string | null;

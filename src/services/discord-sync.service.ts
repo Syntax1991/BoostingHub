@@ -63,6 +63,21 @@ export type RosterEmbedData = {
  * so a schedule/difficulty/raid-lead change is reflected as a rename even
  * when a bot instance is running in legacy single-channel mode and ignores it.
  */
+/**
+ * Reconciliation for a Run's EXISTING dedicated Discord channel — name and
+ * archive/active category — fully independent of signup/roster message
+ * state. `existingRunChannelId` is always non-null: this item means "this
+ * Run already owns a channel; keep its live Discord state correct," never
+ * "provision a first channel." First-channel provisioning stays exclusively
+ * gated behind the signup path's `isSignupWindowOpen` rule below.
+ */
+export type ChannelSyncWorkItem = {
+  runId: string;
+  existingRunChannelId: string;
+  desiredChannelName: string;
+  archived: boolean;
+};
+
 export type SignupSyncWorkItem = {
   runId: string;
   existingChannelId: string | null;
@@ -175,8 +190,12 @@ function boosterByRole(selected: RosterSignupRow[], role: CharacterRole): Roster
  */
 export const discordSyncService = {
   /**
-   * Runs whose posted (or not-yet-posted) Discord message no longer matches
-   * current BoostingHub state.
+   * `channels`: every Run that already owns a dedicated Discord channel,
+   * for independent name/category reconciliation — completely unconditional
+   * on message dirtiness, Run status, or archive state (see
+   * `ChannelSyncWorkItem`). `signups`/`roster`: Runs whose posted (or
+   * not-yet-posted) Discord message no longer matches current BoostingHub
+   * state.
    *
    * The *first* signup post for a Run only happens while signup is actually
    * available (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen`
@@ -189,14 +208,36 @@ export const discordSyncService = {
    * the way through completion, which is deliberate informational
    * continuity, not a re-trigger of the creation gate.
    */
-  async listSyncWork(): Promise<{ signups: SignupSyncWorkItem[]; roster: RosterSyncWorkItem[] }> {
+  async listSyncWork(): Promise<{
+    channels: ChannelSyncWorkItem[];
+    signups: SignupSyncWorkItem[];
+    roster: RosterSyncWorkItem[];
+  }> {
     const runs = await runRepository.listManaged();
+    const channels: ChannelSyncWorkItem[] = [];
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
 
     for (const run of runs) {
-      if (run.status === "DRAFT") continue;
       const post = await runDiscordPostRepository.findByRunId(run.id);
+
+      // Channel reconciliation is fully independent of message state and of
+      // Run status/archive-ness itself — any Run that already owns a
+      // dedicated Discord channel must keep having that channel's name and
+      // active/archive category checked on every poll, regardless of DRAFT
+      // status or whether a signup/roster message currently needs updating.
+      // This never provisions a first channel (existingRunChannelId is only
+      // ever set once the signup path below has already created one).
+      if (post?.runChannelId) {
+        channels.push({
+          runId: run.id,
+          existingRunChannelId: post.runChannelId,
+          desiredChannelName: desiredChannelNameFor(run),
+          archived: Boolean(run.archivedAt),
+        });
+      }
+
+      if (run.status === "DRAFT") continue;
 
       const hasExistingSignupPost = Boolean(post?.signupMessageId);
       const canCreateSignupPost = isSignupWindowOpen(run.status, run.signupsOpen);
@@ -251,7 +292,7 @@ export const discordSyncService = {
       }
     }
 
-    return { signups, roster };
+    return { channels, signups, roster };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {

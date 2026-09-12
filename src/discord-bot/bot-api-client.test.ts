@@ -23,6 +23,17 @@ describe("BotApiClient", () => {
     expect((init?.headers as Headers).get("authorization")).toBe("Bearer secret-token");
   });
 
+  it("listSyncWork returns channels[] alongside signups/roster, unmodified", async () => {
+    const channels = [
+      { runId: "run-1", existingRunChannelId: "chan-1", desiredChannelName: "sat-2200-hc-lead", archived: false },
+    ];
+    mockFetchOnce(200, { ok: true, data: { channels, signups: [], roster: [] } });
+    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
+
+    const work = await client.listSyncWork();
+    expect(work.channels).toEqual(channels);
+  });
+
   it("attaches the acting Discord user header for per-User calls", async () => {
     const spy = mockFetchOnce(200, { ok: true, data: {} });
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
