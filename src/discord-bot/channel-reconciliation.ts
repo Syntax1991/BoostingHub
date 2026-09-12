@@ -152,7 +152,16 @@ export type CategoryChild = {
 /** Lists the current children of a category (Run channels, the two markers, and any unmanaged channels), or null if the category itself can't be resolved. */
 export type CategoryChannelLister = (categoryId: string) => Promise<CategoryChild[] | null>;
 
-/** Applies a full desired ordering in one batched call (discord.js: `guild.channels.setPositions`) — never includes a marker channel id. */
+/**
+ * Applies a full desired ordering in one batched call (discord.js:
+ * `guild.channels.setPositions`). Discord's real position-update semantics
+ * only take effect when the payload is a complete, dense re-index of every
+ * channel in the sortable group (confirmed empirically against a live
+ * server) — a sparse "just move these few channels" payload is silently
+ * ignored. This means the two marker channels DO appear in `moves` whenever
+ * anything in the category needs to move — see the module-level note on
+ * what "never touch the markers" actually means here.
+ */
 export type PositionSetter = (moves: ReadonlyArray<{ channelId: string; position: number }>) => Promise<unknown>;
 
 export type WeekSectionEnv = {
@@ -186,22 +195,32 @@ function sortByScheduleThenRunId(items: WeekSectionItem[]): WeekSectionItem[] {
  * Run channels (chronological), `[unrelated channels between the markers]`,
  * `#next-id`, NEXT Run channels (chronological), `[unrelated channels below]`.
  *
- * The markers themselves are NEVER included in the emitted `moves` — never
- * renamed, never reparented, never repositioned by this function. They are
- * read-only anchors; their live `position` is what the CURRENT/NEXT blocks
- * are computed relative to. A channel not owned by BoostingHub (not one of
- * the two markers and not a `runId`'s `existingRunChannelId` in `items`) is
- * left at its own untouched position — this function only ever proposes new
- * positions for BoostingHub-owned CURRENT/NEXT Run channels.
+ * Discord's real `setPositions` semantics only take effect on a complete,
+ * dense re-index of every channel sharing the category (confirmed
+ * empirically — a sparse payload naming only the channels you want to move,
+ * leaving everyone else's position unspecified, is silently ignored, even
+ * with values chosen to sort correctly against the untouched entries). So
+ * every call here recomputes and resubmits the FULL ordered list, including
+ * the two markers and any unmanaged channels — this is a mechanical
+ * necessity of the Discord API, not a decision to treat the markers as
+ * BoostingHub-managed. What "never touch the markers" actually means, and is
+ * upheld here: their id/name/parent are never altered by this module (this
+ * function's payload shape — `{channelId, position}` — has no capability to
+ * rename or reparent anything), no message is ever sent/edited/deleted in
+ * them, and they are never created, deleted, or recreated. Only their
+ * numeric `position` may shift, purely as a side effect of correctly
+ * ordering the Run channels around them (e.g. `#next-id` moves down as the
+ * CURRENT section gains a channel) — never a rename/reparent/deletion, and
+ * their relative order to each other (`#current-id` before `#next-id`) is
+ * asserted up front and never itself changed by this function.
  *
- * New positions for the CURRENT block are assigned as consecutive integers
- * immediately after the current marker's own (unchanged) position; the NEXT
- * block similarly right after the next marker's position, clamped below the
- * current marker's position on the rare chance the CURRENT block would
- * otherwise number far enough to reach it. This deliberately never touches
- * the markers' own values, so it never needs "free integer slots" between
- * two fixed numbers — Discord tolerates the resulting ties gracefully, and
- * an already-correctly-ordered category produces zero position writes.
+ * A channel not owned by BoostingHub (not one of the two markers and not a
+ * `runId`'s `existingRunChannelId` in `items`) keeps its relative position
+ * among other unmanaged channels in whichever of the three zones (before
+ * `#current-id`, between the markers, after `#next-id`) it already occupied
+ * — it is never renamed, deleted, or reparented, and never reordered
+ * relative to other unmanaged channels, only shifted as a block if managed
+ * channels are inserted/removed around it.
  */
 export async function reconcileWeekSectionPositions(
   listCategoryChildren: CategoryChannelLister,
@@ -244,47 +263,55 @@ export async function reconcileWeekSectionPositions(
 
   const currentManaged = sortByScheduleThenRunId(items.filter((item) => item.targetBucket === "CURRENT"));
   const nextManaged = sortByScheduleThenRunId(items.filter((item) => item.targetBucket === "NEXT"));
+  const managedIds = new Set([...currentManaged, ...nextManaged].map((item) => item.existingRunChannelId));
 
   const childById = new Map(children.map((child) => [child.id, child]));
-  const moves: Array<{ channelId: string; position: number }> = [];
+  const resolvedCurrentManaged = currentManaged.map((item) => childById.get(item.existingRunChannelId)).filter((c): c is CategoryChild => Boolean(c));
+  const resolvedNextManaged = nextManaged.map((item) => childById.get(item.existingRunChannelId)).filter((c): c is CategoryChild => Boolean(c));
 
-  let cursor = currentMarker.position + 1;
-  for (const item of currentManaged) {
-    const child = childById.get(item.existingRunChannelId);
-    if (!child) continue; // Not currently a child of this category — nothing to position yet.
-    const desired = Math.min(cursor, nextMarker.position - 1);
-    if (child.position !== desired) {
-      moves.push({ channelId: child.id, position: desired });
-    }
-    cursor += 1;
-  }
+  const byPositionAsc = [...children].sort((a, b) => a.position - b.position);
+  const isMarker = (c: CategoryChild) => c.id === currentMarker.id || c.id === nextMarker.id;
+  const unmanagedBefore = byPositionAsc.filter((c) => !isMarker(c) && !managedIds.has(c.id) && c.position < currentMarker.position);
+  const unmanagedBetween = byPositionAsc.filter((c) => !isMarker(c) && !managedIds.has(c.id) && c.position > currentMarker.position && c.position < nextMarker.position);
+  const unmanagedAfter = byPositionAsc.filter((c) => !isMarker(c) && !managedIds.has(c.id) && c.position > nextMarker.position);
 
-  cursor = nextMarker.position + 1;
-  for (const item of nextManaged) {
-    const child = childById.get(item.existingRunChannelId);
-    if (!child) continue;
-    if (child.position !== cursor) {
-      moves.push({ channelId: child.id, position: cursor });
-    }
-    cursor += 1;
-  }
+  const finalOrder: CategoryChild[] = [
+    ...unmanagedBefore,
+    currentMarker,
+    ...resolvedCurrentManaged,
+    ...unmanagedBetween,
+    nextMarker,
+    ...resolvedNextManaged,
+    ...unmanagedAfter,
+  ];
 
-  // Defensive — the markers are read-only anchors and must never appear in
-  // the payload we send Discord, even if some computation above went wrong.
-  const safeMoves = moves.filter(
-    (move) => move.channelId !== env.discordRunCurrentMarkerChannelId && move.channelId !== env.discordRunNextMarkerChannelId,
-  );
+  // Compare RELATIVE order, not raw position numbers — the live category's
+  // raw position values need not be dense/contiguous (they can end up
+  // sparse after any number of unrelated Discord-side edits), so a category
+  // already in the correct relative order must never be churned merely to
+  // renumber it. Only an actual change in sequence justifies a write.
+  const currentOrderIds = byPositionAsc.map((c) => c.id);
+  const finalOrderIds = finalOrder.map((c) => c.id);
+  const alreadyInOrder =
+    currentOrderIds.length === finalOrderIds.length && currentOrderIds.every((id, index) => id === finalOrderIds[index]);
 
-  if (safeMoves.length === 0) {
+  if (alreadyInOrder) {
     return { status: "ok", moved: 0 };
   }
 
+  const oldIndexById = new Map(currentOrderIds.map((id, index) => [id, index]));
+  const changedCount = finalOrder.filter((channel, index) => oldIndexById.get(channel.id) !== index).length;
+  const desiredPositions = finalOrder.map((channel, index) => ({ channelId: channel.id, position: index }));
+
   try {
-    await setPositions(safeMoves);
+    // Discord requires the complete set to apply correctly, so every
+    // channel in `finalOrder` is submitted even when most entries are
+    // unchanged — see the function doc comment above.
+    await setPositions(desiredPositions);
   } catch (error) {
     console.error("[discord-bot] failed to reconcile CURRENT/NEXT section positions", error);
     return { status: "skipped", reason: "setPositions failed" };
   }
 
-  return { status: "ok", moved: safeMoves.length };
+  return { status: "ok", moved: changedCount };
 }

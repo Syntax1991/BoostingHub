@@ -227,8 +227,22 @@ const weekEnv: WeekSectionEnv = {
   discordRunNextMarkerChannelId: NEXT_MARKER,
 };
 
+/**
+ * Discord's real `setPositions` API only takes effect on a complete, dense
+ * re-index of every channel in the category (confirmed empirically against
+ * a live server — see channel-reconciliation.ts's doc comment). So the
+ * payload always includes every child of the category, including the two
+ * markers — these helpers extract the section order from that full payload
+ * to make assertions readable without hand-computing dense indices.
+ */
+function orderedChannelIds(setPositions: PositionSetter): string[] {
+  const calls = (setPositions as ReturnType<typeof vi.fn>).mock.calls;
+  const [moves] = calls[calls.length - 1] as [Array<{ channelId: string; position: number }>];
+  return [...moves].sort((a, b) => a.position - b.position).map((m) => m.channelId);
+}
+
 describe("reconcileWeekSectionPositions — CURRENT/NEXT ordering", () => {
-  it("positions a single CURRENT channel right after #current-id", async () => {
+  it("positions a single CURRENT channel right after #current-id, before #next-id", async () => {
     const children = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 10), child("chan-1", 20)];
     const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
 
@@ -236,8 +250,10 @@ describe("reconcileWeekSectionPositions — CURRENT/NEXT ordering", () => {
       weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
     ]);
 
-    expect(setPositions).toHaveBeenCalledWith([{ channelId: "chan-1", position: 1 }]);
-    expect(result).toEqual({ status: "ok", moved: 1 });
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, "chan-1", NEXT_MARKER]);
+    // Both chan-1 and #next-id change relative index (chan-1 moves in front
+    // of the marker); #current-id's index is unchanged.
+    expect(result).toEqual({ status: "ok", moved: 2 });
   });
 
   it("positions a single NEXT channel right after #next-id", async () => {
@@ -248,7 +264,7 @@ describe("reconcileWeekSectionPositions — CURRENT/NEXT ordering", () => {
       weekItem({ targetBucket: "NEXT", existingRunChannelId: "chan-1" }),
     ]);
 
-    expect(setPositions).toHaveBeenCalledWith([{ channelId: "chan-1", position: 11 }]);
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, NEXT_MARKER, "chan-1"]);
   });
 
   it("orders multiple CURRENT channels chronologically by scheduledStartAt", async () => {
@@ -265,10 +281,7 @@ describe("reconcileWeekSectionPositions — CURRENT/NEXT ordering", () => {
       weekItem({ runId: "run-early", existingRunChannelId: "chan-early", scheduledStartAt: "2026-01-14T18:00:00.000Z" }),
     ]);
 
-    expect(setPositions).toHaveBeenCalledWith([
-      { channelId: "chan-early", position: 1 },
-      { channelId: "chan-late", position: 2 },
-    ]);
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, "chan-early", "chan-late", NEXT_MARKER]);
   });
 
   it("no-op when every channel is already correctly ordered", async () => {
@@ -306,10 +319,10 @@ describe("reconcileWeekSectionPositions — drift correction", () => {
       weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
     ]);
 
-    expect(setPositions).toHaveBeenCalledWith([{ channelId: "chan-1", position: 1 }]);
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, "chan-1", NEXT_MARKER]);
   });
 
-  it("manual NEXT drift: a NEXT channel dragged above #next-id moves back below it", async () => {
+  it("manual NEXT drift: a NEXT channel dragged above #current-id moves back below #next-id", async () => {
     const children = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 10), child("chan-1", 1)];
     const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
 
@@ -317,10 +330,10 @@ describe("reconcileWeekSectionPositions — drift correction", () => {
       weekItem({ targetBucket: "NEXT", existingRunChannelId: "chan-1" }),
     ]);
 
-    expect(setPositions).toHaveBeenCalledWith([{ channelId: "chan-1", position: 11 }]);
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, NEXT_MARKER, "chan-1"]);
   });
 
-  it("name + position drift together: position reconciliation only concerns itself with position — name is reconcileExistingRunChannel's job", async () => {
+  it("category drift: a channel outside the category (per reconcileExistingRunChannel) is a separate concern — position reconciliation only orders channels already listed as children", async () => {
     const children = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 10), child("chan-1", 15)];
     const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
 
@@ -328,12 +341,13 @@ describe("reconcileWeekSectionPositions — drift correction", () => {
       weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
     ]);
 
-    expect(result).toEqual({ status: "ok", moved: 1 });
+    // chan-1 and #next-id both change relative index.
+    expect(result).toEqual({ status: "ok", moved: 2 });
   });
 });
 
 describe("reconcileWeekSectionPositions — marker and unmanaged channel safety", () => {
-  it("never includes a marker channel id in the setPositions payload", async () => {
+  it("markers may appear in the payload (Discord requires the full set), but their own relative order and identity never change", async () => {
     const children = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
     const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
 
@@ -341,16 +355,20 @@ describe("reconcileWeekSectionPositions — marker and unmanaged channel safety"
       weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
     ]);
 
+    const order = orderedChannelIds(setPositions);
+    expect(order.indexOf(CURRENT_MARKER)).toBeLessThan(order.indexOf(NEXT_MARKER));
+    // The PositionSetter payload shape ({channelId, position}) has no field
+    // for name or parent — this module is structurally incapable of
+    // renaming, reparenting, deleting, or messaging a marker.
     const calls = (setPositions as ReturnType<typeof vi.fn>).mock.calls;
     for (const [moves] of calls) {
-      for (const move of moves as Array<{ channelId: string }>) {
-        expect(move.channelId).not.toBe(CURRENT_MARKER);
-        expect(move.channelId).not.toBe(NEXT_MARKER);
+      for (const move of moves as object[]) {
+        expect(Object.keys(move).sort()).toEqual(["channelId", "position"]);
       }
     }
   });
 
-  it("an unmanaged channel not present in items is never included in the payload", async () => {
+  it("an unmanaged channel between the markers keeps its relative position among other unmanaged channels", async () => {
     const children = [
       child(CURRENT_MARKER, 0),
       child("unmanaged-chan", 5),
@@ -363,8 +381,26 @@ describe("reconcileWeekSectionPositions — marker and unmanaged channel safety"
       weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" }),
     ]);
 
-    const [moves] = (setPositions as ReturnType<typeof vi.fn>).mock.calls[0] as [Array<{ channelId: string }>];
-    expect(moves.some((move) => move.channelId === "unmanaged-chan")).toBe(false);
+    const order = orderedChannelIds(setPositions);
+    // chan-1 (CURRENT-managed) sorts before the unmanaged channel that was
+    // already sitting between the markers; the unmanaged channel is present
+    // (never dropped) and still sits between the two markers.
+    expect(order).toEqual([CURRENT_MARKER, "chan-1", "unmanaged-chan", NEXT_MARKER]);
+  });
+
+  it("an unmanaged channel before #current-id is preserved in front, never reordered relative to other unmanaged channels", async () => {
+    // chan-1 starts misplaced (between the markers) so an actual reorder is
+    // required — the point of the test is that "unmanaged-chan" stays put
+    // in front of #current-id throughout.
+    const children = [child("unmanaged-chan", 0), child(CURRENT_MARKER, 5), child("chan-1", 7), child(NEXT_MARKER, 10)];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+
+    await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, [
+      weekItem({ targetBucket: "NEXT", existingRunChannelId: "chan-1" }),
+    ]);
+
+    const order = orderedChannelIds(setPositions);
+    expect(order).toEqual(["unmanaged-chan", CURRENT_MARKER, NEXT_MARKER, "chan-1"]);
   });
 });
 
