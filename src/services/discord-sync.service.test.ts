@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -684,5 +684,241 @@ describe("discordSyncService — archive category movement", () => {
     expect(work.signups.some((entry) => entry.runId === bareRunId)).toBe(false);
     expect(work.roster.some((entry) => entry.runId === bareRunId)).toBe(false);
     expect(await runDiscordPostRepository.findByRunId(bareRunId)).toBeNull();
+  });
+});
+
+describe("discordSyncService — raid identity invalidation (embed content signature)", () => {
+  let raidEditRunId = "";
+
+  beforeAll(async () => {
+    raidEditRunId = await runService
+      .createRun(lead, {
+        raidId: MANAFORGE_OMEGA_RAID_ID,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(raidEditRunId);
+    await runService.openRun(lead, raidEditRunId);
+  }, 60_000);
+
+  it("exposes raidId on SignupEmbedData", async () => {
+    const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
+    expect(data?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(data?.raidName).toBe("Manaforge Omega");
+  });
+
+  it("settles after the first post, with no work pending before any edit", async () => {
+    await discordSyncService.recordSignupPost({ runId: raidEditRunId, channelId: "raid-chan-1", messageId: "raid-msg-1" });
+    const work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+  });
+
+  it("CRITICAL: a raid change with an unchanged desired channel name still produces signup sync work", async () => {
+    const before = await discordSyncService.listSyncWork();
+    const beforeItem = before.signups.find((entry) => entry.runId === raidEditRunId);
+    const beforeChannelName = beforeItem?.desiredChannelName;
+    expect(beforeItem).toBeUndefined(); // no pending work yet — settled by the prior test
+
+    const run = await runRepository.findById(raidEditRunId);
+    await runService.updateRun(lead, {
+      runId: raidEditRunId,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: run!.scheduledStartAt,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === raidEditRunId);
+    expect(item).toBeTruthy();
+    expect(item?.existingMessageId).toBe("raid-msg-1");
+    expect(item?.existingChannelId).toBe("raid-chan-1");
+    // Same difficulty/lootType/plannedBossCount/raidLead/schedule → the
+    // channel name (which is deliberately raid-name-free) is unchanged. The
+    // whole point of this fix is that sync work is still produced anyway.
+    if (beforeChannelName) {
+      expect(item?.desiredChannelName).toBe(beforeChannelName);
+    }
+  });
+
+  it("reflects the new raid in getSignupEmbedData after the edit", async () => {
+    const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
+    expect(data?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(data?.raidName).toBe("The Venomous Abyss");
+  });
+
+  it("clears after the bot re-edits the same message, and does not resurface on a no-op resync", async () => {
+    await discordSyncService.recordSignupPost({ runId: raidEditRunId, channelId: "raid-chan-1", messageId: "raid-msg-1" });
+    let work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+
+    // Re-running sync detection with nothing changed must stay idempotent.
+    work = await discordSyncService.listSyncWork();
+    expect(work.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+  });
+
+  it("never recreates the channel or message across the raid edit — same ids throughout", async () => {
+    const persisted = await runDiscordPostRepository.findByRunId(raidEditRunId);
+    expect(persisted?.runChannelId).toBeNull(); // this fixture never called recordRunChannel
+    expect(persisted?.signupChannelId).toBe("raid-chan-1");
+    expect(persisted?.signupMessageId).toBe("raid-msg-1");
+  });
+
+  it("still produces work for a non-raid rendered-field edit after the raid change has settled (schedule)", async () => {
+    const run = await runRepository.findById(raidEditRunId);
+    const newSchedule = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString();
+    await runService.updateRun(lead, {
+      runId: raidEditRunId,
+      raidId: run!.raidId,
+      difficulty: run!.difficulty,
+      lootType: run!.lootType,
+      plannedBossCount: run!.plannedBossCount,
+      scheduledStartAt: newSchedule,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === raidEditRunId);
+    expect(item).toBeTruthy();
+
+    const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
+    expect(new Date(data!.scheduledStartAt).getTime()).toBe(new Date(newSchedule).getTime());
+
+    await discordSyncService.recordSignupPost({ runId: raidEditRunId, channelId: "raid-chan-1", messageId: "raid-msg-1" });
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === raidEditRunId)).toBe(false);
+  });
+
+  it("combines with archive: an archived + raid-changed run still flags work, and clears once resynced", async () => {
+    const comboRunId = await runService
+      .createRun(lead, {
+        raidId: MANAFORGE_OMEGA_RAID_ID,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(comboRunId);
+    await runService.openRun(lead, comboRunId);
+    await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
+
+    const run = await runRepository.findById(comboRunId);
+    await runService.updateRun(lead, {
+      runId: comboRunId,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: run!.scheduledStartAt,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+    });
+    await runRepository.updateFields(comboRunId, { status: "CANCELLED" });
+    await runService.archiveRun(lead, comboRunId);
+
+    const work = await discordSyncService.listSyncWork();
+    const item = work.signups.find((entry) => entry.runId === comboRunId);
+    expect(item).toBeTruthy();
+    expect(item?.archived).toBe(true);
+
+    await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === comboRunId)).toBe(false);
+  });
+
+  it("documents the roster invariant: once a roster is published, the service layer refuses the identity/planning edits that would otherwise change RosterEmbedData content", async () => {
+    const publishedRunId = await runService
+      .createRun(lead, {
+        raidId: MANAFORGE_OMEGA_RAID_ID,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 0,
+        desiredDpsCount: 0,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(publishedRunId);
+    await runService.openRun(lead, publishedRunId);
+
+    const soloCharId = crypto.randomUUID();
+    createdCharacterIds.push(soloCharId);
+    await orm.Character.create({
+      id: soloCharId,
+      userId: ids.tank,
+      name: "Dsinvariant",
+      realm: "Discord Lab",
+      normalizedName: normalizeCharacterIdentity("Dsinvariant"),
+      normalizedRealm: normalizeCharacterIdentity("Discord Lab"),
+      region: "EU",
+      wowClass: "PALADIN",
+      specialization: "Protection",
+      primaryRole: "TANK",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await createSignup({ runId: publishedRunId, userId: ids.tank, characterId: soloCharId, participationType: "BOOSTER", role: "TANK" });
+
+    const view = await rosterService.getRosterManagementView(lead, publishedRunId);
+    const tankSignup = view.groups.tanks[0];
+    await rosterService.setDraftSelection(lead, { runId: publishedRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
+    const afterSelect = await rosterService.getRosterManagementView(lead, publishedRunId);
+    await rosterService.publishRoster(lead, { runId: publishedRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
+
+    const published = await runRepository.findById(publishedRunId);
+    expect(published?.status).toBe("PUBLISHED");
+
+    await expect(
+      runService.updateRun(lead, {
+        runId: publishedRunId,
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        difficulty: published!.difficulty,
+        lootType: published!.lootType,
+        plannedBossCount: published!.plannedBossCount,
+        scheduledStartAt: published!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 0,
+        desiredDpsCount: 0,
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      runService.updateRun(lead, {
+        runId: publishedRunId,
+        raidId: published!.raidId,
+        difficulty: published!.difficulty,
+        lootType: "VIP",
+        plannedBossCount: published!.plannedBossCount,
+        scheduledStartAt: published!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 0,
+        desiredDpsCount: 0,
+      }),
+    ).rejects.toThrow();
   });
 });
