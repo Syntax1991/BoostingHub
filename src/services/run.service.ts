@@ -29,6 +29,9 @@ import {
 import { rosterActionLabel } from "@/lib/run-routes";
 import type { CreateRunInput, UpdateRunInput } from "@/validators/run";
 import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
+import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";
+import type { RaidRecord } from "@/repositories/raid.repository";
+import { isDomainError } from "@/lib/errors";
 
 const DISCOVERY_HIDDEN_STATUSES: readonly RunStatus[] = ["DRAFT", "CANCELLED"];
 
@@ -104,6 +107,130 @@ async function requireEligibleRaidLead(raidLeadId: string) {
     throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
   }
   return lead;
+}
+
+/**
+ * Decides which raidLeadId a new Run should target — before any DB lookup.
+ * RAID_LEAD may only ever target themselves (a forged different id is
+ * rejected); ADMIN must explicitly choose someone. Shared by single create
+ * and every row of mass create so a forged raidLeadId is rejected identically
+ * either way.
+ */
+function resolveRequestedRaidLeadId(user: AuthenticatedUser, requestedRaidLeadId: string | undefined): string {
+  if (hasAdminAccess(user.accountRole)) {
+    if (!requestedRaidLeadId) {
+      throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
+    }
+    return requestedRaidLeadId;
+  }
+  if (requestedRaidLeadId && requestedRaidLeadId !== user.id) {
+    throw new DomainError("RUN_RAID_LEAD_INVALID", "Raid leads can only create runs they lead.");
+  }
+  return user.id;
+}
+
+/**
+ * One Run's fully-merged, not-yet-validated planning input — for single
+ * create this is just the request body; for mass create this is
+ * `defaults + row.overrides` merged by `mergeMassCreateRow` below.
+ */
+type EffectiveRunInput = {
+  raidId: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  scheduledStartAt: string;
+  raidLeadId?: string;
+  notes?: string | null;
+  desiredTankCount: number;
+  desiredHealerCount: number;
+  desiredDpsCount: number;
+  plannedBossCount: number;
+};
+
+type PreparedRunDraft = {
+  title: string;
+  raidId: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  scheduledStartAt: string;
+  raidLeadId: string;
+  notes: string | null;
+  desiredTankCount: number;
+  desiredHealerCount: number;
+  desiredDpsCount: number;
+  plannedBossCount: number;
+};
+
+/**
+ * The single normalized preparation path for a new Run draft: schedule
+ * normalization/past-date rule, composition bounds, loot-type/difficulty
+ * compatibility, planned-boss-count bounds against the effective raid, notes
+ * normalization, and server title derivation. Single create and every row of
+ * mass create both funnel through this one function so they can never derive
+ * two different Runs from the same effective input. Raid availability and
+ * raid-lead eligibility are resolved by the caller (they need DB lookups,
+ * which single vs. batched creation resolve differently) and passed in
+ * already-validated via `context`.
+ */
+function prepareRunDraft(
+  input: EffectiveRunInput,
+  context: { raid: RaidRecord; raidLeadId: string; raidLeadName: string },
+): PreparedRunDraft {
+  const scheduledStartAt = parseSchedule(input.scheduledStartAt);
+  assertNewRunSchedule(scheduledStartAt);
+  assertComposition(input.desiredTankCount, "Desired tanks");
+  assertComposition(input.desiredHealerCount, "Desired healers");
+  assertComposition(input.desiredDpsCount, "Desired DPS");
+  assertValidRunLootType(input.difficulty, input.lootType);
+  assertValidPlannedBossCount(input.plannedBossCount, context.raid.totalBossCount);
+
+  const title = buildRunTitle({
+    scheduledStartAt,
+    difficulty: input.difficulty,
+    lootType: input.lootType,
+    plannedBossCount: input.plannedBossCount,
+    totalBossCount: context.raid.totalBossCount,
+    raidLeadName: context.raidLeadName,
+  });
+
+  return {
+    title,
+    raidId: context.raid.id,
+    difficulty: input.difficulty,
+    lootType: input.lootType,
+    scheduledStartAt,
+    raidLeadId: context.raidLeadId,
+    notes: notesValue(input.notes),
+    desiredTankCount: input.desiredTankCount,
+    desiredHealerCount: input.desiredHealerCount,
+    desiredDpsCount: input.desiredDpsCount,
+    plannedBossCount: input.plannedBossCount,
+  };
+}
+
+/**
+ * Merges shared defaults with one row's overrides into an effective input.
+ * Every field except `notes` treats an absent override as "inherit the
+ * default". `notes` is three-valued: override key absent → inherit;
+ * override `null` → explicitly clear the row's notes even though a shared
+ * default exists; override a string → use that string. This is why `notes`
+ * is read directly off `overrides` (checking for `undefined`) rather than
+ * via `??`, which would conflate "absent" and "explicitly null".
+ */
+function mergeMassCreateRow(defaults: MassCreateDefaults, row: MassCreateRunRow): EffectiveRunInput {
+  const overrides = row.overrides ?? {};
+  return {
+    raidId: overrides.raidId ?? defaults.raidId,
+    difficulty: overrides.difficulty ?? defaults.difficulty,
+    lootType: overrides.lootType ?? defaults.lootType,
+    scheduledStartAt: row.scheduledStartAt,
+    raidLeadId: overrides.raidLeadId ?? defaults.raidLeadId,
+    notes: overrides.notes === undefined ? defaults.notes : overrides.notes,
+    desiredTankCount: overrides.desiredTankCount ?? defaults.desiredTankCount,
+    desiredHealerCount: overrides.desiredHealerCount ?? defaults.desiredHealerCount,
+    desiredDpsCount: overrides.desiredDpsCount ?? defaults.desiredDpsCount,
+    plannedBossCount: overrides.plannedBossCount ?? defaults.plannedBossCount,
+  };
 }
 
 async function loadManagedRun(user: AuthenticatedUser, runId: string) {
@@ -294,46 +421,11 @@ export const runService = {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
     const raid = await requireRaidAvailableForNewSelection(input.raidId);
-    const scheduledStartAt = parseSchedule(input.scheduledStartAt);
-    assertNewRunSchedule(scheduledStartAt);
-    assertComposition(input.desiredTankCount, "Desired tanks");
-    assertComposition(input.desiredHealerCount, "Desired healers");
-    assertComposition(input.desiredDpsCount, "Desired DPS");
-
-    const raidLeadId = hasAdminAccess(user.accountRole) ? input.raidLeadId ?? "" : user.id;
-    if (hasAdminAccess(user.accountRole) && !input.raidLeadId) {
-      throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
-    }
-    if (!hasAdminAccess(user.accountRole) && input.raidLeadId && input.raidLeadId !== user.id) {
-      throw new DomainError("RUN_RAID_LEAD_INVALID", "Raid leads can only create runs they lead.");
-    }
+    const raidLeadId = resolveRequestedRaidLeadId(user, input.raidLeadId);
     const raidLead = await requireEligibleRaidLead(raidLeadId);
 
-    assertValidRunLootType(input.difficulty, input.lootType);
-    assertValidPlannedBossCount(input.plannedBossCount, raid.totalBossCount);
-
-    const title = buildRunTitle({
-      scheduledStartAt,
-      difficulty: input.difficulty,
-      lootType: input.lootType,
-      plannedBossCount: input.plannedBossCount,
-      totalBossCount: raid.totalBossCount,
-      raidLeadName: raidLead.name,
-    });
-
-    const id = await runRepository.create({
-      title,
-      raidId: raid.id,
-      difficulty: input.difficulty,
-      lootType: input.lootType,
-      scheduledStartAt,
-      raidLeadId,
-      notes: notesValue(input.notes),
-      desiredTankCount: input.desiredTankCount,
-      desiredHealerCount: input.desiredHealerCount,
-      desiredDpsCount: input.desiredDpsCount,
-      plannedBossCount: input.plannedBossCount,
-    });
+    const draft = prepareRunDraft(input, { raid, raidLeadId, raidLeadName: raidLead.name });
+    const id = await runRepository.create(draft);
 
     await activityRepository.create({
       userId: user.id,
@@ -342,6 +434,98 @@ export const runService = {
     });
 
     return { id };
+  },
+
+  async getCreateManyForm(user: AuthenticatedUser) {
+    requireManagerRole(user);
+    await raidRepository.ensureReferenceRaids();
+    const raids = await raidRepository.listAvailableForRuns();
+    const raidLeads = hasAdminAccess(user.accountRole)
+      ? await userRepository.listEligibleRaidLeads()
+      : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
+    const scheduled = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    scheduled.setUTCMinutes(0, 0, 0);
+    const scheduledStartAt = scheduled.toISOString();
+
+    return {
+      actorRole: user.accountRole,
+      canAssignRaidLead: hasAdminAccess(user.accountRole),
+      defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
+      defaultRaidLeadName: user.name,
+      raids,
+      raidLeads,
+      maxRuns: 25,
+      defaults: {
+        difficulty: "HEROIC" as RaidDifficulty,
+        lootType: "UNSAVED" as RunLootType,
+        scheduledStartAt,
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+      },
+    };
+  },
+
+  /**
+   * Mass Create Runs: shared defaults + per-row overrides -> N atomic DRAFT
+   * Runs (all-or-nothing). Every row is fully prepared and validated — via
+   * the exact same `prepareRunDraft`/`resolveRequestedRaidLeadId` single
+   * create uses — before any persistence is attempted, and raid/raid-lead
+   * lookups are batched once for the whole request rather than per row.
+   */
+  async createManyRuns(user: AuthenticatedUser, input: CreateManyRunsInput): Promise<{ ids: string[] }> {
+    requireManagerRole(user);
+    await raidRepository.ensureReferenceRaids();
+
+    const effectiveRows = input.runs.map((row) => mergeMassCreateRow(input.defaults, row));
+
+    const raidIds = [...new Set(effectiveRows.map((row) => row.raidId))];
+    const raidById = new Map(
+      (await raidRepository.listByIds(raidIds)).map((raid) => [raid.id, raid]),
+    );
+
+    const eligibleLeads = await userRepository.listEligibleRaidLeads();
+    const leadById = new Map(eligibleLeads.map((lead) => [lead.id, lead]));
+
+    const prepared: PreparedRunDraft[] = [];
+    for (let index = 0; index < effectiveRows.length; index += 1) {
+      const effective = effectiveRows[index]!;
+      try {
+        const raid = raidById.get(effective.raidId);
+        if (!raid) {
+          throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+        }
+        if (!raid.availableForRuns) {
+          throw new DomainError(
+            "RAID_NOT_AVAILABLE_FOR_RUNS",
+            "This raid is no longer available for new runs.",
+          );
+        }
+
+        const raidLeadId = resolveRequestedRaidLeadId(user, effective.raidLeadId);
+        const raidLead = leadById.get(raidLeadId);
+        if (!raidLead) {
+          throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
+        }
+
+        prepared.push(prepareRunDraft(effective, { raid, raidLeadId, raidLeadName: raidLead.name }));
+      } catch (error) {
+        if (isDomainError(error)) {
+          throw new DomainError(error.code, `Run ${index + 1}: ${error.message}`, error.status);
+        }
+        throw error;
+      }
+    }
+
+    const ids = await runRepository.createManyDraftsAtomic(prepared);
+
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_CREATED",
+      message: `Created ${ids.length} run draft${ids.length === 1 ? "" : "s"} via mass create.`,
+    });
+
+    return { ids };
   },
 
   async updateRun(user: AuthenticatedUser, input: UpdateRunInput) {
