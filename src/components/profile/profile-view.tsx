@@ -3,6 +3,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
+import { hasRaidLeadAccess } from "@/auth/authorization";
 import type { profileService } from "@/services/profile.service";
 
 type Profile = Awaited<ReturnType<typeof profileService.getProfile>>;
@@ -48,6 +49,11 @@ export function ProfileView({ data }: { data: Profile }) {
             <Link href="/characters" className="inline-block text-xs text-accent hover:underline">
               Manage characters
             </Link>
+            {hasRaidLeadAccess(data.user.accountRole) ? (
+              <Link href="/profile/templates" className="block text-xs text-accent hover:underline">
+                My Run Templates
+              </Link>
+            ) : null}
           </div>
         </Card>
         <Card>

@@ -14,19 +14,21 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
+import { runTemplateService } from "@/services/run-template.service";
 import {
+  assertComposition,
   assertValidPlannedBossCount,
   assertValidRunLootType,
   canArchiveRun,
   emptyRunCapabilities,
   getRunLifecycleCapabilities,
   isSignupWindowOpen,
-  RUN_COMPOSITION_MAX,
-  RUN_COMPOSITION_MIN,
+  notesValue,
   RUN_SCHEDULE_PAST_GRACE_MS,
   type RunLifecycleCapabilities,
 } from "@/services/run-state";
 import { rosterActionLabel } from "@/lib/run-routes";
+import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { CreateRunInput, UpdateRunInput } from "@/validators/run";
 import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
 import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";
@@ -52,17 +54,6 @@ function parseSchedule(value: string): string {
 function assertNewRunSchedule(iso: string): void {
   if (Date.parse(iso) < Date.now() - RUN_SCHEDULE_PAST_GRACE_MS) {
     throw new DomainError("RUN_SCHEDULE_INVALID", "Scheduled start cannot be in the past.");
-  }
-}
-
-function notesValue(notes: string | null | undefined): string | null {
-  const trimmed = notes?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function assertComposition(count: number, label: string): void {
-  if (!Number.isInteger(count) || count < RUN_COMPOSITION_MIN || count > RUN_COMPOSITION_MAX) {
-    throw new DomainError("VALIDATION_FAILED", `${label} must be a whole number between ${RUN_COMPOSITION_MIN} and ${RUN_COMPOSITION_MAX}.`);
   }
 }
 
@@ -447,6 +438,21 @@ export const runService = {
     scheduled.setUTCMinutes(0, 0, 0);
     const scheduledStartAt = scheduled.toISOString();
 
+    const usableTemplates = await runTemplateService.listUsableForCreation(user);
+    const templates = usableTemplates.map((template) => ({
+      id: template.id,
+      raidLeadId: template.raidLeadId,
+      raidId: template.raidId,
+      difficulty: template.difficulty,
+      lootType: template.lootType,
+      plannedBossCount: template.plannedBossCount,
+      desiredTankCount: template.desiredTankCount,
+      desiredHealerCount: template.desiredHealerCount,
+      desiredDpsCount: template.desiredDpsCount,
+      notes: template.notes,
+      label: `${template.raidLeadName} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${template.plannedBossCount}/${template.totalBossCount}`,
+    }));
+
     return {
       actorRole: user.accountRole,
       canAssignRaidLead: hasAdminAccess(user.accountRole),
@@ -454,6 +460,7 @@ export const runService = {
       defaultRaidLeadName: user.name,
       raids,
       raidLeads,
+      templates,
       maxRuns: 25,
       defaults: {
         difficulty: "HEROIC" as RaidDifficulty,
@@ -472,12 +479,45 @@ export const runService = {
    * the exact same `prepareRunDraft`/`resolveRequestedRaidLeadId` single
    * create uses — before any persistence is attempted, and raid/raid-lead
    * lookups are batched once for the whole request rather than per row.
+   *
+   * When `input.templateId` is present, the template is resolved and
+   * authorized fresh from the DB (never trusting the browser's copy) BEFORE
+   * any row is prepared, and its raidLeadId becomes authoritative for every
+   * row — a defaults- or row-level raidLeadId that explicitly disagrees with
+   * it rejects the entire batch rather than being silently overridden.
    */
   async createManyRuns(user: AuthenticatedUser, input: CreateManyRunsInput): Promise<{ ids: string[] }> {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
 
+    let templateRaidLeadId: string | undefined;
+    if (input.templateId) {
+      const template = await runTemplateService.resolveTemplateForUse(user, input.templateId);
+      templateRaidLeadId = template.raidLeadId;
+
+      if (input.defaults.raidLeadId && input.defaults.raidLeadId !== templateRaidLeadId) {
+        throw new DomainError(
+          "RUN_TEMPLATE_RAID_LEAD_MISMATCH",
+          "The selected template's raid lead cannot be overridden.",
+        );
+      }
+      input.runs.forEach((row, index) => {
+        const overrideRaidLeadId = row.overrides?.raidLeadId;
+        if (overrideRaidLeadId && overrideRaidLeadId !== templateRaidLeadId) {
+          throw new DomainError(
+            "RUN_TEMPLATE_RAID_LEAD_MISMATCH",
+            `Run ${index + 1}: the selected template's raid lead cannot be overridden.`,
+          );
+        }
+      });
+    }
+
     const effectiveRows = input.runs.map((row) => mergeMassCreateRow(input.defaults, row));
+    if (templateRaidLeadId) {
+      for (const row of effectiveRows) {
+        row.raidLeadId = templateRaidLeadId;
+      }
+    }
 
     const raidIds = [...new Set(effectiveRows.map((row) => row.raidId))];
     const raidById = new Map(

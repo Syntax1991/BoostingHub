@@ -67,7 +67,7 @@ export function assertCanManageUsers(user: AuthenticatedUser): void {
 export type ManagementNavItem = {
   href: string;
   label: string;
-  module: "overview" | "runs" | "booster-access" | "users";
+  module: "overview" | "runs" | "templates" | "booster-access" | "users";
 };
 
 /**
@@ -84,6 +84,7 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
   ];
   if (hasAdminAccess(role)) {
     items.push(
+      { href: "/manage/templates", label: "Templates", module: "templates" },
       { href: "/manage/booster-access", label: "Booster Access", module: "booster-access" },
       { href: "/manage/users", label: "Users", module: "users" },
     );
