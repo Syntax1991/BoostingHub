@@ -9,11 +9,17 @@ import {
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
-import { LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 
 type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
+
+/** "HC 8/8 · Saved" — informational only, never a reason a signup is flagged. */
+function formatRaidSave(raidSave: ManagerSignup["raidSave"]): string | null {
+  if (!raidSave) return null;
+  return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
+}
 
 export function RunSignupsSection({ data }: { data: RunDetailView }) {
   if (data.permissions.canViewManagerSignups && data.manager) {
@@ -182,6 +188,9 @@ function ManagerSignupList({ runId, signups }: { runId: string; signups: Manager
                       </span>
                     ) : null}
                     <SignupStatusBadge status={signup.status} />
+                    {formatRaidSave(signup.raidSave) ? (
+                      <span className="text-xs text-muted">{formatRaidSave(signup.raidSave)}</span>
+                    ) : null}
                     {signup.issue ? <span className="text-xs text-danger">{signup.issue}</span> : null}
                   </li>
                 ))}

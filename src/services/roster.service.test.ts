@@ -242,15 +242,16 @@ describe("rosterService publish validation", () => {
     });
   });
 
-  it("blocks publishing when a selected character is locked for the run reset", async () => {
+  it("shows raid-save info for a selected character locked for the run reset — informational only, never a publish blocker", async () => {
     const lockoutId = crypto.randomUUID();
     lockoutIds.push(lockoutId);
+    const resetIdentifier = resetIdentifierFor("2026-09-28T18:00:00.000Z");
     await orm.CharacterRaidLockout.create({
       id: lockoutId,
       characterId: ids.kaelResto,
       raidId: ids.raid,
       difficulty: "HEROIC",
-      resetIdentifier: resetIdentifierFor("2026-09-28T18:00:00.000Z"),
+      resetIdentifier,
       bossesDefeated: 8,
       isComplete: true,
       createdAt: new Date().toISOString(),
@@ -267,7 +268,18 @@ describe("rosterService publish validation", () => {
       });
       view = await rosterService.getRosterManagementView(thorne, ids.lab);
     }
-    expect(view.validation.blockers.some((item) => item.code === "LOCKOUT_CONFLICT")).toBe(true);
+    const candidate = view.groups.healers.find((item) => item.id === ids.labKaelResto);
+    expect(candidate?.raidSave).toEqual({
+      raidId: ids.raid,
+      difficulty: "HEROIC",
+      resetIdentifier,
+      bossesDefeated: 8,
+      totalBossCount: 8,
+      isComplete: true,
+    });
+    // No LOCKOUT_CONFLICT blocker exists anymore at all — raid saves never block.
+    expect(view.validation.blockers.some((item) => item.code === "LOCKOUT_CONFLICT")).toBe(false);
+
     await orm.CharacterRaidLockout.where({ id: lockoutId }).delete();
     lockoutIds.splice(lockoutIds.indexOf(lockoutId), 1);
     await rosterService.setDraftSelection(thorne, {

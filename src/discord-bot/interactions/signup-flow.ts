@@ -31,6 +31,11 @@ function orderedRoles(roles: CharacterRole[]): CharacterRole[] {
   return ROLE_ORDER.filter((role) => roles.includes(role));
 }
 
+type RaidSaveInfo = {
+  bossesDefeated: number;
+  totalBossCount: number;
+  isComplete: boolean;
+};
 type EligibleCharacterOption = {
   characterId: string;
   characterName: string;
@@ -39,6 +44,8 @@ type EligibleCharacterOption = {
   roles?: CharacterRole[];
   /** Specialization-derived default, or null when specialization is missing/unrecognized. Absent for LOOTBUDDY. */
   defaultRole?: CharacterRole | null;
+  /** Informational only — a saved Character remains fully selectable. */
+  raidSave?: RaidSaveInfo | null;
 };
 export type IneligibleCharacterOption = {
   characterId: string;
@@ -73,6 +80,17 @@ function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): st
     ),
   ];
 }
+
+/** Informational only — a saved Character remains fully selectable, this just surfaces the context up front. */
+function describeSavedCharacters(eligible: EligibleCharacterOption[]): string[] {
+  const saved = eligible.filter((option) => option.raidSave);
+  if (saved.length === 0) return [];
+  return [
+    "",
+    "Saved this reset:",
+    ...saved.map((option) => `• ${option.characterName} — ${option.raidSave!.bossesDefeated}/${option.raidSave!.totalBossCount}`),
+  ];
+}
 type OfferResult = { created: number; reactivated: number; withdrawn: number; kept: number };
 /** The subset of a Discord reply-capable interaction every handler here needs — real button and select interactions both satisfy it. */
 type ReplyableInteraction = {
@@ -99,10 +117,15 @@ export function buildCharacterSelectOptions(
       : option.defaultRole
         ? `${ROLE_LABELS[option.defaultRole]} (default)`
         : null;
-    return new StringSelectMenuOptionBuilder()
+    const builder = new StringSelectMenuOptionBuilder()
       .setLabel(roleLabel ? `${option.characterName}-${option.realm} — ${roleLabel}` : `${option.characterName}-${option.realm}`)
       .setValue(option.characterId)
       .setDefault(activeIds.has(option.characterId));
+    // Informational only — a saved Character is still fully selectable.
+    if (option.raidSave) {
+      builder.setDescription(`Saved ${option.raidSave.bossesDefeated}/${option.raidSave.totalBossCount}`);
+    }
+    return builder;
   });
 }
 
@@ -167,6 +190,7 @@ export async function handleSignupButton(
       `Select the characters to offer for **${options.run.title}**.${
         participationType === "BOOSTER" ? " You'll confirm roles before anything is saved." : " This replaces your current offers for this run."
       }`,
+      ...describeSavedCharacters(eligible),
       ...reservationLines,
     ].join("\n"),
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],

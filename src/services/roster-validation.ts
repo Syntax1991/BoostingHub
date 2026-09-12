@@ -24,7 +24,6 @@ export type RosterValidationMember = {
   status: SignupStatus;
   characterActive: boolean;
   boosterApproved: boolean;
-  lockoutConflict: boolean;
 };
 
 const PUBLISHABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
@@ -64,13 +63,8 @@ export function validateRosterDraft(input: {
         signupId: item.signupId,
       });
     }
-    if (item.lockoutConflict) {
-      blockers.push({
-        code: "LOCKOUT_CONFLICT",
-        message: `${item.characterName} is locked for this raid reset.`,
-        signupId: item.signupId,
-      });
-    }
+    // Raid lockouts are informational only — see signup-eligibility.ts and
+    // roster.service.ts's `raidSave` — never a publish blocker.
     if (item.participationType === "BOOSTER" && !item.boosterApproved) {
       blockers.push({
         code: "BOOSTER_ACCESS_INVALID",

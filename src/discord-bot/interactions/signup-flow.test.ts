@@ -433,3 +433,39 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
     expect(call.components).toBeUndefined();
   });
 });
+
+describe("raid save (lockout) is informational in the Discord signup flow", () => {
+  it("a saved character stays selectable, carries a save description on its option, and is summarized up front", async () => {
+    const payload = signupOptionsPayload();
+    payload.booster.eligible = payload.booster.eligible.map((option) =>
+      option.characterId === SYNMIST ? { ...option, raidSave: { bossesDefeated: 8, totalBossCount: 8, isComplete: true } } : option,
+    );
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
+
+    const interaction = fakeInteraction("user-a");
+    await signupButton(interaction, api, RUN_ID, "BOOSTER");
+
+    const call = interaction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toContain("Saved this reset");
+    expect(call.content).toContain("Synmist");
+    const menu = call.components[0].components[0].toJSON();
+    // Still selectable — present in the menu, same as any other eligible character.
+    expect(menu.options.map((option: { value: string }) => option.value)).toEqual(expect.arrayContaining([SYNMIST, FROSTBOLT]));
+    const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
+    expect(synmistOption.description).toContain("8/8");
+  });
+
+  it("selecting a saved character still stages only — no DB call until Confirm", async () => {
+    const payload = signupOptionsPayload();
+    payload.booster.eligible = payload.booster.eligible.map((option) =>
+      option.characterId === SYNMIST ? { ...option, raidSave: { bossesDefeated: 8, totalBossCount: 8, isComplete: true } } : option,
+    );
+    const setCharacterOffers = vi.fn();
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload), setCharacterOffers });
+
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+
+    expect(setCharacterOffers).not.toHaveBeenCalled();
+    expect(getSession("user-a", RUN_ID)?.offers.get(SYNMIST)).toBe("HEALER");
+  });
+});

@@ -133,6 +133,7 @@ export const signupService = {
       difficulty: run.difficulty,
       status: run.status,
       signupsOpen: run.signupsOpen,
+      totalBossCount: run.totalBossCount,
     };
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun, resetIdentifier);
@@ -195,6 +196,7 @@ export const signupService = {
         difficulty: run.difficulty,
         status: run.status,
         signupsOpen: run.signupsOpen,
+        totalBossCount: run.totalBossCount,
       },
       resetIdentifier,
     );
@@ -252,7 +254,7 @@ export const signupService = {
 
     // LOOTBUDDY is not subject to cross-Run reservation (see the audit note on
     // validateOfferedCharacters) — reservationConflict is always null here.
-    const { eligible, ineligible } = evaluateLootbuddyOptions(
+    const { eligible } = evaluateLootbuddyOptions(
       [{ ...character, reservationConflict: null }],
       {
         id: run.id,
@@ -260,15 +262,15 @@ export const signupService = {
         difficulty: run.difficulty,
         status: run.status,
         signupsOpen: run.signupsOpen,
+        totalBossCount: run.totalBossCount,
       },
       resetIdentifier,
     );
 
+    // INACTIVE is the only remaining Lootbuddy ineligibility reason — raid
+    // save is informational only (see evaluateLootbuddyOptions).
     if (!eligible.some((item) => item.characterId === input.characterId)) {
-      if (ineligible[0]?.reason === "INACTIVE") {
-        throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
-      }
-      throw new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
+      throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
     }
 
     const record = await persistSignup({
@@ -513,9 +515,6 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
       "This character is not approved for this difficulty.",
     );
   }
-  if (reason === "LOCKOUT_CONFLICT") {
-    return new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
-  }
   if (reason === "ALREADY_SELECTED_OTHER_RUN") {
     return new DomainError(
       "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
@@ -637,6 +636,7 @@ async function validateOfferedCharacters(
     difficulty: run.difficulty,
     status: run.status,
     signupsOpen: run.signupsOpen,
+    totalBossCount: run.totalBossCount,
   };
   const roleByCharacterId = new Map<string, CharacterRole>();
 
@@ -667,14 +667,12 @@ async function validateOfferedCharacters(
   }
 
   const lootbuddyCharacters = offeredCharacters.map(({ character }) => ({ ...character, reservationConflict: null }));
-  const { eligible, ineligible } = evaluateLootbuddyOptions(lootbuddyCharacters, eligibilityRun, resetIdentifier);
+  const { eligible } = evaluateLootbuddyOptions(lootbuddyCharacters, eligibilityRun, resetIdentifier);
+  // INACTIVE is the only remaining Lootbuddy ineligibility reason — raid save
+  // is informational only (see evaluateLootbuddyOptions).
   for (const { offer } of offeredCharacters) {
     if (!eligible.some((item) => item.characterId === offer.characterId)) {
-      const reason = ineligible.find((item) => item.characterId === offer.characterId)?.reason;
-      if (reason === "INACTIVE") {
-        throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
-      }
-      throw new DomainError("LOCKOUT_CONFLICT", "That character has a conflicting lockout for this run.");
+      throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
     }
   }
   return roleByCharacterId;

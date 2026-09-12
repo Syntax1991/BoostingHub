@@ -58,3 +58,18 @@ export type CharacterRunReservationConflict = {
   runTitle: string;
   scheduledStartAt: string;
 };
+
+/**
+ * Informational raid-save context for the target Run's own raid/difficulty/
+ * reset only — never a blocker. A Raid Lead decides operationally whether to
+ * use an already-saved Character; the server never rejects a signup, offer,
+ * roster selection, or publish because of this.
+ */
+export type SignupRaidSaveInfo = {
+  raidId: string;
+  difficulty: RaidDifficulty;
+  resetIdentifier: string;
+  bossesDefeated: number;
+  totalBossCount: number;
+  isComplete: boolean;
+};

@@ -21,6 +21,7 @@ import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import {
   CHARACTER_ROLE_LABELS,
+  DIFFICULTY_ABBREVIATIONS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
@@ -28,6 +29,12 @@ import type { rosterService } from "@/services/roster.service";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
+
+/** "HC 8/8 · Saved" — informational only, never a reason a candidate can't be selected or published. */
+function formatRaidSave(raidSave: SignupRow["raidSave"]): string | null {
+  if (!raidSave) return null;
+  return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
+}
 
 export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
   const router = useRouter();
@@ -413,6 +420,7 @@ function SignupRowCard({
                 : ""}
             </span>
           ) : null}
+          {formatRaidSave(signup.raidSave) ? <span>{formatRaidSave(signup.raidSave)}</span> : null}
         </div>
         {extras.length > 0 ? (
           <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">

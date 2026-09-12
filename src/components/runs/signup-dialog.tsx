@@ -6,7 +6,13 @@ import { getSignupOptionsAction, setCharacterOffersAction } from "@/controllers/
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { formatDateTime } from "@/lib/datetime";
-import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import {
+  CHARACTER_ROLE_LABELS,
+  CLASS_LABELS,
+  DIFFICULTY_ABBREVIATIONS,
+  LOOTBUDDY_MODE_LABELS,
+  LOOTBUDDY_VERIFICATION_LABELS,
+} from "@/lib/labels";
 import {
   CHARACTER_ROLES,
   LOOTBUDDY_MODES,
@@ -21,6 +27,8 @@ import type { signupService } from "@/services/signup.service";
 type SignupOptions = Awaited<ReturnType<typeof signupService.getSignupOptions>>;
 type Participation = "BOOSTER" | "LOOTBUDDY";
 
+type RaidSaveInfo = SignupOptions["booster"]["eligible"][number]["raidSave"];
+
 type BoosterGroup = {
   characterId: string;
   characterName: string;
@@ -31,11 +39,19 @@ type BoosterGroup = {
   roles: CharacterRole[];
   /** Specialization-derived default for a brand-new selection; null when specialization is missing/unrecognized. */
   defaultRole: CharacterRole | null;
+  /** Informational raid-save progress for this run's raid/difficulty/reset — never affects selectability. */
+  raidSave: RaidSaveInfo;
 };
 
 /** Canonical TANK/HEALER/DPS order for a role dropdown, regardless of a class's own spec-list order. */
 function orderedRoles(roles: CharacterRole[]): CharacterRole[] {
   return CHARACTER_ROLES.filter((role) => roles.includes(role));
+}
+
+/** "HC 8/8 · Saved" — informational only, never a reason a Character can't be offered. */
+function formatRaidSave(raidSave: RaidSaveInfo): string | null {
+  if (!raidSave) return null;
+  return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
 }
 
 function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): BoosterGroup[] {
@@ -47,6 +63,7 @@ function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): Bo
     specialization: option.specialization,
     roles: option.roles,
     defaultRole: option.defaultRole,
+    raidSave: option.raidSave,
   }));
 }
 
@@ -397,6 +414,7 @@ function BoosterCharacterChecklist({
           {groups.map((group) => {
             const isChecked = selected.has(group.characterId);
             const currentRole = roleByCharacterId[group.characterId];
+            const raidSaveLabel = formatRaidSave(group.raidSave);
             return (
               <li
                 key={group.characterId}
@@ -408,8 +426,11 @@ function BoosterCharacterChecklist({
                     checked={isChecked}
                     onChange={() => onToggle(group.characterId)}
                   />
-                  <span className="truncate">
-                    {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">
+                      {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
+                    </span>
+                    {raidSaveLabel ? <span className="text-xs text-muted">{raidSaveLabel}</span> : null}
                   </span>
                 </label>
                 <select
@@ -504,16 +525,22 @@ function LootbuddyChecklist({
         </p>
       ) : (
         <ul className="space-y-2">
-          {options.eligible.map((option) => (
-            <li key={option.characterId} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
-              <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
-                <input type="checkbox" checked={selected.has(option.characterId)} onChange={() => onToggle(option.characterId)} />
-                <span className="truncate">
-                  {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
-                </span>
-              </label>
-            </li>
-          ))}
+          {options.eligible.map((option) => {
+            const raidSaveLabel = formatRaidSave(option.raidSave);
+            return (
+              <li key={option.characterId} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
+                <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
+                  <input type="checkbox" checked={selected.has(option.characterId)} onChange={() => onToggle(option.characterId)} />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">
+                      {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
+                    </span>
+                    {raidSaveLabel ? <span className="text-xs text-muted">{raidSaveLabel}</span> : null}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
         </ul>
       )}
       <label className="block text-sm">
