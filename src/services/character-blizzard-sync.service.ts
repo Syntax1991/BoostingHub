@@ -11,6 +11,7 @@ import {
   realmSlugFromDisplayName,
 } from "@/lib/blizzard/character-domain";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
@@ -23,34 +24,42 @@ import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
  * Owns refreshing already Blizzard-linked characters: single refresh,
  * Refresh All for a region, and the current-raid lockout sync that rides
  * along with a successful profile refresh. Import/link orchestration for
- * new candidates lives in character-blizzard-import.service.ts.
+ * new candidates lives in character-blizzard-import.service.ts. The
+ * scheduled background sync (scheduled-character-sync.service.ts) reuses
+ * refreshLinkedCharacterProfile directly rather than duplicating this logic.
  */
 
 const REFRESH_COOLDOWN_MS = 60_000;
 const REFRESH_ALL_CONCURRENCY = 4;
 
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<R>,
-): Promise<R[]> {
-  if (items.length === 0) return [];
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
+/**
+ * Minimal owner context a refresh actually needs: whose identity-conflict
+ * scope to check and whose name to attribute an Activity row to. Manual
+ * refresh maps its AuthenticatedUser down to this; the scheduled job (which
+ * has no logged-in user) builds it directly from the Character's real owner
+ * — never a fabricated/admin user.
+ */
+export type CharacterSyncOwner = {
+  id: string;
+  name: string;
+};
 
-  async function runWorker() {
-    while (true) {
-      const index = nextIndex;
-      nextIndex += 1;
-      if (index >= items.length) return;
-      results[index] = await worker(items[index]!);
-    }
-  }
-
-  const pool = Math.min(Math.max(1, concurrency), items.length);
-  await Promise.all(Array.from({ length: pool }, () => runWorker()));
-  return results;
+function toSyncOwner(user: AuthenticatedUser): CharacterSyncOwner {
+  return { id: user.id, name: user.name };
 }
+
+export type SyncableCharacter = {
+  id: string;
+  userId: string;
+  name: string;
+  realm: string;
+  region: "EU" | "US";
+  normalizedName: string;
+  normalizedRealm: string;
+  wowClass: string;
+  blizzardCharacterId: string | null;
+  blizzardRealmId: string | null;
+};
 
 async function syncCurrentRaidLockoutsFromBlizzard(character: {
   id: string;
@@ -95,20 +104,16 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
   }
 }
 
-async function refreshLinkedCharacterProfile(
-  user: AuthenticatedUser,
-  character: {
-    id: string;
-    userId: string;
-    name: string;
-    realm: string;
-    region: "EU" | "US";
-    normalizedName: string;
-    normalizedRealm: string;
-    wowClass: string;
-    blizzardCharacterId: string | null;
-    blizzardRealmId: string | null;
-  },
+/**
+ * Reusable lower-level refresh: profile fetch/validate/apply plus current-raid
+ * lockout sync, shared by manual refresh (refreshCharacter,
+ * refreshLinkedCharactersForRegion) and the scheduled background job. Never
+ * touches specialization/primaryRole — those are Character metadata a
+ * Blizzard sync must not overwrite.
+ */
+export async function refreshLinkedCharacterProfile(
+  owner: CharacterSyncOwner,
+  character: SyncableCharacter,
   connectionId: string,
   options: { updateConnectionSync?: boolean; writeActivity?: boolean } = {},
 ): Promise<{ lockoutSynced: boolean }> {
@@ -187,7 +192,7 @@ async function refreshLinkedCharacterProfile(
   const nextNormalizedName = normalizeCharacterIdentity(nextName);
   if (nextNormalizedName !== character.normalizedName) {
     const conflict = await characterRepository.findIdentityConflict({
-      userId: user.id,
+      userId: owner.id,
       region: character.region,
       normalizedName: nextNormalizedName,
       normalizedRealm: character.normalizedRealm,
@@ -236,7 +241,7 @@ async function refreshLinkedCharacterProfile(
   }
   if (writeActivity) {
     await activityRepository.create({
-      userId: user.id,
+      userId: owner.id,
       type: "BATTLENET_CHARACTER_REFRESHED",
       message: lockoutSynced
         ? `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile + current-raid lockouts verified).`
@@ -286,7 +291,7 @@ export const characterBlizzardSyncService = {
       }
     }
 
-    await refreshLinkedCharacterProfile(user, character, connection.id);
+    await refreshLinkedCharacterProfile(toSyncOwner(user), character, connection.id);
 
     const updated = await characterRepository.findById(character.id);
     if (!updated) {
@@ -337,6 +342,7 @@ export const characterBlizzardSyncService = {
       return outcome;
     }
 
+    const syncOwner = toSyncOwner(user);
     const results = await mapWithConcurrency(eligible, REFRESH_ALL_CONCURRENCY, async (character) => {
       if (character.lastSyncedAt) {
         const elapsed = Date.now() - new Date(character.lastSyncedAt).getTime();
@@ -346,7 +352,7 @@ export const characterBlizzardSyncService = {
       }
 
       try {
-        const result = await refreshLinkedCharacterProfile(user, character, connection.id, {
+        const result = await refreshLinkedCharacterProfile(syncOwner, character, connection.id, {
           updateConnectionSync: false,
           writeActivity: false,
         });
