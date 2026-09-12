@@ -8,7 +8,9 @@ import { runService } from "@/services/run.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
+import { runTemplateService } from "@/services/run-template.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
+import { parseManageTemplateFilters } from "@/validators/run-template";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { managementHubService } from "@/services/management-hub.service";
 import { userManagementService } from "@/services/user-management.service";
@@ -112,6 +114,27 @@ export const profileController = {
     const user = await requireUserOrRedirect("/profile");
     return profileService.getProfile(user);
   },
+
+  /**
+   * RAID_LEAD/ADMIN self-service: only the actor's own templates, never
+   * another's. Unlike ADMIN management, the raid lead selector is always
+   * hidden here — even an ADMIN acting on this page may only own the
+   * template as themselves, never assign it to someone else.
+   */
+  async getMyTemplatesPage() {
+    const user = await requireManagerOrRedirect();
+    const [templates, { raids }] = await Promise.all([
+      runTemplateService.listOwn(user),
+      runTemplateService.getCreateFormData(user),
+    ]);
+    return {
+      templates,
+      raids,
+      raidLeads: [{ id: user.id, name: user.name, accountRole: user.accountRole }],
+      canAssignRaidLead: false,
+      defaultRaidLeadId: user.id,
+    };
+  },
 };
 
 export const managementController = {
@@ -138,6 +161,25 @@ export const managementController = {
   async getCreateManyRunsPage() {
     const user = await requireManagerOrRedirect();
     return runService.getCreateManyForm(user);
+  },
+
+  /** ADMIN-only global view across every Raid Lead's templates. */
+  async getManageTemplatesPage(searchParams: {
+    raidLeadId?: string | string[];
+    status?: string | string[];
+  } = {}) {
+    const user = await requireAdminOrRedirect("/manage/templates");
+    const filters = parseManageTemplateFilters(searchParams);
+    const [templates, formData] = await Promise.all([
+      runTemplateService.listAll(user, filters),
+      runTemplateService.getCreateFormData(user),
+    ]);
+    return {
+      templates,
+      filters: { ...filters, status: filters.status ?? "active" },
+      ...formData,
+      defaultRaidLeadId: formData.raidLeads[0]?.id ?? user.id,
+    };
   },
 
   async getBoosterAccessPage(searchParams: {

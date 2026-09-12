@@ -49,6 +49,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const [error, setError] = useState<string | null>(null);
 
   // Shared defaults.
+  const [templateId, setTemplateId] = useState("");
+  const templateLocked = Boolean(templateId);
   const [raidId, setRaidId] = useState(form.raids[0]?.id ?? "");
   const [difficulty, setDifficulty] = useState<RaidDifficulty>(form.defaults.difficulty);
   const [lootType, setLootType] = useState<RunLootType>(form.defaults.lootType);
@@ -64,6 +66,39 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const [rows, setRows] = useState<Row[]>([
     { key: crypto.randomUUID(), scheduledLocal: toDatetimeLocalValue(form.defaults.scheduledStartAt), overrides: {}, expanded: false },
   ]);
+
+  /**
+   * Applying a template copies its planning defaults into Shared Defaults and
+   * locks the effective Raid Lead to the template's owner — staged per-row
+   * raidLeadId overrides are cleared (they'd otherwise hide a mismatch),
+   * while schedules and every other row override are preserved. Selecting
+   * "No template" (empty id) only detaches — it deliberately does not reset
+   * any value already copied in, matching today's fully-editable behavior.
+   */
+  function applyTemplate(nextTemplateId: string) {
+    setTemplateId(nextTemplateId);
+    if (!nextTemplateId) return;
+    const template = form.templates.find((candidate) => candidate.id === nextTemplateId);
+    if (!template) return;
+
+    setRaidId(template.raidId);
+    setDifficulty(template.difficulty);
+    setLootType(template.lootType);
+    setPlannedBossCount(template.plannedBossCount);
+    setDesiredTankCount(template.desiredTankCount);
+    setDesiredHealerCount(template.desiredHealerCount);
+    setDesiredDpsCount(template.desiredDpsCount);
+    setNotes(template.notes ?? "");
+    setRaidLeadId(template.raidLeadId);
+    setRows((current) =>
+      current.map((row) => {
+        if (row.overrides.raidLeadId === undefined) return row;
+        const nextOverrides = { ...row.overrides };
+        delete nextOverrides.raidLeadId;
+        return { ...row, overrides: nextOverrides };
+      }),
+    );
+  }
 
   function selectSharedRaid(nextRaidId: string) {
     setRaidId(nextRaidId);
@@ -213,6 +248,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           scheduledStartAt: scheduledByRow[index],
           overrides: Object.keys(row.overrides).length > 0 ? row.overrides : undefined,
         })),
+        templateId: templateId || undefined,
       });
 
       if (!result.ok) {
@@ -238,6 +274,33 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
           No raid content is available. Reference raids could not be loaded.
         </p>
+      ) : null}
+
+      {form.templates.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="Template"
+            description="Applies a saved planning preset to Shared Defaults and locks the Raid Lead to the template's owner. Other values stay editable after applying."
+          />
+          <div className="px-4 py-4">
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted">Use a template</span>
+              <select
+                aria-label="Run template"
+                value={templateId}
+                onChange={(event) => applyTemplate(event.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2"
+              >
+                <option value="">No template</option>
+                {form.templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </Card>
       ) : null}
 
       <Card>
@@ -307,18 +370,24 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Raid Lead</span>
             {form.canAssignRaidLead ? (
-              <select
-                aria-label="Shared raid lead"
-                value={raidLeadId}
-                onChange={(event) => setRaidLeadId(event.target.value)}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              >
-                {form.raidLeads.map((lead) => (
-                  <option key={lead.id} value={lead.id}>
-                    {lead.name} ({ROLE_LABELS[lead.accountRole]})
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  aria-label="Shared raid lead"
+                  value={raidLeadId}
+                  onChange={(event) => setRaidLeadId(event.target.value)}
+                  disabled={templateLocked}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {form.raidLeads.map((lead) => (
+                    <option key={lead.id} value={lead.id}>
+                      {lead.name} ({ROLE_LABELS[lead.accountRole]})
+                    </option>
+                  ))}
+                </select>
+                {templateLocked ? (
+                  <span className="mt-1 block text-xs text-muted">Locked to the selected template&apos;s raid lead.</span>
+                ) : null}
+              </>
             ) : (
               <>
                 <input
@@ -500,7 +569,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                       />
                     </OverrideField>
 
-                    {form.canAssignRaidLead ? (
+                    {form.canAssignRaidLead && !templateLocked ? (
                       <OverrideField
                         label="Raid Lead"
                         active={row.overrides.raidLeadId !== undefined}

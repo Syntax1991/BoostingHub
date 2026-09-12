@@ -53,6 +53,9 @@ export const createManyRunsSchema = z.object({
     .array(massCreateRowSchema)
     .min(MASS_CREATE_MIN_RUNS, "Add at least one run.")
     .max(MASS_CREATE_MAX_RUNS, `You can create at most ${MASS_CREATE_MAX_RUNS} runs at once.`),
+  // When present, the Service re-resolves this template at submit time and
+  // its raidLeadId is authoritative for every row — see run.service.ts.
+  templateId: entityIdSchema.optional(),
 });
 
 export type CreateManyRunsInput = z.infer<typeof createManyRunsSchema>;

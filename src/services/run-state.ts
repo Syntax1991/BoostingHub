@@ -92,6 +92,22 @@ export function assertValidPlannedBossCount(plannedBossCount: number, totalBossC
   }
 }
 
+/**
+ * Trims notes and normalizes an empty result to null. Shared by Run
+ * create/update and Run Template create/update so both treat "blank notes"
+ * identically.
+ */
+export function notesValue(notes: string | null | undefined): string | null {
+  const trimmed = notes?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function assertComposition(count: number, label: string): void {
+  if (!Number.isInteger(count) || count < RUN_COMPOSITION_MIN || count > RUN_COMPOSITION_MAX) {
+    throw new DomainError("VALIDATION_FAILED", `${label} must be a whole number between ${RUN_COMPOSITION_MIN} and ${RUN_COMPOSITION_MAX}.`);
+  }
+}
+
 export type RunLifecycleCapabilities = {
   canEdit: boolean;
   canEditIdentity: boolean;
