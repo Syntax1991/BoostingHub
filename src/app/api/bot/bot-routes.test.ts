@@ -213,6 +213,33 @@ describe("bot API authentication", () => {
   });
 });
 
+describe("GET /api/bot/discord/sync — channel reconciliation contract", () => {
+  it("exposes a channels array alongside signups/roster, with exactly the fields the bot needs", async () => {
+    const record = await discordStatePut(
+      req(`/api/bot/runs/${runId}/discord-state`, {
+        method: "PUT",
+        headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+        body: { kind: "channel", channelId: "contract-chan-1" },
+      }),
+      params(runId),
+    );
+    expect(record.status).toBe(200);
+
+    const sync = await syncGet(req("/api/bot/discord/sync", { headers: { authorization: `Bearer ${TOKEN}` } })).then((r) =>
+      r.json(),
+    );
+    expect(Array.isArray(sync.data.channels)).toBe(true);
+    const item = sync.data.channels.find((entry: { runId: string }) => entry.runId === runId);
+    expect(item).toBeTruthy();
+    expect(item.existingRunChannelId).toBe("contract-chan-1");
+    expect(typeof item.desiredChannelName).toBe("string");
+    expect(typeof item.archived).toBe("boolean");
+    expect(Object.keys(item).sort()).toEqual(
+      ["archived", "desiredChannelName", "existingRunChannelId", "runId"].sort(),
+    );
+  });
+});
+
 describe("bot API acting-user resolution", () => {
   it("rejects a request with no Discord user header", async () => {
     const res = await signupOptionsGet(

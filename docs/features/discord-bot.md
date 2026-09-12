@@ -24,7 +24,7 @@ Route Handlers under `/api/bot/*` (see [run-signups.md](run-signups.md) for the 
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/bot/discord/sync` | What needs a Discord post created or refreshed |
+| `GET /api/bot/discord/sync` | Independent channel-reconciliation work (`channels`) plus what needs a Discord post created or refreshed (`signups`/`roster`) |
 | `GET /api/bot/runs/:runId/signup-options` | Eligible Characters + current offers for the acting Discord User |
 | `PUT /api/bot/runs/:runId/signup` | `setCharacterOffers` over HTTP |
 | `POST /api/bot/runs/:runId/signup/cancel` | `cancelActiveOffers` over HTTP |
@@ -42,14 +42,15 @@ Every handler: authenticate the bot service → resolve the acting Discord User 
 
 ## Sync architecture
 
-Run/Signup/Roster state never depends synchronously on Discord. `discordSyncService.listSyncWork()` (`src/services/discord-sync.service.ts`) is the single place that decides "something changed":
+Run/Signup/Roster state never depends synchronously on Discord. `discordSyncService.listSyncWork()` (`src/services/discord-sync.service.ts`) is the single place that decides "something changed", and returns three **independent** lanes:
 
-- **Signup embed**: a signature (`uniqueSignupCount:signupWindowOpen:runStatus:desiredChannelName`) is compared against `RunDiscordPost.lastSignupSignature`. DRAFT runs are never candidates. The *first* post additionally requires signup to be genuinely available right now (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen` true) — a Run the bot first sees only after it already reached PUBLISHED/COMPLETED/CANCELLED never gets a brand-new post for a signup phase that's already over. Once a post exists, later updates are unconditional (any non-DRAFT status), so the same message keeps reflecting the Run's real state — including signups closing — all the way through completion. `desiredChannelName` is folded into the signature so a schedule/difficulty/raid-lead change (which changes the desired name) always produces sync work, even when nothing else changed.
-- **Roster embed**: `RunRoster.version` is compared against `RunDiscordPost.lastRosterVersion`; only runs with a published roster are candidates.
+- **`channels`** — channel reconciliation (name + archive/active category) for every Run that already has a persisted `RunDiscordPost.runChannelId`. Completely unconditional: it does not depend on the signup/roster message being dirty, on `Run.status` (DRAFT included), or on anything else — a Run that already owns a dedicated channel always gets a `channels` item, every poll. See "Channel reconciliation" below.
+- **`signups`** — a signature (`uniqueSignupCount:signupWindowOpen:runStatus:desiredChannelName:archived`) is compared against `RunDiscordPost.lastSignupSignature`. DRAFT runs are never candidates. The *first* post additionally requires signup to be genuinely available right now (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen` true) — a Run the bot first sees only after it already reached PUBLISHED/COMPLETED/CANCELLED never gets a brand-new post for a signup phase that's already over. Once a post exists, later updates are unconditional (any non-DRAFT status), so the same message keeps reflecting the Run's real state — including signups closing — all the way through completion. `desiredChannelName`/`archived` are folded into the signature as legacy wake-up signals (historical: before `channels` existed, they were the only way a rename/archive ever got picked up) — kept for now as lower-risk, though `channels` is the actual authoritative fix; a rename or Archive/Restore no longer *depends* on them to reach the channel.
+- **`roster`** — `RunRoster.version` is compared against `RunDiscordPost.lastRosterVersion`; only runs with a published roster are candidates.
 
 `RunDiscordPost` (additive migrations `20260910T2332_discord_integration_state` and `20260911T0136_discord_run_channel`) is small, presentation-only integration state — the channel/message ids the bot already created/posted, so a restart reuses/edits them instead of duplicating. It is never a second source of truth for Run/Signup/Roster data.
 
-The bot's `sync-loop.ts` polls `GET /api/bot/discord/sync` on an interval (`DISCORD_SYNC_INTERVAL_MS`, default 60s), resolves each Run's channel (creating or renaming it — see Per-Run Discord channel below), edits an existing message when an id is present (falling back to a fresh post if that message was deleted out-of-band), and records the result via `PUT /api/bot/runs/:runId/discord-state`. A failed pass is logged and retried on the next tick — it never throws the process down or blocks a BoostingHub Run transition.
+The bot's `sync-loop.ts` polls `GET /api/bot/discord/sync` on an interval (`DISCORD_SYNC_INTERVAL_MS`, default 60s) and processes `channels` **before** `signups`/`roster`, so a Run's channel is already in its correct name/category before any new message work is applied. The resolved channel ids from that pass are reused for the message paths (no duplicate rename/move for a Run that appears in more than one lane the same poll). A failed pass is logged and retried on the next tick — it never throws the process down or blocks a BoostingHub Run transition.
 
 ## Per-Run Discord channel
 
@@ -63,13 +64,34 @@ Preferred mode: each Run that becomes signup-available gets its own dedicated Di
 
 **Rename, not replace**: when the desired name changes (schedule/difficulty/raid-lead edit before roster lock), the sync pass calls `channel.setName(...)` on the *same* channel id. A completed/published Run's source fields are no longer editable through normal Run edit rules, so historical channels are never renamed after the fact.
 
-**Never deleted**: cancellation and completion leave the channel in place with its full history — only the signup embed's buttons/content update to reflect the closed state. There is no automatic archive/delete step.
+**Never deleted, never cloned**: cancellation, completion, and Archive/Restore all leave the channel in place with its full history and identity — Archive/Restore *does* move it to a different category (see "Channel reconciliation" below), but that is a move, never a delete/recreate/clone. The signup embed's buttons/content still update to reflect a closed/cancelled state in the same message.
 
-**Self-healing**: if the stored channel id no longer resolves in Discord (deleted out-of-band), the next sync pass creates a replacement rather than leaving the Run without a home — this is recovery, never the bot deleting anything itself.
+**Self-healing**: if the stored channel id no longer resolves in Discord (deleted out-of-band), the next sync pass creates a replacement rather than leaving the Run without a home — this is recovery, never the bot deleting anything itself. This self-healing is exclusive to the signup path (gated by `isSignupWindowOpen`, same as first-channel provisioning); `channels` reconciliation and the roster path only reuse a channel that already exists — if a Run's channel is missing when only `channels`/roster work would have reached it, that item is skipped with a warning rather than provisioning anything.
 
-**Legacy/test fallback**: when `DISCORD_RUN_CATEGORY_ID` is unset, the bot posts into the single global `DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID` exactly as before per-Run provisioning existed — useful for a minimal test setup that hasn't created a category yet. At least one of the two configurations is required at startup (`loadBotEnv` fails fast otherwise).
+**Legacy/test fallback**: when `DISCORD_RUN_CATEGORY_ID` is unset, the bot posts into the single global `DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID` exactly as before per-Run provisioning existed — useful for a minimal test setup that hasn't created a category yet. At least one of the two configurations is required at startup (`loadBotEnv` fails fast otherwise). `channels` reconciliation only ever concerns `RunDiscordPost.runChannelId` — the legacy global channel ids are never treated as a dedicated Run channel and never appear in `channels`.
 
-**Permissions**: creating and renaming channels requires the bot's role to have **Manage Channels**, in addition to View Channels / Send Messages / Embed Links / Read Message History. The created channel inherits permissions from its parent category by default — no per-channel permission overwrites are created.
+**Permissions**: creating, renaming, and moving channels requires the bot's role to have **Manage Channels**, in addition to View Channels / Send Messages / Embed Links / Read Message History. The created channel inherits permissions from its parent category by default — no per-channel permission overwrites are created, and a category move never resyncs permissions (`lockPermissions: false` — see "Channel reconciliation").
+
+## Channel reconciliation
+
+**Channel state is reconciled independently from message state.** Before this existed, a Run's channel name and archive/active category were only ever corrected as a *side effect* of the bot processing a signup or roster message update — so a Run that already had a settled signup/roster message (the common steady state) got no work item at all, and its channel could sit in the wrong category or under the wrong name indefinitely.
+
+`discordSyncService.listSyncWork()`'s `channels` lane fixes this: it returns one `ChannelSyncWorkItem` — `{ runId, existingRunChannelId, desiredChannelName, archived }`, with `existingRunChannelId` always non-null — for **every** Run that already has a persisted `RunDiscordPost.runChannelId`, regardless of `Run.status` (DRAFT included, for an abnormal legacy row), archive state, or whether any signup/roster message currently needs updating. It is expected and correct for this lane to return the same Run on every poll — BoostingHub's database knows the *desired* name/category but not Discord's *live* `parentId` or actual channel name (including any out-of-band manual change), so the bot must keep re-checking.
+
+`src/discord-bot/channel-reconciliation.ts` holds the actual reconciliation logic, deliberately decoupled from discord.js's concrete channel types behind a narrow `ReconcilableChannel`/`ChannelFetcher` interface so it is unit-testable without a live bot token (`channel-reconciliation.test.ts`). For each item:
+
+1. Fetch the channel by its persisted id (`sync-loop.ts`'s adapter prefers `client.channels.cache` over a `fetch` REST call).
+2. If it can't be resolved (deleted or inaccessible): log a warning and skip — never crash, never provision a replacement (that stays exclusive to the signup path above), and never let one bad channel stop the rest of the batch from reconciling.
+3. If its name doesn't match `desiredChannelName`: `setName(...)` in place.
+4. Independently, resolve the desired parent — `Run.archivedAt` (never `COMPLETED`/`CANCELLED`/`PUBLISHED` status) truthy → `DISCORD_RUN_ARCHIVE_CATEGORY_ID`, else → `DISCORD_RUN_CATEGORY_ID`. If that category is unset: log a warning and leave the channel where it is (never invents another parent, never silently moves an archived channel back to active). If its current `parentId` already matches: no-op. Otherwise `setParent(desiredParentId, { lockPermissions: false })` — a plain move, never a permission resync, never a delete/recreate/clone.
+
+Steps 3 and 4 are each independently idempotent — a channel that's already correctly named and correctly placed produces zero Discord API calls.
+
+`sync-loop.ts` runs `channels` reconciliation first, before any signup/roster message work, and keeps a `runId -> channelId` map from that pass so the message paths reuse the same resolved channel instead of re-resolving (and potentially re-renaming/re-moving) it a second time in the same poll.
+
+**Archive**: `runService.archiveRun` sets `Run.archivedAt`; the next sync pass moves the Run's existing channel to `DISCORD_RUN_ARCHIVE_CATEGORY_ID` — same channel, same history, same messages.
+**Restore**: `runService.restoreRun` clears `archivedAt`; the next sync pass moves the same channel back to `DISCORD_RUN_CATEGORY_ID`.
+Neither ever creates message work by itself — an Archive/Restore with no other Run change produces zero signup/roster reposts, only the channel move.
 
 ## Signup embed
 
@@ -123,14 +145,18 @@ BoostingHub Run becomes OPEN (signup-available)
   → final roster embed posted into the SAME channel
   → republish edits that same roster message
   → completion/cancellation: channel and history preserved, never deleted
+  → Archive: same channel moves to DISCORD_RUN_ARCHIVE_CATEGORY_ID
+  → Restore: same channel moves back to DISCORD_RUN_CATEGORY_ID
 ```
+
+Archive/Restore's channel move is reconciled by the independent `channels` lane (see "Channel reconciliation" above) — it happens whether or not the signup/roster message for that Run currently needs any other update.
 
 ## MVCS / testing
 
-- Pure, fully unit-tested: `custom-ids.ts`, `format.ts`, `discord-channel-name.ts`'s `buildDiscordRunChannelName`, `embeds/signup-embed.ts`, `embeds/roster-embed.ts`, `bot-api-client.ts` (mocked `fetch`), `interactions/error-copy.ts`, `interactions/signup-flow.ts`'s `buildSelectOptions`/`parseSelectedOffers`, `commands/mysignups.ts`'s `formatMySignups`.
-- Bot API routes: tested by calling the exported Route Handler functions directly with constructed `NextRequest`s (`src/app/api/bot/bot-routes.test.ts`) — no live Discord credentials required.
-- `discord-sync.service.ts`: tested against the real dev database like every other Service, including channel provisioning/idempotency/rename (`src/services/discord-sync.service.test.ts`).
-- The discord.js Client wiring itself (`client.ts`, `sync-loop.ts`'s actual channel-create/message send/edit calls, `register-commands.ts`) cannot be unit-tested without a live bot token — it was verified structurally (typecheck, production build, and a boot smoke test against Discord's own token validation) rather than end-to-end.
+- Pure, fully unit-tested: `custom-ids.ts`, `format.ts`, `discord-channel-name.ts`'s `buildDiscordRunChannelName`, `embeds/signup-embed.ts`, `embeds/roster-embed.ts`, `bot-api-client.ts` (mocked `fetch`, including `listSyncWork`'s `channels[]`), `interactions/error-copy.ts`, `interactions/signup-flow.ts`'s `buildSelectOptions`/`parseSelectedOffers`, `commands/mysignups.ts`'s `formatMySignups`, and `channel-reconciliation.ts`'s `reconcileExistingRunChannel`/`reconcileChannels` (rename/archive-move/restore-move/already-correct/missing-category/missing-channel/failure-isolation — all against a fake `ReconcilableChannel`, no discord.js or live token needed).
+- Bot API routes: tested by calling the exported Route Handler functions directly with constructed `NextRequest`s (`src/app/api/bot/bot-routes.test.ts`), including a contract test asserting `GET /api/bot/discord/sync` exposes `channels` alongside `signups`/`roster` — no live Discord credentials required.
+- `discord-sync.service.ts`: tested against the real dev database like every other Service, including channel provisioning/idempotency/rename and the independent `channels` lane — a Run with a settled signup message and no roster still produces a `channels` item on its own (`src/services/discord-sync.service.test.ts`).
+- The discord.js Client wiring itself (`client.ts`, `sync-loop.ts`'s actual channel fetch/create/message send/edit calls, `register-commands.ts`) cannot be unit-tested without a live bot token — it was verified structurally (typecheck, production build, and a boot smoke test against Discord's own token validation) rather than end-to-end. `sync-loop.ts` is kept as thin as possible specifically so the real reconciliation *logic* lives in the unit-tested `channel-reconciliation.ts` instead.
 
 ## Deferred
 

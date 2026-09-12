@@ -6,9 +6,12 @@ import { discordSyncService } from "@/services/discord-sync.service";
 /**
  * GET /api/bot/discord/sync
  *
- * What the Discord bot polls to learn which Runs need their public embed
- * created or refreshed. Run/Signup/Roster state is never posted to Discord
- * speculatively — this is the single place that decides "something changed".
+ * What the Discord bot polls to learn (a) which Runs' existing dedicated
+ * channels need name/category reconciliation (`channels`, independent of
+ * message state) and (b) which Runs need their public embed created or
+ * refreshed (`signups`/`roster`). Run/Signup/Roster state is never posted to
+ * Discord speculatively — this is the single place that decides "something
+ * changed".
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +23,7 @@ export async function GET(request: NextRequest) {
         embed: await discordSyncService.getSignupEmbedData(item.runId),
       })),
     );
-    return botApiOk({ signups, roster: work.roster });
+    return botApiOk({ channels: work.channels, signups, roster: work.roster });
   } catch (error) {
     return botApiError(error);
   }
