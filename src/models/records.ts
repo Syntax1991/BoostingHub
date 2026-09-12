@@ -47,3 +47,29 @@ export type BoosterQualificationRecord = {
 
 /** Enough for eligibility matching. */
 export type BoosterQualificationMatch = Pick<BoosterQualificationRecord, "difficulty" | "status">;
+
+/**
+ * A Character already reserved — draft-selected into another Run's roster, or
+ * SELECTED there — on a different Run scheduled at the exact same time. A
+ * cross-Run scheduling conflict, distinct from a raid lockout.
+ */
+export type CharacterRunReservationConflict = {
+  runId: string;
+  runTitle: string;
+  scheduledStartAt: string;
+};
+
+/**
+ * Informational raid-save context for the target Run's own raid/difficulty/
+ * reset only — never a blocker. A Raid Lead decides operationally whether to
+ * use an already-saved Character; the server never rejects a signup, offer,
+ * roster selection, or publish because of this.
+ */
+export type SignupRaidSaveInfo = {
+  raidId: string;
+  difficulty: RaidDifficulty;
+  resetIdentifier: string;
+  bossesDefeated: number;
+  totalBossCount: number;
+  isComplete: boolean;
+};

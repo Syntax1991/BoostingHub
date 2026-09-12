@@ -8,7 +8,6 @@ import { BotApiError } from "@/discord-bot/bot-api-client";
 const MESSAGES: Record<string, string> = {
   SIGNUP_CLOSED: "Signups are closed for this run.",
   CHARACTER_INACTIVE: "One of the selected characters is inactive.",
-  LOCKOUT_CONFLICT: "One of the selected characters has a conflicting lockout for this run.",
   BOOSTER_ACCESS_REQUIRED: "You need approved booster access for this run's difficulty.",
   BOOSTER_ACCESS_DIFFICULTY_MISMATCH: "One of the selected characters is not approved for this difficulty.",
   CHARACTER_NOT_OWNED: "One of the selected characters does not belong to you.",

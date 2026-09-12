@@ -340,18 +340,12 @@ describe("boosterAccessService approval and signup", () => {
     );
 
     const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
-    // BoosterAccess approval is difficulty-scoped, not role-scoped — signup eligibility
-    // only ever offers the Character's current specialization's role, never every
-    // role the class can perform.
-    expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "HEALER")).toBe(
-      true,
-    );
-    expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "TANK")).toBe(
-      false,
-    );
-    expect(options.booster.eligible.some((item) => item.characterId === character.id && item.role === "DPS")).toBe(
-      false,
-    );
+    // BoosterAccess approval is difficulty-scoped, not role-scoped — the
+    // Character's specialization only determines the signup DEFAULT role;
+    // the eligible option still exposes every role the class can perform.
+    expect(
+      options.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
+    ).toBe(true);
 
     const mythicOpen = "r2222222-2222-4222-8222-222222222222";
     const mythicOptions = await signupService.getSignupOptions(owner, mythicOpen);
@@ -382,11 +376,15 @@ describe("boosterAccessService approval and signup", () => {
     expect(quals).toHaveLength(1);
 
     const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
-    expect(options.booster.eligible.some((item) => item.characterId === first.id && item.role === "HEALER")).toBe(true);
-    expect(options.booster.eligible.some((item) => item.characterId === second.id && item.role === "HEALER")).toBe(
+    expect(
+      options.booster.eligible.some((item) => item.characterId === first.id && item.defaultRole === "HEALER"),
+    ).toBe(true);
+    expect(
+      options.booster.eligible.some((item) => item.characterId === second.id && item.defaultRole === "HEALER"),
+    ).toBe(true);
+    expect(options.booster.eligible.some((item) => item.characterId === dps.id && item.defaultRole === "DPS")).toBe(
       true,
     );
-    expect(options.booster.eligible.some((item) => item.characterId === dps.id && item.role === "DPS")).toBe(true);
     expect(options.booster.eligible.some((item) => item.characterId === paladin.id)).toBe(true);
 
     const otherOptions = await signupService.getSignupOptions(other, ids.heroicOpen);

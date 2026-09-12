@@ -1,11 +1,11 @@
-import type { BoosterQualificationMatch } from "@/models/records";
+import type { BoosterQualificationMatch, CharacterRunReservationConflict, SignupRaidSaveInfo } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
   RunStatus,
   WowClass,
 } from "@/models/enums";
-import { roleForSpecialization } from "@/lib/wow-specializations";
+import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -28,6 +28,13 @@ export type EligibilityCharacter = {
   isActive: boolean;
   boosterQualifications: BoosterQualificationMatch[];
   lockouts: EligibilityLockout[];
+  /**
+   * Non-null when this Character is already reserved — draft-selected into
+   * another Run's roster, or SELECTED there — on a different Run scheduled
+   * at the exact same time. Populated by the caller before evaluation (a
+   * cross-Run scheduling rule, never derived from lockouts).
+   */
+  reservationConflict: CharacterRunReservationConflict | null;
 };
 
 export type EligibilityRun = {
@@ -36,28 +43,35 @@ export type EligibilityRun = {
   difficulty: RaidDifficulty;
   status: RunStatus;
   signupsOpen: boolean;
+  /** The target Run's raid's total boss count — needed only to render raid-save progress (e.g. "8/8"), never for eligibility. */
+  totalBossCount: number;
 };
 
 export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
   | "DIFFICULTY_NOT_APPROVED"
-  | "LOCKOUT_CONFLICT"
-  | "NO_SPECIALIZATION";
+  | "ALREADY_SELECTED_OTHER_RUN";
 
-export type LootbuddyIneligibilityReason = "INACTIVE" | "LOCKOUT_CONFLICT";
+/**
+ * Raid lockouts are informational only (never a Booster or Lootbuddy
+ * eligibility blocker) — see `EligibleBoosterOption.raidSave` /
+ * `EligibleLootbuddyOption.raidSave`. A Lootbuddy is just as Character-backed
+ * as a Booster and the same reasoning applies: there is no product reason to
+ * refuse a saved Character from tagging along for loot, so this list has no
+ * lockout-derived reason left at all.
+ */
+export type LootbuddyIneligibilityReason = "INACTIVE";
 
 export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
-  LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
-  NO_SPECIALIZATION: "Character has no valid specialization set.",
+  ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
 };
 
 export const LOOTBUDDY_INELIGIBILITY_MESSAGES: Record<LootbuddyIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
-  LOCKOUT_CONFLICT: "Conflicting raid lockout this reset.",
 };
 
 export type EligibleBoosterOption = {
@@ -66,7 +80,12 @@ export type EligibleBoosterOption = {
   realm: string;
   wowClass: WowClass;
   specialization: string | null;
-  role: CharacterRole;
+  /** Every role this Character's class can actually perform — the signup role choice is bounded to this set. */
+  roles: CharacterRole[];
+  /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
+  defaultRole: CharacterRole | null;
+  /** Informational only — present when this Character already has raid-save progress for the target Run's exact raid/difficulty/current reset. Never affects eligibility. */
+  raidSave: SignupRaidSaveInfo | null;
 };
 
 export type IneligibleBoosterCharacter = {
@@ -75,6 +94,10 @@ export type IneligibleBoosterCharacter = {
   realm: string;
   reason: BoosterIneligibilityReason;
   message: string;
+  /** Present only when reason is ALREADY_SELECTED_OTHER_RUN. */
+  conflictingRunId?: string;
+  conflictingRunTitle?: string;
+  conflictingScheduledStartAt?: string;
 };
 
 export type EligibleLootbuddyOption = {
@@ -83,6 +106,8 @@ export type EligibleLootbuddyOption = {
   realm: string;
   wowClass: WowClass;
   specialization: string | null;
+  /** Informational only — see EligibleBoosterOption.raidSave. */
+  raidSave: SignupRaidSaveInfo | null;
 };
 
 export type IneligibleLootbuddyCharacter = {
@@ -94,12 +119,45 @@ export type IneligibleLootbuddyCharacter = {
 };
 
 /**
+ * Raid-save progress for the target Run's own raid/difficulty/current reset
+ * only — a Character's lockout on a different raid, difficulty, or an old
+ * reset is never surfaced here, matching "only show the lockout relevant to
+ * the target Run." Informational — the caller never uses this to reject
+ * anything.
+ */
+function findRaidSave(
+  character: Pick<EligibilityCharacter, "lockouts">,
+  run: EligibilityRun,
+  resetIdentifier: string,
+): SignupRaidSaveInfo | null {
+  const lockout = character.lockouts.find(
+    (item) =>
+      item.raidId === run.raidId &&
+      item.difficulty === run.difficulty &&
+      item.resetIdentifier === resetIdentifier &&
+      lockoutService.isProgressLockout(item),
+  );
+  if (!lockout) return null;
+  return {
+    raidId: lockout.raidId,
+    difficulty: lockout.difficulty,
+    resetIdentifier: lockout.resetIdentifier,
+    bossesDefeated: lockout.bossesDefeated,
+    totalBossCount: run.totalBossCount,
+    isComplete: lockout.isComplete,
+  };
+}
+
+/**
  * Booster options require an APPROVED BoosterQualification for the run difficulty.
- * A Character's role is not a choice — it is whatever role its current
- * specialization maps to (roleForSpecialization), so an eligible Character
- * produces exactly one option. A missing or unrecognized specialization is
- * NO_SPECIALIZATION, never a guessed role. Heroic approval never implies
- * Mythic.
+ * A Character's specialization determines only the DEFAULT signup role — the
+ * User may choose any role the Character's class can actually perform
+ * (`rolesForClass`), never restricted to specialization alone. A missing or
+ * unrecognized specialization does not block an otherwise-eligible Character;
+ * it just means no default is offered (`defaultRole: null`) and the User must
+ * choose explicitly. Heroic approval never implies Mythic. Raid save/lockout
+ * status is informational only (`raidSave`) — a saved Character remains fully
+ * eligible; the Raid Lead decides operationally whether to use it.
  */
 export function evaluateBoosterOptions(
   characters: EligibilityCharacter[],
@@ -113,18 +171,37 @@ export function evaluateBoosterOptions(
   const ineligible: IneligibleBoosterCharacter[] = [];
 
   for (const character of characters) {
-    const pushIneligible = (reason: BoosterIneligibilityReason) => {
+    const pushIneligible = (
+      reason: BoosterIneligibilityReason,
+      extra?: Pick<IneligibleBoosterCharacter, "conflictingRunId" | "conflictingRunTitle" | "conflictingScheduledStartAt">,
+    ) => {
       ineligible.push({
         characterId: character.id,
         characterName: character.name,
         realm: character.realm,
         reason,
-        message: BOOSTER_INELIGIBILITY_MESSAGES[reason],
+        message:
+          reason === "ALREADY_SELECTED_OTHER_RUN" && extra?.conflictingRunTitle
+            ? `Already selected for ${extra.conflictingRunTitle}.`
+            : BOOSTER_INELIGIBILITY_MESSAGES[reason],
+        ...extra,
       });
     };
 
     if (!character.isActive) {
       pushIneligible("INACTIVE");
+      continue;
+    }
+
+    // Cross-Run scheduling conflict — independent of booster access, lockouts,
+    // and role choice (the same Character cannot be reserved on two colliding
+    // Runs regardless of which role it would play).
+    if (character.reservationConflict) {
+      pushIneligible("ALREADY_SELECTED_OTHER_RUN", {
+        conflictingRunId: character.reservationConflict.runId,
+        conflictingRunTitle: character.reservationConflict.runTitle,
+        conflictingScheduledStartAt: character.reservationConflict.scheduledStartAt,
+      });
       continue;
     }
 
@@ -141,22 +218,9 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    if (
-      lockoutService.hasRunConflict(character.lockouts, {
-        raidId: run.raidId,
-        difficulty: run.difficulty,
-        resetIdentifier,
-      })
-    ) {
-      pushIneligible("LOCKOUT_CONFLICT");
-      continue;
-    }
-
-    const role = character.specialization ? roleForSpecialization(character.wowClass, character.specialization) : null;
-    if (!role) {
-      pushIneligible("NO_SPECIALIZATION");
-      continue;
-    }
+    const defaultRole = character.specialization
+      ? roleForSpecialization(character.wowClass, character.specialization)
+      : null;
 
     eligible.push({
       characterId: character.id,
@@ -164,7 +228,9 @@ export function evaluateBoosterOptions(
       realm: character.realm,
       wowClass: character.wowClass,
       specialization: character.specialization,
-      role,
+      roles: rolesForClass(character.wowClass),
+      defaultRole,
+      raidSave: findRaidSave(character, run, resetIdentifier),
     });
   }
 
@@ -172,9 +238,10 @@ export function evaluateBoosterOptions(
 }
 
 /**
- * Lootbuddy eligibility is lockout-scoped, not BoosterQualification-scoped.
- * LOOT_ONLY and PLAYING share this check in Phase 2; PLAYING does not invent
- * a booster-access requirement.
+ * Lootbuddy eligibility is not BoosterQualification-scoped. LOOT_ONLY and
+ * PLAYING share this check in Phase 2; PLAYING does not invent a
+ * booster-access requirement. Raid save/lockout status is informational only
+ * (`raidSave`), same as Booster — see evaluateBoosterOptions.
  */
 export function evaluateLootbuddyOptions(
   characters: EligibilityCharacter[],
@@ -199,29 +266,13 @@ export function evaluateLootbuddyOptions(
       continue;
     }
 
-    if (
-      lockoutService.hasRunConflict(character.lockouts, {
-        raidId: run.raidId,
-        difficulty: run.difficulty,
-        resetIdentifier,
-      })
-    ) {
-      ineligible.push({
-        characterId: character.id,
-        characterName: character.name,
-        realm: character.realm,
-        reason: "LOCKOUT_CONFLICT",
-        message: LOOTBUDDY_INELIGIBILITY_MESSAGES.LOCKOUT_CONFLICT,
-      });
-      continue;
-    }
-
     eligible.push({
       characterId: character.id,
       characterName: character.name,
       realm: character.realm,
       wowClass: character.wowClass,
       specialization: character.specialization,
+      raidSave: findRaidSave(character, run, resetIdentifier),
     });
   }
 

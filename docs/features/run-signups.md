@@ -11,7 +11,7 @@ Each `RunSignup` row is one offered Character — the schema needed no redesign 
 - **Set semantics, not additive.** The `offers` array is the complete desired set. Omitting a currently-offered Character withdraws it; a `WITHDRAWN` row matching a re-offered Character is reactivated in place rather than duplicated.
 - **One active participation type per User + Run.** Switching from BOOSTER to LOOTBUDDY (or back) withdraws every active offer of the other type as part of the same atomic call.
 - **All-or-nothing.** If any offered Character fails eligibility, or any removal is currently protected (see below), the whole call is rejected and nothing changes.
-- **Role defaults to the Character's own specialization** when omitted and unambiguous; an explicit `role` is required only when a hybrid class's default isn't valid for the run (rare — `INVALID_CHARACTER_ROLE`/`VALIDATION_FAILED`).
+- **Role is a per-Character User choice, bounded by class — not fixed to specialization.** A Character's specialization only determines the *default* role a client should preselect for a fresh offer (`roleForSpecialization`); the User may offer it as any role its class can actually perform (`rolesForClass` / `isRoleValidForClass`). Every BOOSTER offer must carry an explicit `role` — the server never guesses one and never trusts one that the class can't perform (`INVALID_CHARACTER_ROLE`). See "Booster signup role" below.
 
 Removal protection: a `PENDING` offer may always be withdrawn while lifecycle rules allow editing. An offer currently selected on the **Roster tab's draft** cannot be silently withdrawn (`SIGNUP_OFFER_ROSTER_SELECTED` — the raid lead must change the roster selection first). A `SELECTED` offer after `PUBLISHED` follows the existing self-withdraw lock (see Withdrawal below).
 
@@ -22,9 +22,15 @@ Removal protection: a `PENDING` offer may always be withdrawn while lifecycle ru
 1. Add at least one character on `/characters` if the account has none.
 2. Open `/runs` or `/runs/[runId]`.
 3. Choose **Sign up** on an open run.
-4. Pick Booster or Lootbuddy, then check every Character to offer (or **Select all eligible**).
+4. Pick Booster or Lootbuddy, then check every Character to offer (or **Select all eligible**). For Booster, checking a Character for the first time seeds its role dropdown with the specialization-derived default (never a guess, never the class's first role in enum order) — the User can change it to any role the class can perform before submitting.
 5. Submit once. `setCharacterOffers` reconciles the whole set; rows are `PENDING`.
-6. Review or edit on `/my-runs` or the Run detail Signups tab — reopening the dialog preselects the current active offer-set.
+6. Review or edit on `/my-runs` or the Run detail Signups tab — reopening the dialog preselects the current active offer-set, including each Character's **persisted** role (which wins over the specialization default — the User's prior choice for this Run is never silently reverted).
+
+## Booster signup role
+
+A Character's specialization (`roleForSpecialization`) determines only the **default** role offered in the Web dialog and the Discord character-select label — never a restriction. The actual allowed set is everything the Character's *class* can perform (`rolesForClass` / `isRoleValidForClass`, in `src/lib/wow-specializations.ts`): e.g. a Mistweaver Monk defaults to Healer but may be offered as Tank or DPS; a Restoration Shaman defaults to Healer but may only be offered as Healer or DPS (Shaman cannot Tank). `RunSignup.role` is the only place the chosen role lives — offering a Character as a different role never mutates `Character.specialization` or `Character.primaryRole`.
+
+The server requires an explicit `role` on every BOOSTER offer and validates it with `isRoleValidForClass`, rejecting anything the class genuinely cannot perform (`INVALID_CHARACTER_ROLE`) — it never re-derives or silently corrects a role from specialization. If a Character's specialization is missing or unrecognized, it stays eligible (never blocked for this reason alone) with no default role — the User must choose explicitly.
 
 ## Participation types
 
@@ -41,8 +47,8 @@ Eligibility (server, re-checked on submit):
 
 1. Character belongs to the current user
 2. Character is active
-3. Approved BoosterQualification matches the User + **this** run difficulty (class/role are character validation, not qualification dimensions)
-4. Selected role is valid for the character's class
+3. Approved BoosterQualification matches the User + **this** run difficulty (class/role are character validation, not qualification dimensions — an approved User may offer an eligible Character in any role its class can perform)
+4. Offered role is valid for the character's class (`isRoleValidForClass`) — not restricted to the specialization-derived default
 5. No progress lockout for character + raid + difficulty + reset
 6. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
 7. No active duplicate for run + user + character + BOOSTER

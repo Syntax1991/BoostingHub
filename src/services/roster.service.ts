@@ -14,6 +14,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus } from "@/models/enums";
+import type { SignupRaidSaveInfo } from "@/models/records";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 
@@ -21,23 +22,34 @@ type InspectedSignup = RosterSignupRow & {
   draftSelected: boolean;
   characterActive: boolean;
   boosterApproved: boolean;
-  lockoutConflict: boolean;
+  /** Informational only — never a roster blocker. See signup-eligibility.ts. */
+  raidSave: SignupRaidSaveInfo | null;
   issue: string | null;
 };
 
 function inspectSignup(
   signup: RosterSignupRow,
-  run: { raidId: string; difficulty: RaidDifficulty },
+  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number },
   resetIdentifier: string,
 ): Omit<InspectedSignup, "draftSelected"> {
   const character = signup.character;
-  const lockoutConflict = character
-    ? lockoutService.hasRunConflict(character.lockouts, {
-        raidId: run.raidId,
-        difficulty: run.difficulty,
-        resetIdentifier,
-      })
-    : false;
+  const matchingLockout = character?.lockouts.find(
+    (lockout) =>
+      lockout.raidId === run.raidId &&
+      lockout.difficulty === run.difficulty &&
+      lockout.resetIdentifier === resetIdentifier &&
+      lockoutService.isProgressLockout(lockout),
+  );
+  const raidSave: SignupRaidSaveInfo | null = matchingLockout
+    ? {
+        raidId: matchingLockout.raidId,
+        difficulty: matchingLockout.difficulty,
+        resetIdentifier: matchingLockout.resetIdentifier,
+        bossesDefeated: matchingLockout.bossesDefeated,
+        totalBossCount: run.totalBossCount,
+        isComplete: matchingLockout.isComplete,
+      }
+    : null;
   const boosterApproved =
     signup.participationType !== "BOOSTER" || !signup.role || !character
       ? signup.participationType !== "BOOSTER"
@@ -49,7 +61,6 @@ function inspectSignup(
   let issue: string | null = null;
   if (signup.status === "WITHDRAWN") issue = "Withdrawn";
   else if (!characterActive) issue = "Character is inactive.";
-  else if (lockoutConflict) issue = `Locked for this ${DIFFICULTY_LABELS[run.difficulty]} reset`;
   else if (signup.participationType === "BOOSTER" && !boosterApproved) {
     const roleLabel = signup.role ? CHARACTER_ROLE_LABELS[signup.role].toLowerCase() : "role";
     issue = `${DIFFICULTY_LABELS[run.difficulty]} ${roleLabel} access is no longer approved`;
@@ -59,7 +70,7 @@ function inspectSignup(
     ...signup,
     characterActive,
     boosterApproved,
-    lockoutConflict,
+    raidSave,
     issue,
   };
 }
@@ -75,7 +86,6 @@ function asMember(row: InspectedSignup) {
     status: row.status,
     characterActive: row.characterActive,
     boosterApproved: row.boosterApproved,
-    lockoutConflict: row.lockoutConflict,
   };
 }
 
@@ -267,6 +277,23 @@ export const rosterService = {
       throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
     }
 
+    // Cross-Run Character reservation, BOOSTER only (see the LOOTBUDDY audit
+    // note in signup.service.ts). Deselecting never needs this check — that
+    // is exactly how a reservation is released for another colliding Run.
+    if (input.selected && signup.participationType === "BOOSTER" && signup.character) {
+      const conflicts = await signupRepository.findReservationConflicts({
+        characterIds: [signup.character.id],
+        targetRunId: input.runId,
+        scheduledStartAt: run.scheduledStartAt,
+      });
+      if (conflicts.length > 0) {
+        throw new DomainError(
+          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+          `${signup.character.name} is already selected for ${conflicts[0].runTitle}.`,
+        );
+      }
+    }
+
     /**
      * One selected participation per user per run. Selecting a second offer
      * replaces the previous draft row instead of stacking two slots.
@@ -281,6 +308,9 @@ export const rosterService = {
       signupId: input.signupId,
       selected: input.selected,
       replaceSignupIds,
+      characterId: signup.participationType === "BOOSTER" ? (signup.character?.id ?? null) : null,
+      targetRunId: input.runId,
+      scheduledStartAt: run.scheduledStartAt,
     });
 
     if (run.status === "OPEN") {
@@ -364,6 +394,31 @@ export const rosterService = {
     }
 
     const selectedIds = selected.map((item) => item.id);
+
+    // Cross-Run Character reservation, BOOSTER only (see the LOOTBUDDY audit
+    // note in signup.service.ts). Booster access and lockouts are already
+    // re-checked above via inspectSignup for the same reason: eligibility
+    // can drift between signup time and publish time.
+    const selectedCharacterIds = selected
+      .filter((item) => item.participationType === "BOOSTER")
+      .map((item) => item.character?.id)
+      .filter((id): id is string => Boolean(id));
+    if (selectedCharacterIds.length > 0) {
+      const conflicts = await signupRepository.findReservationConflicts({
+        characterIds: selectedCharacterIds,
+        targetRunId: input.runId,
+        scheduledStartAt: run.scheduledStartAt,
+      });
+      if (conflicts.length > 0) {
+        const conflict = conflicts[0];
+        const conflictingName = selected.find((item) => item.character?.id === conflict.characterId)?.character?.name;
+        throw new DomainError(
+          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+          `${conflictingName ?? "A selected character"} is already selected for ${conflict.runTitle}. Resolve the conflict before publishing.`,
+        );
+      }
+    }
+
     const publishedSelection = inspected.filter((item) => item.status === "SELECTED");
     if (
       roster.publishedAt &&
@@ -406,6 +461,8 @@ export const rosterService = {
       rosterId: roster.id,
       expectedVersion: input.version,
       selectedSignupIds: selectedIds,
+      selectedCharacterIds,
+      scheduledStartAt: run.scheduledStartAt,
       notSelectedSignupIds: notSelectedIds,
       fromStatus: run.status,
       runStatus: nextStatus,

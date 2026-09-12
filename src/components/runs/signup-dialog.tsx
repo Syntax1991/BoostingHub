@@ -6,8 +6,15 @@ import { getSignupOptionsAction, setCharacterOffersAction } from "@/controllers/
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { formatDateTime } from "@/lib/datetime";
-import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import {
+  CHARACTER_ROLE_LABELS,
+  CLASS_LABELS,
+  DIFFICULTY_ABBREVIATIONS,
+  LOOTBUDDY_MODE_LABELS,
+  LOOTBUDDY_VERIFICATION_LABELS,
+} from "@/lib/labels";
+import {
+  CHARACTER_ROLES,
   LOOTBUDDY_MODES,
   LOOTBUDDY_VERIFICATIONS,
   type CharacterRole,
@@ -20,17 +27,33 @@ import type { signupService } from "@/services/signup.service";
 type SignupOptions = Awaited<ReturnType<typeof signupService.getSignupOptions>>;
 type Participation = "BOOSTER" | "LOOTBUDDY";
 
+type RaidSaveInfo = SignupOptions["booster"]["eligible"][number]["raidSave"];
+
 type BoosterGroup = {
   characterId: string;
   characterName: string;
   realm: string;
   wowClass: WowClass;
   specialization: string | null;
-  /** Whatever the Character's current specialization maps to — never a User choice. */
-  role: CharacterRole;
+  /** Every role this Character's class can perform — the role choice is bounded to this set, never just one. */
+  roles: CharacterRole[];
+  /** Specialization-derived default for a brand-new selection; null when specialization is missing/unrecognized. */
+  defaultRole: CharacterRole | null;
+  /** Informational raid-save progress for this run's raid/difficulty/reset — never affects selectability. */
+  raidSave: RaidSaveInfo;
 };
 
-/** The server already returns exactly one, authoritative role per eligible Character. */
+/** Canonical TANK/HEALER/DPS order for a role dropdown, regardless of a class's own spec-list order. */
+function orderedRoles(roles: CharacterRole[]): CharacterRole[] {
+  return CHARACTER_ROLES.filter((role) => roles.includes(role));
+}
+
+/** "HC 8/8 · Saved" — informational only, never a reason a Character can't be offered. */
+function formatRaidSave(raidSave: RaidSaveInfo): string | null {
+  if (!raidSave) return null;
+  return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
+}
+
 function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): BoosterGroup[] {
   return eligible.map((option) => ({
     characterId: option.characterId,
@@ -38,7 +61,9 @@ function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): Bo
     realm: option.realm,
     wowClass: option.wowClass,
     specialization: option.specialization,
-    role: option.role,
+    roles: option.roles,
+    defaultRole: option.defaultRole,
+    raidSave: option.raidSave,
   }));
 }
 
@@ -59,6 +84,7 @@ export function RunSignupButton({
   const [success, setSuccess] = useState<string | null>(null);
   const [participation, setParticipation] = useState<Participation>("BOOSTER");
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<string>>(new Set());
+  const [roleByCharacterId, setRoleByCharacterId] = useState<Record<string, CharacterRole>>({});
   const [mode, setMode] = useState<LootbuddyMode>("LOOT_ONLY");
   const [verification, setVerification] = useState<LootbuddyVerification>("NONE");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,6 +107,10 @@ export function RunSignupButton({
     setOptions(result.data);
     setParticipation(result.data.activeOffer.participationType ?? "BOOSTER");
     setSelectedCharacterIds(new Set(result.data.activeOffer.characterIds));
+    // Existing persisted RunSignup.role wins over the specialization default —
+    // the User explicitly chose this role for this Run; reopening the dialog
+    // must never silently revert it.
+    setRoleByCharacterId({ ...result.data.activeOffer.roleByCharacterId } as Record<string, CharacterRole>);
     setMode(result.data.activeOffer.lootbuddyMode ?? "LOOT_ONLY");
     setVerification(result.data.activeOffer.lootbuddyVerification ?? "NONE");
   }
@@ -101,6 +131,7 @@ export function RunSignupButton({
       setError(null);
       setSuccess(null);
       setSelectedCharacterIds(new Set());
+      setRoleByCharacterId({});
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
@@ -123,8 +154,37 @@ export function RunSignupButton({
     });
   }
 
+  /**
+   * When a Character first becomes selected, initialize its role from the
+   * specialization-derived default — never from class order, never a single
+   * global role. A Character re-checked after being unchecked keeps whatever
+   * role it already had in this dialog session.
+   */
+  function toggleBoosterCharacter(characterId: string) {
+    toggleCharacter(characterId);
+    setRoleByCharacterId((current) => {
+      if (current[characterId]) return current;
+      const group = boosterGroups.find((item) => item.characterId === characterId);
+      return group?.defaultRole ? { ...current, [characterId]: group.defaultRole } : current;
+    });
+  }
+
+  function setBoosterRole(characterId: string, role: CharacterRole) {
+    setRoleByCharacterId((current) => ({ ...current, [characterId]: role }));
+  }
+
+  /** Each newly-selected Character is initialized independently: its own existing role or its own specialization default — never one role for the whole batch. */
   function selectAllEligibleBooster() {
     setSelectedCharacterIds(new Set(boosterGroups.map((group) => group.characterId)));
+    setRoleByCharacterId((current) => {
+      const next = { ...current };
+      for (const group of boosterGroups) {
+        if (!next[group.characterId] && group.defaultRole) {
+          next[group.characterId] = group.defaultRole;
+        }
+      }
+      return next;
+    });
   }
 
   function selectAllEligibleLootbuddy() {
@@ -134,10 +194,21 @@ export function RunSignupButton({
 
   function submit() {
     setError(null);
+
+    if (participation === "BOOSTER") {
+      const missingRole = [...selectedCharacterIds].find((characterId) => !roleByCharacterId[characterId]);
+      if (missingRole) {
+        const group = boosterGroups.find((item) => item.characterId === missingRole);
+        setError(`Choose a role for ${group?.characterName ?? "the selected character"}.`);
+        return;
+      }
+    }
+
     startTransition(async () => {
-      // Role is never a client choice — the server derives it from each
-      // Character's current specialization for BOOSTER offers.
-      const offers = [...selectedCharacterIds].map((characterId) => ({ characterId }));
+      const offers = [...selectedCharacterIds].map((characterId) => ({
+        characterId,
+        ...(participation === "BOOSTER" ? { role: roleByCharacterId[characterId] } : {}),
+      }));
 
       const result = await setCharacterOffersAction({
         runId,
@@ -219,7 +290,9 @@ export function RunSignupButton({
                 groups={boosterGroups}
                 ineligible={options.booster.ineligible}
                 selected={selectedCharacterIds}
-                onToggle={toggleCharacter}
+                roleByCharacterId={roleByCharacterId}
+                onToggle={toggleBoosterCharacter}
+                onRoleChange={setBoosterRole}
                 onSelectAll={selectAllEligibleBooster}
               />
             ) : (
@@ -300,15 +373,26 @@ function BoosterCharacterChecklist({
   groups,
   ineligible,
   selected,
+  roleByCharacterId,
   onToggle,
+  onRoleChange,
   onSelectAll,
 }: {
   groups: BoosterGroup[];
   ineligible: SignupOptions["booster"]["ineligible"];
   selected: Set<string>;
+  roleByCharacterId: Record<string, CharacterRole>;
   onToggle: (characterId: string) => void;
+  onRoleChange: (characterId: string, role: CharacterRole) => void;
   onSelectAll: () => void;
 }) {
+  // Already-selected-elsewhere is shown inline (visible but disabled) rather
+  // than tucked into the collapsed "unavailable" details below — the User
+  // should see which of their characters is double-booked, and where,
+  // without hunting for it. Every other ineligibility reason stays collapsed.
+  const reservationBlocked = ineligible.filter((item) => item.reason === "ALREADY_SELECTED_OTHER_RUN");
+  const otherIneligible = ineligible.filter((item) => item.reason !== "ALREADY_SELECTED_OTHER_RUN");
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -319,7 +403,7 @@ function BoosterCharacterChecklist({
           </button>
         ) : null}
       </div>
-      {groups.length === 0 ? (
+      {groups.length === 0 && reservationBlocked.length === 0 ? (
         <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
           {ineligible.length === 0
             ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
@@ -327,31 +411,72 @@ function BoosterCharacterChecklist({
         </p>
       ) : (
         <ul className="space-y-2">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const isChecked = selected.has(group.characterId);
+            const currentRole = roleByCharacterId[group.characterId];
+            const raidSaveLabel = formatRaidSave(group.raidSave);
+            return (
+              <li
+                key={group.characterId}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2"
+              >
+                <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => onToggle(group.characterId)}
+                  />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">
+                      {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
+                    </span>
+                    {raidSaveLabel ? <span className="text-xs text-muted">{raidSaveLabel}</span> : null}
+                  </span>
+                </label>
+                <select
+                  aria-label={`Role for ${group.characterName}`}
+                  value={currentRole ?? ""}
+                  disabled={!isChecked}
+                  onChange={(event) => onRoleChange(group.characterId, event.target.value as CharacterRole)}
+                  className="h-8 shrink-0 rounded-md border border-border bg-surface px-2 text-xs disabled:opacity-50"
+                >
+                  {!currentRole ? (
+                    <option value="" disabled>
+                      Choose a role
+                    </option>
+                  ) : null}
+                  {orderedRoles(group.roles).map((role) => (
+                    <option key={role} value={role}>
+                      {CHARACTER_ROLE_LABELS[role]}
+                    </option>
+                  ))}
+                </select>
+              </li>
+            );
+          })}
+          {reservationBlocked.map((item) => (
             <li
-              key={group.characterId}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2"
+              key={item.characterId}
+              className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-raised/50 px-3 py-2 opacity-75"
             >
-              <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.has(group.characterId)}
-                  onChange={() => onToggle(group.characterId)}
-                />
+              <div className="flex min-w-0 flex-1 flex-col text-sm">
                 <span className="truncate">
-                  {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
+                  {item.characterName}-{item.realm}
                 </span>
-              </label>
-              <span className="shrink-0 text-xs text-muted">{CHARACTER_ROLE_LABELS[group.role]}</span>
+                <span className="text-xs text-danger">
+                  Unavailable — already selected for another run
+                  {item.conflictingRunTitle ? `: ${item.conflictingRunTitle}` : ""}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
       )}
-      {ineligible.length > 0 ? (
+      {otherIneligible.length > 0 ? (
         <details className="text-xs text-muted">
-          <summary>{ineligible.length} character{ineligible.length === 1 ? "" : "s"} unavailable</summary>
+          <summary>{otherIneligible.length} character{otherIneligible.length === 1 ? "" : "s"} unavailable</summary>
           <ul className="mt-2 space-y-1">
-            {ineligible.map((item) => (
+            {otherIneligible.map((item) => (
               <li key={item.characterId}>
                 {item.characterName}-{item.realm}: {item.message}
               </li>
@@ -400,16 +525,22 @@ function LootbuddyChecklist({
         </p>
       ) : (
         <ul className="space-y-2">
-          {options.eligible.map((option) => (
-            <li key={option.characterId} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
-              <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
-                <input type="checkbox" checked={selected.has(option.characterId)} onChange={() => onToggle(option.characterId)} />
-                <span className="truncate">
-                  {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
-                </span>
-              </label>
-            </li>
-          ))}
+          {options.eligible.map((option) => {
+            const raidSaveLabel = formatRaidSave(option.raidSave);
+            return (
+              <li key={option.characterId} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
+                <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
+                  <input type="checkbox" checked={selected.has(option.characterId)} onChange={() => onToggle(option.characterId)} />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">
+                      {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
+                    </span>
+                    {raidSaveLabel ? <span className="text-xs text-muted">{raidSaveLabel}</span> : null}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
         </ul>
       )}
       <label className="block text-sm">
