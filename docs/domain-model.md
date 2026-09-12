@@ -104,6 +104,10 @@ Historical Runs are **not** retroactively retitled — a migration backfills `lo
 
 `Run.plannedBossCount` must satisfy `1 <= plannedBossCount <= <raid's total boss count>` (validated by `assertValidPlannedBossCount`, throwing `RUN_BOSS_COUNT_INVALID`). Create defaults it to the raid's full total; selecting a different raid resets it to that raid's total.
 
+### Historical raid availability
+
+A raid is never deleted when superseded — `RaidRecord.availableForRuns` (catalog: `WowRaidCatalogEntry.availableForRuns`, persisted on the existing `Raid.isActive` column, no separate column) controls only whether it can be picked for a **new** Run, independent of `currentForLockouts` (the separate Blizzard lockout-derivation target). `createRun` rejects an unavailable raid with `RAID_NOT_AVAILABLE_FOR_RUNS`; `updateRun` only enforces this when the raid is actually changing to a different one — keeping an existing (possibly historical) raid, including a difficulty-only change, is never blocked. See [run-management.md § Historical raid availability](features/run-management.md#historical-raid-availability) for the full detail.
+
 ### Discord channel naming
 
 Discord run-channel names are derived from the same structured fields as the title — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{planned}of{total}-{raidLead}`, e.g. `thu-2100-hc-vip-7of9-titan`. Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`), so an invalid state like `my-saved` can never render. Any change to a naming-source field (schedule, difficulty, loot type, planned boss count, or raid lead) renames the Run's existing Discord channel in place — the bot never creates a replacement channel or reposts existing messages for a rename.
