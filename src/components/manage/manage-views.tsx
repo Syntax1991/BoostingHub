@@ -24,20 +24,12 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
         description="Create drafts, open signups, and open the canonical run page to roster. Raid leads see assigned runs. Admins see every run."
         actions={
           data.canCreate ? (
-            <div className="flex gap-2">
-              <Link
-                href="/manage/runs/create-many"
-                className="inline-flex h-9 items-center rounded-md border border-border bg-surface-raised px-3 text-sm font-medium hover:bg-[#222a3b]"
-              >
-                Create Many
-              </Link>
-              <Link
-                href="/manage/runs/new"
-                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
-              >
-                Create Run
-              </Link>
-            </div>
+            <Link
+              href="/manage/runs/create"
+              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+            >
+              Create Runs
+            </Link>
           ) : null
         }
       />

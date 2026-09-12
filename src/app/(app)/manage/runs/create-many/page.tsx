@@ -1,16 +1,9 @@
-import { managementController } from "@/controllers/app.controller";
-import { PageHeader } from "@/components/ui/primitives";
-import { RunCreateManyForm } from "@/components/runs/run-create-many-form";
+import { redirect } from "next/navigation";
 
-export default async function CreateManyRunsPage() {
-  const form = await managementController.getCreateManyRunsPage();
-  return (
-    <div>
-      <PageHeader
-        title="Create Many Runs"
-        description="Set shared defaults, add one row per concrete run, then submit once. Every run starts as a draft with signups closed — open each one individually when it's ready."
-      />
-      <RunCreateManyForm form={form} />
-    </div>
-  );
+/**
+ * Legacy URL. Run creation is one canonical workflow (1-25 drafts) at
+ * /manage/runs/create — this route only preserves old links/bookmarks.
+ */
+export default function CreateManyRunsRedirectPage() {
+  redirect("/manage/runs/create");
 }

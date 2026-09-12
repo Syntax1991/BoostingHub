@@ -42,7 +42,7 @@ function nextDefaultLocal(afterLocal: string): string {
   }
 }
 
-export function RunCreateManyForm({ form }: { form: CreateManyRunsForm }) {
+export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const router = useRouter();
   const errorId = useId();
   const [pending, startTransition] = useTransition();

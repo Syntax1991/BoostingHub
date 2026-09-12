@@ -131,10 +131,9 @@ export const managementController = {
     return runService.getManagedRunsPage(user, filters);
   },
 
-  async getCreateRunPage() {
-    const user = await requireManagerOrRedirect();
-    return runService.getCreateForm(user);
-  },
+  // Note: no single-Run getCreateRunPage anymore — Run creation is one
+  // canonical workflow at /manage/runs/create. runService.getCreateForm
+  // remains for internal/test use only.
 
   async getCreateManyRunsPage() {
     const user = await requireManagerOrRedirect();
