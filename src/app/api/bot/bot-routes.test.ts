@@ -65,7 +65,12 @@ async function deleteIfPresent(table: string, id: string) {
   }
 }
 
-function futureIso(days = 10) {
+// Small default offset: guaranteed to classify CURRENT or NEXT regardless of
+// where "now" falls in the current raid-ID week (see wow-run-week.ts — the
+// minimum reach into NEXT from any point in CURRENT is always > 7 days), so
+// these fixtures stay eligible for first-channel provisioning no matter when
+// the suite actually runs.
+function futureIso(days = 2) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
@@ -233,9 +238,9 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
     expect(item).toBeTruthy();
     expect(item.existingRunChannelId).toBe("contract-chan-1");
     expect(typeof item.desiredChannelName).toBe("string");
-    expect(typeof item.archived).toBe("boolean");
+    expect(["CURRENT", "NEXT", "ARCHIVE"]).toContain(item.targetBucket);
     expect(Object.keys(item).sort()).toEqual(
-      ["archived", "desiredChannelName", "existingRunChannelId", "runId"].sort(),
+      ["desiredChannelName", "existingRunChannelId", "runId", "targetBucket"].sort(),
     );
   });
 });

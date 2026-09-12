@@ -5,11 +5,13 @@
  * adapter (a `ChannelFetcher`) that resolves a real channel into the narrow
  * `ReconcilableChannel` shape this module actually needs.
  *
- * Scope: reconciling an EXISTING per-Run channel's name and archive/active
- * category. This module never provisions a Run's first channel — that stays
- * exclusively gated behind the signup path's `isSignupWindowOpen` rule in
- * discord-sync.service.ts. See docs/features/discord-bot.md § channel
- * reconciliation for the full architecture.
+ * Scope: reconciling an EXISTING per-Run channel's name and CURRENT/NEXT/
+ * ARCHIVE category. This module never provisions a Run's first channel —
+ * that stays exclusively gated behind the signup path's `isSignupWindowOpen`
+ * + week-bucket rule in discord-sync.service.ts, and never reproduces that
+ * weekly calendar logic itself: `item.targetBucket` arrives already decided
+ * by the Service. See docs/features/discord-bot.md § weekly raid-ID
+ * categories for the full architecture.
  */
 
 export type ReconcilableChannel = {
@@ -24,7 +26,8 @@ export type ReconcilableChannel = {
 export type ChannelFetcher = (channelId: string) => Promise<ReconcilableChannel | null>;
 
 export type ChannelReconciliationEnv = {
-  discordRunCategoryId: string | null;
+  discordRunCurrentCategoryId: string | null;
+  discordRunNextCategoryId: string | null;
   discordRunArchiveCategoryId: string | null;
 };
 
@@ -32,7 +35,7 @@ export type ChannelReconciliationItem = {
   runId: string;
   existingRunChannelId: string;
   desiredChannelName: string;
-  archived: boolean;
+  targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
 };
 
 export type ChannelReconciliationResult =
@@ -43,10 +46,10 @@ export type ChannelReconciliationResult =
 /**
  * Reconciles one already-existing Run channel: renames it in place if its
  * name has drifted, then independently moves it to whichever category
- * (active/archive) its Run's current archived state calls for. Both steps
- * are idempotent no-ops when the channel is already correct, and neither
- * ever deletes, recreates, or clones the channel — the same Discord channel
- * identity survives every Archive/Restore/rename.
+ * (CURRENT/NEXT/ARCHIVE) `item.targetBucket` calls for. Both steps are
+ * idempotent no-ops when the channel is already correct, and neither ever
+ * deletes, recreates, or clones the channel — the same Discord channel
+ * identity survives every Archive/Restore/rename/weekly rollover.
  */
 export async function reconcileExistingRunChannel(
   fetchChannel: ChannelFetcher,
@@ -75,12 +78,21 @@ export async function reconcileExistingRunChannel(
     }
   }
 
-  const desiredParentId = item.archived ? env.discordRunArchiveCategoryId : env.discordRunCategoryId;
+  const desiredParentId =
+    item.targetBucket === "ARCHIVE"
+      ? env.discordRunArchiveCategoryId
+      : item.targetBucket === "NEXT"
+        ? env.discordRunNextCategoryId
+        : env.discordRunCurrentCategoryId;
   if (!desiredParentId) {
+    const missingVar =
+      item.targetBucket === "ARCHIVE"
+        ? "DISCORD_RUN_ARCHIVE_CATEGORY_ID"
+        : item.targetBucket === "NEXT"
+          ? "DISCORD_RUN_NEXT_CATEGORY_ID"
+          : "DISCORD_RUN_CURRENT_CATEGORY_ID";
     console.warn(
-      item.archived
-        ? `[discord-bot] run ${item.runId} is archived but DISCORD_RUN_ARCHIVE_CATEGORY_ID is unset — leaving its channel where it is`
-        : `[discord-bot] run ${item.runId} needs its active category but DISCORD_RUN_CATEGORY_ID is unset — leaving its channel where it is`,
+      `[discord-bot] run ${item.runId} needs its ${item.targetBucket} category but ${missingVar} is unset — leaving its channel where it is`,
     );
     return { status: "ok", channelId: channel.id };
   }

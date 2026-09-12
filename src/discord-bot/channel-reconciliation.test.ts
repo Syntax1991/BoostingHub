@@ -8,14 +8,15 @@ import {
   type ReconcilableChannel,
 } from "@/discord-bot/channel-reconciliation";
 
-const ACTIVE_CATEGORY = "active-cat-1";
+const CURRENT_CATEGORY = "current-cat-1";
+const NEXT_CATEGORY = "next-cat-1";
 const ARCHIVE_CATEGORY = "archive-cat-1";
 
 function fakeChannel(overrides: { id?: string; name?: string; parentId?: string | null } = {}) {
   return {
     id: overrides.id ?? "chan-1",
     name: overrides.name ?? "current-name",
-    parentId: overrides.parentId ?? ACTIVE_CATEGORY,
+    parentId: overrides.parentId ?? CURRENT_CATEGORY,
     setName: vi.fn().mockResolvedValue(undefined),
     setParent: vi.fn().mockResolvedValue(undefined),
   };
@@ -30,47 +31,86 @@ function item(overrides: Partial<ChannelReconciliationItem> = {}): ChannelReconc
     runId: "run-1",
     existingRunChannelId: "chan-1",
     desiredChannelName: "current-name",
-    archived: false,
+    targetBucket: "CURRENT",
     ...overrides,
   };
 }
 
-const envBothConfigured: ChannelReconciliationEnv = {
-  discordRunCategoryId: ACTIVE_CATEGORY,
+const envAllConfigured: ChannelReconciliationEnv = {
+  discordRunCurrentCategoryId: CURRENT_CATEGORY,
+  discordRunNextCategoryId: NEXT_CATEGORY,
   discordRunArchiveCategoryId: ARCHIVE_CATEGORY,
 };
 
-describe("reconcileExistingRunChannel", () => {
-  it("archive move: moves the same channel to the archive category", async () => {
-    const channel = fakeChannel({ parentId: ACTIVE_CATEGORY });
-    const result = await reconcileExistingRunChannel(fetcherFor(channel), envBothConfigured, item({ archived: true }));
-
-    expect(channel.setParent).toHaveBeenCalledWith(ARCHIVE_CATEGORY, { lockPermissions: false });
-    expect(channel.setParent).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
-  });
-
-  it("restore move: moves the same channel back to the active category", async () => {
-    const channel = fakeChannel({ parentId: ARCHIVE_CATEGORY });
-    await reconcileExistingRunChannel(fetcherFor(channel), envBothConfigured, item({ archived: false }));
-
-    expect(channel.setParent).toHaveBeenCalledWith(ACTIVE_CATEGORY, { lockPermissions: false });
-    expect(channel.setParent).toHaveBeenCalledTimes(1);
-  });
-
-  it("parent already correct: setParent is not called", async () => {
-    const channel = fakeChannel({ parentId: ACTIVE_CATEGORY });
-    await reconcileExistingRunChannel(fetcherFor(channel), envBothConfigured, item({ archived: false }));
+describe("reconcileExistingRunChannel — category movement", () => {
+  it("CURRENT no-op: channel already in CURRENT, setParent is not called", async () => {
+    const channel = fakeChannel({ parentId: CURRENT_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "CURRENT" }));
 
     expect(channel.setParent).not.toHaveBeenCalled();
   });
 
+  it("NEXT no-op: channel already in NEXT, setParent is not called", async () => {
+    const channel = fakeChannel({ parentId: NEXT_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "NEXT" }));
+
+    expect(channel.setParent).not.toHaveBeenCalled();
+  });
+
+  it("reconcile NEXT -> CURRENT: same channel id, setParent(CURRENT, { lockPermissions: false })", async () => {
+    const channel = fakeChannel({ parentId: NEXT_CATEGORY });
+    const result = await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "CURRENT" }));
+
+    expect(channel.setParent).toHaveBeenCalledWith(CURRENT_CATEGORY, { lockPermissions: false });
+    expect(channel.setParent).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+  });
+
+  it("reconcile CURRENT -> NEXT: same channel id, setParent(NEXT, { lockPermissions: false })", async () => {
+    const channel = fakeChannel({ parentId: CURRENT_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "NEXT" }));
+
+    expect(channel.setParent).toHaveBeenCalledWith(NEXT_CATEGORY, { lockPermissions: false });
+    expect(channel.setParent).toHaveBeenCalledTimes(1);
+  });
+
+  it("archive move: current/next channel whose target is ARCHIVE moves there, same channel id", async () => {
+    const channel = fakeChannel({ parentId: CURRENT_CATEGORY });
+    const result = await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "ARCHIVE" }));
+
+    expect(channel.setParent).toHaveBeenCalledWith(ARCHIVE_CATEGORY, { lockPermissions: false });
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+  });
+
+  it("restore CURRENT: previously archived channel moves back to CURRENT, same channel id", async () => {
+    const channel = fakeChannel({ parentId: ARCHIVE_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "CURRENT" }));
+
+    expect(channel.setParent).toHaveBeenCalledWith(CURRENT_CATEGORY, { lockPermissions: false });
+  });
+
+  it("restore NEXT: previously archived channel moves back to NEXT, same channel id", async () => {
+    const channel = fakeChannel({ parentId: ARCHIVE_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "NEXT" }));
+
+    expect(channel.setParent).toHaveBeenCalledWith(NEXT_CATEGORY, { lockPermissions: false });
+  });
+
+  it("parent already correct: setParent is not called", async () => {
+    const channel = fakeChannel({ parentId: CURRENT_CATEGORY });
+    await reconcileExistingRunChannel(fetcherFor(channel), envAllConfigured, item({ targetBucket: "CURRENT" }));
+
+    expect(channel.setParent).not.toHaveBeenCalled();
+  });
+});
+
+describe("reconcileExistingRunChannel — name drift", () => {
   it("name drift: renames the same channel, never replaces it", async () => {
-    const channel = fakeChannel({ name: "wrong-name", parentId: ACTIVE_CATEGORY });
+    const channel = fakeChannel({ name: "wrong-name", parentId: CURRENT_CATEGORY });
     const result = await reconcileExistingRunChannel(
       fetcherFor(channel),
-      envBothConfigured,
-      item({ desiredChannelName: "sat-2200-hc-syntax", archived: false }),
+      envAllConfigured,
+      item({ desiredChannelName: "sat-2200-hc-syntax", targetBucket: "CURRENT" }),
     );
 
     expect(channel.setName).toHaveBeenCalledWith("sat-2200-hc-syntax");
@@ -79,57 +119,99 @@ describe("reconcileExistingRunChannel", () => {
   });
 
   it("name already correct: setName is not called", async () => {
-    const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: ACTIVE_CATEGORY });
+    const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: CURRENT_CATEGORY });
     await reconcileExistingRunChannel(
       fetcherFor(channel),
-      envBothConfigured,
-      item({ desiredChannelName: "sat-2200-hc-syntax", archived: false }),
+      envAllConfigured,
+      item({ desiredChannelName: "sat-2200-hc-syntax", targetBucket: "CURRENT" }),
     );
 
     expect(channel.setName).not.toHaveBeenCalled();
   });
 
   it("already fully correct: neither setName nor setParent is called (full idempotency)", async () => {
-    const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: ACTIVE_CATEGORY });
+    const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: CURRENT_CATEGORY });
     await reconcileExistingRunChannel(
       fetcherFor(channel),
-      envBothConfigured,
-      item({ desiredChannelName: "sat-2200-hc-syntax", archived: false }),
+      envAllConfigured,
+      item({ desiredChannelName: "sat-2200-hc-syntax", targetBucket: "CURRENT" }),
     );
 
     expect(channel.setName).not.toHaveBeenCalled();
     expect(channel.setParent).not.toHaveBeenCalled();
   });
 
-  it("archive category unset: no setParent call, no throw, a warning is logged", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const channel = fakeChannel({ parentId: ACTIVE_CATEGORY });
-    const env: ChannelReconciliationEnv = { discordRunCategoryId: ACTIVE_CATEGORY, discordRunArchiveCategoryId: null };
+  it("name drift + week move: one pass corrects both, same channel id", async () => {
+    const channel = fakeChannel({ name: "wrong-name", parentId: NEXT_CATEGORY });
+    const result = await reconcileExistingRunChannel(
+      fetcherFor(channel),
+      envAllConfigured,
+      item({ desiredChannelName: "right-name", targetBucket: "CURRENT" }),
+    );
 
-    const result = await reconcileExistingRunChannel(fetcherFor(channel), env, item({ archived: true }));
+    expect(channel.setName).toHaveBeenCalledWith("right-name");
+    expect(channel.setParent).toHaveBeenCalledWith(CURRENT_CATEGORY, { lockPermissions: false });
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+  });
+});
+
+describe("reconcileExistingRunChannel — missing category configuration", () => {
+  it("missing CURRENT category: no setParent call, no throw, a warning is logged, channel unchanged", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const channel = fakeChannel({ parentId: ARCHIVE_CATEGORY });
+    const env: ChannelReconciliationEnv = {
+      discordRunCurrentCategoryId: null,
+      discordRunNextCategoryId: NEXT_CATEGORY,
+      discordRunArchiveCategoryId: ARCHIVE_CATEGORY,
+    };
+
+    const result = await reconcileExistingRunChannel(fetcherFor(channel), env, item({ targetBucket: "CURRENT" }));
+
+    expect(channel.setParent).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("DISCORD_RUN_CURRENT_CATEGORY_ID is unset"));
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+    warnSpy.mockRestore();
+  });
+
+  it("missing NEXT category: no setParent call, no throw, a warning is logged, and CURRENT is never used as a fallback", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const channel = fakeChannel({ parentId: CURRENT_CATEGORY });
+    const env: ChannelReconciliationEnv = {
+      discordRunCurrentCategoryId: CURRENT_CATEGORY,
+      discordRunNextCategoryId: null,
+      discordRunArchiveCategoryId: ARCHIVE_CATEGORY,
+    };
+
+    const result = await reconcileExistingRunChannel(fetcherFor(channel), env, item({ targetBucket: "NEXT" }));
+
+    expect(channel.setParent).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("DISCORD_RUN_NEXT_CATEGORY_ID is unset"));
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+    warnSpy.mockRestore();
+  });
+
+  it("missing ARCHIVE category: no setParent call, no throw, a warning is logged", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const channel = fakeChannel({ parentId: CURRENT_CATEGORY });
+    const env: ChannelReconciliationEnv = {
+      discordRunCurrentCategoryId: CURRENT_CATEGORY,
+      discordRunNextCategoryId: NEXT_CATEGORY,
+      discordRunArchiveCategoryId: null,
+    };
+
+    const result = await reconcileExistingRunChannel(fetcherFor(channel), env, item({ targetBucket: "ARCHIVE" }));
 
     expect(channel.setParent).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("DISCORD_RUN_ARCHIVE_CATEGORY_ID is unset"));
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
     warnSpy.mockRestore();
   });
+});
 
-  it("active category unset on restore: no setParent call, no throw, a warning is logged", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const channel = fakeChannel({ parentId: ARCHIVE_CATEGORY });
-    const env: ChannelReconciliationEnv = { discordRunCategoryId: null, discordRunArchiveCategoryId: ARCHIVE_CATEGORY };
-
-    const result = await reconcileExistingRunChannel(fetcherFor(channel), env, item({ archived: false }));
-
-    expect(channel.setParent).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("DISCORD_RUN_CATEGORY_ID is unset"));
-    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
-    warnSpy.mockRestore();
-  });
-
+describe("reconcileExistingRunChannel — channel resolution failures", () => {
   it("missing/inaccessible channel: no throw, a warning is logged, status is 'missing'", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await reconcileExistingRunChannel(fetcherFor(null), envBothConfigured, item());
+    const result = await reconcileExistingRunChannel(fetcherFor(null), envAllConfigured, item());
 
     expect(result).toEqual({ status: "missing" });
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("could not be resolved"));
@@ -138,13 +220,13 @@ describe("reconcileExistingRunChannel", () => {
 
   it("a rename failure does not prevent the independent category move from being attempted", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const channel = fakeChannel({ name: "wrong-name", parentId: ACTIVE_CATEGORY });
+    const channel = fakeChannel({ name: "wrong-name", parentId: CURRENT_CATEGORY });
     channel.setName.mockRejectedValueOnce(new Error("rename failed"));
 
     const result = await reconcileExistingRunChannel(
       fetcherFor(channel),
-      envBothConfigured,
-      item({ desiredChannelName: "new-name", archived: true }),
+      envAllConfigured,
+      item({ desiredChannelName: "new-name", targetBucket: "ARCHIVE" }),
     );
 
     expect(channel.setParent).toHaveBeenCalledWith(ARCHIVE_CATEGORY, { lockPermissions: false });
@@ -155,8 +237,8 @@ describe("reconcileExistingRunChannel", () => {
 
 describe("reconcileChannels — channel-only pass and failure isolation", () => {
   it("channel-only pass: reconciles a Run's channel with no message send/edit involved", async () => {
-    const channel = fakeChannel({ name: "wrong-name", parentId: ACTIVE_CATEGORY });
-    const resolved = await reconcileChannels(fetcherFor(channel), envBothConfigured, [
+    const channel = fakeChannel({ name: "wrong-name", parentId: CURRENT_CATEGORY });
+    const resolved = await reconcileChannels(fetcherFor(channel), envAllConfigured, [
       item({ runId: "run-a", desiredChannelName: "right-name" }),
     ]);
 
@@ -168,17 +250,17 @@ describe("reconcileChannels — channel-only pass and failure isolation", () => 
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const goodChannel = fakeChannel({ id: "chan-good", parentId: ACTIVE_CATEGORY });
+    const goodChannel = fakeChannel({ id: "chan-good", parentId: CURRENT_CATEGORY });
     const fetcher: ChannelFetcher = vi.fn(async (channelId: string) => {
       if (channelId === "chan-bad") throw new Error("Discord API unavailable");
       if (channelId === "chan-missing") return null;
       return goodChannel;
     });
 
-    const resolved = await reconcileChannels(fetcher, envBothConfigured, [
+    const resolved = await reconcileChannels(fetcher, envAllConfigured, [
       item({ runId: "run-bad", existingRunChannelId: "chan-bad" }),
       item({ runId: "run-missing", existingRunChannelId: "chan-missing" }),
-      item({ runId: "run-good", existingRunChannelId: "chan-good", archived: true }),
+      item({ runId: "run-good", existingRunChannelId: "chan-good", targetBucket: "ARCHIVE" }),
     ]);
 
     expect(resolved.has("run-bad")).toBe(false);

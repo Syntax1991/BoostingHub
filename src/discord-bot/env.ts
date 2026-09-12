@@ -5,18 +5,28 @@ export type BotEnv = {
   discordGuildId: string;
   /**
    * Preferred: the parent category new per-Run text channels are created
-   * under (§ per-Run channel provisioning). When unset, the bot falls back
-   * to the legacy single global channel pair below — see docs/features/discord-bot.md.
+   * under for the CURRENT raid-ID week (§ weekly raid-ID categories). Falls
+   * back to the DEPRECATED `DISCORD_RUN_CATEGORY_ID` when unset — that
+   * legacy variable may only ever resolve CURRENT, never NEXT. When neither
+   * this nor `DISCORD_RUN_NEXT_CATEGORY_ID` is configured at all, the bot
+   * falls back further to the legacy single global channel pair below.
    */
-  discordRunCategoryId: string | null;
+  discordRunCurrentCategoryId: string | null;
   /**
-   * Where an archived Run's channel moves to. Optional — when unset, an
-   * archived Run's channel simply stays wherever it already is (a move is
-   * skipped with a warning, never an error, and nothing else about sync
-   * fails because of it).
+   * The parent category for the NEXT raid-ID week. Deliberately has NO
+   * legacy fallback — a Run due next week must never be silently routed into
+   * the CURRENT category merely because this is unset.
+   */
+  discordRunNextCategoryId: string | null;
+  /**
+   * Where an ARCHIVE-targeted Run's channel moves to (app-archived Runs, and
+   * PAST/FUTURE Runs held outside the active CURRENT/NEXT rotation).
+   * Optional — when unset, such a channel simply stays wherever it already
+   * is (a move is skipped with a warning, never an error, and nothing else
+   * about sync fails because of it).
    */
   discordRunArchiveCategoryId: string | null;
-  /** Legacy/test fallback, used only when discordRunCategoryId is unset. */
+  /** Legacy/test fallback, used only when neither CURRENT nor NEXT category is configured. */
   discordSignupChannelId: string | null;
   discordRosterChannelId: string | null;
   apiBaseUrl: string;
@@ -38,14 +48,20 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     throw new Error(`Missing required Discord bot environment variable(s): ${missing.join(", ")}`);
   }
 
-  const runCategoryId = env.DISCORD_RUN_CATEGORY_ID?.trim() || null;
+  // DISCORD_RUN_CATEGORY_ID is the pre-week-categories variable. It is kept
+  // as a deprecated fallback ONLY for CURRENT — it must never resolve NEXT,
+  // even when DISCORD_RUN_NEXT_CATEGORY_ID is unset, because that would
+  // silently place a next-week Run's channel in the current-week category.
+  const legacyRunCategoryId = env.DISCORD_RUN_CATEGORY_ID?.trim() || null;
+  const currentCategoryId = env.DISCORD_RUN_CURRENT_CATEGORY_ID?.trim() || legacyRunCategoryId;
+  const nextCategoryId = env.DISCORD_RUN_NEXT_CATEGORY_ID?.trim() || null;
   const runArchiveCategoryId = env.DISCORD_RUN_ARCHIVE_CATEGORY_ID?.trim() || null;
   const signupChannelId = env.DISCORD_SIGNUP_CHANNEL_ID?.trim() || null;
   const rosterChannelId = env.DISCORD_ROSTER_CHANNEL_ID?.trim() || null;
 
-  if (!runCategoryId && !signupChannelId) {
+  if (!currentCategoryId && !nextCategoryId && !signupChannelId) {
     throw new Error(
-      "Configure either DISCORD_RUN_CATEGORY_ID (preferred, per-Run channels) or DISCORD_SIGNUP_CHANNEL_ID (legacy fallback).",
+      "Configure DISCORD_RUN_CURRENT_CATEGORY_ID (preferred, per-Run channels; DISCORD_RUN_CATEGORY_ID is a deprecated CURRENT-only fallback) or DISCORD_SIGNUP_CHANNEL_ID (legacy fallback).",
     );
   }
 
@@ -53,7 +69,8 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     discordBotToken: env.DISCORD_BOT_TOKEN!,
     discordApplicationId: env.DISCORD_APPLICATION_ID!,
     discordGuildId: env.DISCORD_GUILD_ID!,
-    discordRunCategoryId: runCategoryId,
+    discordRunCurrentCategoryId: currentCategoryId,
+    discordRunNextCategoryId: nextCategoryId,
     discordRunArchiveCategoryId: runArchiveCategoryId,
     discordSignupChannelId: signupChannelId,
     discordRosterChannelId: rosterChannelId,

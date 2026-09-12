@@ -15,7 +15,7 @@ type ChannelWorkItem = {
   runId: string;
   existingRunChannelId: string | null;
   desiredChannelName: string;
-  archived: boolean;
+  targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
 };
 
 /**
@@ -75,7 +75,11 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
   // it a second time within the same pass.
   const resolvedChannels = await reconcileChannels(
     makeChannelFetcher(client),
-    { discordRunCategoryId: env.discordRunCategoryId, discordRunArchiveCategoryId: env.discordRunArchiveCategoryId },
+    {
+      discordRunCurrentCategoryId: env.discordRunCurrentCategoryId,
+      discordRunNextCategoryId: env.discordRunNextCategoryId,
+      discordRunArchiveCategoryId: env.discordRunArchiveCategoryId,
+    },
     work.channels,
   );
 
@@ -94,10 +98,15 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
 /**
  * Resolves the Discord channel a Run's posts belong in.
  *
- * Preferred (per-Run) mode — `DISCORD_RUN_CATEGORY_ID` configured: creates
- * the Run's own dedicated text channel once (recorded immediately via the
- * "channel" discord-state kind, before any message is posted). Renaming and
- * archive/active category movement for an already-existing channel are no
+ * Preferred (per-Run) mode — a CURRENT or NEXT category configured: creates
+ * the Run's own dedicated text channel once, under whichever category
+ * `item.targetBucket` calls for (recorded immediately via the "channel"
+ * discord-state kind, before any message is posted). `targetBucket` always
+ * arrives already decided by discordSyncService — this function never
+ * reproduces the weekly calendar logic, and by construction only ever sees
+ * "CURRENT" or "NEXT" here (a first-provisioning item is never emitted with
+ * "ARCHIVE" — see discord-sync.service.ts's `eligibleForFirstProvisioning`).
+ * Renaming and category movement for an already-existing channel are no
  * longer this function's job — they happen unconditionally and independently
  * via `channel-reconciliation.ts`/`reconcileChannels`, before this function
  * ever runs (see `syncOnce`). This function only needs to know the resolved
@@ -115,11 +124,12 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  * scratch by the roster path alone, defeating the signup-side rule that a
  * Run never gets retroactive Discord infrastructure for a phase that's
  * already over. Only the signup path — itself gated by `isSignupWindowOpen`
- * in `listSyncWork` — may create a Run's first channel; the roster path may
- * only reuse one that already exists.
+ * + week bucket in `listSyncWork` — may create a Run's first channel; the
+ * roster path may only reuse one that already exists.
  *
- * Legacy mode — no category configured: always the single global channel
- * from env (`DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID`).
+ * Legacy mode — neither CURRENT nor NEXT category configured: always the
+ * single global channel from env (`DISCORD_SIGNUP_CHANNEL_ID` /
+ * `DISCORD_ROSTER_CHANNEL_ID`).
  */
 async function resolveRunChannel(
   client: Client,
@@ -130,7 +140,8 @@ async function resolveRunChannel(
   allowCreate: boolean,
   resolvedChannels: Map<string, string>,
 ): Promise<string | null> {
-  if (!env.discordRunCategoryId) {
+  const perRunModeEnabled = Boolean(env.discordRunCurrentCategoryId || env.discordRunNextCategoryId);
+  if (!perRunModeEnabled) {
     return legacyFallbackChannelId;
   }
 
@@ -151,17 +162,25 @@ async function resolveRunChannel(
 
   if (!allowCreate) {
     // Only the signup path may provision a Run's first channel (it alone is
-    // gated by isSignupWindowOpen). A roster-only sync pass for a Run that
-    // never went through a bot-observed signup phase — e.g. historical data
-    // predating the bot, or the bot being offline through the entire signup
-    // window — must not retroactively create Discord infrastructure for it.
+    // gated by isSignupWindowOpen + week bucket). A roster-only sync pass for
+    // a Run that never went through a bot-observed signup phase — e.g.
+    // historical data predating the bot, or the bot being offline through
+    // the entire signup window — must not retroactively create Discord
+    // infrastructure for it.
     console.warn(`[discord-bot] run ${item.runId} has no channel and none may be created from the roster path — skipping`);
     return null;
   }
 
-  const category = await client.channels.fetch(env.discordRunCategoryId).catch(() => null);
+  const categoryId = item.targetBucket === "NEXT" ? env.discordRunNextCategoryId : env.discordRunCurrentCategoryId;
+  const categoryEnvVar = item.targetBucket === "NEXT" ? "DISCORD_RUN_NEXT_CATEGORY_ID" : "DISCORD_RUN_CURRENT_CATEGORY_ID";
+  if (!categoryId) {
+    console.error(`[discord-bot] run ${item.runId} needs its ${item.targetBucket} category but ${categoryEnvVar} is unset — skipping`);
+    return null;
+  }
+
+  const category = await client.channels.fetch(categoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
-    console.error(`[discord-bot] DISCORD_RUN_CATEGORY_ID does not resolve to a category — skipping run ${item.runId}`);
+    console.error(`[discord-bot] ${categoryEnvVar} does not resolve to a category — skipping run ${item.runId}`);
     return null;
   }
 

@@ -1,11 +1,38 @@
 import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
+import { classifyRunWeek } from "@/lib/wow-run-week";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { isActiveSignupOffer } from "@/services/signup-state";
+
+/**
+ * Where a Run's dedicated Discord channel belongs, decided once here and
+ * carried through every sync work item — the bot never reproduces this
+ * calendar logic itself, it only reconciles Discord to whatever target the
+ * Service already computed (see channel-reconciliation.ts).
+ *
+ * App archival (`Run.archivedAt`) always wins over week classification.
+ * Otherwise: CURRENT/NEXT map directly from `classifyRunWeek`; PAST and
+ * FUTURE both resolve to ARCHIVE — a holding placement that keeps the
+ * CURRENT/NEXT categories strictly limited to Runs actually in those weeks
+ * while never deleting/recreating the same already-provisioned channel (see
+ * docs/features/discord-bot.md § weekly raid-ID categories).
+ */
+export type DiscordRunChannelTarget = "CURRENT" | "NEXT" | "ARCHIVE";
+
+function resolveDiscordTarget(
+  run: { scheduledStartAt: string; archivedAt: string | null },
+  now: Date,
+): DiscordRunChannelTarget {
+  if (run.archivedAt) return "ARCHIVE";
+  const { bucket } = classifyRunWeek({ scheduledStartAt: run.scheduledStartAt, now });
+  if (bucket === "CURRENT") return "CURRENT";
+  if (bucket === "NEXT") return "NEXT";
+  return "ARCHIVE";
+}
 
 export type SignupEmbedData = {
   runId: string;
@@ -65,17 +92,17 @@ export type RosterEmbedData = {
  */
 /**
  * Reconciliation for a Run's EXISTING dedicated Discord channel — name and
- * archive/active category — fully independent of signup/roster message
+ * CURRENT/NEXT/ARCHIVE category — fully independent of signup/roster message
  * state. `existingRunChannelId` is always non-null: this item means "this
  * Run already owns a channel; keep its live Discord state correct," never
  * "provision a first channel." First-channel provisioning stays exclusively
- * gated behind the signup path's `isSignupWindowOpen` rule below.
+ * gated behind the signup path's `isSignupWindowOpen` + week-bucket rule below.
  */
 export type ChannelSyncWorkItem = {
   runId: string;
   existingRunChannelId: string;
   desiredChannelName: string;
-  archived: boolean;
+  targetBucket: DiscordRunChannelTarget;
 };
 
 export type SignupSyncWorkItem = {
@@ -84,8 +111,8 @@ export type SignupSyncWorkItem = {
   existingMessageId: string | null;
   existingRunChannelId: string | null;
   desiredChannelName: string;
-  /** Whether the Run's channel, if any, belongs in the archive category rather than the active one. */
-  archived: boolean;
+  /** Where the Run's channel, if any, belongs — CURRENT, NEXT, or ARCHIVE. */
+  targetBucket: DiscordRunChannelTarget;
 };
 export type RosterSyncWorkItem = {
   runId: string;
@@ -93,7 +120,7 @@ export type RosterSyncWorkItem = {
   existingMessageId: string | null;
   existingRunChannelId: string | null;
   desiredChannelName: string;
-  archived: boolean;
+  targetBucket: DiscordRunChannelTarget;
 };
 
 function desiredChannelNameFor(run: {
@@ -145,12 +172,16 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
  * Deterministic signature built FROM the normalized `SignupEmbedData` —
  * every field that can change the rendered embed content is a property on
  * `data`, so a future embed field only needs to be added to `SignupEmbedData`
- * and this function picks it up automatically. `channelName` and `archived`
- * are folded in on top (not part of the rendered embed content itself, but
- * still real sync signals: a rename or an Archive/Restore) — they must never
- * be the ONLY thing standing in for a content change.
+ * and this function picks it up automatically. `channelName` and
+ * `targetBucket` are folded in on top (not part of the rendered embed
+ * content itself, but still real sync signals: a rename, an Archive/Restore,
+ * or a weekly CURRENT/NEXT rollover) — they must never be the ONLY thing
+ * standing in for a content change.
  */
-function buildSignupEmbedSignature(data: SignupEmbedData, extra: { channelName: string; archived: boolean }): string {
+function buildSignupEmbedSignature(
+  data: SignupEmbedData,
+  extra: { channelName: string; targetBucket: DiscordRunChannelTarget },
+): string {
   return JSON.stringify({
     runTitle: data.runTitle,
     raidId: data.raidId,
@@ -164,7 +195,7 @@ function buildSignupEmbedSignature(data: SignupEmbedData, extra: { channelName: 
     signupWindowOpen: data.signupWindowOpen,
     uniqueSignupCount: data.uniqueSignupCount,
     channelName: extra.channelName,
-    archived: extra.archived,
+    targetBucket: extra.targetBucket,
   });
 }
 
@@ -199,16 +230,20 @@ export const discordSyncService = {
    *
    * The *first* signup post for a Run only happens while signup is actually
    * available (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen`
-   * true), never merely because the Run left DRAFT: a Run the bot only sees
-   * for the first time after it already reached PUBLISHED/COMPLETED/
-   * CANCELLED (e.g. the bot was offline through its whole signup phase) must
-   * not get a brand-new "Signups: 0" post for a phase that's already over.
-   * Once a post exists, later updates are unconditional — the same message
-   * keeps reflecting the Run's real state (including signups closing) all
-   * the way through completion, which is deliberate informational
-   * continuity, not a re-trigger of the creation gate.
+   * true) AND the Run's schedule currently classifies CURRENT or NEXT — never
+   * merely because the Run left DRAFT, and never for a Run scheduled too far
+   * out (FUTURE): a Run the bot only sees for the first time after it already
+   * reached PUBLISHED/COMPLETED/CANCELLED (e.g. the bot was offline through
+   * its whole signup phase) must not get a brand-new "Signups: 0" post for a
+   * phase that's already over, and a Run scheduled weeks ahead must not get
+   * Discord infrastructure before its raid-ID week is even CURRENT/NEXT.
+   * Once a post exists, later updates are unconditional regardless of week
+   * bucket — the same message keeps reflecting the Run's real state
+   * (including signups closing, or the Run rolling PAST/into ARCHIVE
+   * holding) all the way through completion, which is deliberate
+   * informational continuity, not a re-trigger of the creation gate.
    */
-  async listSyncWork(): Promise<{
+  async listSyncWork(now: Date = new Date()): Promise<{
     channels: ChannelSyncWorkItem[];
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
@@ -220,31 +255,36 @@ export const discordSyncService = {
 
     for (const run of runs) {
       const post = await runDiscordPostRepository.findByRunId(run.id);
+      const targetBucket = resolveDiscordTarget(run, now);
 
       // Channel reconciliation is fully independent of message state and of
       // Run status/archive-ness itself — any Run that already owns a
       // dedicated Discord channel must keep having that channel's name and
-      // active/archive category checked on every poll, regardless of DRAFT
-      // status or whether a signup/roster message currently needs updating.
-      // This never provisions a first channel (existingRunChannelId is only
-      // ever set once the signup path below has already created one).
+      // CURRENT/NEXT/ARCHIVE category checked on every poll, regardless of
+      // DRAFT status or whether a signup/roster message currently needs
+      // updating. This never provisions a first channel (existingRunChannelId
+      // is only ever set once the signup path below has already created one).
       if (post?.runChannelId) {
         channels.push({
           runId: run.id,
           existingRunChannelId: post.runChannelId,
           desiredChannelName: desiredChannelNameFor(run),
-          archived: Boolean(run.archivedAt),
+          targetBucket,
         });
       }
 
       if (run.status === "DRAFT") continue;
 
       const hasExistingSignupPost = Boolean(post?.signupMessageId);
-      const canCreateSignupPost = isSignupWindowOpen(run.status, run.signupsOpen);
-      if (hasExistingSignupPost || canCreateSignupPost) {
+      // A brand-new channel/message may only be created for a Run whose week
+      // is actually CURRENT or NEXT — PAST and FUTURE both resolve to
+      // ARCHIVE above, so gating on `targetBucket !== "ARCHIVE"` here blocks
+      // first provisioning for both without duplicating the week logic.
+      const eligibleForFirstProvisioning = isSignupWindowOpen(run.status, run.signupsOpen) && targetBucket !== "ARCHIVE";
+      if (hasExistingSignupPost || eligibleForFirstProvisioning) {
         const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
           channelName: desiredChannelNameFor(run),
-          archived: Boolean(run.archivedAt),
+          targetBucket,
         });
         if (!hasExistingSignupPost || post!.lastSignupSignature !== signature) {
           signups.push({
@@ -253,7 +293,7 @@ export const discordSyncService = {
             existingMessageId: post?.signupMessageId ?? null,
             existingRunChannelId: post?.runChannelId ?? null,
             desiredChannelName: desiredChannelNameFor(run),
-            archived: Boolean(run.archivedAt),
+            targetBucket,
           });
         }
       }
@@ -286,7 +326,7 @@ export const discordSyncService = {
             existingMessageId: post?.rosterMessageId ?? null,
             existingRunChannelId: post?.runChannelId ?? null,
             desiredChannelName: desiredChannelNameFor(run),
-            archived: Boolean(run.archivedAt),
+            targetBucket,
           });
         }
       }
@@ -339,12 +379,12 @@ export const discordSyncService = {
     await runDiscordPostRepository.recordRunChannel(input);
   },
 
-  async recordSignupPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
+  async recordSignupPost(input: { runId: string; channelId: string; messageId: string }, now: Date = new Date()): Promise<void> {
     const run = await runRepository.findById(input.runId);
     if (!run) return;
     const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
       channelName: desiredChannelNameFor(run),
-      archived: Boolean(run.archivedAt),
+      targetBucket: resolveDiscordTarget(run, now),
     });
     await runDiscordPostRepository.recordSignupPost({
       runId: input.runId,

@@ -25,7 +25,7 @@ describe("BotApiClient", () => {
 
   it("listSyncWork returns channels[] alongside signups/roster, unmodified", async () => {
     const channels = [
-      { runId: "run-1", existingRunChannelId: "chan-1", desiredChannelName: "sat-2200-hc-lead", archived: false },
+      { runId: "run-1", existingRunChannelId: "chan-1", desiredChannelName: "sat-2200-hc-lead", targetBucket: "CURRENT" },
     ];
     mockFetchOnce(200, { ok: true, data: { channels, signups: [], roster: [] } });
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
