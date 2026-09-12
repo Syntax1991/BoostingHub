@@ -10,7 +10,7 @@ import {
   mapRegion,
   mapWowClass,
 } from "@/lib/persistence";
-import type { BoosterQualificationRecord } from "@/models/records";
+import type { BoosterQualificationRecord, ScheduledCharacterSyncCandidate } from "@/models/records";
 import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 
@@ -321,5 +321,100 @@ export const characterRepository = {
       isActive,
       updatedAt: new Date().toISOString(),
     });
+  },
+
+  /**
+   * Global candidate list for the scheduled Blizzard character sync job:
+   * active, Blizzard-linked characters whose owner has a BattleNetConnection
+   * for that character's own region, and which are stale per `staleBefore`.
+   *
+   * Bounded to two queries regardless of how many characters/users exist —
+   * one Character scan (with the owning User eager-loaded for attribution)
+   * plus one batched BattleNetConnection lookup by the distinct owner ids —
+   * so this never turns into a User -> Character -> connection N+1 scan.
+   * Staleness itself (lastSyncedAt === null or older than staleBefore) is
+   * filtered in-process because the ORM's public field-proxy API has no OR
+   * combinator to express "null or older than X" as a single predicate.
+   */
+  async listScheduledSyncCandidates(input: {
+    staleBefore: string;
+  }): Promise<ScheduledCharacterSyncCandidate[]> {
+    const linked = await orm.Character
+      .where({ isActive: true })
+      .where((character) => character.blizzardCharacterId.isNotNull())
+      .where((character) => character.blizzardRealmId.isNotNull())
+      .include("user")
+      .all();
+
+    const staleBeforeMs = new Date(input.staleBefore).getTime();
+    const stale = linked.filter((row) => {
+      const record = row as Record<string, unknown>;
+      const lastSyncedAt = asStringOrNull(record.lastSyncedAt);
+      // Compared as parsed timestamps, never as raw strings: the driver
+      // round-trips TimestamptzString as Postgres's own text format (e.g.
+      // "2026-09-12 12:32:22.218+02"), not the "...T...Z" ISO shape a caller
+      // may have built staleBefore from, so lexicographic comparison would
+      // be meaningless.
+      return lastSyncedAt === null || new Date(lastSyncedAt).getTime() < staleBeforeMs;
+    });
+
+    if (stale.length === 0) {
+      return [];
+    }
+
+    const userIds = [
+      ...new Set(stale.map((row) => asString((row as Record<string, unknown>).userId))),
+    ];
+    const connections = await orm.BattleNetConnection
+      .where((connection) => connection.userId.in(userIds))
+      .all();
+
+    const connectionByUserRegion = new Map<
+      string,
+      { id: string; userId: string; region: WowRegion }
+    >();
+    for (const row of connections) {
+      const record = row as Record<string, unknown>;
+      const userId = asString(record.userId);
+      const region = mapRegion(record.region);
+      connectionByUserRegion.set(`${userId}:${region}`, {
+        id: asString(record.id),
+        userId,
+        region,
+      });
+    }
+
+    const candidates: ScheduledCharacterSyncCandidate[] = [];
+    for (const row of stale) {
+      const record = row as Record<string, unknown>;
+      const userId = asString(record.userId);
+      const region = mapRegion(record.region);
+      const connection = connectionByUserRegion.get(`${userId}:${region}`);
+      if (!connection) continue;
+
+      const user = (record.user ?? {}) as Record<string, unknown>;
+      candidates.push({
+        character: {
+          id: asString(record.id),
+          userId,
+          name: asString(record.name),
+          realm: asString(record.realm),
+          region,
+          normalizedName: asString(record.normalizedName),
+          normalizedRealm: asString(record.normalizedRealm),
+          wowClass: mapWowClass(record.wowClass),
+          blizzardCharacterId: asString(record.blizzardCharacterId),
+          blizzardRealmId: asString(record.blizzardRealmId),
+          lastSyncedAt: asStringOrNull(record.lastSyncedAt),
+        },
+        connection,
+        owner: {
+          id: userId,
+          name: asString(user.name, "Unknown"),
+        },
+      });
+    }
+
+    return candidates;
   },
 };

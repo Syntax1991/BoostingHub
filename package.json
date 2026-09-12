@@ -19,7 +19,8 @@
     "contract:emit": "prisma contract emit",
     "bot:dev": "tsx watch src/discord-bot/index.ts",
     "bot:start": "tsx src/discord-bot/index.ts",
-    "bot:register-commands": "tsx src/discord-bot/register-commands.ts"
+    "bot:register-commands": "tsx src/discord-bot/register-commands.ts",
+    "sync:characters": "tsx scripts/sync-blizzard-characters.ts"
   },
   "dependencies": {
     "@prisma/orm-postgres": "^8.0.0-rc.8",

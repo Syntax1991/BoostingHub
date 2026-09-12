@@ -4,6 +4,7 @@ import type {
   CharacterRole,
   RaidDifficulty,
   WowClass,
+  WowRegion,
 } from "@/models/enums";
 
 /** Legacy historical BoosterAccess request/history row. */
@@ -72,4 +73,35 @@ export type SignupRaidSaveInfo = {
   bossesDefeated: number;
   totalBossCount: number;
   isComplete: boolean;
+};
+
+/**
+ * One globally-eligible row for the scheduled Blizzard character sync job:
+ * an active, Blizzard-linked Character whose owner has a BattleNetConnection
+ * for that Character's own region. Staleness is filtered before this shape
+ * is built (see characterRepository.listScheduledSyncCandidates).
+ */
+export type ScheduledCharacterSyncCandidate = {
+  character: {
+    id: string;
+    userId: string;
+    name: string;
+    realm: string;
+    region: WowRegion;
+    normalizedName: string;
+    normalizedRealm: string;
+    wowClass: WowClass;
+    blizzardCharacterId: string;
+    blizzardRealmId: string;
+    lastSyncedAt: string | null;
+  };
+  connection: {
+    id: string;
+    userId: string;
+    region: WowRegion;
+  };
+  owner: {
+    id: string;
+    name: string;
+  };
 };
