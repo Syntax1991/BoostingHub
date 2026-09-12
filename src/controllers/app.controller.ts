@@ -136,6 +136,11 @@ export const managementController = {
     return runService.getCreateForm(user);
   },
 
+  async getCreateManyRunsPage() {
+    const user = await requireManagerOrRedirect();
+    return runService.getCreateManyForm(user);
+  },
+
   async getBoosterAccessPage(searchParams: {
     view?: string | string[];
     status?: string | string[];

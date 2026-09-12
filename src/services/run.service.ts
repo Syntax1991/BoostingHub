@@ -827,3 +827,4 @@ export const runService = {
 
 export type ManagedRunsPage = Awaited<ReturnType<typeof runService.getManagedRunsPage>>;
 export type CreateRunForm = Awaited<ReturnType<typeof runService.getCreateForm>>;
+export type CreateManyRunsForm = Awaited<ReturnType<typeof runService.getCreateManyForm>>;

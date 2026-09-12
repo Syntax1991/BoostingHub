@@ -5,6 +5,7 @@ import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { runService } from "@/services/run.service";
 import { createRunSchema, runIdSchema, updateRunSchema } from "@/validators/run";
+import { createManyRunsSchema } from "@/validators/mass-create-runs";
 
 function revalidateRunSurfaces(runId?: string) {
   revalidatePath("/runs");
@@ -23,6 +24,23 @@ export async function createRunAction(input: unknown): Promise<ActionResult> {
     const created = await runService.createRun(user, parsed);
     revalidateRunSurfaces(created.id);
     return { ok: true, message: "Run draft created.", runId: created.id };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export type CreateManyRunsActionResult =
+  | { ok: true; message: string; runIds: string[] }
+  | { ok: false; code: string; message: string };
+
+export async function createManyRunsAction(input: unknown): Promise<CreateManyRunsActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = createManyRunsSchema.parse(input);
+    const created = await runService.createManyRuns(user, parsed);
+    revalidateRunSurfaces();
+    const count = created.ids.length;
+    return { ok: true, message: `Created ${count} run draft${count === 1 ? "" : "s"}.`, runIds: created.ids };
   } catch (error) {
     return mapActionError(error);
   }
