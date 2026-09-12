@@ -7,6 +7,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runService } from "@/services/run.service";
+import { runTemplateService } from "@/services/run-template.service";
 import { createManyRunsSchema, type CreateManyRunsInput } from "@/validators/mass-create-runs";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
@@ -19,6 +20,7 @@ const ids = {
 };
 
 const createdRunIds: string[] = [];
+const createdTemplateIds: string[] = [];
 
 function asUser(
   id: string,
@@ -131,6 +133,13 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of createdRunIds) {
     await deleteIfPresent("Run", id);
+  }
+  for (const id of createdTemplateIds) {
+    try {
+      await orm.RunTemplate.where({ id }).delete();
+    } catch {
+      // Already gone.
+    }
   }
   for (const id of [ids.user, ids.lead, ids.otherLead, ids.admin, ids.disabledLead]) {
     await deleteIfPresent("User", id);
@@ -585,5 +594,305 @@ describe("runRepository.createManyDraftsAtomic — atomic rollback", () => {
     const leakedBad = await orm.Run.where({ scheduledStartAt: futureIso(701) }).select("id").all();
     expect(leakedGood).toHaveLength(0);
     expect(leakedBad).toHaveLength(0);
+  });
+});
+
+describe("runService.createManyRuns — templateId integration", () => {
+  it("RAID_LEAD applying their own template creates Runs whose raidLeadId is the template owner", async () => {
+    const template = await runTemplateService.createTemplate(lead, {
+      name: "Integration Own Template",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: "Template notes",
+    });
+    createdTemplateIds.push(template.id);
+
+    // The Server only derives raidLeadId from the template — copying the
+    // other planning values (notes, composition, etc.) into Shared Defaults
+    // is the client's job when it applies a template. Simulate that here by
+    // passing them through defaults, exactly as the real form would submit.
+    const result = await runService.createManyRuns(lead, {
+      defaults: defaultsFor({ notes: "Template notes" }),
+      runs: rowsOf(1, 800),
+      templateId: template.id,
+    });
+    createdRunIds.push(...result.ids);
+
+    const run = await runRepository.findById(result.ids[0]!);
+    expect(run?.raidLeadId).toBe(ids.lead);
+    expect(run?.notes).toBe("Template notes");
+  });
+
+  it("ADMIN applying another raid lead's template creates Runs owned by that raid lead, not the ADMIN", async () => {
+    const template = await runTemplateService.createTemplate(admin, {
+      name: "Integration Admin-Applied Template",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+      raidLeadId: ids.otherLead,
+    });
+    createdTemplateIds.push(template.id);
+
+    const result = await runService.createManyRuns(admin, {
+      defaults: defaultsFor(),
+      runs: rowsOf(1, 810),
+      templateId: template.id,
+    });
+    createdRunIds.push(...result.ids);
+
+    const run = await runRepository.findById(result.ids[0]!);
+    expect(run?.raidLeadId).toBe(ids.otherLead);
+  });
+
+  it("RAID_LEAD attempting to use another raid lead's template is rejected, 0 Runs created", async () => {
+    const template = await runTemplateService.createTemplate(admin, {
+      name: "Integration Forbidden Template",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+      raidLeadId: ids.otherLead,
+    });
+    createdTemplateIds.push(template.id);
+
+    await expectDomainCode(
+      runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(1, 820), templateId: template.id }),
+      "NOT_AUTHORIZED",
+    );
+    const leaked = await orm.Run.where({ scheduledStartAt: futureIso(820) }).select("id").all();
+    expect(leaked).toHaveLength(0);
+  });
+
+  it("a forged raidLeadId in defaults while a template is selected rejects the entire batch, 0 Runs created", async () => {
+    const template = await runTemplateService.createTemplate(lead, {
+      name: "Integration Defaults Mismatch",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+    });
+    createdTemplateIds.push(template.id);
+
+    await expectDomainCode(
+      runService.createManyRuns(admin, {
+        defaults: defaultsFor({ raidLeadId: ids.otherLead }),
+        runs: rowsOf(2, 830),
+        templateId: template.id,
+      }),
+      "RUN_TEMPLATE_RAID_LEAD_MISMATCH",
+    );
+    const leaked = await orm.Run.where({ scheduledStartAt: futureIso(830) }).select("id").all();
+    expect(leaked).toHaveLength(0);
+  });
+
+  it("a forged raidLeadId via a row override while a template is selected rejects the entire batch, 0 Runs created", async () => {
+    const template = await runTemplateService.createTemplate(lead, {
+      name: "Integration Row Mismatch",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+    });
+    createdTemplateIds.push(template.id);
+
+    await expectDomainCode(
+      runService.createManyRuns(lead, {
+        defaults: defaultsFor(),
+        runs: [
+          { scheduledStartAt: futureIso(840) },
+          { scheduledStartAt: futureIso(841), overrides: { raidLeadId: ids.otherLead } },
+        ],
+        templateId: template.id,
+      }),
+      "RUN_TEMPLATE_RAID_LEAD_MISMATCH",
+    );
+    const leaked = await orm.Run.where({ scheduledStartAt: futureIso(840) }).select("id").all();
+    expect(leaked).toHaveLength(0);
+  });
+
+  it("using an inactive template is rejected before any row is prepared, 0 Runs created", async () => {
+    const template = await runTemplateService.createTemplate(lead, {
+      name: "Integration Inactive Template",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+    });
+    createdTemplateIds.push(template.id);
+    await runTemplateService.deactivate(lead, template.id);
+
+    await expectDomainCode(
+      runService.createManyRuns(lead, { defaults: defaultsFor(), runs: rowsOf(1, 850), templateId: template.id }),
+      "RUN_TEMPLATE_UNUSABLE",
+    );
+    const leaked = await orm.Run.where({ scheduledStartAt: futureIso(850) }).select("id").all();
+    expect(leaked).toHaveLength(0);
+  });
+
+  it("a row may still override other template-derived values while the raid lead stays the template owner", async () => {
+    const template = await runTemplateService.createTemplate(lead, {
+      name: "Integration Row Override",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: "Shared template notes",
+    });
+    createdTemplateIds.push(template.id);
+
+    const result = await runService.createManyRuns(lead, {
+      defaults: defaultsFor(),
+      runs: [{ scheduledStartAt: futureIso(860), overrides: { notes: "Row-specific notes", desiredTankCount: 3 } }],
+      templateId: template.id,
+    });
+    createdRunIds.push(...result.ids);
+
+    const run = await runRepository.findById(result.ids[0]!);
+    expect(run?.raidLeadId).toBe(ids.lead);
+    expect(run?.notes).toBe("Row-specific notes");
+    expect(run?.desiredTankCount).toBe(3);
+  });
+
+  it("a multi-row batch via a template shares the template's raid lead across every row, atomically", async () => {
+    const template = await runTemplateService.createTemplate(lead, {
+      name: "Integration Multi-Row",
+      raidId,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+    });
+    createdTemplateIds.push(template.id);
+
+    const result = await runService.createManyRuns(lead, {
+      defaults: defaultsFor(),
+      runs: rowsOf(3, 870),
+      templateId: template.id,
+    });
+    createdRunIds.push(...result.ids);
+
+    expect(result.ids).toHaveLength(3);
+    const runs = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
+    for (const run of runs) {
+      expect(run?.raidLeadId).toBe(ids.lead);
+      expect(run?.status).toBe("DRAFT");
+      expect(run?.signupsOpen).toBe(false);
+      const roster = await orm.RunRoster.where({ runId: run!.id }).first();
+      expect(roster).toBeTruthy();
+    }
+  });
+
+  describe("snapshot independence — editing/deactivating a template never mutates a Run already created from it", () => {
+    it("editing the template after Run creation leaves the existing Run's fields unchanged", async () => {
+      const template = await runTemplateService.createTemplate(lead, {
+        name: "Snapshot Independence",
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        notes: "Original notes",
+      });
+      createdTemplateIds.push(template.id);
+
+      const result = await runService.createManyRuns(lead, {
+        defaults: defaultsFor(),
+        runs: rowsOf(1, 880),
+        templateId: template.id,
+      });
+      createdRunIds.push(...result.ids);
+      const before = await runRepository.findById(result.ids[0]!);
+
+      await runTemplateService.updateTemplate(lead, {
+        templateId: template.id,
+        name: "Snapshot Independence (edited)",
+        raidId,
+        difficulty: "MYTHIC",
+        lootType: "VIP",
+        plannedBossCount: 3,
+        desiredTankCount: 5,
+        desiredHealerCount: 1,
+        desiredDpsCount: 20,
+        notes: "Changed notes",
+      });
+
+      const after = await runRepository.findById(result.ids[0]!);
+      expect(after?.difficulty).toBe(before?.difficulty);
+      expect(after?.lootType).toBe(before?.lootType);
+      expect(after?.plannedBossCount).toBe(before?.plannedBossCount);
+      expect(after?.desiredTankCount).toBe(before?.desiredTankCount);
+      expect(after?.desiredHealerCount).toBe(before?.desiredHealerCount);
+      expect(after?.desiredDpsCount).toBe(before?.desiredDpsCount);
+      expect(after?.notes).toBe(before?.notes);
+      expect(after?.raidLeadId).toBe(before?.raidLeadId);
+    });
+
+    it("deactivating the template after Run creation leaves the existing Run fully manageable and unchanged", async () => {
+      const template = await runTemplateService.createTemplate(lead, {
+        name: "Deactivation Independence",
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        notes: null,
+      });
+      createdTemplateIds.push(template.id);
+
+      const result = await runService.createManyRuns(lead, {
+        defaults: defaultsFor(),
+        runs: rowsOf(1, 890),
+        templateId: template.id,
+      });
+      createdRunIds.push(...result.ids);
+      const before = await runRepository.findById(result.ids[0]!);
+
+      await runTemplateService.deactivate(lead, template.id);
+
+      const after = await runRepository.findById(result.ids[0]!);
+      expect(after?.status).toBe(before?.status);
+      expect(after?.raidLeadId).toBe(before?.raidLeadId);
+      expect(after?.archivedAt).toBeNull();
+      // The Run can still be opened normally — deactivation of its origin
+      // template has no bearing on the Run's own lifecycle.
+      const opened = await runService.openRun(lead, result.ids[0]!);
+      expect(opened.id).toBe(result.ids[0]);
+    });
   });
 });
