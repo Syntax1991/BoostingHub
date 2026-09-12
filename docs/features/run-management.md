@@ -151,6 +151,22 @@ This is **system/reference WoW content**, not demo users or demo Runs. The catal
 
 `ensureReferenceRaids()` is idempotent and is invoked from seed and from Run create/edit option loading so a production install without demo Runs can still create Runs.
 
+### Historical raid availability
+
+A raid is never deleted when a new content tier replaces it — its `Raid`/`RaidBoss` rows, and every historical Run/lockout relation pointing at it, stay intact and fully readable forever. What changes is whether it can be picked for a **new** Run.
+
+`WowRaidCatalogEntry.availableForRuns` (mapped by `ensureReferenceRaids()` onto the `Raid.isActive` column — no separate column, no migration) is the single source of truth, exposed as `RaidRecord.availableForRuns` and read exclusively through `raidRepository.listAvailableForRuns()` (available raids only) / `raidRepository.findById()` (any raid, including historical). Views never infer availability themselves.
+
+This is a **distinct concept from `currentForLockouts`** (`src/lib/wow-raid-catalog.ts`), which only tells Blizzard lockout derivation which raid's encounters to track. Manaforge Omega is `currentForLockouts: false` (superseded) *and* `availableForRuns: false` (historical) today, but the two flags are independent and neither is ever derived from the other — a future raid could in principle be current for lockouts without being open for new Run creation, or vice versa.
+
+Where availability is enforced:
+
+- **Create Run** (`getCreateForm`, `createRun`): the raid picker only lists available raids; the server independently re-validates on submit and rejects an unavailable raid with `RAID_NOT_AVAILABLE_FOR_RUNS` ("This raid is no longer available for new runs.").
+- **Edit Run** (`updateRun`): only rejected when the raid is *actually changing* to a different, unavailable one. Keeping an existing (possibly historical) raid — including a difficulty-only change on that same raid, or any unrelated field edit — is never blocked by availability; that is a completely separate concern from the signup-history identity lock above. The Edit Run raid selector always represents the Run's current raid as its selected value (marked "(Historical)" and non-selectable as a fresh alternative when historical) without offering any other historical raid as a replacement.
+- **Open Run**: never re-checks raid availability — opening progresses an already-established reference, not a new selection, so a Draft created before a raid became historical can still be opened.
+
+Historical Run reads (`/runs/[runId]`, Discord/embed DTOs, etc.) are unaffected — they resolve the raid by its stable id regardless of availability.
+
 ## MVCS
 
 View → Controller → Service → Repository.

@@ -3,7 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -12,7 +12,7 @@ import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-so0000000001",
   target: "aaaaaaaa-aaaa-4aaa-8aaa-so0000000002",

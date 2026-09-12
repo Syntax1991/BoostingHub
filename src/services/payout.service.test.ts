@@ -3,7 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { allocateGold } from "@/services/payout-calculation";
@@ -13,7 +13,7 @@ import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   user: "aaaaaaaa-aaaa-4aaa-8aaa-po0000000001",
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-po0000000002",

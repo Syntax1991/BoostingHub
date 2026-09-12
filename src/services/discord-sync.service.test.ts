@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -11,7 +11,7 @@ import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { ParticipationType, CharacterRole } from "@/models/enums";
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000001",
   tank: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000002",
@@ -691,18 +691,23 @@ describe("discordSyncService — raid identity invalidation (embed content signa
   let raidEditRunId = "";
 
   beforeAll(async () => {
-    raidEditRunId = await runService
-      .createRun(lead, {
-        raidId: MANAFORGE_OMEGA_RAID_ID,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
-      .then((run) => run.id);
+    // Manaforge Omega is historical (RAID_NOT_AVAILABLE_FOR_RUNS via the
+    // service create boundary) — this fixture simulates a pre-existing
+    // historical Run by writing it directly through the repository, exactly
+    // as a Run created before the raid became historical would look.
+    raidEditRunId = await runRepository.create({
+      title: "Historical raid edit fixture",
+      raidId: MANAFORGE_OMEGA_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(),
+      raidLeadId: ids.lead,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+      plannedBossCount: 8,
+    });
     createdRunIds.push(raidEditRunId);
     await runService.openRun(lead, raidEditRunId);
   }, 60_000);
@@ -804,18 +809,20 @@ describe("discordSyncService — raid identity invalidation (embed content signa
   });
 
   it("combines with archive: an archived + raid-changed run still flags work, and clears once resynced", async () => {
-    const comboRunId = await runService
-      .createRun(lead, {
-        raidId: MANAFORGE_OMEGA_RAID_ID,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
-      .then((run) => run.id);
+    // Historical-raid fixture, same reasoning as raidEditRunId above.
+    const comboRunId = await runRepository.create({
+      title: "Historical archive+raid-change fixture",
+      raidId: MANAFORGE_OMEGA_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(),
+      raidLeadId: ids.lead,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 2,
+      plannedBossCount: 8,
+    });
     createdRunIds.push(comboRunId);
     await runService.openRun(lead, comboRunId);
     await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
@@ -847,18 +854,20 @@ describe("discordSyncService — raid identity invalidation (embed content signa
   });
 
   it("documents the roster invariant: once a roster is published, the service layer refuses the identity/planning edits that would otherwise change RosterEmbedData content", async () => {
-    const publishedRunId = await runService
-      .createRun(lead, {
-        raidId: MANAFORGE_OMEGA_RAID_ID,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 0,
-        desiredDpsCount: 0,
-      })
-      .then((run) => run.id);
+    // Historical-raid fixture, same reasoning as raidEditRunId above.
+    const publishedRunId = await runRepository.create({
+      title: "Historical roster-invariant fixture",
+      raidId: MANAFORGE_OMEGA_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(),
+      raidLeadId: ids.lead,
+      notes: null,
+      desiredTankCount: 1,
+      desiredHealerCount: 0,
+      desiredDpsCount: 0,
+      plannedBossCount: 8,
+    });
     createdRunIds.push(publishedRunId);
     await runService.openRun(lead, publishedRunId);
 

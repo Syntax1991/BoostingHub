@@ -4,7 +4,7 @@ import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { resetIdentifierFor } from "@/lib/datetime";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -20,7 +20,7 @@ import { signupService } from "@/services/signup.service";
  * which remains a hard block (see the last test in this file).
  */
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-rl0000000001",
   target: "aaaaaaaa-aaaa-4aaa-8aaa-rl0000000002",

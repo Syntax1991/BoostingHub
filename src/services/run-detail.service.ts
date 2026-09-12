@@ -11,6 +11,23 @@ import { payoutService } from "@/services/payout.service";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 
+/**
+ * Options for the Edit Run raid selector: every currently-available raid,
+ * plus the Run's own current raid even if it has since become historical —
+ * so an existing historical selection always renders correctly as the
+ * current value, without offering any OTHER historical raid as a fresh
+ * alternative. Each entry is annotated with availableForRuns so the View can
+ * mark the historical one distinctly.
+ */
+async function listEditableRaidOptions(currentRaidId: string) {
+  const available = await raidRepository.listAvailableForRuns();
+  if (available.some((raid) => raid.id === currentRaidId)) {
+    return available;
+  }
+  const current = await raidRepository.findById(currentRaidId);
+  return current ? [current, ...available] : available;
+}
+
 function canViewRunDetail(
   user: AuthenticatedUser,
   run: { status: string; raidLeadId: string },
@@ -96,13 +113,19 @@ export const runDetailService = {
     let editor: {
       hasSignupHistory: boolean;
       canAssignRaidLead: boolean;
-      raids: Array<{ id: string; name: string; season: string; totalBossCount: number }>;
+      raids: Array<{
+        id: string;
+        name: string;
+        season: string;
+        totalBossCount: number;
+        availableForRuns: boolean;
+      }>;
       raidLeads: Array<{ id: string; name: string }>;
     } | null = null;
 
     if (manage && capabilities.canEdit) {
       await raidRepository.ensureReferenceRaids();
-      const raids = await raidRepository.listActive();
+      const raids = await listEditableRaidOptions(run.raidId);
       const raidLeads = capabilities.canReassignRaidLead
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName }];
