@@ -5,7 +5,10 @@ import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import {
   reconcileChannels,
+  reconcileWeekSectionPositions,
+  type CategoryChannelLister,
   type ChannelFetcher,
+  type PositionSetter,
   type ReconcilableChannel,
 } from "@/discord-bot/channel-reconciliation";
 import type { RosterEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
@@ -15,7 +18,7 @@ type ChannelWorkItem = {
   runId: string;
   existingRunChannelId: string | null;
   desiredChannelName: string;
-  archived: boolean;
+  targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
 };
 
 /**
@@ -64,10 +67,35 @@ function makeChannelFetcher(client: Client): ChannelFetcher {
   };
 }
 
+/**
+ * Lists the current children of a category by their live `position`, for
+ * `reconcileWeekSectionPositions`. Prefers the cache (populated by the
+ * gateway's own channel-create/update/delete events) over a REST call.
+ */
+function makeCategoryChannelLister(client: Client): CategoryChannelLister {
+  return async (categoryId) => {
+    const category = await client.channels.fetch(categoryId).catch(() => null);
+    if (!category || category.type !== ChannelType.GuildCategory) {
+      return null;
+    }
+    return client.channels.cache
+      .filter((channel) => channel !== null && "parentId" in channel && channel.parentId === categoryId)
+      .map((channel) => ({ id: channel.id, position: "position" in channel ? (channel as { position: number }).position : 0 }));
+  };
+}
+
+/** Applies a full desired ordering in one guild-level batched call — never includes a marker channel id (enforced in channel-reconciliation.ts). */
+function makePositionSetter(client: Client, guildId: string): PositionSetter {
+  return async (moves) => {
+    const guild = await client.guilds.fetch(guildId);
+    return guild.channels.setPositions(moves.map((move) => ({ channel: move.channelId, position: move.position })));
+  };
+}
+
 async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
   const work: SyncWork = await api.listSyncWork();
 
-  // Channel reconciliation (name + archive/active category) runs first and
+  // Channel reconciliation (name + parent category) runs first and
   // independently of message state — a Run's channel should already be in
   // its correct place before any new signup/roster message work is applied.
   // The resulting map lets the message paths below reuse the same resolved
@@ -76,6 +104,20 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
   const resolvedChannels = await reconcileChannels(
     makeChannelFetcher(client),
     { discordRunCategoryId: env.discordRunCategoryId, discordRunArchiveCategoryId: env.discordRunArchiveCategoryId },
+    work.channels,
+  );
+
+  // Independently, order CURRENT/NEXT channels within that one shared
+  // category around the two marker channels — a separate concern from which
+  // category a channel's parent is (handled above).
+  await reconcileWeekSectionPositions(
+    makeCategoryChannelLister(client),
+    makePositionSetter(client, env.discordGuildId),
+    {
+      discordRunCategoryId: env.discordRunCategoryId,
+      discordRunCurrentMarkerChannelId: env.discordRunCurrentMarkerChannelId,
+      discordRunNextMarkerChannelId: env.discordRunNextMarkerChannelId,
+    },
     work.channels,
   );
 
@@ -95,12 +137,15 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  * Resolves the Discord channel a Run's posts belong in.
  *
  * Preferred (per-Run) mode — `DISCORD_RUN_CATEGORY_ID` configured: creates
- * the Run's own dedicated text channel once (recorded immediately via the
- * "channel" discord-state kind, before any message is posted). Renaming and
- * archive/active category movement for an already-existing channel are no
- * longer this function's job — they happen unconditionally and independently
- * via `channel-reconciliation.ts`/`reconcileChannels`, before this function
- * ever runs (see `syncOnce`). This function only needs to know the resolved
+ * the Run's own dedicated text channel once under that ONE category
+ * (recorded immediately via the "channel" discord-state kind, before any
+ * message is posted) — CURRENT and NEXT share this same category; only
+ * ordering (see `reconcileWeekSectionPositions`) distinguishes them
+ * visually, not which parent they get created under. Renaming and category
+ * movement for an already-existing channel are no longer this function's
+ * job — they happen unconditionally and independently via
+ * `channel-reconciliation.ts`/`reconcileChannels`, before this function ever
+ * runs (see `syncOnce`). This function only needs to know the resolved
  * channel id — reusing it from `resolvedChannels` when available — and,
  * failing that, whether the stored id still resolves at all (if the channel
  * was deleted out-of-band in Discord, a fresh one is created only when
@@ -115,8 +160,8 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  * scratch by the roster path alone, defeating the signup-side rule that a
  * Run never gets retroactive Discord infrastructure for a phase that's
  * already over. Only the signup path — itself gated by `isSignupWindowOpen`
- * in `listSyncWork` — may create a Run's first channel; the roster path may
- * only reuse one that already exists.
+ * + week bucket in `listSyncWork` — may create a Run's first channel; the
+ * roster path may only reuse one that already exists.
  *
  * Legacy mode — no category configured: always the single global channel
  * from env (`DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID`).
@@ -151,10 +196,11 @@ async function resolveRunChannel(
 
   if (!allowCreate) {
     // Only the signup path may provision a Run's first channel (it alone is
-    // gated by isSignupWindowOpen). A roster-only sync pass for a Run that
-    // never went through a bot-observed signup phase — e.g. historical data
-    // predating the bot, or the bot being offline through the entire signup
-    // window — must not retroactively create Discord infrastructure for it.
+    // gated by isSignupWindowOpen + week bucket). A roster-only sync pass for
+    // a Run that never went through a bot-observed signup phase — e.g.
+    // historical data predating the bot, or the bot being offline through
+    // the entire signup window — must not retroactively create Discord
+    // infrastructure for it.
     console.warn(`[discord-bot] run ${item.runId} has no channel and none may be created from the roster path — skipping`);
     return null;
   }

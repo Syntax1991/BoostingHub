@@ -74,7 +74,8 @@ export class BotApiClient {
         runId: string;
         existingRunChannelId: string;
         desiredChannelName: string;
-        archived: boolean;
+        targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+        scheduledStartAt: string;
       }>;
       signups: Array<{
         runId: string;
@@ -82,7 +83,7 @@ export class BotApiClient {
         existingMessageId: string | null;
         existingRunChannelId: string | null;
         desiredChannelName: string;
-        archived: boolean;
+        targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
         embed: unknown;
       }>;
       roster: Array<{
@@ -91,7 +92,7 @@ export class BotApiClient {
         existingMessageId: string | null;
         existingRunChannelId: string | null;
         desiredChannelName: string;
-        archived: boolean;
+        targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
       }>;
     }>("/api/bot/discord/sync");
   }

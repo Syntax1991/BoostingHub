@@ -3,6 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { classifyRunWeek } from "@/lib/wow-run-week";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -70,7 +71,15 @@ async function deleteIfPresent(table: string, id: string) {
   }
 }
 
-function futureIso(days = 10) {
+// Small default offset: guaranteed to classify CURRENT or NEXT regardless of
+// where "now" falls in the current raid-ID week (see wow-run-week.ts — the
+// minimum reach into NEXT from any point in CURRENT is always > 7 days), so
+// these fixtures stay eligible for first-channel provisioning no matter when
+// the suite actually runs. Explicit larger offsets used elsewhere in this
+// file are all reschedules of a Run that already has a posted message/
+// channel, which is exempt from the week-eligibility gate (see
+// discord-sync.service.ts's `eligibleForFirstProvisioning`).
+function futureIso(days = 2) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
@@ -622,7 +631,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 });
 
 describe("discordSyncService — archive category movement", () => {
-  it("flags archived:true after Archive and archived:false again after Restore, with the channel identity untouched", async () => {
+  it("flags targetBucket ARCHIVE after Archive and reverts to schedule-derived CURRENT after Restore, with the channel identity untouched", async () => {
     const archiveRunId = await runService
       .createRun(lead, {
         raidId,
@@ -648,7 +657,7 @@ describe("discordSyncService — archive category movement", () => {
 
     work = await discordSyncService.listSyncWork();
     const archived = work.signups.find((entry) => entry.runId === archiveRunId);
-    expect(archived?.archived).toBe(true);
+    expect(archived?.targetBucket).toBe("ARCHIVE");
     expect(archived?.existingRunChannelId).toBe("archive-chan-1");
 
     // The bot resyncs (same channel, same message) once it observes the new signature.
@@ -659,7 +668,9 @@ describe("discordSyncService — archive category movement", () => {
     await runService.restoreRun(lead, archiveRunId);
     work = await discordSyncService.listSyncWork();
     const restored = work.signups.find((entry) => entry.runId === archiveRunId);
-    expect(restored?.archived).toBe(false);
+    // Restore is never "back to the one active category" — placement is
+    // re-derived from the schedule, and this Run's futureIso(2) schedule is CURRENT.
+    expect(restored?.targetBucket).toBe("CURRENT");
     expect(restored?.existingRunChannelId).toBe("archive-chan-1");
   });
 
@@ -712,8 +723,8 @@ describe("discordSyncService.listSyncWork — channel reconciliation is independ
     await discordSyncService.recordSignupPost({ runId: id, channelId: "core-regr-chan-1", messageId: "core-regr-msg-1" });
 
     // Settle the signup message before archiving, then archive and resettle
-    // once more — the pre-existing signature still embeds `archived`, so one
-    // resync is expected to clear it. The point of this test is what
+    // once more — the pre-existing signature still embeds `targetBucket`, so
+    // one resync is expected to clear it. The point of this test is what
     // happens AFTER that: at steady state (signup message fully caught up),
     // channels[] must still carry the Run so the bot keeps checking its
     // live Discord category every poll — it must never depend on the
@@ -726,12 +737,12 @@ describe("discordSyncService.listSyncWork — channel reconciliation is independ
     const channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem).toBeTruthy();
     expect(channelItem?.existingRunChannelId).toBe("core-regr-chan-1");
-    expect(channelItem?.archived).toBe(true);
+    expect(channelItem?.targetBucket).toBe("ARCHIVE");
     expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
     expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
   });
 
-  it("RESTORE: the channels[] item reflects archived:false immediately after Restore, independent of message settlement", async () => {
+  it("RESTORE: the channels[] item reflects schedule-derived CURRENT immediately after Restore, independent of message settlement", async () => {
     const id = await createOpenRunWithChannel("restore-chan-1");
     await discordSyncService.recordSignupPost({ runId: id, channelId: "restore-chan-1", messageId: "restore-msg-1" });
     await runRepository.updateFields(id, { status: "CANCELLED" });
@@ -739,13 +750,13 @@ describe("discordSyncService.listSyncWork — channel reconciliation is independ
     await runService.restoreRun(lead, id);
 
     // Deliberately NOT resyncing the signup message here — the whole point
-    // is that channels[] must report the correct archived state on its own,
-    // whether or not the (separate, still-coupled-by-design) signup
-    // signature has caught up yet.
+    // is that channels[] must report the correct target on its own, whether
+    // or not the (separate, still-coupled-by-design) signup signature has
+    // caught up yet.
     const work = await discordSyncService.listSyncWork();
     const channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem).toBeTruthy();
-    expect(channelItem?.archived).toBe(false);
+    expect(channelItem?.targetBucket).toBe("CURRENT");
     expect(channelItem?.existingRunChannelId).toBe("restore-chan-1");
   });
 
@@ -966,7 +977,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
     const work = await discordSyncService.listSyncWork();
     const item = work.signups.find((entry) => entry.runId === comboRunId);
     expect(item).toBeTruthy();
-    expect(item?.archived).toBe(true);
+    expect(item?.targetBucket).toBe("ARCHIVE");
 
     await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
     const settled = await discordSyncService.listSyncWork();
@@ -1049,5 +1060,103 @@ describe("discordSyncService — raid identity invalidation (embed content signa
         desiredDpsCount: 0,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("discordSyncService — weekly raid-ID target resolution", () => {
+  // A classification "now" far enough in the real future that every test
+  // schedule below (CURRENT/NEXT/PAST/FUTURE relative to THIS now) is still
+  // comfortably in the real future too, so runService.createRun's own
+  // past-schedule guard never rejects them — only the explicit `now` passed
+  // to listSyncWork decides week classification here, never the real clock.
+  const classificationNow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  const { currentStart, nextStart, followingStart } = classifyRunWeek({
+    scheduledStartAt: classificationNow.toISOString(),
+    now: classificationNow,
+  });
+
+  async function createRunAt(scheduledStartAt: string) {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    return id;
+  }
+
+  it("CURRENT + signup-open + no channel: eligible for first provisioning, targetBucket CURRENT", async () => {
+    const id = await createRunAt(currentStart);
+    await runService.openRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const item = work.signups.find((entry) => entry.runId === id);
+    expect(item).toBeTruthy();
+    expect(item?.targetBucket).toBe("CURRENT");
+    // Eligibility is not provisioning itself — no channel exists until the bot creates one.
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("NEXT + signup-open + no channel: eligible for first provisioning, targetBucket NEXT", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const item = work.signups.find((entry) => entry.runId === id);
+    expect(item).toBeTruthy();
+    expect(item?.targetBucket).toBe("NEXT");
+  });
+
+  it("FUTURE + signup-open + no channel: NOT eligible — no signups[] item, no RunDiscordPost created", async () => {
+    const id = await createRunAt(followingStart);
+    await runService.openRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("PAST + no channel: NOT eligible for first provisioning even though status/signups otherwise look open", async () => {
+    // Before currentStart relative to classificationNow, but still safely in
+    // the real future relative to actual now — see classificationNow above.
+    const pastRelativeToClassification = new Date(new Date(currentStart).getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const id = await createRunAt(pastRelativeToClassification);
+    await runService.openRun(lead, id); // status OPEN, signupsOpen true — otherwise looks eligible
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+    expect(await runDiscordPostRepository.findByRunId(id)).toBeNull();
+  });
+
+  it("rollover: the SAME scheduled Run flips NEXT -> CURRENT across two listSyncWork calls with different `now`, with no Run mutation in between", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+
+    const before = await discordSyncService.listSyncWork(classificationNow);
+    expect(before.signups.find((entry) => entry.runId === id)?.targetBucket).toBe("NEXT");
+
+    // Advance only the classification `now` to the NEXT boundary itself — no
+    // write to the Run row happens between these two calls.
+    const after = await discordSyncService.listSyncWork(new Date(nextStart));
+    expect(after.signups.find((entry) => entry.runId === id)?.targetBucket).toBe("CURRENT");
+  });
+
+  it("app archive overrides week classification: an archived Run scheduled NEXT still targets ARCHIVE", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "override-chan-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.targetBucket).toBe("ARCHIVE");
   });
 });
