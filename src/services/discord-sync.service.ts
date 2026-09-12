@@ -14,12 +14,17 @@ import { isActiveSignupOffer } from "@/services/signup-state";
  * calendar logic itself, it only reconciles Discord to whatever target the
  * Service already computed (see channel-reconciliation.ts).
  *
+ * CURRENT and NEXT are not separate Discord categories — Discord channels
+ * cannot contain child channels, so both weeks share the one active Run
+ * category and are visually separated by ordering around two marker
+ * channels (`#current-id`/`#next-id`). ARCHIVE is a real, separate category.
+ *
  * App archival (`Run.archivedAt`) always wins over week classification.
  * Otherwise: CURRENT/NEXT map directly from `classifyRunWeek`; PAST and
  * FUTURE both resolve to ARCHIVE — a holding placement that keeps the
- * CURRENT/NEXT categories strictly limited to Runs actually in those weeks
+ * CURRENT/NEXT sections strictly limited to Runs actually in those weeks
  * while never deleting/recreating the same already-provisioned channel (see
- * docs/features/discord-bot.md § weekly raid-ID categories).
+ * docs/features/discord-bot.md § weekly raid-ID sections).
  */
 export type DiscordRunChannelTarget = "CURRENT" | "NEXT" | "ARCHIVE";
 
@@ -91,10 +96,11 @@ export type RosterEmbedData = {
  * when a bot instance is running in legacy single-channel mode and ignores it.
  */
 /**
- * Reconciliation for a Run's EXISTING dedicated Discord channel — name and
- * CURRENT/NEXT/ARCHIVE category — fully independent of signup/roster message
- * state. `existingRunChannelId` is always non-null: this item means "this
- * Run already owns a channel; keep its live Discord state correct," never
+ * Reconciliation for a Run's EXISTING dedicated Discord channel — name,
+ * parent category, and (for CURRENT/NEXT) its section ordering — fully
+ * independent of signup/roster message state. `existingRunChannelId` is
+ * always non-null: this item means "this Run already owns a channel; keep
+ * its live Discord state correct," never
  * "provision a first channel." First-channel provisioning stays exclusively
  * gated behind the signup path's `isSignupWindowOpen` + week-bucket rule below.
  */
@@ -103,6 +109,8 @@ export type ChannelSyncWorkItem = {
   existingRunChannelId: string;
   desiredChannelName: string;
   targetBucket: DiscordRunChannelTarget;
+  /** Needed by the bot's CURRENT/NEXT section position reconciliation to order channels chronologically — never used for week classification itself, which already happened above. */
+  scheduledStartAt: string;
 };
 
 export type SignupSyncWorkItem = {
@@ -259,17 +267,19 @@ export const discordSyncService = {
 
       // Channel reconciliation is fully independent of message state and of
       // Run status/archive-ness itself — any Run that already owns a
-      // dedicated Discord channel must keep having that channel's name and
-      // CURRENT/NEXT/ARCHIVE category checked on every poll, regardless of
-      // DRAFT status or whether a signup/roster message currently needs
-      // updating. This never provisions a first channel (existingRunChannelId
-      // is only ever set once the signup path below has already created one).
+      // dedicated Discord channel must keep having that channel's name,
+      // parent category, and CURRENT/NEXT section position checked on every
+      // poll, regardless of DRAFT status or whether a signup/roster message
+      // currently needs updating. This never provisions a first channel
+      // (existingRunChannelId is only ever set once the signup path below
+      // has already created one).
       if (post?.runChannelId) {
         channels.push({
           runId: run.id,
           existingRunChannelId: post.runChannelId,
           desiredChannelName: desiredChannelNameFor(run),
           targetBucket,
+          scheduledStartAt: run.scheduledStartAt,
         });
       }
 

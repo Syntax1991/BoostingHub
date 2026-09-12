@@ -239,8 +239,9 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
     expect(item.existingRunChannelId).toBe("contract-chan-1");
     expect(typeof item.desiredChannelName).toBe("string");
     expect(["CURRENT", "NEXT", "ARCHIVE"]).toContain(item.targetBucket);
+    expect(typeof item.scheduledStartAt).toBe("string");
     expect(Object.keys(item).sort()).toEqual(
-      ["desiredChannelName", "existingRunChannelId", "runId", "targetBucket"].sort(),
+      ["desiredChannelName", "existingRunChannelId", "runId", "scheduledStartAt", "targetBucket"].sort(),
     );
   });
 });

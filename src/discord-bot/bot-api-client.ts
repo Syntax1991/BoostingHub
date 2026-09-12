@@ -75,6 +75,7 @@ export class BotApiClient {
         existingRunChannelId: string;
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+        scheduledStartAt: string;
       }>;
       signups: Array<{
         runId: string;

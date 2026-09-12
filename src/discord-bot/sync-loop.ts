@@ -5,7 +5,10 @@ import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import {
   reconcileChannels,
+  reconcileWeekSectionPositions,
+  type CategoryChannelLister,
   type ChannelFetcher,
+  type PositionSetter,
   type ReconcilableChannel,
 } from "@/discord-bot/channel-reconciliation";
 import type { RosterEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
@@ -64,10 +67,35 @@ function makeChannelFetcher(client: Client): ChannelFetcher {
   };
 }
 
+/**
+ * Lists the current children of a category by their live `position`, for
+ * `reconcileWeekSectionPositions`. Prefers the cache (populated by the
+ * gateway's own channel-create/update/delete events) over a REST call.
+ */
+function makeCategoryChannelLister(client: Client): CategoryChannelLister {
+  return async (categoryId) => {
+    const category = await client.channels.fetch(categoryId).catch(() => null);
+    if (!category || category.type !== ChannelType.GuildCategory) {
+      return null;
+    }
+    return client.channels.cache
+      .filter((channel) => channel !== null && "parentId" in channel && channel.parentId === categoryId)
+      .map((channel) => ({ id: channel.id, position: "position" in channel ? (channel as { position: number }).position : 0 }));
+  };
+}
+
+/** Applies a full desired ordering in one guild-level batched call — never includes a marker channel id (enforced in channel-reconciliation.ts). */
+function makePositionSetter(client: Client, guildId: string): PositionSetter {
+  return async (moves) => {
+    const guild = await client.guilds.fetch(guildId);
+    return guild.channels.setPositions(moves.map((move) => ({ channel: move.channelId, position: move.position })));
+  };
+}
+
 async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
   const work: SyncWork = await api.listSyncWork();
 
-  // Channel reconciliation (name + archive/active category) runs first and
+  // Channel reconciliation (name + parent category) runs first and
   // independently of message state — a Run's channel should already be in
   // its correct place before any new signup/roster message work is applied.
   // The resulting map lets the message paths below reuse the same resolved
@@ -75,10 +103,20 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
   // it a second time within the same pass.
   const resolvedChannels = await reconcileChannels(
     makeChannelFetcher(client),
+    { discordRunCategoryId: env.discordRunCategoryId, discordRunArchiveCategoryId: env.discordRunArchiveCategoryId },
+    work.channels,
+  );
+
+  // Independently, order CURRENT/NEXT channels within that one shared
+  // category around the two marker channels — a separate concern from which
+  // category a channel's parent is (handled above).
+  await reconcileWeekSectionPositions(
+    makeCategoryChannelLister(client),
+    makePositionSetter(client, env.discordGuildId),
     {
-      discordRunCurrentCategoryId: env.discordRunCurrentCategoryId,
-      discordRunNextCategoryId: env.discordRunNextCategoryId,
-      discordRunArchiveCategoryId: env.discordRunArchiveCategoryId,
+      discordRunCategoryId: env.discordRunCategoryId,
+      discordRunCurrentMarkerChannelId: env.discordRunCurrentMarkerChannelId,
+      discordRunNextMarkerChannelId: env.discordRunNextMarkerChannelId,
     },
     work.channels,
   );
@@ -98,18 +136,16 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
 /**
  * Resolves the Discord channel a Run's posts belong in.
  *
- * Preferred (per-Run) mode — a CURRENT or NEXT category configured: creates
- * the Run's own dedicated text channel once, under whichever category
- * `item.targetBucket` calls for (recorded immediately via the "channel"
- * discord-state kind, before any message is posted). `targetBucket` always
- * arrives already decided by discordSyncService — this function never
- * reproduces the weekly calendar logic, and by construction only ever sees
- * "CURRENT" or "NEXT" here (a first-provisioning item is never emitted with
- * "ARCHIVE" — see discord-sync.service.ts's `eligibleForFirstProvisioning`).
- * Renaming and category movement for an already-existing channel are no
- * longer this function's job — they happen unconditionally and independently
- * via `channel-reconciliation.ts`/`reconcileChannels`, before this function
- * ever runs (see `syncOnce`). This function only needs to know the resolved
+ * Preferred (per-Run) mode — `DISCORD_RUN_CATEGORY_ID` configured: creates
+ * the Run's own dedicated text channel once under that ONE category
+ * (recorded immediately via the "channel" discord-state kind, before any
+ * message is posted) — CURRENT and NEXT share this same category; only
+ * ordering (see `reconcileWeekSectionPositions`) distinguishes them
+ * visually, not which parent they get created under. Renaming and category
+ * movement for an already-existing channel are no longer this function's
+ * job — they happen unconditionally and independently via
+ * `channel-reconciliation.ts`/`reconcileChannels`, before this function ever
+ * runs (see `syncOnce`). This function only needs to know the resolved
  * channel id — reusing it from `resolvedChannels` when available — and,
  * failing that, whether the stored id still resolves at all (if the channel
  * was deleted out-of-band in Discord, a fresh one is created only when
@@ -127,9 +163,8 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
  * + week bucket in `listSyncWork` — may create a Run's first channel; the
  * roster path may only reuse one that already exists.
  *
- * Legacy mode — neither CURRENT nor NEXT category configured: always the
- * single global channel from env (`DISCORD_SIGNUP_CHANNEL_ID` /
- * `DISCORD_ROSTER_CHANNEL_ID`).
+ * Legacy mode — no category configured: always the single global channel
+ * from env (`DISCORD_SIGNUP_CHANNEL_ID` / `DISCORD_ROSTER_CHANNEL_ID`).
  */
 async function resolveRunChannel(
   client: Client,
@@ -140,8 +175,7 @@ async function resolveRunChannel(
   allowCreate: boolean,
   resolvedChannels: Map<string, string>,
 ): Promise<string | null> {
-  const perRunModeEnabled = Boolean(env.discordRunCurrentCategoryId || env.discordRunNextCategoryId);
-  if (!perRunModeEnabled) {
+  if (!env.discordRunCategoryId) {
     return legacyFallbackChannelId;
   }
 
@@ -171,16 +205,9 @@ async function resolveRunChannel(
     return null;
   }
 
-  const categoryId = item.targetBucket === "NEXT" ? env.discordRunNextCategoryId : env.discordRunCurrentCategoryId;
-  const categoryEnvVar = item.targetBucket === "NEXT" ? "DISCORD_RUN_NEXT_CATEGORY_ID" : "DISCORD_RUN_CURRENT_CATEGORY_ID";
-  if (!categoryId) {
-    console.error(`[discord-bot] run ${item.runId} needs its ${item.targetBucket} category but ${categoryEnvVar} is unset — skipping`);
-    return null;
-  }
-
-  const category = await client.channels.fetch(categoryId).catch(() => null);
+  const category = await client.channels.fetch(env.discordRunCategoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
-    console.error(`[discord-bot] ${categoryEnvVar} does not resolve to a category — skipping run ${item.runId}`);
+    console.error(`[discord-bot] DISCORD_RUN_CATEGORY_ID does not resolve to a category — skipping run ${item.runId}`);
     return null;
   }
 
