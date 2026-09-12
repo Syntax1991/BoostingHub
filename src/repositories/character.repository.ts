@@ -346,10 +346,16 @@ export const characterRepository = {
       .include("user")
       .all();
 
+    const staleBeforeMs = new Date(input.staleBefore).getTime();
     const stale = linked.filter((row) => {
       const record = row as Record<string, unknown>;
       const lastSyncedAt = asStringOrNull(record.lastSyncedAt);
-      return lastSyncedAt === null || lastSyncedAt < input.staleBefore;
+      // Compared as parsed timestamps, never as raw strings: the driver
+      // round-trips TimestamptzString as Postgres's own text format (e.g.
+      // "2026-09-12 12:32:22.218+02"), not the "...T...Z" ISO shape a caller
+      // may have built staleBefore from, so lexicographic comparison would
+      // be meaningless.
+      return lastSyncedAt === null || new Date(lastSyncedAt).getTime() < staleBeforeMs;
     });
 
     if (stale.length === 0) {

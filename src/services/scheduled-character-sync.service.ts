@@ -24,7 +24,7 @@ const SCHEDULED_SYNC_CONCURRENCY = 4;
  * different objectId for any future scheduled job sharing the namespace, so
  * unrelated jobs never contend on the same key by accident.
  */
-const SCHEDULED_CHARACTER_SYNC_LOCK_KEY = { classId: 837462, objectId: 1 } as const;
+export const SCHEDULED_CHARACTER_SYNC_LOCK_KEY = { classId: 837462, objectId: 1 } as const;
 
 export type ScheduledCharacterSyncResult = {
   status: "COMPLETED" | "SKIPPED_ALREADY_RUNNING";
