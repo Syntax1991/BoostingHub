@@ -160,8 +160,9 @@ export function RunEditDialog({
             className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {editor.raids.map((raid) => (
-              <option key={raid.id} value={raid.id}>
+              <option key={raid.id} value={raid.id} disabled={!raid.availableForRuns}>
                 {raid.name} · {raid.season}
+                {raid.availableForRuns ? "" : " (Historical)"}
               </option>
             ))}
           </select>

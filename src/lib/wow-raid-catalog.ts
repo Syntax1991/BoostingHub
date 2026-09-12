@@ -43,7 +43,11 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     // Live Character Raid Encounters instance.id (was incorrectly 1296 = Liberation of Undermine).
     blizzardInstanceId: 1302,
     currentForLockouts: false,
-    availableForRuns: true,
+    // Historical: superseded by The Venomous Abyss. Kept in the catalog (and
+    // its Raid/RaidBoss rows kept in the database) forever so existing Runs,
+    // lockout history, and Discord/embed data keep resolving this raid's
+    // name — only NEW Run creation/selection is blocked, via availableForRuns.
+    availableForRuns: false,
     bosses: [
       {
         id: "ab000001-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

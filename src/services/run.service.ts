@@ -63,10 +63,37 @@ function assertComposition(count: number, label: string): void {
   }
 }
 
-async function requireActiveRaid(raidId: string) {
+/** New-selection boundary: creating a Run may only target an available raid. */
+async function requireRaidAvailableForNewSelection(raidId: string) {
   const raid = await raidRepository.findById(raidId);
-  if (!raid || !raid.isActive) {
+  if (!raid) {
     throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+  }
+  if (!raid.availableForRuns) {
+    throw new DomainError(
+      "RAID_NOT_AVAILABLE_FOR_RUNS",
+      "This raid is no longer available for new runs.",
+    );
+  }
+  return raid;
+}
+
+/**
+ * Update boundary: only rejects on availability when the Run's raid is
+ * actually changing to a different one. Keeping an existing historical
+ * reference (raidId unchanged, or only difficulty changing on the same raid)
+ * is never blocked by availability — only *selecting* a different raid is.
+ */
+async function resolveRaidForUpdate(input: { raidId: string; raidChanged: boolean }) {
+  const raid = await raidRepository.findById(input.raidId);
+  if (!raid) {
+    throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+  }
+  if (input.raidChanged && !raid.availableForRuns) {
+    throw new DomainError(
+      "RAID_NOT_AVAILABLE_FOR_RUNS",
+      "This raid is no longer available for new runs.",
+    );
   }
   return raid;
 }
@@ -234,7 +261,7 @@ export const runService = {
   async getCreateForm(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const raids = await raidRepository.listActive();
+    const raids = await raidRepository.listAvailableForRuns();
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
       : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
@@ -266,7 +293,7 @@ export const runService = {
   async createRun(user: AuthenticatedUser, input: CreateRunInput) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const raid = await requireActiveRaid(input.raidId);
+    const raid = await requireRaidAvailableForNewSelection(input.raidId);
     const scheduledStartAt = parseSchedule(input.scheduledStartAt);
     assertNewRunSchedule(scheduledStartAt);
     assertComposition(input.desiredTankCount, "Desired tanks");
@@ -373,7 +400,12 @@ export const runService = {
     let difficulty = run.difficulty;
     let totalBossCount = run.totalBossCount;
     if (identityChanged) {
-      const raid = await requireActiveRaid(input.raidId);
+      // Only actually selecting a different raid is gated by availability —
+      // a difficulty-only change that keeps the same (possibly historical)
+      // raid must not be blocked merely because that raid isn't a new-Run
+      // option anymore.
+      const raidChanged = input.raidId !== run.raidId;
+      const raid = await resolveRaidForUpdate({ raidId: input.raidId, raidChanged });
       raidId = raid.id;
       difficulty = input.difficulty;
       totalBossCount = raid.totalBossCount;
@@ -434,7 +466,10 @@ export const runService = {
     if (run.status !== "DRAFT") {
       throw new DomainError("RUN_INVALID_TRANSITION", "Only a draft run can be opened.");
     }
-    await requireActiveRaid(run.raidId);
+    // Opening progresses the Run's already-established raid reference — it
+    // is not a new raid selection, so raid availability is never re-checked
+    // here (a Draft created before a raid became historical must still be
+    // openable).
 
     await runRepository.updateFields(run.id, { status: "OPEN", signupsOpen: true });
     await activityRepository.create({

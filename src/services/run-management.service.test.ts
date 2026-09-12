@@ -3,14 +3,14 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   user: "aaaaaaaa-aaaa-4aaa-8aaa-rm0000000001",
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-rm0000000002",
@@ -94,6 +94,32 @@ async function createDraft(actor: AuthenticatedUser, extra: Record<string, unkno
   });
   createdRunIds.push(created.id);
   return created.id;
+}
+
+/**
+ * Simulates a pre-existing historical Run (raid = Manaforge Omega, now
+ * unavailable for new selection) by writing it directly through the
+ * repository — exactly how a Run created before the raid became historical
+ * would look. Bypasses runService.createRun's availability gate on purpose;
+ * that gate only applies to NEW selection, never to preserving history.
+ */
+async function createHistoricalDraft(extra: Record<string, unknown> = {}) {
+  const id = await runRepository.create({
+    title: "Historical fixture run",
+    raidId: MANAFORGE_OMEGA_RAID_ID,
+    difficulty: "HEROIC",
+    lootType: "UNSAVED",
+    scheduledStartAt: futureIso(),
+    raidLeadId: ids.lead,
+    notes: null,
+    desiredTankCount: 2,
+    desiredHealerCount: 4,
+    desiredDpsCount: 14,
+    plannedBossCount: 8,
+    ...extra,
+  });
+  createdRunIds.push(id);
+  return id;
 }
 
 const user = asUser(ids.user, "Runmgmt User");
@@ -935,11 +961,177 @@ describe("manage runs archive filter", () => {
 });
 
 describe("raid reference bootstrap", () => {
-  it("is idempotent and independent of demo runs", async () => {
+  it("is idempotent and independent of demo runs, with stable ids", async () => {
     await raidRepository.ensureReferenceRaids();
     await raidRepository.ensureReferenceRaids();
-    const raids = await raidRepository.listActive();
-    expect(raids.some((raid) => raid.id === raidId)).toBe(true);
-    expect(raids.some((raid) => raid.name === "Manaforge Omega")).toBe(true);
+
+    const manaforge = await raidRepository.findById(MANAFORGE_OMEGA_RAID_ID);
+    const venomous = await raidRepository.findById(VENOMOUS_ABYSS_RAID_ID);
+    expect(manaforge?.id).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(venomous?.id).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(manaforge?.name).toBe("Manaforge Omega");
+    expect(venomous?.name).toBe("The Venomous Abyss");
+  });
+});
+
+describe("historical raid availability", () => {
+  it("Manaforge Omega is historical (unavailable for new runs); The Venomous Abyss remains available", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const manaforge = await raidRepository.findById(MANAFORGE_OMEGA_RAID_ID);
+    const venomous = await raidRepository.findById(VENOMOUS_ABYSS_RAID_ID);
+    expect(manaforge?.availableForRuns).toBe(false);
+    expect(venomous?.availableForRuns).toBe(true);
+  });
+
+  it("listAvailableForRuns excludes historical raids but includes the current one", async () => {
+    const available = await raidRepository.listAvailableForRuns();
+    expect(available.some((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
+    expect(available.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
+  });
+
+  it("the Create Run form omits historical raids and offers the current one", async () => {
+    const form = await runService.getCreateForm(lead);
+    expect(form.raids.some((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
+    expect(form.raids.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
+  });
+
+  it("rejects creating a new Run targeting a historical raid, with no Run row created", async () => {
+    const before = (await orm.Run.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
+    await expectDomainCode(
+      runService.createRun(lead, {
+        raidId: MANAFORGE_OMEGA_RAID_ID,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+      }),
+      "RAID_NOT_AVAILABLE_FOR_RUNS",
+    );
+    const after = (await orm.Run.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
+    expect(after).toBe(before);
+  });
+
+  it("succeeds creating a new Run targeting the current available raid", async () => {
+    const id = await createDraft(lead, { title: "Available raid create" });
+    const run = await runRepository.findById(id);
+    expect(run?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+  });
+
+  it("a historical Run still loads through Run detail and renders its real raid name", async () => {
+    const id = await createHistoricalDraft();
+    const detail = await runDetailService.getRunDetail(lead, id);
+    expect(detail.run.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(detail.run.raidName).toBe("Manaforge Omega");
+  });
+
+  it("allows an unrelated edit (notes) on a historical Run without touching its raid", async () => {
+    const id = await createHistoricalDraft({ notes: "Before" });
+    const run = await runRepository.findById(id);
+    await runService.updateRun(lead, {
+      runId: id,
+      raidId: run!.raidId,
+      difficulty: run!.difficulty,
+      lootType: run!.lootType,
+      scheduledStartAt: run!.scheduledStartAt,
+      notes: "After",
+      desiredTankCount: run!.desiredTankCount,
+      desiredHealerCount: run!.desiredHealerCount,
+      desiredDpsCount: run!.desiredDpsCount,
+      plannedBossCount: run!.plannedBossCount,
+    });
+    const updated = await runRepository.findById(id);
+    expect(updated?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(updated?.notes).toBe("After");
+  });
+
+  it("allows a difficulty-only change while keeping the same historical raid", async () => {
+    const id = await createHistoricalDraft();
+    const run = await runRepository.findById(id);
+    await runService.updateRun(lead, {
+      runId: id,
+      raidId: run!.raidId,
+      difficulty: "MYTHIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: run!.scheduledStartAt,
+      notes: run!.notes,
+      desiredTankCount: run!.desiredTankCount,
+      desiredHealerCount: run!.desiredHealerCount,
+      desiredDpsCount: run!.desiredDpsCount,
+      plannedBossCount: run!.plannedBossCount,
+    });
+    const updated = await runRepository.findById(id);
+    expect(updated?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(updated?.difficulty).toBe("MYTHIC");
+  });
+
+  it("rejects changing an existing Run's raid to a historical one, with no partial mutation", async () => {
+    const id = await createDraft(lead, { title: "Switch to historical" });
+    const before = await runRepository.findById(id);
+    await expectDomainCode(
+      runService.updateRun(lead, {
+        runId: id,
+        raidId: MANAFORGE_OMEGA_RAID_ID,
+        difficulty: before!.difficulty,
+        lootType: before!.lootType,
+        scheduledStartAt: before!.scheduledStartAt,
+        notes: before!.notes,
+        desiredTankCount: before!.desiredTankCount,
+        desiredHealerCount: before!.desiredHealerCount,
+        desiredDpsCount: before!.desiredDpsCount,
+        plannedBossCount: before!.plannedBossCount,
+      }),
+      "RAID_NOT_AVAILABLE_FOR_RUNS",
+    );
+    const after = await runRepository.findById(id);
+    expect(after?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(after?.difficulty).toBe(before?.difficulty);
+    expect(after?.notes).toBe(before?.notes);
+  });
+
+  it("allows changing an existing historical Run's raid to the current available raid", async () => {
+    const id = await createHistoricalDraft();
+    const before = await runRepository.findById(id);
+    await runService.updateRun(lead, {
+      runId: id,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: before!.difficulty,
+      lootType: before!.lootType,
+      scheduledStartAt: before!.scheduledStartAt,
+      notes: before!.notes,
+      desiredTankCount: before!.desiredTankCount,
+      desiredHealerCount: before!.desiredHealerCount,
+      desiredDpsCount: before!.desiredDpsCount,
+      plannedBossCount: before!.plannedBossCount,
+    });
+    const after = await runRepository.findById(id);
+    expect(after?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+  });
+
+  it("Edit Run editor data represents the historical current selection without offering other historical raids as alternatives", async () => {
+    const id = await createHistoricalDraft();
+    const detail = await runDetailService.getRunDetail(lead, id);
+    const raids = detail.editor?.raids ?? [];
+
+    const current = raids.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID);
+    expect(current).toBeTruthy();
+    expect(current?.availableForRuns).toBe(false);
+
+    const unavailableEntries = raids.filter((raid) => !raid.availableForRuns);
+    expect(unavailableEntries).toHaveLength(1);
+    expect(unavailableEntries[0]?.id).toBe(MANAFORGE_OMEGA_RAID_ID);
+
+    const venomous = raids.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID);
+    expect(venomous?.availableForRuns).toBe(true);
+  });
+
+  it("opening a Draft still works even if its raid has since become historical", async () => {
+    const id = await createHistoricalDraft();
+    await runService.openRun(lead, id);
+    const run = await runRepository.findById(id);
+    expect(run?.status).toBe("OPEN");
+    expect(run?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
   });
 });

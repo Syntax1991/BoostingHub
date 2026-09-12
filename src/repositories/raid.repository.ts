@@ -6,7 +6,15 @@ export type RaidRecord = {
   id: string;
   name: string;
   season: string;
-  isActive: boolean;
+  /**
+   * Whether Users may select this raid for a NEW Run. Independent of
+   * `currentForLockouts` (Blizzard lockout derivation target) — a raid can
+   * be historical (availableForRuns: false) while its data, bosses, and
+   * every historical Run/lockout relation referencing it remain intact and
+   * fully readable forever. Never inferred by callers; always read from here.
+   * Persisted on the `Raid.isActive` column (no separate column/migration).
+   */
+  availableForRuns: boolean;
   /** Computed from RaidBoss rows — never a separate stored total. */
   totalBossCount: number;
 };
@@ -17,7 +25,7 @@ function mapRaid(row: Record<string, unknown>): RaidRecord {
     id: asString(row.id),
     name: asString(row.name),
     season: asString(row.season),
-    isActive: asBoolean(row.isActive, true),
+    availableForRuns: asBoolean(row.isActive, true),
     totalBossCount: bosses.length,
   };
 }
@@ -72,11 +80,15 @@ export const raidRepository = {
     }
   },
 
-  async listActive(): Promise<RaidRecord[]> {
+  /** Raids selectable for a NEW Run. Historical raids are deliberately excluded. */
+  async listAvailableForRuns(): Promise<RaidRecord[]> {
     const rows = await orm.Raid.include("bosses").orderBy((raid) => raid.name.asc()).all();
-    return rows.map((row) => mapRaid(row as Record<string, unknown>)).filter((raid) => raid.isActive);
+    return rows
+      .map((row) => mapRaid(row as Record<string, unknown>))
+      .filter((raid) => raid.availableForRuns);
   },
 
+  /** Every raid, including historical ones — used for existing-Run reads, never for new-Run selection. */
   async findById(id: string): Promise<RaidRecord | null> {
     const row = await orm.Raid.where({ id }).include("bosses").first();
     return row ? mapRaid(row as Record<string, unknown>) : null;

@@ -3,14 +3,14 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { strikeRepository } from "@/repositories/strike.repository";
 import { runService } from "@/services/run.service";
 import { strikeService } from "@/services/strike.service";
 import type { ParticipationType } from "@/models/enums";
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   admin: "aaaaaaaa-aaaa-4aaa-8aaa-sk0000000001",
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-sk0000000002",

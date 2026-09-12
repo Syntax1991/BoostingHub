@@ -3,7 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -21,7 +21,7 @@ import { signupService } from "@/services/signup.service";
  * `scheduledStartAt` + reservation source (RunRosterEntry / SELECTED).
  */
 
-const raidId = WOW_RAID_CATALOG[0].id;
+const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-cr0000000001",
   target: "aaaaaaaa-aaaa-4aaa-8aaa-cr0000000002",
