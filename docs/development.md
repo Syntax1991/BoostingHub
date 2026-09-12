@@ -97,6 +97,19 @@ Development identities remain for automated tests and local QA. They use Better 
 
 Production must never expose the identity picker. Do not remove the mechanism while tests and local QA still depend on it.
 
+## Development account bootstrap
+
+`npm run db:seed` resets `accountRole`/`accountStatus` and Booster qualifications for everyone, including your real Discord account. To avoid re-granting yourself ADMIN by hand after every reseed, set in `.env`:
+
+```bash
+DEV_ACCOUNT_BOOTSTRAP_ENABLED="true"
+DEV_ADMIN_DISCORD_USER_ID="<your real Discord user ID>"
+```
+
+The next time that Discord account signs in (new or returning session), it is automatically restored to `ADMIN`/`ACTIVE` with `APPROVED` `NORMAL`/`HEROIC`/`MYTHIC` Booster qualifications. Hard-disabled in production regardless of these env vars; a non-matching Discord user is never affected; no Activity is logged for it. See [authentication.md](authentication.md#development-account-bootstrap) for the full behavior.
+
+Leave `DEV_ACCOUNT_BOOTSTRAP_ENABLED="false"` unless you specifically need this, and never commit your real Discord user ID.
+
 ## Incremental Prisma migrations
 
 `npx prisma migration plan --name slug` can emit a full recreate if `--from` is omitted incorrectly. Plan from the previous migration directory:

@@ -41,6 +41,29 @@ This is not a silent production bypass. Production runtime disables the credenti
 
 Seeded identities and `DEV_AUTH_PASSWORD` are documented in [development.md](development.md).
 
+## Development account bootstrap
+
+`npm run db:seed` wipes `accountRole`/`accountStatus` and Booster qualifications for every user, including your own real Discord-linked developer account. Development account bootstrap exists solely to restore that ONE account automatically after a Discord sign-in, so re-seeding never leaves you locked out of ADMIN screens locally.
+
+Enabled only when all of the following hold:
+
+- `NODE_ENV !== "production"` — a code-level check, not just configuration. Even if `DEV_ACCOUNT_BOOTSTRAP_ENABLED` is accidentally left `"true"` in a deployed environment, production is a hard no-op.
+- `DEV_ACCOUNT_BOOTSTRAP_ENABLED === "true"`
+- `DEV_ADMIN_DISCORD_USER_ID` is set to your real Discord user ID (snowflake)
+
+Targeting is by exact `User.discordUserId` match only — never username, display name, email, or database `User.id`. A signed-in user whose `discordUserId` doesn't match exactly is completely untouched (0 writes).
+
+Wired as Better Auth's `databaseHooks.session.create.after` (see `src/auth/auth.ts`), which fires once per sign-in for both a brand-new User (first Discord sign-in after a DB reset) and an existing one (privileges reset by re-seeding) — there is no separate first-login code path. Discord sign-in creates/persists the `user` row first, as normal; bootstrap only ever evaluates an already-persisted User and never creates one itself.
+
+On a match, it restores:
+
+- `accountRole = ADMIN`, `accountStatus = ACTIVE`
+- An `APPROVED` `BoosterQualification` row for `NORMAL`, `HEROIC`, and `MYTHIC` independently (exact per-difficulty match — the normal product rule that a difficulty never implies another is unchanged)
+
+It is idempotent: an already-correct field is left untouched, including timestamps (`updatedAt`, `grantedAt`, `notes` do not churn on every login), and it never writes an `ActivityEvent` — normal ADMIN grant/revoke through `/manage/booster-access` continues to log Activity exactly as before; this only seeds/restores one development account's own qualifications, with `grantedById = null` to correctly represent a system bootstrap rather than a human admin's action.
+
+There is no UI, no admin endpoint, and no client-visible flag for this — `DEV_ADMIN_DISCORD_USER_ID` is server-only configuration, never exposed to the browser. See [development.md](development.md) for setup and safe local verification.
+
 ## Session enforcement
 
 `src/proxy.ts` redirects unauthenticated browsers away from app routes based on cookie presence. That check is not sufficient.
