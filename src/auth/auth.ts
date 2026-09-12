@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { pgPool } from "@/lib/pg-pool";
 import { isDevAuthEnabled, isDiscordOAuthConfigured } from "@/auth/dev-auth";
+import { bootstrapDevelopmentAccount } from "@/services/dev-account-bootstrap.service";
 
 /**
  * Better Auth owns session/account rows via its built-in Kysely PostgreSQL adapter.
@@ -69,6 +70,16 @@ export const auth = betterAuth({
   advanced: {
     database: {
       generateId: () => crypto.randomUUID(),
+    },
+  },
+  // Fires once per sign-in (new or returning user) — see
+  // dev-account-bootstrap.service.ts for what this restores and why
+  // session.create is the seam that covers both cases.
+  databaseHooks: {
+    session: {
+      create: {
+        after: (session) => bootstrapDevelopmentAccount({ userId: session.userId }),
+      },
     },
   },
   plugins: [nextCookies()],
