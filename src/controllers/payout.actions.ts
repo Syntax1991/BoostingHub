@@ -27,7 +27,6 @@ export async function prepareRunPayoutAction(input: unknown): Promise<ActionResu
     const created = await payoutService.prepareSettlement(user, parsed.runId, {
       totalGold: parsed.totalGold,
       raidLeadCutMode: parsed.raidLeadCutMode,
-      raidLeadCutGold: parsed.raidLeadCutGold,
     });
     revalidatePayout(created.runId);
     return { ok: true, message: "Payout draft prepared.", runId: created.runId };
@@ -43,7 +42,6 @@ export async function updateRunPayoutFinancialsAction(input: unknown): Promise<A
     const updated = await payoutService.updateDraftFinancials(user, parsed.settlementId, {
       totalGold: parsed.totalGold,
       raidLeadCutMode: parsed.raidLeadCutMode,
-      raidLeadCutGold: parsed.raidLeadCutGold,
     });
     revalidatePayout(updated.runId);
     return { ok: true, message: "Settlement financials updated." };

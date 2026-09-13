@@ -11,13 +11,10 @@ import {
   type SettlementRecord,
 } from "@/repositories/payout.repository";
 import { runRepository } from "@/repositories/run.repository";
-import {
-  assertRaidLeadCutGold,
-  assertRaidLeadCutMode,
-  calculateSettlementPool,
-} from "@/services/payout-calculation";
+import { assertRaidLeadCutMode, calculateSettlementPool } from "@/services/payout-calculation";
 import {
   PAYOUT_ADJUSTMENT_REASON_MAX,
+  RAID_LEAD_CUT_SHARE_UNITS,
   assertShareUnits,
   assertTotalGold,
   defaultShareUnits,
@@ -48,7 +45,6 @@ function loadSnapshot(row: AttendanceRecord): PayoutEntryWrite {
 function applySettlementAmounts(input: {
   totalGold: number;
   raidLeadCutMode: RaidLeadCutMode;
-  raidLeadCutGold: number;
   entries: Array<{ attendanceId: string; shareUnits: number }>;
 }) {
   const settled = calculateSettlementPool(input);
@@ -56,11 +52,10 @@ function applySettlementAmounts(input: {
   return { settled, byAttendance };
 }
 
-function summaryFrom(settlement: SettlementRecord) {
+function summaryFrom(settlement: SettlementRecord, raidLeadUserId: string) {
   const settled = calculateSettlementPool({
     totalGold: settlement.totalGold,
     raidLeadCutMode: settlement.raidLeadCutMode,
-    raidLeadCutGold: settlement.raidLeadCutGold,
     entries: settlement.entries.map((row) => ({
       attendanceId: row.attendanceId,
       shareUnits: row.shareUnits,
@@ -69,19 +64,24 @@ function summaryFrom(settlement: SettlementRecord) {
   const totalShareUnits = settlement.entries.reduce((sum, row) => sum + row.shareUnits, 0);
   const recipientsWithShare = settlement.entries.filter((row) => row.shareUnits > 0).length;
   const zeroShare = settlement.entries.filter((row) => row.shareUnits === 0).length;
-  const distributedGold = settlement.entries.reduce((sum, row) => sum + row.amountGold, 0);
+  const attendanceDistributedGold = settlement.entries.reduce((sum, row) => sum + row.amountGold, 0);
+  const ordinaryRaidLeadPayout = settlement.entries
+    .filter((row) => row.userId === raidLeadUserId)
+    .reduce((sum, row) => sum + row.amountGold, 0);
   return {
     totalGold: settlement.totalGold,
     raidLeadCutMode: settlement.raidLeadCutMode,
-    raidLeadCutGold: settlement.raidLeadCutGold,
+    raidLeadCutShareUnits: settled.raidLeadCutShareUnits,
     dedicatedRaidLeadPayout: settled.dedicatedRaidLeadPayout,
-    distributablePool: settled.distributablePool,
+    ordinaryRaidLeadPayout,
+    raidLeadTotalPayout: ordinaryRaidLeadPayout + settled.dedicatedRaidLeadPayout,
+    attendanceUnits: settled.attendanceUnits,
+    totalSettlementUnits: settled.totalSettlementUnits,
     totalShareUnits,
     recipientsWithShare,
     zeroShareParticipants: zeroShare,
-    distributedGold,
-    remainder: settled.distributablePool - distributedGold,
-    totalAllocatedGold: distributedGold + settled.dedicatedRaidLeadPayout,
+    attendanceDistributedGold,
+    totalAllocatedGold: attendanceDistributedGold + settled.dedicatedRaidLeadPayout,
   };
 }
 
@@ -187,15 +187,10 @@ function assertEntriesMatchAttendance(settlement: SettlementRecord, attendance: 
   }
 }
 
-function normalizeFinancialInput(input: {
-  totalGold: number;
-  raidLeadCutMode?: RaidLeadCutMode;
-  raidLeadCutGold?: number;
-}) {
+function normalizeFinancialInput(input: { totalGold: number; raidLeadCutMode?: RaidLeadCutMode }) {
   const totalGold = assertTotalGold(input.totalGold);
   const raidLeadCutMode = assertRaidLeadCutMode(input.raidLeadCutMode ?? "SHARE");
-  const raidLeadCutGold = assertRaidLeadCutGold(input.raidLeadCutGold ?? 0, totalGold);
-  return { totalGold, raidLeadCutMode, raidLeadCutGold };
+  return { totalGold, raidLeadCutMode };
 }
 
 function emptyCapabilities() {
@@ -223,22 +218,30 @@ export const payoutService = {
       published && !manage
         ? settlement.entries.filter((row) => row.userId === user.id).map((row) => toOwnEntry(row, settlement.status))
         : [];
-    const dedicatedRaidLeadPayout =
+    const settled =
       published && settlement
         ? calculateSettlementPool({
             totalGold: settlement.totalGold,
             raidLeadCutMode: settlement.raidLeadCutMode,
-            raidLeadCutGold: settlement.raidLeadCutGold,
             entries: settlement.entries.map((row) => ({
               attendanceId: row.attendanceId,
               shareUnits: row.shareUnits,
             })),
-          }).dedicatedRaidLeadPayout
+          })
+        : null;
+    const ordinaryRaidLeadPayout =
+      published && settlement && user.id === run.raidLeadId
+        ? settlement.entries
+            .filter((row) => row.userId === user.id)
+            .reduce((sum, row) => sum + row.amountGold, 0)
         : 0;
-    const ownRaidLeadCut =
-      published && !manage && user.id === run.raidLeadId && dedicatedRaidLeadPayout > 0
+    const dedicatedRaidLeadPayout = settled?.dedicatedRaidLeadPayout ?? 0;
+    const ownRaidLeadPayout =
+      published && !manage && user.id === run.raidLeadId && (ordinaryRaidLeadPayout > 0 || dedicatedRaidLeadPayout > 0)
         ? {
-            amountGold: dedicatedRaidLeadPayout,
+            ordinaryAttendancePayout: ordinaryRaidLeadPayout,
+            dedicatedRaidLeadPayout,
+            raidLeadTotalPayout: ordinaryRaidLeadPayout + dedicatedRaidLeadPayout,
             settlementStatus: settlement!.status,
             raidLeadName: settlement!.raidLeadName,
           }
@@ -249,7 +252,7 @@ export const payoutService = {
         runStatus: run.status,
         available: Boolean(published),
         own: ownAttendance,
-        ownRaidLeadCut,
+        ownRaidLeadPayout,
         manager: null,
         capabilities: emptyCapabilities(),
       };
@@ -259,14 +262,14 @@ export const payoutService = {
       runStatus: run.status,
       available: Boolean(settlement),
       own: [],
-      ownRaidLeadCut: null,
+      ownRaidLeadPayout: null,
       manager: settlement
         ? {
             id: settlement.id,
             status: settlement.status,
             totalGold: settlement.totalGold,
             raidLeadCutMode: settlement.raidLeadCutMode,
-            raidLeadCutGold: settlement.raidLeadCutGold,
+            raidLeadCutShareUnits: RAID_LEAD_CUT_SHARE_UNITS,
             raidLeadUserId: run.raidLeadId,
             runTitle: settlement.runTitle,
             raidName: settlement.raidName,
@@ -274,7 +277,7 @@ export const payoutService = {
             raidLeadName: settlement.raidLeadName,
             finalizedAt: settlement.finalizedAt,
             paidAt: settlement.paidAt,
-            summary: summaryFrom(settlement),
+            summary: summaryFrom(settlement, run.raidLeadId),
             entries: settlement.entries
               .slice()
               .sort((a, b) => (a.attendanceId < b.attendanceId ? -1 : 1))
@@ -293,7 +296,7 @@ export const payoutService = {
   async prepareSettlement(
     user: AuthenticatedUser,
     runId: string,
-    input: { totalGold: number; raidLeadCutMode?: RaidLeadCutMode; raidLeadCutGold?: number },
+    input: { totalGold: number; raidLeadCutMode?: RaidLeadCutMode },
   ) {
     const financial = normalizeFinancialInput(input);
     const run = await loadManagedCompletedRun(user, runId);
@@ -321,7 +324,6 @@ export const payoutService = {
       runId: run.id,
       totalGold: financial.totalGold,
       raidLeadCutMode: financial.raidLeadCutMode,
-      raidLeadCutGold: financial.raidLeadCutGold,
       preparedById: user.id,
       runTitle: run.title,
       raidName: run.raidName,
@@ -340,7 +342,7 @@ export const payoutService = {
   async updateDraftFinancials(
     user: AuthenticatedUser,
     settlementId: string,
-    input: { totalGold: number; raidLeadCutMode: RaidLeadCutMode; raidLeadCutGold: number },
+    input: { totalGold: number; raidLeadCutMode: RaidLeadCutMode },
   ) {
     const financial = normalizeFinancialInput(input);
     const { settlement } = await loadManagedSettlement(user, settlementId);
@@ -378,7 +380,6 @@ export const payoutService = {
       {
         totalGold: settlement.totalGold,
         raidLeadCutMode: settlement.raidLeadCutMode,
-        raidLeadCutGold: settlement.raidLeadCutGold,
       },
       nextEntries,
     );
@@ -397,7 +398,6 @@ export const payoutService = {
     const financial = normalizeFinancialInput({
       totalGold: settlement.totalGold,
       raidLeadCutMode: settlement.raidLeadCutMode,
-      raidLeadCutGold: settlement.raidLeadCutGold,
     });
     const { settled, byAttendance } = applySettlementAmounts({
       ...financial,
@@ -435,7 +435,6 @@ export const payoutService = {
       finalizedById: user.id,
       totalGold: financial.totalGold,
       raidLeadCutMode: financial.raidLeadCutMode,
-      raidLeadCutGold: financial.raidLeadCutGold,
       runTitle: run.title,
       raidName: run.raidName,
       difficulty: run.difficulty,
@@ -476,7 +475,7 @@ export const payoutService = {
 
 async function persistRecalculation(
   settlement: SettlementRecord,
-  financial: { totalGold: number; raidLeadCutMode: RaidLeadCutMode; raidLeadCutGold: number },
+  financial: { totalGold: number; raidLeadCutMode: RaidLeadCutMode },
   entries: PayoutEntryRecord[],
 ) {
   const { byAttendance } = applySettlementAmounts({
@@ -487,7 +486,6 @@ async function persistRecalculation(
     settlementId: settlement.id,
     totalGold: financial.totalGold,
     raidLeadCutMode: financial.raidLeadCutMode,
-    raidLeadCutGold: financial.raidLeadCutGold,
     entries: entries.map((row) => ({
       id: row.id,
       shareUnits: row.shareUnits,
