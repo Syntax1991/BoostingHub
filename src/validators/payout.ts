@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RAID_LEAD_CUT_MODES } from "@/models/enums";
 import {
   PAYOUT_ADJUSTMENT_REASON_MAX,
   SHARE_UNITS_MAX,
@@ -8,11 +9,45 @@ import {
 } from "@/services/payout-state";
 import { entityIdSchema } from "@/validators/ids";
 
-export const prepareRunPayoutSchema = z.object({
-  runId: entityIdSchema,
-  totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),
-});
+const raidLeadCutModeSchema = z.enum(RAID_LEAD_CUT_MODES);
 
+const raidLeadCutGoldSchema = z.number().int().min(0).max(TOTAL_GOLD_MAX);
+
+export const prepareRunPayoutSchema = z
+  .object({
+    runId: entityIdSchema,
+    totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),
+    raidLeadCutMode: raidLeadCutModeSchema.optional().default("SHARE"),
+    raidLeadCutGold: raidLeadCutGoldSchema.optional().default(0),
+  })
+  .superRefine((value, ctx) => {
+    if (value.raidLeadCutGold >= value.totalGold) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["raidLeadCutGold"],
+        message: "Raid Lead cut must be less than the final pot.",
+      });
+    }
+  });
+
+export const updateRunPayoutFinancialsSchema = z
+  .object({
+    settlementId: entityIdSchema,
+    totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),
+    raidLeadCutMode: raidLeadCutModeSchema,
+    raidLeadCutGold: raidLeadCutGoldSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.raidLeadCutGold >= value.totalGold) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["raidLeadCutGold"],
+        message: "Raid Lead cut must be less than the final pot.",
+      });
+    }
+  });
+
+/** @deprecated Prefer updateRunPayoutFinancialsSchema */
 export const updateRunPayoutTotalSchema = z.object({
   settlementId: entityIdSchema,
   totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),

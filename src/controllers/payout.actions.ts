@@ -8,6 +8,7 @@ import {
   finalizeRunPayoutSchema,
   markRunPayoutPaidSchema,
   prepareRunPayoutSchema,
+  updateRunPayoutFinancialsSchema,
   updateRunPayoutShareSchema,
   updateRunPayoutTotalSchema,
 } from "@/validators/payout";
@@ -24,9 +25,29 @@ export async function prepareRunPayoutAction(input: unknown): Promise<ActionResu
   try {
     const user = await requireUser();
     const parsed = prepareRunPayoutSchema.parse(input);
-    const created = await payoutService.prepareSettlement(user, parsed.runId, parsed.totalGold);
+    const created = await payoutService.prepareSettlement(user, parsed.runId, {
+      totalGold: parsed.totalGold,
+      raidLeadCutMode: parsed.raidLeadCutMode,
+      raidLeadCutGold: parsed.raidLeadCutGold,
+    });
     revalidatePayout(created.runId);
     return { ok: true, message: "Payout draft prepared.", runId: created.runId };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function updateRunPayoutFinancialsAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = updateRunPayoutFinancialsSchema.parse(input);
+    const updated = await payoutService.updateDraftFinancials(user, parsed.settlementId, {
+      totalGold: parsed.totalGold,
+      raidLeadCutMode: parsed.raidLeadCutMode,
+      raidLeadCutGold: parsed.raidLeadCutGold,
+    });
+    revalidatePayout(updated.runId);
+    return { ok: true, message: "Settlement financials updated." };
   } catch (error) {
     return mapActionError(error);
   }
