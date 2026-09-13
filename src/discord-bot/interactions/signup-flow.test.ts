@@ -22,8 +22,7 @@ const mistweaver: { characterId: string; characterName: string; realm: string; r
 
 describe("buildCharacterSelectOptions", () => {
   it("labels a fresh selection with its specialization-derived default role", () => {
-    const options = buildCharacterSelectOptions([mistweaver], "BOOSTER", {
-      participationType: null,
+    const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: [],
       roleByCharacterId: {},
     }).map((option) => option.toJSON());
@@ -34,17 +33,15 @@ describe("buildCharacterSelectOptions", () => {
   });
 
   it("labels an existing offer with its persisted role, not the specialization default, when they differ", () => {
-    const options = buildCharacterSelectOptions([mistweaver], "BOOSTER", {
-      participationType: "BOOSTER",
+    const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: ["c-mist"],
       roleByCharacterId: { "c-mist": "TANK" },
     }).map((option) => option.toJSON());
     expect(options[0]?.label).toBe("Synmist-Antonidas — Tank");
   });
 
-  it("preselects a Character with an active offer of the same participation type", () => {
-    const options = buildCharacterSelectOptions([mistweaver], "BOOSTER", {
-      participationType: "BOOSTER",
+  it("preselects a Character with an active booster offer", () => {
+    const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: ["c-mist"],
       roleByCharacterId: { "c-mist": "HEALER" },
     }).map((option) => option.toJSON());
@@ -54,17 +51,7 @@ describe("buildCharacterSelectOptions", () => {
   it("shows no role suffix for a Character with neither an existing offer nor a specialization default", () => {
     const options = buildCharacterSelectOptions(
       [{ characterId: "c-1", characterName: "A", realm: "R", roles: ["DPS", "HEALER"] as ("TANK" | "HEALER" | "DPS")[], defaultRole: null }],
-      "BOOSTER",
-      { participationType: null, characterIds: [], roleByCharacterId: {} },
-    ).map((option) => option.toJSON());
-    expect(options[0]?.label).toBe("A-R");
-  });
-
-  it("has no role suffix for LOOTBUDDY, which carries no role dimension", () => {
-    const options = buildCharacterSelectOptions(
-      [{ characterId: "c-1", characterName: "A", realm: "R" }],
-      "LOOTBUDDY",
-      { participationType: null, characterIds: [], roleByCharacterId: {} },
+      { characterIds: [], roleByCharacterId: {} },
     ).map((option) => option.toJSON());
     expect(options[0]?.label).toBe("A-R");
   });
@@ -114,12 +101,11 @@ function signupOptionsPayload(overrides: {
       ],
       ineligible: [] as IneligibleCharacterOption[],
     },
-    lootbuddy: { eligible: [], ineligible: [] as IneligibleCharacterOption[] },
-    activeOffer: {
-      participationType: overrides.activeCharacterIds?.length ? "BOOSTER" : null,
+    activeBoosterOffers: {
       characterIds: overrides.activeCharacterIds ?? [],
       roleByCharacterId: overrides.roleByCharacterId ?? {},
     },
+    activeLootbuddies: [],
   };
 }
 
@@ -155,7 +141,6 @@ const characterSelect = handleCharacterSelect as unknown as (
   interaction: FakeInteraction,
   api: BotApiClient,
   runId: string,
-  participationType: "BOOSTER" | "LOOTBUDDY",
 ) => Promise<void>;
 const roleSelect = handleRoleSelect as unknown as (
   interaction: FakeInteraction,
@@ -183,7 +168,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
     const interaction = fakeInteraction("user-a", [SYNMIST, FROSTBOLT]);
 
-    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+    await characterSelect(interaction, api, RUN_ID);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
     expect(interaction.deferUpdate).toHaveBeenCalled();
@@ -194,7 +179,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
     const interaction = fakeInteraction("user-a", [SYNMIST]);
 
-    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+    await characterSelect(interaction, api, RUN_ID);
 
     const session = getSession("user-a", RUN_ID)!;
     // Synmist's class-order first role is TANK (Brewmaster listed first); the
@@ -210,7 +195,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     });
     const interaction = fakeInteraction("user-a", [SYNMIST]);
 
-    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+    await characterSelect(interaction, api, RUN_ID);
 
     const session = getSession("user-a", RUN_ID)!;
     expect(session.offers.get(SYNMIST)).toBe("TANK");
@@ -221,7 +206,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
     const interaction = fakeInteraction("user-a", [FROSTBOLT]);
 
-    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+    await characterSelect(interaction, api, RUN_ID);
 
     expect(getSession("user-a", RUN_ID)!.offers.get(FROSTBOLT)).toBe("DPS");
   });
@@ -230,7 +215,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })) });
     const interaction = fakeInteraction("user-a", [SYNMIST]);
 
-    await characterSelect(interaction, api, RUN_ID, "BOOSTER");
+    await characterSelect(interaction, api, RUN_ID);
 
     expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBeNull();
   });
@@ -238,7 +223,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
   it("changing a staged role does NOT call setCharacterOffers", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
 
     const roleInteraction = fakeInteraction("user-a", ["TANK"]);
     await roleSelect(roleInteraction, api, RUN_ID, SYNMIST);
@@ -250,7 +235,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
   it("Confirm persists the full staged set exactly once, with each Character's own role", async () => {
     const setCharacterOffers = vi.fn().mockResolvedValue({ created: 2, reactivated: 0, withdrawn: 0, kept: 0 });
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST, FROSTBOLT]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST, FROSTBOLT]), api, RUN_ID);
     await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
 
     const confirmInteraction = fakeInteraction("user-a");
@@ -272,7 +257,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
   it("no offered Character can appear twice in the Confirm payload", async () => {
     const setCharacterOffers = vi.fn().mockResolvedValue({ created: 1, reactivated: 0, withdrawn: 0, kept: 0 });
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
     await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
     await roleSelect(fakeInteraction("user-a", ["HEALER"]), api, RUN_ID, SYNMIST);
 
@@ -287,7 +272,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
   it("Cancel discards the session and never calls setCharacterOffers", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
     await roleSelect(fakeInteraction("user-a", ["TANK"]), api, RUN_ID, SYNMIST);
 
     const cancelInteraction = fakeInteraction("user-a");
@@ -321,7 +306,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
 
   it("User B cannot read or mutate User A's staged session", async () => {
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
 
     const userBRoleSelect = fakeInteraction("user-b", ["TANK"]);
     await roleSelect(userBRoleSelect, api, RUN_ID, SYNMIST);
@@ -336,7 +321,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
   it("a failed Confirm keeps the staged session so the User can retry, and mutates nothing", async () => {
     const setCharacterOffers = vi.fn().mockRejectedValue(new Error("boom"));
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
 
     const confirmInteraction = fakeInteraction("user-a");
     await confirmSignup(confirmInteraction, api, RUN_ID);
@@ -353,7 +338,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
       getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload({ synmistDefaultRole: null })),
       setCharacterOffers,
     });
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
 
     const confirmInteraction = fakeInteraction("user-a");
     await confirmSignup(confirmInteraction, api, RUN_ID);
@@ -370,7 +355,6 @@ const signupButton = handleSignupButton as unknown as (
   interaction: FakeInteraction,
   api: BotApiClient,
   runId: string,
-  participationType: "BOOSTER" | "LOOTBUDDY",
 ) => Promise<void>;
 
 describe("cross-Run reservation conflicts in the Discord signup flow", () => {
@@ -390,7 +374,7 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
 
     const interaction = fakeInteraction("user-a");
-    await signupButton(interaction, api, RUN_ID, "BOOSTER");
+    await signupButton(interaction, api, RUN_ID);
 
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).toContain("Unavailable characters");
@@ -424,10 +408,10 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
 
     const interaction = fakeInteraction("user-a");
-    await signupButton(interaction, api, RUN_ID, "BOOSTER");
+    await signupButton(interaction, api, RUN_ID);
 
     const call = interaction.editReply.mock.calls[0]?.[0];
-    expect(call.content).toContain("no eligible characters");
+    expect(call.content).toContain("no eligible booster characters");
     expect(call.content).toContain("Unavailable characters");
     expect(call.content).toContain("Frostbolt-Antonidas");
     expect(call.components).toBeUndefined();
@@ -443,7 +427,7 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
 
     const interaction = fakeInteraction("user-a");
-    await signupButton(interaction, api, RUN_ID, "BOOSTER");
+    await signupButton(interaction, api, RUN_ID);
 
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).toContain("Saved this reset");
@@ -463,7 +447,7 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload), setCharacterOffers });
 
-    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID, "BOOSTER");
+    await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
     expect(getSession("user-a", RUN_ID)?.offers.get(SYNMIST)).toBe("HEALER");

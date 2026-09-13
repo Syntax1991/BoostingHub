@@ -95,35 +95,52 @@ describe("signupService create/withdraw", () => {
   });
 
   it("creates loot-only and playing lootbuddy signups with verification metadata", async () => {
-    const lootOnly = await signupService.createLootbuddySignup(mira, {
+    const result = await signupService.setLootbuddies(mira, {
       runId: ids.normal,
-      characterId: ids.miraPriest,
-      mode: "LOOT_ONLY",
-      verification: "ACCESS",
+      lootbuddies: [
+        { wowClass: "PRIEST", mode: "LOOT_ONLY", verification: "ACCESS" },
+        { wowClass: "MAGE", mode: "PLAYING", verification: "TRIAL" },
+      ],
     });
-    createdIds.push(lootOnly.id);
-    const lootRow = await signupRepository.findById(lootOnly.id);
-    expect(lootRow?.lootbuddyMode).toBe("LOOT_ONLY");
-    expect(lootRow?.lootbuddyVerification).toBe("ACCESS");
-    expect(lootRow?.status).toBe("PENDING");
+    expect(result.created).toBe(2);
 
-    const playing = await signupService.createLootbuddySignup(mira, {
-      runId: ids.weekend,
-      characterId: ids.miraPriest,
-      mode: "PLAYING",
-      verification: "TRIAL",
-    });
-    expect(playing.revived).toBe(true);
-    const playingRow = await signupRepository.findById(playing.id);
-    expect(playingRow?.lootbuddyMode).toBe("PLAYING");
-    expect(playingRow?.lootbuddyVerification).toBe("TRIAL");
-    expect(playingRow?.status).toBe("PENDING");
-    await signupService.withdrawSignup(mira, playing.id);
-    const restored = await signupRepository.findById(playing.id);
+    const rows = (await signupRepository.listByRunAndUser(ids.normal, ids.mira)).filter(
+      (row) => row.participationType === "LOOTBUDDY" && row.status === "PENDING",
+    );
+    for (const row of rows) createdIds.push(row.id);
+
+    const lootOnly = rows.find((row) => row.lootbuddyMode === "LOOT_ONLY");
+    const playing = rows.find((row) => row.lootbuddyMode === "PLAYING");
+    expect(lootOnly?.lootbuddyClass).toBe("PRIEST");
+    expect(lootOnly?.lootbuddyVerification).toBe("ACCESS");
+    expect(lootOnly?.character).toBeNull();
+    expect(playing?.lootbuddyClass).toBe("MAGE");
+    expect(playing?.lootbuddyVerification).toBe("TRIAL");
+    expect(playing?.id).not.toBe(lootOnly?.id);
+
+    await signupService.withdrawSignup(mira, playing!.id);
+    const restored = await signupRepository.findById(playing!.id);
     expect(restored?.status).toBe("WITHDRAWN");
   });
 
-  it("rejects signing another user's character", async () => {
+  it("allows identical class+mode lootbuddy entries as distinct signup ids", async () => {
+    const result = await signupService.setLootbuddies(mira, {
+      runId: ids.weekend,
+      lootbuddies: [
+        { wowClass: "MAGE", mode: "LOOT_ONLY" },
+        { wowClass: "MAGE", mode: "LOOT_ONLY" },
+      ],
+    });
+    expect(result.created).toBe(2);
+    const rows = (await signupRepository.listByRunAndUser(ids.weekend, ids.mira)).filter(
+      (row) => row.participationType === "LOOTBUDDY" && row.status === "PENDING",
+    );
+    for (const row of rows) createdIds.push(row.id);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.id).not.toBe(rows[1]!.id);
+  });
+
+  it("rejects booster signup when the user has no characters / character not owned", async () => {
     await expectDomainCode(
       signupService.createBoosterSignup(kael, {
         runId: ids.weekend,

@@ -60,13 +60,15 @@ Draft rows point at `RunSignup`. The live roster after publish is still those si
 
 `isBackup` is still player intent, not a status. Backups may be draft-selected.
 
-## One user rule
+## One user rule (Booster-specific)
 
-**One selected participation per user per run.**
+**At most one selected BOOSTER participation per user per run.**
 
-Selecting a second signup for the same user **replaces** the previous draft row. Silent double slots are forbidden. The service enforces this; the database cannot, because the path is `RunRosterEntry → RunSignup.userId`.
+Selecting a second BOOSTER signup for the same user **replaces** the previous BOOSTER draft row. Silent double booster slots are forbidden. The service enforces this; the database cannot, because the path is `RunRosterEntry → RunSignup.userId`.
 
-If one character is `SELECTED`, the user's other active offers on that run become `NOT_SELECTED` on publish. They are not all marked `SELECTED`.
+The same User **may** hold one selected BOOSTER **plus** any number of selected LOOTBUDDY rows. Lootbuddy selections are never collapsed by `userId`.
+
+If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers on that run become `NOT_SELECTED` on publish. Lootbuddy rows are decided independently per `RunSignup.id`.
 
 ## Composition
 
@@ -74,7 +76,7 @@ Targets come from the run (`desiredTankCount`, `desiredHealerCount`, `desiredDps
 
 - Booster `TANK` / `HEALER` / `DPS` count toward those slots
 - Lootbuddies (`LOOT_ONLY` and `PLAYING`) do **not** count as booster composition
-- `PLAYING` has no assigned booster role in Phase 2, so it stays in the lootbuddy bucket
+- `PLAYING` has no assigned booster role, so it stays in the lootbuddy bucket
 
 Mismatch is a **warning**, not an automatic hard block. A lead may draft 5/4 healers. Publish requires explicit acknowledgement when warnings exist. Blocking issues cannot be acknowledged away.
 
@@ -86,13 +88,11 @@ Blockers include:
 
 - run not in `OPEN` / `ROSTERING` / `PUBLISHED` (including frozen `IN_PROGRESS` / `COMPLETED`)
 - withdrawn selection
-- inactive character
-- lockout conflict (`LockoutService`, same reset as signup)
+- inactive Character (BOOSTER and legacy Character-backed LOOTBUDDY only — characterless Lootbuddy is not inactive)
 - booster qualification no longer approved (`BoosterQualificationService` — User + Run Difficulty; revoke is a publish blocker)
+- two selected **BOOSTER** signups for one user
 
-See [booster-access-management.md](booster-access-management.md).
-- two selected signups for one user
-
+Raid lockouts remain informational only — never a publish blocker.
 Warnings: composition under or over target.
 
 Signup-time eligibility can rot before publish. Access and lockouts are therefore re-checked at publish.

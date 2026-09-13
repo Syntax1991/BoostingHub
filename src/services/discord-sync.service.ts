@@ -1,5 +1,6 @@
 import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
+import { CLASS_LABELS } from "@/lib/labels";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
@@ -207,12 +208,14 @@ function buildSignupEmbedSignature(
   });
 }
 
+/** A characterless Lootbuddy has no Character to name — its own Class snapshot stands in for display; legacy Character-backed Lootbuddy rows still show their Character. */
 function toMember(row: RosterSignupRow): RosterEmbedMember {
+  const lootbuddyClassLabel = row.lootbuddyClass ? CLASS_LABELS[row.lootbuddyClass] : null;
   return {
     userId: row.userId,
     userName: row.userName,
     discordUserId: row.discordUserId,
-    characterName: row.character?.name ?? "Unknown character",
+    characterName: row.character?.name ?? lootbuddyClassLabel ?? "Unknown character",
     characterRealm: row.character?.realm ?? "",
   };
 }

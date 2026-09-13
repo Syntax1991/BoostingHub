@@ -47,7 +47,11 @@ export function validateRosterDraft(input: {
     });
   }
 
-  const seenUsers = new Map<string, string>();
+  // A User may simultaneously hold BOOSTER participation and any number of
+  // LOOTBUDDY entries on the same Run (see docs/features/signups.md) — only
+  // two SELECTED BOOSTER rows for the same User is ever invalid; LOOTBUDDY
+  // entries are independently selectable and never counted here.
+  const seenBoosterUsers = new Map<string, string>();
   for (const item of input.selected) {
     if (item.status === "WITHDRAWN") {
       blockers.push({
@@ -72,15 +76,17 @@ export function validateRosterDraft(input: {
         signupId: item.signupId,
       });
     }
-    const previous = seenUsers.get(item.userId);
-    if (previous) {
-      blockers.push({
-        code: "INVALID_ROSTER_SELECTION",
-        message: `${item.userName} cannot occupy more than one roster slot.`,
-        signupId: item.signupId,
-      });
-    } else {
-      seenUsers.set(item.userId, item.signupId);
+    if (item.participationType === "BOOSTER") {
+      const previous = seenBoosterUsers.get(item.userId);
+      if (previous) {
+        blockers.push({
+          code: "INVALID_ROSTER_SELECTION",
+          message: `${item.userName} cannot occupy more than one booster roster slot.`,
+          signupId: item.signupId,
+        });
+      } else {
+        seenBoosterUsers.set(item.userId, item.signupId);
+      }
     }
   }
 

@@ -69,7 +69,7 @@ New characters start `isActive = true`.
 
 **Reactivate** sets `isActive = true`. It does not grant BoosterAccess, clear lockouts, or rewrite signups.
 
-Inactive characters are excluded from **new** BOOSTER and LOOTBUDDY signup eligibility. Historical My Runs and roster rows stay visible.
+Inactive characters are excluded from **new** BOOSTER signup eligibility. New LOOTBUDDY signups are characterless (Class + Mode) and do not use Character eligibility. Historical My Runs and roster rows stay visible.
 
 Deactivating a character that already has future PENDING/SELECTED signups does **not** auto-withdraw those rows. That needs an explicit later lifecycle policy.
 

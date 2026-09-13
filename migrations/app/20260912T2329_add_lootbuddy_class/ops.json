@@ -1,0 +1,86 @@
+[
+  {
+    "id": "column.public.run_signup.lootbuddyClass",
+    "label": "Add column \"lootbuddyClass\" to \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lootbuddyClass",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lootbuddyClass\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyClass"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lootbuddyClass\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD COLUMN \"lootbuddyClass\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lootbuddyClass\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "lootbuddyClass"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_signup.run_signup_lootbuddyClass_check_f786dcc9",
+    "label": "Add check constraint \"run_signup_lootbuddyClass_check_f786dcc9\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_lootbuddyClass_check_f786dcc9",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_lootbuddyClass_check_f786dcc9\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_lootbuddyClass_check_f786dcc9",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_signup_lootbuddyClass_check_f786dcc9\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD CONSTRAINT \"run_signup_lootbuddyClass_check_f786dcc9\" CHECK (\"lootbuddyClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_lootbuddyClass_check_f786dcc9\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_lootbuddyClass_check_f786dcc9",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  }
+]

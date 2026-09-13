@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { getSignupOptionsAction, setCharacterOffersAction } from "@/controllers/signup.actions";
+import { getSignupOptionsAction, setCharacterOffersAction, setLootbuddiesAction } from "@/controllers/signup.actions";
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { formatDateTime } from "@/lib/datetime";
@@ -17,6 +17,7 @@ import {
   CHARACTER_ROLES,
   LOOTBUDDY_MODES,
   LOOTBUDDY_VERIFICATIONS,
+  WOW_CLASSES,
   type CharacterRole,
   type LootbuddyMode,
   type LootbuddyVerification,
@@ -25,7 +26,6 @@ import {
 import type { signupService } from "@/services/signup.service";
 
 type SignupOptions = Awaited<ReturnType<typeof signupService.getSignupOptions>>;
-type Participation = "BOOSTER" | "LOOTBUDDY";
 
 type RaidSaveInfo = SignupOptions["booster"]["eligible"][number]["raidSave"];
 
@@ -41,6 +41,14 @@ type BoosterGroup = {
   defaultRole: CharacterRole | null;
   /** Informational raid-save progress for this run's raid/difficulty/reset — never affects selectability. */
   raidSave: RaidSaveInfo;
+};
+
+type LootbuddyEntry = {
+  /** Present = an existing owned row being edited; absent = a new entry not yet saved. */
+  signupId?: string;
+  wowClass: WowClass;
+  mode: LootbuddyMode;
+  verification: LootbuddyVerification;
 };
 
 /** Canonical TANK/HEALER/DPS order for a role dropdown, regardless of a class's own spec-list order. */
@@ -67,6 +75,21 @@ function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): Bo
   }));
 }
 
+function toLootbuddyEntries(active: SignupOptions["activeLootbuddies"]): LootbuddyEntry[] {
+  return active.map((item) => ({
+    signupId: item.signupId,
+    wowClass: item.wowClass ?? WOW_CLASSES[0],
+    mode: item.mode,
+    verification: item.verification,
+  }));
+}
+
+/**
+ * A User may hold BOOSTER participation and any number of LOOTBUDDY entries
+ * on the same Run at once — the two sections below submit independently
+ * (`setCharacterOffersAction` / `setLootbuddiesAction`), so saving one never
+ * withdraws the other.
+ */
 export function RunSignupButton({
   runId,
   signupWindowOpen,
@@ -82,13 +105,12 @@ export function RunSignupButton({
   const [options, setOptions] = useState<SignupOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [participation, setParticipation] = useState<Participation>("BOOSTER");
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<string>>(new Set());
   const [roleByCharacterId, setRoleByCharacterId] = useState<Record<string, CharacterRole>>({});
-  const [mode, setMode] = useState<LootbuddyMode>("LOOT_ONLY");
-  const [verification, setVerification] = useState<LootbuddyVerification>("NONE");
+  const [lootbuddies, setLootbuddies] = useState<LootbuddyEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [boosterPending, startBoosterTransition] = useTransition();
+  const [lootbuddyPending, startLootbuddyTransition] = useTransition();
 
   const boosterGroups = useMemo(
     () => (options ? groupBoosterOptions(options.booster.eligible) : []),
@@ -105,14 +127,12 @@ export function RunSignupButton({
       return;
     }
     setOptions(result.data);
-    setParticipation(result.data.activeOffer.participationType ?? "BOOSTER");
-    setSelectedCharacterIds(new Set(result.data.activeOffer.characterIds));
+    setSelectedCharacterIds(new Set(result.data.activeBoosterOffers.characterIds));
     // Existing persisted RunSignup.role wins over the specialization default —
     // the User explicitly chose this role for this Run; reopening the dialog
     // must never silently revert it.
-    setRoleByCharacterId({ ...result.data.activeOffer.roleByCharacterId } as Record<string, CharacterRole>);
-    setMode(result.data.activeOffer.lootbuddyMode ?? "LOOT_ONLY");
-    setVerification(result.data.activeOffer.lootbuddyVerification ?? "NONE");
+    setRoleByCharacterId({ ...result.data.activeBoosterOffers.roleByCharacterId } as Record<string, CharacterRole>);
+    setLootbuddies(toLootbuddyEntries(result.data.activeLootbuddies));
   }
 
   function closeDialog() {
@@ -132,17 +152,19 @@ export function RunSignupButton({
       setSuccess(null);
       setSelectedCharacterIds(new Set());
       setRoleByCharacterId({});
+      setLootbuddies([]);
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
   }, [dialogOpen]);
 
-  function switchParticipation(next: Participation) {
-    setParticipation(next);
-    setSelectedCharacterIds(new Set());
-  }
-
-  function toggleCharacter(characterId: string) {
+  /**
+   * When a Character first becomes selected, initialize its role from the
+   * specialization-derived default — never from class order, never a single
+   * global role. A Character re-checked after being unchecked keeps whatever
+   * role it already had in this dialog session.
+   */
+  function toggleBoosterCharacter(characterId: string) {
     setSelectedCharacterIds((current) => {
       const next = new Set(current);
       if (next.has(characterId)) {
@@ -152,16 +174,6 @@ export function RunSignupButton({
       }
       return next;
     });
-  }
-
-  /**
-   * When a Character first becomes selected, initialize its role from the
-   * specialization-derived default — never from class order, never a single
-   * global role. A Character re-checked after being unchecked keeps whatever
-   * role it already had in this dialog session.
-   */
-  function toggleBoosterCharacter(characterId: string) {
-    toggleCharacter(characterId);
     setRoleByCharacterId((current) => {
       if (current[characterId]) return current;
       const group = boosterGroups.find((item) => item.characterId === characterId);
@@ -187,44 +199,60 @@ export function RunSignupButton({
     });
   }
 
-  function selectAllEligibleLootbuddy() {
-    if (!options) return;
-    setSelectedCharacterIds(new Set(options.lootbuddy.eligible.map((option) => option.characterId)));
-  }
-
-  function submit() {
+  function submitBooster() {
     setError(null);
-
-    if (participation === "BOOSTER") {
-      const missingRole = [...selectedCharacterIds].find((characterId) => !roleByCharacterId[characterId]);
-      if (missingRole) {
-        const group = boosterGroups.find((item) => item.characterId === missingRole);
-        setError(`Choose a role for ${group?.characterName ?? "the selected character"}.`);
-        return;
-      }
+    const missingRole = [...selectedCharacterIds].find((characterId) => !roleByCharacterId[characterId]);
+    if (missingRole) {
+      const group = boosterGroups.find((item) => item.characterId === missingRole);
+      setError(`Choose a role for ${group?.characterName ?? "the selected character"}.`);
+      return;
     }
 
-    startTransition(async () => {
+    startBoosterTransition(async () => {
       const offers = [...selectedCharacterIds].map((characterId) => ({
         characterId,
-        ...(participation === "BOOSTER" ? { role: roleByCharacterId[characterId] } : {}),
+        role: roleByCharacterId[characterId],
       }));
-
-      const result = await setCharacterOffersAction({
-        runId,
-        participationType: participation,
-        offers,
-        ...(participation === "LOOTBUDDY" ? { lootbuddyMode: mode, lootbuddyVerification: verification } : {}),
-      });
-
+      const result = await setCharacterOffersAction({ runId, offers });
       if (!result.ok) {
         setError(result.message);
         return;
       }
-
       setSuccess(result.message);
       router.refresh();
-      window.setTimeout(() => closeDialog(), 600);
+    });
+  }
+
+  function addLootbuddy() {
+    setLootbuddies((current) => [...current, { wowClass: WOW_CLASSES[0], mode: "LOOT_ONLY", verification: "NONE" }]);
+  }
+
+  function removeLootbuddy(index: number) {
+    setLootbuddies((current) => current.filter((_, i) => i !== index));
+  }
+
+  function updateLootbuddy(index: number, patch: Partial<LootbuddyEntry>) {
+    setLootbuddies((current) => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  }
+
+  function submitLootbuddies() {
+    setError(null);
+    startLootbuddyTransition(async () => {
+      const result = await setLootbuddiesAction({
+        runId,
+        lootbuddies: lootbuddies.map((entry) => ({
+          signupId: entry.signupId,
+          wowClass: entry.wowClass,
+          mode: entry.mode,
+          verification: entry.verification,
+        })),
+      });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setSuccess(result.message);
+      router.refresh();
     });
   }
 
@@ -245,7 +273,7 @@ export function RunSignupButton({
       <dialog
         ref={dialogRef}
         aria-labelledby={titleId}
-        className="fixed left-1/2 top-[8vh] m-0 w-[min(32rem,calc(100vw-2rem))] max-h-[min(84vh,40rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/60"
+        className="fixed left-1/2 top-[8vh] m-0 w-[min(34rem,calc(100vw-2rem))] max-h-[min(84vh,44rem)] -translate-x-1/2 overflow-y-auto rounded-md border border-border bg-surface p-0 text-foreground shadow-xl backdrop:bg-black/60"
       >
         <div className="border-b border-border px-4 py-3">
           <h2 id={titleId} className="text-base font-semibold">
@@ -260,32 +288,16 @@ export function RunSignupButton({
           )}
         </div>
         {options ? (
-          <div className="space-y-4 px-4 py-4">
+          <div className="space-y-5 px-4 py-4">
             <div className="flex items-center gap-2">
               <DifficultyBadge difficulty={options.run.difficulty} />
               {!options.run.signupWindowOpen ? (
                 <span className="text-xs text-danger">Signups are closed. You may still remove offers.</span>
               ) : null}
             </div>
-            <fieldset className="space-y-2">
-              <legend className="text-xs font-semibold uppercase tracking-wide text-muted">Participation</legend>
-              <div className="flex gap-2">
-                <ParticipationToggle
-                  label="Booster"
-                  selected={participation === "BOOSTER"}
-                  onSelect={() => switchParticipation("BOOSTER")}
-                />
-                <ParticipationToggle
-                  label="Lootbuddy"
-                  selected={participation === "LOOTBUDDY"}
-                  onSelect={() => switchParticipation("LOOTBUDDY")}
-                />
-              </div>
-              <p className="text-xs text-muted">
-                You may hold only one active participation type on this run. Switching replaces your current offers.
-              </p>
-            </fieldset>
-            {participation === "BOOSTER" ? (
+
+            <section className="space-y-3 rounded-md border border-border p-3">
+              <h3 className="text-sm font-semibold">Booster</h3>
               <BoosterCharacterChecklist
                 groups={boosterGroups}
                 ineligible={options.booster.ineligible}
@@ -295,21 +307,42 @@ export function RunSignupButton({
                 onRoleChange={setBoosterRole}
                 onSelectAll={selectAllEligibleBooster}
               />
-            ) : (
-              <LootbuddyChecklist
-                options={options.lootbuddy}
-                selected={selectedCharacterIds}
-                onToggle={toggleCharacter}
-                onSelectAll={selectAllEligibleLootbuddy}
-                mode={mode}
-                verification={verification}
-                onModeChange={setMode}
-                onVerificationChange={setVerification}
+              {selectedCharacterIds.size === 0 ? (
+                <p className="text-xs text-muted">No characters selected — saving will clear your booster signup on this run.</p>
+              ) : null}
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={boosterPending || (selectedCharacterIds.size > 0 && !options.run.signupWindowOpen)}
+                  onClick={submitBooster}
+                >
+                  {boosterPending ? "Saving…" : "Save Booster Offers"}
+                </Button>
+              </div>
+            </section>
+
+            <section className="space-y-3 rounded-md border border-border p-3">
+              <h3 className="text-sm font-semibold">Lootbuddies</h3>
+              <p className="text-xs text-muted">No character required — coexists with your Booster signup above.</p>
+              <LootbuddyEntryEditor
+                entries={lootbuddies}
+                onAdd={addLootbuddy}
+                onRemove={removeLootbuddy}
+                onChange={updateLootbuddy}
               />
-            )}
-            {selectedCharacterIds.size === 0 ? (
-              <p className="text-xs text-muted">No characters selected — submitting will clear your signup on this run.</p>
-            ) : null}
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={lootbuddyPending || (lootbuddies.some((entry) => !entry.signupId) && !options.run.signupWindowOpen)}
+                  onClick={submitLootbuddies}
+                >
+                  {lootbuddyPending ? "Saving…" : "Save Lootbuddies"}
+                </Button>
+              </div>
+            </section>
+
             {error ? (
               <p role="alert" className="text-sm text-danger">
                 {error}
@@ -330,42 +363,12 @@ export function RunSignupButton({
         )}
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
           <Button type="button" variant="ghost" onClick={closeDialog}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            disabled={pending || !options || (selectedCharacterIds.size > 0 && !options.run.signupWindowOpen)}
-            onClick={submit}
-          >
-            {pending ? "Saving…" : "Save offers"}
+            Close
           </Button>
         </div>
       </dialog>
       ) : null}
     </>
-  );
-}
-
-function ParticipationToggle({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={`h-8 rounded-md border px-3 text-sm ${
-        selected ? "border-accent bg-accent/15 text-accent" : "border-border text-muted hover:bg-surface-raised"
-      }`}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -407,7 +410,7 @@ function BoosterCharacterChecklist({
         <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
           {ineligible.length === 0
             ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
-            : "No eligible booster characters for this run. Switch to Lootbuddy or check access and lockouts."}
+            : "No eligible booster characters for this run. Check access and lockouts, or sign as a lootbuddy below."}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -488,106 +491,94 @@ function BoosterCharacterChecklist({
   );
 }
 
-function LootbuddyChecklist({
-  options,
-  selected,
-  onToggle,
-  onSelectAll,
-  mode,
-  verification,
-  onModeChange,
-  onVerificationChange,
+/**
+ * Characterless list editor — no Character selector, ever. Each row is a
+ * distinct entry identified by its own array position (and, once saved, its
+ * `signupId`); adding, editing, and removing one row never touches the
+ * others.
+ */
+function LootbuddyEntryEditor({
+  entries,
+  onAdd,
+  onRemove,
+  onChange,
 }: {
-  options: SignupOptions["lootbuddy"];
-  selected: Set<string>;
-  onToggle: (characterId: string) => void;
-  onSelectAll: () => void;
-  mode: LootbuddyMode;
-  verification: LootbuddyVerification;
-  onModeChange: (value: LootbuddyMode) => void;
-  onVerificationChange: (value: LootbuddyVerification) => void;
+  entries: LootbuddyEntry[];
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+  onChange: (index: number, patch: Partial<LootbuddyEntry>) => void;
 }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted">Characters to offer</span>
-        {options.eligible.length > 1 ? (
-          <button type="button" className="text-xs text-accent hover:underline" onClick={onSelectAll}>
-            Select all eligible
-          </button>
-        ) : null}
-      </div>
-      {options.eligible.length === 0 ? (
+    <div className="space-y-2">
+      {entries.length === 0 ? (
         <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
-          {options.ineligible.length === 0
-            ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
-            : "No loot-eligible characters available for this run."}
+          No lootbuddy entries yet. Add one below — no character required.
         </p>
       ) : (
         <ul className="space-y-2">
-          {options.eligible.map((option) => {
-            const raidSaveLabel = formatRaidSave(option.raidSave);
-            return (
-              <li key={option.characterId} className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
-                <label className="flex flex-1 min-w-0 items-center gap-2 text-sm">
-                  <input type="checkbox" checked={selected.has(option.characterId)} onChange={() => onToggle(option.characterId)} />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate">
-                      {option.characterName}-{option.realm} · {CLASS_LABELS[option.wowClass]}
-                    </span>
-                    {raidSaveLabel ? <span className="text-xs text-muted">{raidSaveLabel}</span> : null}
-                  </span>
-                </label>
-              </li>
-            );
-          })}
+          {entries.map((entry, index) => (
+            <li key={entry.signupId ?? `new-${index}`} className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2">
+              <span className="w-4 shrink-0 text-xs text-muted">{index + 1}.</span>
+              <label className="flex-1 min-w-[8rem] text-sm">
+                <span className="sr-only">Class</span>
+                <select
+                  aria-label={`Class for lootbuddy ${index + 1}`}
+                  value={entry.wowClass}
+                  onChange={(event) => onChange(index, { wowClass: event.target.value as WowClass })}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                >
+                  {WOW_CLASSES.map((wowClass) => (
+                    <option key={wowClass} value={wowClass}>
+                      {CLASS_LABELS[wowClass]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex-1 min-w-[8rem] text-sm">
+                <span className="sr-only">Mode</span>
+                <select
+                  aria-label={`Mode for lootbuddy ${index + 1}`}
+                  value={entry.mode}
+                  onChange={(event) => onChange(index, { mode: event.target.value as LootbuddyMode })}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                >
+                  {LOOTBUDDY_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {LOOTBUDDY_MODE_LABELS[mode]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex-1 min-w-[8rem] text-sm">
+                <span className="sr-only">Verification metadata</span>
+                <select
+                  aria-label={`Verification metadata for lootbuddy ${index + 1}`}
+                  value={entry.verification}
+                  onChange={(event) => onChange(index, { verification: event.target.value as LootbuddyVerification })}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                >
+                  {LOOTBUDDY_VERIFICATIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {LOOTBUDDY_VERIFICATION_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                aria-label={`Remove lootbuddy ${index + 1}`}
+                className="text-xs text-danger hover:underline"
+                onClick={() => onRemove(index)}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
         </ul>
       )}
-      <label className="block text-sm">
-        <span className="mb-1 block text-muted">Mode</span>
-        <select
-          aria-label="Lootbuddy mode"
-          value={mode}
-          onChange={(event) => onModeChange(event.target.value as LootbuddyMode)}
-          className="h-9 w-full rounded-md border border-border bg-surface px-2"
-        >
-          {LOOTBUDDY_MODES.map((value) => (
-            <option key={value} value={value}>
-              {LOOTBUDDY_MODE_LABELS[value]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block text-muted">Verification metadata</span>
-        <select
-          aria-label="Lootbuddy verification metadata"
-          value={verification}
-          onChange={(event) => onVerificationChange(event.target.value as LootbuddyVerification)}
-          className="h-9 w-full rounded-md border border-border bg-surface px-2"
-        >
-          {LOOTBUDDY_VERIFICATIONS.map((value) => (
-            <option key={value} value={value}>
-              {LOOTBUDDY_VERIFICATION_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <span className="mt-1 block text-xs text-muted">
-          Access/Trial is signup metadata in this phase, not an approval workflow.
-        </span>
-      </label>
-      {options.ineligible.length > 0 ? (
-        <details className="text-xs text-muted">
-          <summary>{options.ineligible.length} character{options.ineligible.length === 1 ? "" : "s"} unavailable</summary>
-          <ul className="mt-2 space-y-1">
-            {options.ineligible.map((item) => (
-              <li key={item.characterId}>
-                {item.characterName}-{item.realm}: {item.message}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+      <button type="button" className="text-xs text-accent hover:underline" onClick={onAdd}>
+        + Add Lootbuddy
+      </button>
     </div>
   );
 }

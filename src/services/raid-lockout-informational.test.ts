@@ -245,7 +245,6 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
 
     const result = await signupService.setCharacterOffers(target, {
       runId: runA,
-      participationType: "BOOSTER",
       offers: [{ characterId: saved, role: "DPS" }],
     });
     expect(result.created + result.reactivated).toBeGreaterThan(0);
@@ -264,7 +263,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
   it("a saved, draft-selected Character publishes normally — save context survives into the published roster view", async () => {
     const runA = await createOpenRun(futureIso(410));
     await markSaved(runA, saved);
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: saved, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, role: "DPS" }] });
 
     const view = await rosterService.getRosterManagementView(lead, runA);
     const candidate = view.groups.dps.find((item) => item.character?.id === saved);
@@ -298,7 +297,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     expect(optionsB.booster.eligible.some((item) => item.characterId === saved)).toBe(true);
 
     // Reserve on runA via draft selection.
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: saved, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, role: "DPS" }] });
     const viewA = await rosterService.getRosterManagementView(lead, runA);
     const signupA = viewA.groups.dps.find((item) => item.character?.id === saved)!;
     await rosterService.setDraftSelection(lead, { runId: runA, signupId: signupA.id, selected: true, version: viewA.roster.version });
@@ -306,7 +305,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     // Now runB must block on the cross-run reservation reason, not lockout —
     // even though the Character is ALSO saved on runB's exact raid/difficulty/reset.
     await expectDomainCode(
-      signupService.setCharacterOffers(target, { runId: runB, participationType: "BOOSTER", offers: [{ characterId: saved, role: "DPS" }] }),
+      signupService.setCharacterOffers(target, { runId: runB, offers: [{ characterId: saved, role: "DPS" }] }),
       "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
     );
 

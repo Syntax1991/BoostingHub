@@ -363,7 +363,6 @@ describe("characterService lifecycle and signup eligibility", () => {
     createdCharacterIds.push(character.id);
 
     const beforeAccess = await signupService.getSignupOptions(owner, ids.heroicOpen);
-    expect(beforeAccess.lootbuddy.eligible.some((item) => item.characterId === character.id)).toBe(true);
     expect(beforeAccess.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
     await expectDomainCode(
       signupService.createBoosterSignup(owner, {
@@ -397,11 +396,11 @@ describe("characterService lifecycle and signup eligibility", () => {
       withAccess.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
     ).toBe(true);
 
-    const signup = await signupService.createLootbuddySignup(owner, {
+    const signup = await signupService.createBoosterSignup(owner, {
       runId: ids.heroicOpen,
       characterId: character.id,
-      mode: "LOOT_ONLY",
-      verification: "NONE",
+      role: "HEALER",
+      isBackup: false,
     });
     createdSignupIds.push(signup.id);
 
@@ -422,20 +421,7 @@ describe("characterService lifecycle and signup eligibility", () => {
     ).toBe(true);
 
     const inactiveOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
-    expect(inactiveOptions.lootbuddy.eligible.some((item) => item.characterId === character.id)).toBe(false);
-    expect(inactiveOptions.lootbuddy.ineligible.some((item) => item.characterId === character.id && item.reason === "INACTIVE")).toBe(
-      true,
-    );
     expect(inactiveOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
-    await expectDomainCode(
-      signupService.createLootbuddySignup(owner, {
-        runId: ids.heroicOpen,
-        characterId: character.id,
-        mode: "PLAYING",
-        verification: "NONE",
-      }),
-      "CHARACTER_INACTIVE",
-    );
     await expectDomainCode(
       signupService.createBoosterSignup(owner, {
         runId: ids.heroicOpen,
@@ -451,7 +437,6 @@ describe("characterService lifecycle and signup eligibility", () => {
     expect(reactivated?.isActive).toBe(true);
 
     const activeOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
-    expect(activeOptions.lootbuddy.eligible.some((item) => item.characterId === character.id)).toBe(true);
     expect(
       activeOptions.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
     ).toBe(true);

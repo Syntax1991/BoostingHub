@@ -53,25 +53,11 @@ export type BoosterIneligibilityReason =
   | "DIFFICULTY_NOT_APPROVED"
   | "ALREADY_SELECTED_OTHER_RUN";
 
-/**
- * Raid lockouts are informational only (never a Booster or Lootbuddy
- * eligibility blocker) — see `EligibleBoosterOption.raidSave` /
- * `EligibleLootbuddyOption.raidSave`. A Lootbuddy is just as Character-backed
- * as a Booster and the same reasoning applies: there is no product reason to
- * refuse a saved Character from tagging along for loot, so this list has no
- * lockout-derived reason left at all.
- */
-export type LootbuddyIneligibilityReason = "INACTIVE";
-
 export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
-};
-
-export const LOOTBUDDY_INELIGIBILITY_MESSAGES: Record<LootbuddyIneligibilityReason, string> = {
-  INACTIVE: "Character is inactive.",
 };
 
 export type EligibleBoosterOption = {
@@ -98,24 +84,6 @@ export type IneligibleBoosterCharacter = {
   conflictingRunId?: string;
   conflictingRunTitle?: string;
   conflictingScheduledStartAt?: string;
-};
-
-export type EligibleLootbuddyOption = {
-  characterId: string;
-  characterName: string;
-  realm: string;
-  wowClass: WowClass;
-  specialization: string | null;
-  /** Informational only — see EligibleBoosterOption.raidSave. */
-  raidSave: SignupRaidSaveInfo | null;
-};
-
-export type IneligibleLootbuddyCharacter = {
-  characterId: string;
-  characterName: string;
-  realm: string;
-  reason: LootbuddyIneligibilityReason;
-  message: string;
 };
 
 /**
@@ -230,48 +198,6 @@ export function evaluateBoosterOptions(
       specialization: character.specialization,
       roles: rolesForClass(character.wowClass),
       defaultRole,
-      raidSave: findRaidSave(character, run, resetIdentifier),
-    });
-  }
-
-  return { eligible, ineligible };
-}
-
-/**
- * Lootbuddy eligibility is not BoosterQualification-scoped. LOOT_ONLY and
- * PLAYING share this check in Phase 2; PLAYING does not invent a
- * booster-access requirement. Raid save/lockout status is informational only
- * (`raidSave`), same as Booster — see evaluateBoosterOptions.
- */
-export function evaluateLootbuddyOptions(
-  characters: EligibilityCharacter[],
-  run: EligibilityRun,
-  resetIdentifier: string,
-): {
-  eligible: EligibleLootbuddyOption[];
-  ineligible: IneligibleLootbuddyCharacter[];
-} {
-  const eligible: EligibleLootbuddyOption[] = [];
-  const ineligible: IneligibleLootbuddyCharacter[] = [];
-
-  for (const character of characters) {
-    if (!character.isActive) {
-      ineligible.push({
-        characterId: character.id,
-        characterName: character.name,
-        realm: character.realm,
-        reason: "INACTIVE",
-        message: LOOTBUDDY_INELIGIBILITY_MESSAGES.INACTIVE,
-      });
-      continue;
-    }
-
-    eligible.push({
-      characterId: character.id,
-      characterName: character.name,
-      realm: character.realm,
-      wowClass: character.wowClass,
-      specialization: character.specialization,
       raidSave: findRaidSave(character, run, resetIdentifier),
     });
   }
