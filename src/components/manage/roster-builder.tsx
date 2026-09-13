@@ -25,6 +25,7 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
+import { buildRosterSavedSelectionKey } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
@@ -65,7 +66,41 @@ function selectionKey(ids: Iterable<string>) {
   return [...ids].sort().join(",");
 }
 
+function collectSavedSelectedIds(data: RosterView): Set<string> {
+  const ids = new Set<string>();
+  for (const signup of collectSignups(data)) {
+    if (signup.draftSelected) ids.add(signup.id);
+  }
+  return ids;
+}
+
+/**
+ * Remount the editor only when the authoritative server draft snapshot changes
+ * (version and/or saved selected ids). Harmless parent rerenders keep local staged
+ * edits and filters because the key stays stable.
+ */
 export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
+  const savedSelectedIds = collectSavedSelectedIds(data);
+  const savedSelectionKey = buildRosterSavedSelectionKey(data.roster.version, savedSelectedIds);
+  return (
+    <RosterBuilderEditor
+      key={savedSelectionKey}
+      data={data}
+      embedded={embedded}
+      savedSelectedIds={savedSelectedIds}
+    />
+  );
+}
+
+function RosterBuilderEditor({
+  data,
+  embedded = false,
+  savedSelectedIds,
+}: {
+  data: RosterView;
+  embedded?: boolean;
+  savedSelectedIds: Set<string>;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -79,24 +114,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   const allSignups = useMemo(() => collectSignups(data), [data]);
-  const savedSelectedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const signup of allSignups) {
-      if (signup.draftSelected) ids.add(signup.id);
-    }
-    return ids;
-  }, [allSignups]);
-  const savedSelectionKey = useMemo(
-    () => `${data.roster.version}:${selectionKey(savedSelectedIds)}`,
-    [data.roster.version, savedSelectedIds],
-  );
-
   const [stagedSelectedIds, setStagedSelectedIds] = useState<Set<string>>(() => new Set(savedSelectedIds));
-  const [syncedSelectionKey, setSyncedSelectionKey] = useState(savedSelectionKey);
-  if (syncedSelectionKey !== savedSelectionKey) {
-    setSyncedSelectionKey(savedSelectionKey);
-    setStagedSelectedIds(new Set(savedSelectedIds));
-  }
 
   const isDirty = selectionKey(stagedSelectedIds) !== selectionKey(savedSelectedIds);
   const unsavedChangeCount = useMemo(() => {
