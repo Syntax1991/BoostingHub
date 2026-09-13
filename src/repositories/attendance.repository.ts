@@ -10,6 +10,7 @@ import {
   mapRegion,
   mapWowClass,
 } from "@/lib/persistence";
+import { CLASS_LABELS } from "@/lib/labels";
 import type {
   AttendanceStatus,
   CharacterRole,
@@ -61,10 +62,18 @@ function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
     userId: asString(signup.userId),
     userName: asString(user.name),
     characterId: asStringOrNull(signup.characterId),
-    characterName: character ? asString(character.name, "Unknown character") : "Unknown character",
+    characterName: character
+      ? asString(character.name, "Unknown character")
+      : signup.lootbuddyClass != null
+        ? CLASS_LABELS[mapWowClass(signup.lootbuddyClass)]
+        : "Lootbuddy",
     characterRealm: character ? asString(character.realm) : "",
     characterRegion: character ? mapRegion(character.region) : null,
-    wowClass: character ? mapWowClass(character.wowClass) : null,
+    wowClass: character
+      ? mapWowClass(character.wowClass)
+      : signup.lootbuddyClass == null
+        ? null
+        : mapWowClass(signup.lootbuddyClass),
     role: signup.role == null ? null : mapCharacterRole(signup.role),
     participationType: mapParticipation(signup.participationType),
     isBackup: asBoolean(signup.isBackup),

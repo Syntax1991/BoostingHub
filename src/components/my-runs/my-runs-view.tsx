@@ -9,15 +9,21 @@ import {
   SignupStatusBadge,
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
-import { LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import type { signupService } from "@/services/signup.service";
 
 type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
 type SignupItem = MyRuns["pending"][number];
 
-function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm">): string {
-  if (!item.characterName) return "Unknown character";
-  return item.characterRealm ? `${item.characterName}-${item.characterRealm}` : item.characterName;
+/** A characterless Lootbuddy has no Character — its own Class snapshot stands in for display. */
+function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm" | "lootbuddyClass">): string {
+  if (item.characterName) {
+    return item.characterRealm ? `${item.characterName}-${item.characterRealm}` : item.characterName;
+  }
+  if (item.lootbuddyClass) {
+    return CLASS_LABELS[item.lootbuddyClass];
+  }
+  return "Unknown character";
 }
 
 export function MyRunsView({ data }: { data: MyRuns }) {
@@ -85,14 +91,13 @@ type RunGroup = {
   raidName: string;
   difficulty: SignupItem["difficulty"];
   scheduledStartAt: string;
-  participationType: SignupItem["participationType"];
+  participationTypes: Array<SignupItem["participationType"]>;
   offers: SignupItem[];
 };
 
 /**
- * A User may offer several Characters for the same Run (multiple RunSignup
- * rows). Grouped by runId here so one Run renders as one card with all
- * offered Characters listed together, instead of one row per Character.
+ * Group by runId so one Run renders as one card. A User may hold Booster + N
+ * Lootbuddy rows on the same Run — each offer keeps its own type badge.
  */
 function groupByRun(items: SignupItem[]): RunGroup[] {
   const groups: RunGroup[] = [];
@@ -105,12 +110,15 @@ function groupByRun(items: SignupItem[]): RunGroup[] {
         raidName: item.raidName,
         difficulty: item.difficulty,
         scheduledStartAt: item.scheduledStartAt,
-        participationType: item.participationType,
+        participationTypes: [],
         offers: [],
       };
       groups.push(group);
     }
     group.offers.push(item);
+    if (!group.participationTypes.includes(item.participationType)) {
+      group.participationTypes.push(item.participationType);
+    }
   }
   return groups;
 }
@@ -124,7 +132,7 @@ function SignupTable({ items }: { items: SignupItem[] }) {
           <tr>
             <th className="px-4 py-2 font-medium">Run</th>
             <th className="px-4 py-2 font-medium">Schedule</th>
-            <th className="px-4 py-2 font-medium">Characters</th>
+            <th className="px-4 py-2 font-medium">Participations</th>
             <th className="px-4 py-2 font-medium">Type</th>
             <th className="px-4 py-2 font-medium">Offers</th>
           </tr>
@@ -157,13 +165,17 @@ function SignupTable({ items }: { items: SignupItem[] }) {
                   <p className="mt-1 max-w-[240px] truncate text-xs text-muted">Selected: {selectedLabel}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <ParticipationBadge type={group.participationType} />
+                  <div className="flex flex-wrap gap-1">
+                    {group.participationTypes.map((type) => (
+                      <ParticipationBadge key={type} type={type} />
+                    ))}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <ul className="space-y-1.5">
                     {group.offers.map((offer) => (
                       <li key={offer.id} className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-muted">{offer.characterName ?? "—"}</span>
+                        <span className="text-xs text-muted">{characterLabel(offer)}</span>
                         {offer.participationType === "LOOTBUDDY" ? (
                           <span className="text-xs text-muted">
                             {offer.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[offer.lootbuddyMode] : "Lootbuddy"}

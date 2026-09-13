@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isActiveSignupOffer, planCharacterOfferReconciliation, type OfferReconciliationSignup } from "@/services/signup-state";
+import {
+  isActiveSignupOffer,
+  planCharacterOfferReconciliation,
+  planLootbuddyReconciliation,
+  type OfferReconciliationSignup,
+} from "@/services/signup-state";
 
 function row(
   id: string,
@@ -54,7 +59,7 @@ describe("planCharacterOfferReconciliation", () => {
     expect(plan?.toWithdraw).toEqual([]);
   });
 
-  it("withdraws every active offer of the other type when switching participation type", () => {
+  it("never withdraws BOOSTER rows when planning LOOTBUDDY character offers — coexistence", () => {
     const { plan, blocked } = planCharacterOfferReconciliation({
       participationType: "LOOTBUDDY",
       desiredCharacterIds: ["D"],
@@ -67,7 +72,7 @@ describe("planCharacterOfferReconciliation", () => {
     });
 
     expect(blocked).toEqual([]);
-    expect(plan?.toWithdraw.sort()).toEqual(["s-a", "s-b"]);
+    expect(plan?.toWithdraw).toEqual([]);
     expect(plan?.toCreate).toEqual(["D"]);
   });
 
@@ -127,5 +132,47 @@ describe("planCharacterOfferReconciliation", () => {
     expect(plan?.toWithdraw).toEqual([]);
     expect(plan?.toCreate).toEqual([]);
     expect(plan?.toReactivate).toEqual([]);
+  });
+});
+
+describe("planLootbuddyReconciliation", () => {
+  it("creates N new rows and withdraws omitted ones by signupId", () => {
+    const { plan, blocked } = planLootbuddyReconciliation({
+      desiredEntries: [{ signupId: "lb-1" }, {}, {}],
+      currentSignups: [
+        { id: "lb-1", status: "PENDING" },
+        { id: "lb-2", status: "PENDING" },
+      ],
+      rosterSelectedSignupIds: [],
+      runStatus: "OPEN",
+    });
+
+    expect(blocked).toEqual([]);
+    expect(plan?.toWithdraw).toEqual(["lb-2"]);
+    expect(plan?.toUpdate).toEqual(["lb-1"]);
+    expect(plan?.toCreateCount).toBe(2);
+  });
+
+  it("allows two identical desired creates as two new rows", () => {
+    const { plan, blocked } = planLootbuddyReconciliation({
+      desiredEntries: [{}, {}],
+      currentSignups: [],
+      rosterSelectedSignupIds: [],
+      runStatus: "OPEN",
+    });
+    expect(blocked).toEqual([]);
+    expect(plan?.toCreateCount).toBe(2);
+    expect(plan?.toWithdraw).toEqual([]);
+  });
+
+  it("blocks atomically when an omitted row is roster-selected", () => {
+    const { plan, blocked } = planLootbuddyReconciliation({
+      desiredEntries: [],
+      currentSignups: [{ id: "lb-1", status: "PENDING" }],
+      rosterSelectedSignupIds: ["lb-1"],
+      runStatus: "OPEN",
+    });
+    expect(plan).toBeNull();
+    expect(blocked).toEqual([{ signupId: "lb-1", reason: "ROSTER_SELECTED" }]);
   });
 });

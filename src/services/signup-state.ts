@@ -70,8 +70,7 @@ export type OfferReconciliationSignup = {
 };
 
 export type OfferReconciliationPlan = {
-  /** Signup ids transitioning to WITHDRAWN: same-type offers no longer desired, plus every
-   *  active offer of the other participation type (a User may hold only one active type). */
+  /** Signup ids transitioning to WITHDRAWN: same-type offers no longer desired. */
   toWithdraw: string[];
   /** WITHDRAWN rows reused instead of inserting a duplicate row for the same unique key. */
   toReactivate: Array<{ id: string; characterId: string }>;
@@ -87,13 +86,14 @@ export type OfferRemovalBlock = {
 };
 
 /**
- * Pure desired-set reconciliation. A User may hold only one ACTIVE participation
- * type (BOOSTER or LOOTBUDDY) per Run: offers of the other type are always
- * removal candidates alongside same-type offers the desired set no longer lists.
- * A row currently selected on the roster draft, or a published+SELECTED row the
- * lifecycle already protects, blocks the whole plan rather than being silently
- * skipped — the caller returns `blocked` instead of a plan so the mutation is
- * all-or-nothing.
+ * Pure desired-set reconciliation for BOOSTER Character offers only. A User
+ * may simultaneously hold Booster participation AND any number of Lootbuddy
+ * entries on the same Run (see `planLootbuddyReconciliation`) — this function
+ * never touches the other participation type's rows, only same-type (BOOSTER)
+ * offers. A row currently selected on the roster draft, or a published+
+ * SELECTED row the lifecycle already protects, blocks the whole plan rather
+ * than being silently skipped — the caller returns `blocked` instead of a
+ * plan so the mutation is all-or-nothing.
  */
 export function planCharacterOfferReconciliation(input: {
   participationType: ParticipationType;
@@ -105,15 +105,11 @@ export function planCharacterOfferReconciliation(input: {
   const desired = new Set(input.desiredCharacterIds);
   const activeRows = input.currentSignups.filter((row) => row.status !== "WITHDRAWN");
   const sameTypeActive = activeRows.filter((row) => row.participationType === input.participationType);
-  const otherTypeActive = activeRows.filter((row) => row.participationType !== input.participationType);
   const sameTypeWithdrawn = input.currentSignups.filter(
     (row) => row.status === "WITHDRAWN" && row.participationType === input.participationType,
   );
 
-  const removalCandidates = [
-    ...sameTypeActive.filter((row) => !row.characterId || !desired.has(row.characterId)),
-    ...otherTypeActive,
-  ];
+  const removalCandidates = sameTypeActive.filter((row) => !row.characterId || !desired.has(row.characterId));
 
   const blocked: OfferRemovalBlock[] = [];
   for (const row of removalCandidates) {
@@ -151,6 +147,77 @@ export function planCharacterOfferReconciliation(input: {
       toReactivate,
       toCreate,
       kept: keptRows.map((row) => row.id),
+    },
+    blocked: [],
+  };
+}
+
+export type LootbuddyReconciliationSignup = {
+  id: string;
+  status: SignupStatus;
+};
+
+export type DesiredLootbuddyEntry = {
+  /** Present = edit an existing owned row; absent = always a brand-new row (never a revival of old history — see `planLootbuddyReconciliation`). */
+  signupId?: string;
+};
+
+export type LootbuddyReconciliationPlan = {
+  /** Existing active LOOTBUDDY rows omitted from the desired set. */
+  toWithdraw: string[];
+  /** Desired entries with no `signupId` — always new rows, never a reactivated historical one (identity is RunSignup.id, not a natural key). */
+  toCreateCount: number;
+  /** Desired entries whose `signupId` matches an existing active row — updated in place, never withdrawn+recreated. */
+  toUpdate: string[];
+};
+
+/**
+ * Pure desired-set reconciliation for LOOTBUDDY entries, keyed by
+ * `RunSignup.id` rather than `characterId` — two entries with the same Class
+ * and Mode are still two distinct rows if the User intentionally has two.
+ * Never touches BOOSTER rows. A `signupId` naming a row not present in
+ * `currentSignups` (already withdrawn, foreign, or fabricated) is a caller
+ * error the Service must reject before this ever runs — this function only
+ * ever sees the acting User's own current LOOTBUDDY rows.
+ */
+export function planLootbuddyReconciliation(input: {
+  desiredEntries: readonly DesiredLootbuddyEntry[];
+  currentSignups: readonly LootbuddyReconciliationSignup[];
+  rosterSelectedSignupIds: readonly string[];
+  runStatus: RunStatus;
+}): { plan: LootbuddyReconciliationPlan | null; blocked: OfferRemovalBlock[] } {
+  const activeRows = input.currentSignups.filter((row) => row.status !== "WITHDRAWN");
+  const desiredSignupIds = new Set(
+    input.desiredEntries.map((entry) => entry.signupId).filter((id): id is string => Boolean(id)),
+  );
+
+  const removalCandidates = activeRows.filter((row) => !desiredSignupIds.has(row.id));
+
+  const blocked: OfferRemovalBlock[] = [];
+  for (const row of removalCandidates) {
+    if (input.rosterSelectedSignupIds.includes(row.id)) {
+      blocked.push({ signupId: row.id, reason: "ROSTER_SELECTED" });
+      continue;
+    }
+    if (!canSelfWithdrawSignup(row.status, input.runStatus)) {
+      blocked.push({ signupId: row.id, reason: "PUBLISHED_LOCKED" });
+    }
+  }
+
+  if (blocked.length > 0) {
+    return { plan: null, blocked };
+  }
+
+  const toUpdate = input.desiredEntries
+    .map((entry) => entry.signupId)
+    .filter((id): id is string => Boolean(id) && activeRows.some((row) => row.id === id));
+  const toCreateCount = input.desiredEntries.filter((entry) => !entry.signupId).length;
+
+  return {
+    plan: {
+      toWithdraw: removalCandidates.map((row) => row.id),
+      toCreateCount,
+      toUpdate,
     },
     blocked: [],
   };

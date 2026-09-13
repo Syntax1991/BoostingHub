@@ -516,6 +516,11 @@ model RunSignup {
   role                  CharacterRole?
   isBackup              Boolean                @default(false)
   status                SignupStatus
+  /// Characterless Lootbuddy's own Class snapshot — required for a new (characterId
+  /// null) Lootbuddy row going forward. Null on Booster rows and on legacy
+  /// Character-backed Lootbuddy rows predating this field (display falls back to
+  /// character.wowClass for those). Never used for Booster eligibility.
+  lootbuddyClass        WowClass?
   lootbuddyMode         LootbuddyMode?
   lootbuddyVerification LootbuddyVerification?
   notes                 String?
@@ -525,6 +530,12 @@ model RunSignup {
   rosterEntries RunRosterEntry[]
   payoutEntries RunPayoutEntry[]
 
+  /// NULL is distinct per row under Postgres unique-index semantics, so this does
+  /// NOT limit a User to one characterless (characterId null) LOOTBUDDY row per
+  /// Run — multiple such rows are intentional. It still prevents offering the
+  /// same Character twice for the same participationType, which remains the
+  /// invariant for Character-backed rows (BOOSTER, and legacy Character-backed
+  /// LOOTBUDDY).
   @@unique([runId, userId, characterId, participationType])
   @@index([userId])
   @@index([runId])

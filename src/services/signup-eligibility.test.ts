@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EligibilityCharacter, EligibilityRun } from "@/services/signup-eligibility";
-import {
-  evaluateBoosterOptions,
-  evaluateLootbuddyOptions,
-} from "@/services/signup-eligibility";
+import { evaluateBoosterOptions } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen } from "@/services/signup-eligibility";
 import { canSelfWithdrawSignup, canTransitionSignup, isBlockingDuplicate } from "@/services/signup-state";
 import { canTransitionRun } from "@/services/run-state";
-import { boosterSignupSchema, lootbuddySignupSchema, signupOptionsSchema } from "@/validators/signup";
+import { boosterSignupSchema, setLootbuddiesSchema, signupOptionsSchema } from "@/validators/signup";
 
 const reset = "2026-W37";
 
@@ -135,43 +132,6 @@ describe("booster eligibility", () => {
     expect(result.eligible.map((item) => item.characterId).includes("char-1")).toBe(true);
     expect(result.eligible.map((item) => item.characterId).includes("char-2")).toBe(true);
     expect(result.eligible.find((item) => item.characterId === "char-2")?.defaultRole).toBe("HEALER");
-  });
-});
-
-describe("lootbuddy eligibility", () => {
-  it("does not require booster access for loot-only or playing", () => {
-    const character = shaman({ boosterQualifications: [] });
-    const result = evaluateLootbuddyOptions([character], heroicRun, reset);
-    expect(result.eligible).toHaveLength(1);
-  });
-
-  it("remains eligible with a matching raid/difficulty/reset lockout — informational only", () => {
-    const result = evaluateLootbuddyOptions(
-      [
-        shaman({
-          lockouts: [
-            {
-              raidId: "raid-1",
-              difficulty: "HEROIC",
-              resetIdentifier: reset,
-              isComplete: true,
-              bossesDefeated: 8,
-            },
-          ],
-        }),
-      ],
-      heroicRun,
-      reset,
-    );
-    expect(result.eligible).toHaveLength(1);
-    expect(result.eligible[0]?.raidSave).toEqual({
-      raidId: "raid-1",
-      difficulty: "HEROIC",
-      resetIdentifier: reset,
-      bossesDefeated: 8,
-      totalBossCount: 8,
-      isComplete: true,
-    });
   });
 });
 
@@ -309,20 +269,19 @@ describe("signup creation rules", () => {
       }).isBackup,
     ).toBe(true);
     expect(
-      lootbuddySignupSchema.parse({
+      setLootbuddiesSchema.parse({
         runId: "11111111-1111-4111-8111-111111111111",
-        characterId: "c1111111-1111-4111-8111-111111111111",
-        mode: "LOOT_ONLY",
-        verification: "ACCESS",
-      }).mode,
+        lootbuddies: [{ wowClass: "MAGE", mode: "LOOT_ONLY", verification: "ACCESS" }],
+      }).lootbuddies[0]?.mode,
     ).toBe("LOOT_ONLY");
     expect(
-      lootbuddySignupSchema.parse({
+      setLootbuddiesSchema.parse({
         runId: "11111111-1111-4111-8111-111111111111",
-        characterId: "c1111111-1111-4111-8111-111111111111",
-        mode: "PLAYING",
-        verification: "TRIAL",
-      }).verification,
+        lootbuddies: [
+          { wowClass: "PRIEST", mode: "PLAYING", verification: "TRIAL" },
+          { signupId: "c1111111-1111-4111-8111-111111111111", wowClass: "WARLOCK", mode: "LOOT_ONLY" },
+        ],
+      }).lootbuddies[0]?.verification,
     ).toBe("TRIAL");
   });
 

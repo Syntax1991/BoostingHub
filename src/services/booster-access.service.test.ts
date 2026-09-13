@@ -446,13 +446,15 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
     const qualification = await boosterQualificationRepository.findExact(ids.owner, "HEROIC");
     expect(qualification).toBeTruthy();
 
-    const loot = await signupService.createLootbuddySignup(owner, {
+    const loot = await signupService.setLootbuddies(owner, {
       runId: ids.heroicOpen,
-      characterId: character.id,
-      mode: "PLAYING",
-      verification: "NONE",
+      lootbuddies: [{ wowClass: "PALADIN", mode: "PLAYING", verification: "NONE" }],
     });
-    createdSignupIds.push(loot.id);
+    expect(loot.created).toBe(1);
+    const lootRows = (await orm.RunSignup.where({ runId: ids.heroicOpen, userId: ids.owner, participationType: "LOOTBUDDY" }).all()) as Array<{
+      id: string;
+    }>;
+    for (const row of lootRows) createdSignupIds.push(row.id);
     const booster = await signupService.createBoosterSignup(owner, {
       runId: ids.heroicOpen,
       characterId: character.id,
@@ -464,7 +466,8 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
     await boosterAccessService.revokeAccess(admin, qualification!.id, "Break.");
     const after = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(after.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
-    expect(after.lootbuddy.eligible.some((item) => item.characterId === character.id)).toBe(true);
+    expect(after.activeLootbuddies.length).toBeGreaterThan(0);
+    expect(after.activeLootbuddies.some((item) => item.wowClass === "PALADIN")).toBe(true);
 
     const storedBooster = await orm.RunSignup.where({ id: booster.id }).first();
     expect(storedBooster?.status).toBe("PENDING");

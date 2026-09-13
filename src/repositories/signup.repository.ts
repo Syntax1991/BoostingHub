@@ -7,6 +7,7 @@ import type {
   RaidDifficulty,
   RunStatus,
   SignupStatus,
+  WowClass,
 } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import {
@@ -20,6 +21,7 @@ import {
   mapParticipation,
   mapRunStatus,
   mapSignupStatus,
+  mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
 
@@ -30,9 +32,11 @@ export type SignupListRecord = {
   participationType: ParticipationType;
   isBackup: boolean;
   role: CharacterRole | null;
+  /** Own Class snapshot for a characterless Lootbuddy row; null for BOOSTER and for legacy Character-backed Lootbuddy rows (fall back to character.wowClass for those). */
+  lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
-  character: { id: string; name: string; realm: string } | null;
+  character: { id: string; name: string; realm: string; wowClass: WowClass } | null;
   run: {
     id: string;
     title: string;
@@ -55,6 +59,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
     participationType: mapParticipation(row.participationType),
     isBackup: asBoolean(row.isBackup),
     role: row.role == null ? null : mapCharacterRole(row.role),
+    lootbuddyClass: row.lootbuddyClass == null ? null : mapWowClass(row.lootbuddyClass),
     lootbuddyMode: row.lootbuddyMode == null ? null : mapLootbuddyMode(row.lootbuddyMode),
     lootbuddyVerification:
       row.lootbuddyVerification == null ? null : mapLootbuddyVerification(row.lootbuddyVerification),
@@ -63,6 +68,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
           id: asString(character.id),
           name: asString(character.name),
           realm: asString(character.realm),
+          wowClass: mapWowClass(character.wowClass),
         }
       : null,
     run: {
@@ -152,6 +158,7 @@ export type SignupWriteInput = {
   role: CharacterRole | null;
   isBackup: boolean;
   status: SignupStatus;
+  lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
 };
@@ -217,6 +224,7 @@ export const signupRepository = {
       role: input.role,
       isBackup: input.isBackup,
       status: input.status,
+      lootbuddyClass: input.lootbuddyClass,
       lootbuddyMode: input.lootbuddyMode,
       lootbuddyVerification: input.lootbuddyVerification,
       createdAt: now,
@@ -233,6 +241,7 @@ export const signupRepository = {
     if (input.role !== undefined) patch.role = input.role;
     if (input.isBackup !== undefined) patch.isBackup = input.isBackup;
     if (input.status !== undefined) patch.status = input.status;
+    if (input.lootbuddyClass !== undefined) patch.lootbuddyClass = input.lootbuddyClass;
     if (input.lootbuddyMode !== undefined) patch.lootbuddyMode = input.lootbuddyMode;
     if (input.lootbuddyVerification !== undefined) patch.lootbuddyVerification = input.lootbuddyVerification;
     await orm.RunSignup.where({ id }).update(patch);
@@ -262,33 +271,23 @@ export const signupRepository = {
   },
 
   /**
-   * Executes one already-authorized, already-eligibility-checked reconciliation
-   * plan atomically. Each planned mutation re-checks the row's current status
-   * against fresh in-transaction reads immediately before writing it, so a
-   * concurrent change (e.g. another request reactivating the same WITHDRAWN
-   * row) fails the whole transaction instead of corrupting state — the plan
-   * itself is not recomputed here, only defended at the row level.
+   * Executes one already-authorized, already-eligibility-checked BOOSTER
+   * reconciliation plan atomically. Never touches LOOTBUDDY rows — see
+   * `applyLootbuddyPlan` for that participation type's own atomic apply. Each
+   * planned mutation re-checks the row's current status against fresh
+   * in-transaction reads immediately before writing it, so a concurrent
+   * change (e.g. another request reactivating the same WITHDRAWN row) fails
+   * the whole transaction instead of corrupting state — the plan itself is
+   * not recomputed here, only defended at the row level.
    */
   async applyOfferPlan(input: {
     runId: string;
     userId: string;
-    participationType: ParticipationType;
-    /** Required only to re-verify cross-Run reservation for BOOSTER offers newly becoming active. */
+    /** Required only to re-verify cross-Run reservation for offers newly becoming active. */
     scheduledStartAt: string;
     toWithdraw: string[];
-    toReactivate: Array<{
-      id: string;
-      characterId: string;
-      role: CharacterRole | null;
-      lootbuddyMode: LootbuddyMode | null;
-      lootbuddyVerification: LootbuddyVerification | null;
-    }>;
-    toCreate: Array<{
-      characterId: string;
-      role: CharacterRole | null;
-      lootbuddyMode: LootbuddyMode | null;
-      lootbuddyVerification: LootbuddyVerification | null;
-    }>;
+    toReactivate: Array<{ id: string; characterId: string; role: CharacterRole | null }>;
+    toCreate: Array<{ characterId: string; role: CharacterRole | null }>;
     toUpdateRole: Array<{ id: string; role: CharacterRole | null }>;
   }): Promise<{ created: string[]; reactivated: string[]; withdrawn: string[] }> {
     const created: string[] = [];
@@ -306,27 +305,25 @@ export const signupRepository = {
        * reserved the same Character elsewhere in between. Only Characters
        * newly becoming active (reactivated or created) can newly conflict —
        * a `kept` row that already existed is not creating a new reservation
-       * here. BOOSTER only, matching the eligibility check this mirrors.
+       * here.
        */
-      if (input.participationType === "BOOSTER") {
-        const activatingCharacterIds = [
-          ...input.toReactivate.map((offer) => offer.characterId),
-          ...input.toCreate.map((offer) => offer.characterId),
-        ];
-        if (activatingCharacterIds.length > 0) {
-          const conflicts = await queryReservationConflicts(txOrm, {
-            characterIds: activatingCharacterIds,
-            targetRunId: input.runId,
-            scheduledStartAt: input.scheduledStartAt,
-          });
-          if (conflicts.length > 0) {
-            throw new DomainError(
-              "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-              conflicts.length === 1
-                ? `That character was just selected for ${conflicts[0].runTitle}. Please try again.`
-                : "Those characters were just selected for other runs. Please try again.",
-            );
-          }
+      const activatingCharacterIds = [
+        ...input.toReactivate.map((offer) => offer.characterId),
+        ...input.toCreate.map((offer) => offer.characterId),
+      ];
+      if (activatingCharacterIds.length > 0) {
+        const conflicts = await queryReservationConflicts(txOrm, {
+          characterIds: activatingCharacterIds,
+          targetRunId: input.runId,
+          scheduledStartAt: input.scheduledStartAt,
+        });
+        if (conflicts.length > 0) {
+          throw new DomainError(
+            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+            conflicts.length === 1
+              ? `That character was just selected for ${conflicts[0].runTitle}. Please try again.`
+              : "Those characters were just selected for other runs. Please try again.",
+          );
         }
       }
 
@@ -355,8 +352,6 @@ export const signupRepository = {
           status: "PENDING",
           role: offer.role,
           isBackup: false,
-          lootbuddyMode: offer.lootbuddyMode,
-          lootbuddyVerification: offer.lootbuddyVerification,
           updatedAt: now,
         });
         reactivated.push(offer.id);
@@ -369,12 +364,13 @@ export const signupRepository = {
           runId: input.runId,
           userId: input.userId,
           characterId: offer.characterId,
-          participationType: input.participationType,
+          participationType: "BOOSTER",
           role: offer.role,
           isBackup: false,
           status: "PENDING",
-          lootbuddyMode: offer.lootbuddyMode,
-          lootbuddyVerification: offer.lootbuddyVerification,
+          lootbuddyClass: null,
+          lootbuddyMode: null,
+          lootbuddyVerification: null,
           createdAt: now,
           updatedAt: now,
         });
@@ -387,6 +383,94 @@ export const signupRepository = {
     });
 
     return { created, reactivated, withdrawn };
+  },
+
+  /**
+   * Executes one already-authorized LOOTBUDDY desired-set reconciliation plan
+   * atomically. Identity is `RunSignup.id`, never Class+Mode — two entries
+   * with the same Class and Mode create two distinct rows. Never touches
+   * BOOSTER rows, and never checks cross-Run Character reservation (a
+   * characterless Lootbuddy has no Character to reserve — see the audit note
+   * in signup.service.ts). `toUpdate`/`toCreate` are keyed by the desired
+   * entry's own array position so the caller's per-entry Class/Mode/
+   * verification lines up with the row that ends up representing it.
+   */
+  async applyLootbuddyPlan(input: {
+    runId: string;
+    userId: string;
+    toWithdraw: string[];
+    toUpdate: Array<{
+      id: string;
+      lootbuddyClass: WowClass;
+      lootbuddyMode: LootbuddyMode;
+      lootbuddyVerification: LootbuddyVerification;
+    }>;
+    toCreate: Array<{
+      lootbuddyClass: WowClass;
+      lootbuddyMode: LootbuddyMode;
+      lootbuddyVerification: LootbuddyVerification;
+    }>;
+  }): Promise<{ created: string[]; updated: string[]; withdrawn: string[] }> {
+    const created: string[] = [];
+    const updated: string[] = [];
+    const withdrawn: string[] = [];
+
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+
+      for (const id of input.toWithdraw) {
+        const row = await txOrm.RunSignup.where({ id }).first();
+        if (!row) continue;
+        const status = mapSignupStatus((row as Record<string, unknown>).status);
+        if (status === "WITHDRAWN") continue;
+        await txOrm.RunSignup.where({ id }).update({ status: "WITHDRAWN", updatedAt: now });
+        withdrawn.push(id);
+      }
+
+      for (const entry of input.toUpdate) {
+        const row = await txOrm.RunSignup.where({ id: entry.id }).first();
+        if (!row) {
+          throw new DomainError("NOT_FOUND", "A previously staged lootbuddy entry was removed.");
+        }
+        const status = mapSignupStatus((row as Record<string, unknown>).status);
+        if (status === "WITHDRAWN") {
+          throw new DomainError(
+            "INVALID_STATE_TRANSITION",
+            "This lootbuddy entry changed since it was loaded. Please try again.",
+          );
+        }
+        await txOrm.RunSignup.where({ id: entry.id }).update({
+          lootbuddyClass: entry.lootbuddyClass,
+          lootbuddyMode: entry.lootbuddyMode,
+          lootbuddyVerification: entry.lootbuddyVerification,
+          updatedAt: now,
+        });
+        updated.push(entry.id);
+      }
+
+      for (const entry of input.toCreate) {
+        const id = crypto.randomUUID();
+        await txOrm.RunSignup.create({
+          id,
+          runId: input.runId,
+          userId: input.userId,
+          characterId: null,
+          participationType: "LOOTBUDDY",
+          role: null,
+          isBackup: false,
+          status: "PENDING",
+          lootbuddyClass: entry.lootbuddyClass,
+          lootbuddyMode: entry.lootbuddyMode,
+          lootbuddyVerification: entry.lootbuddyVerification,
+          createdAt: now,
+          updatedAt: now,
+        });
+        created.push(id);
+      }
+    });
+
+    return { created, updated, withdrawn };
   },
 };
 

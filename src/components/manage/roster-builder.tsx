@@ -21,14 +21,28 @@ import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import {
   CHARACTER_ROLE_LABELS,
+  CLASS_LABELS,
   DIFFICULTY_ABBREVIATIONS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import type { rosterService } from "@/services/roster.service";
+import type { WowClass } from "@/models/enums";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
+
+function lootbuddyDisplayClass(signup: SignupRow): WowClass | null {
+  return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
+}
+
+function signupDisplayName(signup: SignupRow): string {
+  if (signup.character) {
+    return `${signup.character.name}-${signup.character.realm}`;
+  }
+  const wowClass = lootbuddyDisplayClass(signup);
+  return wowClass ? CLASS_LABELS[wowClass] : "Unknown character";
+}
 
 /** "HC 8/8 · Saved" — informational only, never a reason a candidate can't be selected or published. */
 function formatRaidSave(raidSave: SignupRow["raidSave"]): string | null {
@@ -54,7 +68,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
   );
 
   function matches(signup: SignupRow) {
-    const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""}`.toLowerCase();
+    const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""} ${signup.lootbuddyClass ?? ""}`.toLowerCase();
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation !== "ALL" && signup.participationType !== participation) return false;
     if (roleFilter !== "ALL" && signup.role !== roleFilter) return false;
@@ -381,6 +395,7 @@ function SignupRowCard({
 }) {
   const checkboxId = `signup-${signup.id}`;
   const character = signup.character;
+  const displayClass = lootbuddyDisplayClass(signup);
   return (
     <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2">
       <input
@@ -393,10 +408,8 @@ function SignupRowCard({
       />
       <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer text-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">
-            {character ? `${character.name}-${character.realm}` : "Unknown character"}
-          </span>
-          {character ? <ClassBadge wowClass={character.wowClass} /> : null}
+          <span className="font-medium">{signupDisplayName(signup)}</span>
+          {displayClass ? <ClassBadge wowClass={displayClass} /> : null}
           {signup.role ? <RoleBadge role={signup.role} /> : null}
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />

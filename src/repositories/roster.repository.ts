@@ -59,6 +59,8 @@ export type RosterSignupRow = {
   participationType: ParticipationType;
   role: CharacterRole | null;
   isBackup: boolean;
+  /** Own Class snapshot for a characterless Lootbuddy row; null for BOOSTER and for legacy Character-backed Lootbuddy rows (fall back to character.wowClass for those). */
+  lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
   character: RosterCharacterSnapshot | null;
@@ -114,6 +116,7 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
     participationType: mapParticipation(row.participationType),
     role: row.role == null ? null : mapCharacterRole(row.role),
     isBackup: asBoolean(row.isBackup),
+    lootbuddyClass: row.lootbuddyClass == null ? null : mapWowClass(row.lootbuddyClass),
     lootbuddyMode: row.lootbuddyMode == null ? null : mapLootbuddyMode(row.lootbuddyMode),
     lootbuddyVerification:
       row.lootbuddyVerification == null ? null : mapLootbuddyVerification(row.lootbuddyVerification),

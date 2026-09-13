@@ -120,15 +120,23 @@ export class BotApiClient {
   setCharacterOffers(
     runId: string,
     discordUserId: string,
-    input: {
-      participationType: "BOOSTER" | "LOOTBUDDY";
-      offers: Array<{ characterId: string; role?: string }>;
-      lootbuddyMode?: string;
-      lootbuddyVerification?: string;
-    },
+    input: { offers: Array<{ characterId: string; role?: string }> },
   ) {
     return this.request<{ created: number; reactivated: number; withdrawn: number; kept: number }>(
       `/api/bot/runs/${runId}/signup`,
+      { method: "PUT", discordUserId, body: JSON.stringify(input) },
+    );
+  }
+
+  setLootbuddies(
+    runId: string,
+    discordUserId: string,
+    input: {
+      lootbuddies: Array<{ signupId?: string; wowClass: string; mode: string; verification?: string }>;
+    },
+  ) {
+    return this.request<{ created: number; updated: number; withdrawn: number }>(
+      `/api/bot/runs/${runId}/lootbuddies`,
       { method: "PUT", discordUserId, body: JSON.stringify(input) },
     );
   }

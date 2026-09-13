@@ -2,18 +2,19 @@ import type { NextRequest } from "next/server";
 import { assertBotServiceAuthorized, resolveActingDiscordUser } from "@/auth/bot-auth";
 import { botApiError, botApiOk } from "@/lib/bot-api-result";
 import { signupService } from "@/services/signup.service";
-import { setCharacterOffersSchema } from "@/validators/signup";
+import { setLootbuddiesSchema } from "@/validators/signup";
 
-const bodySchema = setCharacterOffersSchema.omit({ runId: true });
+const bodySchema = setLootbuddiesSchema.omit({ runId: true });
 
 /**
- * PUT /api/bot/runs/:runId/signup
+ * PUT /api/bot/runs/:runId/lootbuddies
  *
- * setCharacterOffers over HTTP: the Discord Signup button flow submits the
- * whole desired BOOSTER offer-set in one request, exactly like the Web
- * dialog. The runId always comes from the URL, never the body, so a client
- * cannot target a different Run than the one it authenticated for. Lootbuddy
- * entries go through their own endpoint — see /api/bot/runs/:runId/lootbuddies.
+ * setLootbuddies over HTTP: the Discord Sign as Lootbuddy flow submits the
+ * whole desired Lootbuddy entry set in one request, exactly like the Web
+ * dialog. A distinct collection from Booster offers — see
+ * /api/bot/runs/:runId/signup. The runId always comes from the URL, never
+ * the body, so a client cannot target a different Run than the one it
+ * authenticated for.
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -21,7 +22,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { runId } = await params;
     const actor = await resolveActingDiscordUser(request.headers.get("x-discord-user-id"));
     const body = bodySchema.parse(await request.json());
-    const result = await signupService.setCharacterOffers(actor, { runId, ...body });
+    const result = await signupService.setLootbuddies(actor, { runId, ...body });
     return botApiOk(result);
   } catch (error) {
     return botApiError(error);

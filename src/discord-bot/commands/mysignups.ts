@@ -1,12 +1,15 @@
 import type { ChatInputCommandInteraction } from "discord.js";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
+import { CLASS_LABELS } from "@/lib/labels";
+import type { WowClass } from "@/models/enums";
 
 type MySignupItem = {
   runId: string;
   runTitle: string;
   participationType: "BOOSTER" | "LOOTBUDDY";
   characterName: string | null;
+  lootbuddyClass?: WowClass | null;
   status: "PENDING" | "SELECTED" | "NOT_SELECTED" | "WITHDRAWN";
 };
 
@@ -18,10 +21,16 @@ type MyRunsPayload = {
 
 type RunGroup = { runTitle: string; participationType: string; offers: string[]; selected: string | null };
 
+function offerLabel(item: MySignupItem): string {
+  if (item.characterName) return item.characterName;
+  if (item.lootbuddyClass) return CLASS_LABELS[item.lootbuddyClass];
+  return item.participationType === "LOOTBUDDY" ? "Lootbuddy" : "Unknown character";
+}
+
 /**
- * Groups the flat per-Character signup rows by Run + participation type —
+ * Groups the flat per-participation signup rows by Run + participation type —
  * the same "one Run, one card" presentation as the Web My Runs page — so a
- * User who offered three Characters sees one line, not three.
+ * User who offered three Characters / Lootbuddies sees one line, not three.
  */
 export function formatMySignups(data: MyRunsPayload): string[] {
   const byRun = new Map<string, RunGroup>();
@@ -34,9 +43,9 @@ export function formatMySignups(data: MyRunsPayload): string[] {
         offers: [],
         selected: null,
       };
-      group.offers.push(item.characterName ?? "Unknown character");
+      group.offers.push(offerLabel(item));
       if (item.status === "SELECTED") {
-        group.selected = item.characterName ?? "Unknown character";
+        group.selected = offerLabel(item);
       }
       byRun.set(key, group);
     }

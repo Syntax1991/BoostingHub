@@ -3,7 +3,7 @@ import type {
   CharacterRole,
   LootbuddyMode,
   LootbuddyVerification,
-  ParticipationType,
+  WowClass,
 } from "@/models/enums";
 import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
@@ -16,23 +16,20 @@ import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
-import {
-  assertSignupWindowOpen,
-  evaluateBoosterOptions,
-  evaluateLootbuddyOptions,
-} from "@/services/signup-eligibility";
+import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
 import {
   assertSignupTransition,
   canSelfWithdrawSignup,
   isBlockingDuplicate,
   planCharacterOfferReconciliation,
+  planLootbuddyReconciliation,
 } from "@/services/signup-state";
 
 /**
  * Attaches cross-Run reservation info to a batch of Characters in one query
- * (never N+1 per Character). BOOSTER-only concern: LOOTBUDDY characters are
- * never checked here — see the `validateOfferedCharacters`/`evaluateLootbuddyOptions`
- * call sites, which set `reservationConflict: null` directly instead.
+ * (never N+1 per Character). BOOSTER-only concern: characterless LOOTBUDDY
+ * entries never enter this path; Character-backed legacy Lootbuddy rows are
+ * also not reservation-checked (see roster draft selection).
  */
 async function withReservationConflicts<T extends { id: string }>(
   characters: T[],
@@ -82,6 +79,8 @@ export const signupService = {
       participationType: signup.participationType,
       isBackup: signup.isBackup,
       status: signup.status,
+      /** Legacy Character-backed Lootbuddy rows have no lootbuddyClass — display falls back to the Character's class. */
+      lootbuddyClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
       lootbuddyMode: signup.lootbuddyMode,
       lootbuddyVerification: signup.lootbuddyVerification,
       canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
@@ -108,6 +107,7 @@ export const signupService = {
         participationType: signup.participationType,
         isBackup: signup.isBackup,
         status: signup.status,
+        lootbuddyClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
         lootbuddyMode: signup.lootbuddyMode,
         lootbuddyVerification: signup.lootbuddyVerification,
         canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
@@ -137,12 +137,14 @@ export const signupService = {
     };
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun, resetIdentifier);
-    const lootbuddy = evaluateLootbuddyOptions(characters, eligibilityRun, resetIdentifier);
 
     const ownSignups = await signupRepository.listByRunAndUser(runId, user.id);
     const activeSignups = ownSignups.filter((signup) => signup.status !== "WITHDRAWN");
+    const activeBoosterSignups = activeSignups.filter((signup) => signup.participationType === "BOOSTER");
+    const activeLootbuddySignups = activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY");
+
     const roleByCharacterId: Partial<Record<string, CharacterRole>> = {};
-    for (const signup of activeSignups) {
+    for (const signup of activeBoosterSignups) {
       if (signup.character && signup.role) {
         roleByCharacterId[signup.character.id] = signup.role;
       }
@@ -159,17 +161,20 @@ export const signupService = {
         signupWindowOpen: assertSignupWindowOpen(run),
       },
       booster,
-      lootbuddy,
-      /** The desired-set the signup dialog should preselect on open. */
-      activeOffer: {
-        participationType: activeSignups[0]?.participationType ?? null,
-        characterIds: activeSignups
+      /** The desired-set the Booster half of the signup dialog should preselect on open. Independent of Lootbuddy — a User may hold both at once. */
+      activeBoosterOffers: {
+        characterIds: activeBoosterSignups
           .map((signup) => signup.character?.id)
           .filter((id): id is string => Boolean(id)),
         roleByCharacterId,
-        lootbuddyMode: activeSignups[0]?.lootbuddyMode ?? null,
-        lootbuddyVerification: activeSignups[0]?.lootbuddyVerification ?? null,
       },
+      /** Every currently active Lootbuddy entry, identified by RunSignup.id — never collapsed into one intent. */
+      activeLootbuddies: activeLootbuddySignups.map((signup) => ({
+        signupId: signup.id,
+        wowClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
+        mode: signup.lootbuddyMode ?? "LOOT_ONLY",
+        verification: signup.lootbuddyVerification ?? "NONE",
+      })),
     };
   },
 
@@ -220,6 +225,7 @@ export const signupService = {
       role: input.role,
       isBackup: input.isBackup,
       status: "PENDING",
+      lootbuddyClass: null,
       lootbuddyMode: null,
       lootbuddyVerification: null,
     });
@@ -233,85 +239,19 @@ export const signupService = {
     return record;
   },
 
-  async createLootbuddySignup(
-    user: AuthenticatedUser,
-    input: {
-      runId: string;
-      characterId: string;
-      mode: LootbuddyMode;
-      verification: LootbuddyVerification;
-    },
-  ) {
-    const { run, character, resetIdentifier } = await loadSignupContext(
-      user.id,
-      input.runId,
-      input.characterId,
-    );
-
-    if (!assertSignupWindowOpen(run)) {
-      throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
-    }
-
-    // LOOTBUDDY is not subject to cross-Run reservation (see the audit note on
-    // validateOfferedCharacters) — reservationConflict is always null here.
-    const { eligible } = evaluateLootbuddyOptions(
-      [{ ...character, reservationConflict: null }],
-      {
-        id: run.id,
-        raidId: run.raidId,
-        difficulty: run.difficulty,
-        status: run.status,
-        signupsOpen: run.signupsOpen,
-        totalBossCount: run.totalBossCount,
-      },
-      resetIdentifier,
-    );
-
-    // INACTIVE is the only remaining Lootbuddy ineligibility reason — raid
-    // save is informational only (see evaluateLootbuddyOptions).
-    if (!eligible.some((item) => item.characterId === input.characterId)) {
-      throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
-    }
-
-    const record = await persistSignup({
-      runId: run.id,
-      userId: user.id,
-      characterId: character.id,
-      participationType: "LOOTBUDDY",
-      role: null,
-      isBackup: false,
-      status: "PENDING",
-      lootbuddyMode: input.mode,
-      lootbuddyVerification: input.verification,
-    });
-
-    await activityRepository.create({
-      userId: user.id,
-      type: "SIGNUP",
-      message: `${user.name} signed ${character.name} as lootbuddy (${input.mode}).`,
-    });
-
-    return record;
-  },
-
   /**
-   * The complete desired Character-offer set for one User + Run + participation
-   * type. Reuses each existing RunSignup row as a Character offer (no parent
+   * The complete desired BOOSTER Character-offer set for one User + Run.
+   * Reuses each existing RunSignup row as a Character offer (no parent
    * intent/offer model): rows no longer desired are withdrawn, WITHDRAWN rows
    * matching a re-offered Character are reactivated in place, and net-new
-   * Characters get a fresh row. A User may hold only one ACTIVE participation
-   * type per Run — offers of the other type are withdrawn as part of a switch.
-   * Not additive: omitting a currently-offered Character removes it.
+   * Characters get a fresh row. Not additive: omitting a currently-offered
+   * Character removes it. BOOSTER-only — never touches the User's Lootbuddy
+   * entries on this Run (see `setLootbuddies`); a User may hold Booster
+   * participation and any number of Lootbuddy entries on the same Run at once.
    */
   async setCharacterOffers(
     actor: AuthenticatedUser,
-    input: {
-      runId: string;
-      participationType: ParticipationType;
-      offers: Array<{ characterId: string; role?: CharacterRole }>;
-      lootbuddyMode?: LootbuddyMode;
-      lootbuddyVerification?: LootbuddyVerification;
-    },
+    input: { runId: string; offers: Array<{ characterId: string; role?: CharacterRole }> },
   ) {
     const seen = new Set<string>();
     for (const offer of input.offers) {
@@ -323,11 +263,6 @@ export const signupService = {
       }
       seen.add(offer.characterId);
     }
-    if (input.participationType === "LOOTBUDDY" && input.offers.length > 0) {
-      if (!input.lootbuddyMode || !input.lootbuddyVerification) {
-        throw new DomainError("VALIDATION_FAILED", "Lootbuddy mode and verification are required.");
-      }
-    }
 
     const run = await runRepository.findById(input.runId);
     if (!run) {
@@ -335,7 +270,6 @@ export const signupService = {
     }
 
     const { plan, currentSignups } = await buildReconciliationPlan(actor.id, run, {
-      participationType: input.participationType,
       desiredCharacterIds: input.offers.map((offer) => offer.characterId),
     });
 
@@ -354,44 +288,32 @@ export const signupService = {
       return { offer, character };
     });
 
-    const roleByCharacterId = await validateOfferedCharacters(input.participationType, offeredCharacters, run);
-
-    const lootbuddyModeValue = input.participationType === "LOOTBUDDY" ? (input.lootbuddyMode ?? null) : null;
-    const lootbuddyVerificationValue =
-      input.participationType === "LOOTBUDDY" ? (input.lootbuddyVerification ?? null) : null;
+    const roleByCharacterId = await validateOfferedCharacters(offeredCharacters, run);
 
     const toReactivate = plan.toReactivate.map((offer) => ({
       id: offer.id,
       characterId: offer.characterId,
       role: roleByCharacterId.get(offer.characterId) ?? null,
-      lootbuddyMode: lootbuddyModeValue,
-      lootbuddyVerification: lootbuddyVerificationValue,
     }));
     const toCreate = plan.toCreate.map((characterId) => ({
       characterId,
       role: roleByCharacterId.get(characterId) ?? null,
-      lootbuddyMode: lootbuddyModeValue,
-      lootbuddyVerification: lootbuddyVerificationValue,
     }));
 
     const currentById = new Map(currentSignups.map((signup) => [signup.id, signup]));
-    const toUpdateRole =
-      input.participationType === "BOOSTER"
-        ? plan.kept
-            .map((signupId) => {
-              const existing = currentById.get(signupId);
-              const characterId = existing?.character?.id;
-              if (!existing || !characterId) return null;
-              const desiredRole = roleByCharacterId.get(characterId) ?? null;
-              return existing.role !== desiredRole ? { id: signupId, role: desiredRole } : null;
-            })
-            .filter((item): item is { id: string; role: CharacterRole | null } => item !== null)
-        : [];
+    const toUpdateRole = plan.kept
+      .map((signupId) => {
+        const existing = currentById.get(signupId);
+        const characterId = existing?.character?.id;
+        if (!existing || !characterId) return null;
+        const desiredRole = roleByCharacterId.get(characterId) ?? null;
+        return existing.role !== desiredRole ? { id: signupId, role: desiredRole } : null;
+      })
+      .filter((item): item is { id: string; role: CharacterRole | null } => item !== null);
 
     const result = await signupRepository.applyOfferPlan({
       runId: input.runId,
       userId: actor.id,
-      participationType: input.participationType,
       scheduledStartAt: run.scheduledStartAt,
       toWithdraw: plan.toWithdraw,
       toReactivate,
@@ -402,12 +324,11 @@ export const signupService = {
     await activityRepository.create({
       userId: actor.id,
       type: "SIGNUP",
-      message: `${actor.name} updated ${input.participationType.toLowerCase()} offers for ${run.title} (${input.offers.length} offered).`,
+      message: `${actor.name} updated booster offers for ${run.title} (${input.offers.length} offered).`,
     });
 
     return {
       runId: input.runId,
-      participationType: input.participationType,
       created: result.created.length,
       reactivated: result.reactivated.length,
       withdrawn: result.withdrawn.length,
@@ -416,33 +337,168 @@ export const signupService = {
   },
 
   /**
-   * Withdraws the User's entire current active offer-set for a Run (whichever
-   * participation type is active) in one atomic, all-or-nothing operation —
-   * the domain behind a Discord "Cancel Signup" button. A no-op signup has
-   * nothing to cancel; a protected offer (roster-selected or published-locked)
-   * blocks the whole cancellation instead of partially clearing the set.
+   * The complete desired LOOTBUDDY entry set for one User + Run — a distinct
+   * collection from Booster offers, never a discriminator on the same one
+   * (see docs/features/signups.md). Each entry is characterless: identity is
+   * `RunSignup.id`, never Class+Mode, so two entries with the same Class and
+   * Mode are still two distinct rows when the User intentionally adds two. An
+   * entry with `signupId` edits that existing owned row in place; an entry
+   * without one always creates a brand-new row — a bare desired entry never
+   * revives old withdrawn history the way Booster's characterId-keyed offers
+   * do, because there is no natural key to revive by. Omitting an existing
+   * entry withdraws it. Never touches BOOSTER rows.
    */
-  async cancelActiveOffers(actor: AuthenticatedUser, input: { runId: string }) {
+  async setLootbuddies(
+    actor: AuthenticatedUser,
+    input: {
+      runId: string;
+      lootbuddies: Array<{
+        signupId?: string;
+        wowClass: WowClass;
+        mode: LootbuddyMode;
+        verification?: LootbuddyVerification;
+      }>;
+    },
+  ) {
+    const seenSignupIds = new Set<string>();
+    for (const entry of input.lootbuddies) {
+      if (!entry.signupId) continue;
+      if (seenSignupIds.has(entry.signupId)) {
+        throw new DomainError(
+          "SIGNUP_OFFER_DUPLICATE_CHARACTER",
+          "The same lootbuddy entry was referenced twice in one request.",
+        );
+      }
+      seenSignupIds.add(entry.signupId);
+    }
+
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+
+    const currentSignups = await signupRepository.listByRunAndUser(input.runId, actor.id);
+    const currentLootbuddies = currentSignups.filter((signup) => signup.participationType === "LOOTBUDDY");
+    const currentById = new Map(currentLootbuddies.map((signup) => [signup.id, signup]));
+
+    // A client may only ever reference its own current LOOTBUDDY rows on this Run — never another User's signupId, and never a foreign/withdrawn one.
+    for (const entry of input.lootbuddies) {
+      if (entry.signupId && !currentById.has(entry.signupId)) {
+        throw new DomainError("NOT_FOUND", "A referenced lootbuddy entry was not found.", 404);
+      }
+    }
+
+    const roster = await rosterRepository.findByRunId(input.runId);
+    const rosterSelectedSignupIds = roster?.selectedSignupIds ?? [];
+
+    const { plan, blocked } = planLootbuddyReconciliation({
+      desiredEntries: input.lootbuddies.map((entry) => ({ signupId: entry.signupId })),
+      currentSignups: currentLootbuddies.map((signup) => ({ id: signup.id, status: signup.status })),
+      rosterSelectedSignupIds,
+      runStatus: run.status,
+    });
+
+    if (blocked.length > 0) {
+      if (blocked.some((item) => item.reason === "ROSTER_SELECTED")) {
+        throw new DomainError(
+          "SIGNUP_OFFER_ROSTER_SELECTED",
+          "A currently selected lootbuddy entry cannot be removed. Ask the raid lead to change the roster selection first.",
+        );
+      }
+      throw new DomainError(
+        "INVALID_STATE_TRANSITION",
+        "Selected signups cannot be withdrawn after the roster is published.",
+      );
+    }
+    if (!plan) {
+      throw new DomainError("VALIDATION_FAILED", "Could not compute a lootbuddy plan.");
+    }
+
+    if (plan.toCreateCount > 0 && !assertSignupWindowOpen(run)) {
+      throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
+    }
+
+    const bySignupId = new Map(
+      input.lootbuddies.filter((entry): entry is typeof entry & { signupId: string } => Boolean(entry.signupId)).map((entry) => [entry.signupId, entry]),
+    );
+    const toUpdate = plan.toUpdate
+      .map((signupId) => {
+        const entry = bySignupId.get(signupId);
+        const existing = currentById.get(signupId);
+        if (!entry || !existing) return null;
+        const desiredVerification = entry.verification ?? "NONE";
+        const changed =
+          existing.lootbuddyClass !== entry.wowClass ||
+          existing.lootbuddyMode !== entry.mode ||
+          existing.lootbuddyVerification !== desiredVerification;
+        if (!changed) return null;
+        return {
+          id: signupId,
+          lootbuddyClass: entry.wowClass,
+          lootbuddyMode: entry.mode,
+          lootbuddyVerification: desiredVerification,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    const toCreate = input.lootbuddies
+      .filter((entry) => !entry.signupId)
+      .map((entry) => ({
+        lootbuddyClass: entry.wowClass,
+        lootbuddyMode: entry.mode,
+        lootbuddyVerification: entry.verification ?? "NONE",
+      }));
+
+    const result = await signupRepository.applyLootbuddyPlan({
+      runId: input.runId,
+      userId: actor.id,
+      toWithdraw: plan.toWithdraw,
+      toUpdate,
+      toCreate,
+    });
+
+    await activityRepository.create({
+      userId: actor.id,
+      type: "SIGNUP",
+      message: `${actor.name} updated lootbuddy entries for ${run.title} (${input.lootbuddies.length} total).`,
+    });
+
+    return {
+      runId: input.runId,
+      created: result.created.length,
+      updated: result.updated.length,
+      withdrawn: result.withdrawn.length,
+    };
+  },
+
+  /**
+   * Withdraws the User's entire active BOOSTER offer-set for a Run in one
+   * atomic, all-or-nothing operation — "Cancel Booster Signup." Never touches
+   * the User's Lootbuddy entries on this Run (removing a Lootbuddy is its own
+   * action via `setLootbuddies`) — the two participation types cancel
+   * independently, matching that they coexist. A no-op signup has nothing to
+   * cancel; a protected offer (roster-selected or published-locked) blocks
+   * the whole cancellation instead of partially clearing the set.
+   */
+  async cancelBoosterSignup(actor: AuthenticatedUser, input: { runId: string }) {
     const run = await runRepository.findById(input.runId);
     if (!run) {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
     }
 
     const existingSignups = await signupRepository.listByRunAndUser(input.runId, actor.id);
-    const activeType = existingSignups.find((signup) => signup.status !== "WITHDRAWN")?.participationType;
-    if (!activeType) {
-      throw new DomainError("NOT_FOUND", "You have no active signup on this run.", 404);
+    const hasActiveBooster = existingSignups.some(
+      (signup) => signup.status !== "WITHDRAWN" && signup.participationType === "BOOSTER",
+    );
+    if (!hasActiveBooster) {
+      throw new DomainError("NOT_FOUND", "You have no active booster signup on this run.", 404);
     }
 
-    const { plan } = await buildReconciliationPlan(actor.id, run, {
-      participationType: activeType,
-      desiredCharacterIds: [],
-    });
+    const { plan } = await buildReconciliationPlan(actor.id, run, { desiredCharacterIds: [] });
 
     const result = await signupRepository.applyOfferPlan({
       runId: input.runId,
       userId: actor.id,
-      participationType: activeType,
       scheduledStartAt: run.scheduledStartAt,
       toWithdraw: plan.toWithdraw,
       toReactivate: [],
@@ -453,7 +509,7 @@ export const signupService = {
     await activityRepository.create({
       userId: actor.id,
       type: "SIGNUP_WITHDRAWN",
-      message: `${actor.name} cancelled their signup for ${run.title}.`,
+      message: `${actor.name} cancelled their booster signup for ${run.title}.`,
     });
 
     return { withdrawn: result.withdrawn.length };
@@ -563,14 +619,14 @@ type LoadedRun = NonNullable<Awaited<ReturnType<typeof runRepository.findById>>>
 async function buildReconciliationPlan(
   userId: string,
   run: LoadedRun,
-  input: { participationType: ParticipationType; desiredCharacterIds: string[] },
+  input: { desiredCharacterIds: string[] },
 ) {
   const currentSignups = await signupRepository.listByRunAndUser(run.id, userId);
   const roster = await rosterRepository.findByRunId(run.id);
   const rosterSelectedSignupIds = roster?.selectedSignupIds ?? [];
 
   const { plan, blocked } = planCharacterOfferReconciliation({
-    participationType: input.participationType,
+    participationType: "BOOSTER",
     desiredCharacterIds: input.desiredCharacterIds,
     currentSignups: currentSignups.map((signup) => ({
       id: signup.id,
@@ -602,30 +658,19 @@ async function buildReconciliationPlan(
 }
 
 /**
- * Validates every offered Character against the same eligibility rules a
- * single-Character signup already enforces (ownership already checked by the
- * caller). For BOOSTER, every offer must carry an explicit role that the
+ * Validates every offered BOOSTER Character against the same eligibility
+ * rules a single-Character signup already enforces (ownership already
+ * checked by the caller). Every offer must carry an explicit role that the
  * Character's class can actually perform (`option.roles`, from
  * `rolesForClass`) — the server never trusts an arbitrary client role, but it
  * also no longer restricts the choice to the specialization-derived default.
- * Also the Confirm-time cross-Run reservation revalidation boundary (BOOSTER
- * only — see the LOOTBUDDY audit note below): eligibility-time and Confirm-
- * time can disagree if another Run reserved the same Character in between,
- * so this re-queries fresh immediately before the caller's atomic write
- * rather than trusting the read the User's client loaded earlier.
- *
- * LOOTBUDDY audit: a LOOTBUDDY offer is just as Character-backed as a
- * BOOSTER one and could in principle double-book the same way. This is
- * deliberately NOT enforced here — the reservation rule stays scoped to
- * BOOSTER per the current requirement — so `reservationConflict` is always
- * set to null for the LOOTBUDDY branch below rather than computed. Revisit
- * if LOOTBUDDY double-booking turns out to be a real operational problem.
- *
- * Returns the resolved BOOSTER role per characterId; empty for LOOTBUDDY,
- * which carries no per-offer role.
+ * Also the Confirm-time cross-Run reservation revalidation boundary:
+ * eligibility-time and Confirm-time can disagree if another Run reserved the
+ * same Character in between, so this re-queries fresh immediately before the
+ * caller's atomic write rather than trusting the read the User's client
+ * loaded earlier. Returns the resolved role per characterId.
  */
 async function validateOfferedCharacters(
-  participationType: ParticipationType,
   offeredCharacters: Array<{ offer: { characterId: string; role?: CharacterRole }; character: CharacterPageRecord }>,
   run: LoadedRun,
 ): Promise<Map<string, CharacterRole>> {
@@ -640,40 +685,27 @@ async function validateOfferedCharacters(
   };
   const roleByCharacterId = new Map<string, CharacterRole>();
 
-  if (participationType === "BOOSTER") {
-    const enrichedCharacters = await withReservationConflicts(
-      offeredCharacters.map(({ character }) => character),
-      run.id,
-      run.scheduledStartAt,
-    );
-    const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun, resetIdentifier);
-    for (const { offer, character } of offeredCharacters) {
-      const option = eligible.find((item) => item.characterId === offer.characterId);
-      if (!option) {
-        throw boosterRejection(ineligible.find((item) => item.characterId === offer.characterId));
-      }
-      if (!offer.role) {
-        throw new DomainError("INVALID_CHARACTER_ROLE", `Choose a role for ${character.name}.`);
-      }
-      if (!option.roles.includes(offer.role)) {
-        throw new DomainError(
-          "INVALID_CHARACTER_ROLE",
-          `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[offer.role]}.`,
-        );
-      }
-      roleByCharacterId.set(offer.characterId, offer.role);
+  const enrichedCharacters = await withReservationConflicts(
+    offeredCharacters.map(({ character }) => character),
+    run.id,
+    run.scheduledStartAt,
+  );
+  const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun, resetIdentifier);
+  for (const { offer, character } of offeredCharacters) {
+    const option = eligible.find((item) => item.characterId === offer.characterId);
+    if (!option) {
+      throw boosterRejection(ineligible.find((item) => item.characterId === offer.characterId));
     }
-    return roleByCharacterId;
-  }
-
-  const lootbuddyCharacters = offeredCharacters.map(({ character }) => ({ ...character, reservationConflict: null }));
-  const { eligible } = evaluateLootbuddyOptions(lootbuddyCharacters, eligibilityRun, resetIdentifier);
-  // INACTIVE is the only remaining Lootbuddy ineligibility reason — raid save
-  // is informational only (see evaluateLootbuddyOptions).
-  for (const { offer } of offeredCharacters) {
-    if (!eligible.some((item) => item.characterId === offer.characterId)) {
-      throw new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
+    if (!offer.role) {
+      throw new DomainError("INVALID_CHARACTER_ROLE", `Choose a role for ${character.name}.`);
     }
+    if (!option.roles.includes(offer.role)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_ROLE",
+        `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[offer.role]}.`,
+      );
+    }
+    roleByCharacterId.set(offer.characterId, offer.role);
   }
   return roleByCharacterId;
 }

@@ -11,9 +11,9 @@ import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.re
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { activityRepository } from "@/repositories/activity.repository";
-import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { rosterActionLabel } from "@/lib/run-routes";
-import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus } from "@/models/enums";
+import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus, WowClass } from "@/models/enums";
 import type { SignupRaidSaveInfo } from "@/models/records";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
@@ -26,6 +26,24 @@ type InspectedSignup = RosterSignupRow & {
   raidSave: SignupRaidSaveInfo | null;
   issue: string | null;
 };
+
+/** Prefer character name; characterless Lootbuddy falls back to Class label. */
+function participationLabel(input: {
+  character: { name: string; realm: string } | null;
+  lootbuddyClass: WowClass | null;
+}): string {
+  if (input.character) {
+    return `${input.character.name}-${input.character.realm}`;
+  }
+  if (input.lootbuddyClass) {
+    return CLASS_LABELS[input.lootbuddyClass];
+  }
+  return "Unknown character";
+}
+
+function resolvedLootbuddyClass(signup: RosterSignupRow): WowClass | null {
+  return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
+}
 
 function inspectSignup(
   signup: RosterSignupRow,
@@ -57,7 +75,10 @@ function inspectSignup(
           character.boosterQualifications,
           run.difficulty,
         );
-  const characterActive = character?.isActive ?? false;
+  // Characterless Lootbuddy has no Character row — "active" is vacuously true.
+  // Legacy Character-backed Lootbuddy still respects Character.isActive.
+  const characterActive =
+    signup.participationType === "LOOTBUDDY" && !character ? true : Boolean(character?.isActive);
   let issue: string | null = null;
   if (signup.status === "WITHDRAWN") issue = "Withdrawn";
   else if (!characterActive) issue = "Character is inactive.";
@@ -80,7 +101,7 @@ function asMember(row: InspectedSignup) {
     signupId: row.id,
     userId: row.userId,
     userName: row.userName,
-    characterName: row.character?.name ?? "Unknown character",
+    characterName: participationLabel(row),
     participationType: row.participationType,
     role: row.role,
     status: row.status,
@@ -138,16 +159,19 @@ export const rosterService = {
     const signups = await rosterRepository.listSignups(runId);
     const members = signups
       .filter((signup) => signup.status === "SELECTED")
-      .map((signup) => ({
-        signupId: signup.id,
-        userName: signup.userName,
-        characterName: signup.character?.name ?? "Unknown character",
-        characterRealm: signup.character?.realm ?? "",
-        wowClass: signup.character?.wowClass ?? null,
-        role: signup.role,
-        participationType: signup.participationType,
-        isBackup: signup.isBackup,
-      }));
+      .map((signup) => {
+        const wowClass = resolvedLootbuddyClass(signup);
+        return {
+          signupId: signup.id,
+          userName: signup.userName,
+          characterName: signup.character?.name ?? (wowClass ? CLASS_LABELS[wowClass] : "Unknown character"),
+          characterRealm: signup.character?.realm ?? "",
+          wowClass,
+          role: signup.role,
+          participationType: signup.participationType,
+          isBackup: signup.isBackup,
+        };
+      });
 
     return {
       publishedAt: roster.publishedAt,
@@ -295,12 +319,19 @@ export const rosterService = {
     }
 
     /**
-     * One selected participation per user per run. Selecting a second offer
-     * replaces the previous draft row instead of stacking two slots.
+     * A User holds at most one selected BOOSTER participation per run —
+     * selecting a second Booster offer replaces the previous draft row
+     * instead of stacking two slots. LOOTBUDDY entries are independently
+     * selectable and never replace each other or the User's Booster row (a
+     * User may simultaneously have Booster participation and any number of
+     * selected Lootbuddy entries) — see docs/features/signups.md.
      */
-    const replaceSignupIds = input.selected
-      ? signups.filter((item) => item.userId === signup.userId).map((item) => item.id)
-      : [];
+    const replaceSignupIds =
+      input.selected && signup.participationType === "BOOSTER"
+        ? signups
+            .filter((item) => item.userId === signup.userId && item.participationType === "BOOSTER")
+            .map((item) => item.id)
+        : [];
 
     await rosterRepository.setSignupSelected({
       rosterId: roster.id,

@@ -9,9 +9,10 @@ import {
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
-import { DIFFICULTY_ABBREVIATIONS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
+import type { WowClass } from "@/models/enums";
 
 type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
 
@@ -19,6 +20,29 @@ type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
 function formatRaidSave(raidSave: ManagerSignup["raidSave"]): string | null {
   if (!raidSave) return null;
   return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
+}
+
+function resolvedClass(signup: {
+  lootbuddyClass?: WowClass | null;
+  character?: { wowClass: WowClass } | null;
+}): WowClass | null {
+  return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
+}
+
+function characterLabel(signup: {
+  characterName?: string | null;
+  characterRealm?: string | null;
+  lootbuddyClass?: WowClass | null;
+  character?: { name: string; realm: string; wowClass: WowClass } | null;
+}): string {
+  if (signup.character) {
+    return `${signup.character.name}-${signup.character.realm}`;
+  }
+  if (signup.characterName) {
+    return signup.characterRealm ? `${signup.characterName}-${signup.characterRealm}` : signup.characterName;
+  }
+  const wowClass = resolvedClass(signup);
+  return wowClass ? CLASS_LABELS[wowClass] : "Unknown character";
 }
 
 export function RunSignupsSection({ data }: { data: RunDetailView }) {
@@ -33,11 +57,6 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
   }
 
   return <OwnSignupList signups={data.viewerSignups} />;
-}
-
-function characterLabel(signup: { characterName: string | null; characterRealm: string | null }): string {
-  if (!signup.characterName) return "Unknown character";
-  return signup.characterRealm ? `${signup.characterName}-${signup.characterRealm}` : signup.characterName;
 }
 
 function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] }) {
@@ -73,11 +92,9 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
           {active.map((signup) => (
             <li key={signup.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
               <div>
-                <p className="font-medium">
-                  {signup.characterName ?? "Unknown character"}
-                  {signup.characterRealm ? `-${signup.characterRealm}` : ""}
-                </p>
+                <p className="font-medium">{characterLabel(signup)}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                  {resolvedClass(signup) ? <ClassBadge wowClass={resolvedClass(signup)!} /> : null}
                   <ParticipationBadge type={signup.participationType} />
                   {signup.role ? <RoleBadge role={signup.role} /> : null}
                   <SignupStatusBadge status={signup.status} />
@@ -107,7 +124,7 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
 type ManagerSignupGroup = {
   userId: string;
   userName: string;
-  participationType: ManagerSignup["participationType"];
+  participationTypes: Array<ManagerSignup["participationType"]>;
   anyApproved: boolean;
   signups: ManagerSignup[];
 };
@@ -127,13 +144,16 @@ function groupSignupsByUser(signups: ManagerSignup[]): ManagerSignupGroup[] {
       group = {
         userId: signup.userId,
         userName: signup.userName,
-        participationType: signup.participationType,
+        participationTypes: [],
         anyApproved: false,
         signups: [],
       };
       groups.push(group);
     }
     group.signups.push(signup);
+    if (!group.participationTypes.includes(signup.participationType)) {
+      group.participationTypes.push(signup.participationType);
+    }
     if (signup.participationType === "BOOSTER" && signup.boosterApproved) {
       group.anyApproved = true;
     }
@@ -142,10 +162,9 @@ function groupSignupsByUser(signups: ManagerSignup[]): ManagerSignupGroup[] {
 }
 
 /**
- * One User may offer several Characters for the same Run (multiple RunSignup
- * rows sharing userId). Grouped here so a User with three offers reads as one
- * signup intent, not three unrelated rows — draft selection itself still
- * happens per exact RunSignup row on the Roster tab.
+ * One User may hold Booster + N Lootbuddy rows on the same Run. Grouped by
+ * userId for the operational overview; each row still keeps its own
+ * participation identity (RunSignup.id) and type badge.
  */
 function ManagerSignupList({ runId, signups }: { runId: string; signups: ManagerSignup[] }) {
   const groups = groupSignupsByUser(signups);
@@ -164,20 +183,22 @@ function ManagerSignupList({ runId, signups }: { runId: string; signups: Manager
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold">{group.userName}</span>
-                  <ParticipationBadge type={group.participationType} />
-                  {group.participationType === "BOOSTER" && group.anyApproved ? (
+                  {group.participationTypes.map((type) => (
+                    <ParticipationBadge key={type} type={type} />
+                  ))}
+                  {group.participationTypes.includes("BOOSTER") && group.anyApproved ? (
                     <AccessBadge status="APPROVED" />
                   ) : null}
                 </div>
                 <AddStrikeButton runId={runId} userId={group.userId} userName={group.userName} />
               </div>
               <ul className="mt-2 space-y-1.5">
-                {group.signups.map((signup) => (
+                {group.signups.map((signup) => {
+                  const wowClass = resolvedClass(signup);
+                  return (
                   <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span>
-                      {signup.character ? `${signup.character.name}-${signup.character.realm}` : "Unknown character"}
-                    </span>
-                    {signup.character ? <ClassBadge wowClass={signup.character.wowClass} /> : null}
+                    <span>{characterLabel(signup)}</span>
+                    {wowClass ? <ClassBadge wowClass={wowClass} /> : null}
                     {signup.role ? <RoleBadge role={signup.role} /> : null}
                     {signup.participationType === "LOOTBUDDY" ? (
                       <span className="text-xs text-muted">
@@ -193,7 +214,8 @@ function ManagerSignupList({ runId, signups }: { runId: string; signups: Manager
                     ) : null}
                     {signup.issue ? <span className="text-xs text-danger">{signup.issue}</span> : null}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </li>
           ))}

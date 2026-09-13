@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Discord is a second interaction surface for the exact same signup domain the Web app uses — never a parallel implementation. A User may sign up through the Web dialog or through a Discord Run embed; both manipulate the same `RunSignup` rows through `signupService.setCharacterOffers` / `cancelActiveOffers`. There is no separate "Discord signup" record.
+Discord is a second interaction surface for the exact same signup domain the Web app uses — never a parallel implementation. A User may sign up through the Web dialog or through a Discord Run embed; both manipulate the same `RunSignup` rows through `signupService.setCharacterOffers` / `setLootbuddies` / `cancelBoosterSignup`. There is no separate "Discord signup" record.
 
 ## Architecture
 
@@ -25,9 +25,10 @@ Route Handlers under `/api/bot/*` (see [run-signups.md](run-signups.md) for the 
 | Route | Purpose |
 | --- | --- |
 | `GET /api/bot/discord/sync` | Independent channel-reconciliation work (`channels`) plus what needs a Discord post created or refreshed (`signups`/`roster`) |
-| `GET /api/bot/runs/:runId/signup-options` | Eligible Characters + current offers for the acting Discord User |
-| `PUT /api/bot/runs/:runId/signup` | `setCharacterOffers` over HTTP |
-| `POST /api/bot/runs/:runId/signup/cancel` | `cancelActiveOffers` over HTTP |
+| `GET /api/bot/runs/:runId/signup-options` | Eligible Booster Characters + `activeBoosterOffers` + `activeLootbuddies` for the acting Discord User |
+| `PUT /api/bot/runs/:runId/signup` | `setCharacterOffers` (BOOSTER-only) over HTTP |
+| `PUT /api/bot/runs/:runId/lootbuddies` | `setLootbuddies` over HTTP |
+| `POST /api/bot/runs/:runId/signup/cancel` | `cancelBoosterSignup` over HTTP |
 | `GET /api/bot/my-signups` | Backs `/mysignups` |
 | `GET /api/bot/runs/:runId/roster` | Discord-ready final roster DTO |
 | `PUT /api/bot/runs/:runId/discord-state` | Records a created channel id, or a posted message's channel/message id |
@@ -153,18 +154,27 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 
 ### Signup / Lootbuddy button flow
 
+**Signup (Booster)** — Character multi-select → staged role editor → Confirm:
+
 1. `interaction.deferReply({ ephemeral: true })`.
 2. `GET .../signup-options` for the acting Discord User.
-3. If the window is closed or there are no eligible Characters, say so and stop.
-4. Show an ephemeral multi-select with one option per eligible Character, preselecting the User's current active offers. For BOOSTER, each label shows the Character's persisted role if it already has an active offer, else its specialization-derived default (suffixed "(default)"), for information only. LOOTBUDDY has no role dimension.
-5. **LOOTBUDDY** submits and applies immediately — there is nothing to configure. **BOOSTER** submits into a staging step instead (`handleCharacterSelect` in `signup-flow.ts`): nothing is persisted yet. Each selected Character's role resolves to its existing offer's role, else its specialization default, else (for a single-role class) the only role it can perform, else stays unresolved until chosen.
-6. The same ephemeral message is replaced with the **staging editor** (`renderStagingEditor`): one role select per staged Character whose class can perform more than one role (up to 4 rows — Discord allows 5 action rows per message and one is reserved for the buttons below; a longer tail points to the Web dialog rather than capping the product-wide offer count), each defaulted to that Character's currently staged role; single-role Characters are listed as read-only text. A **Confirm Signup** (or **Confirm Changes**, when editing an already-persisted offer) and a **Cancel** button are always present. Picking a role (`handleRoleSelect`) only updates the staged session and re-renders this same editor — still no persistence.
-7. **Confirm** (`handleConfirmSignupButton`) is the one and only mutation point: it calls `setCharacterOffers` exactly once with the complete staged desired set, then clears the session. A failure (`SIGNUP_CLOSED`, `INVALID_CHARACTER_ROLE`, `CHARACTER_ALREADY_SELECTED_OTHER_RUN`, …) keeps the session and re-renders the editor with the mapped error so the User can fix and retry. **Cancel** (`handleDiscardSignupButton`) discards the staged session and calls no API at all — distinct from the persisted-offer "Cancel Signup" button below, which withdraws an already-saved signup via `cancelActiveOffers`.
-8. Staging state lives only in an in-memory, per-(Discord User, Run) session (`signup-staging.ts`) — keyed so one User can never see or mutate another's, TTL-renewed on activity to match Discord's own ~15 minute interaction-editing window, and wiped (never corrupting persisted signup state) on bot restart. A stale or missing session answers with an explicit "editor has expired" message rather than silently doing nothing.
+3. If the window is closed or there are no eligible Booster Characters, say so and stop.
+4. Show an ephemeral multi-select of eligible Characters (preselect current `activeBoosterOffers`). Labels show persisted role or specialization default.
+5. Submitting stages a BOOSTER session (`handleCharacterSelect`) — nothing persisted yet.
+6. Staging editor: per-Character role selects, Confirm / Cancel. Confirm calls `setCharacterOffers` once; Cancel discards staging only.
+7. Staging is in-memory (`signup-staging.ts`), TTL ~15 minutes, wiped on bot restart without touching DB.
+
+**Sign as Lootbuddy** — staged Class + Mode collection (no Character selector):
+
+1. Preload existing `activeLootbuddies` into a dedicated Lootbuddy staging session.
+2. Summary of staged entries (Class — Mode). Buttons: Add / Edit / Remove / Confirm / Cancel.
+3. Add/Edit: pick `WowClass`, then pick Mode (`Loot only` / `Play along`).
+4. Confirm calls `PUT .../lootbuddies` (`setLootbuddies`) once with the full desired set; Cancel discards staging and leaves DB untouched.
+5. Zero-character Users can complete this flow. Identical Class+Mode entries are allowed as distinct rows.
 
 ### Cancel Signup button
 
-`POST .../signup/cancel` — withdraws the User's entire active offer-set atomically. A protected offer (currently roster-selected, or published-and-locked) rejects the whole cancellation with the server's own explanation.
+`POST .../signup/cancel` — withdraws the User's active **BOOSTER** offer-set only (`cancelBoosterSignup`). Lootbuddies are unchanged. A protected Booster offer rejects the whole cancellation.
 
 ## Final roster embed
 

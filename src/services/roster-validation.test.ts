@@ -53,6 +53,51 @@ describe("validateRosterDraft", () => {
     );
   });
 
+  it("allows the same user as one BOOSTER plus multiple LOOTBUDDY selections", () => {
+    const result = validateRosterDraft({
+      runStatus: "ROSTERING",
+      selected: [
+        member({ signupId: "b1", userId: "u1", participationType: "BOOSTER", role: "HEALER" }),
+        member({
+          signupId: "l1",
+          userId: "u1",
+          characterName: "Mage",
+          participationType: "LOOTBUDDY",
+          role: null,
+          boosterApproved: true,
+        }),
+        member({
+          signupId: "l2",
+          userId: "u1",
+          characterName: "Priest",
+          participationType: "LOOTBUDDY",
+          role: null,
+          boosterApproved: true,
+        }),
+      ],
+      targets: { tanks: 2, healers: 4, dps: 14 },
+    });
+    expect(result.canPublish).toBe(true);
+    expect(result.blockers).toEqual([]);
+  });
+
+  it("characterless lootbuddy with characterActive true is not blocked as inactive", () => {
+    const result = validateRosterDraft({
+      runStatus: "ROSTERING",
+      selected: [
+        member({
+          signupId: "l1",
+          characterName: "Mage",
+          participationType: "LOOTBUDDY",
+          role: null,
+          characterActive: true,
+          boosterApproved: true,
+        }),
+      ],
+      targets: { tanks: 2, healers: 4, dps: 14 },
+    });
+    expect(result.canPublish).toBe(true);
+  });
   it("raid lockouts are informational only — a locked/saved character never blocks publish", () => {
     // RosterValidationMember carries no lockout field at all anymore; this
     // documents the invariant that validateRosterDraft has nothing left that

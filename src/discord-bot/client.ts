@@ -7,6 +7,16 @@ import {
   handleCharacterSelect,
   handleConfirmSignupButton,
   handleDiscardSignupButton,
+  handleLootbuddyAddButton,
+  handleLootbuddyButton,
+  handleLootbuddyClassSelect,
+  handleLootbuddyConfirmButton,
+  handleLootbuddyDiscardButton,
+  handleLootbuddyEditButton,
+  handleLootbuddyEditPickSelect,
+  handleLootbuddyModeSelect,
+  handleLootbuddyRemoveButton,
+  handleLootbuddyRemovePickSelect,
   handleRoleSelect,
   handleSignupButton,
 } from "@/discord-bot/interactions/signup-flow";
@@ -32,23 +42,65 @@ export function createBotClient(env: BotEnv): Client {
       if (interaction.isButton()) {
         const parsed = parseCustomId(interaction.customId);
         if (!parsed) return;
-        if (parsed.action === "cancel") {
-          await handleCancelButton(interaction, api, parsed.runId);
-        } else if (parsed.action === "signup-confirm") {
-          await handleConfirmSignupButton(interaction, api, parsed.runId);
-        } else if (parsed.action === "signup-discard") {
-          await handleDiscardSignupButton(interaction, parsed.runId);
-        } else {
-          await handleSignupButton(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
+        switch (parsed.action) {
+          case "cancel":
+            await handleCancelButton(interaction, api, parsed.runId);
+            break;
+          case "signup":
+            await handleSignupButton(interaction, api, parsed.runId);
+            break;
+          case "signup-confirm":
+            await handleConfirmSignupButton(interaction, api, parsed.runId);
+            break;
+          case "signup-discard":
+            await handleDiscardSignupButton(interaction, parsed.runId);
+            break;
+          case "lootbuddy":
+            await handleLootbuddyButton(interaction, api, parsed.runId);
+            break;
+          case "lootbuddy-add":
+            await handleLootbuddyAddButton(interaction, parsed.runId);
+            break;
+          case "lootbuddy-edit":
+            await handleLootbuddyEditButton(interaction, parsed.runId);
+            break;
+          case "lootbuddy-remove":
+            await handleLootbuddyRemoveButton(interaction, parsed.runId);
+            break;
+          case "lootbuddy-confirm":
+            await handleLootbuddyConfirmButton(interaction, api, parsed.runId);
+            break;
+          case "lootbuddy-discard":
+            await handleLootbuddyDiscardButton(interaction, parsed.runId);
+            break;
+          default:
+            break;
         }
         return;
       }
 
       if (interaction.isStringSelectMenu()) {
         const parsed = parseCustomId(interaction.customId);
-        if (parsed && parsed.action !== "cancel") {
-          await handleCharacterSelect(interaction, api, parsed.runId, parsed.action === "signup" ? "BOOSTER" : "LOOTBUDDY");
-          return;
+        if (parsed) {
+          switch (parsed.action) {
+            case "signup":
+              await handleCharacterSelect(interaction, api, parsed.runId);
+              return;
+            case "lootbuddy-edit-pick":
+              await handleLootbuddyEditPickSelect(interaction, parsed.runId);
+              return;
+            case "lootbuddy-remove-pick":
+              await handleLootbuddyRemovePickSelect(interaction, api, parsed.runId);
+              return;
+            case "lootbuddy-class-select":
+              await handleLootbuddyClassSelect(interaction, parsed.runId);
+              return;
+            case "lootbuddy-mode-select":
+              await handleLootbuddyModeSelect(interaction, api, parsed.runId);
+              return;
+            default:
+              break;
+          }
         }
         const scoped = parseCharacterScopedCustomId(interaction.customId);
         if (scoped) {

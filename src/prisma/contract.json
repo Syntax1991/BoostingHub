@@ -3518,6 +3518,19 @@
                   "kind": "scalar"
                 }
               },
+              "lootbuddyClass": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowClass",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "lootbuddyMode": {
                 "nullable": true,
                 "type": {
@@ -3702,6 +3715,9 @@
                 },
                 "isBackup": {
                   "column": "isBackup"
+                },
+                "lootbuddyClass": {
+                  "column": "lootbuddyClass"
                 },
                 "lootbuddyMode": {
                   "column": "lootbuddyMode"
@@ -7469,6 +7485,11 @@
             "run_signup": {
               "checks": [
                 {
+                  "expression": "\"lootbuddyClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR')",
+                  "name": "run_signup_lootbuddyClass_check_f786dcc9",
+                  "prefix": "run_signup_lootbuddyClass_check"
+                },
+                {
                   "expression": "\"lootbuddyMode\" IN ('LOOT_ONLY', 'PLAYING')",
                   "name": "run_signup_lootbuddyMode_check_eaa3f64b",
                   "prefix": "run_signup_lootbuddyMode_check"
@@ -7522,6 +7543,17 @@
                   },
                   "nativeType": "bool",
                   "nullable": false
+                },
+                "lootbuddyClass": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowClass",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "lootbuddyMode": {
                   "codecId": "pg/text@1",
@@ -8542,7 +8574,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "3169e897c3da55d7b45d8993dcb94df970eba052cb8fdf00478fbc6c962e5f79"
+    "storageHash": "40a32a4868bfdb44beb2a152a157bab172c5b30044b41969861f2122dd0b4071"
   },
   "execution": {
     "executionHash": "3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b",

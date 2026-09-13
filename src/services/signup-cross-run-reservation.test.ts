@@ -217,10 +217,10 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched); // same instant as runA
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
 
-    const active = await signupService.setCharacterOffers(target, { runId: runB, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] }).catch((error) => error);
+    const active = await signupService.setCharacterOffers(target, { runId: runB, offers: [{ characterId: hybrid, role: "DPS" }] }).catch((error) => error);
     expect(isDomainError(active) && active.code).toBe("CHARACTER_ALREADY_SELECTED_OTHER_RUN");
 
     const options = await signupService.getSignupOptions(target, runB);
@@ -235,7 +235,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     const rows = await signupRepository.listByRunAndUser(runA, ids.target);
     const signupId = rows.find((row) => row.character?.id === hybrid)!.id;
     await orm.RunSignup.where({ id: signupId }).update({ status: "SELECTED" });
@@ -246,7 +246,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     expect(ineligible?.conflictingRunTitle).toBeTruthy();
 
     await orm.RunSignup.where({ id: signupId }).update({ status: "PENDING" });
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [] });
   });
 
   it("C: draft-selected AND SELECTED on the same Run reports exactly one conflict, never two", async () => {
@@ -254,7 +254,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     const signupId = await selectIntoRoster(runA, hybrid);
     await orm.RunSignup.where({ id: signupId }).update({ status: "SELECTED" });
 
@@ -271,7 +271,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, futureIso(230));
     const runC = await createOpenRun(lead, futureIso(231)); // one hour later — no collision
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
 
     const options = await signupService.getSignupOptions(target, runC);
@@ -281,13 +281,13 @@ describe("cross-Run Character reservation — signup eligibility", () => {
   it("E: the target Run's own existing offer/roster state is never a conflict with itself", async () => {
     const runA = await createOpenRun(lead, futureIso(240));
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
 
     // Re-confirming the exact same desired set on the SAME run must never
     // trip the reservation check against itself.
     await expect(
-      signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] }),
+      signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] }),
     ).resolves.toBeTruthy();
 
     const options = await signupService.getSignupOptions(target, runA);
@@ -299,7 +299,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
     await runRepository.updateFields(runA, { status: "COMPLETED" });
 
@@ -312,7 +312,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
     await runRepository.updateFields(runA, { status: "CANCELLED" });
 
@@ -325,33 +325,13 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "HEALER" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "HEALER" }] });
     await selectIntoRoster(runA, hybrid);
 
     const result = await signupService
-      .setCharacterOffers(target, { runId: runB, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] })
+      .setCharacterOffers(target, { runId: runB, offers: [{ characterId: hybrid, role: "DPS" }] })
       .catch((error) => error);
     expect(isDomainError(result) && result.code).toBe("CHARACTER_ALREADY_SELECTED_OTHER_RUN");
-  });
-
-  it("LOOTBUDDY audit: a BOOSTER reservation elsewhere does NOT block a LOOTBUDDY offer for the same Character (deliberately unenforced)", async () => {
-    const sched = futureIso(280);
-    const runA = await createOpenRun(lead, sched);
-    const runB = await createOpenRun(lead, sched);
-
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
-    await selectIntoRoster(runA, hybrid);
-
-    const result = await signupService.setCharacterOffers(target, {
-      runId: runB,
-      participationType: "LOOTBUDDY",
-      offers: [{ characterId: hybrid }],
-      lootbuddyMode: "LOOT_ONLY",
-      lootbuddyVerification: "NONE",
-    });
-    expect(result.created + result.reactivated).toBeGreaterThan(0);
-
-    await signupService.setCharacterOffers(target, { runId: runB, participationType: "LOOTBUDDY", offers: [] });
   });
 
   it("releasing a draft selection immediately frees the Character for a colliding Run", async () => {
@@ -359,7 +339,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     const signupId = await selectIntoRoster(runA, hybrid);
 
     let options = await signupService.getSignupOptions(target, runB);
@@ -381,14 +361,14 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
 
     // Simulate the read-then-write race: eligibility looked free, but by the
     // time Confirm runs the Character has been reserved on the colliding Run.
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
 
     const before = await signupRepository.listByRunAndUser(runB, ids.target);
     expect(before.filter((row) => row.status !== "WITHDRAWN")).toHaveLength(0);
 
     await expectDomainCode(
-      signupService.setCharacterOffers(target, { runId: runB, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] }),
+      signupService.setCharacterOffers(target, { runId: runB, offers: [{ characterId: hybrid, role: "DPS" }] }),
       "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
     );
 
@@ -401,10 +381,10 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     const signupIdA = await selectIntoRoster(runA, hybrid);
 
-    await signupService.setCharacterOffers(target, { runId: runB, participationType: "BOOSTER", offers: [] }).catch(() => {});
+    await signupService.setCharacterOffers(target, { runId: runB, offers: [] }).catch(() => {});
     // Force a PENDING signup directly on runB to exercise setDraftSelection's
     // own reservation guard even when the earlier setCharacterOffers boundary
     // is bypassed (defense in depth at the roster-write boundary itself).
@@ -441,12 +421,12 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
     const runA = await createOpenRun(lead, sched);
     const runB = await createOpenRun(lead, sched);
 
-    await signupService.setCharacterOffers(target, { runId: runA, participationType: "BOOSTER", offers: [{ characterId: hybrid, role: "DPS" }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
     await selectIntoRoster(runA, hybrid);
 
     // Race: after runA's draft selection, the same Character gets reserved
     // (SELECTED) on the colliding runB before runA publishes.
-    await signupService.setCharacterOffers(target, { runId: runB, participationType: "BOOSTER", offers: [] }).catch(() => {});
+    await signupService.setCharacterOffers(target, { runId: runB, offers: [] }).catch(() => {});
     const bypassId = crypto.randomUUID();
     await orm.RunSignup.create({
       id: bypassId,

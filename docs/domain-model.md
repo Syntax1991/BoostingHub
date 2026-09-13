@@ -128,16 +128,24 @@ Run statuses:
 
 ## RunSignup
 
-Participation on a specific run. The same user may offer multiple characters; duplicate rows are prevented per run + user + character + participation type. A withdrawn row keeps that unique key and can be revived.
+Participation on a specific run. Identity where multiplicity matters is `RunSignup.id`.
+
+A User may simultaneously hold:
+
+- BOOSTER participation (Character-backed offer set), and
+- zero to N LOOTBUDDY participations on the **same** Run
 
 - participation type: `BOOSTER` \| `LOOTBUDDY`
-- character (required for new Phase 2 signups)
+- character: **required for BOOSTER**; **null for new LOOTBUDDY** (legacy Character-backed Lootbuddy rows remain valid)
+- `lootbuddyClass` (`WowClass?`) — required for new characterless Lootbuddy; display fallback `lootbuddyClass ?? character?.wowClass`
 - booster role and `isBackup` (backup is not a status)
 - lootbuddy `lootbuddyMode`: `LOOT_ONLY` \| `PLAYING`
 - lootbuddy `lootbuddyVerification`: `NONE` \| `ACCESS` \| `TRIAL` (metadata, not an approval workflow)
 - status: `PENDING` \| `SELECTED` \| `NOT_SELECTED` \| `WITHDRAWN`
 
 Player-created signups start as `PENDING`. `SELECTED` / `NOT_SELECTED` remain roster outcomes.
+
+Duplicate BOOSTER rows are prevented per run + user + character + participation type. Multiple characterless LOOTBUDDY rows (null `characterId`) are allowed.
 
 Signup counts on run lists exclude `WITHDRAWN`.
 
@@ -153,7 +161,7 @@ One roster document per run. Draft selection lives in `RunRosterEntry` and is in
 - `publishedAt` / `publishedById` after a successful publish
 - `RunRosterEntry` unique on `(rosterId, signupId)`; rows are currently selected draft members
 
-One selected signup per user per run is enforced in `RosterService`, not as a database constraint.
+At most one **SELECTED BOOSTER** per User is enforced in roster validation. Multiple LOOTBUDDY selections for the same User are allowed. Characterless Lootbuddy candidates are not treated as inactive merely because they have no Character.
 
 See [docs/features/roster-management.md](features/roster-management.md).
 
