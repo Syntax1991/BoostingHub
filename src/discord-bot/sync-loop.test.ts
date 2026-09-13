@@ -78,6 +78,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -114,6 +115,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -152,6 +154,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -185,6 +188,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -227,6 +231,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -270,6 +275,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -304,6 +310,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -336,6 +343,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
         ],
         signups: [],
         roster: [],
+        start: [],
       }),
     );
 
@@ -367,6 +375,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -404,6 +413,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
           },
         ],
         roster: [],
+        start: [],
       }),
     );
 
@@ -441,15 +451,25 @@ function makeApi(input: {
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
   }>;
+  start?: Array<{
+    runId: string;
+    existingChannelId: string | null;
+    existingMessageId: string | null;
+    existingRunChannelId: string | null;
+    desiredChannelName: string;
+    targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+  }>;
 }): BotApiClient {
   return {
     listSyncWork: vi.fn().mockResolvedValue({
       channels: input.channels,
       signups: input.signups,
       roster: input.roster,
+      start: input.start ?? [],
     }),
     recordDiscordState: vi.fn().mockResolvedValue(undefined),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
+    getRunStartEmbedData: vi.fn().mockResolvedValue(null),
   } as unknown as BotApiClient;
 }
 

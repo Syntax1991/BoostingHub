@@ -2,6 +2,7 @@ import { ChannelType, type CategoryChannel, type Client, type MessageEditOptions
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
+import { buildRunStartEmbed } from "@/discord-bot/embeds/run-start-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -13,7 +14,7 @@ import {
   type ReconcilableChannel,
   type WeekSectionItem,
 } from "@/discord-bot/channel-reconciliation";
-import type { RosterEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
+import type { RosterEmbedData, RunStartEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 
 type SyncWork = Awaited<ReturnType<BotApiClient["listSyncWork"]>>;
 type ChannelWorkItem = {
@@ -206,6 +207,17 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
         await syncRosterPost(client, env, api, item, data, resolvedChannels);
       } catch (error) {
         console.error(`[discord-bot] roster sync failed for run ${item.runId}`, error);
+        messagePhaseError ??= error;
+      }
+    }
+
+    for (const item of work.start ?? []) {
+      try {
+        const data = (await api.getRunStartEmbedData(item.runId).catch(() => null)) as RunStartEmbedData | null;
+        if (!data) continue;
+        await syncStartPost(client, env, api, item, data, resolvedChannels);
+      } catch (error) {
+        console.error(`[discord-bot] start sync failed for run ${item.runId}`, error);
         messagePhaseError ??= error;
       }
     }
@@ -433,6 +445,34 @@ async function syncRosterPost(
   if (!channel?.isTextBased() || !("send" in channel)) return;
   const message = await channel.send({ embeds: [embed] });
   await api.recordDiscordState(item.runId, { kind: "roster", channelId: message.channelId, messageId: message.id });
+}
+
+async function syncStartPost(
+  client: Client,
+  env: BotEnv,
+  api: BotApiClient,
+  item: ChannelWorkItem & { existingMessageId: string | null },
+  data: RunStartEmbedData,
+  resolvedChannels: Map<string, string>,
+): Promise<void> {
+  const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
+  if (!resolved) return;
+  const { channelId } = resolved;
+
+  const embed = buildRunStartEmbed(data);
+
+  if (item.existingMessageId) {
+    const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });
+    if (edited) {
+      await api.recordDiscordState(item.runId, { kind: "start", channelId, messageId: item.existingMessageId });
+      return;
+    }
+  }
+
+  const channel = await client.channels.fetch(channelId);
+  if (!channel?.isTextBased() || !("send" in channel)) return;
+  const message = await channel.send({ embeds: [embed] });
+  await api.recordDiscordState(item.runId, { kind: "start", channelId: message.channelId, messageId: message.id });
 }
 
 async function tryEditMessage(
