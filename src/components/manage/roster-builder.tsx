@@ -22,10 +22,10 @@ import { formatDateTime } from "@/lib/datetime";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
-  DIFFICULTY_ABBREVIATIONS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
+import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import type { rosterService } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
@@ -44,10 +44,17 @@ function signupDisplayName(signup: SignupRow): string {
   return wowClass ? CLASS_LABELS[wowClass] : "Unknown character";
 }
 
-/** "HC 8/8 · Saved" — informational only, never a reason a candidate can't be selected or published. */
-function formatRaidSave(raidSave: SignupRow["raidSave"]): string | null {
-  if (!raidSave) return null;
-  return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
+function boosterLockoutLabel(
+  signup: SignupRow,
+  run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">,
+): ReturnType<typeof formatTargetRaidLockoutLabel> | null {
+  if (signup.participationType !== "BOOSTER" || !signup.character) return null;
+  return formatTargetRaidLockoutLabel({
+    difficulty: run.difficulty,
+    totalBossCount: run.totalBossCount,
+    raidSave: signup.raidSave,
+    lootType: run.lootType,
+  });
 }
 
 export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
@@ -198,6 +205,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         empty="No tank signups"
         signups={data.groups.tanks.filter(matches)}
         allSignups={allSignups}
+        run={data.run}
         editing={editing}
         pending={pending}
         onToggle={toggle}
@@ -207,6 +215,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         empty="No healer signups"
         signups={data.groups.healers.filter(matches)}
         allSignups={allSignups}
+        run={data.run}
         editing={editing}
         pending={pending}
         onToggle={toggle}
@@ -216,6 +225,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         empty="No DPS signups"
         signups={data.groups.dps.filter(matches)}
         allSignups={allSignups}
+        run={data.run}
         editing={editing}
         pending={pending}
         onToggle={toggle}
@@ -225,6 +235,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         empty="No lootbuddy signups"
         signups={data.groups.lootbuddies.filter(matches)}
         allSignups={allSignups}
+        run={data.run}
         editing={editing}
         pending={pending}
         onToggle={toggle}
@@ -337,6 +348,7 @@ function SignupSection({
   empty,
   signups,
   allSignups,
+  run,
   editing,
   pending,
   onToggle,
@@ -345,6 +357,7 @@ function SignupSection({
   empty: string;
   signups: SignupRow[];
   allSignups: SignupRow[];
+  run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   pending: boolean;
   onToggle: (signup: SignupRow, selected: boolean) => void;
@@ -366,6 +379,7 @@ function SignupSection({
                     key={signup.id}
                     signup={signup}
                     extras={allSignups.filter((item) => item.userId === signup.userId && item.id !== signup.id)}
+                    run={run}
                     editing={editing}
                     pending={pending}
                     onToggle={onToggle}
@@ -383,12 +397,14 @@ function SignupSection({
 function SignupRowCard({
   signup,
   extras,
+  run,
   editing,
   pending,
   onToggle,
 }: {
   signup: SignupRow;
   extras: SignupRow[];
+  run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   pending: boolean;
   onToggle: (signup: SignupRow, selected: boolean) => void;
@@ -396,6 +412,7 @@ function SignupRowCard({
   const checkboxId = `signup-${signup.id}`;
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
+  const lockout = boosterLockoutLabel(signup, run);
   return (
     <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2">
       <input
@@ -433,7 +450,9 @@ function SignupRowCard({
                 : ""}
             </span>
           ) : null}
-          {formatRaidSave(signup.raidSave) ? <span>{formatRaidSave(signup.raidSave)}</span> : null}
+          {lockout ? (
+            <span className={lockout.attention ? "text-warning" : undefined}>{lockout.text}</span>
+          ) : null}
         </div>
         {extras.length > 0 ? (
           <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">

@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
-import { resetIdentifierFor } from "@/lib/datetime";
 import { orm } from "@/lib/prisma";
 import { activityRepository } from "@/repositories/activity.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 
@@ -245,7 +245,7 @@ describe("rosterService publish validation", () => {
   it("shows raid-save info for a selected character locked for the run reset — informational only, never a publish blocker", async () => {
     const lockoutId = crypto.randomUUID();
     lockoutIds.push(lockoutId);
-    const resetIdentifier = resetIdentifierFor("2026-09-28T18:00:00.000Z");
+    const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", "2026-09-28T18:00:00.000Z");
     await orm.CharacterRaidLockout.create({
       id: lockoutId,
       characterId: ids.kaelResto,

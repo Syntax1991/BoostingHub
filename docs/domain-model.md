@@ -76,9 +76,17 @@ A Raid's **total boss count** is never a stored field — it is computed by coun
 
 Lockout is **not** `character.locked = true`.
 
-It depends on character + raid + difficulty + `resetIdentifier` (ISO week, e.g. `2026-W37`).
+It depends on character + raid + difficulty + `resetIdentifier`.
+
+`resetIdentifier` is an ISO-week style string (e.g. `2026-W37`), but for Blizzard sync and Signup/Roster matching it is derived from the **Character region's regional WoW reset start** via `getRegionalWeeklyReset(region, instant).resetIdentifier` — never from the Run wall-clock's ISO week alone.
+
+Example (EU): a Run on Monday 14 September 2026 still belongs to the reset that started Wednesday 09 September 2026 (`2026-W37`). Looking up lockouts with `resetIdentifierFor(run.scheduledStartAt)` would incorrectly use `2026-W38` and miss the persisted row.
 
 Heroic and Mythic lockouts for the same raid week are independent.
+
+Verified `0/N` (a `CharacterRaidLockout` row with `bossesDefeated = 0`) means **verified Unsaved** for that exact key. **No row** means **Unknown** — never invent `0/N` from absence.
+
+`UNSAVED` and `VIP` Runs share the same fresh-lockout attention semantics (`requiresFreshRaidLockout`); `SAVED` Runs may still show progress but do not treat progress as attention/error. Lockouts remain **informational** for signup/roster/publish — never a hard `LOCKOUT_CONFLICT` blocker.
 
 ## Run
 

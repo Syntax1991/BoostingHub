@@ -30,6 +30,8 @@ import {
   type StagedLootbuddySession,
   type WowClass,
 } from "@/discord-bot/interactions/signup-staging";
+import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
+import type { RunLootType } from "@/models/enums";
 
 const MAX_SELECT_OPTIONS = 25;
 /** Discord allows at most 5 action rows per message; one row is reserved for the Confirm/Cancel buttons. */
@@ -110,7 +112,13 @@ type ActiveLootbuddy = {
   mode: LootbuddyMode;
 };
 type SignupOptionsPayload = {
-  run: { title: string; signupWindowOpen: boolean };
+  run: {
+    title: string;
+    signupWindowOpen: boolean;
+    difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
+    totalBossCount: number;
+    lootType: RunLootType;
+  };
   booster: { eligible: EligibleCharacterOption[]; ineligible: IneligibleCharacterOption[] };
   activeBoosterOffers: ActiveBoosterOffers;
   activeLootbuddies: ActiveLootbuddy[];
@@ -129,14 +137,34 @@ function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): st
   ];
 }
 
-/** Informational only — a saved Character remains fully selectable, this just surfaces the context up front. */
-function describeSavedCharacters(eligible: EligibleCharacterOption[]): string[] {
-  const saved = eligible.filter((option) => option.raidSave);
-  if (saved.length === 0) return [];
+/** Informational only — verified lockouts remain fully selectable. */
+function describeSavedCharacters(
+  eligible: EligibleCharacterOption[],
+  run: Pick<SignupOptionsPayload["run"], "difficulty" | "totalBossCount" | "lootType">,
+): string[] {
+  const withLockout = eligible.filter((option) => option.raidSave);
+  if (withLockout.length === 0) return [];
   return [
     "",
-    "Saved this reset:",
-    ...saved.map((option) => `• ${option.characterName} — ${option.raidSave!.bossesDefeated}/${option.raidSave!.totalBossCount}`),
+    "Lockouts this reset:",
+    ...withLockout.map((option) => {
+      const label = formatTargetRaidLockoutLabel({
+        difficulty: run.difficulty,
+        totalBossCount: run.totalBossCount,
+        raidSave: option.raidSave
+          ? {
+              raidId: "",
+              difficulty: run.difficulty,
+              resetIdentifier: "",
+              bossesDefeated: option.raidSave.bossesDefeated,
+              totalBossCount: option.raidSave.totalBossCount,
+              isComplete: option.raidSave.isComplete,
+            }
+          : null,
+        lootType: run.lootType,
+      });
+      return `• ${option.characterName} — ${label.text}`;
+    }),
   ];
 }
 type OfferResult = { created: number; reactivated: number; withdrawn: number; kept: number };
@@ -155,6 +183,7 @@ type ReplyableInteraction = {
 export function buildCharacterSelectOptions(
   eligible: EligibleCharacterOption[],
   activeOffer: ActiveBoosterOffers,
+  run?: Pick<SignupOptionsPayload["run"], "difficulty" | "totalBossCount" | "lootType">,
 ): StringSelectMenuOptionBuilder[] {
   const activeIds = new Set(activeOffer.characterIds);
   return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) => {
@@ -169,8 +198,23 @@ export function buildCharacterSelectOptions(
       .setValue(option.characterId)
       .setDefault(activeIds.has(option.characterId));
     // Informational only — a saved Character is still fully selectable.
-    if (option.raidSave) {
-      builder.setDescription(`Saved ${option.raidSave.bossesDefeated}/${option.raidSave.totalBossCount}`);
+    if (option.raidSave && run) {
+      const label = formatTargetRaidLockoutLabel({
+        difficulty: run.difficulty,
+        totalBossCount: run.totalBossCount,
+        raidSave: {
+          raidId: "",
+          difficulty: run.difficulty,
+          resetIdentifier: "",
+          bossesDefeated: option.raidSave.bossesDefeated,
+          totalBossCount: option.raidSave.totalBossCount,
+          isComplete: option.raidSave.isComplete,
+        },
+        lootType: run.lootType,
+      });
+      builder.setDescription(label.text.slice(0, 100));
+    } else if (option.raidSave) {
+      builder.setDescription(`${option.raidSave.bossesDefeated}/${option.raidSave.totalBossCount}`);
     }
     return builder;
   });
@@ -212,7 +256,7 @@ export async function handleSignupButton(interaction: ButtonInteraction, api: Bo
     return;
   }
 
-  const selectOptions = buildCharacterSelectOptions(eligible, options.activeBoosterOffers);
+  const selectOptions = buildCharacterSelectOptions(eligible, options.activeBoosterOffers, options.run);
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildCustomId("signup", runId))
     .setPlaceholder("Select characters to offer, then configure roles")
@@ -223,7 +267,7 @@ export async function handleSignupButton(interaction: ButtonInteraction, api: Bo
   await interaction.editReply({
     content: [
       `Select the characters to offer for **${options.run.title}**. You'll confirm roles before anything is saved.`,
-      ...describeSavedCharacters(eligible),
+      ...describeSavedCharacters(eligible, options.run),
       ...reservationLines,
     ].join("\n"),
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
