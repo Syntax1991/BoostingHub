@@ -612,8 +612,9 @@ model RunRosterEntry {
 
 /// One gold settlement per completed Run. Amounts are whole WoW gold integers.
 /// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
-/// totalGold is the authoritative final pot. raidLeadCutGold is the declared cut for
-/// both KEEP and SHARE; only KEEP deducts it from the attendance pool.
+/// totalGold is the single settlement pot: mutable while DRAFT, frozen as the final pot
+/// at FINALIZED. raidLeadCutGold is the declared cut for both KEEP and SHARE; only KEEP
+/// deducts it from the attendance pool.
 model RunSettlement {
   id               String           @id @default(uuid())
   runId            String           @unique

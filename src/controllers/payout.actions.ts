@@ -10,7 +10,6 @@ import {
   prepareRunPayoutSchema,
   updateRunPayoutFinancialsSchema,
   updateRunPayoutShareSchema,
-  updateRunPayoutTotalSchema,
 } from "@/validators/payout";
 
 function revalidatePayout(runId: string) {
@@ -48,18 +47,6 @@ export async function updateRunPayoutFinancialsAction(input: unknown): Promise<A
     });
     revalidatePayout(updated.runId);
     return { ok: true, message: "Settlement financials updated." };
-  } catch (error) {
-    return mapActionError(error);
-  }
-}
-
-export async function updateRunPayoutTotalAction(input: unknown): Promise<ActionResult> {
-  try {
-    const user = await requireUser();
-    const parsed = updateRunPayoutTotalSchema.parse(input);
-    const updated = await payoutService.updateDraftTotal(user, parsed.settlementId, parsed.totalGold);
-    revalidatePayout(updated.runId);
-    return { ok: true, message: "Payout total updated." };
   } catch (error) {
     return mapActionError(error);
   }

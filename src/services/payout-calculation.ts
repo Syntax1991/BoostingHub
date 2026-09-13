@@ -108,7 +108,7 @@ export function assertRaidLeadCutGold(cutGold: number, totalGold: number): numbe
   if (cutGold >= totalGold) {
     throw new DomainError(
       "PAYOUT_INVALID_RAID_LEAD_CUT",
-      "Raid Lead cut must be less than the final pot.",
+      "Raid Lead cut must be less than the pot.",
     );
   }
   return cutGold;

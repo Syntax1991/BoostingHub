@@ -482,7 +482,11 @@ describe("draft editing and calculation", () => {
     ]);
     await payoutService.prepareSettlement(lead, runId, { totalGold: 1000 });
     const prepared = (await payoutService.getPayoutView(lead, runId)).manager!;
-    await payoutService.updateDraftTotal(lead, prepared.id, 1001);
+    await payoutService.updateDraftFinancials(lead, prepared.id, {
+      totalGold: 1001,
+      raidLeadCutMode: prepared.raidLeadCutMode,
+      raidLeadCutGold: prepared.raidLeadCutGold,
+    });
     const byName = Object.fromEntries(prepared.entries.map((row) => [row.characterName, row]));
     await payoutService.updateShareUnits(lead, { payoutEntryId: byName.Pykael.id, shareUnits: 100 });
     await payoutService.updateShareUnits(lead, { payoutEntryId: byName.Pymira.id, shareUnits: 100 });
@@ -513,7 +517,14 @@ describe("draft editing and calculation", () => {
       payoutService.updateShareUnits(lead, { payoutEntryId: byName.Pykael.id, shareUnits: 10001 }),
       "PAYOUT_INVALID_SHARE",
     );
-    await expectDomainCode(payoutService.updateDraftTotal(lead, prepared.id, 0), "PAYOUT_INVALID_TOTAL");
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(lead, prepared.id, {
+        totalGold: 0,
+        raidLeadCutMode: prepared.raidLeadCutMode,
+        raidLeadCutGold: prepared.raidLeadCutGold,
+      }),
+      "PAYOUT_INVALID_TOTAL",
+    );
     await expectDomainCode(
       payoutService.updateShareUnits(user, { payoutEntryId: byName.Pykael.id, shareUnits: 50 }),
       "PAYOUT_NOT_MANAGEABLE",
@@ -546,7 +557,14 @@ describe("finalize and paid", () => {
     expect(finalized.manager?.entries.some((row) => row.characterName === "Pykael")).toBe(true);
     expect(finalized.manager?.entries.some((row) => row.characterName === "RenamedAfterFinalize")).toBe(false);
     expect(finalized.manager?.entries.some((row) => row.userDisplayName === "Payout User")).toBe(true);
-    await expectDomainCode(payoutService.updateDraftTotal(lead, draft.id, 900), "PAYOUT_FINALIZED");
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(lead, draft.id, {
+        totalGold: 900,
+        raidLeadCutMode: draft.raidLeadCutMode,
+        raidLeadCutGold: draft.raidLeadCutGold,
+      }),
+      "PAYOUT_FINALIZED",
+    );
     await expectDomainCode(
       payoutService.updateShareUnits(lead, { payoutEntryId: draft.entries[0].id, shareUnits: 50 }),
       "PAYOUT_FINALIZED",
@@ -574,7 +592,14 @@ describe("finalize and paid", () => {
     expect(paid.manager?.status).toBe("PAID");
     expect(paid.manager?.paidAt).toBeTruthy();
     await expectDomainCode(payoutService.markPaid(admin, draft.id), "PAYOUT_ALREADY_PAID");
-    await expectDomainCode(payoutService.updateDraftTotal(admin, draft.id, 700), "PAYOUT_ALREADY_PAID");
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(admin, draft.id, {
+        totalGold: 700,
+        raidLeadCutMode: draft.raidLeadCutMode,
+        raidLeadCutGold: draft.raidLeadCutGold,
+      }),
+      "PAYOUT_ALREADY_PAID",
+    );
   });
 });
 

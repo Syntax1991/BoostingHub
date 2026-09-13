@@ -349,17 +349,6 @@ export const payoutService = {
     return { runId: settlement.runId };
   },
 
-  /** @deprecated Prefer updateDraftFinancials — kept as a thin wrapper for callers that only change total. */
-  async updateDraftTotal(user: AuthenticatedUser, settlementId: string, totalGold: number) {
-    const { settlement } = await loadManagedSettlement(user, settlementId);
-    assertDraft(settlement);
-    return this.updateDraftFinancials(user, settlementId, {
-      totalGold,
-      raidLeadCutMode: settlement.raidLeadCutMode,
-      raidLeadCutGold: settlement.raidLeadCutGold,
-    });
-  },
-
   async updateShareUnits(
     user: AuthenticatedUser,
     input: { payoutEntryId: string; shareUnits: number; adjustmentReason?: string | null },

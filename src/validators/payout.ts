@@ -25,7 +25,7 @@ export const prepareRunPayoutSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["raidLeadCutGold"],
-        message: "Raid Lead cut must be less than the final pot.",
+        message: "Raid Lead cut must be less than the pot.",
       });
     }
   });
@@ -42,16 +42,10 @@ export const updateRunPayoutFinancialsSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["raidLeadCutGold"],
-        message: "Raid Lead cut must be less than the final pot.",
+        message: "Raid Lead cut must be less than the pot.",
       });
     }
   });
-
-/** @deprecated Prefer updateRunPayoutFinancialsSchema */
-export const updateRunPayoutTotalSchema = z.object({
-  settlementId: entityIdSchema,
-  totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),
-});
 
 export const updateRunPayoutShareSchema = z.object({
   payoutEntryId: entityIdSchema,
