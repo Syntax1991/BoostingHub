@@ -4,6 +4,7 @@ import type {
   RaidDifficulty,
   RunStatus,
   WowClass,
+  WowRegion,
 } from "@/models/enums";
 import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
@@ -23,6 +24,7 @@ export type EligibilityCharacter = {
   userId: string;
   name: string;
   realm: string;
+  region: WowRegion;
   wowClass: WowClass;
   specialization: string | null;
   isActive: boolean;
@@ -45,6 +47,8 @@ export type EligibilityRun = {
   signupsOpen: boolean;
   /** The target Run's raid's total boss count — needed only to render raid-save progress (e.g. "8/8"), never for eligibility. */
   totalBossCount: number;
+  /** Used with each Character's region to resolve the regional WoW reset containing this instant. */
+  scheduledStartAt: string;
 };
 
 export type BoosterIneligibilityReason =
@@ -70,7 +74,11 @@ export type EligibleBoosterOption = {
   roles: CharacterRole[];
   /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
   defaultRole: CharacterRole | null;
-  /** Informational only — present when this Character already has raid-save progress for the target Run's exact raid/difficulty/current reset. Never affects eligibility. */
+  /**
+   * Informational verified lockout for the target Run's exact raid/difficulty
+   * and this Character's regional reset containing `scheduledStartAt`.
+   * Includes verified 0/x. Null means unknown/unverified — never affects eligibility.
+   */
   raidSave: SignupRaidSaveInfo | null;
 };
 
@@ -87,33 +95,21 @@ export type IneligibleBoosterCharacter = {
 };
 
 /**
- * Raid-save progress for the target Run's own raid/difficulty/current reset
- * only — a Character's lockout on a different raid, difficulty, or an old
- * reset is never surfaced here, matching "only show the lockout relevant to
- * the target Run." Informational — the caller never uses this to reject
- * anything.
+ * Verified lockout for the target Run's own raid/difficulty and the Character's
+ * regional reset containing the Run schedule — including verified 0/x.
+ * A different raid, difficulty, or reset is never surfaced. Informational only.
  */
 function findRaidSave(
-  character: Pick<EligibilityCharacter, "lockouts">,
+  character: Pick<EligibilityCharacter, "lockouts" | "region">,
   run: EligibilityRun,
-  resetIdentifier: string,
 ): SignupRaidSaveInfo | null {
-  const lockout = character.lockouts.find(
-    (item) =>
-      item.raidId === run.raidId &&
-      item.difficulty === run.difficulty &&
-      item.resetIdentifier === resetIdentifier &&
-      lockoutService.isProgressLockout(item),
-  );
-  if (!lockout) return null;
-  return {
-    raidId: lockout.raidId,
-    difficulty: lockout.difficulty,
-    resetIdentifier: lockout.resetIdentifier,
-    bossesDefeated: lockout.bossesDefeated,
-    totalBossCount: run.totalBossCount,
-    isComplete: lockout.isComplete,
-  };
+  const resetIdentifier = lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt);
+  const lockout = lockoutService.findExactLockout(character.lockouts, {
+    raidId: run.raidId,
+    difficulty: run.difficulty,
+    resetIdentifier,
+  });
+  return lockout ? lockoutService.toRaidSaveInfo(lockout, run.totalBossCount) : null;
 }
 
 /**
@@ -130,7 +126,6 @@ function findRaidSave(
 export function evaluateBoosterOptions(
   characters: EligibilityCharacter[],
   run: EligibilityRun,
-  resetIdentifier: string,
 ): {
   eligible: EligibleBoosterOption[];
   ineligible: IneligibleBoosterCharacter[];
@@ -198,7 +193,7 @@ export function evaluateBoosterOptions(
       specialization: character.specialization,
       roles: rolesForClass(character.wowClass),
       defaultRole,
-      raidSave: findRaidSave(character, run, resetIdentifier),
+      raidSave: findRaidSave(character, run),
     });
   }
 

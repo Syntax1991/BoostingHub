@@ -149,7 +149,7 @@ Run creation lists raids with `availableForRuns: true` via `raidRepository.ensur
 
 - For each **verified** difficulty (`NORMAL` / `HEROIC` / `MYTHIC`): killed this reset iff `last_kill_timestamp` is in `[resetStart, resetEnd)`.
 - Do **not** treat historical `completed_count > 0` alone as current lockout.
-- Regional weekly reset windows (`src/lib/wow-weekly-reset.ts`): EU Wednesday 04:00 UTC; US Tuesday 15:00 UTC. Identifiers use `resetIdentifierFor(resetStart)`.
+- Regional weekly reset windows (`src/lib/wow-weekly-reset.ts`): EU Wednesday 04:00 UTC; US Tuesday 15:00 UTC. Identifiers use `resetIdentifierFor(resetStart)`. Signup/Roster target the same helper via `lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt)` — never `resetIdentifierFor(run.scheduledStartAt)` alone.
 - Difficulties map centrally in `src/lib/blizzard/raid-difficulty.ts` (LFR / Story ignored).
 
 ### Clear vs Unknown (per difficulty)
@@ -171,7 +171,7 @@ Mythic progress is boss-kill progress in the current reset only. This API does *
 
 Verified difficulty aggregates upsert into existing `CharacterRaidLockout`. Missing modes for the current raid+reset are deleted so they remain Unknown. Same-reset rows for non-current catalog raids are cleared on successful sync. No parallel BlizzardLockout domain.
 
-Signup / roster eligibility is **unchanged**. No Warcraft Logs, Raider.IO, or addon required.
+Signup / roster lockout display uses the Character region's regional reset containing the Run schedule. Verified `0/N` is Unsaved (distinct from Unknown). Lockouts remain informational — never a hard signup/roster blocker. No Warcraft Logs, Raider.IO, or addon required.
 
 ## Security
 

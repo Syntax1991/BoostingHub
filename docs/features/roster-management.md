@@ -92,7 +92,7 @@ Blockers include:
 - booster qualification no longer approved (`BoosterQualificationService` — User + Run Difficulty; revoke is a publish blocker)
 - two selected **BOOSTER** signups for one user
 
-Raid lockouts remain informational only — never a publish blocker.
+Raid lockouts remain informational only — never a publish blocker. Matching uses each Character's regional WoW reset containing `Run.scheduledStartAt` (not the Run date's ISO week alone). Verified `0/x` is Unsaved; no row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
 Warnings: composition under or over target.
 
 Signup-time eligibility can rot before publish. Access and lockouts are therefore re-checked at publish.

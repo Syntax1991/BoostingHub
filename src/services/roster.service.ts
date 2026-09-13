@@ -1,7 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanManageRun, canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
-import { resetIdentifierFor } from "@/lib/datetime";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
@@ -47,26 +46,19 @@ function resolvedLootbuddyClass(signup: RosterSignupRow): WowClass | null {
 
 function inspectSignup(
   signup: RosterSignupRow,
-  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number },
-  resetIdentifier: string,
+  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number; scheduledStartAt: string },
 ): Omit<InspectedSignup, "draftSelected"> {
   const character = signup.character;
-  const matchingLockout = character?.lockouts.find(
-    (lockout) =>
-      lockout.raidId === run.raidId &&
-      lockout.difficulty === run.difficulty &&
-      lockout.resetIdentifier === resetIdentifier &&
-      lockoutService.isProgressLockout(lockout),
-  );
+  const matchingLockout =
+    character == null
+      ? null
+      : lockoutService.findExactLockout(character.lockouts, {
+          raidId: run.raidId,
+          difficulty: run.difficulty,
+          resetIdentifier: lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt),
+        });
   const raidSave: SignupRaidSaveInfo | null = matchingLockout
-    ? {
-        raidId: matchingLockout.raidId,
-        difficulty: matchingLockout.difficulty,
-        resetIdentifier: matchingLockout.resetIdentifier,
-        bossesDefeated: matchingLockout.bossesDefeated,
-        totalBossCount: run.totalBossCount,
-        isComplete: matchingLockout.isComplete,
-      }
+    ? lockoutService.toRaidSaveInfo(matchingLockout, run.totalBossCount)
     : null;
   const boosterApproved =
     signup.participationType !== "BOOSTER" || !signup.role || !character
@@ -189,9 +181,8 @@ export const rosterService = {
 
     const roster = await rosterRepository.ensure(runId);
     const signups = await rosterRepository.listSignups(runId);
-    const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
     const inspected = signups.map((signup) => ({
-      ...inspectSignup(signup, run, resetIdentifier),
+      ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
     }));
 
@@ -219,6 +210,7 @@ export const rosterService = {
         title: run.title,
         raidName: run.raidName,
         difficulty: run.difficulty,
+        lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         raidLeadName: run.raidLeadName,
@@ -228,6 +220,7 @@ export const rosterService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        totalBossCount: run.totalBossCount,
         activeSignupCount: inspected.filter((item) => item.status !== "WITHDRAWN").length,
         publishedSelectedCount: publishedSelection.length,
         backupCount: inspected.filter((item) => item.isBackup && item.status !== "WITHDRAWN").length,
@@ -395,9 +388,8 @@ export const rosterService = {
     await rosterRepository.assertVersion(roster, input.version);
 
     const signups = await rosterRepository.listSignups(input.runId);
-    const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
     const inspected = signups.map((signup) => ({
-      ...inspectSignup(signup, run, resetIdentifier),
+      ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
     }));
     const selected = inspected.filter((item) => item.draftSelected);

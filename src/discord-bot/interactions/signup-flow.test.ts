@@ -81,7 +81,13 @@ function signupOptionsPayload(overrides: {
   synmistDefaultRole?: "TANK" | "HEALER" | "DPS" | null;
 } = {}) {
   return {
-    run: { title: "Test Run", signupWindowOpen: true },
+    run: {
+      title: "Test Run",
+      signupWindowOpen: true,
+      difficulty: "HEROIC",
+      totalBossCount: 8,
+      lootType: "UNSAVED",
+    },
     booster: {
       eligible: [
         {
@@ -430,13 +436,14 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     await signupButton(interaction, api, RUN_ID);
 
     const call = interaction.editReply.mock.calls[0]?.[0];
-    expect(call.content).toContain("Saved this reset");
+    expect(call.content).toContain("Lockouts this reset");
     expect(call.content).toContain("Synmist");
     const menu = call.components[0].components[0].toJSON();
     // Still selectable — present in the menu, same as any other eligible character.
     expect(menu.options.map((option: { value: string }) => option.value)).toEqual(expect.arrayContaining([SYNMIST, FROSTBOLT]));
     const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
     expect(synmistOption.description).toContain("8/8");
+    expect(synmistOption.description).toContain("Fully saved");
   });
 
   it("selecting a saved character still stages only — no DB call until Confirm", async () => {

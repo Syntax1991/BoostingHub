@@ -9,17 +9,23 @@ import {
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
-import { DIFFICULTY_ABBREVIATIONS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
 type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
+type ManagerRun = Pick<RosterManagementView["run"], "difficulty" | "totalBossCount" | "lootType">;
 
-/** "HC 8/8 · Saved" — informational only, never a reason a signup is flagged. */
-function formatRaidSave(raidSave: ManagerSignup["raidSave"]): string | null {
-  if (!raidSave) return null;
-  return `${DIFFICULTY_ABBREVIATIONS[raidSave.difficulty]} ${raidSave.bossesDefeated}/${raidSave.totalBossCount} · Saved`;
+function boosterLockoutLabel(signup: ManagerSignup, run: ManagerRun) {
+  if (signup.participationType !== "BOOSTER" || !signup.character) return null;
+  return formatTargetRaidLockoutLabel({
+    difficulty: run.difficulty,
+    totalBossCount: run.totalBossCount,
+    raidSave: signup.raidSave,
+    lootType: run.lootType,
+  });
 }
 
 function resolvedClass(signup: {
@@ -53,7 +59,7 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
       ...data.manager.groups.dps,
       ...data.manager.groups.lootbuddies,
     ];
-    return <ManagerSignupList runId={data.run.id} signups={all} />;
+    return <ManagerSignupList runId={data.run.id} run={data.manager.run} signups={all} />;
   }
 
   return <OwnSignupList signups={data.viewerSignups} />;
@@ -166,7 +172,15 @@ function groupSignupsByUser(signups: ManagerSignup[]): ManagerSignupGroup[] {
  * userId for the operational overview; each row still keeps its own
  * participation identity (RunSignup.id) and type badge.
  */
-function ManagerSignupList({ runId, signups }: { runId: string; signups: ManagerSignup[] }) {
+function ManagerSignupList({
+  runId,
+  run,
+  signups,
+}: {
+  runId: string;
+  run: ManagerRun;
+  signups: ManagerSignup[];
+}) {
   const groups = groupSignupsByUser(signups);
   return (
     <Card>
@@ -195,6 +209,7 @@ function ManagerSignupList({ runId, signups }: { runId: string; signups: Manager
               <ul className="mt-2 space-y-1.5">
                 {group.signups.map((signup) => {
                   const wowClass = resolvedClass(signup);
+                  const lockout = boosterLockoutLabel(signup, run);
                   return (
                   <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
                     <span>{characterLabel(signup)}</span>
@@ -209,8 +224,10 @@ function ManagerSignupList({ runId, signups }: { runId: string; signups: Manager
                       </span>
                     ) : null}
                     <SignupStatusBadge status={signup.status} />
-                    {formatRaidSave(signup.raidSave) ? (
-                      <span className="text-xs text-muted">{formatRaidSave(signup.raidSave)}</span>
+                    {lockout ? (
+                      <span className={`text-xs ${lockout.attention ? "text-warning" : "text-muted"}`}>
+                        {lockout.text}
+                      </span>
                     ) : null}
                     {signup.issue ? <span className="text-xs text-danger">{signup.issue}</span> : null}
                   </li>

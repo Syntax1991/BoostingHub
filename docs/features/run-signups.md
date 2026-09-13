@@ -88,7 +88,7 @@ Required: run, user (server session), character, role, `isBackup`, status `PENDI
 2. Character is active
 3. Approved BoosterQualification matches the User + **this** run difficulty
 4. Offered role is valid for the character's class
-5. Progress lockouts are informational only (never a hard blocker at signup)
+5. Progress lockouts are informational only (never a hard blocker at signup). Target reset is the Character region's regional WoW reset window containing `Run.scheduledStartAt` (`lockoutService.getResetIdentifierForRun`). Verified `0/x` is Unsaved; missing row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
 6. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
 7. No active duplicate for run + user + character + BOOSTER
 8. Cross-run Character reservation (SELECTED booster Character on a colliding scheduled start) still applies — BOOSTER only
