@@ -29,8 +29,16 @@ import {
   SHARE_UNITS_MIN,
   TOTAL_GOLD_MAX,
   TOTAL_GOLD_MIN,
+  formatPayoutCut,
 } from "@/services/payout-state";
 import type { RunDetailView } from "@/services/run-detail.service";
+
+/** Format basis points as a percent label (6250 → "62.5%"). */
+function formatBpsPercent(bps: number): string {
+  const pct = bps / 100;
+  const label = Number.isInteger(pct) ? String(pct) : pct.toFixed(1).replace(/\.0$/, "");
+  return `${label}%`;
+}
 
 export function RunPayoutSection({ data }: { data: RunDetailView }) {
   const payout = data.payout;
@@ -62,7 +70,7 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
       <Card>
         <CardHeader
           title="Payout"
-          description="Enter the current pot (for example from Dawn) and choose KEEP or SHARE for the Raid Lead cut. This is not a wallet or transfer."
+          description="Enter the gross pot (for example from Dawn) and choose KEEP or SHARE for the Raid Lead cut. This is not a wallet or transfer."
         />
         <div className="space-y-3 px-4 py-4 text-sm">
           <p>No settlement exists yet.</p>
@@ -118,7 +126,7 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
               <SettlementStatusBadge status={row.settlementStatus} />
             </div>
             <p className="mt-1 text-muted">
-              Share {row.shareUnits} · {formatGold(row.amountGold)}
+              {formatPayoutCut(row.shareUnits)} · {formatGold(row.amountGold)}
               {row.settlementStatus === "PAID" ? " · Paid" : ""}
             </p>
           </li>
@@ -193,7 +201,7 @@ function ManagerPayoutPanel({
         title="Payout"
         description={
           canEdit
-            ? "Whole gold only. Updating pot or Raid Lead cut mode recalculates the settlement preview on the server."
+            ? "Whole gold only. Updating the gross pot or Raid Lead cut mode recalculates the settlement preview on the server."
             : "Final settlement for this completed run."
         }
         action={
@@ -219,22 +227,14 @@ function ManagerPayoutPanel({
         </p>
       ) : null}
 
-      <SettlementFinancialSummary
-        status={manager.status}
-        totalGold={summary.totalGold}
-        raidLeadCutMode={summary.raidLeadCutMode}
-        dedicatedRaidLeadPayout={summary.dedicatedRaidLeadPayout}
-        attendanceDistributedGold={summary.attendanceDistributedGold}
-        raidLeadName={manager.raidLeadName}
-      />
+      <SettlementFinancialSummary summary={summary} status={manager.status} raidLeadName={manager.raidLeadName} />
 
       <div className="flex flex-wrap gap-4 px-4 py-3 text-xs text-muted">
         <span>Attendance units {summary.attendanceUnits}</span>
-        <span>Settlement units {summary.totalSettlementUnits}</span>
         <span>Share units {summary.totalShareUnits}</span>
         <span>Recipients with share {summary.recipientsWithShare}</span>
         <span>Zero-share {summary.zeroShareParticipants}</span>
-        <span>Participant payout {formatGold(summary.attendanceDistributedGold)}</span>
+        <span>Attendance distributed {formatGold(summary.attendanceDistributedGold)}</span>
         <span>Total allocated {formatGold(summary.totalAllocatedGold)}</span>
       </div>
 
@@ -255,7 +255,7 @@ function ManagerPayoutPanel({
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <label htmlFor={totalId} className="mb-1 block text-xs text-muted">
-                Pot
+                Gross pot
               </label>
               <input
                 id={totalId}
@@ -268,7 +268,9 @@ function ManagerPayoutPanel({
                 onChange={(event) => setTotalGold(event.target.value)}
                 className="h-9 w-40 rounded-md border border-border bg-surface-raised px-3 text-sm"
               />
-              <p className="mt-1 text-xs text-muted">Enter the current pot. Updating it recalculates the settlement preview.</p>
+              <p className="mt-1 text-xs text-muted">
+                Enter the gross pot. Booster Cut is {formatBpsPercent(summary.boosterCutBps)} of gross.
+              </p>
             </div>
             <fieldset className="space-y-1">
               <legend className="text-xs text-muted">Raid Lead cut mode</legend>
@@ -293,22 +295,21 @@ function ManagerPayoutPanel({
           </div>
           <p className="text-xs text-muted">
             {raidLeadCutMode === "KEEP"
-              ? "KEEP: One extra full share is auto-calculated for the Raid Lead and paid separately."
-              : "SHARE: Pot is split only among attendance shares; no separate Raid Lead cut."}
+              ? `KEEP: Raid Lead keeps the ${formatBpsPercent(summary.raidLeadCutBps)} cut as a dedicated payout. Booster pool is the booster base only.`
+              : `SHARE: The ${formatBpsPercent(summary.raidLeadCutBps)} Raid Lead cut joins the booster pool. Dedicated Raid Lead payout is 0.`}
           </p>
         </form>
       ) : null}
 
       <div className="max-w-full min-w-0 overflow-x-auto">
-        <table className="min-w-[52rem] w-full text-left text-sm">
+        <table className="min-w-[48rem] w-full text-left text-sm">
           <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-2 font-medium">Character</th>
               <th className="px-3 py-2 font-medium">Type</th>
               <th className="px-3 py-2 font-medium">Attendance</th>
-              <th className="px-3 py-2 font-medium">Backup</th>
-              <th className="px-3 py-2 font-medium">Share units</th>
-              <th className="px-3 py-2 font-medium">Amount</th>
+              <th className="px-3 py-2 font-medium">Cut</th>
+              <th className="px-3 py-2 font-medium">Payout</th>
               {canEdit ? <th className="px-4 py-2 font-medium">Reason</th> : null}
             </tr>
           </thead>
@@ -321,6 +322,8 @@ function ManagerPayoutPanel({
                 pending={pending}
                 isRaidLead={row.userId === manager.raidLeadUserId}
                 dedicatedRaidLeadPayout={summary.dedicatedRaidLeadPayout}
+                ordinaryRaidLeadPayout={summary.ordinaryRaidLeadPayout}
+                raidLeadTotalPayout={summary.raidLeadTotalPayout}
                 onSave={(shareUnits, adjustmentReason) =>
                   runMutation(() =>
                     updateRunPayoutShareAction({
@@ -341,7 +344,8 @@ function ManagerPayoutPanel({
             Raid Lead receives separately · {formatGold(summary.dedicatedRaidLeadPayout)}
           </p>
           <p className="text-xs text-muted">
-            Calculated KEEP cut for {manager.raidLeadName}. Not an attendance share.
+            KEEP cut ({formatBpsPercent(summary.raidLeadCutBps)} of gross) for {manager.raidLeadName}. Not an attendance
+            Cut.
           </p>
         </div>
       ) : null}
@@ -349,8 +353,11 @@ function ManagerPayoutPanel({
         <FinalizePayoutDialog
           settlementId={manager.id}
           totalGold={manager.totalGold}
+          boosterCutBps={summary.boosterCutBps}
+          boosterBaseGold={summary.boosterBaseGold}
           dedicatedRaidLeadPayout={summary.dedicatedRaidLeadPayout}
           raidLeadCutMode={manager.raidLeadCutMode}
+          raidLeadCutBps={summary.raidLeadCutBps}
           onClose={onFinalizeClose}
         />
       ) : null}
@@ -361,42 +368,62 @@ function ManagerPayoutPanel({
 }
 
 function SettlementFinancialSummary({
+  summary,
   status,
-  totalGold,
-  raidLeadCutMode,
-  dedicatedRaidLeadPayout,
-  attendanceDistributedGold,
   raidLeadName,
 }: {
+  summary: NonNullable<RunDetailView["payout"]["manager"]>["summary"];
   status: NonNullable<RunDetailView["payout"]["manager"]>["status"];
-  totalGold: number;
-  raidLeadCutMode: RaidLeadCutMode;
-  dedicatedRaidLeadPayout: number;
-  attendanceDistributedGold: number;
   raidLeadName: string;
 }) {
-  const potLabel = status === "DRAFT" ? "Pot" : "Final pot";
-  const calculatedCut = raidLeadCutMode === "KEEP" ? dedicatedRaidLeadPayout : 0;
+  const potLabel = status === "DRAFT" ? "Total Pot (gross)" : "Final pot (gross)";
+  const isShare = summary.raidLeadCutMode === "SHARE";
+
   return (
-    <div className="mx-4 mt-3 grid gap-2 rounded-md border border-border bg-surface-raised/40 px-3 py-3 text-sm sm:grid-cols-2">
-      <div>
-        <p className="text-xs text-muted">{potLabel}</p>
-        <p className="font-medium">{formatGold(totalGold)}</p>
+    <div className="mx-4 mt-3 space-y-3 rounded-md border border-border bg-surface-raised/40 px-3 py-3 text-sm">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-xs text-muted">{potLabel}</p>
+          <p className="text-lg font-semibold tracking-tight">{formatGold(summary.totalGold)}</p>
+        </div>
+        <div className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2">
+          <p className="text-xs font-medium text-muted">
+            Booster Cut · {formatBpsPercent(summary.boosterCutBps)}
+          </p>
+          <p className="text-base font-semibold tracking-tight">{formatGold(summary.boosterBaseGold)}</p>
+          <p className="text-xs text-muted">Base booster pool</p>
+        </div>
       </div>
-      <div>
-        <p className="text-xs text-muted">Raid Lead cut mode</p>
-        <p className="font-medium">{RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted">Calculated Raid Lead cut</p>
-        <p className="font-medium">{formatGold(calculatedCut)}</p>
-        {raidLeadCutMode === "KEEP" ? (
-          <p className="text-xs text-muted">{raidLeadName}</p>
-        ) : null}
-      </div>
-      <div>
-        <p className="text-xs text-muted">Participant payout total</p>
-        <p className="font-medium">{formatGold(attendanceDistributedGold)}</p>
+
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-xs text-muted">
+            Raid Lead Cut · {formatBpsPercent(summary.raidLeadCutBps)} ·{" "}
+            {RAID_LEAD_CUT_MODE_LABELS[summary.raidLeadCutMode]}
+          </p>
+          <p className="font-medium">{formatGold(summary.raidLeadCutGold)}</p>
+          {isShare ? (
+            <p className="text-xs text-muted">
+              Dedicated {formatGold(0)} · Shared into pool {formatGold(summary.raidLeadSharedGold)}
+            </p>
+          ) : (
+            <p className="text-xs text-muted">
+              Dedicated {formatGold(summary.dedicatedRaidLeadPayout)} · {raidLeadName}
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-xs text-muted">Advertiser · {formatBpsPercent(summary.advertiserCutBps)}</p>
+          <p className="font-medium">{formatGold(summary.advertiserCutGold)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted">Dawn residual · {formatBpsPercent(summary.dawnCutBps)}</p>
+          <p className="font-medium">{formatGold(summary.dawnCutGold)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted">Distributable Booster Pool</p>
+          <p className="font-medium">{formatGold(summary.distributableBoosterPool)}</p>
+        </div>
       </div>
     </div>
   );
@@ -436,6 +463,8 @@ function ManagerPayoutRow({
   pending,
   isRaidLead,
   dedicatedRaidLeadPayout,
+  ordinaryRaidLeadPayout,
+  raidLeadTotalPayout,
   onSave,
 }: {
   row: NonNullable<RunDetailView["payout"]["manager"]>["entries"][number];
@@ -443,22 +472,26 @@ function ManagerPayoutRow({
   pending: boolean;
   isRaidLead: boolean;
   dedicatedRaidLeadPayout: number;
+  ordinaryRaidLeadPayout: number;
+  raidLeadTotalPayout: number;
   onSave: (shareUnits: number, adjustmentReason: string | null) => void;
 }) {
   const shareId = useId();
   const reasonId = useId();
   const [shareUnits, setShareUnits] = useState(String(row.shareUnits));
   const [reason, setReason] = useState(row.adjustmentReason ?? "");
+  const displayCut = canEdit ? formatPayoutCut(Number(shareUnits) || 0) : formatPayoutCut(row.shareUnits);
+  const showRaidLeadBreakdown = isRaidLead && dedicatedRaidLeadPayout > 0;
 
   return (
     <tr className="border-b border-border/70">
       <td className="px-4 py-2">
         <div className="font-medium">{row.characterName}</div>
         <div className="text-xs text-muted">{row.userDisplayName}</div>
-        {isRaidLead && dedicatedRaidLeadPayout > 0 ? (
+        {showRaidLeadBreakdown ? (
           <div className="mt-1 text-xs text-muted">
-            Attendance {formatGold(row.amountGold)} + Raid Lead cut {formatGold(dedicatedRaidLeadPayout)} = Total{" "}
-            {formatGold(row.amountGold + dedicatedRaidLeadPayout)}
+            Attendance {formatGold(ordinaryRaidLeadPayout)} + Raid Lead cut {formatGold(dedicatedRaidLeadPayout)} = Total{" "}
+            {formatGold(raidLeadTotalPayout)}
           </div>
         ) : null}
       </td>
@@ -469,11 +502,10 @@ function ManagerPayoutRow({
         <AttendanceStatusBadge status={row.attendanceStatus} />
         <span className="sr-only">{ATTENDANCE_STATUS_LABELS[row.attendanceStatus]}</span>
       </td>
-      <td className="px-3 py-2">{row.isBackup ? "Backup" : "—"}</td>
       <td className="px-3 py-2">
         {canEdit ? (
           <form
-            className="flex items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               onSave(Number(shareUnits), reason);
@@ -494,12 +526,13 @@ function ManagerPayoutRow({
               onChange={(event) => setShareUnits(event.target.value)}
               className="h-9 w-20 rounded-md border border-border bg-surface-raised px-2 text-sm"
             />
+            <span className="text-xs text-muted">{displayCut}</span>
             <Button type="submit" variant="secondary" className="h-8" disabled={pending}>
               Save
             </Button>
           </form>
         ) : (
-          <span>{row.shareUnits}</span>
+          <span>{formatPayoutCut(row.shareUnits)}</span>
         )}
       </td>
       <td className="px-3 py-2 font-medium">{formatGold(row.amountGold)}</td>
@@ -584,12 +617,12 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
             </p>
           ) : null}
           <p>
-            Enter the current pot (manual Dawn/community total) and choose KEEP or SHARE. KEEP auto-calculates one extra
-            full Raid Lead share. No gold is transferred automatically.
+            Enter the Gross Pot / Total Pot (manual Dawn or community total) and choose KEEP or SHARE for the Raid Lead
+            cut. Booster Cut is 62.5% of gross. No gold is transferred automatically.
           </p>
           <div>
             <label htmlFor={goldId} className="mb-1 block text-xs text-muted">
-              Pot
+              Gross pot / Total pot
             </label>
             <input
               id={goldId}
@@ -603,7 +636,9 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
               onChange={(event) => setTotalGold(event.target.value)}
               className="h-9 w-full rounded-md border border-border bg-surface-raised px-3 text-sm"
             />
-            <p className="mt-1 text-xs text-muted">Enter the current pot. Updating it recalculates the settlement preview.</p>
+            <p className="mt-1 text-xs text-muted">
+              Enter the gross pot. Updating it recalculates the settlement preview. Booster Cut is 62.5% of gross.
+            </p>
           </div>
           <fieldset className="space-y-1">
             <legend className="text-xs text-muted">Raid Lead cut mode</legend>
@@ -623,8 +658,8 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
             </div>
             <p className="text-xs text-muted">
               {raidLeadCutMode === "KEEP"
-                ? "KEEP: One extra full share is auto-calculated for the Raid Lead and paid separately."
-                : "SHARE: Pot is split only among attendance shares; no separate Raid Lead cut."}
+                ? "KEEP: Raid Lead keeps the 3% cut as a dedicated payout. Booster pool is the 62.5% booster base only."
+                : "SHARE: The 3% Raid Lead cut joins the booster pool. Dedicated Raid Lead payout is 0."}
             </p>
           </fieldset>
         </div>
@@ -644,14 +679,20 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
 function FinalizePayoutDialog({
   settlementId,
   totalGold,
+  boosterCutBps,
+  boosterBaseGold,
   dedicatedRaidLeadPayout,
   raidLeadCutMode,
+  raidLeadCutBps,
   onClose,
 }: {
   settlementId: string;
   totalGold: number;
+  boosterCutBps: number;
+  boosterBaseGold: number;
   dedicatedRaidLeadPayout: number;
   raidLeadCutMode: RaidLeadCutMode;
+  raidLeadCutBps: number;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -694,9 +735,10 @@ function FinalizePayoutDialog({
           </p>
         ) : null}
         <p>
-          Finalizing locks the current pot of {formatGold(totalGold)} ({RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]}) and
-          the calculated Raid Lead cut of {formatGold(calculatedCut)}. Totals, recipients, and amounts cannot be edited
-          afterwards.
+          Finalizing locks the Gross Pot / Total Pot of {formatGold(totalGold)}. Booster Cut is{" "}
+          {formatBpsPercent(boosterCutBps)} of gross ({formatGold(boosterBaseGold)}). Raid Lead mode{" "}
+          {RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]} · {formatBpsPercent(raidLeadCutBps)} dedicated cut{" "}
+          {formatGold(calculatedCut)}. Totals, recipients, and amounts cannot be edited afterwards.
         </p>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
           <Button type="button" variant="secondary" onClick={close} disabled={pending}>

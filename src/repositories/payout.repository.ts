@@ -49,6 +49,9 @@ export type SettlementRecord = {
   runId: string;
   totalGold: number;
   raidLeadCutMode: RaidLeadCutMode;
+  boosterCutBps: number;
+  raidLeadCutBps: number;
+  advertiserCutBps: number;
   status: SettlementStatus;
   preparedById: string;
   finalizedAt: string | null;
@@ -98,6 +101,9 @@ function mapSettlement(row: Record<string, unknown>): SettlementRecord {
     runId: asString(row.runId),
     totalGold: asNumber(row.totalGold),
     raidLeadCutMode: mapRaidLeadCutMode(row.raidLeadCutMode),
+    boosterCutBps: asNumber(row.boosterCutBps),
+    raidLeadCutBps: asNumber(row.raidLeadCutBps),
+    advertiserCutBps: asNumber(row.advertiserCutBps),
     status: mapSettlementStatus(row.status),
     preparedById: asString(row.preparedById),
     finalizedAt: asStringOrNull(row.finalizedAt),
@@ -138,6 +144,9 @@ export const payoutRepository = {
     runId: string;
     totalGold: number;
     raidLeadCutMode: RaidLeadCutMode;
+    boosterCutBps: number;
+    raidLeadCutBps: number;
+    advertiserCutBps: number;
     preparedById: string;
     runTitle: string;
     raidName: string;
@@ -158,6 +167,9 @@ export const payoutRepository = {
         runId: input.runId,
         totalGold: input.totalGold,
         raidLeadCutMode: input.raidLeadCutMode,
+        boosterCutBps: input.boosterCutBps,
+        raidLeadCutBps: input.raidLeadCutBps,
+        advertiserCutBps: input.advertiserCutBps,
         status: "DRAFT",
         preparedById: input.preparedById,
         runTitle: input.runTitle,

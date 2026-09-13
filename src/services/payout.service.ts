@@ -11,10 +11,13 @@ import {
   type SettlementRecord,
 } from "@/repositories/payout.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { assertRaidLeadCutMode, calculateSettlementPool } from "@/services/payout-calculation";
+import {
+  CURRENT_SETTLEMENT_POLICY,
+  assertRaidLeadCutMode,
+  calculateSettlementPool,
+} from "@/services/payout-calculation";
 import {
   PAYOUT_ADJUSTMENT_REASON_MAX,
-  RAID_LEAD_CUT_SHARE_UNITS,
   assertShareUnits,
   assertTotalGold,
   defaultShareUnits,
@@ -36,9 +39,20 @@ function loadSnapshot(row: AttendanceRecord): PayoutEntryWrite {
     attendanceStatus: row.status,
     role: row.role,
     isBackup: row.isBackup,
-    shareUnits: defaultShareUnits(row.status),
+    shareUnits: defaultShareUnits({
+      participationType: row.participationType,
+      attendanceStatus: row.status,
+    }),
     amountGold: 0,
     adjustmentReason: null,
+  };
+}
+
+function policyFromSettlement(settlement: Pick<SettlementRecord, "boosterCutBps" | "raidLeadCutBps" | "advertiserCutBps">) {
+  return {
+    boosterCutBps: settlement.boosterCutBps,
+    raidLeadCutBps: settlement.raidLeadCutBps,
+    advertiserCutBps: settlement.advertiserCutBps,
   };
 }
 
@@ -46,8 +60,14 @@ function applySettlementAmounts(input: {
   totalGold: number;
   raidLeadCutMode: RaidLeadCutMode;
   entries: Array<{ attendanceId: string; shareUnits: number }>;
+  policy?: { boosterCutBps: number; raidLeadCutBps: number; advertiserCutBps: number };
 }) {
-  const settled = calculateSettlementPool(input);
+  const settled = calculateSettlementPool({
+    totalGold: input.totalGold,
+    raidLeadCutMode: input.raidLeadCutMode,
+    entries: input.entries,
+    policy: input.policy,
+  });
   const byAttendance = new Map(settled.attendancePayouts.map((row) => [row.attendanceId, row.amountGold]));
   return { settled, byAttendance };
 }
@@ -60,6 +80,7 @@ function summaryFrom(settlement: SettlementRecord, raidLeadUserId: string) {
       attendanceId: row.attendanceId,
       shareUnits: row.shareUnits,
     })),
+    policy: policyFromSettlement(settlement),
   });
   const totalShareUnits = settlement.entries.reduce((sum, row) => sum + row.shareUnits, 0);
   const recipientsWithShare = settlement.entries.filter((row) => row.shareUnits > 0).length;
@@ -71,12 +92,20 @@ function summaryFrom(settlement: SettlementRecord, raidLeadUserId: string) {
   return {
     totalGold: settlement.totalGold,
     raidLeadCutMode: settlement.raidLeadCutMode,
-    raidLeadCutShareUnits: settled.raidLeadCutShareUnits,
+    boosterCutBps: settled.boosterCutBps,
+    boosterBaseGold: settled.boosterBaseGold,
+    raidLeadCutBps: settled.raidLeadCutBps,
+    raidLeadCutGold: settled.raidLeadCutGold,
+    advertiserCutBps: settled.advertiserCutBps,
+    advertiserCutGold: settled.advertiserCutGold,
+    dawnCutBps: settled.dawnCutBps,
+    dawnCutGold: settled.dawnCutGold,
+    raidLeadSharedGold: settled.raidLeadSharedGold,
     dedicatedRaidLeadPayout: settled.dedicatedRaidLeadPayout,
+    distributableBoosterPool: settled.distributableBoosterPool,
     ordinaryRaidLeadPayout,
     raidLeadTotalPayout: ordinaryRaidLeadPayout + settled.dedicatedRaidLeadPayout,
     attendanceUnits: settled.attendanceUnits,
-    totalSettlementUnits: settled.totalSettlementUnits,
     totalShareUnits,
     recipientsWithShare,
     zeroShareParticipants: zeroShare,
@@ -227,6 +256,7 @@ export const payoutService = {
               attendanceId: row.attendanceId,
               shareUnits: row.shareUnits,
             })),
+            policy: policyFromSettlement(settlement),
           })
         : null;
     const ordinaryRaidLeadPayout =
@@ -269,7 +299,9 @@ export const payoutService = {
             status: settlement.status,
             totalGold: settlement.totalGold,
             raidLeadCutMode: settlement.raidLeadCutMode,
-            raidLeadCutShareUnits: RAID_LEAD_CUT_SHARE_UNITS,
+            boosterCutBps: settlement.boosterCutBps,
+            raidLeadCutBps: settlement.raidLeadCutBps,
+            advertiserCutBps: settlement.advertiserCutBps,
             raidLeadUserId: run.raidLeadId,
             runTitle: settlement.runTitle,
             raidName: settlement.raidName,
@@ -313,6 +345,7 @@ export const payoutService = {
       .map(loadSnapshot);
     const { byAttendance } = applySettlementAmounts({
       ...financial,
+      policy: CURRENT_SETTLEMENT_POLICY,
       entries: drafts.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
     });
     const entries = drafts.map((row) => ({
@@ -324,6 +357,9 @@ export const payoutService = {
       runId: run.id,
       totalGold: financial.totalGold,
       raidLeadCutMode: financial.raidLeadCutMode,
+      boosterCutBps: CURRENT_SETTLEMENT_POLICY.boosterCutBps,
+      raidLeadCutBps: CURRENT_SETTLEMENT_POLICY.raidLeadCutBps,
+      advertiserCutBps: CURRENT_SETTLEMENT_POLICY.advertiserCutBps,
       preparedById: user.id,
       runTitle: run.title,
       raidName: run.raidName,
@@ -401,6 +437,7 @@ export const payoutService = {
     });
     const { settled, byAttendance } = applySettlementAmounts({
       ...financial,
+      policy: policyFromSettlement(settlement),
       entries: settlement.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
     });
     const liveByAttendance = new Map(attendance.map((row) => [row.id, row]));
@@ -427,8 +464,14 @@ export const payoutService = {
       };
     });
     const distributed = entries.reduce((sum, row) => sum + row.amountGold, 0);
-    if (distributed + settled.dedicatedRaidLeadPayout !== financial.totalGold) {
-      throw new DomainError("PAYOUT_INVALID_TOTAL", "Calculated gold does not equal the settlement total.");
+    if (distributed + settled.dedicatedRaidLeadPayout !== settled.totalAllocatedGold) {
+      throw new DomainError("PAYOUT_INVALID_TOTAL", "Calculated gold does not match Booster Pool plus Raid Lead cut.");
+    }
+    if (
+      settled.boosterBaseGold + settled.raidLeadCutGold + settled.advertiserCutGold + settled.dawnCutGold !==
+      financial.totalGold
+    ) {
+      throw new DomainError("PAYOUT_INVALID_TOTAL", "Community buckets do not equal the gross pot.");
     }
     await payoutRepository.finalize({
       settlementId: settlement.id,
@@ -480,6 +523,7 @@ async function persistRecalculation(
 ) {
   const { byAttendance } = applySettlementAmounts({
     ...financial,
+    policy: policyFromSettlement(settlement),
     entries: entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
   });
   await payoutRepository.replaceDraftAmounts({

@@ -826,7 +826,7 @@ async function seed() {
       raidId: ids.raid,
       notes:
         run.id === ids.runs.settlementQa
-          ? "Settlement QA: multi-participant Prepare Payout fixture. No settlement seeded — use Prepare Payout with pot 6000000."
+          ? "Settlement QA: Dawn gross-pot Prepare Payout fixture (20 Boosters + Lootbuddy 0 Cut). No settlement seeded — Prepare with Gross Pot 5000000."
           : run.status === "DRAFT"
             ? "Not visible as an open signup run until published."
             : null,
@@ -1414,6 +1414,46 @@ async function seed() {
     });
   }
 
+  // Settlement QA: 16 extra SELECTED Boosters so named 4 + fillers 16 = 20 full Cuts.
+  // Prefer healers/DPS fillers so combined role minima stay at least 2/4/14.
+  const settlementQaFillerDefs = [
+    ...FILLER_BOOSTERS.filter((filler) => filler.role === "HEALER").slice(0, 3),
+    ...FILLER_BOOSTERS.filter((filler) => filler.role === "DPS").slice(0, 13),
+  ];
+  const settlementQaFillerSignups: Array<{
+    id: string;
+    runId: string;
+    userId: string;
+    characterId: string;
+    participationType: "BOOSTER";
+    role: FillerBoosterRole;
+    isBackup: boolean;
+    status: "SELECTED";
+  }> = [];
+  for (const [index, filler] of settlementQaFillerDefs.entries()) {
+    const n = String(index + 1).padStart(2, "0");
+    const row = {
+      id: `s9999996-f016-4016-8016-0000000000${n}`,
+      runId: ids.runs.settlementQa,
+      userId: filler.userId,
+      characterId: filler.characterId,
+      participationType: "BOOSTER" as const,
+      role: filler.role,
+      isBackup: false,
+      status: "SELECTED" as const,
+    };
+    settlementQaFillerSignups.push(row);
+    await orm.RunSignup.create({
+      ...row,
+      lootbuddyClass: null,
+      lootbuddyMode: null,
+      lootbuddyVerification: null,
+      notes: "Settlement QA filler Booster for 20×1.00 Cut math.",
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+
   // Pad every run to composition minima (2/4/14 BOOSTER) then MIN_SIGNUPS_PER_RUN.
   // BOOSTER fillers use the dedicated filler pool; LOOTBUDDY fillers pad remainder.
   // Never SELECTED / never on roster — keeps payout, attendance, and roster tests stable.
@@ -1426,7 +1466,10 @@ async function seed() {
   ];
 
   for (const run of runs) {
-    const runSignups = signups.filter((signup) => signup.runId === run.id);
+    const runSignups = [
+      ...signups.filter((signup) => signup.runId === run.id),
+      ...(run.id === ids.runs.settlementQa ? settlementQaFillerSignups : []),
+    ];
     const fillerStatus =
       run.status === "OPEN" || run.status === "DRAFT" || run.status === "ROSTERING" ? "PENDING" : "NOT_SELECTED";
 
@@ -1436,12 +1479,20 @@ async function seed() {
       roleCounts[signup.role] += 1;
     }
 
+    // Characters already offered as BOOSTER on this run (named + settlement QA fillers).
+    const usedCharacterIds = new Set(
+      runSignups
+        .filter((signup) => signup.participationType === "BOOSTER" && signup.characterId)
+        .map((signup) => signup.characterId as string),
+    );
+
     let created = 0;
     for (const { role, minimum } of roleMinimums) {
       let need = Math.max(0, minimum - roleCounts[role]);
       for (const filler of FILLER_BOOSTERS) {
         if (need <= 0) break;
         if (filler.role !== role) continue;
+        if (usedCharacterIds.has(filler.characterId)) continue;
         await orm.RunSignup.create({
           id: crypto.randomUUID(),
           runId: run.id,
@@ -1458,6 +1509,7 @@ async function seed() {
           createdAt: SEED_NOW,
           updatedAt: SEED_NOW,
         });
+        usedCharacterIds.add(filler.characterId);
         need -= 1;
         created += 1;
         roleCounts[role] += 1;
@@ -1611,6 +1663,7 @@ async function seed() {
   }
 
   // Settlement QA: COMPLETED + published roster + fully marked attendance, no settlement.
+  // 20 PRESENT Boosters (named + filler pool) + PRESENT Lootbuddy (0 Cut) + STANDBY Lootbuddy.
   await orm.RunRoster.create({
     id: ids.rosters.settlementQa,
     runId: ids.runs.settlementQa,
@@ -1627,7 +1680,7 @@ async function seed() {
       attendanceId: "a9999996-9996-4996-8996-999999999991",
       signupId: ids.signups.sqThorne,
       status: "PRESENT" as const,
-      note: null,
+      note: null as string | null,
     },
     {
       rosterEntryId: "e9999996-9996-4996-8996-999999999992",
@@ -1655,7 +1708,7 @@ async function seed() {
       attendanceId: "a9999996-9996-4996-8996-999999999995",
       signupId: ids.signups.sqMira,
       status: "PRESENT" as const,
-      note: "characterless PLAYING lootbuddy",
+      note: "characterless PLAYING lootbuddy — default 0 Cut",
     },
     {
       rosterEntryId: "e9999996-9996-4996-8996-999999999996",
@@ -1665,6 +1718,16 @@ async function seed() {
       note: "zero-share standby lootbuddy for payout QA",
     },
   ];
+  for (const [index, fillerSignup] of settlementQaFillerSignups.entries()) {
+    const n = String(index + 1).padStart(2, "0");
+    settlementQaMembers.push({
+      rosterEntryId: `e9999996-f016-4016-8016-0000000000${n}`,
+      attendanceId: `a9999996-f016-4016-8016-0000000000${n}`,
+      signupId: fillerSignup.id,
+      status: "PRESENT",
+      note: null,
+    });
+  }
   for (const member of settlementQaMembers) {
     await orm.RunRosterEntry.create({
       id: member.rosterEntryId,
@@ -1750,6 +1813,9 @@ async function seed() {
       runId: input.runId,
       totalGold: input.totalGold,
       raidLeadCutMode: "SHARE",
+      boosterCutBps: 6250,
+      raidLeadCutBps: 300,
+      advertiserCutBps: 3000,
       status: input.status,
       preparedById: ids.users.thorne,
       finalizedAt: input.status === "DRAFT" ? null : SEED_NOW,
@@ -1854,8 +1920,8 @@ async function seed() {
     status: "DRAFT",
     totalGold: 10000,
     members: [
-      { ...payoutMembers.kael, signupId: ids.signups.pdKael, rosterEntryId: "e9999993-9993-4993-8993-999999999991", attendanceId: "a9999993-9993-4993-8993-999999999991", payoutEntryId: "p9999993-9993-4993-8993-999999999991", shareUnits: 100, amountGold: 5000 },
-      { ...payoutMembers.mira, signupId: ids.signups.pdMira, rosterEntryId: "e9999993-9993-4993-8993-999999999992", attendanceId: "a9999993-9993-4993-8993-999999999992", payoutEntryId: "p9999993-9993-4993-8993-999999999992", shareUnits: 100, amountGold: 5000 },
+      { ...payoutMembers.kael, signupId: ids.signups.pdKael, rosterEntryId: "e9999993-9993-4993-8993-999999999991", attendanceId: "a9999993-9993-4993-8993-999999999991", payoutEntryId: "p9999993-9993-4993-8993-999999999991", shareUnits: 100, amountGold: 6550 },
+      { ...payoutMembers.mira, signupId: ids.signups.pdMira, rosterEntryId: "e9999993-9993-4993-8993-999999999992", attendanceId: "a9999993-9993-4993-8993-999999999992", payoutEntryId: "p9999993-9993-4993-8993-999999999992", shareUnits: 0, amountGold: 0 },
       { ...payoutMembers.brann, signupId: ids.signups.pdBrann, rosterEntryId: "e9999993-9993-4993-8993-999999999993", attendanceId: "a9999993-9993-4993-8993-999999999993", payoutEntryId: "p9999993-9993-4993-8993-999999999993", shareUnits: 0, amountGold: 0 },
       { ...payoutMembers.sylva, signupId: ids.signups.pdSylva, rosterEntryId: "e9999993-9993-4993-8993-999999999994", attendanceId: "a9999993-9993-4993-8993-999999999994", payoutEntryId: "p9999993-9993-4993-8993-999999999994", shareUnits: 0, amountGold: 0 },
     ],
@@ -1869,9 +1935,9 @@ async function seed() {
     status: "FINALIZED",
     totalGold: 1001,
     members: [
-      { ...payoutMembers.kael, signupId: ids.signups.pfKael, rosterEntryId: "e9999994-9994-4994-8994-999999999991", attendanceId: "a9999994-0001-4000-8000-000000000001", payoutEntryId: "p9999994-9994-4994-8994-999999999991", shareUnits: 100, amountGold: 401 },
-      { ...payoutMembers.mira, signupId: ids.signups.pfMira, rosterEntryId: "e9999994-9994-4994-8994-999999999992", attendanceId: "a9999994-0001-4000-8000-000000000002", payoutEntryId: "p9999994-9994-4994-8994-999999999992", shareUnits: 100, amountGold: 400 },
-      { ...payoutMembers.brann, signupId: ids.signups.pfBrann, rosterEntryId: "e9999994-9994-4994-8994-999999999993", attendanceId: "a9999994-0001-4000-8000-000000000003", payoutEntryId: "p9999994-9994-4994-8994-999999999993", shareUnits: 50, amountGold: 200, attendanceStatus: "NO_SHOW", adjustmentReason: "manager half share" },
+      { ...payoutMembers.kael, signupId: ids.signups.pfKael, rosterEntryId: "e9999994-9994-4994-8994-999999999991", attendanceId: "a9999994-0001-4000-8000-000000000001", payoutEntryId: "p9999994-9994-4994-8994-999999999991", shareUnits: 100, amountGold: 437 },
+      { ...payoutMembers.mira, signupId: ids.signups.pfMira, rosterEntryId: "e9999994-9994-4994-8994-999999999992", attendanceId: "a9999994-0001-4000-8000-000000000002", payoutEntryId: "p9999994-9994-4994-8994-999999999992", shareUnits: 0, amountGold: 0 },
+      { ...payoutMembers.brann, signupId: ids.signups.pfBrann, rosterEntryId: "e9999994-9994-4994-8994-999999999993", attendanceId: "a9999994-0001-4000-8000-000000000003", payoutEntryId: "p9999994-9994-4994-8994-999999999993", shareUnits: 50, amountGold: 218, attendanceStatus: "NO_SHOW", adjustmentReason: "manager half share" },
       { ...payoutMembers.sylva, signupId: ids.signups.pfSylva, rosterEntryId: "e9999994-9994-4994-8994-999999999994", attendanceId: "a9999994-0001-4000-8000-000000000004", payoutEntryId: "p9999994-9994-4994-8994-999999999994", shareUnits: 0, amountGold: 0 },
     ],
   });
@@ -1884,8 +1950,8 @@ async function seed() {
     status: "PAID",
     totalGold: 9000,
     members: [
-      { ...payoutMembers.kael, signupId: ids.signups.ppKael, rosterEntryId: "e9999995-9995-4995-8995-999999999991", attendanceId: "a9999995-9995-4995-8995-999999999991", payoutEntryId: "p9999995-9995-4995-8995-999999999991", shareUnits: 100, amountGold: 4500 },
-      { ...payoutMembers.mira, signupId: ids.signups.ppMira, rosterEntryId: "e9999995-9995-4995-8995-999999999992", attendanceId: "a9999995-9995-4995-8995-999999999992", payoutEntryId: "p9999995-9995-4995-8995-999999999992", shareUnits: 100, amountGold: 4500 },
+      { ...payoutMembers.kael, signupId: ids.signups.ppKael, rosterEntryId: "e9999995-9995-4995-8995-999999999991", attendanceId: "a9999995-9995-4995-8995-999999999991", payoutEntryId: "p9999995-9995-4995-8995-999999999991", shareUnits: 100, amountGold: 5895 },
+      { ...payoutMembers.mira, signupId: ids.signups.ppMira, rosterEntryId: "e9999995-9995-4995-8995-999999999992", attendanceId: "a9999995-9995-4995-8995-999999999992", payoutEntryId: "p9999995-9995-4995-8995-999999999992", shareUnits: 0, amountGold: 0 },
       { ...payoutMembers.brann, signupId: ids.signups.ppBrann, rosterEntryId: "e9999995-9995-4995-8995-999999999993", attendanceId: "a9999995-9995-4995-8995-999999999993", payoutEntryId: "p9999995-9995-4995-8995-999999999993", shareUnits: 0, amountGold: 0 },
       { ...payoutMembers.sylva, signupId: ids.signups.ppSylva, rosterEntryId: "e9999995-9995-4995-8995-999999999994", attendanceId: "a9999995-9995-4995-8995-999999999994", payoutEntryId: "p9999995-9995-4995-8995-999999999994", shareUnits: 0, amountGold: 0 },
     ],
