@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  mergeWeekSectionItemsForOrdering,
   reconcileChannels,
   reconcileExistingRunChannel,
   reconcileWeekSectionPositions,
@@ -520,5 +521,150 @@ describe("reconcileWeekSectionPositions — missing/invalid configuration", () =
     expect(result.status).toBe("skipped");
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+});
+
+describe("mergeWeekSectionItemsForOrdering — same-pass first-channel create", () => {
+  it("live bug regression: brand-new CURRENT channel is ordered between markers without a second poll", async () => {
+    // Initial category: only markers. Sync provisions mon-0200 CURRENT below
+    // #next-id (Discord default). End-of-pass merge must place it correctly.
+    const children = [
+      child(CURRENT_MARKER, 0),
+      child(NEXT_MARKER, 10),
+      child("chan-mon-0200", 20), // default placement after create
+    ];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const items = mergeWeekSectionItemsForOrdering(
+      [],
+      [
+        weekItem({
+          runId: "run-mon-0200",
+          existingRunChannelId: "chan-mon-0200",
+          targetBucket: "CURRENT",
+          // Monday 14 Sep 2026 02:00 Europe/Berlin = 2026-09-14T00:00:00.000Z
+          scheduledStartAt: "2026-09-14T00:00:00.000Z",
+        }),
+      ],
+    );
+
+    await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, items);
+
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, "chan-mon-0200", NEXT_MARKER]);
+  });
+
+  it("brand-new NEXT channel ends below #next-id in the same pass", async () => {
+    const children = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 10), child("chan-next", 5)];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const items = mergeWeekSectionItemsForOrdering(
+      [],
+      [weekItem({ runId: "run-next", existingRunChannelId: "chan-next", targetBucket: "NEXT" })],
+    );
+
+    await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, items);
+    expect(orderedChannelIds(setPositions)).toEqual([CURRENT_MARKER, NEXT_MARKER, "chan-next"]);
+  });
+
+  it("existing CURRENT + newly provisioned CURRENT insert chronologically before #next-id", async () => {
+    const children = [
+      child(CURRENT_MARKER, 0),
+      child("chan-mon", 1),
+      child(NEXT_MARKER, 10),
+      child("chan-thu", 11),
+      child("chan-tue", 20), // new Tuesday CURRENT, defaulted below next
+    ];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const items = mergeWeekSectionItemsForOrdering(
+      [
+        weekItem({
+          runId: "run-mon",
+          existingRunChannelId: "chan-mon",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-14T00:00:00.000Z",
+        }),
+        weekItem({
+          runId: "run-thu",
+          existingRunChannelId: "chan-thu",
+          targetBucket: "NEXT",
+          scheduledStartAt: "2026-09-17T18:00:00.000Z",
+        }),
+      ],
+      [
+        weekItem({
+          runId: "run-tue",
+          existingRunChannelId: "chan-tue",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-15T18:00:00.000Z",
+        }),
+      ],
+    );
+
+    await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, items);
+    expect(orderedChannelIds(setPositions)).toEqual([
+      CURRENT_MARKER,
+      "chan-mon",
+      "chan-tue",
+      NEXT_MARKER,
+      "chan-thu",
+    ]);
+  });
+
+  it("multiple new channels sort by schedule, not creation/merge order", async () => {
+    const children = [
+      child(CURRENT_MARKER, 0),
+      child(NEXT_MARKER, 10),
+      child("chan-tue", 20),
+      child("chan-mon", 21),
+      child("chan-wed", 22),
+      child("chan-thu", 23),
+    ];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    // Intentionally non-chronological merge/create order.
+    const items = mergeWeekSectionItemsForOrdering(
+      [],
+      [
+        weekItem({
+          runId: "run-wed",
+          existingRunChannelId: "chan-wed",
+          targetBucket: "NEXT",
+          scheduledStartAt: "2026-09-16T18:00:00.000Z",
+        }),
+        weekItem({
+          runId: "run-tue",
+          existingRunChannelId: "chan-tue",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-15T18:00:00.000Z",
+        }),
+        weekItem({
+          runId: "run-thu",
+          existingRunChannelId: "chan-thu",
+          targetBucket: "NEXT",
+          scheduledStartAt: "2026-09-17T17:00:00.000Z",
+        }),
+        weekItem({
+          runId: "run-mon",
+          existingRunChannelId: "chan-mon",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-14T00:00:00.000Z",
+        }),
+      ],
+    );
+
+    await reconcileWeekSectionPositions(listerFor(children), setPositions, weekEnv, items);
+    expect(orderedChannelIds(setPositions)).toEqual([
+      CURRENT_MARKER,
+      "chan-mon",
+      "chan-tue",
+      NEXT_MARKER,
+      "chan-wed",
+      "chan-thu",
+    ]);
+  });
+
+  it("later provisioned item for the same runId replaces a stale existing channel id", () => {
+    const merged = mergeWeekSectionItemsForOrdering(
+      [weekItem({ runId: "run-1", existingRunChannelId: "chan-dead" })],
+      [weekItem({ runId: "run-1", existingRunChannelId: "chan-fresh" })],
+    );
+    expect(merged).toEqual([weekItem({ runId: "run-1", existingRunChannelId: "chan-fresh" })]);
   });
 });

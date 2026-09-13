@@ -4,12 +4,14 @@ import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import {
+  mergeWeekSectionItemsForOrdering,
   reconcileChannels,
   reconcileWeekSectionPositions,
   type CategoryChannelLister,
   type ChannelFetcher,
   type PositionSetter,
   type ReconcilableChannel,
+  type WeekSectionItem,
 } from "@/discord-bot/channel-reconciliation";
 import type { RosterEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 
@@ -19,6 +21,13 @@ type ChannelWorkItem = {
   existingRunChannelId: string | null;
   desiredChannelName: string;
   targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+  scheduledStartAt?: string;
+};
+
+type ResolvedRunChannel = {
+  channelId: string;
+  /** True only when this sync pass created the channel under the active category. */
+  created: boolean;
 };
 
 /**
@@ -70,7 +79,8 @@ function makeChannelFetcher(client: Client): ChannelFetcher {
 /**
  * Lists the current children of a category by their live `position`, for
  * `reconcileWeekSectionPositions`. Prefers the cache (populated by the
- * gateway's own channel-create/update/delete events) over a REST call.
+ * gateway's own channel-create/update/delete events, and by channels this
+ * process just created via `guild.channels.create`) over a REST call.
  */
 function makeCategoryChannelLister(client: Client): CategoryChannelLister {
   return async (categoryId) => {
@@ -107,9 +117,32 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
     work.channels,
   );
 
-  // Independently, order CURRENT/NEXT channels within that one shared
-  // category around the two marker channels — a separate concern from which
-  // category a channel's parent is (handled above).
+  // CURRENT/NEXT section ordering runs ONCE at the end of the pass so it can
+  // include channels provisioned by the signup path below. Running it before
+  // first-channel create left brand-new CURRENT channels below #next-id until
+  // the next poll — the live bug this orchestration fixes. Later polls still
+  // self-heal drift via the same reconciler over work.channels.
+  const newlyProvisionedSections: WeekSectionItem[] = [];
+
+  for (const item of work.signups) {
+    if (!item.embed) continue;
+    const createdSection = await syncSignupPost(
+      client,
+      env,
+      api,
+      item,
+      item.embed as SignupEmbedData,
+      resolvedChannels,
+    );
+    if (createdSection) newlyProvisionedSections.push(createdSection);
+  }
+
+  for (const item of work.roster) {
+    const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
+    if (!data) continue;
+    await syncRosterPost(client, env, api, item, data, resolvedChannels);
+  }
+
   await reconcileWeekSectionPositions(
     makeCategoryChannelLister(client),
     makePositionSetter(client, env.discordGuildId),
@@ -118,19 +151,8 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
       discordRunCurrentMarkerChannelId: env.discordRunCurrentMarkerChannelId,
       discordRunNextMarkerChannelId: env.discordRunNextMarkerChannelId,
     },
-    work.channels,
+    mergeWeekSectionItemsForOrdering(work.channels, newlyProvisionedSections),
   );
-
-  for (const item of work.signups) {
-    if (!item.embed) continue;
-    await syncSignupPost(client, env, api, item, item.embed as SignupEmbedData, resolvedChannels);
-  }
-
-  for (const item of work.roster) {
-    const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
-    if (!data) continue;
-    await syncRosterPost(client, env, api, item, data, resolvedChannels);
-  }
 }
 
 /**
@@ -174,14 +196,14 @@ async function resolveRunChannel(
   legacyFallbackChannelId: string | null,
   allowCreate: boolean,
   resolvedChannels: Map<string, string>,
-): Promise<string | null> {
+): Promise<ResolvedRunChannel | null> {
   if (!env.discordRunCategoryId) {
-    return legacyFallbackChannelId;
+    return legacyFallbackChannelId ? { channelId: legacyFallbackChannelId, created: false } : null;
   }
 
   if (item.existingRunChannelId) {
     const reconciled = resolvedChannels.get(item.runId);
-    if (reconciled) return reconciled;
+    if (reconciled) return { channelId: reconciled, created: false };
 
     // Not reconciled this pass — defensive only; every Run with a persisted
     // runChannelId is always included in work.channels, so this should
@@ -190,7 +212,7 @@ async function resolveRunChannel(
     // repeated here, so the same channel is never renamed/moved twice in
     // one pass.
     const existing = await client.channels.fetch(item.existingRunChannelId).catch(() => null);
-    if (existing) return item.existingRunChannelId;
+    if (existing) return { channelId: item.existingRunChannelId, created: false };
     // Stored channel id no longer resolves (deleted in Discord) — fall through.
   }
 
@@ -217,19 +239,20 @@ async function resolveRunChannel(
     parent: category.id,
   });
   await api.recordDiscordState(item.runId, { kind: "channel", channelId: created.id });
-  return created.id;
+  return { channelId: created.id, created: true };
 }
 
 async function syncSignupPost(
   client: Client,
   env: BotEnv,
   api: BotApiClient,
-  item: ChannelWorkItem & { existingMessageId: string | null },
+  item: ChannelWorkItem & { existingMessageId: string | null; scheduledStartAt: string },
   data: SignupEmbedData,
   resolvedChannels: Map<string, string>,
-): Promise<void> {
-  const channelId = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
-  if (!channelId) return;
+): Promise<WeekSectionItem | null> {
+  const resolved = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
+  if (!resolved) return null;
+  const { channelId, created } = resolved;
 
   const embed = buildSignupEmbed(data);
   const row = buildSignupButtons(data);
@@ -241,15 +264,33 @@ async function syncSignupPost(
     });
     if (edited) {
       await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: item.existingMessageId });
-      return;
+      return createdSectionItem(item, channelId, created);
     }
     // The stored message is gone (deleted in Discord) — fall through and repost.
   }
 
   const channel = await client.channels.fetch(channelId);
-  if (!channel?.isTextBased() || !("send" in channel)) return;
+  if (!channel?.isTextBased() || !("send" in channel)) {
+    return createdSectionItem(item, channelId, created);
+  }
   const message = await channel.send({ embeds: [embed], components: [row] });
   await api.recordDiscordState(data.runId, { kind: "signup", channelId: message.channelId, messageId: message.id });
+  return createdSectionItem(item, channelId, created);
+}
+
+function createdSectionItem(
+  item: ChannelWorkItem & { scheduledStartAt: string },
+  channelId: string,
+  created: boolean,
+): WeekSectionItem | null {
+  if (!created) return null;
+  if (item.targetBucket !== "CURRENT" && item.targetBucket !== "NEXT") return null;
+  return {
+    runId: item.runId,
+    existingRunChannelId: channelId,
+    targetBucket: item.targetBucket,
+    scheduledStartAt: item.scheduledStartAt,
+  };
 }
 
 async function syncRosterPost(
@@ -260,8 +301,9 @@ async function syncRosterPost(
   data: RosterEmbedData,
   resolvedChannels: Map<string, string>,
 ): Promise<void> {
-  const channelId = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
-  if (!channelId) return;
+  const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
+  if (!resolved) return;
+  const { channelId } = resolved;
 
   const embed = buildRosterEmbed(data);
 

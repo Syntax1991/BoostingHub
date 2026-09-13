@@ -189,6 +189,27 @@ function sortByScheduleThenRunId(items: WeekSectionItem[]): WeekSectionItem[] {
 }
 
 /**
+ * Builds the authoritative CURRENT/NEXT ordering input for one sync pass:
+ * every pre-existing `channels` lane item plus any Run channels provisioned
+ * during this same pass. Later items for the same `runId` win (a same-pass
+ * recreate after a dead stored id) so the reconciler never tries to place a
+ * channel that is no longer in the category.
+ */
+export function mergeWeekSectionItemsForOrdering(
+  existing: ReadonlyArray<WeekSectionItem>,
+  newlyProvisioned: ReadonlyArray<WeekSectionItem>,
+): WeekSectionItem[] {
+  const byRunId = new Map<string, WeekSectionItem>();
+  for (const item of existing) {
+    byRunId.set(item.runId, item);
+  }
+  for (const item of newlyProvisioned) {
+    byRunId.set(item.runId, item);
+  }
+  return [...byRunId.values()];
+}
+
+/**
  * Orders CURRENT/NEXT Run channels within the ONE active category around the
  * two manually-managed marker channels, so the category reads (top to
  * bottom): `[unrelated channels above #current-id]`, `#current-id`, CURRENT
