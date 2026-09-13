@@ -122,6 +122,8 @@ export type SignupSyncWorkItem = {
   desiredChannelName: string;
   /** Where the Run's channel, if any, belongs — CURRENT, NEXT, or ARCHIVE. */
   targetBucket: DiscordRunChannelTarget;
+  /** Carried so a same-pass first-channel create can join CURRENT/NEXT position reconciliation without re-classifying the week. */
+  scheduledStartAt: string;
 };
 export type RosterSyncWorkItem = {
   runId: string;
@@ -307,6 +309,7 @@ export const discordSyncService = {
             existingRunChannelId: post?.runChannelId ?? null,
             desiredChannelName: desiredChannelNameFor(run),
             targetBucket,
+            scheduledStartAt: run.scheduledStartAt,
           });
         }
       }
