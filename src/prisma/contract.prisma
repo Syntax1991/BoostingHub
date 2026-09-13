@@ -613,15 +613,14 @@ model RunRosterEntry {
 /// One gold settlement per completed Run. Amounts are whole WoW gold integers.
 /// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
 /// totalGold is the single settlement pot: mutable while DRAFT, frozen as the final pot
-/// at FINALIZED. raidLeadCutGold is the declared cut for both KEEP and SHARE; only KEEP
-/// deducts it from the attendance pool.
+/// at FINALIZED. raidLeadCutMode selects KEEP (one auto-calculated extra full share) or
+/// SHARE (no extra Raid Lead share). The dedicated KEEP cut is derived, not stored.
 model RunSettlement {
   id               String           @id @default(uuid())
   runId            String           @unique
   run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
   totalGold        Int
   raidLeadCutMode  RaidLeadCutMode  @default(SHARE)
-  raidLeadCutGold  Int              @default(0)
   status           SettlementStatus @default(DRAFT)
   preparedById     String
   preparedBy       User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)

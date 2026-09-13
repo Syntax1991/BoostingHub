@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'a5043345f94882f8cb6ffb202ae27eb00028779df830e131572a63d632abac8b'>;
+  StorageHashBase<'9d7de262ce89e4758b1c93ed1c10ea84eae34d6151ed45a79c920f28ac13a7f1'>;
 export type ExecutionHash =
   ExecutionHashBase<'3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b'>;
 export type ProfileHash =
@@ -478,7 +478,6 @@ export type FieldOutputTypes = {
       readonly runId: CodecTypes['pg/text@1']['output'];
       readonly totalGold: CodecTypes['pg/int4@1']['output'];
       readonly raidLeadCutMode: 'KEEP' | 'SHARE';
-      readonly raidLeadCutGold: CodecTypes['pg/int4@1']['output'];
       readonly status: 'DRAFT' | 'FINALIZED' | 'PAID';
       readonly preparedById: CodecTypes['pg/text@1']['output'];
       readonly finalizedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -826,7 +825,6 @@ export type FieldInputTypes = {
       readonly runId: CodecTypes['pg/text@1']['input'];
       readonly totalGold: CodecTypes['pg/int4@1']['input'];
       readonly raidLeadCutMode: 'KEEP' | 'SHARE';
-      readonly raidLeadCutGold: CodecTypes['pg/int4@1']['input'];
       readonly status: 'DRAFT' | 'FINALIZED' | 'PAID';
       readonly preparedById: CodecTypes['pg/text@1']['input'];
       readonly finalizedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -1178,7 +1176,6 @@ export type StorageColumnTypes = {
       readonly paidAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly paidById: CodecTypes['pg/text@1']['output'] | null;
       readonly preparedById: CodecTypes['pg/text@1']['output'];
-      readonly raidLeadCutGold: CodecTypes['pg/int4@1']['output'];
       readonly raidLeadCutMode: 'KEEP' | 'SHARE';
       readonly raidLeadName: CodecTypes['pg/text@1']['output'];
       readonly raidName: CodecTypes['pg/text@1']['output'];
@@ -1526,7 +1523,6 @@ export type StorageColumnInputTypes = {
       readonly paidAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly paidById: CodecTypes['pg/text@1']['input'] | null;
       readonly preparedById: CodecTypes['pg/text@1']['input'];
-      readonly raidLeadCutGold: CodecTypes['pg/int4@1']['input'];
       readonly raidLeadCutMode: 'KEEP' | 'SHARE';
       readonly raidLeadName: CodecTypes['pg/text@1']['input'];
       readonly raidName: CodecTypes['pg/text@1']['input'];
@@ -3369,15 +3365,6 @@ type ContractBase = Omit<
                   readonly default: {
                     readonly kind: 'literal';
                     readonly value: DefaultLiteralValue<'pg/text@1', 'SHARE'>;
-                  };
-                };
-                readonly raidLeadCutGold: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 0>;
                   };
                 };
                 readonly status: {
@@ -6053,10 +6040,6 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly raidLeadCutGold: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
               readonly status: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -6171,7 +6154,6 @@ type ContractBase = Omit<
                 readonly runId: { readonly column: 'runId' };
                 readonly totalGold: { readonly column: 'totalGold' };
                 readonly raidLeadCutMode: { readonly column: 'raidLeadCutMode' };
-                readonly raidLeadCutGold: { readonly column: 'raidLeadCutGold' };
                 readonly status: { readonly column: 'status' };
                 readonly preparedById: { readonly column: 'preparedById' };
                 readonly finalizedAt: { readonly column: 'finalizedAt' };

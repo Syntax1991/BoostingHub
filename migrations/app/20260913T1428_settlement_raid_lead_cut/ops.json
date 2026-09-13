@@ -1,47 +1,5 @@
 [
   {
-    "id": "column.public.run_settlement.raidLeadCutGold",
-    "label": "Add column \"raidLeadCutGold\" to \"run_settlement\"",
-    "operationClass": "additive",
-    "target": {
-      "id": "postgres",
-      "details": {
-        "schema": "public",
-        "objectType": "column",
-        "name": "raidLeadCutGold",
-        "table": "run_settlement"
-      }
-    },
-    "precheck": [
-      {
-        "description": "ensure column \"raidLeadCutGold\" is missing",
-        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
-        "params": [
-          "public",
-          "run_settlement",
-          "raidLeadCutGold"
-        ]
-      }
-    ],
-    "execute": [
-      {
-        "description": "add column \"raidLeadCutGold\"",
-        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD COLUMN \"raidLeadCutGold\" int4 DEFAULT 0 NOT NULL"
-      }
-    ],
-    "postcheck": [
-      {
-        "description": "verify column \"raidLeadCutGold\" exists",
-        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
-        "params": [
-          "public",
-          "run_settlement",
-          "raidLeadCutGold"
-        ]
-      }
-    ]
-  },
-  {
     "id": "column.public.run_settlement.raidLeadCutMode",
     "label": "Add column \"raidLeadCutMode\" to \"run_settlement\"",
     "operationClass": "additive",

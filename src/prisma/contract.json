@@ -3316,13 +3316,6 @@
                   "kind": "scalar"
                 }
               },
-              "raidLeadCutGold": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
               "raidLeadCutMode": {
                 "nullable": false,
                 "type": {
@@ -3494,9 +3487,6 @@
                 },
                 "preparedById": {
                   "column": "preparedById"
-                },
-                "raidLeadCutGold": {
-                  "column": "raidLeadCutGold"
                 },
                 "raidLeadCutMode": {
                   "column": "raidLeadCutMode"
@@ -7363,15 +7353,6 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "raidLeadCutGold": {
-                  "codecId": "pg/int4@1",
-                  "default": {
-                    "kind": "literal",
-                    "value": 0
-                  },
-                  "nativeType": "int4",
-                  "nullable": false
-                },
                 "raidLeadCutMode": {
                   "codecId": "pg/text@1",
                   "default": {
@@ -8649,7 +8630,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "a5043345f94882f8cb6ffb202ae27eb00028779df830e131572a63d632abac8b"
+    "storageHash": "9d7de262ce89e4758b1c93ed1c10ea84eae34d6151ed45a79c920f28ac13a7f1"
   },
   "execution": {
     "executionHash": "3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b",

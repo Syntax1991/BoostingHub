@@ -49,7 +49,6 @@ export type SettlementRecord = {
   runId: string;
   totalGold: number;
   raidLeadCutMode: RaidLeadCutMode;
-  raidLeadCutGold: number;
   status: SettlementStatus;
   preparedById: string;
   finalizedAt: string | null;
@@ -99,7 +98,6 @@ function mapSettlement(row: Record<string, unknown>): SettlementRecord {
     runId: asString(row.runId),
     totalGold: asNumber(row.totalGold),
     raidLeadCutMode: mapRaidLeadCutMode(row.raidLeadCutMode),
-    raidLeadCutGold: asNumber(row.raidLeadCutGold),
     status: mapSettlementStatus(row.status),
     preparedById: asString(row.preparedById),
     finalizedAt: asStringOrNull(row.finalizedAt),
@@ -140,7 +138,6 @@ export const payoutRepository = {
     runId: string;
     totalGold: number;
     raidLeadCutMode: RaidLeadCutMode;
-    raidLeadCutGold: number;
     preparedById: string;
     runTitle: string;
     raidName: string;
@@ -161,7 +158,6 @@ export const payoutRepository = {
         runId: input.runId,
         totalGold: input.totalGold,
         raidLeadCutMode: input.raidLeadCutMode,
-        raidLeadCutGold: input.raidLeadCutGold,
         status: "DRAFT",
         preparedById: input.preparedById,
         runTitle: input.runTitle,
@@ -207,7 +203,6 @@ export const payoutRepository = {
     settlementId: string;
     totalGold: number;
     raidLeadCutMode: RaidLeadCutMode;
-    raidLeadCutGold: number;
     entries: Array<{ id: string; shareUnits: number; amountGold: number; adjustmentReason?: string | null }>;
   }) {
     const now = new Date().toISOString();
@@ -220,7 +215,6 @@ export const payoutRepository = {
       await txOrm.RunSettlement.where({ id: input.settlementId }).update({
         totalGold: input.totalGold,
         raidLeadCutMode: input.raidLeadCutMode,
-        raidLeadCutGold: input.raidLeadCutGold,
         updatedAt: now,
       });
       for (const entry of input.entries) {
@@ -239,7 +233,6 @@ export const payoutRepository = {
     finalizedById: string;
     totalGold: number;
     raidLeadCutMode: RaidLeadCutMode;
-    raidLeadCutGold: number;
     runTitle: string;
     raidName: string;
     difficulty: RaidDifficulty;
@@ -270,7 +263,6 @@ export const payoutRepository = {
         status: "FINALIZED",
         totalGold: input.totalGold,
         raidLeadCutMode: input.raidLeadCutMode,
-        raidLeadCutGold: input.raidLeadCutGold,
         runTitle: input.runTitle,
         raidName: input.raidName,
         difficulty: input.difficulty,
