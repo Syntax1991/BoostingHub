@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { runService } from "@/services/run.service";
-import { runIdSchema, updateRunSchema } from "@/validators/run";
+import { runIdSchema, startRunSchema, updateRunSchema } from "@/validators/run";
 import { createManyRunsSchema } from "@/validators/mass-create-runs";
 
 function revalidateRunSurfaces(runId?: string) {
@@ -101,8 +101,8 @@ export async function cancelRunAction(input: unknown): Promise<ActionResult> {
 export async function startRunAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const parsed = runIdSchema.parse(input);
-    await runService.startRun(user, parsed.runId);
+    const parsed = startRunSchema.parse(input);
+    await runService.startRun(user, parsed);
     revalidateRunSurfaces(parsed.runId);
     return { ok: true, message: "Run started. Attendance is ready to mark." };
   } catch (error) {

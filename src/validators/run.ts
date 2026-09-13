@@ -60,5 +60,16 @@ export const runIdSchema = z.object({
   runId: entityIdSchema,
 });
 
+const goldCollectorIdentitySchema = z.object({
+  name: z.string().min(1, "Character name is required."),
+  realm: z.string().min(1, "Realm is required."),
+});
+
+export const startRunSchema = z.object({
+  runId: entityIdSchema,
+  goldCollectors: z.tuple([goldCollectorIdentitySchema, goldCollectorIdentitySchema]),
+});
+
 export type CreateRunInput = z.infer<typeof createRunSchema>;
 export type UpdateRunInput = z.infer<typeof updateRunSchema>;
+export type StartRunInput = z.infer<typeof startRunSchema>;

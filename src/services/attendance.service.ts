@@ -90,8 +90,17 @@ export const attendanceService = {
     return signups.filter((signup) => signup.status === "SELECTED").map((signup) => signup.id);
   },
 
-  async snapshotSelectedRoster(runId: string) {
-    await attendanceRepository.startRunWithAttendance(runId);
+  async snapshotSelectedRoster(
+    runId: string,
+    input: {
+      startedById: string;
+      goldCollector1Name: string;
+      goldCollector1Realm: string;
+      goldCollector2Name: string;
+      goldCollector2Realm: string;
+    },
+  ) {
+    await attendanceRepository.startRunWithAttendance(runId, input);
   },
 
   async completeIfFullyMarked(runId: string) {

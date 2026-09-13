@@ -141,12 +141,25 @@ export const attendanceRepository = {
     return unmarked.length;
   },
 
-  async startRunWithAttendance(runId: string) {
+  async startRunWithAttendance(
+    runId: string,
+    input: {
+      startedById: string;
+      goldCollector1Name: string;
+      goldCollector1Realm: string;
+      goldCollector2Name: string;
+      goldCollector2Realm: string;
+    },
+  ) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
       const run = await txOrm.Run.where({ id: runId }).first();
       if (!run || asString((run as Record<string, unknown>).status) !== "PUBLISHED") {
         throw new DomainError("RUN_NOT_PUBLISHED", "Only a published run can be started.");
+      }
+      const existingSnapshot = await txOrm.RunStartSnapshot.where({ runId }).first();
+      if (existingSnapshot) {
+        throw new DomainError("RUN_ALREADY_STARTED", "This run has already started.");
       }
       const roster = await txOrm.RunRoster.where({ runId }).first();
       const rosterRow = roster as Record<string, unknown> | undefined;
@@ -171,8 +184,8 @@ export const attendanceRepository = {
       const rosterId = asString(rosterRow.id);
       for (const signup of selected) {
         const signupId = asString((signup as Record<string, unknown>).id);
-        const existing = await txOrm.RunRosterEntry.where({ rosterId, signupId }).first();
-        let rosterEntryId = existing ? asString((existing as Record<string, unknown>).id) : "";
+        const existingEntry = await txOrm.RunRosterEntry.where({ rosterId, signupId }).first();
+        let rosterEntryId = existingEntry ? asString((existingEntry as Record<string, unknown>).id) : "";
         if (!rosterEntryId) {
           rosterEntryId = crypto.randomUUID();
           await txOrm.RunRosterEntry.create({
@@ -193,6 +206,18 @@ export const attendanceRepository = {
           updatedAt: now,
         });
       }
+      await txOrm.RunStartSnapshot.create({
+        id: crypto.randomUUID(),
+        runId,
+        goldCollector1Name: input.goldCollector1Name,
+        goldCollector1Realm: input.goldCollector1Realm,
+        goldCollector2Name: input.goldCollector2Name,
+        goldCollector2Realm: input.goldCollector2Realm,
+        startedAt: now,
+        startedById: input.startedById,
+        createdAt: now,
+        updatedAt: now,
+      });
       await txOrm.Run.where({ id: runId }).update({
         status: "IN_PROGRESS",
         signupsOpen: false,

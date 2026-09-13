@@ -1,12 +1,27 @@
 import Link from "next/link";
-import { formatDate, formatTime } from "@/lib/datetime";
-import { Card, PageHeader } from "@/components/ui/primitives";
+import { formatDate, formatDateTime, formatTime } from "@/lib/datetime";
+import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
 import { RunDetailTabs } from "@/components/runs/run-detail-tabs";
 import { RunManagerActions } from "@/components/runs/run-manager-actions";
 import type { RunDetailTab } from "@/lib/run-routes";
 import type { RunDetailView as RunDetailData } from "@/services/run-detail.service";
+
+function startComposition(data: RunDetailData) {
+  const members = data.publishedRoster?.members ?? [];
+  const tanks = members.filter((member) => member.role === "TANK").length;
+  const healers = members.filter((member) => member.role === "HEALER").length;
+  const dps = members.filter((member) => member.role === "DPS").length;
+  const lootbuddies = members.filter((member) => member.participationType === "LOOTBUDDY").length;
+  return {
+    tanks,
+    healers,
+    dps,
+    lootbuddies,
+    total: members.length,
+  };
+}
 
 export function RunDetailView({
   data,
@@ -16,6 +31,7 @@ export function RunDetailView({
   initialTab: RunDetailTab;
 }) {
   const run = data.run;
+  const composition = startComposition(data);
   return (
     <div>
       <PageHeader
@@ -47,6 +63,7 @@ export function RunDetailView({
               capabilities={data.capabilities}
               editor={data.editor}
               unmarkedCount={data.attendance.manager?.summary.unmarked ?? 0}
+              startComposition={composition}
             />
         </div>
       ) : null}
@@ -64,6 +81,23 @@ export function RunDetailView({
           <span className="text-sm text-muted">{run.activeSignupCount} signed</span>
         </div>
       </Card>
+      {data.startSnapshot ? (
+        <Card className="mb-4">
+          <CardHeader title="Gold Collectors" description="Frozen when this Run started." />
+          <div className="space-y-1 px-4 py-3 text-sm">
+            <p>
+              Collector 1: {data.startSnapshot.goldCollector1Name}-{data.startSnapshot.goldCollector1Realm}
+            </p>
+            <p>
+              Collector 2: {data.startSnapshot.goldCollector2Name}-{data.startSnapshot.goldCollector2Realm}
+            </p>
+            <p className="text-xs text-muted">
+              Started {formatDateTime(data.startSnapshot.startedAt)}
+              {data.startSnapshot.startedByName ? ` · ${data.startSnapshot.startedByName}` : ""}
+            </p>
+          </div>
+        </Card>
+      ) : null}
       <RunDetailTabs data={data} initialTab={initialTab} />
     </div>
   );

@@ -18,11 +18,19 @@ export function RunManagerActions({
   capabilities,
   editor,
   unmarkedCount = 0,
+  startComposition,
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
   editor: RunDetailView["editor"];
   unmarkedCount?: number;
+  startComposition?: {
+    tanks: number;
+    healers: number;
+    dps: number;
+    lootbuddies: number;
+    total: number;
+  };
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +127,9 @@ export function RunManagerActions({
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
-      {startOpen ? <RunStartDialog runId={runId} onClose={() => setStartOpen(false)} /> : null}
+      {startOpen ? (
+        <RunStartDialog runId={runId} composition={startComposition} onClose={() => setStartOpen(false)} />
+      ) : null}
       {completeOpen ? (
         <RunCompleteDialog runId={runId} unmarkedCount={unmarkedCount} onClose={() => setCompleteOpen(false)} />
       ) : null}

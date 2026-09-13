@@ -10,6 +10,7 @@ import { attendanceService } from "@/services/attendance.service";
 import { payoutService } from "@/services/payout.service";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
+import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 
 /**
  * Options for the Edit Run raid selector: every currently-available raid,
@@ -109,6 +110,7 @@ export const runDetailService = {
     const ownAttendance = manage ? [] : await attendanceService.getOwnAttendance(user, runId);
     const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
     const payout = await payoutService.getPayoutView(user, runId);
+    const startSnapshot = manage ? await runStartSnapshotRepository.findByRunId(runId) : null;
 
     let editor: {
       hasSignupHistory: boolean;
@@ -161,6 +163,7 @@ export const runDetailService = {
       viewerSignups,
       publishedRoster,
       manager,
+      startSnapshot,
       attendance: {
         own: ownAttendance,
         manager: managerAttendance,

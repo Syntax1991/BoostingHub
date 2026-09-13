@@ -354,7 +354,7 @@ async function completedRun(statuses: Array<{
     );
   }
   await selectAndPublish(lead, runId, signupIds);
-  await runService.startRun(lead, runId);
+  await runService.startRun(lead, { runId: runId, goldCollectors: [{ name: "Duskgc", realm: "Draenor" }, { name: "Duskalli", realm: "Draenor" }] });
   const rows = await attendanceRepository.listByRunId(runId);
   const byCharacterId = Object.fromEntries(
     rows

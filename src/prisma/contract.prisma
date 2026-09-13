@@ -195,6 +195,7 @@ model User {
   strikes              Strike[]        @relation("StrikeSubject")
   createdStrikes       Strike[]        @relation("StrikeCreator")
   revokedStrikes       Strike[]        @relation("StrikeRevoker")
+  startedRunSnapshots  RunStartSnapshot[] @relation("RunStartStarter")
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
 
@@ -454,17 +455,38 @@ model Run {
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
 
-  signups     RunSignup[]
-  roster      RunRoster?
-  attendance  RunAttendance[]
-  settlement  RunSettlement?
-  strikes     Strike[]
-  discordPost RunDiscordPost?
+  signups       RunSignup[]
+  roster        RunRoster?
+  attendance    RunAttendance[]
+  startSnapshot RunStartSnapshot?
+  settlement    RunSettlement?
+  strikes       Strike[]
+  discordPost   RunDiscordPost?
 
   @@index([scheduledStartAt])
   @@index([status])
   @@index([archivedAt])
   @@map("run")
+}
+
+/// Immutable operational snapshot taken when a Run starts. Gold Collector
+/// identities are Name-Realm strings only — not Character FKs — so they do
+/// not need BoostingHub Users, booster qualifications, or roster membership.
+model RunStartSnapshot {
+  id                  String   @id @default(uuid())
+  runId               String   @unique
+  run                 Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  goldCollector1Name  String
+  goldCollector1Realm String
+  goldCollector2Name  String
+  goldCollector2Realm String
+  startedAt           TimestamptzString
+  startedById         String
+  startedBy           User     @relation("RunStartStarter", fields: [startedById], references: [id], onDelete: Restrict)
+  createdAt           TimestamptzString @default(now())
+  updatedAt           temporal.updatedAtString()
+
+  @@map("run_start_snapshot")
 }
 
 /// A reusable Run-planning preset, always owned by one specific Raid Lead
@@ -752,6 +774,10 @@ model RunDiscordPost {
   rosterPostedAt      TimestamptzString?
   /// RunRoster.version at last successful roster post, to detect republish.
   lastRosterVersion   Int?
+  /// Operational Run Start roster post (separate from signup + published roster).
+  startChannelId      String?
+  startMessageId      String?
+  startPostedAt       TimestamptzString?
   createdAt           TimestamptzString @default(now())
   updatedAt           temporal.updatedAtString()
 

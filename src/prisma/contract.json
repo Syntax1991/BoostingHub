@@ -76,6 +76,10 @@
       "model": "RunSignup",
       "namespace": "public"
     },
+    "run_start_snapshot": {
+      "model": "RunStartSnapshot",
+      "namespace": "public"
+    },
     "run_template": {
       "model": "RunTemplate",
       "namespace": "public"
@@ -2249,6 +2253,21 @@
                   "namespace": "public"
                 }
               },
+              "startSnapshot": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunStartSnapshot",
+                  "namespace": "public"
+                }
+              },
               "strikes": {
                 "cardinality": "1:N",
                 "on": {
@@ -2580,6 +2599,27 @@
                   "kind": "scalar"
                 }
               },
+              "startChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startPostedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
@@ -2642,6 +2682,15 @@
                 },
                 "signupPostedAt": {
                   "column": "signupPostedAt"
+                },
+                "startChannelId": {
+                  "column": "startChannelId"
+                },
+                "startMessageId": {
+                  "column": "startMessageId"
+                },
+                "startPostedAt": {
+                  "column": "startPostedAt"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -3810,6 +3859,148 @@
               "table": "run_signup"
             }
           },
+          "RunStartSnapshot": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "goldCollector1Name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "goldCollector1Realm": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "goldCollector2Name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "goldCollector2Realm": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "startedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "startedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "goldCollector1Name": {
+                  "column": "goldCollector1Name"
+                },
+                "goldCollector1Realm": {
+                  "column": "goldCollector1Realm"
+                },
+                "goldCollector2Name": {
+                  "column": "goldCollector2Name"
+                },
+                "goldCollector2Realm": {
+                  "column": "goldCollector2Realm"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "startedAt": {
+                  "column": "startedAt"
+                },
+                "startedById": {
+                  "column": "startedById"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_start_snapshot"
+            }
+          },
           "RunTemplate": {
             "fields": {
               "createdAt": {
@@ -4809,6 +5000,21 @@
                 },
                 "to": {
                   "model": "RunSignup",
+                  "namespace": "public"
+                }
+              },
+              "startedRunSnapshots": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "startedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunStartSnapshot",
                   "namespace": "public"
                 }
               },
@@ -6727,6 +6933,21 @@
                   "nativeType": "timestamptz",
                   "nullable": true
                 },
+                "startChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "startMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "startPostedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -7832,6 +8053,122 @@
                 }
               ]
             },
+            "run_start_snapshot": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "goldCollector1Name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "goldCollector1Realm": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "goldCollector2Name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "goldCollector2Realm": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "startedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_start_snapshot"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "startedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_start_snapshot"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "startedById"
+                  ],
+                  "name": "run_start_snapshot_startedById_idx_a8358300",
+                  "prefix": "run_start_snapshot_startedById_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId"
+                  ]
+                }
+              ]
+            },
             "run_template": {
               "checks": [
                 {
@@ -8687,10 +9024,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "446fdbf8b590ea5c4a84fedce42c3f52fa2c1ca2cb50b57bd567d4adccb8f97b"
+    "storageHash": "a2fe637fd1ffa1754e920299de0414c0552ff8124c0c80ea37e3e3b4361f6351"
   },
   "execution": {
-    "executionHash": "3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b",
+    "executionHash": "e360afc15d9acb3a64cba5a920edaddddd531ee2246e5ae03f7da92ddec5d4a7",
     "mutations": {
       "defaults": [
         {
@@ -9114,6 +9451,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_signup"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_start_snapshot"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_start_snapshot"
           }
         },
         {

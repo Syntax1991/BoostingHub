@@ -338,7 +338,6 @@ describe("rosterService saveDraftSelection", () => {
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
-      title: "Batch Save Open Transition",
     });
     await runService.openRun(thorne, run.id);
     const signup = await signupService.createBoosterSignup(kael, {

@@ -3,9 +3,7 @@ import { ATTENDANCE_STATUSES } from "@/models/enums";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import { entityIdSchema } from "@/validators/ids";
 
-export const startRunSchema = z.object({
-  runId: entityIdSchema,
-});
+export { startRunSchema } from "@/validators/run";
 
 export const completeRunSchema = z.object({
   runId: entityIdSchema,

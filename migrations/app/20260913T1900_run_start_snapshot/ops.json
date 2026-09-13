@@ -1,0 +1,332 @@
+[
+  {
+    "id": "table.run_start_snapshot",
+    "label": "Create table \"run_start_snapshot\"",
+    "summary": "Creates table \"run_start_snapshot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_start_snapshot\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_start_snapshot\"",
+        "sql": "CREATE TABLE \"public\".\"run_start_snapshot\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"goldCollector1Name\" text NOT NULL,\n  \"goldCollector1Realm\" text NOT NULL,\n  \"goldCollector2Name\" text NOT NULL,\n  \"goldCollector2Realm\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"runId\" text NOT NULL,\n  \"startedAt\" timestamptz NOT NULL,\n  \"startedById\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_start_snapshot\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_post.startChannelId",
+    "label": "Add column \"startChannelId\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "startChannelId",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"startChannelId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "startChannelId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"startChannelId\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"startChannelId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"startChannelId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "startChannelId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_post.startMessageId",
+    "label": "Add column \"startMessageId\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "startMessageId",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"startMessageId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "startMessageId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"startMessageId\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"startMessageId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"startMessageId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "startMessageId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_post.startPostedAt",
+    "label": "Add column \"startPostedAt\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "startPostedAt",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"startPostedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "startPostedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"startPostedAt\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"startPostedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"startPostedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "startPostedAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_start_snapshot.run_start_snapshot_runId_key",
+    "label": "Add unique constraint on \"run_start_snapshot\" (runId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_start_snapshot_runId_key",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_start_snapshot_runId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_start_snapshot_runId_key",
+          "public",
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_start_snapshot_runId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\" ADD CONSTRAINT \"run_start_snapshot_runId_key\" UNIQUE (\"runId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_start_snapshot_runId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_start_snapshot_runId_key",
+          "public",
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_start_snapshot.run_start_snapshot_startedById_idx_a8358300",
+    "label": "Create index \"run_start_snapshot_startedById_idx_a8358300\" on \"run_start_snapshot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_start_snapshot_startedById_idx_a8358300",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_start_snapshot_startedById_idx_a8358300\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_start_snapshot_startedById_idx_a8358300\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_start_snapshot_startedById_idx_a8358300\"",
+        "sql": "CREATE INDEX \"run_start_snapshot_startedById_idx_a8358300\" ON \"public\".\"run_start_snapshot\" (\"startedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_start_snapshot_startedById_idx_a8358300\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_start_snapshot_startedById_idx_a8358300\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_start_snapshot.run_start_snapshot_runId_fkey",
+    "label": "Add foreign key \"run_start_snapshot_runId_fkey\" on \"run_start_snapshot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_start_snapshot_runId_fkey",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_start_snapshot_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_start_snapshot_runId_fkey",
+          "public",
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_start_snapshot_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\"\nADD CONSTRAINT \"run_start_snapshot_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_start_snapshot_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_start_snapshot_runId_fkey",
+          "public",
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_start_snapshot.run_start_snapshot_startedById_fkey",
+    "label": "Add foreign key \"run_start_snapshot_startedById_fkey\" on \"run_start_snapshot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_start_snapshot_startedById_fkey",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_start_snapshot_startedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_start_snapshot_startedById_fkey",
+          "public",
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_start_snapshot_startedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\"\nADD CONSTRAINT \"run_start_snapshot_startedById_fkey\"\nFOREIGN KEY (\"startedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_start_snapshot_startedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_start_snapshot_startedById_fkey",
+          "public",
+          "\"public\".\"run_start_snapshot\""
+        ]
+      }
+    ]
+  }
+]
