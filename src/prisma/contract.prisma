@@ -140,6 +140,14 @@ enum SettlementStatus {
   PAID      = "PAID"
 }
 
+/// Settlement-time Raid Lead cut handling. Declared cut amount is always stored;
+/// only KEEP deducts it from the attendance distributable pool.
+enum RaidLeadCutMode {
+  @@type("pg/text@1")
+  KEEP  = "KEEP"
+  SHARE = "SHARE"
+}
+
 /// No hard delete. REVOKED is a staff correction, not an expiry — there is no
 /// automatic expiry status in this contract.
 enum StrikeStatus {
@@ -604,26 +612,30 @@ model RunRosterEntry {
 
 /// One gold settlement per completed Run. Amounts are whole WoW gold integers.
 /// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
+/// totalGold is the authoritative final pot. raidLeadCutGold is the declared cut for
+/// both KEEP and SHARE; only KEEP deducts it from the attendance pool.
 model RunSettlement {
-  id            String           @id @default(uuid())
-  runId         String           @unique
-  run           Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
-  totalGold     Int
-  status        SettlementStatus @default(DRAFT)
-  preparedById  String
-  preparedBy    User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
-  finalizedAt   TimestamptzString?
-  finalizedById String?
-  finalizedBy   User?            @relation("SettlementFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
-  paidAt        TimestamptzString?
-  paidById      String?
-  paidBy        User?            @relation("SettlementPayer", fields: [paidById], references: [id], onDelete: SetNull)
-  runTitle      String
-  raidName      String
-  difficulty    RaidDifficulty
-  raidLeadName  String
-  createdAt     TimestamptzString @default(now())
-  updatedAt     temporal.updatedAtString()
+  id               String           @id @default(uuid())
+  runId            String           @unique
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  totalGold        Int
+  raidLeadCutMode  RaidLeadCutMode  @default(SHARE)
+  raidLeadCutGold  Int              @default(0)
+  status           SettlementStatus @default(DRAFT)
+  preparedById     String
+  preparedBy       User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
+  finalizedAt      TimestamptzString?
+  finalizedById    String?
+  finalizedBy      User?            @relation("SettlementFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
+  paidAt           TimestamptzString?
+  paidById         String?
+  paidBy           User?            @relation("SettlementPayer", fields: [paidById], references: [id], onDelete: SetNull)
+  runTitle         String
+  raidName         String
+  difficulty       RaidDifficulty
+  raidLeadName     String
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
 
   entries RunPayoutEntry[]
 

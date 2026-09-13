@@ -89,6 +89,9 @@ export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 export const SETTLEMENT_STATUSES = ["DRAFT", "FINALIZED", "PAID"] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
 
+export const RAID_LEAD_CUT_MODES = ["KEEP", "SHARE"] as const;
+export type RaidLeadCutMode = (typeof RAID_LEAD_CUT_MODES)[number];
+
 /** No EXPIRED status: Strikes never expire automatically in this contract. */
 export const STRIKE_STATUSES = ["ACTIVE", "REVOKED"] as const;
 export type StrikeStatus = (typeof STRIKE_STATUSES)[number];

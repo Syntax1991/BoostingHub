@@ -1356,6 +1356,8 @@ async function seed() {
       id: input.settlementId,
       runId: input.runId,
       totalGold: input.totalGold,
+      raidLeadCutMode: "SHARE",
+      raidLeadCutGold: 0,
       status: input.status,
       preparedById: ids.users.thorne,
       finalizedAt: input.status === "DRAFT" ? null : SEED_NOW,

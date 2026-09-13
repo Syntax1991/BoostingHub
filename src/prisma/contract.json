@@ -275,6 +275,19 @@
               }
             ]
           },
+          "RaidLeadCutMode": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "KEEP",
+                "value": "KEEP"
+              },
+              {
+                "name": "SHARE",
+                "value": "SHARE"
+              }
+            ]
+          },
           "RosterState": {
             "codecId": "pg/text@1",
             "members": [
@@ -3303,6 +3316,26 @@
                   "kind": "scalar"
                 }
               },
+              "raidLeadCutGold": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidLeadCutMode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidLeadCutMode",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "raidLeadName": {
                 "nullable": false,
                 "type": {
@@ -3461,6 +3494,12 @@
                 },
                 "preparedById": {
                   "column": "preparedById"
+                },
+                "raidLeadCutGold": {
+                  "column": "raidLeadCutGold"
+                },
+                "raidLeadCutMode": {
+                  "column": "raidLeadCutMode"
                 },
                 "raidLeadName": {
                   "column": "raidLeadName"
@@ -7263,6 +7302,11 @@
                   "prefix": "run_settlement_difficulty_check"
                 },
                 {
+                  "expression": "\"raidLeadCutMode\" IN ('KEEP', 'SHARE')",
+                  "name": "run_settlement_raidLeadCutMode_check_8050fe6d",
+                  "prefix": "run_settlement_raidLeadCutMode_check"
+                },
+                {
                   "expression": "\"status\" IN ('DRAFT', 'FINALIZED', 'PAID')",
                   "name": "run_settlement_status_check_54af39d0",
                   "prefix": "run_settlement_status_check"
@@ -7318,6 +7362,30 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "raidLeadCutGold": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "raidLeadCutMode": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "SHARE"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidLeadCutMode",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "raidLeadName": {
                   "codecId": "pg/text@1",
@@ -8492,6 +8560,13 @@
                 "MYTHIC"
               ]
             },
+            "RaidLeadCutMode": {
+              "kind": "valueSet",
+              "values": [
+                "KEEP",
+                "SHARE"
+              ]
+            },
             "RosterState": {
               "kind": "valueSet",
               "values": [
@@ -8574,7 +8649,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "40a32a4868bfdb44beb2a152a157bab172c5b30044b41969861f2122dd0b4071"
+    "storageHash": "a5043345f94882f8cb6ffb202ae27eb00028779df830e131572a63d632abac8b"
   },
   "execution": {
     "executionHash": "3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b",

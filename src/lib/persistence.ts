@@ -13,6 +13,7 @@ import {
   LOOTBUDDY_VERIFICATIONS,
   ROSTER_STATES,
   ATTENDANCE_STATUSES,
+  RAID_LEAD_CUT_MODES,
   SETTLEMENT_STATUSES,
   STRIKE_STATUSES,
   WOW_CLASSES,
@@ -22,6 +23,7 @@ import {
   type AttendanceStatus,
   type BoosterAccessStatus,
   type BoosterQualificationStatus,
+  type RaidLeadCutMode,
   type SettlementStatus,
   type StrikeStatus,
   type CharacterRole,
@@ -129,6 +131,10 @@ export function mapAttendanceStatus(value: unknown): AttendanceStatus {
 
 export function mapSettlementStatus(value: unknown): SettlementStatus {
   return asEnum(value, SETTLEMENT_STATUSES, "DRAFT");
+}
+
+export function mapRaidLeadCutMode(value: unknown): RaidLeadCutMode {
+  return asEnum(value, RAID_LEAD_CUT_MODES, "SHARE");
 }
 
 export function mapStrikeStatus(value: unknown): StrikeStatus {
