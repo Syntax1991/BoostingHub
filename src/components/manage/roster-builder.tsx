@@ -28,6 +28,7 @@ import {
 } from "@/lib/labels";
 import type { rosterService } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
+import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
@@ -173,6 +174,8 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
           <Stat label="Lootbuddies" value={String(data.composition.lootbuddies)} />
         </div>
       </Card>
+
+      <ClassBuffChecker coverage={data.raidBuffCoverage} />
 
       <Card>
         <CardHeader title="Filters" />
@@ -483,6 +486,50 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
       <p className="mt-1 font-medium">{value}</p>
     </div>
+  );
+}
+
+/**
+ * Derived Class Buff coverage for the CURRENT draft selection.
+ * Coverage means a selected composition contains a class that can provide the
+ * buff — not that the aura is cast or talented in-game.
+ */
+function ClassBuffChecker({ coverage }: { coverage: RaidBuffCoverage }) {
+  return (
+    <Card>
+      <CardHeader
+        title="Class Buffs"
+        description={`${coverage.coveredCount} / ${coverage.totalCount} covered${
+          coverage.missingCount > 0 ? ` · ${coverage.missingCount} missing` : ""
+        }. Class availability only — not live aura verification.`}
+      />
+      <ul className="grid gap-1.5 px-4 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label="Class buff coverage">
+        {coverage.buffs.map((buff) => {
+          const providerLabel = buff.providerClass ? CLASS_LABELS[buff.providerClass] : null;
+          return (
+            <li
+              key={buff.id}
+              className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 ${
+                buff.covered ? "border-border" : "border-danger/40 bg-danger/5"
+              }`}
+            >
+              <span className="mt-0.5 font-medium" aria-hidden="true">
+                {buff.covered ? "✓" : "✕"}
+              </span>
+              <span className="min-w-0">
+                <span className="sr-only">{buff.covered ? "Covered: " : "Missing: "}</span>
+                <span className={buff.covered ? "font-medium" : "font-medium text-danger"}>{buff.name}</span>
+                {buff.covered && providerLabel ? (
+                  <span className="mt-0.5 block truncate text-xs text-muted">— {providerLabel}</span>
+                ) : (
+                  <span className="mt-0.5 block text-xs text-danger">Missing</span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

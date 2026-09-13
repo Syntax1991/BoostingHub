@@ -7,6 +7,12 @@ import { lockoutService } from "@/services/lockout.service";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
 import { assertSignupTransition } from "@/services/signup-state";
 import { validateRosterDraft, type RosterIssue, type RosterValidationResult } from "@/services/roster-validation";
+import {
+  evaluateRaidBuffCoverage,
+  resolveBuffContributorClass,
+  type RaidBuffCoverage,
+  type RaidBuffParticipant,
+} from "@/services/roster-raid-buffs";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -110,6 +116,23 @@ function asMember(row: InspectedSignup) {
   };
 }
 
+/** Maps a draft-selected signup into the pure Class Buff Checker participant shape. */
+function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
+  return {
+    signupId: row.id,
+    userName: row.userName,
+    participationType: row.participationType,
+    lootbuddyMode: row.lootbuddyMode,
+    wowClass: resolveBuffContributorClass({
+      participationType: row.participationType,
+      lootbuddyMode: row.lootbuddyMode,
+      lootbuddyClass: row.lootbuddyClass,
+      characterWowClass: row.character?.wowClass ?? null,
+    }),
+    characterName: row.character?.name ?? null,
+  };
+}
+
 /**
  * Roster orchestration. Draft selection is persisted on RunRosterEntry and is
  * not RunSignup.status. Publish copies the draft into SELECTED / NOT_SELECTED
@@ -206,6 +229,7 @@ export const rosterService = {
       },
     });
     const composition = validation.composition;
+    const raidBuffCoverage: RaidBuffCoverage = evaluateRaidBuffCoverage(selected.map(asRaidBuffParticipant));
     const canEdit = EDITABLE_RUN_STATUSES.includes(run.status);
     const publishedSelection = inspected.filter((item) => item.status === "SELECTED");
     // WITHDRAWN is a dead end (no outgoing transition) and must never appear as a
@@ -250,6 +274,7 @@ export const rosterService = {
           roster.version === 1,
       },
       composition,
+      raidBuffCoverage,
       validation,
       groups: {
         tanks: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "TANK"),

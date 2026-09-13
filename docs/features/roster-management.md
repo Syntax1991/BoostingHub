@@ -80,6 +80,20 @@ Targets come from the run (`desiredTankCount`, `desiredHealerCount`, `desiredDps
 
 Mismatch is a **warning**, not an automatic hard block. A lead may draft 5/4 healers. Publish requires explicit acknowledgement when warnings exist. Blocking issues cannot be acknowledged away.
 
+## Class Buff Checker
+
+Derived composition helper on the Roster Builder (informational — never a publish blocker).
+
+- **Source of truth:** current **draft** selection (`RunRosterEntry.selected === true`), not every signup.
+- **Booster:** counts by `character.wowClass` when selected.
+- **PLAYING Lootbuddy:** counts by `lootbuddyClass ?? character?.wowClass` when selected (includes legacy Character-backed rows).
+- **LOOT_ONLY Lootbuddy:** never counts, even when selected.
+- **Duplicates:** multiple Mages still cover Arcane Intellect once; provider detail retains every `signupId`.
+- **Meaning:** class *availability* in the selected composition — not live aura cast / talent verification.
+- **No persistence:** coverage is computed by `evaluateRaidBuffCoverage` in `roster-raid-buffs.ts`. No coverage tables or stored counts.
+
+Tracked set (Midnight Season 2): Arcane Intellect, Power Word: Fortitude, Battle Shout, Mark of the Wild, Skyfury, Devotion Aura, Blessing of the Bronze, Chaos Brand, Mystic Touch.
+
 ## Validation
 
 `RosterService` + `validateRosterDraft` re-query authoritative rows. Client-supplied statuses and user IDs are ignored.
