@@ -9,6 +9,7 @@ import type {
   RunStatus,
   SignupStatus,
   WowClass,
+  WowRegion,
 } from "@/models/enums";
 import type { BoosterQualificationMatch } from "@/models/records";
 import {
@@ -22,6 +23,7 @@ import {
   mapLootbuddyMode,
   mapLootbuddyVerification,
   mapParticipation,
+  mapRegion,
   mapRosterState,
   mapSignupStatus,
   mapWowClass,
@@ -34,6 +36,7 @@ export type RosterCharacterSnapshot = {
   id: string;
   name: string;
   realm: string;
+  region: WowRegion;
   wowClass: WowClass;
   specialization: string | null;
   primaryRole: CharacterRole;
@@ -83,6 +86,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     id: asString(row.id),
     name: asString(row.name),
     realm: asString(row.realm),
+    region: mapRegion(row.region),
     wowClass: mapWowClass(row.wowClass),
     specialization: asStringOrNull(row.specialization),
     primaryRole: mapCharacterRole(row.primaryRole),
