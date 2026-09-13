@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { formatGold } from "@/lib/gold";
 import { isDomainError } from "@/lib/errors";
-import { allocateGold } from "@/services/payout-calculation";
+import {
+  allocateGold,
+  assertRaidLeadCutGold,
+  calculateSettlementPool,
+} from "@/services/payout-calculation";
 import { defaultShareUnits } from "@/services/payout-state";
 
 describe("formatGold", () => {
@@ -105,5 +109,197 @@ describe("allocateGold", () => {
     } catch (error) {
       expect(isDomainError(error) && error.code).toBe("PAYOUT_NO_ELIGIBLE_SHARES");
     }
+  });
+});
+
+describe("assertRaidLeadCutGold", () => {
+  it("rejects negative, equal, and greater-than pot cuts", () => {
+    try {
+      assertRaidLeadCutGold(-1, 1000);
+      throw new Error("expected domain error");
+    } catch (error) {
+      expect(isDomainError(error) && error.code).toBe("PAYOUT_INVALID_RAID_LEAD_CUT");
+    }
+    try {
+      assertRaidLeadCutGold(1000, 1000);
+      throw new Error("expected domain error");
+    } catch (error) {
+      expect(isDomainError(error) && error.code).toBe("PAYOUT_INVALID_RAID_LEAD_CUT");
+    }
+    try {
+      assertRaidLeadCutGold(1001, 1000);
+      throw new Error("expected domain error");
+    } catch (error) {
+      expect(isDomainError(error) && error.code).toBe("PAYOUT_INVALID_RAID_LEAD_CUT");
+    }
+  });
+
+  it("allows zero cut", () => {
+    expect(assertRaidLeadCutGold(0, 1450000)).toBe(0);
+  });
+});
+
+describe("calculateSettlementPool", () => {
+  const twoPresent = [
+    { attendanceId: "att-a", shareUnits: 100 },
+    { attendanceId: "att-b", shareUnits: 100 },
+  ];
+
+  it("KEEP basic: deducts dedicated cut and conserves totalGold", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_450_000,
+      raidLeadCutMode: "KEEP",
+      raidLeadCutGold: 50_000,
+      entries: twoPresent,
+    });
+    expect(result.declaredRaidLeadCut).toBe(50_000);
+    expect(result.dedicatedRaidLeadPayout).toBe(50_000);
+    expect(result.distributablePool).toBe(1_400_000);
+    expect(result.allocatedAttendanceGold).toBe(1_400_000);
+    expect(result.totalAllocatedGold).toBe(1_450_000);
+    expect(result.attendancePayouts.every((row) => row.amountGold === 700_000)).toBe(true);
+  });
+
+  it("SHARE basic: retains declared cut but does not deduct or pay it separately", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_450_000,
+      raidLeadCutMode: "SHARE",
+      raidLeadCutGold: 50_000,
+      entries: twoPresent,
+    });
+    expect(result.declaredRaidLeadCut).toBe(50_000);
+    expect(result.dedicatedRaidLeadPayout).toBe(0);
+    expect(result.distributablePool).toBe(1_450_000);
+    expect(result.allocatedAttendanceGold).toBe(1_450_000);
+    expect(result.totalAllocatedGold).toBe(1_450_000);
+  });
+
+  it("KEEP with cut 0 matches a full-pot allocation", () => {
+    const result = calculateSettlementPool({
+      totalGold: 900,
+      raidLeadCutMode: "KEEP",
+      raidLeadCutGold: 0,
+      entries: [
+        { attendanceId: "a", shareUnits: 100 },
+        { attendanceId: "b", shareUnits: 100 },
+        { attendanceId: "c", shareUnits: 100 },
+      ],
+    });
+    expect(result.dedicatedRaidLeadPayout).toBe(0);
+    expect(result.distributablePool).toBe(900);
+    expect(result.totalAllocatedGold).toBe(900);
+  });
+
+  it("KEEP preserves ordinary Raid Lead attendance share separately from dedicated cut", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_450_000,
+      raidLeadCutMode: "KEEP",
+      raidLeadCutGold: 50_000,
+      entries: [
+        { attendanceId: "lead-att", shareUnits: 100 },
+        { attendanceId: "booster-att", shareUnits: 100 },
+      ],
+    });
+    const leadShare = result.attendancePayouts.find((row) => row.attendanceId === "lead-att")!.amountGold;
+    expect(leadShare).toBe(700_000);
+    expect(result.dedicatedRaidLeadPayout).toBe(50_000);
+    expect(leadShare + result.dedicatedRaidLeadPayout).toBe(750_000);
+    expect(result.allocatedAttendanceGold + result.dedicatedRaidLeadPayout).toBe(1_450_000);
+  });
+
+  it("KEEP still pays dedicated cut when Raid Lead has no attendance row", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_450_000,
+      raidLeadCutMode: "KEEP",
+      raidLeadCutGold: 50_000,
+      entries: [
+        { attendanceId: "booster-a", shareUnits: 100 },
+        { attendanceId: "booster-b", shareUnits: 100 },
+      ],
+    });
+    expect(result.dedicatedRaidLeadPayout).toBe(50_000);
+    expect(result.distributablePool).toBe(1_400_000);
+    expect(result.attendancePayouts).toHaveLength(2);
+    expect(result.totalAllocatedGold).toBe(1_450_000);
+  });
+
+  it("SHARE with Raid Lead attendance pays ordinary share only", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_450_000,
+      raidLeadCutMode: "SHARE",
+      raidLeadCutGold: 50_000,
+      entries: [
+        { attendanceId: "lead-att", shareUnits: 100 },
+        { attendanceId: "booster-att", shareUnits: 100 },
+      ],
+    });
+    const leadShare = result.attendancePayouts.find((row) => row.attendanceId === "lead-att")!.amountGold;
+    expect(result.dedicatedRaidLeadPayout).toBe(0);
+    expect(leadShare).toBe(725_000);
+  });
+
+  it("SHARE with Raid Lead absent pays zero dedicated cut", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_450_000,
+      raidLeadCutMode: "SHARE",
+      raidLeadCutGold: 50_000,
+      entries: [{ attendanceId: "booster-only", shareUnits: 100 }],
+    });
+    expect(result.dedicatedRaidLeadPayout).toBe(0);
+    expect(result.allocatedAttendanceGold).toBe(1_450_000);
+  });
+
+  it("keeps zero-share rows, weighted shares, and same-user multiple attendance", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_001,
+      raidLeadCutMode: "KEEP",
+      raidLeadCutGold: 1,
+      entries: [
+        { attendanceId: "att-a", shareUnits: 100 },
+        { attendanceId: "att-b", shareUnits: 100 },
+        { attendanceId: "att-c", shareUnits: 50 },
+        { attendanceId: "att-d", shareUnits: 0 },
+        { attendanceId: "att-e", shareUnits: 100 },
+      ],
+    });
+    expect(result.distributablePool).toBe(1_000);
+    expect(result.dedicatedRaidLeadPayout).toBe(1);
+    expect(result.allocatedAttendanceGold + result.dedicatedRaidLeadPayout).toBe(1_001);
+    expect(result.attendancePayouts.find((row) => row.attendanceId === "att-d")?.amountGold).toBe(0);
+    // same user can own att-a and att-e conceptually; amounts stay per attendanceId
+    expect(result.attendancePayouts.filter((row) => row.shareUnits > 0)).toHaveLength(4);
+  });
+
+  it("characterless lootbuddy attendance still allocates from the pool", () => {
+    const result = calculateSettlementPool({
+      totalGold: 200,
+      raidLeadCutMode: "SHARE",
+      raidLeadCutGold: 20,
+      entries: [
+        { attendanceId: "lootbuddy-no-char", shareUnits: 100 },
+        { attendanceId: "booster", shareUnits: 100 },
+      ],
+    });
+    expect(result.distributablePool).toBe(200);
+    expect(result.attendancePayouts.find((row) => row.attendanceId === "lootbuddy-no-char")?.amountGold).toBe(100);
+  });
+
+  it("uses deterministic remainder against the KEEP pool", () => {
+    const result = calculateSettlementPool({
+      totalGold: 1_004,
+      raidLeadCutMode: "KEEP",
+      raidLeadCutGold: 3,
+      entries: [
+        { attendanceId: "att-a", shareUnits: 100 },
+        { attendanceId: "att-b", shareUnits: 100 },
+        { attendanceId: "att-c", shareUnits: 50 },
+      ],
+    });
+    expect(result.distributablePool).toBe(1_001);
+    const byId = Object.fromEntries(result.attendancePayouts.map((row) => [row.attendanceId, row.amountGold]));
+    expect(byId["att-a"]).toBe(401);
+    expect(byId["att-b"]).toBe(400);
+    expect(byId["att-c"]).toBe(200);
+    expect(result.totalAllocatedGold).toBe(1_004);
   });
 });
