@@ -2,6 +2,8 @@ import { DomainError } from "@/lib/errors";
 import type { AttendanceStatus } from "@/models/enums";
 
 export const FULL_SHARE_UNITS = 100;
+/** One additional full standard share for KEEP Raid Lead cut calculation. */
+export const RAID_LEAD_CUT_SHARE_UNITS = FULL_SHARE_UNITS;
 export const SHARE_UNITS_MIN = 0;
 export const SHARE_UNITS_MAX = 10_000;
 /** Inclusive upper bound for PostgreSQL signed integer gold totals. */

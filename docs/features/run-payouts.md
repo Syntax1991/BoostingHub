@@ -46,7 +46,6 @@ One `RunSettlement` per Run (`runId` unique). Finalized and paid settlements are
 Whole World of Warcraft gold, stored as a signed integer.
 
 - `totalGold` from 1 to 2,000,000,000 — the only pot field
-- `raidLeadCutGold` from 0 to `totalGold - 1` (declared Raid Lead cut; may be 0)
 - no silver, copper, or floating-point money
 - display helper: `151000` → `151,000g`
 
@@ -66,26 +65,32 @@ Settlement-time financial decision on `RunSettlement` (not Run creation config):
 | Field | Meaning |
 | --- | --- |
 | `raidLeadCutMode` | `KEEP` or `SHARE` (default `SHARE` for backwards compatibility) |
-| `raidLeadCutGold` | Declared Raid Lead cut amount (persisted for **both** modes) |
+
+There is **no** manual `raidLeadCutGold` input. Schema stores only `raidLeadCutMode`. The KEEP cut is auto-calculated as one extra full share (`RAID_LEAD_CUT_SHARE_UNITS = 100`).
 
 ### KEEP
 
-- `dedicatedRaidLeadPayout = raidLeadCutGold`
-- `distributablePool = totalGold - raidLeadCutGold`
-- Attendance share allocation runs against `distributablePool`
+- Adds one calculation-only full share (`100` units) into the same weighted allocation as attendance shares
+- That synthetic share uses allocation key `__raid_lead_cut__` — never persisted as attendance
+- `dedicatedRaidLeadPayout` = gold allocated to that synthetic share
+- Attendance rows receive only their attendance share amounts (`attendanceDistributedGold`)
 - The assigned Run Raid Lead (`run.raidLeadId`) receives the dedicated cut as settlement-level money — **not** via a fabricated attendance/roster/signup row
 - If that Raid Lead is also a payout-eligible attendance participant, they **also** receive their ordinary attendance share
+- All-zero attendance with KEEP is allowed: the dedicated cut receives the entire pot
 
-Conservation: `sum(attendance amountGold) + dedicatedRaidLeadPayout === totalGold`
+Conservation: `attendanceDistributedGold + dedicatedRaidLeadPayout === totalGold`
+
+Settlement units: `totalSettlementUnits = attendanceUnits + 100`
 
 ### SHARE
 
 - `dedicatedRaidLeadPayout = 0`
-- `distributablePool = totalGold`
-- Declared `raidLeadCutGold` stays stored/displayed for audit transparency but is **not** deducted and **not** paid separately
+- `raidLeadCutShareUnits = 0`
+- Pot is allocated only across attendance share units
 - Raid Lead receives only an ordinary attendance share if otherwise eligible
+- All-zero attendance with SHARE rejects with `PAYOUT_NO_ELIGIBLE_SHARES`
 
-Conservation: `sum(attendance amountGold) === totalGold`
+Conservation: `attendanceDistributedGold === totalGold`
 
 ### Raid Lead recipient identity
 
@@ -123,15 +128,15 @@ While DRAFT, an authorized manager may change `shareUnits` (optional adjustment 
 
 ## Calculation / Remainder
 
-`totalUnits = sum(shareUnits > 0)`. Must be greater than zero.
+`calculateSettlementPool({ totalGold, raidLeadCutMode, entries })`:
 
-Allocation runs against the **distributable pool** (see KEEP / SHARE above), not always against `totalGold`.
+1. `attendanceUnits = sum(shareUnits > 0)`
+2. `raidLeadCutShareUnits = KEEP ? 100 : 0`
+3. `totalSettlementUnits = attendanceUnits + raidLeadCutShareUnits` (must be > 0)
+4. Run deterministic `allocateGold` over attendance entries plus the KEEP synthetic key when present
+5. Remainder gold is given one unit at a time in **allocation-key lexicographic order** (so `__raid_lead_cut__` participates in the same remainder pass)
 
-Each eligible entry gets `floor(pool * shareUnits / totalUnits)` using integer arithmetic.
-
-Remaining pool gold is given one unit at a time in **`attendanceId` lexicographic order**.
-
-Attendance invariant: `sum(attendance amountGold) === distributablePool`.
+Each eligible entry gets `floor(totalGold * shareUnits / totalSettlementUnits)` using integer arithmetic.
 
 Zero-share attendance rows are kept with `amountGold = 0` so the settlement explains every operational participant.
 
@@ -147,11 +152,11 @@ Signup `isBackup` does not determine payout. `STANDBY` defaults to 0. A backup m
 
 ## Finalization
 
-Recalculates from database state (including cut mode / declared cut), snapshots run/participant display fields, then stores `FINALIZED` with `finalizedAt` / `finalizedById`.
+Recalculates from database state (including cut mode), snapshots run/participant display fields, then stores `FINALIZED` with `finalizedAt` / `finalizedById`.
 
 The current DRAFT `totalGold` becomes the frozen final pot — no copy into a second field.
 
-After finalize: `totalGold`, cut mode, declared cut, dedicated Raid Lead payout, shares, recipients, amounts, and snapshots are immutable.
+After finalize: `totalGold`, cut mode, dedicated Raid Lead payout, shares, recipients, amounts, and snapshots are immutable.
 
 ## Paid
 
@@ -159,7 +164,7 @@ Settlement-level bookkeeping marker only (`paidAt` / `paidById`). No gold is tra
 
 ## Historical Snapshots
 
-At finalize the settlement stores run title, raid name, difficulty, raid lead name, cut mode, declared cut, and each entry's user/character display fields, participation type, attendance status, backup flag, share units, and amount.
+At finalize the settlement stores run title, raid name, difficulty, raid lead name, cut mode, and each entry's user/character display fields, participation type, attendance status, backup flag, share units, and amount.
 
 Later user/character renames must not rewrite a finalized settlement.
 
@@ -176,7 +181,8 @@ View → Controller → Service → Repository → Model
 ```
 
 - `PayoutService` owns prepare, draft edits, calculation, finalize, mark paid, and DTO shaping
-- Settlement math (KEEP/SHARE pools) lives in `payout-calculation` / service — not in React or controllers
+- Settlement math (KEEP/SHARE auto-calc share model) lives in `payout-calculation` / service — not in React or controllers
+- `prepareSettlement` / `updateDraftFinancials` take `{ totalGold, raidLeadCutMode }` only
 - `PayoutRepository` owns persistence
 - Controllers authenticate, validate with Zod, call the service, map domain errors, revalidate `/runs/[runId]`
 - `RunService.completeRun` does not compute payouts
