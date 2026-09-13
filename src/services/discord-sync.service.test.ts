@@ -1237,6 +1237,7 @@ describe("discordSyncService — run start operational post", () => {
 
     const dto = await discordSyncService.getRunStartEmbedData(id);
     expect(dto).toBeTruthy();
+    expect(dto!.targets).toEqual({ tanks: 1, healers: 1, dps: 1 });
     expect(dto!.groups.tanks).toHaveLength(1);
     expect(dto!.groups.healers).toHaveLength(1);
     expect(dto!.groups.dps).toHaveLength(1);
@@ -1244,6 +1245,7 @@ describe("discordSyncService — run start operational post", () => {
     expect(dto!.goldCollectors[0]).toEqual({ name: "Duskgc", realm: "Draenor" });
     expect(dto!.goldCollectors[1]).toEqual({ name: "Duskalli", realm: "Draenor" });
     expect(dto!.groups.lootbuddies[0].characterName).toBe("Mage");
+    expect(dto!.groups.tanks[0].wowClass).toBe("PALADIN");
 
     await discordSyncService.recordStartPost({ runId: id, channelId: "start-chan-1", messageId: "start-msg-1" });
     work = await discordSyncService.listSyncWork();

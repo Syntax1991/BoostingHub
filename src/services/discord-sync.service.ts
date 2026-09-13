@@ -155,7 +155,10 @@ export type RunStartEmbedMember = {
   discordUserId: string | null;
   characterName: string;
   characterRealm: string;
+  /** WoW class enum when known — used for optional Discord class emoji mapping. */
+  wowClass: WowClass | null;
   classLabel: string | null;
+  /** Informational lockout label; not rendered in the compact Final Setup post. */
   saveLabel: string;
   participationType: "BOOSTER" | "LOOTBUDDY";
   role: CharacterRole | null;
@@ -168,6 +171,12 @@ export type RunStartEmbedData = {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
+  /** Desired composition from the Run — never inferred from selected counts. */
+  targets: {
+    tanks: number;
+    healers: number;
+    dps: number;
+  };
   groups: {
     tanks: RunStartEmbedMember[];
     healers: RunStartEmbedMember[];
@@ -329,6 +338,10 @@ function toStartMember(
       (row.lootbuddyClass ? CLASS_LABELS[row.lootbuddyClass] : null) ??
       "Unknown character",
     characterRealm: row.character?.realm ?? "",
+    wowClass:
+      row.participationType === "BOOSTER"
+        ? (row.character?.wowClass ?? null)
+        : lootbuddyClass,
     classLabel,
     saveLabel,
     participationType: row.participationType,
@@ -590,6 +603,11 @@ export const discordSyncService = {
       difficulty: run.difficulty,
       lootType: run.lootType,
       scheduledStartAt: run.scheduledStartAt,
+      targets: {
+        tanks: run.desiredTankCount,
+        healers: run.desiredHealerCount,
+        dps: run.desiredDpsCount,
+      },
       groups: { tanks, healers, dps, lootbuddies },
       goldCollectors: [
         { name: snapshot.goldCollector1Name, realm: snapshot.goldCollector1Realm },
