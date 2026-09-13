@@ -62,7 +62,7 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
       <Card>
         <CardHeader
           title="Payout"
-          description="Enter the authoritative final pot (for example from Dawn) and optional Raid Lead cut. This is not a wallet or transfer."
+          description="Enter the current pot (for example from Dawn) and optional Raid Lead cut. This is not a wallet or transfer."
         />
         <div className="space-y-3 px-4 py-4 text-sm">
           <p>No settlement exists yet.</p>
@@ -193,7 +193,7 @@ function ManagerPayoutPanel({
         title="Payout"
         description={
           canEdit
-            ? "Whole gold only. Final pot and Raid Lead cut drive the server-calculated split."
+            ? "Whole gold only. Updating pot or Raid Lead cut recalculates the settlement preview on the server."
             : "Final settlement for this completed run."
         }
         action={
@@ -220,6 +220,7 @@ function ManagerPayoutPanel({
       ) : null}
 
       <SettlementFinancialSummary
+        status={manager.status}
         totalGold={summary.totalGold}
         raidLeadCutGold={summary.raidLeadCutGold}
         raidLeadCutMode={summary.raidLeadCutMode}
@@ -255,7 +256,7 @@ function ManagerPayoutPanel({
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <label htmlFor={totalId} className="mb-1 block text-xs text-muted">
-                Final pot
+                Pot
               </label>
               <input
                 id={totalId}
@@ -268,6 +269,7 @@ function ManagerPayoutPanel({
                 onChange={(event) => setTotalGold(event.target.value)}
                 className="h-9 w-40 rounded-md border border-border bg-surface-raised px-3 text-sm"
               />
+              <p className="mt-1 text-xs text-muted">Enter the current pot. Updating it recalculates the settlement preview.</p>
             </div>
             <div>
               <label htmlFor={cutId} className="mb-1 block text-xs text-muted">
@@ -377,6 +379,7 @@ function ManagerPayoutPanel({
 }
 
 function SettlementFinancialSummary({
+  status,
   totalGold,
   raidLeadCutGold,
   raidLeadCutMode,
@@ -384,6 +387,7 @@ function SettlementFinancialSummary({
   distributablePool,
   raidLeadName,
 }: {
+  status: NonNullable<RunDetailView["payout"]["manager"]>["status"];
   totalGold: number;
   raidLeadCutGold: number;
   raidLeadCutMode: RaidLeadCutMode;
@@ -391,10 +395,11 @@ function SettlementFinancialSummary({
   distributablePool: number;
   raidLeadName: string;
 }) {
+  const potLabel = status === "DRAFT" ? "Pot" : "Final pot";
   return (
     <div className="mx-4 mt-3 grid gap-2 rounded-md border border-border bg-surface-raised/40 px-3 py-3 text-sm sm:grid-cols-2">
       <div>
-        <p className="text-xs text-muted">Final pot</p>
+        <p className="text-xs text-muted">{potLabel}</p>
         <p className="font-medium">{formatGold(totalGold)}</p>
       </div>
       <div>
@@ -545,8 +550,8 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
   const errorId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [totalGold, setTotalGold] = useState("1450000");
-  const [raidLeadCutGold, setRaidLeadCutGold] = useState("50000");
+  const [totalGold, setTotalGold] = useState("");
+  const [raidLeadCutGold, setRaidLeadCutGold] = useState("0");
   const [raidLeadCutMode, setRaidLeadCutMode] = useState<RaidLeadCutMode>("SHARE");
 
   useEffect(() => {
@@ -601,12 +606,12 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
             </p>
           ) : null}
           <p>
-            Enter the authoritative final pot (manual Dawn/community total) and the declared Raid Lead cut. No gold is
-            transferred automatically.
+            Enter the current pot (manual Dawn/community total) and the declared Raid Lead cut. You can change the pot
+            while the settlement stays a draft. No gold is transferred automatically.
           </p>
           <div>
             <label htmlFor={goldId} className="mb-1 block text-xs text-muted">
-              Final pot
+              Pot
             </label>
             <input
               id={goldId}
@@ -620,6 +625,7 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
               onChange={(event) => setTotalGold(event.target.value)}
               className="h-9 w-full rounded-md border border-border bg-surface-raised px-3 text-sm"
             />
+            <p className="mt-1 text-xs text-muted">Enter the current pot. Updating it recalculates the settlement preview.</p>
           </div>
           <div>
             <label htmlFor={cutId} className="mb-1 block text-xs text-muted">
@@ -727,9 +733,9 @@ function FinalizePayoutDialog({
           </p>
         ) : null}
         <p>
-          Finalizing locks {formatGold(totalGold)} ({RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]}), the participant pool{" "}
-          {formatGold(distributablePool)}, and the separate Raid Lead payout {formatGold(dedicatedRaidLeadPayout)}. Totals,
-          recipients, and amounts cannot be edited afterwards.
+          Finalizing locks the current pot of {formatGold(totalGold)} ({RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]}), the
+          participant pool {formatGold(distributablePool)}, and the separate Raid Lead payout{" "}
+          {formatGold(dedicatedRaidLeadPayout)}. Totals, recipients, and amounts cannot be edited afterwards.
         </p>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
           <Button type="button" variant="secondary" onClick={close} disabled={pending}>

@@ -8,7 +8,7 @@ Financial settlement of a **completed** Run:
 
 Payout eligibility comes from completed `RunAttendance`. This is not a wallet, escrow, or payment provider.
 
-The manager-entered `totalGold` is the **authoritative final pot** for the settlement (typically taken from Dawn manually). There is no Dawn API, cookie, or credential integration in this feature.
+`RunSettlement.totalGold` is the **single** settlement pot field. There is no estimated/final dual model and no Dawn API, cookie, or credential integration — the Raid Lead enters the current pot manually (for example from Dawn).
 
 ## Source of Truth
 
@@ -45,10 +45,19 @@ One `RunSettlement` per Run (`runId` unique). Finalized and paid settlements are
 
 Whole World of Warcraft gold, stored as a signed integer.
 
-- `totalGold` from 1 to 2,000,000,000 — authoritative final pot
+- `totalGold` from 1 to 2,000,000,000 — the only pot field
 - `raidLeadCutGold` from 0 to `totalGold - 1` (declared Raid Lead cut; may be 0)
 - no silver, copper, or floating-point money
 - display helper: `151000` → `151,000g`
+
+### Pot semantics (`totalGold`)
+
+| Status | Meaning |
+| --- | --- |
+| `DRAFT` | Mutable **current pot**. Editing it recalculates the settlement preview immediately. |
+| `FINALIZED` / `PAID` | The same field is frozen and is now the final authoritative pot. |
+
+No separate `estimatedPot` / `finalPot` columns. Intermediate Dawn values before finalize are not versioned — edit the existing DRAFT `totalGold`.
 
 ## Raid Lead Cut (KEEP / SHARE)
 
@@ -140,7 +149,9 @@ Signup `isBackup` does not determine payout. `STANDBY` defaults to 0. A backup m
 
 Recalculates from database state (including cut mode / declared cut), snapshots run/participant display fields, then stores `FINALIZED` with `finalizedAt` / `finalizedById`.
 
-After finalize: total pot, cut mode, declared cut, dedicated Raid Lead payout, shares, recipients, amounts, and snapshots are immutable.
+The current DRAFT `totalGold` becomes the frozen final pot — no copy into a second field.
+
+After finalize: `totalGold`, cut mode, declared cut, dedicated Raid Lead payout, shares, recipients, amounts, and snapshots are immutable.
 
 ## Paid
 
