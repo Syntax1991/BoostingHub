@@ -1,13 +1,18 @@
-import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus } from "@/models/enums";
+import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
 import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 import { CLASS_LABELS } from "@/lib/labels";
+import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { classifyRunWeek } from "@/lib/wow-run-week";
+import { attendanceRepository } from "@/repositories/attendance.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
+import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { isActiveSignupOffer } from "@/services/signup-state";
+import type { SignupRaidSaveInfo } from "@/models/records";
 
 /**
  * Where a Run's dedicated Discord channel belongs, decided once here and
@@ -134,6 +139,48 @@ export type RosterSyncWorkItem = {
   targetBucket: DiscordRunChannelTarget;
 };
 
+export type RunStartSyncWorkItem = {
+  runId: string;
+  existingChannelId: string | null;
+  existingMessageId: string | null;
+  existingRunChannelId: string | null;
+  desiredChannelName: string;
+  targetBucket: DiscordRunChannelTarget;
+};
+
+export type RunStartEmbedMember = {
+  signupId: string;
+  userId: string;
+  userName: string;
+  discordUserId: string | null;
+  characterName: string;
+  characterRealm: string;
+  classLabel: string | null;
+  saveLabel: string;
+  participationType: "BOOSTER" | "LOOTBUDDY";
+  role: CharacterRole | null;
+};
+
+export type RunStartEmbedData = {
+  runId: string;
+  runTitle: string;
+  raidName: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  scheduledStartAt: string;
+  groups: {
+    tanks: RunStartEmbedMember[];
+    healers: RunStartEmbedMember[];
+    dps: RunStartEmbedMember[];
+    lootbuddies: RunStartEmbedMember[];
+  };
+  goldCollectors: [
+    { name: string; realm: string },
+    { name: string; realm: string },
+  ];
+  totalSelected: number;
+};
+
 function desiredChannelNameFor(run: {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
@@ -226,6 +273,69 @@ function boosterByRole(selected: RosterSignupRow[], role: CharacterRole): Roster
   return selected.filter((row) => row.participationType === "BOOSTER" && row.role === role);
 }
 
+function shortSaveLabel(kind: ReturnType<typeof formatTargetRaidLockoutLabel>["kind"]): string {
+  if (kind === "unsaved") return "Unsaved";
+  if (kind === "saved") return "Saved";
+  if (kind === "fully_saved") return "Fully saved";
+  return "Unknown";
+}
+
+function compareStartMembers(a: RunStartEmbedMember, b: RunStartEmbedMember): number {
+  const byName = a.characterName.localeCompare(b.characterName, "en");
+  if (byName !== 0) return byName;
+  return a.userName.localeCompare(b.userName, "en");
+}
+
+function toStartMember(
+  row: RosterSignupRow,
+  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number; scheduledStartAt: string; lootType: RunLootType },
+): RunStartEmbedMember {
+  const lootbuddyClass: WowClass | null = row.lootbuddyClass ?? row.character?.wowClass ?? null;
+  const classLabel = row.participationType === "BOOSTER"
+    ? row.character
+      ? CLASS_LABELS[row.character.wowClass]
+      : null
+    : lootbuddyClass
+      ? CLASS_LABELS[lootbuddyClass]
+      : null;
+
+  let saveLabel = "Unknown";
+  if (row.participationType === "BOOSTER" && row.character) {
+    const matchingLockout = lockoutService.findExactLockout(row.character.lockouts, {
+      raidId: run.raidId,
+      difficulty: run.difficulty,
+      resetIdentifier: lockoutService.getResetIdentifierForRun(row.character.region, run.scheduledStartAt),
+    });
+    const raidSave: SignupRaidSaveInfo | null = matchingLockout
+      ? lockoutService.toRaidSaveInfo(matchingLockout, run.totalBossCount)
+      : null;
+    saveLabel = shortSaveLabel(
+      formatTargetRaidLockoutLabel({
+        difficulty: run.difficulty,
+        totalBossCount: run.totalBossCount,
+        raidSave,
+        lootType: run.lootType,
+      }).kind,
+    );
+  }
+
+  return {
+    signupId: row.id,
+    userId: row.userId,
+    userName: row.userName,
+    discordUserId: row.discordUserId,
+    characterName:
+      row.character?.name ??
+      (row.lootbuddyClass ? CLASS_LABELS[row.lootbuddyClass] : null) ??
+      "Unknown character",
+    characterRealm: row.character?.realm ?? "",
+    classLabel,
+    saveLabel,
+    participationType: row.participationType,
+    role: row.role,
+  };
+}
+
 /**
  * Presentation-only integration state for the Discord bot. Never a second
  * source of truth: every DTO here is re-derived from the same Run/Signup/
@@ -260,11 +370,13 @@ export const discordSyncService = {
     channels: ChannelSyncWorkItem[];
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
+    start: RunStartSyncWorkItem[];
   }> {
     const runs = await runRepository.listManaged();
     const channels: ChannelSyncWorkItem[] = [];
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
+    const start: RunStartSyncWorkItem[] = [];
 
     for (const run of runs) {
       const post = await runDiscordPostRepository.findByRunId(run.id);
@@ -346,9 +458,29 @@ export const discordSyncService = {
           });
         }
       }
+
+      // Operational Run Start post: only after IN_PROGRESS+ with an immutable
+      // start snapshot, and only into an already-provisioned dedicated channel.
+      // Never creates a first channel. Immutable content → post once (message
+      // id presence is the only dirtiness signal).
+      const started = run.status === "IN_PROGRESS" || run.status === "COMPLETED";
+      const dedicatedChannelId = post?.runChannelId ?? post?.signupChannelId ?? null;
+      if (started && dedicatedChannelId && !post?.startMessageId) {
+        const snapshot = await runStartSnapshotRepository.findByRunId(run.id);
+        if (snapshot) {
+          start.push({
+            runId: run.id,
+            existingChannelId: post?.startChannelId ?? null,
+            existingMessageId: post?.startMessageId ?? null,
+            existingRunChannelId: post?.runChannelId ?? null,
+            desiredChannelName: desiredChannelNameFor(run),
+            targetBucket,
+          });
+        }
+      }
     }
 
-    return { channels, signups, roster };
+    return { channels, signups, roster, start };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
@@ -418,6 +550,60 @@ export const discordSyncService = {
       rosterChannelId: input.channelId,
       rosterMessageId: input.messageId,
       lastRosterVersion: run.roster.version,
+    });
+  },
+
+  /**
+   * Null when the Run has not started (no immutable snapshot) or has no
+   * attendance-snapshotted participants. Source of truth is attendance
+   * signup IDs joined to roster signup rows for Discord/class/lockout data.
+   */
+  async getRunStartEmbedData(runId: string): Promise<RunStartEmbedData | null> {
+    const run = await runRepository.findById(runId);
+    if (!run) return null;
+    if (run.status !== "IN_PROGRESS" && run.status !== "COMPLETED") return null;
+
+    const snapshot = await runStartSnapshotRepository.findByRunId(runId);
+    if (!snapshot) return null;
+
+    const attendance = await attendanceRepository.listByRunId(runId);
+    if (attendance.length === 0) return null;
+
+    const signupRows = await rosterRepository.listSignups(runId);
+    const bySignupId = new Map(signupRows.map((row) => [row.id, row]));
+    const members: RunStartEmbedMember[] = [];
+    for (const row of attendance) {
+      const signup = bySignupId.get(row.signupId);
+      if (!signup) continue;
+      members.push(toStartMember(signup, run));
+    }
+
+    const tanks = members.filter((m) => m.participationType === "BOOSTER" && m.role === "TANK").sort(compareStartMembers);
+    const healers = members.filter((m) => m.participationType === "BOOSTER" && m.role === "HEALER").sort(compareStartMembers);
+    const dps = members.filter((m) => m.participationType === "BOOSTER" && m.role === "DPS").sort(compareStartMembers);
+    const lootbuddies = members.filter((m) => m.participationType === "LOOTBUDDY").sort(compareStartMembers);
+
+    return {
+      runId: run.id,
+      runTitle: run.title,
+      raidName: run.raidName,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+      scheduledStartAt: run.scheduledStartAt,
+      groups: { tanks, healers, dps, lootbuddies },
+      goldCollectors: [
+        { name: snapshot.goldCollector1Name, realm: snapshot.goldCollector1Realm },
+        { name: snapshot.goldCollector2Name, realm: snapshot.goldCollector2Realm },
+      ],
+      totalSelected: members.length,
+    };
+  },
+
+  async recordStartPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
+    await runDiscordPostRepository.recordStartPost({
+      runId: input.runId,
+      startChannelId: input.channelId,
+      startMessageId: input.messageId,
     });
   },
 };

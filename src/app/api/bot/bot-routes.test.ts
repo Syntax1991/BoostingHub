@@ -219,7 +219,7 @@ describe("bot API authentication", () => {
 });
 
 describe("GET /api/bot/discord/sync — channel reconciliation contract", () => {
-  it("exposes a channels array alongside signups/roster, with exactly the fields the bot needs", async () => {
+  it("exposes a channels array alongside signups/roster/start, with exactly the fields the bot needs", async () => {
     const record = await discordStatePut(
       req(`/api/bot/runs/${runId}/discord-state`, {
         method: "PUT",
@@ -234,6 +234,7 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
       r.json(),
     );
     expect(Array.isArray(sync.data.channels)).toBe(true);
+    expect(Array.isArray(sync.data.start)).toBe(true);
     const item = sync.data.channels.find((entry: { runId: string }) => entry.runId === runId);
     expect(item).toBeTruthy();
     expect(item.existingRunChannelId).toBe("contract-chan-1");

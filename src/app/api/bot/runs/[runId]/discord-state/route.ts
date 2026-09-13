@@ -8,15 +8,17 @@ const discordStateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("channel"), channelId: z.string().min(1).max(64) }),
   z.object({ kind: z.literal("signup"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
   z.object({ kind: z.literal("roster"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
+  z.object({ kind: z.literal("start"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
 ]);
 
 /**
  * PUT /api/bot/runs/:runId/discord-state
  *
  * Records Discord identity the bot just created or confirmed for a Run —
- * its dedicated channel, its signup message, or its roster message — so the
- * next sync pass reuses/edits that same identity instead of creating a
- * duplicate. Purely bookkeeping — never authoritative Run/Signup state.
+ * its dedicated channel, its signup message, its roster message, or its
+ * operational start roster message — so the next sync pass reuses/edits
+ * that same identity instead of creating a duplicate. Purely bookkeeping —
+ * never authoritative Run/Signup state.
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -28,8 +30,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await discordSyncService.recordRunChannel({ runId, channelId: body.channelId });
     } else if (body.kind === "signup") {
       await discordSyncService.recordSignupPost({ runId, channelId: body.channelId, messageId: body.messageId });
-    } else {
+    } else if (body.kind === "roster") {
       await discordSyncService.recordRosterPost({ runId, channelId: body.channelId, messageId: body.messageId });
+    } else {
+      await discordSyncService.recordStartPost({ runId, channelId: body.channelId, messageId: body.messageId });
     }
 
     return botApiOk({ recorded: true });

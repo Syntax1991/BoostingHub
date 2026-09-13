@@ -132,9 +132,11 @@ async function createCharacter(
 async function createSignup(input: {
   runId: string;
   userId: string;
-  characterId: string;
+  characterId: string | null;
   participationType: ParticipationType;
   role: CharacterRole | null;
+  lootbuddyClass?: "MAGE" | "PRIEST" | null;
+  lootbuddyMode?: "LOOT_ONLY" | "PLAYING" | null;
 }) {
   const id = crypto.randomUUID();
   await orm.RunSignup.create({
@@ -146,7 +148,9 @@ async function createSignup(input: {
     role: input.role,
     isBackup: false,
     status: "PENDING",
-    lootbuddyMode: input.participationType === "LOOTBUDDY" ? "PLAYING" : null,
+    lootbuddyClass: input.lootbuddyClass ?? null,
+    lootbuddyMode:
+      input.lootbuddyMode ?? (input.participationType === "LOOTBUDDY" ? "PLAYING" : null),
     lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "NONE" : null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -155,8 +159,12 @@ async function createSignup(input: {
 }
 
 async function cleanupRun(runId: string) {
-  await deleteIfPresent("RunDiscordPost", runId);
   await orm.RunDiscordPost.where({ runId }).delete().catch(() => {});
+  await orm.RunStartSnapshot.where({ runId }).delete().catch(() => {});
+  const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
+  for (const row of attendance) {
+    await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete().catch(() => {});
+  }
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
@@ -1158,5 +1166,87 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
     const work = await discordSyncService.listSyncWork(classificationNow);
     const channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem?.targetBucket).toBe("ARCHIVE");
+  });
+});
+
+describe("discordSyncService — run start operational post", () => {
+  it("exposes start work once, builds grouped DTO from attendance, and disappears after recordStartPost", async () => {
+    const id = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(3),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 1,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+
+    const tank = await createCharacter(ids.tank, "StartTank", "PALADIN", "Protection", "TANK");
+    const healer = await createCharacter(ids.healer, "StartHeal", "PRIEST", "Holy", "HEALER");
+    const dps = await createCharacter(ids.melee, "StartDps", "WARRIOR", "Arms", "DPS");
+    await createSignup({ runId: id, userId: ids.tank, characterId: tank, participationType: "BOOSTER", role: "TANK" });
+    await createSignup({ runId: id, userId: ids.healer, characterId: healer, participationType: "BOOSTER", role: "HEALER" });
+    await createSignup({ runId: id, userId: ids.melee, characterId: dps, participationType: "BOOSTER", role: "DPS" });
+    await createSignup({
+      runId: id,
+      userId: ids.loot,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      role: null,
+      lootbuddyClass: "MAGE",
+      lootbuddyMode: "LOOT_ONLY",
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const group of [view.groups.tanks, view.groups.healers, view.groups.dps, view.groups.lootbuddies]) {
+      for (const signup of group) {
+        view = await rosterService.getRosterManagementView(lead, id);
+        if (!signup.draftSelected) {
+          await rosterService.setDraftSelection(lead, {
+            runId: id,
+            signupId: signup.id,
+            selected: true,
+            version: view.roster.version,
+          });
+        }
+      }
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "start-chan-1" });
+
+    let work = await discordSyncService.listSyncWork();
+    expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+
+    await runService.startRun(lead, {
+      runId: id,
+      goldCollectors: [
+        { name: "Duskgc", realm: "Draenor" },
+        { name: "Duskalli", realm: "Draenor" },
+      ],
+    });
+
+    work = await discordSyncService.listSyncWork();
+    expect(work.start.some((entry) => entry.runId === id && entry.existingMessageId === null)).toBe(true);
+
+    const dto = await discordSyncService.getRunStartEmbedData(id);
+    expect(dto).toBeTruthy();
+    expect(dto!.groups.tanks).toHaveLength(1);
+    expect(dto!.groups.healers).toHaveLength(1);
+    expect(dto!.groups.dps).toHaveLength(1);
+    expect(dto!.groups.lootbuddies).toHaveLength(1);
+    expect(dto!.goldCollectors[0]).toEqual({ name: "Duskgc", realm: "Draenor" });
+    expect(dto!.goldCollectors[1]).toEqual({ name: "Duskalli", realm: "Draenor" });
+    expect(dto!.groups.lootbuddies[0].characterName).toBe("Mage");
+
+    await discordSyncService.recordStartPost({ runId: id, channelId: "start-chan-1", messageId: "start-msg-1" });
+    work = await discordSyncService.listSyncWork();
+    expect(work.start.some((entry) => entry.runId === id)).toBe(false);
   });
 });
