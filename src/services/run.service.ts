@@ -7,13 +7,6 @@ import {
   isEligibleRaidLead,
 } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
-import {
-  isValidCharacterName,
-  isValidRealmName,
-  normalizeCharacterIdentity,
-  prepareCharacterName,
-  prepareRealmName,
-} from "@/lib/character-identity";
 import { buildRunTitle } from "@/lib/run-title";
 import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -43,34 +36,6 @@ import type { RaidRecord } from "@/repositories/raid.repository";
 import { isDomainError } from "@/lib/errors";
 
 const DISCOVERY_HIDDEN_STATUSES: readonly RunStatus[] = ["DRAFT", "CANCELLED"];
-
-type NormalizedGoldCollector = { name: string; realm: string };
-
-function normalizeGoldCollectors(
-  collectors: StartRunInput["goldCollectors"],
-): [NormalizedGoldCollector, NormalizedGoldCollector] {
-  const normalized = collectors.map((collector) => {
-    const name = prepareCharacterName(collector.name);
-    const realm = prepareRealmName(collector.realm);
-    if (!isValidCharacterName(name)) {
-      throw new DomainError("INVALID_CHARACTER_NAME", "Enter a valid gold collector character name.");
-    }
-    if (!isValidRealmName(realm)) {
-      throw new DomainError("INVALID_CHARACTER_NAME", "Enter a valid gold collector realm.");
-    }
-    return { name, realm };
-  }) as [NormalizedGoldCollector, NormalizedGoldCollector];
-
-  const keyA = `${normalizeCharacterIdentity(normalized[0].name)}@${normalizeCharacterIdentity(normalized[0].realm)}`;
-  const keyB = `${normalizeCharacterIdentity(normalized[1].name)}@${normalizeCharacterIdentity(normalized[1].realm)}`;
-  if (keyA === keyB) {
-    throw new DomainError(
-      "VALIDATION_FAILED",
-      "Gold Collector 1 and Gold Collector 2 must be different characters.",
-    );
-  }
-  return normalized;
-}
 
 function requireManagerRole(user: AuthenticatedUser): void {
   if (!hasRaidLeadAccess(user.accountRole)) {
@@ -783,7 +748,7 @@ export const runService = {
     return { id: run.id };
   },
 
-  async startRun(user: AuthenticatedUser, input: { runId: string; goldCollectors: StartRunInput["goldCollectors"] }) {
+  async startRun(user: AuthenticatedUser, input: StartRunInput) {
     const run = await loadManagedRun(user, input.runId);
     if (run.status === "IN_PROGRESS") {
       throw new DomainError("RUN_ALREADY_STARTED", "This run has already started.");
@@ -799,13 +764,8 @@ export const runService = {
       );
     }
 
-    const [collector1, collector2] = normalizeGoldCollectors(input.goldCollectors);
     await attendanceService.snapshotSelectedRoster(run.id, {
       startedById: user.id,
-      goldCollector1Name: collector1.name,
-      goldCollector1Realm: collector1.realm,
-      goldCollector2Name: collector2.name,
-      goldCollector2Realm: collector2.realm,
     });
     await activityRepository.create({
       userId: user.id,

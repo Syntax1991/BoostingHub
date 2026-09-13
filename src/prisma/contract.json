@@ -3868,34 +3868,6 @@
                   "kind": "scalar"
                 }
               },
-              "goldCollector1Name": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "goldCollector1Realm": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "goldCollector2Name": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "goldCollector2Realm": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -3968,18 +3940,6 @@
               "fields": {
                 "createdAt": {
                   "column": "createdAt"
-                },
-                "goldCollector1Name": {
-                  "column": "goldCollector1Name"
-                },
-                "goldCollector1Realm": {
-                  "column": "goldCollector1Realm"
-                },
-                "goldCollector2Name": {
-                  "column": "goldCollector2Name"
-                },
-                "goldCollector2Realm": {
-                  "column": "goldCollector2Realm"
                 },
                 "id": {
                   "column": "id"
@@ -8064,26 +8024,6 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
-                "goldCollector1Name": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "goldCollector1Realm": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "goldCollector2Name": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "goldCollector2Realm": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -9024,7 +8964,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "a2fe637fd1ffa1754e920299de0414c0552ff8124c0c80ea37e3e3b4361f6351"
+    "storageHash": "60c56dbcad0eaa2dc5cc7234e8a78e3df3cf3abbe41bd3c63f92b3e978279fa4"
   },
   "execution": {
     "executionHash": "e360afc15d9acb3a64cba5a920edaddddd531ee2246e5ae03f7da92ddec5d4a7",

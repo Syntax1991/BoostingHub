@@ -145,10 +145,6 @@ export const attendanceRepository = {
     runId: string,
     input: {
       startedById: string;
-      goldCollector1Name: string;
-      goldCollector1Realm: string;
-      goldCollector2Name: string;
-      goldCollector2Realm: string;
     },
   ) {
     await db.transaction(async (tx) => {
@@ -209,10 +205,6 @@ export const attendanceRepository = {
       await txOrm.RunStartSnapshot.create({
         id: crypto.randomUUID(),
         runId,
-        goldCollector1Name: input.goldCollector1Name,
-        goldCollector1Realm: input.goldCollector1Realm,
-        goldCollector2Name: input.goldCollector2Name,
-        goldCollector2Realm: input.goldCollector2Realm,
         startedAt: now,
         startedById: input.startedById,
         createdAt: now,

@@ -183,10 +183,6 @@ export type RunStartEmbedData = {
     dps: RunStartEmbedMember[];
     lootbuddies: RunStartEmbedMember[];
   };
-  goldCollectors: [
-    { name: string; realm: string },
-    { name: string; realm: string },
-  ];
   totalSelected: number;
 };
 
@@ -609,10 +605,6 @@ export const discordSyncService = {
         dps: run.desiredDpsCount,
       },
       groups: { tanks, healers, dps, lootbuddies },
-      goldCollectors: [
-        { name: snapshot.goldCollector1Name, realm: snapshot.goldCollector1Realm },
-        { name: snapshot.goldCollector2Name, realm: snapshot.goldCollector2Realm },
-      ],
       totalSelected: members.length,
     };
   },

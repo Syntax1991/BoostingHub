@@ -94,10 +94,6 @@ export const attendanceService = {
     runId: string,
     input: {
       startedById: string;
-      goldCollector1Name: string;
-      goldCollector1Realm: string;
-      goldCollector2Name: string;
-      goldCollector2Realm: string;
     },
   ) {
     await attendanceRepository.startRunWithAttendance(runId, input);

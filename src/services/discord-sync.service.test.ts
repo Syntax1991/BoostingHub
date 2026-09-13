@@ -1226,10 +1226,6 @@ describe("discordSyncService — run start operational post", () => {
 
     await runService.startRun(lead, {
       runId: id,
-      goldCollectors: [
-        { name: "Duskgc", realm: "Draenor" },
-        { name: "Duskalli", realm: "Draenor" },
-      ],
     });
 
     work = await discordSyncService.listSyncWork();
@@ -1242,8 +1238,7 @@ describe("discordSyncService — run start operational post", () => {
     expect(dto!.groups.healers).toHaveLength(1);
     expect(dto!.groups.dps).toHaveLength(1);
     expect(dto!.groups.lootbuddies).toHaveLength(1);
-    expect(dto!.goldCollectors[0]).toEqual({ name: "Duskgc", realm: "Draenor" });
-    expect(dto!.goldCollectors[1]).toEqual({ name: "Duskalli", realm: "Draenor" });
+    expect(dto).not.toHaveProperty("goldCollectors");
     expect(dto!.groups.lootbuddies[0].characterName).toBe("Mage");
     expect(dto!.groups.tanks[0].wowClass).toBe("PALADIN");
 

@@ -4,10 +4,6 @@ import { asString } from "@/lib/persistence";
 export type RunStartSnapshotRecord = {
   id: string;
   runId: string;
-  goldCollector1Name: string;
-  goldCollector1Realm: string;
-  goldCollector2Name: string;
-  goldCollector2Realm: string;
   startedAt: string;
   startedById: string;
   startedByName: string | null;
@@ -18,10 +14,6 @@ function mapRow(row: Record<string, unknown>): RunStartSnapshotRecord {
   return {
     id: asString(row.id),
     runId: asString(row.runId),
-    goldCollector1Name: asString(row.goldCollector1Name),
-    goldCollector1Realm: asString(row.goldCollector1Realm),
-    goldCollector2Name: asString(row.goldCollector2Name),
-    goldCollector2Realm: asString(row.goldCollector2Realm),
     startedAt: asString(row.startedAt),
     startedById: asString(row.startedById),
     startedByName: starter ? asString(starter.name) : null,

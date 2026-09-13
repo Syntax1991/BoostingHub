@@ -469,22 +469,18 @@ model Run {
   @@map("run")
 }
 
-/// Immutable operational snapshot taken when a Run starts. Gold Collector
-/// identities are Name-Realm strings only — not Character FKs — so they do
-/// not need BoostingHub Users, booster qualifications, or roster membership.
+/// Immutable operational audit record that a Run Start occurred (who/when).
+/// Participant roster is snapshotted into RunAttendance; Discord Final Setup
+/// is posted asynchronously from that attendance.
 model RunStartSnapshot {
-  id                  String   @id @default(uuid())
-  runId               String   @unique
-  run                 Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
-  goldCollector1Name  String
-  goldCollector1Realm String
-  goldCollector2Name  String
-  goldCollector2Realm String
-  startedAt           TimestamptzString
-  startedById         String
-  startedBy           User     @relation("RunStartStarter", fields: [startedById], references: [id], onDelete: Restrict)
-  createdAt           TimestamptzString @default(now())
-  updatedAt           temporal.updatedAtString()
+  id          String   @id @default(uuid())
+  runId       String   @unique
+  run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  startedAt   TimestamptzString
+  startedById String
+  startedBy   User     @relation("RunStartStarter", fields: [startedById], references: [id], onDelete: Restrict)
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
 
   @@map("run_start_snapshot")
 }
