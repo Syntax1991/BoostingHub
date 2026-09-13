@@ -6,7 +6,7 @@ import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signu
 import {
   mergeWeekSectionItemsForOrdering,
   reconcileChannels,
-  reconcileWeekSectionPositions,
+  reconcileWeekSectionPositionsUntilSettled,
   type CategoryChannelLister,
   type ChannelFetcher,
   type PositionSetter,
@@ -76,11 +76,29 @@ function makeChannelFetcher(client: Client): ChannelFetcher {
   };
 }
 
+function mapCategoryChildren(
+  channels: Iterable<{ id: string; position?: number; parentId?: string | null }>,
+  categoryId: string | null,
+): Array<{ id: string; position: number }> {
+  return [...channels]
+    .filter((channel) => {
+      if (categoryId === null) return true;
+      return "parentId" in channel && channel.parentId === categoryId;
+    })
+    .map((channel) => ({
+      id: channel.id,
+      position: typeof channel.position === "number" ? channel.position : 0,
+    }));
+}
+
 /**
  * Lists the current children of a category by their live `position`, for
- * `reconcileWeekSectionPositions`. Prefers the category's own `children`
- * cache (updated immediately by `guild.channels.create({ parent })`) and
- * falls back to scanning the client channel cache by `parentId`.
+ * planning `reconcileWeekSectionPositions`. Prefers the category's own
+ * `children` cache (updated immediately by `guild.channels.create({ parent })`)
+ * and falls back to scanning the client channel cache by `parentId`.
+ *
+ * Do not use this alone to prove Discord accepted a position write — use
+ * `makeFreshCategoryChannelLister` after `setPositions`.
  */
 function makeCategoryChannelLister(client: Client): CategoryChannelLister {
   return async (categoryId) => {
@@ -90,21 +108,41 @@ function makeCategoryChannelLister(client: Client): CategoryChannelLister {
     }
     const fromCategoryChildren = (category as CategoryChannel).children?.cache;
     if (fromCategoryChildren && fromCategoryChildren.size > 0) {
-      return [...fromCategoryChildren.values()].map((channel) => ({
-        id: channel.id,
-        position: "position" in channel ? (channel as { position: number }).position : 0,
-      }));
+      return mapCategoryChildren(fromCategoryChildren.values(), null);
     }
-    return [...client.channels.cache.values()]
-      .filter((channel) => channel !== null && "parentId" in channel && channel.parentId === categoryId)
-      .map((channel) => ({
-        id: (channel as { id: string }).id,
-        position: "position" in channel ? (channel as { position: number }).position : 0,
-      }));
+    return mapCategoryChildren(
+      client.channels.cache.values() as Iterable<{ id: string; position?: number; parentId?: string | null }>,
+      categoryId,
+    );
   };
 }
 
-/** Applies a full desired ordering in one guild-level batched call — never includes a marker channel id (enforced in channel-reconciliation.ts). */
+/**
+ * Fresh REST-backed category child listing used to verify post-write order.
+ * Forces `guild.channels.fetch()` so success is not judged from the
+ * create-time cache view alone (live Discord can lag that cache).
+ */
+function makeFreshCategoryChannelLister(client: Client, guildId: string): CategoryChannelLister {
+  return async (categoryId) => {
+    const guild = await client.guilds.fetch(guildId);
+    // GET /guilds/{id}/channels — refresh positions from Discord, not cache.
+    await guild.channels.fetch();
+    const category = guild.channels.cache.get(categoryId) ?? (await client.channels.fetch(categoryId).catch(() => null));
+    if (!category || category.type !== ChannelType.GuildCategory) {
+      return null;
+    }
+    const fromCategoryChildren = (category as CategoryChannel).children?.cache;
+    if (fromCategoryChildren && fromCategoryChildren.size > 0) {
+      return mapCategoryChildren(fromCategoryChildren.values(), null);
+    }
+    return mapCategoryChildren(
+      guild.channels.cache.values() as Iterable<{ id: string; position?: number; parentId?: string | null }>,
+      categoryId,
+    );
+  };
+}
+
+/** Applies a full desired ordering in one guild-level batched call. */
 function makePositionSetter(client: Client, guildId: string): PositionSetter {
   return async (moves) => {
     const guild = await client.guilds.fetch(guildId);
@@ -173,29 +211,38 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     }
   } finally {
     const baseLister = makeCategoryChannelLister(client);
+    const freshLister = makeFreshCategoryChannelLister(client, env.discordGuildId);
     // Same-pass creates normally enter the category children cache immediately,
     // but do not depend on that alone: overlay any newly provisioned channel
     // ids so setPositions can still place them if the listing briefly lags.
     // Only newly provisioned ids are overlaid — never resurrect a deleted
     // stored runChannelId from work.channels that is absent from Discord.
-    const listWithSamePassCreates: CategoryChannelLister = async (categoryId) => {
-      const children = await baseLister(categoryId);
-      if (!children) return null;
-      const byId = new Map(children.map((child) => [child.id, child]));
-      let nextPosition = children.reduce((max, child) => Math.max(max, child.position), -1);
-      for (const item of newlyProvisionedSections) {
-        if (byId.has(item.existingRunChannelId)) continue;
-        nextPosition += 1;
-        byId.set(item.existingRunChannelId, {
-          id: item.existingRunChannelId,
-          position: nextPosition,
-        });
-      }
-      return [...byId.values()];
+    const withSamePassCreates = (lister: CategoryChannelLister): CategoryChannelLister => {
+      return async (categoryId) => {
+        const children = await lister(categoryId);
+        if (!children) return null;
+        const byId = new Map(children.map((child) => [child.id, child]));
+        let nextPosition = children.reduce((max, child) => Math.max(max, child.position), -1);
+        for (const item of newlyProvisionedSections) {
+          if (byId.has(item.existingRunChannelId)) continue;
+          nextPosition += 1;
+          byId.set(item.existingRunChannelId, {
+            id: item.existingRunChannelId,
+            position: nextPosition,
+          });
+        }
+        return [...byId.values()];
+      };
     };
 
-    await reconcileWeekSectionPositions(
-      listWithSamePassCreates,
+    // Create-time GuildChannelCreateOptions.position was audited and not used
+    // as a first-line placement: it cannot encode full CURRENT/NEXT chronology
+    // around markers without duplicating the canonical planner, and Discord's
+    // create→position visibility still needs post-write reconcile+verify.
+    // Source of truth remains reconcileWeekSectionPositions (+ settle).
+    await reconcileWeekSectionPositionsUntilSettled(
+      withSamePassCreates(baseLister),
+      withSamePassCreates(freshLister),
       makePositionSetter(client, env.discordGuildId),
       {
         discordRunCategoryId: env.discordRunCategoryId,

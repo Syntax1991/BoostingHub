@@ -4,6 +4,9 @@ import {
   reconcileChannels,
   reconcileExistingRunChannel,
   reconcileWeekSectionPositions,
+  reconcileWeekSectionPositionsUntilSettled,
+  relativeOrderMatches,
+  WEEK_SECTION_POSITION_MAX_ATTEMPTS,
   type CategoryChannelLister,
   type CategoryChild,
   type ChannelFetcher,
@@ -666,5 +669,117 @@ describe("mergeWeekSectionItemsForOrdering — same-pass first-channel create", 
       [weekItem({ runId: "run-1", existingRunChannelId: "chan-fresh" })],
     );
     expect(merged).toEqual([weekItem({ runId: "run-1", existingRunChannelId: "chan-fresh" })]);
+  });
+});
+
+describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded retry", () => {
+  it("relativeOrderMatches distinguishes intended vs live sequences", () => {
+    expect(relativeOrderMatches(["a", "b", "c"], ["a", "b", "c"])).toBe(true);
+    expect(relativeOrderMatches(["a", "c", "b"], ["a", "b", "c"])).toBe(false);
+  });
+
+  it("verifies correct order on first attempt without retry when fresh matches", async () => {
+    let live = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      live = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+    }) as unknown as PositionSetter;
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listerFor(live),
+      async () => live,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep, retryDelayMs: 10 },
+    );
+
+    expect(result).toEqual({ status: "ok", moved: 2, attempts: 1, verified: true });
+    expect(setPositions).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(live.map((c) => c.id)).toEqual([CURRENT_MARKER, "chan-1", NEXT_MARKER]);
+  });
+
+  it("retries when cache write looks done but fresh Discord order stays wrong", async () => {
+    // Cache/plan view starts wrong; setPositions "succeeds" but fresh stays wrong until 2nd write.
+    let cacheView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    let freshView = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    let writes = 0;
+    const setPositions = vi.fn(async (moves: Array<{ channelId: string; position: number }>) => {
+      writes += 1;
+      const next = [...moves]
+        .sort((a, b) => a.position - b.position)
+        .map((move) => child(move.channelId, move.position));
+      cacheView = next;
+      // Discord create→position lag: first write ignored by server view.
+      if (writes >= 2) {
+        freshView = next;
+      }
+    }) as unknown as PositionSetter;
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      async () => cacheView,
+      async () => freshView,
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep, retryDelayMs: 5 },
+    );
+
+    expect(result).toEqual({ status: "ok", moved: expect.any(Number), attempts: 2, verified: true });
+    expect(result.status === "ok" && result.moved).toBeGreaterThan(0);
+    expect(setPositions).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(5);
+    expect(freshView.map((c) => c.id)).toEqual([CURRENT_MARKER, "chan-1", NEXT_MARKER]);
+  });
+
+  it("stops at configured maximum and surfaces unverified when Discord never converges", async () => {
+    const stuck = [child(CURRENT_MARKER, 0), child(NEXT_MARKER, 1), child("chan-1", 2)];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listerFor(stuck),
+      listerFor(stuck),
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep, retryDelayMs: 1, maxAttempts: WEEK_SECTION_POSITION_MAX_ATTEMPTS },
+    );
+
+    expect(result).toEqual({
+      status: "ok",
+      moved: expect.any(Number),
+      attempts: WEEK_SECTION_POSITION_MAX_ATTEMPTS,
+      verified: false,
+    });
+    expect(setPositions).toHaveBeenCalledTimes(WEEK_SECTION_POSITION_MAX_ATTEMPTS);
+    expect(sleep).toHaveBeenCalledTimes(WEEK_SECTION_POSITION_MAX_ATTEMPTS - 1);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not write when already correct and fresh agrees", async () => {
+    const live = [child(CURRENT_MARKER, 0), child("chan-1", 1), child(NEXT_MARKER, 2)];
+    const setPositions = vi.fn().mockResolvedValue(undefined) as PositionSetter;
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await reconcileWeekSectionPositionsUntilSettled(
+      listerFor(live),
+      listerFor(live),
+      setPositions,
+      weekEnv,
+      [weekItem({ targetBucket: "CURRENT", existingRunChannelId: "chan-1" })],
+      { sleep },
+    );
+
+    expect(result).toEqual({ status: "ok", moved: 0, attempts: 1, verified: true });
+    expect(setPositions).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
   });
 });

@@ -181,11 +181,143 @@ export type WeekSectionResult =
   | { status: "ok"; moved: number }
   | { status: "skipped"; reason: string };
 
+/**
+ * Same-pass create→position can resolve successfully while Discord's live
+ * category order briefly stays wrong. Cap retries tightly; never wait for the
+ * normal 60s poll. Delay is injectable so tests stay fast.
+ */
+export const WEEK_SECTION_POSITION_MAX_ATTEMPTS = 3; // initial attempt + up to 2 retries
+export const WEEK_SECTION_POSITION_RETRY_DELAY_MS = 250;
+
+export type WeekSectionSettleOptions = {
+  maxAttempts?: number;
+  retryDelayMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+};
+
+export type WeekSectionSettleResult =
+  | { status: "ok"; moved: number; attempts: number; verified: boolean }
+  | { status: "skipped"; reason: string; attempts: number };
+
 function sortByScheduleThenRunId(items: WeekSectionItem[]): WeekSectionItem[] {
   return [...items].sort((a, b) => {
     const delta = new Date(a.scheduledStartAt).getTime() - new Date(b.scheduledStartAt).getTime();
     return delta !== 0 ? delta : a.runId.localeCompare(b.runId);
   });
+}
+
+function sortChildrenByPosition(children: ReadonlyArray<CategoryChild>): CategoryChild[] {
+  return [...children].sort((a, b) => a.position - b.position);
+}
+
+/** True when two id sequences are identical (relative order, not raw Discord position numbers). */
+export function relativeOrderMatches(
+  liveOrderedIds: ReadonlyArray<string>,
+  desiredOrderedIds: ReadonlyArray<string>,
+): boolean {
+  return (
+    liveOrderedIds.length === desiredOrderedIds.length &&
+    liveOrderedIds.every((id, index) => id === desiredOrderedIds[index])
+  );
+}
+
+type WeekSectionPlan =
+  | {
+      status: "ok";
+      finalOrder: CategoryChild[];
+      finalOrderIds: string[];
+      currentOrderIds: string[];
+      alreadyInOrder: boolean;
+      desiredPositions: Array<{ channelId: string; position: number }>;
+      changedCount: number;
+    }
+  | { status: "skipped"; reason: string };
+
+/**
+ * Single canonical planner for CURRENT/NEXT category order. Both the write
+ * path and post-write verification use this — never a second ordering algorithm.
+ */
+export function planWeekSectionOrder(
+  children: ReadonlyArray<CategoryChild>,
+  env: WeekSectionEnv,
+  items: ReadonlyArray<WeekSectionItem>,
+): WeekSectionPlan {
+  if (!env.discordRunCategoryId) {
+    return { status: "skipped", reason: "DISCORD_RUN_CATEGORY_ID is unset" };
+  }
+  if (!env.discordRunCurrentMarkerChannelId) {
+    return { status: "skipped", reason: "DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID is unset" };
+  }
+  if (!env.discordRunNextMarkerChannelId) {
+    return { status: "skipped", reason: "DISCORD_RUN_NEXT_MARKER_CHANNEL_ID is unset" };
+  }
+
+  const currentMarker = children.find((c) => c.id === env.discordRunCurrentMarkerChannelId);
+  const nextMarker = children.find((c) => c.id === env.discordRunNextMarkerChannelId);
+  if (!currentMarker) {
+    return { status: "skipped", reason: "current marker not in category" };
+  }
+  if (!nextMarker) {
+    return { status: "skipped", reason: "next marker not in category" };
+  }
+  if (currentMarker.position >= nextMarker.position) {
+    return { status: "skipped", reason: "marker order reversed" };
+  }
+
+  const currentManaged = sortByScheduleThenRunId(items.filter((item) => item.targetBucket === "CURRENT"));
+  const nextManaged = sortByScheduleThenRunId(items.filter((item) => item.targetBucket === "NEXT"));
+  const managedIds = new Set([...currentManaged, ...nextManaged].map((item) => item.existingRunChannelId));
+
+  const childById = new Map(children.map((child) => [child.id, child]));
+  const resolvedCurrentManaged = currentManaged
+    .map((item) => childById.get(item.existingRunChannelId))
+    .filter((c): c is CategoryChild => Boolean(c));
+  const resolvedNextManaged = nextManaged
+    .map((item) => childById.get(item.existingRunChannelId))
+    .filter((c): c is CategoryChild => Boolean(c));
+
+  const byPositionAsc = sortChildrenByPosition(children);
+  const isMarker = (c: CategoryChild) => c.id === currentMarker.id || c.id === nextMarker.id;
+  const unmanagedBefore = byPositionAsc.filter(
+    (c) => !isMarker(c) && !managedIds.has(c.id) && c.position < currentMarker.position,
+  );
+  const unmanagedBetween = byPositionAsc.filter(
+    (c) =>
+      !isMarker(c) &&
+      !managedIds.has(c.id) &&
+      c.position > currentMarker.position &&
+      c.position < nextMarker.position,
+  );
+  const unmanagedAfter = byPositionAsc.filter(
+    (c) => !isMarker(c) && !managedIds.has(c.id) && c.position > nextMarker.position,
+  );
+
+  const finalOrder: CategoryChild[] = [
+    ...unmanagedBefore,
+    currentMarker,
+    ...resolvedCurrentManaged,
+    ...unmanagedBetween,
+    nextMarker,
+    ...resolvedNextManaged,
+    ...unmanagedAfter,
+  ];
+
+  const currentOrderIds = byPositionAsc.map((c) => c.id);
+  const finalOrderIds = finalOrder.map((c) => c.id);
+  const alreadyInOrder = relativeOrderMatches(currentOrderIds, finalOrderIds);
+  const oldIndexById = new Map(currentOrderIds.map((id, index) => [id, index]));
+  const changedCount = finalOrder.filter((channel, index) => oldIndexById.get(channel.id) !== index).length;
+  const desiredPositions = finalOrder.map((channel, index) => ({ channelId: channel.id, position: index }));
+
+  return {
+    status: "ok",
+    finalOrder,
+    finalOrderIds,
+    currentOrderIds,
+    alreadyInOrder,
+    desiredPositions,
+    changedCount,
+  };
 }
 
 /**
@@ -267,72 +399,110 @@ export async function reconcileWeekSectionPositions(
     return { status: "skipped", reason: "category not found" };
   }
 
-  const currentMarker = children.find((c) => c.id === env.discordRunCurrentMarkerChannelId);
-  const nextMarker = children.find((c) => c.id === env.discordRunNextMarkerChannelId);
-  if (!currentMarker) {
-    console.warn("[discord-bot] #current-id marker is not a child of DISCORD_RUN_CATEGORY_ID — skipping CURRENT/NEXT section reconciliation");
-    return { status: "skipped", reason: "current marker not in category" };
+  const plan = planWeekSectionOrder(children, env, items);
+  if (plan.status === "skipped") {
+    if (plan.reason === "current marker not in category") {
+      console.warn("[discord-bot] #current-id marker is not a child of DISCORD_RUN_CATEGORY_ID — skipping CURRENT/NEXT section reconciliation");
+    } else if (plan.reason === "next marker not in category") {
+      console.warn("[discord-bot] #next-id marker is not a child of DISCORD_RUN_CATEGORY_ID — skipping CURRENT/NEXT section reconciliation");
+    } else if (plan.reason === "marker order reversed") {
+      console.warn("[discord-bot] #current-id must sit above #next-id — skipping CURRENT/NEXT section reconciliation until reordered manually");
+    }
+    return plan;
   }
-  if (!nextMarker) {
-    console.warn("[discord-bot] #next-id marker is not a child of DISCORD_RUN_CATEGORY_ID — skipping CURRENT/NEXT section reconciliation");
-    return { status: "skipped", reason: "next marker not in category" };
-  }
-  if (currentMarker.position >= nextMarker.position) {
-    console.warn("[discord-bot] #current-id must sit above #next-id — skipping CURRENT/NEXT section reconciliation until reordered manually");
-    return { status: "skipped", reason: "marker order reversed" };
-  }
-
-  const currentManaged = sortByScheduleThenRunId(items.filter((item) => item.targetBucket === "CURRENT"));
-  const nextManaged = sortByScheduleThenRunId(items.filter((item) => item.targetBucket === "NEXT"));
-  const managedIds = new Set([...currentManaged, ...nextManaged].map((item) => item.existingRunChannelId));
-
-  const childById = new Map(children.map((child) => [child.id, child]));
-  const resolvedCurrentManaged = currentManaged.map((item) => childById.get(item.existingRunChannelId)).filter((c): c is CategoryChild => Boolean(c));
-  const resolvedNextManaged = nextManaged.map((item) => childById.get(item.existingRunChannelId)).filter((c): c is CategoryChild => Boolean(c));
-
-  const byPositionAsc = [...children].sort((a, b) => a.position - b.position);
-  const isMarker = (c: CategoryChild) => c.id === currentMarker.id || c.id === nextMarker.id;
-  const unmanagedBefore = byPositionAsc.filter((c) => !isMarker(c) && !managedIds.has(c.id) && c.position < currentMarker.position);
-  const unmanagedBetween = byPositionAsc.filter((c) => !isMarker(c) && !managedIds.has(c.id) && c.position > currentMarker.position && c.position < nextMarker.position);
-  const unmanagedAfter = byPositionAsc.filter((c) => !isMarker(c) && !managedIds.has(c.id) && c.position > nextMarker.position);
-
-  const finalOrder: CategoryChild[] = [
-    ...unmanagedBefore,
-    currentMarker,
-    ...resolvedCurrentManaged,
-    ...unmanagedBetween,
-    nextMarker,
-    ...resolvedNextManaged,
-    ...unmanagedAfter,
-  ];
 
   // Compare RELATIVE order, not raw position numbers — the live category's
   // raw position values need not be dense/contiguous (they can end up
   // sparse after any number of unrelated Discord-side edits), so a category
   // already in the correct relative order must never be churned merely to
   // renumber it. Only an actual change in sequence justifies a write.
-  const currentOrderIds = byPositionAsc.map((c) => c.id);
-  const finalOrderIds = finalOrder.map((c) => c.id);
-  const alreadyInOrder =
-    currentOrderIds.length === finalOrderIds.length && currentOrderIds.every((id, index) => id === finalOrderIds[index]);
-
-  if (alreadyInOrder) {
+  if (plan.alreadyInOrder) {
     return { status: "ok", moved: 0 };
   }
-
-  const oldIndexById = new Map(currentOrderIds.map((id, index) => [id, index]));
-  const changedCount = finalOrder.filter((channel, index) => oldIndexById.get(channel.id) !== index).length;
-  const desiredPositions = finalOrder.map((channel, index) => ({ channelId: channel.id, position: index }));
 
   try {
     // Discord requires the complete set to apply correctly, so every
     // channel in `finalOrder` is submitted even when most entries are
     // unchanged — see the function doc comment above.
-    await setPositions(desiredPositions);
+    await setPositions(plan.desiredPositions);
   } catch (error) {
     console.error("[discord-bot] failed to reconcile CURRENT/NEXT section positions", error);
     return { status: "skipped", reason: "setPositions failed" };
   }
 
-  return { status: "ok", moved: changedCount };
+  return { status: "ok", moved: plan.changedCount };
+}
+
+/**
+ * Canonical CURRENT/NEXT reconcile with fresh post-write verification and a
+ * bounded same-pass retry. Handles Discord create→position consistency where
+ * `setPositions` resolves successfully but the live category order briefly
+ * remains wrong. Does not wait for the normal 60s scheduler poll.
+ *
+ * `listForPlan` may include same-pass create overlays (cache-friendly).
+ * `listFresh` must reflect Discord server state after a write (REST/force
+ * fetch) — never validate success solely against the create-time cache view.
+ */
+export async function reconcileWeekSectionPositionsUntilSettled(
+  listForPlan: CategoryChannelLister,
+  listFresh: CategoryChannelLister,
+  setPositions: PositionSetter,
+  env: WeekSectionEnv,
+  items: WeekSectionItem[],
+  options: WeekSectionSettleOptions = {},
+): Promise<WeekSectionSettleResult> {
+  const maxAttempts = options.maxAttempts ?? WEEK_SECTION_POSITION_MAX_ATTEMPTS;
+  const retryDelayMs = options.retryDelayMs ?? WEEK_SECTION_POSITION_RETRY_DELAY_MS;
+  const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+
+  let totalMoved = 0;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // After the first write, re-plan from a fresh server listing so retries
+    // are not driven by a stale create-time cache snapshot.
+    const lister = attempt === 1 ? listForPlan : listFresh;
+    const result = await reconcileWeekSectionPositions(lister, setPositions, env, items);
+    if (result.status === "skipped") {
+      return { status: "skipped", reason: result.reason, attempts: attempt };
+    }
+    totalMoved += result.moved;
+
+    if (!env.discordRunCategoryId) {
+      return { status: "skipped", reason: "DISCORD_RUN_CATEGORY_ID is unset", attempts: attempt };
+    }
+
+    const freshChildren = await listFresh(env.discordRunCategoryId);
+    if (!freshChildren) {
+      console.warn(
+        "[discord-bot] fresh category fetch failed after position reconciliation — cannot verify CURRENT/NEXT order",
+      );
+      if (attempt >= maxAttempts) {
+        return { status: "ok", moved: totalMoved, attempts: attempt, verified: false };
+      }
+      await sleep(retryDelayMs);
+      continue;
+    }
+
+    const verifyPlan = planWeekSectionOrder(freshChildren, env, items);
+    if (verifyPlan.status === "skipped") {
+      return { status: "skipped", reason: verifyPlan.reason, attempts: attempt };
+    }
+
+    const liveOrderIds = sortChildrenByPosition(freshChildren).map((child) => child.id);
+    if (relativeOrderMatches(liveOrderIds, verifyPlan.finalOrderIds)) {
+      return { status: "ok", moved: totalMoved, attempts: attempt, verified: true };
+    }
+
+    if (attempt < maxAttempts) {
+      console.warn(
+        `[discord-bot] CURRENT/NEXT order still wrong after setPositions (attempt ${attempt}/${maxAttempts}); retrying same-pass reconcile (Discord create→position consistency)`,
+      );
+      await sleep(retryDelayMs);
+    }
+  }
+
+  console.error(
+    `[discord-bot] CURRENT/NEXT order did not converge after ${maxAttempts} same-pass attempts — leaving for next poll self-heal`,
+  );
+  return { status: "ok", moved: totalMoved, attempts: maxAttempts, verified: false };
 }
