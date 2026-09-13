@@ -78,9 +78,9 @@ function makeChannelFetcher(client: Client): ChannelFetcher {
 
 /**
  * Lists the current children of a category by their live `position`, for
- * `reconcileWeekSectionPositions`. Prefers the cache (populated by the
- * gateway's own channel-create/update/delete events, and by channels this
- * process just created via `guild.channels.create`) over a REST call.
+ * `reconcileWeekSectionPositions`. Prefers the category's own `children`
+ * cache (updated immediately by `guild.channels.create({ parent })`) and
+ * falls back to scanning the client channel cache by `parentId`.
  */
 function makeCategoryChannelLister(client: Client): CategoryChannelLister {
   return async (categoryId) => {
@@ -88,9 +88,19 @@ function makeCategoryChannelLister(client: Client): CategoryChannelLister {
     if (!category || category.type !== ChannelType.GuildCategory) {
       return null;
     }
-    return client.channels.cache
+    const fromCategoryChildren = (category as CategoryChannel).children?.cache;
+    if (fromCategoryChildren && fromCategoryChildren.size > 0) {
+      return [...fromCategoryChildren.values()].map((channel) => ({
+        id: channel.id,
+        position: "position" in channel ? (channel as { position: number }).position : 0,
+      }));
+    }
+    return [...client.channels.cache.values()]
       .filter((channel) => channel !== null && "parentId" in channel && channel.parentId === categoryId)
-      .map((channel) => ({ id: channel.id, position: "position" in channel ? (channel as { position: number }).position : 0 }));
+      .map((channel) => ({
+        id: (channel as { id: string }).id,
+        position: "position" in channel ? (channel as { position: number }).position : 0,
+      }));
   };
 }
 
@@ -102,7 +112,15 @@ function makePositionSetter(client: Client, guildId: string): PositionSetter {
   };
 }
 
-async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
+/**
+ * One Discord sync pass. Exported for orchestration tests — production entry
+ * remains `startSyncLoop`.
+ *
+ * Position reconciliation always runs after channel provisioning is known,
+ * even when a later signup/roster message send/edit fails. Otherwise a brand
+ * new CURRENT channel could remain below `#next-id` until the next poll.
+ */
+export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
   const work: SyncWork = await api.listSyncWork();
 
   // Channel reconciliation (name + parent category) runs first and
@@ -117,42 +135,80 @@ async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise
     work.channels,
   );
 
-  // CURRENT/NEXT section ordering runs ONCE at the end of the pass so it can
-  // include channels provisioned by the signup path below. Running it before
-  // first-channel create left brand-new CURRENT channels below #next-id until
-  // the next poll — the live bug this orchestration fixes. Later polls still
-  // self-heal drift via the same reconciler over work.channels.
+  // CURRENT/NEXT section ordering runs once after provisioning so same-pass
+  // creates are included. It must not be skipped merely because a later
+  // signup/roster embed send fails — wrap message work and always reconcile
+  // in `finally`. Later polls still self-heal drift via work.channels.
   const newlyProvisionedSections: WeekSectionItem[] = [];
+  let messagePhaseError: unknown = null;
 
-  for (const item of work.signups) {
-    if (!item.embed) continue;
-    const createdSection = await syncSignupPost(
-      client,
-      env,
-      api,
-      item,
-      item.embed as SignupEmbedData,
-      resolvedChannels,
+  try {
+    for (const item of work.signups) {
+      if (!item.embed) continue;
+      try {
+        const createdSection = await syncSignupPost(
+          client,
+          env,
+          api,
+          item,
+          item.embed as SignupEmbedData,
+          resolvedChannels,
+        );
+        if (createdSection) newlyProvisionedSections.push(createdSection);
+      } catch (error) {
+        console.error(`[discord-bot] signup sync failed for run ${item.runId}`, error);
+        messagePhaseError ??= error;
+      }
+    }
+
+    for (const item of work.roster) {
+      try {
+        const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
+        if (!data) continue;
+        await syncRosterPost(client, env, api, item, data, resolvedChannels);
+      } catch (error) {
+        console.error(`[discord-bot] roster sync failed for run ${item.runId}`, error);
+        messagePhaseError ??= error;
+      }
+    }
+  } finally {
+    const baseLister = makeCategoryChannelLister(client);
+    // Same-pass creates normally enter the category children cache immediately,
+    // but do not depend on that alone: overlay any newly provisioned channel
+    // ids so setPositions can still place them if the listing briefly lags.
+    // Only newly provisioned ids are overlaid — never resurrect a deleted
+    // stored runChannelId from work.channels that is absent from Discord.
+    const listWithSamePassCreates: CategoryChannelLister = async (categoryId) => {
+      const children = await baseLister(categoryId);
+      if (!children) return null;
+      const byId = new Map(children.map((child) => [child.id, child]));
+      let nextPosition = children.reduce((max, child) => Math.max(max, child.position), -1);
+      for (const item of newlyProvisionedSections) {
+        if (byId.has(item.existingRunChannelId)) continue;
+        nextPosition += 1;
+        byId.set(item.existingRunChannelId, {
+          id: item.existingRunChannelId,
+          position: nextPosition,
+        });
+      }
+      return [...byId.values()];
+    };
+
+    await reconcileWeekSectionPositions(
+      listWithSamePassCreates,
+      makePositionSetter(client, env.discordGuildId),
+      {
+        discordRunCategoryId: env.discordRunCategoryId,
+        discordRunCurrentMarkerChannelId: env.discordRunCurrentMarkerChannelId,
+        discordRunNextMarkerChannelId: env.discordRunNextMarkerChannelId,
+      },
+      mergeWeekSectionItemsForOrdering(work.channels, newlyProvisionedSections),
     );
-    if (createdSection) newlyProvisionedSections.push(createdSection);
   }
 
-  for (const item of work.roster) {
-    const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
-    if (!data) continue;
-    await syncRosterPost(client, env, api, item, data, resolvedChannels);
+  if (messagePhaseError) {
+    throw messagePhaseError;
   }
-
-  await reconcileWeekSectionPositions(
-    makeCategoryChannelLister(client),
-    makePositionSetter(client, env.discordGuildId),
-    {
-      discordRunCategoryId: env.discordRunCategoryId,
-      discordRunCurrentMarkerChannelId: env.discordRunCurrentMarkerChannelId,
-      discordRunNextMarkerChannelId: env.discordRunNextMarkerChannelId,
-    },
-    mergeWeekSectionItemsForOrdering(work.channels, newlyProvisionedSections),
-  );
 }
 
 /**
@@ -253,29 +309,40 @@ async function syncSignupPost(
   const resolved = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
   if (!resolved) return null;
   const { channelId, created } = resolved;
+  // Capture same-pass ordering metadata before message work — send/edit/
+  // recordDiscordState failures must not erase the fact that a CURRENT/NEXT
+  // channel was provisioned and needs immediate section placement.
+  const section = createdSectionItem(item, channelId, created);
 
-  const embed = buildSignupEmbed(data);
-  const row = buildSignupButtons(data);
+  try {
+    const embed = buildSignupEmbed(data);
+    const row = buildSignupButtons(data);
 
-  if (item.existingMessageId) {
-    const edited = await tryEditMessage(client, channelId, item.existingMessageId, {
-      embeds: [embed],
-      components: [row],
-    });
-    if (edited) {
-      await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: item.existingMessageId });
-      return createdSectionItem(item, channelId, created);
+    if (item.existingMessageId) {
+      const edited = await tryEditMessage(client, channelId, item.existingMessageId, {
+        embeds: [embed],
+        components: [row],
+      });
+      if (edited) {
+        await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: item.existingMessageId });
+        return section;
+      }
+      // The stored message is gone (deleted in Discord) — fall through and repost.
     }
-    // The stored message is gone (deleted in Discord) — fall through and repost.
-  }
 
-  const channel = await client.channels.fetch(channelId);
-  if (!channel?.isTextBased() || !("send" in channel)) {
-    return createdSectionItem(item, channelId, created);
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isTextBased() || !("send" in channel)) {
+      return section;
+    }
+    const message = await channel.send({ embeds: [embed], components: [row] });
+    await api.recordDiscordState(data.runId, { kind: "signup", channelId: message.channelId, messageId: message.id });
+  } catch (error) {
+    // Channel identity is already persisted; message work retries next poll.
+    // Still return `section` so same-pass CURRENT/NEXT positioning includes
+    // this newly created channel.
+    console.error(`[discord-bot] signup message sync failed for run ${item.runId} (channel ${channelId})`, error);
   }
-  const message = await channel.send({ embeds: [embed], components: [row] });
-  await api.recordDiscordState(data.runId, { kind: "signup", channelId: message.channelId, messageId: message.id });
-  return createdSectionItem(item, channelId, created);
+  return section;
 }
 
 function createdSectionItem(
