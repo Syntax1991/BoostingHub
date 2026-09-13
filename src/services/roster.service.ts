@@ -373,6 +373,113 @@ export const rosterService = {
     }
   },
 
+  /**
+   * Persist a complete draft selection in one mutation. Validates every
+   * requested signup before writing; rejects malformed same-user Booster
+   * batches instead of silently normalizing. OPEN → ROSTERING only when the
+   * saved selection is non-empty.
+   */
+  async saveDraftSelection(
+    user: AuthenticatedUser,
+    input: { runId: string; version: number; selectedSignupIds: string[] },
+  ) {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    assertCanManageRun(user, run);
+    if (!EDITABLE_RUN_STATUSES.includes(run.status)) {
+      throw new DomainError("INVALID_ROSTER_SELECTION", "This run cannot be rostered in its current state.");
+    }
+
+    const roster = await rosterRepository.ensure(input.runId);
+    await rosterRepository.assertVersion(roster, input.version);
+
+    const selectedIds = [...new Set(input.selectedSignupIds)];
+    const signups = await rosterRepository.listSignups(input.runId);
+    const byId = new Map(signups.map((item) => [item.id, item]));
+    const selectedRows: RosterSignupRow[] = [];
+
+    for (const signupId of selectedIds) {
+      const signup = byId.get(signupId);
+      if (!signup) {
+        const record = await signupRepository.findById(signupId);
+        if (!record) {
+          throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+        }
+        if (record.run.id !== input.runId) {
+          throw new DomainError("INVALID_ROSTER_SELECTION", "That signup does not belong to this run.");
+        }
+        throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+      }
+      if (signup.status === "WITHDRAWN") {
+        throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+      }
+
+      const inspected = inspectSignup(signup, run);
+      if (!inspected.characterActive) {
+        throw new DomainError("INVALID_ROSTER_SELECTION", inspected.issue ?? "Character is inactive.");
+      }
+      if (signup.participationType === "BOOSTER" && !inspected.boosterApproved) {
+        throw new DomainError(
+          "INVALID_ROSTER_SELECTION",
+          inspected.issue ?? "Booster access is no longer approved.",
+        );
+      }
+      selectedRows.push(signup);
+    }
+
+    const boosterByUser = new Map<string, string>();
+    for (const signup of selectedRows) {
+      if (signup.participationType !== "BOOSTER") continue;
+      const prior = boosterByUser.get(signup.userId);
+      if (prior && prior !== signup.id) {
+        throw new DomainError(
+          "INVALID_ROSTER_SELECTION",
+          "A user can have at most one selected booster offer. Remove the duplicate before saving.",
+        );
+      }
+      boosterByUser.set(signup.userId, signup.id);
+    }
+
+    const selectedCharacterIds = selectedRows
+      .filter((item) => item.participationType === "BOOSTER")
+      .map((item) => item.character?.id)
+      .filter((id): id is string => Boolean(id));
+    if (selectedCharacterIds.length > 0) {
+      const conflicts = await signupRepository.findReservationConflicts({
+        characterIds: selectedCharacterIds,
+        targetRunId: input.runId,
+        scheduledStartAt: run.scheduledStartAt,
+      });
+      if (conflicts.length > 0) {
+        const conflict = conflicts[0];
+        const conflictingName = selectedRows.find((item) => item.character?.id === conflict.characterId)?.character
+          ?.name;
+        throw new DomainError(
+          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+          `${conflictingName ?? "A selected character"} is already selected for ${conflict.runTitle}.`,
+        );
+      }
+    }
+
+    await rosterRepository.replaceSelectedSignupIds(roster.id, input.version, selectedIds, {
+      targetRunId: input.runId,
+      scheduledStartAt: run.scheduledStartAt,
+      selectedCharacterIds,
+    });
+
+    if (run.status === "OPEN" && selectedIds.length > 0) {
+      assertRunTransition("OPEN", "ROSTERING");
+      await runRepository.updateStatus(run.id, "ROSTERING");
+      await activityRepository.create({
+        userId: user.id,
+        type: "ROSTERING_STARTED",
+        message: `Started rostering ${run.title}.`,
+      });
+    }
+  },
+
   async preparePublishedRosterForEditing(user: AuthenticatedUser, input: { runId: string; version: number }) {
     const view = await this.getRosterManagementView(user, input.runId);
     if (view.run.status !== "PUBLISHED") {

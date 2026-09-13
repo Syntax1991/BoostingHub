@@ -416,6 +416,45 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
     expect(stillSelected).toBe(true);
   });
 
+  it("saveDraftSelection rejects a whole batch when any booster Character is reserved on a colliding Run", async () => {
+    const sched = futureIso(315);
+    const runA = await createOpenRun(lead, sched);
+    const runB = await createOpenRun(lead, sched);
+
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, role: "DPS" }] });
+    await selectIntoRoster(runA, hybrid);
+
+    await signupService.setCharacterOffers(target, { runId: runB, offers: [] }).catch(() => {});
+    const bypassSignupId = crypto.randomUUID();
+    await orm.RunSignup.create({
+      id: bypassSignupId,
+      runId: runB,
+      userId: ids.target,
+      characterId: hybrid,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "PENDING",
+      lootbuddyMode: null,
+      lootbuddyVerification: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const viewB = await rosterService.getRosterManagementView(lead, runB);
+    await expectDomainCode(
+      rosterService.saveDraftSelection(lead, {
+        runId: runB,
+        version: viewB.roster.version,
+        selectedSignupIds: [bypassSignupId],
+      }),
+      "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+    );
+    const after = await rosterService.getRosterManagementView(lead, runB);
+    expect(after.roster.version).toBe(viewB.roster.version);
+    expect(after.groups.dps.find((item) => item.id === bypassSignupId)?.draftSelected).toBe(false);
+  });
+
   it("publishRoster is blocked when a draft-selected Character became reserved on another colliding Run before publish", async () => {
     const sched = futureIso(320);
     const runA = await createOpenRun(lead, sched);

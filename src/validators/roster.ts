@@ -12,6 +12,12 @@ export const rosterDraftSelectionSchema = z.object({
   version: z.number().int().positive(),
 });
 
+export const saveRosterDraftSchema = z.object({
+  runId: entityIdSchema,
+  version: z.number().int().positive(),
+  selectedSignupIds: z.array(entityIdSchema),
+});
+
 export const rosterVersionSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),

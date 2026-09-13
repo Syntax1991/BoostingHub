@@ -5,17 +5,17 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { rosterService } from "@/services/roster.service";
 import {
   publishRosterSchema,
-  rosterDraftSelectionSchema,
   rosterRunSchema,
   rosterVersionSchema,
+  saveRosterDraftSchema,
 } from "@/validators/roster";
 
-export async function toggleRosterDraftSelectionAction(input: unknown): Promise<ActionResult> {
+export async function saveRosterDraftAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const parsed = rosterDraftSelectionSchema.parse(input);
-    await rosterService.setDraftSelection(user, parsed);
-    return { ok: true, message: parsed.selected ? "Added to draft roster." : "Removed from draft roster." };
+    const parsed = saveRosterDraftSchema.parse(input);
+    await rosterService.saveDraftSelection(user, parsed);
+    return { ok: true, message: "Roster draft saved." };
   } catch (error) {
     return mapActionError(error);
   }
