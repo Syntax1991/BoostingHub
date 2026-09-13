@@ -140,8 +140,9 @@ enum SettlementStatus {
   PAID      = "PAID"
 }
 
-/// Settlement-time Raid Lead cut handling. Declared cut amount is always stored;
-/// only KEEP deducts it from the attendance distributable pool.
+/// Settlement-time Raid Lead payout mode.
+/// KEEP adds one automatically calculated extra full share; SHARE does not.
+/// The dedicated Raid Lead payout is derived from the frozen settlement math.
 enum RaidLeadCutMode {
   @@type("pg/text@1")
   KEEP  = "KEEP"
