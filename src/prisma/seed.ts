@@ -2,6 +2,7 @@ import { hashPassword } from "better-auth/crypto";
 import { db, orm } from "@/lib/prisma";
 import { getDevAuthPassword } from "@/auth/dev-auth";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
+import { buildRunTitle } from "@/lib/run-title";
 import { MANAFORGE_OMEGA_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 
@@ -53,6 +54,8 @@ const ids = {
     payoutDraft: "r9999993-9993-4993-8993-999999999993",
     payoutFinalized: "r9999994-9994-4994-8994-999999999994",
     payoutPaid: "r9999995-9995-4995-8995-999999999995",
+    /** Completed multi-participant fixture for manual Prepare Payout QA (no settlement). */
+    settlementQa: "r9999996-9996-4996-8996-999999999996",
   },
   signups: {
     publishedKael: "s5555555-5555-4555-8555-555555555551",
@@ -94,6 +97,12 @@ const ids = {
     ppMira: "s9999995-9995-4995-8995-999999999992",
     ppBrann: "s9999995-9995-4995-8995-999999999993",
     ppSylva: "s9999995-9995-4995-8995-999999999994",
+    sqThorne: "s9999996-9996-4996-8996-999999999991",
+    sqKael: "s9999996-9996-4996-8996-999999999992",
+    sqBrann: "s9999996-9996-4996-8996-999999999993",
+    sqAelira: "s9999996-9996-4996-8996-999999999994",
+    sqMira: "s9999996-9996-4996-8996-999999999995",
+    sqSylva: "s9999996-9996-4996-8996-999999999996",
   },
   rosters: {
     sunday: "o3333333-3333-4333-8333-333333333333",
@@ -103,6 +112,7 @@ const ids = {
     payoutDraft: "o9999993-9993-4993-8993-999999999993",
     payoutFinalized: "o9999994-9994-4994-8994-999999999994",
     payoutPaid: "o9999995-9995-4995-8995-999999999995",
+    settlementQa: "o9999996-9996-4996-8996-999999999996",
   },
 };
 
@@ -143,6 +153,10 @@ async function wipe() {
   }
   for (const row of await orm.Run.select("id").all()) {
     await orm.Run.where({ id: row.id }).delete();
+  }
+  // Templates reference Raid + User (Restrict); clear before both.
+  for (const row of await orm.RunTemplate.select("id").all()) {
+    await orm.RunTemplate.where({ id: row.id }).delete();
   }
   for (const row of await orm.RaidBoss.select("id").all()) {
     await orm.RaidBoss.where({ id: row.id }).delete();
@@ -443,6 +457,17 @@ async function seed() {
 
   await raidRepository.ensureReferenceRaids(SEED_NOW);
 
+  const settlementQaRaid = WOW_RAID_CATALOG.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)!;
+  const settlementQaScheduledStartAt = "2026-10-01T17:00:00.000Z";
+  const settlementQaTitle = buildRunTitle({
+    scheduledStartAt: settlementQaScheduledStartAt,
+    difficulty: "HEROIC",
+    lootType: "UNSAVED",
+    plannedBossCount: 8,
+    totalBossCount: settlementQaRaid.bosses.length,
+    raidLeadName: "Thorne Ironvein",
+  });
+
   await orm.CharacterRaidLockout.create({
     id: crypto.randomUUID(),
     characterId: ids.characters.kaelResto,
@@ -649,13 +674,32 @@ async function seed() {
       desiredDpsCount: 14,
       raidLeadId: ids.users.thorne,
     },
+    {
+      id: ids.runs.settlementQa,
+      title: settlementQaTitle,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: settlementQaScheduledStartAt,
+      status: "COMPLETED",
+      signupsOpen: false,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      raidLeadId: ids.users.thorne,
+    },
   ] as const;
 
   for (const run of runs) {
     await orm.Run.create({
       ...run,
       raidId: ids.raid,
-      notes: run.status === "DRAFT" ? "Not visible as an open signup run until published." : null,
+      notes:
+        run.id === ids.runs.settlementQa
+          ? "Settlement QA: multi-participant Prepare Payout fixture. No settlement seeded — use Prepare Payout with pot 6000000."
+          : run.status === "DRAFT"
+            ? "Not visible as an open signup run until published."
+            : null,
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
@@ -1154,6 +1198,72 @@ async function seed() {
       isBackup: true,
       status: "SELECTED",
     },
+    {
+      id: ids.signups.sqThorne,
+      runId: ids.runs.settlementQa,
+      userId: ids.users.thorne,
+      characterId: ids.characters.thorneWarrior,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.sqKael,
+      runId: ids.runs.settlementQa,
+      userId: ids.users.kael,
+      characterId: ids.characters.kaelEle,
+      participationType: "BOOSTER",
+      role: "DPS",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.sqBrann,
+      runId: ids.runs.settlementQa,
+      userId: ids.users.brann,
+      characterId: ids.characters.brannPaladin,
+      participationType: "BOOSTER",
+      role: "TANK",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.sqAelira,
+      runId: ids.runs.settlementQa,
+      userId: ids.users.aelira,
+      characterId: ids.characters.aeliraMonk,
+      participationType: "BOOSTER",
+      role: "HEALER",
+      isBackup: false,
+      status: "SELECTED",
+    },
+    {
+      id: ids.signups.sqMira,
+      runId: ids.runs.settlementQa,
+      userId: ids.users.mira,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyClass: "PRIEST",
+      lootbuddyMode: "PLAYING",
+      lootbuddyVerification: "ACCESS",
+    },
+    {
+      id: ids.signups.sqSylva,
+      runId: ids.runs.settlementQa,
+      userId: ids.users.sylva,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      role: null,
+      isBackup: false,
+      status: "SELECTED",
+      lootbuddyClass: "HUNTER",
+      lootbuddyMode: "LOOT_ONLY",
+      lootbuddyVerification: "NONE",
+    },
   ] as const;
 
   for (const signup of signups) {
@@ -1166,6 +1276,7 @@ async function seed() {
       role: signup.role,
       isBackup: signup.isBackup,
       status: signup.status,
+      lootbuddyClass: "lootbuddyClass" in signup ? signup.lootbuddyClass : null,
       lootbuddyMode: "lootbuddyMode" in signup ? signup.lootbuddyMode : null,
       lootbuddyVerification: "lootbuddyVerification" in signup ? signup.lootbuddyVerification : null,
       createdAt: SEED_NOW,
@@ -1287,6 +1398,83 @@ async function seed() {
       rosterEntryId: entry.id,
       status: entry.status,
       note: entry.note,
+      markedAt: SEED_NOW,
+      markedById: ids.users.thorne,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+
+  // Settlement QA: COMPLETED + published roster + fully marked attendance, no settlement.
+  await orm.RunRoster.create({
+    id: ids.rosters.settlementQa,
+    runId: ids.runs.settlementQa,
+    state: "PUBLISHED",
+    version: 1,
+    publishedAt: SEED_NOW,
+    publishedById: ids.users.thorne,
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+  });
+  const settlementQaMembers = [
+    {
+      rosterEntryId: "e9999996-9996-4996-8996-999999999991",
+      attendanceId: "a9999996-9996-4996-8996-999999999991",
+      signupId: ids.signups.sqThorne,
+      status: "PRESENT" as const,
+      note: null,
+    },
+    {
+      rosterEntryId: "e9999996-9996-4996-8996-999999999992",
+      attendanceId: "a9999996-9996-4996-8996-999999999992",
+      signupId: ids.signups.sqKael,
+      status: "PRESENT" as const,
+      note: null,
+    },
+    {
+      rosterEntryId: "e9999996-9996-4996-8996-999999999993",
+      attendanceId: "a9999996-9996-4996-8996-999999999993",
+      signupId: ids.signups.sqBrann,
+      status: "PRESENT" as const,
+      note: null,
+    },
+    {
+      rosterEntryId: "e9999996-9996-4996-8996-999999999994",
+      attendanceId: "a9999996-9996-4996-8996-999999999994",
+      signupId: ids.signups.sqAelira,
+      status: "PRESENT" as const,
+      note: null,
+    },
+    {
+      rosterEntryId: "e9999996-9996-4996-8996-999999999995",
+      attendanceId: "a9999996-9996-4996-8996-999999999995",
+      signupId: ids.signups.sqMira,
+      status: "PRESENT" as const,
+      note: "characterless PLAYING lootbuddy",
+    },
+    {
+      rosterEntryId: "e9999996-9996-4996-8996-999999999996",
+      attendanceId: "a9999996-9996-4996-8996-999999999996",
+      signupId: ids.signups.sqSylva,
+      status: "STANDBY" as const,
+      note: "zero-share standby lootbuddy for payout QA",
+    },
+  ];
+  for (const member of settlementQaMembers) {
+    await orm.RunRosterEntry.create({
+      id: member.rosterEntryId,
+      rosterId: ids.rosters.settlementQa,
+      signupId: member.signupId,
+      selected: true,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+    await orm.RunAttendance.create({
+      id: member.attendanceId,
+      runId: ids.runs.settlementQa,
+      rosterEntryId: member.rosterEntryId,
+      status: member.status,
+      note: member.note,
       markedAt: SEED_NOW,
       markedById: ids.users.thorne,
       createdAt: SEED_NOW,
@@ -1573,6 +1761,9 @@ async function seed() {
   console.log("  brann@dev.boostting.local    USER");
   console.log("  sylva@dev.boostting.local    USER");
   console.log(`  password: ${PASSWORD}`);
+  console.log(`Settlement QA run: ${settlementQaTitle}`);
+  console.log(`  id: ${ids.runs.settlementQa}`);
+  console.log(`  http://localhost:3000/runs/${ids.runs.settlementQa}?tab=payout`);
 }
 
 seed()
