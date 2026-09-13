@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   prepareRosterEditAction,
@@ -20,7 +20,6 @@ import {
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import {
-  CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
@@ -69,11 +68,6 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
   const [selectedFilter, setSelectedFilter] = useState("ALL");
   const [acknowledge, setAcknowledge] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
-
-  const allSignups = useMemo(
-    () => [...data.groups.tanks, ...data.groups.healers, ...data.groups.dps, ...data.groups.lootbuddies],
-    [data.groups],
-  );
 
   function matches(signup: SignupRow) {
     const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""} ${signup.lootbuddyClass ?? ""}`.toLowerCase();
@@ -207,7 +201,6 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         title="Tanks"
         empty="No tank signups"
         signups={data.groups.tanks.filter(matches)}
-        allSignups={allSignups}
         run={data.run}
         editing={editing}
         pending={pending}
@@ -217,7 +210,6 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         title="Healers"
         empty="No healer signups"
         signups={data.groups.healers.filter(matches)}
-        allSignups={allSignups}
         run={data.run}
         editing={editing}
         pending={pending}
@@ -227,7 +219,6 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         title="DPS"
         empty="No DPS signups"
         signups={data.groups.dps.filter(matches)}
-        allSignups={allSignups}
         run={data.run}
         editing={editing}
         pending={pending}
@@ -237,7 +228,6 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         title="Lootbuddies"
         empty="No lootbuddy signups"
         signups={data.groups.lootbuddies.filter(matches)}
-        allSignups={allSignups}
         run={data.run}
         editing={editing}
         pending={pending}
@@ -350,7 +340,6 @@ function SignupSection({
   title,
   empty,
   signups,
-  allSignups,
   run,
   editing,
   pending,
@@ -359,7 +348,6 @@ function SignupSection({
   title: string;
   empty: string;
   signups: SignupRow[];
-  allSignups: SignupRow[];
   run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   pending: boolean;
@@ -381,7 +369,6 @@ function SignupSection({
                   <SignupRowCard
                     key={signup.id}
                     signup={signup}
-                    extras={allSignups.filter((item) => item.userId === signup.userId && item.id !== signup.id)}
                     run={run}
                     editing={editing}
                     pending={pending}
@@ -399,14 +386,12 @@ function SignupSection({
 
 function SignupRowCard({
   signup,
-  extras,
   run,
   editing,
   pending,
   onToggle,
 }: {
   signup: SignupRow;
-  extras: SignupRow[];
   run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   pending: boolean;
@@ -457,27 +442,6 @@ function SignupRowCard({
             <span className={lockout.attention ? "text-warning" : undefined}>{lockout.text}</span>
           ) : null}
         </div>
-        {extras.length > 0 ? (
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">
-            <span>Also offered:</span>
-            {extras.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                disabled={!editing || pending || item.status === "WITHDRAWN"}
-                onClick={(event) => {
-                  event.preventDefault();
-                  onToggle(item, true);
-                }}
-                className="rounded border border-border px-1.5 py-0.5 hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
-                title={`Select ${item.character?.name ?? "this offer"} instead`}
-              >
-                {item.character?.name ?? "character"}
-                {item.role ? ` (${CHARACTER_ROLE_LABELS[item.role]})` : ` (${item.participationType})`}
-              </button>
-            ))}
-          </div>
-        ) : null}
         {signup.issue ? (
           <p className="mt-1 text-xs text-danger">{signup.issue}</p>
         ) : null}
