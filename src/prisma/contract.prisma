@@ -140,9 +140,8 @@ enum SettlementStatus {
   PAID      = "PAID"
 }
 
-/// Settlement-time Raid Lead payout mode.
-/// KEEP adds one automatically calculated extra full share; SHARE does not.
-/// The dedicated Raid Lead payout is derived from the frozen settlement math.
+/// Settlement-time Raid Lead payout mode for the 3% Raid Lead cut.
+/// KEEP: Raid Lead keeps 3% separately. SHARE: 3% joins the Booster Pool.
 enum RaidLeadCutMode {
   @@type("pg/text@1")
   KEEP  = "KEEP"
@@ -613,15 +612,19 @@ model RunRosterEntry {
 
 /// One gold settlement per completed Run. Amounts are whole WoW gold integers.
 /// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
-/// totalGold is the single settlement pot: mutable while DRAFT, frozen as the final pot
-/// at FINALIZED. raidLeadCutMode selects KEEP (one auto-calculated extra full share) or
-/// SHARE (no extra Raid Lead share). The dedicated KEEP cut is derived, not stored.
+/// totalGold is the GROSS pot: mutable while DRAFT, frozen at FINALIZED.
+/// Community cut BPS fields are snapshotted at prepare from current Dawn policy
+/// (Booster 62.5%, Raid Lead 3%, Advertiser 30%; Dawn is residual).
+/// raidLeadCutMode selects KEEP (RL keeps 3%) or SHARE (3% joins Booster Pool).
 model RunSettlement {
   id               String           @id @default(uuid())
   runId            String           @unique
   run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
   totalGold        Int
   raidLeadCutMode  RaidLeadCutMode  @default(SHARE)
+  boosterCutBps    Int              @default(6250)
+  raidLeadCutBps   Int              @default(300)
+  advertiserCutBps Int              @default(3000)
   status           SettlementStatus @default(DRAFT)
   preparedById     String
   preparedBy       User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
