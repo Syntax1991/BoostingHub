@@ -4,11 +4,14 @@ import { getDevAuthPassword } from "@/auth/dev-auth";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { buildRunTitle } from "@/lib/run-title";
 import { MANAFORGE_OMEGA_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { WOW_CLASSES } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 
 const SEED_NOW = "2026-09-08T12:00:00.000Z";
 const RESET = "2026-W37";
 const PASSWORD = getDevAuthPassword();
+/** Every seeded Run gets at least this many signup rows (named fixtures + fillers). */
+const MIN_SIGNUPS_PER_RUN = 25;
 
 function characterIdentity(name: string, realm: string) {
   return {
@@ -1284,6 +1287,39 @@ async function seed() {
     });
   }
 
+  // Pad every run to MIN_SIGNUPS_PER_RUN with characterless LOOTBUDDY fillers.
+  // Never SELECTED / never on roster — keeps payout, attendance, and roster tests stable.
+  // Skip mira: signup.service tests assert exact PENDING lootbuddy counts for her on some runs.
+  const fillerOwners = [ids.users.kael, ids.users.thorne, ids.users.aelira, ids.users.brann, ids.users.sylva];
+  const signupCounts = new Map<string, number>();
+  for (const signup of signups) {
+    signupCounts.set(signup.runId, (signupCounts.get(signup.runId) ?? 0) + 1);
+  }
+  for (const run of runs) {
+    const existing = signupCounts.get(run.id) ?? 0;
+    const need = Math.max(0, MIN_SIGNUPS_PER_RUN - existing);
+    const fillerStatus =
+      run.status === "OPEN" || run.status === "DRAFT" || run.status === "ROSTERING" ? "PENDING" : "NOT_SELECTED";
+    for (let i = 0; i < need; i++) {
+      await orm.RunSignup.create({
+        id: crypto.randomUUID(),
+        runId: run.id,
+        userId: fillerOwners[i % fillerOwners.length]!,
+        characterId: null,
+        participationType: "LOOTBUDDY",
+        role: null,
+        isBackup: false,
+        status: fillerStatus,
+        lootbuddyClass: WOW_CLASSES[i % WOW_CLASSES.length]!,
+        lootbuddyMode: "LOOT_ONLY",
+        lootbuddyVerification: "NONE",
+        notes: "Seed filler to reach minimum signup volume for UI QA.",
+        createdAt: SEED_NOW,
+        updatedAt: SEED_NOW,
+      });
+    }
+  }
+
   await orm.RunRoster.create({
     id: ids.rosters.sunday,
     runId: ids.runs.heroicRostering,
@@ -1764,6 +1800,7 @@ async function seed() {
   console.log(`Settlement QA run: ${settlementQaTitle}`);
   console.log(`  id: ${ids.runs.settlementQa}`);
   console.log(`  http://localhost:3000/runs/${ids.runs.settlementQa}?tab=payout`);
+  console.log(`Every run padded to ≥${MIN_SIGNUPS_PER_RUN} signups (characterless LOOTBUDDY fillers).`);
 }
 
 seed()
