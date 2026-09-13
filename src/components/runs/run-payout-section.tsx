@@ -5,8 +5,8 @@ import {
   finalizeRunPayoutAction,
   markRunPayoutPaidAction,
   prepareRunPayoutAction,
+  updateRunPayoutFinancialsAction,
   updateRunPayoutShareAction,
-  updateRunPayoutTotalAction,
 } from "@/controllers/payout.actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,12 @@ import {
 } from "@/components/ui/badges";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatGold } from "@/lib/gold";
-import { ATTENDANCE_STATUS_LABELS, SETTLEMENT_STATUS_LABELS } from "@/lib/labels";
+import {
+  ATTENDANCE_STATUS_LABELS,
+  RAID_LEAD_CUT_MODE_LABELS,
+  SETTLEMENT_STATUS_LABELS,
+} from "@/lib/labels";
+import type { RaidLeadCutMode } from "@/models/enums";
 import {
   PAYOUT_ADJUSTMENT_REASON_MAX,
   SHARE_UNITS_MAX,
@@ -57,7 +62,7 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
       <Card>
         <CardHeader
           title="Payout"
-          description="Record the total distributable gold for this completed run. This is not a wallet or transfer."
+          description="Enter the authoritative final pot (for example from Dawn) and optional Raid Lead cut. This is not a wallet or transfer."
         />
         <div className="space-y-3 px-4 py-4 text-sm">
           <p>No settlement exists yet.</p>
@@ -90,7 +95,7 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
     );
   }
 
-  if (payout.own.length === 0) {
+  if (payout.own.length === 0 && !payout.ownRaidLeadCut) {
     return (
       <Card>
         <CardHeader title="Payout" />
@@ -118,6 +123,18 @@ export function RunPayoutSection({ data }: { data: RunDetailView }) {
             </p>
           </li>
         ))}
+        {payout.ownRaidLeadCut ? (
+          <li className="px-4 py-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Raid Lead cut</span>
+              <SettlementStatusBadge status={payout.ownRaidLeadCut.settlementStatus} />
+            </div>
+            <p className="mt-1 text-muted">
+              Dedicated KEEP payout · {formatGold(payout.ownRaidLeadCut.amountGold)}
+              {payout.ownRaidLeadCut.settlementStatus === "PAID" ? " · Paid" : ""}
+            </p>
+          </li>
+        ) : null}
       </ul>
     </Card>
   );
@@ -151,7 +168,10 @@ function ManagerPayoutPanel({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const totalId = useId();
+  const cutId = useId();
   const [totalGold, setTotalGold] = useState(String(manager.totalGold));
+  const [raidLeadCutGold, setRaidLeadCutGold] = useState(String(manager.raidLeadCutGold));
+  const [raidLeadCutMode, setRaidLeadCutMode] = useState<RaidLeadCutMode>(manager.raidLeadCutMode);
 
   function runMutation(action: () => Promise<{ ok: boolean; message: string }>) {
     setError(null);
@@ -165,13 +185,15 @@ function ManagerPayoutPanel({
     });
   }
 
+  const summary = manager.summary;
+
   return (
     <Card>
       <CardHeader
         title="Payout"
         description={
           canEdit
-            ? "Whole gold only. Amounts are calculated on the server from total gold and share units."
+            ? "Whole gold only. Final pot and Raid Lead cut drive the server-calculated split."
             : "Final settlement for this completed run."
         }
         action={
@@ -196,48 +218,102 @@ function ManagerPayoutPanel({
           {error}
         </p>
       ) : null}
+
+      <SettlementFinancialSummary
+        totalGold={summary.totalGold}
+        raidLeadCutGold={summary.raidLeadCutGold}
+        raidLeadCutMode={summary.raidLeadCutMode}
+        dedicatedRaidLeadPayout={summary.dedicatedRaidLeadPayout}
+        distributablePool={summary.distributablePool}
+        raidLeadName={manager.raidLeadName}
+      />
+
       <div className="flex flex-wrap gap-4 px-4 py-3 text-xs text-muted">
-        <span>Total gold {formatGold(manager.summary.totalGold)}</span>
-        <span>Share units {manager.summary.totalShareUnits}</span>
-        <span>Recipients with share {manager.summary.recipientsWithShare}</span>
-        <span>Zero-share {manager.summary.zeroShareParticipants}</span>
-        <span>Distributed {formatGold(manager.summary.distributedGold)}</span>
-        <span>Remainder {formatGold(manager.summary.remainder)}</span>
+        <span>Share units {summary.totalShareUnits}</span>
+        <span>Recipients with share {summary.recipientsWithShare}</span>
+        <span>Zero-share {summary.zeroShareParticipants}</span>
+        <span>Participant distributed {formatGold(summary.distributedGold)}</span>
+        <span>Pool remainder {formatGold(summary.remainder)}</span>
+        <span>Total allocated {formatGold(summary.totalAllocatedGold)}</span>
       </div>
+
       {canEdit ? (
         <form
-          className="flex flex-wrap items-end gap-2 px-4 pb-3"
+          className="space-y-3 px-4 pb-3"
           onSubmit={(event) => {
             event.preventDefault();
             runMutation(() =>
-              updateRunPayoutTotalAction({
+              updateRunPayoutFinancialsAction({
                 settlementId: manager.id,
                 totalGold: Number(totalGold),
+                raidLeadCutMode,
+                raidLeadCutGold: Number(raidLeadCutGold),
               }),
             );
           }}
         >
-          <div>
-            <label htmlFor={totalId} className="mb-1 block text-xs text-muted">
-              Total gold
-            </label>
-            <input
-              id={totalId}
-              type="number"
-              inputMode="numeric"
-              min={TOTAL_GOLD_MIN}
-              max={TOTAL_GOLD_MAX}
-              step={1}
-              value={totalGold}
-              onChange={(event) => setTotalGold(event.target.value)}
-              className="h-9 w-40 rounded-md border border-border bg-surface-raised px-3 text-sm"
-            />
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor={totalId} className="mb-1 block text-xs text-muted">
+                Final pot
+              </label>
+              <input
+                id={totalId}
+                type="number"
+                inputMode="numeric"
+                min={TOTAL_GOLD_MIN}
+                max={TOTAL_GOLD_MAX}
+                step={1}
+                value={totalGold}
+                onChange={(event) => setTotalGold(event.target.value)}
+                className="h-9 w-40 rounded-md border border-border bg-surface-raised px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor={cutId} className="mb-1 block text-xs text-muted">
+                Raid Lead cut
+              </label>
+              <input
+                id={cutId}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={TOTAL_GOLD_MAX}
+                step={1}
+                value={raidLeadCutGold}
+                onChange={(event) => setRaidLeadCutGold(event.target.value)}
+                className="h-9 w-40 rounded-md border border-border bg-surface-raised px-3 text-sm"
+              />
+            </div>
+            <fieldset className="space-y-1">
+              <legend className="text-xs text-muted">Raid Lead cut mode</legend>
+              <div className="flex gap-2">
+                <ModeToggle
+                  mode="KEEP"
+                  selected={raidLeadCutMode === "KEEP"}
+                  onSelect={() => setRaidLeadCutMode("KEEP")}
+                  disabled={pending}
+                />
+                <ModeToggle
+                  mode="SHARE"
+                  selected={raidLeadCutMode === "SHARE"}
+                  onSelect={() => setRaidLeadCutMode("SHARE")}
+                  disabled={pending}
+                />
+              </div>
+            </fieldset>
+            <Button type="submit" variant="secondary" disabled={pending}>
+              Update settlement
+            </Button>
           </div>
-          <Button type="submit" variant="secondary" disabled={pending}>
-            Update total
-          </Button>
+          <p className="text-xs text-muted">
+            {raidLeadCutMode === "KEEP"
+              ? "KEEP: Paid separately to the Raid Lead and deducted from the participant pool."
+              : "SHARE: Recorded as the Raid Lead cut but shared with the participant pool; no separate Raid Lead payout."}
+          </p>
         </form>
       ) : null}
+
       <div className="max-w-full min-w-0 overflow-x-auto">
         <table className="min-w-[52rem] w-full text-left text-sm">
           <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
@@ -258,6 +334,8 @@ function ManagerPayoutPanel({
                 row={row}
                 canEdit={canEdit}
                 pending={pending}
+                isRaidLead={row.userId === manager.raidLeadUserId}
+                dedicatedRaidLeadPayout={summary.dedicatedRaidLeadPayout}
                 onSave={(shareUnits, adjustmentReason) =>
                   runMutation(() =>
                     updateRunPayoutShareAction({
@@ -272,10 +350,23 @@ function ManagerPayoutPanel({
           </tbody>
         </table>
       </div>
+      {summary.dedicatedRaidLeadPayout > 0 ? (
+        <div className="border-t border-border px-4 py-3 text-sm">
+          <p className="font-medium">
+            Raid Lead receives separately · {formatGold(summary.dedicatedRaidLeadPayout)}
+          </p>
+          <p className="text-xs text-muted">
+            Dedicated KEEP cut for {manager.raidLeadName}. Not an attendance share.
+          </p>
+        </div>
+      ) : null}
       {finalizeOpen ? (
         <FinalizePayoutDialog
           settlementId={manager.id}
           totalGold={manager.totalGold}
+          dedicatedRaidLeadPayout={summary.dedicatedRaidLeadPayout}
+          distributablePool={summary.distributablePool}
+          raidLeadCutMode={manager.raidLeadCutMode}
           onClose={onFinalizeClose}
         />
       ) : null}
@@ -285,15 +376,87 @@ function ManagerPayoutPanel({
   );
 }
 
+function SettlementFinancialSummary({
+  totalGold,
+  raidLeadCutGold,
+  raidLeadCutMode,
+  dedicatedRaidLeadPayout,
+  distributablePool,
+  raidLeadName,
+}: {
+  totalGold: number;
+  raidLeadCutGold: number;
+  raidLeadCutMode: RaidLeadCutMode;
+  dedicatedRaidLeadPayout: number;
+  distributablePool: number;
+  raidLeadName: string;
+}) {
+  return (
+    <div className="mx-4 mt-3 grid gap-2 rounded-md border border-border bg-surface-raised/40 px-3 py-3 text-sm sm:grid-cols-2">
+      <div>
+        <p className="text-xs text-muted">Final pot</p>
+        <p className="font-medium">{formatGold(totalGold)}</p>
+      </div>
+      <div>
+        <p className="text-xs text-muted">Raid Lead cut</p>
+        <p className="font-medium">
+          {formatGold(raidLeadCutGold)} · {RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]}
+        </p>
+      </div>
+      <div>
+        <p className="text-xs text-muted">Raid Lead receives separately</p>
+        <p className="font-medium">{formatGold(dedicatedRaidLeadPayout)}</p>
+        <p className="text-xs text-muted">{raidLeadName}</p>
+      </div>
+      <div>
+        <p className="text-xs text-muted">Participant pool</p>
+        <p className="font-medium">{formatGold(distributablePool)}</p>
+      </div>
+    </div>
+  );
+}
+
+function ModeToggle({
+  mode,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  mode: RaidLeadCutMode;
+  selected: boolean;
+  onSelect: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={`h-9 rounded-md border px-3 text-sm ${
+        selected
+          ? "border-accent bg-accent/15 font-medium text-foreground"
+          : "border-border bg-surface-raised text-muted"
+      }`}
+    >
+      {RAID_LEAD_CUT_MODE_LABELS[mode]}
+    </button>
+  );
+}
+
 function ManagerPayoutRow({
   row,
   canEdit,
   pending,
+  isRaidLead,
+  dedicatedRaidLeadPayout,
   onSave,
 }: {
   row: NonNullable<RunDetailView["payout"]["manager"]>["entries"][number];
   canEdit: boolean;
   pending: boolean;
+  isRaidLead: boolean;
+  dedicatedRaidLeadPayout: number;
   onSave: (shareUnits: number, adjustmentReason: string | null) => void;
 }) {
   const shareId = useId();
@@ -306,6 +469,12 @@ function ManagerPayoutRow({
       <td className="px-4 py-2">
         <div className="font-medium">{row.characterName}</div>
         <div className="text-xs text-muted">{row.userDisplayName}</div>
+        {isRaidLead && dedicatedRaidLeadPayout > 0 ? (
+          <div className="mt-1 text-xs text-muted">
+            Attendance {formatGold(row.amountGold)} + KEEP cut {formatGold(dedicatedRaidLeadPayout)} ={" "}
+            {formatGold(row.amountGold + dedicatedRaidLeadPayout)}
+          </div>
+        ) : null}
       </td>
       <td className="px-3 py-2">
         <ParticipationBadge type={row.participationType} />
@@ -372,10 +541,13 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const goldId = useId();
+  const cutId = useId();
   const errorId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [totalGold, setTotalGold] = useState("1000");
+  const [totalGold, setTotalGold] = useState("1450000");
+  const [raidLeadCutGold, setRaidLeadCutGold] = useState("50000");
+  const [raidLeadCutMode, setRaidLeadCutMode] = useState<RaidLeadCutMode>("SHARE");
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -395,7 +567,7 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
-      className="w-[min(28rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
+      className="w-[min(32rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
     >
       <form
         onSubmit={(event) => {
@@ -405,6 +577,8 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
             const result = await prepareRunPayoutAction({
               runId,
               totalGold: Number(totalGold),
+              raidLeadCutMode,
+              raidLeadCutGold: Number(raidLeadCutGold),
             });
             if (!result.ok) {
               setError(result.message);
@@ -427,12 +601,12 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
             </p>
           ) : null}
           <p>
-            Enter the total distributable gold for this completed run. This is a manual bookkeeping total, not a wallet
-            balance or automatic transfer.
+            Enter the authoritative final pot (manual Dawn/community total) and the declared Raid Lead cut. No gold is
+            transferred automatically.
           </p>
           <div>
             <label htmlFor={goldId} className="mb-1 block text-xs text-muted">
-              Total gold
+              Final pot
             </label>
             <input
               id={goldId}
@@ -447,6 +621,45 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
               className="h-9 w-full rounded-md border border-border bg-surface-raised px-3 text-sm"
             />
           </div>
+          <div>
+            <label htmlFor={cutId} className="mb-1 block text-xs text-muted">
+              Raid Lead cut
+            </label>
+            <input
+              id={cutId}
+              type="number"
+              inputMode="numeric"
+              required
+              min={0}
+              max={TOTAL_GOLD_MAX}
+              step={1}
+              value={raidLeadCutGold}
+              onChange={(event) => setRaidLeadCutGold(event.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-surface-raised px-3 text-sm"
+            />
+          </div>
+          <fieldset className="space-y-1">
+            <legend className="text-xs text-muted">Raid Lead cut mode</legend>
+            <div className="flex gap-2">
+              <ModeToggle
+                mode="KEEP"
+                selected={raidLeadCutMode === "KEEP"}
+                onSelect={() => setRaidLeadCutMode("KEEP")}
+                disabled={pending}
+              />
+              <ModeToggle
+                mode="SHARE"
+                selected={raidLeadCutMode === "SHARE"}
+                onSelect={() => setRaidLeadCutMode("SHARE")}
+                disabled={pending}
+              />
+            </div>
+            <p className="text-xs text-muted">
+              {raidLeadCutMode === "KEEP"
+                ? "KEEP: Paid separately to the Raid Lead and deducted from the participant pool."
+                : "SHARE: Recorded as the Raid Lead cut but shared with the participant pool; no separate Raid Lead payout."}
+            </p>
+          </fieldset>
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
           <Button type="button" variant="secondary" onClick={close} disabled={pending}>
@@ -464,10 +677,16 @@ function PreparePayoutDialog({ runId, onClose }: { runId: string; onClose: () =>
 function FinalizePayoutDialog({
   settlementId,
   totalGold,
+  dedicatedRaidLeadPayout,
+  distributablePool,
+  raidLeadCutMode,
   onClose,
 }: {
   settlementId: string;
   totalGold: number;
+  dedicatedRaidLeadPayout: number;
+  distributablePool: number;
+  raidLeadCutMode: RaidLeadCutMode;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -508,8 +727,9 @@ function FinalizePayoutDialog({
           </p>
         ) : null}
         <p>
-          Finalizing locks {formatGold(totalGold)} and every share. Totals, recipients, and amounts cannot be edited
-          afterwards. There is no correction workflow in this version.
+          Finalizing locks {formatGold(totalGold)} ({RAID_LEAD_CUT_MODE_LABELS[raidLeadCutMode]}), the participant pool{" "}
+          {formatGold(distributablePool)}, and the separate Raid Lead payout {formatGold(dedicatedRaidLeadPayout)}. Totals,
+          recipients, and amounts cannot be edited afterwards.
         </p>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
           <Button type="button" variant="secondary" onClick={close} disabled={pending}>
