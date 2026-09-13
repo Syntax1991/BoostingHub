@@ -12,6 +12,78 @@ const RESET = "2026-W37";
 const PASSWORD = getDevAuthPassword();
 /** Every seeded Run gets at least this many signup rows (named fixtures + fillers). */
 const MIN_SIGNUPS_PER_RUN = 25;
+/** Minimum BOOSTER role offers per run (desired 2/4/14 composition). */
+const MIN_BOOSTER_TANKS = 2;
+const MIN_BOOSTER_HEALERS = 4;
+const MIN_BOOSTER_DPS = 14;
+
+type FillerWowClass =
+  | "DEATH_KNIGHT"
+  | "DEMON_HUNTER"
+  | "DRUID"
+  | "EVOKER"
+  | "HUNTER"
+  | "MAGE"
+  | "MONK"
+  | "PALADIN"
+  | "PRIEST"
+  | "ROGUE"
+  | "SHAMAN"
+  | "WARLOCK"
+  | "WARRIOR";
+
+type FillerBoosterRole = "TANK" | "HEALER" | "DPS";
+
+type FillerBooster = {
+  index: number;
+  userId: string;
+  characterId: string;
+  role: FillerBoosterRole;
+  wowClass: FillerWowClass;
+  specialization: string;
+  name: string;
+};
+
+function fillerId(prefix: "u" | "c", index: number): string {
+  const n = index.toString(16).padStart(12, "0");
+  return prefix === "u" ? `f0000000-0000-4000-8000-${n}` : `fc000000-0000-4000-8000-${n}`;
+}
+
+/** Dedicated BOOSTER filler pool — enough for 2 tanks / 4 healers / 14 DPS on every run. */
+const FILLER_BOOSTER_DEFS: Array<{
+  role: FillerBoosterRole;
+  wowClass: FillerWowClass;
+  specialization: string;
+  name: string;
+}> = [
+  { role: "TANK", wowClass: "WARRIOR", specialization: "Protection", name: "Filltanka" },
+  { role: "TANK", wowClass: "PALADIN", specialization: "Protection", name: "Filltankb" },
+  { role: "HEALER", wowClass: "PRIEST", specialization: "Holy", name: "Fillheala" },
+  { role: "HEALER", wowClass: "SHAMAN", specialization: "Restoration", name: "Fillhealb" },
+  { role: "HEALER", wowClass: "DRUID", specialization: "Restoration", name: "Fillhealc" },
+  { role: "HEALER", wowClass: "MONK", specialization: "Mistweaver", name: "Fillheald" },
+  { role: "DPS", wowClass: "MAGE", specialization: "Frost", name: "Filldpsa" },
+  { role: "DPS", wowClass: "WARLOCK", specialization: "Affliction", name: "Filldpsb" },
+  { role: "DPS", wowClass: "HUNTER", specialization: "Beast Mastery", name: "Filldpsc" },
+  { role: "DPS", wowClass: "ROGUE", specialization: "Assassination", name: "Filldpsd" },
+  { role: "DPS", wowClass: "DEMON_HUNTER", specialization: "Havoc", name: "Filldpse" },
+  { role: "DPS", wowClass: "EVOKER", specialization: "Devastation", name: "Filldpsf" },
+  { role: "DPS", wowClass: "DEATH_KNIGHT", specialization: "Unholy", name: "Filldpsg" },
+  { role: "DPS", wowClass: "WARRIOR", specialization: "Fury", name: "Filldpsh" },
+  { role: "DPS", wowClass: "PALADIN", specialization: "Retribution", name: "Filldpsi" },
+  { role: "DPS", wowClass: "PRIEST", specialization: "Shadow", name: "Filldpsj" },
+  { role: "DPS", wowClass: "SHAMAN", specialization: "Enhancement", name: "Filldpsk" },
+  { role: "DPS", wowClass: "DRUID", specialization: "Balance", name: "Filldpsl" },
+  { role: "DPS", wowClass: "MONK", specialization: "Windwalker", name: "Filldpsm" },
+  { role: "DPS", wowClass: "MAGE", specialization: "Fire", name: "Filldpsn" },
+];
+
+const FILLER_BOOSTERS: FillerBooster[] = FILLER_BOOSTER_DEFS.map((def, index) => ({
+  index: index + 1,
+  userId: fillerId("u", index + 1),
+  characterId: fillerId("c", index + 1),
+  ...def,
+}));
 
 function characterIdentity(name: string, realm: string) {
   return {
@@ -393,6 +465,43 @@ async function seed() {
     updatedAt: SEED_NOW,
   });
 
+  for (const filler of FILLER_BOOSTERS) {
+    await orm.User.create({
+      id: filler.userId,
+      name: `Filler ${filler.name}`,
+      email: `filler${filler.index}@dev.boostting.local`,
+      emailVerified: true,
+      discordUserId: `200000000000000${String(filler.index).padStart(3, "0")}`,
+      discordUsername: `filler${filler.index}`,
+      accountRole: "USER",
+      accountStatus: "ACTIVE",
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+    await orm.Account.create({
+      id: crypto.randomUUID(),
+      accountId: filler.userId,
+      providerId: "credential",
+      userId: filler.userId,
+      password,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+    await orm.Character.create({
+      id: filler.characterId,
+      userId: filler.userId,
+      ...characterIdentity(filler.name, "Twisting Nether"),
+      region: "EU",
+      wowClass: filler.wowClass,
+      specialization: filler.specialization,
+      primaryRole: filler.role,
+      itemLevel: 680,
+      isActive: true,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
+  }
+
   const access: Array<{
     userId: string;
     characterId: string;
@@ -456,6 +565,24 @@ async function seed() {
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
+  }
+
+  for (const filler of FILLER_BOOSTERS) {
+    for (const difficulty of ["NORMAL", "HEROIC", "MYTHIC"] as const) {
+      await orm.BoosterQualification.create({
+        id: crypto.randomUUID(),
+        userId: filler.userId,
+        difficulty,
+        status: "APPROVED",
+        notes: "Seed filler booster — approved for composition padding.",
+        grantedAt: SEED_NOW,
+        grantedById: ids.users.aelira,
+        revokedAt: null,
+        revokedById: null,
+        createdAt: SEED_NOW,
+        updatedAt: SEED_NOW,
+      });
+    }
   }
 
   await raidRepository.ensureReferenceRaids(SEED_NOW);
@@ -1287,24 +1414,66 @@ async function seed() {
     });
   }
 
-  // Pad every run to MIN_SIGNUPS_PER_RUN with characterless LOOTBUDDY fillers.
+  // Pad every run to composition minima (2/4/14 BOOSTER) then MIN_SIGNUPS_PER_RUN.
+  // BOOSTER fillers use the dedicated filler pool; LOOTBUDDY fillers pad remainder.
   // Never SELECTED / never on roster — keeps payout, attendance, and roster tests stable.
-  // Skip mira: signup.service tests assert exact PENDING lootbuddy counts for her on some runs.
-  const fillerOwners = [ids.users.kael, ids.users.thorne, ids.users.aelira, ids.users.brann, ids.users.sylva];
-  const signupCounts = new Map<string, number>();
-  for (const signup of signups) {
-    signupCounts.set(signup.runId, (signupCounts.get(signup.runId) ?? 0) + 1);
-  }
+  // Skip mira for lootbuddy padding: signup.service tests assert her PENDING counts.
+  const lootbuddyFillerOwners = [ids.users.kael, ids.users.thorne, ids.users.aelira, ids.users.brann, ids.users.sylva];
+  const roleMinimums: Array<{ role: FillerBoosterRole; minimum: number }> = [
+    { role: "TANK", minimum: MIN_BOOSTER_TANKS },
+    { role: "HEALER", minimum: MIN_BOOSTER_HEALERS },
+    { role: "DPS", minimum: MIN_BOOSTER_DPS },
+  ];
+
   for (const run of runs) {
-    const existing = signupCounts.get(run.id) ?? 0;
-    const need = Math.max(0, MIN_SIGNUPS_PER_RUN - existing);
+    const runSignups = signups.filter((signup) => signup.runId === run.id);
     const fillerStatus =
       run.status === "OPEN" || run.status === "DRAFT" || run.status === "ROSTERING" ? "PENDING" : "NOT_SELECTED";
-    for (let i = 0; i < need; i++) {
+
+    const roleCounts: Record<FillerBoosterRole, number> = { TANK: 0, HEALER: 0, DPS: 0 };
+    for (const signup of runSignups) {
+      if (signup.participationType !== "BOOSTER" || signup.status === "WITHDRAWN" || signup.role == null) continue;
+      roleCounts[signup.role] += 1;
+    }
+
+    let created = 0;
+    for (const { role, minimum } of roleMinimums) {
+      let need = Math.max(0, minimum - roleCounts[role]);
+      for (const filler of FILLER_BOOSTERS) {
+        if (need <= 0) break;
+        if (filler.role !== role) continue;
+        await orm.RunSignup.create({
+          id: crypto.randomUUID(),
+          runId: run.id,
+          userId: filler.userId,
+          characterId: filler.characterId,
+          participationType: "BOOSTER",
+          role: filler.role,
+          isBackup: false,
+          status: fillerStatus,
+          lootbuddyClass: null,
+          lootbuddyMode: null,
+          lootbuddyVerification: null,
+          notes: "Seed filler booster for 2/4/14 composition QA.",
+          createdAt: SEED_NOW,
+          updatedAt: SEED_NOW,
+        });
+        need -= 1;
+        created += 1;
+        roleCounts[role] += 1;
+      }
+      if (need > 0) {
+        throw new Error(`Seed filler pool exhausted for ${role} on run ${run.id} (still need ${need}).`);
+      }
+    }
+
+    const activeNamed = runSignups.filter((signup) => signup.status !== "WITHDRAWN").length;
+    const lootNeed = Math.max(0, MIN_SIGNUPS_PER_RUN - (activeNamed + created));
+    for (let i = 0; i < lootNeed; i++) {
       await orm.RunSignup.create({
         id: crypto.randomUUID(),
         runId: run.id,
-        userId: fillerOwners[i % fillerOwners.length]!,
+        userId: lootbuddyFillerOwners[i % lootbuddyFillerOwners.length]!,
         characterId: null,
         participationType: "LOOTBUDDY",
         role: null,
@@ -1800,7 +1969,7 @@ async function seed() {
   console.log(`Settlement QA run: ${settlementQaTitle}`);
   console.log(`  id: ${ids.runs.settlementQa}`);
   console.log(`  http://localhost:3000/runs/${ids.runs.settlementQa}?tab=payout`);
-  console.log(`Every run padded to ≥${MIN_SIGNUPS_PER_RUN} signups (characterless LOOTBUDDY fillers).`);
+  console.log(`Every run padded to ≥${MIN_SIGNUPS_PER_RUN} signups and ≥${MIN_BOOSTER_TANKS}/${MIN_BOOSTER_HEALERS}/${MIN_BOOSTER_DPS} BOOSTER roles.`);
 }
 
 seed()
