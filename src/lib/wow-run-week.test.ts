@@ -17,6 +17,23 @@ const SUMMER_NOW = new Date("2026-07-16T12:00:00.000Z");
 const SUMMER_CURRENT_START = "2026-07-15T04:00:00.000Z";
 const SUMMER_NEXT_START = "2026-07-22T04:00:00.000Z";
 
+describe("classifyRunWeek — live Discord week boundary (Sep 2026)", () => {
+  // Observed live bug Run: Monday 14 September 2026 02:00 Europe/Berlin.
+  // With now still inside that CURRENT window (before Wed 16 Sep 06:00 Berlin),
+  // the Run must classify CURRENT — not NEXT.
+  it("Monday 14 Sep 2026 02:00 Europe/Berlin is CURRENT", () => {
+    const now = new Date("2026-09-13T12:00:00.000Z"); // Sat before the Mon run, still CURRENT week
+    const result = classifyRunWeek({
+      scheduledStartAt: "2026-09-14T00:00:00.000Z", // Mon 02:00 CEST
+      now,
+      timeZone: TZ,
+    });
+    expect(result.bucket).toBe("CURRENT");
+    expect(result.currentStart).toBe("2026-09-09T04:00:00.000Z"); // Wed 09 Sep 06:00 CEST
+    expect(result.nextStart).toBe("2026-09-16T04:00:00.000Z"); // Wed 16 Sep 06:00 CEST
+  });
+});
+
 describe("classifyRunWeek — basic classification (winter, no DST)", () => {
   it("Tuesday before reset is PAST", () => {
     const result = classifyRunWeek({ scheduledStartAt: "2026-01-13T18:00:00.000Z", now: WINTER_NOW, timeZone: TZ });

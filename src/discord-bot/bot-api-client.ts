@@ -84,6 +84,7 @@ export class BotApiClient {
         existingRunChannelId: string | null;
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+        scheduledStartAt: string;
         embed: unknown;
       }>;
       roster: Array<{
