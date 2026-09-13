@@ -67,7 +67,6 @@ describe("booster eligibility", () => {
     const paladin = evaluateBoosterOptions(
       [shaman({ wowClass: "PALADIN", specialization: "Holy" })],
       heroicRun,
-      reset,
     ).eligible[0];
     expect(paladin?.defaultRole).toBe("HEALER");
     expect(paladin?.roles).toEqual(["HEALER", "TANK", "DPS"]);
@@ -81,7 +80,6 @@ describe("booster eligibility", () => {
     const priest = evaluateBoosterOptions(
       [shaman({ wowClass: "PRIEST", specialization: "Holy" })],
       heroicRun,
-      reset,
     ).eligible[0];
     expect(priest?.roles).toEqual(["HEALER", "DPS"]);
     expect(priest?.roles).not.toContain("TANK");
@@ -89,7 +87,6 @@ describe("booster eligibility", () => {
     const mage = evaluateBoosterOptions(
       [shaman({ wowClass: "MAGE", specialization: "Frost" })],
       heroicRun,
-      reset,
     ).eligible[0];
     expect(mage?.roles).toEqual(["DPS"]);
   });
