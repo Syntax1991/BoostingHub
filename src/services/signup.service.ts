@@ -7,7 +7,6 @@ import type {
 } from "@/models/enums";
 import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
-import { resetIdentifierFor } from "@/lib/datetime";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { activityRepository } from "@/repositories/activity.repository";
 import type { CharacterPageRecord } from "@/repositories/character.repository";
@@ -126,7 +125,6 @@ export const signupService = {
 
     const rawCharacters = await characterRepository.listByUserId(user.id);
     const characters = await withReservationConflicts(rawCharacters, run.id, run.scheduledStartAt);
-    const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
     const eligibilityRun = {
       id: run.id,
       raidId: run.raidId,
@@ -134,9 +132,10 @@ export const signupService = {
       status: run.status,
       signupsOpen: run.signupsOpen,
       totalBossCount: run.totalBossCount,
+      scheduledStartAt: run.scheduledStartAt,
     };
 
-    const booster = evaluateBoosterOptions(characters, eligibilityRun, resetIdentifier);
+    const booster = evaluateBoosterOptions(characters, eligibilityRun);
 
     const ownSignups = await signupRepository.listByRunAndUser(runId, user.id);
     const activeSignups = ownSignups.filter((signup) => signup.status !== "WITHDRAWN");
@@ -156,9 +155,11 @@ export const signupService = {
         title: run.title,
         raidName: run.raidName,
         difficulty: run.difficulty,
+        lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         signupWindowOpen: assertSignupWindowOpen(run),
+        totalBossCount: run.totalBossCount,
       },
       booster,
       /** The desired-set the Booster half of the signup dialog should preselect on open. Independent of Lootbuddy — a User may hold both at once. */
@@ -182,7 +183,7 @@ export const signupService = {
     user: AuthenticatedUser,
     input: { runId: string; characterId: string; role: CharacterRole; isBackup: boolean },
   ) {
-    const { run, character, resetIdentifier } = await loadSignupContext(
+    const { run, character } = await loadSignupContext(
       user.id,
       input.runId,
       input.characterId,
@@ -202,8 +203,8 @@ export const signupService = {
         status: run.status,
         signupsOpen: run.signupsOpen,
         totalBossCount: run.totalBossCount,
+        scheduledStartAt: run.scheduledStartAt,
       },
-      resetIdentifier,
     );
 
     const option = eligible.find((item) => item.characterId === input.characterId);
@@ -556,7 +557,6 @@ async function loadSignupContext(userId: string, runId: string, characterId: str
   return {
     run,
     character,
-    resetIdentifier: resetIdentifierFor(run.scheduledStartAt),
   };
 }
 
@@ -674,7 +674,6 @@ async function validateOfferedCharacters(
   offeredCharacters: Array<{ offer: { characterId: string; role?: CharacterRole }; character: CharacterPageRecord }>,
   run: LoadedRun,
 ): Promise<Map<string, CharacterRole>> {
-  const resetIdentifier = resetIdentifierFor(run.scheduledStartAt);
   const eligibilityRun = {
     id: run.id,
     raidId: run.raidId,
@@ -682,6 +681,7 @@ async function validateOfferedCharacters(
     status: run.status,
     signupsOpen: run.signupsOpen,
     totalBossCount: run.totalBossCount,
+    scheduledStartAt: run.scheduledStartAt,
   };
   const roleByCharacterId = new Map<string, CharacterRole>();
 
@@ -690,7 +690,7 @@ async function validateOfferedCharacters(
     run.id,
     run.scheduledStartAt,
   );
-  const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun, resetIdentifier);
+  const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun);
   for (const { offer, character } of offeredCharacters) {
     const option = eligible.find((item) => item.characterId === offer.characterId);
     if (!option) {

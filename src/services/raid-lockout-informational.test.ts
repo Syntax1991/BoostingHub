@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
-import { resetIdentifierFor } from "@/lib/datetime";
 import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
@@ -201,9 +201,14 @@ async function createOpenRun(scheduledStartAt: string) {
   return id;
 }
 
-async function markSaved(runId: string, characterId: string) {
+async function markSaved(runId: string, characterId: string, bossesDefeated = 8, isComplete = true) {
   const run = await runRepository.findById(runId);
-  const resetIdentifier = resetIdentifierFor(run?.scheduledStartAt ?? futureIso(1));
+  const character = await orm.Character.where({ id: characterId }).first();
+  const region = (character as { region?: string } | null)?.region === "US" ? "US" : "EU";
+  const resetIdentifier = lockoutService.getResetIdentifierForRun(
+    region,
+    run?.scheduledStartAt ?? futureIso(1),
+  );
   // Tests reuse the same Character/raid/difficulty across several Runs that
   // may land in the same reset week — CharacterRaidLockout is unique on
   // (characterId, raidId, difficulty, resetIdentifier), so clear any prior
@@ -217,8 +222,8 @@ async function markSaved(runId: string, characterId: string) {
     raidId,
     difficulty: "HEROIC",
     resetIdentifier,
-    bossesDefeated: 8,
-    isComplete: true,
+    bossesDefeated,
+    isComplete,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -237,7 +242,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     expect(eligibleOption?.raidSave).toEqual({
       raidId,
       difficulty: "HEROIC",
-      resetIdentifier: resetIdentifierFor(runARecord!.scheduledStartAt),
+      resetIdentifier: lockoutService.getResetIdentifierForRun("EU", runARecord!.scheduledStartAt),
       bossesDefeated: 8,
       totalBossCount: 8,
       isComplete: true,
@@ -312,5 +317,55 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     const optionsBAfter = await signupService.getSignupOptions(target, runB);
     const ineligible = optionsBAfter.booster.ineligible.find((item) => item.characterId === saved);
     expect(ineligible?.reason).toBe("ALREADY_SELECTED_OTHER_RUN");
+  });
+
+  it("EU Monday/Tuesday Runs find HC lockouts persisted under the Wednesday regional reset start", async () => {
+    const monday = await createOpenRun("2026-09-14T00:00:00.000Z"); // Mon 02:00 Berlin
+    const tuesday = await createOpenRun("2026-09-15T01:00:00.000Z"); // Tue 03:00 Berlin VIP-style
+    const { resetIdentifier } = await markSaved(monday, saved, 7, false);
+    expect(resetIdentifier).toBe("2026-W37");
+    // Same regional key for Tuesday — reusing markSaved would recreate the same unique row.
+    await markSaved(tuesday, saved, 7, false);
+
+    const mondayOptions = await signupService.getSignupOptions(target, monday);
+    expect(mondayOptions.booster.eligible.find((item) => item.characterId === saved)?.raidSave).toEqual({
+      raidId,
+      difficulty: "HEROIC",
+      resetIdentifier: "2026-W37",
+      bossesDefeated: 7,
+      totalBossCount: 8,
+      isComplete: false,
+    });
+
+    await signupService.setCharacterOffers(target, {
+      runId: tuesday,
+      offers: [{ characterId: saved, role: "DPS" }],
+    });
+    const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
+    const candidate = tuesdayView.groups.dps.find((item) => item.character?.id === saved);
+    expect(candidate?.raidSave?.resetIdentifier).toBe("2026-W37");
+    expect(candidate?.raidSave?.bossesDefeated).toBe(7);
+  });
+
+  it("verified HC 0/8 surfaces on signup options and roster (not Unknown)", async () => {
+    const runId = await createOpenRun("2026-09-14T00:00:00.000Z");
+    await markSaved(runId, saved, 0, false);
+
+    const options = await signupService.getSignupOptions(target, runId);
+    expect(options.booster.eligible.find((item) => item.characterId === saved)?.raidSave?.bossesDefeated).toBe(0);
+
+    await signupService.setCharacterOffers(target, {
+      runId,
+      offers: [{ characterId: saved, role: "DPS" }],
+    });
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.groups.dps.find((item) => item.character?.id === saved)?.raidSave).toEqual({
+      raidId,
+      difficulty: "HEROIC",
+      resetIdentifier: "2026-W37",
+      bossesDefeated: 0,
+      totalBossCount: 8,
+      isComplete: false,
+    });
   });
 });
