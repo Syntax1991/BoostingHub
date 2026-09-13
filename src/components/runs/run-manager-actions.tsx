@@ -12,25 +12,20 @@ import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
+import type { FinalSetupInput } from "@/lib/run-start-message";
 
 export function RunManagerActions({
   run,
   capabilities,
   editor,
   unmarkedCount = 0,
-  startComposition,
+  finalSetupPreview,
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
   editor: RunDetailView["editor"];
   unmarkedCount?: number;
-  startComposition?: {
-    tanks: number;
-    healers: number;
-    dps: number;
-    lootbuddies: number;
-    total: number;
-  };
+  finalSetupPreview?: FinalSetupInput | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +123,7 @@ export function RunManagerActions({
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
       {startOpen ? (
-        <RunStartDialog runId={runId} composition={startComposition} onClose={() => setStartOpen(false)} />
+        <RunStartDialog runId={runId} finalSetup={finalSetupPreview} onClose={() => setStartOpen(false)} />
       ) : null}
       {completeOpen ? (
         <RunCompleteDialog runId={runId} unmarkedCount={unmarkedCount} onClose={() => setCompleteOpen(false)} />

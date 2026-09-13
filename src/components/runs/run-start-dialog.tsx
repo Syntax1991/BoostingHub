@@ -1,24 +1,17 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { startRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
-
-type CompositionPreview = {
-  tanks: number;
-  healers: number;
-  dps: number;
-  lootbuddies: number;
-  total: number;
-};
+import { renderFinalSetupText, type FinalSetupInput } from "@/lib/run-start-message";
 
 export function RunStartDialog({
   runId,
-  composition,
+  finalSetup,
   onClose,
 }: {
   runId: string;
-  composition?: CompositionPreview;
+  finalSetup?: FinalSetupInput | null;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -26,23 +19,9 @@ export function RunStartDialog({
   const errorId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [collector1Name, setCollector1Name] = useState("");
-  const [collector1Realm, setCollector1Realm] = useState("");
-  const [collector2Name, setCollector2Name] = useState("");
-  const [collector2Realm, setCollector2Realm] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  const preview1 = useMemo(() => {
-    const name = collector1Name.trim();
-    const realm = collector1Realm.trim();
-    return name && realm ? `${name}-${realm}` : null;
-  }, [collector1Name, collector1Realm]);
-  const preview2 = useMemo(() => {
-    const name = collector2Name.trim();
-    const realm = collector2Realm.trim();
-    return name && realm ? `${name}-${realm}` : null;
-  }, [collector2Name, collector2Realm]);
-
-  const canSubmit = Boolean(preview1 && preview2);
+  const previewText = finalSetup ? renderFinalSetupText(finalSetup) : null;
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -58,17 +37,18 @@ export function RunStartDialog({
     onClose();
   }
 
+  function copyMessage() {
+    if (!previewText) return;
+    void navigator.clipboard.writeText(previewText).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   function submit() {
-    if (!canSubmit) return;
     setError(null);
     startTransition(async () => {
-      const result = await startRunAction({
-        runId,
-        goldCollectors: [
-          { name: collector1Name, realm: collector1Realm },
-          { name: collector2Name, realm: collector2Realm },
-        ],
-      });
+      const result = await startRunAction({ runId });
       if (!result.ok) {
         setError(result.message);
         return;
@@ -82,7 +62,7 @@ export function RunStartDialog({
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
-      className="w-[min(36rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
+      className="w-[min(40rem,calc(100vw-2rem))] max-h-[min(90vh,44rem)] overflow-y-auto rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
     >
       <div className="border-b border-border px-4 py-3">
         <h2 id={titleId} className="text-sm font-semibold">
@@ -95,95 +75,39 @@ export function RunStartDialog({
             {error}
           </p>
         ) : null}
-        <p>Starting freezes the operational roster and opens attendance tracking.</p>
+        <p>Starting this run will:</p>
         <ul className="list-disc space-y-1 pl-5 text-muted">
-          <li>Signups will close and attendance will be snapshotted from the published roster.</li>
-          <li>Both Gold Collector characters will be frozen for this Run.</li>
-          <li>The Discord bot will post the operational start roster into this Run&apos;s channel asynchronously.</li>
+          <li>close signups</li>
+          <li>freeze/snapshot the published roster into Attendance</li>
+          <li>set the Run to IN_PROGRESS</li>
+          <li>post the Final Setup to the Run&apos;s Discord channel asynchronously</li>
         </ul>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <CollectorFields
-            title="Gold Collector 1"
-            name={collector1Name}
-            realm={collector1Realm}
-            onNameChange={setCollector1Name}
-            onRealmChange={setCollector1Realm}
-            disabled={pending}
-          />
-          <CollectorFields
-            title="Gold Collector 2"
-            name={collector2Name}
-            realm={collector2Realm}
-            onNameChange={setCollector2Name}
-            onRealmChange={setCollector2Realm}
-            disabled={pending}
-          />
-        </div>
-
-        <div className="rounded-md border border-border bg-surface-raised px-3 py-3 text-sm">
-          <p className="text-xs uppercase tracking-wide text-muted">Preview</p>
-          <p className="mt-2">
-            Selected participants: {composition?.total ?? "—"}
-            {composition
-              ? ` · Tanks ${composition.tanks} · Healers ${composition.healers} · DPS ${composition.dps} · Lootbuddies ${composition.lootbuddies}`
-              : null}
-          </p>
-          <p className="mt-1">Gold Collector 1: {preview1 ?? "—"}</p>
-          <p>Gold Collector 2: {preview2 ?? "—"}</p>
-        </div>
+        {previewText ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Final Setup</p>
+              <Button type="button" variant="ghost" disabled={pending} onClick={copyMessage}>
+                {copied ? "Copied" : "Copy message"}
+              </Button>
+            </div>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-surface-raised px-3 py-3 font-mono text-xs leading-relaxed">
+              {previewText}
+            </pre>
+          </div>
+        ) : (
+          <p className="text-muted">Final Setup preview is available from the Run detail page.</p>
+        )}
 
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4">
           <Button type="button" variant="secondary" onClick={close} disabled={pending}>
-            Keep waiting
+            Cancel
           </Button>
-          <Button type="button" onClick={submit} disabled={pending || !canSubmit}>
+          <Button type="button" onClick={submit} disabled={pending}>
             {pending ? "Starting…" : "Start Run"}
           </Button>
         </div>
       </div>
     </dialog>
-  );
-}
-
-function CollectorFields({
-  title,
-  name,
-  realm,
-  onNameChange,
-  onRealmChange,
-  disabled,
-}: {
-  title: string;
-  name: string;
-  realm: string;
-  onNameChange: (value: string) => void;
-  onRealmChange: (value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</legend>
-      <label className="block text-sm">
-        <span className="mb-1 block text-xs text-muted">Character</span>
-        <input
-          value={name}
-          onChange={(event) => onNameChange(event.target.value)}
-          disabled={disabled}
-          className="h-9 w-full rounded-md border border-border bg-surface px-2"
-          autoComplete="off"
-        />
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block text-xs text-muted">Realm</span>
-        <input
-          value={realm}
-          onChange={(event) => onRealmChange(event.target.value)}
-          disabled={disabled}
-          className="h-9 w-full rounded-md border border-border bg-surface px-2"
-          autoComplete="off"
-        />
-      </label>
-    </fieldset>
   );
 }

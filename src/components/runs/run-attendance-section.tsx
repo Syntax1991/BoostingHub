@@ -45,15 +45,7 @@ export function RunAttendanceSection({ data }: { data: RunDetailView }) {
           {startOpen ? (
             <RunStartDialog
               runId={data.run.id}
-              composition={{
-                tanks: (data.publishedRoster?.members ?? []).filter((member) => member.role === "TANK").length,
-                healers: (data.publishedRoster?.members ?? []).filter((member) => member.role === "HEALER").length,
-                dps: (data.publishedRoster?.members ?? []).filter((member) => member.role === "DPS").length,
-                lootbuddies: (data.publishedRoster?.members ?? []).filter(
-                  (member) => member.participationType === "LOOTBUDDY",
-                ).length,
-                total: data.publishedRoster?.members.length ?? 0,
-              }}
+              finalSetup={data.finalSetupPreview}
               onClose={() => setStartOpen(false)}
             />
           ) : null}
