@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { DifficultyBadge, RoleBadge, SignupStatusBadge } from "@/components/ui/badges";
+import { DifficultyBadge, OfferedRolesBadges, SignupStatusBadge } from "@/components/ui/badges";
 import { runDetailPath } from "@/lib/run-routes";
 import type { dashboardController } from "@/controllers/dashboard.controller";
 
@@ -122,7 +122,7 @@ export function DashboardView({ data }: { data: DashboardData }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {signup.role ? <RoleBadge role={signup.role} /> : null}
+                    <OfferedRolesBadges roles={signup.offeredRoles} />
                     <SignupStatusBadge status={signup.status} />
                   </div>
                 </div>

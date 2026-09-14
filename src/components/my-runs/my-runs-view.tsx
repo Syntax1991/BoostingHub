@@ -5,7 +5,7 @@ import { runDetailPath } from "@/lib/run-routes";
 import {
   DifficultyBadge,
   ParticipationBadge,
-  RoleBadge,
+  OfferedRolesBadges,
   SignupStatusBadge,
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
@@ -183,9 +183,9 @@ function SignupTable({ items }: { items: SignupItem[] }) {
                               ? ` · ${LOOTBUDDY_VERIFICATION_LABELS[offer.lootbuddyVerification]}`
                               : ""}
                           </span>
-                        ) : offer.role ? (
-                          <RoleBadge role={offer.role} />
-                        ) : null}
+                        ) : (
+                          <OfferedRolesBadges roles={offer.offeredRoles} />
+                        )}
                         <SignupStatusBadge status={offer.status} />
                         {offer.canWithdraw ? <WithdrawButton signupId={offer.id} /> : null}
                       </li>

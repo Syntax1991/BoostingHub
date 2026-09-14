@@ -3,7 +3,7 @@ import {
   clearAllSessionsForTests,
   discardSession,
   getSession,
-  setStagedRole,
+  setStagedRoles,
   startSession,
 } from "@/discord-bot/interactions/signup-staging";
 
@@ -18,44 +18,59 @@ describe("signup-staging", () => {
       runId: "run-1",
       isExistingSignup: false,
       offers: [
-        { characterId: "c1", role: "TANK" },
-        { characterId: "c2", role: null },
+        { characterId: "c1", offeredRoles: ["TANK"] },
+        { characterId: "c2", offeredRoles: [] },
       ],
     });
-    expect(session.offers.get("c1")).toBe("TANK");
-    expect(session.offers.get("c2")).toBeNull();
+    expect(session.offers.get("c1")).toEqual(["TANK"]);
+    expect(session.offers.get("c2")).toEqual([]);
     expect(getSession("user-a", "run-1")).toBe(session);
   });
 
   it("isolates sessions by both discordUserId and runId — no cross-User or cross-Run leakage", () => {
-    startSession({ discordUserId: "user-a", runId: "run-1", isExistingSignup: false, offers: [{ characterId: "c1", role: "TANK" }] });
-    startSession({ discordUserId: "user-b", runId: "run-1", isExistingSignup: false, offers: [{ characterId: "c1", role: "HEALER" }] });
-    startSession({ discordUserId: "user-a", runId: "run-2", isExistingSignup: false, offers: [{ characterId: "c1", role: "DPS" }] });
+    startSession({
+      discordUserId: "user-a",
+      runId: "run-1",
+      isExistingSignup: false,
+      offers: [{ characterId: "c1", offeredRoles: ["TANK"] }],
+    });
+    startSession({
+      discordUserId: "user-b",
+      runId: "run-1",
+      isExistingSignup: false,
+      offers: [{ characterId: "c1", offeredRoles: ["HEALER"] }],
+    });
+    startSession({
+      discordUserId: "user-a",
+      runId: "run-2",
+      isExistingSignup: false,
+      offers: [{ characterId: "c1", offeredRoles: ["DPS"] }],
+    });
 
-    expect(getSession("user-a", "run-1")?.offers.get("c1")).toBe("TANK");
-    expect(getSession("user-b", "run-1")?.offers.get("c1")).toBe("HEALER");
-    expect(getSession("user-a", "run-2")?.offers.get("c1")).toBe("DPS");
+    expect(getSession("user-a", "run-1")?.offers.get("c1")).toEqual(["TANK"]);
+    expect(getSession("user-b", "run-1")?.offers.get("c1")).toEqual(["HEALER"]);
+    expect(getSession("user-a", "run-2")?.offers.get("c1")).toEqual(["DPS"]);
     expect(getSession("user-b", "run-2")).toBeUndefined();
   });
 
-  it("setStagedRole updates only the named Character, leaving the rest of the session untouched", () => {
+  it("setStagedRoles updates only the named Character, leaving the rest of the session untouched", () => {
     startSession({
       discordUserId: "user-a",
       runId: "run-1",
       isExistingSignup: false,
       offers: [
-        { characterId: "c1", role: "TANK" },
-        { characterId: "c2", role: "HEALER" },
+        { characterId: "c1", offeredRoles: ["TANK"] },
+        { characterId: "c2", offeredRoles: ["HEALER"] },
       ],
     });
-    expect(setStagedRole("user-a", "run-1", "c2", "DPS")).toBe(true);
+    expect(setStagedRoles("user-a", "run-1", "c2", ["DPS"])).toBe(true);
     const session = getSession("user-a", "run-1")!;
-    expect(session.offers.get("c1")).toBe("TANK");
-    expect(session.offers.get("c2")).toBe("DPS");
+    expect(session.offers.get("c1")).toEqual(["TANK"]);
+    expect(session.offers.get("c2")).toEqual(["DPS"]);
   });
 
-  it("setStagedRole on a missing session returns false and creates nothing", () => {
-    expect(setStagedRole("ghost", "run-1", "c1", "TANK")).toBe(false);
+  it("setStagedRoles on a missing session returns false and creates nothing", () => {
+    expect(setStagedRoles("ghost", "run-1", "c1", ["TANK"])).toBe(false);
     expect(getSession("ghost", "run-1")).toBeUndefined();
   });
 
@@ -70,7 +85,12 @@ describe("signup-staging", () => {
   it("expires a session after the TTL — a stale session reads as missing", () => {
     vi.useFakeTimers();
     try {
-      startSession({ discordUserId: "user-a", runId: "run-1", isExistingSignup: false, offers: [{ characterId: "c1", role: "TANK" }] });
+      startSession({
+        discordUserId: "user-a",
+        runId: "run-1",
+        isExistingSignup: false,
+        offers: [{ characterId: "c1", offeredRoles: ["TANK"] }],
+      });
       expect(getSession("user-a", "run-1")).not.toBeUndefined();
 
       vi.advanceTimersByTime(16 * 60 * 1000);
@@ -83,11 +103,16 @@ describe("signup-staging", () => {
   it("renews the TTL on a role change so an active editor never expires mid-use", () => {
     vi.useFakeTimers();
     try {
-      startSession({ discordUserId: "user-a", runId: "run-1", isExistingSignup: false, offers: [{ characterId: "c1", role: "TANK" }] });
+      startSession({
+        discordUserId: "user-a",
+        runId: "run-1",
+        isExistingSignup: false,
+        offers: [{ characterId: "c1", offeredRoles: ["TANK"] }],
+      });
       vi.advanceTimersByTime(14 * 60 * 1000);
-      expect(setStagedRole("user-a", "run-1", "c1", "HEALER")).toBe(true);
+      expect(setStagedRoles("user-a", "run-1", "c1", ["HEALER"])).toBe(true);
       vi.advanceTimersByTime(14 * 60 * 1000);
-      expect(getSession("user-a", "run-1")?.offers.get("c1")).toBe("HEALER");
+      expect(getSession("user-a", "run-1")?.offers.get("c1")).toEqual(["HEALER"]);
     } finally {
       vi.useRealTimers();
     }

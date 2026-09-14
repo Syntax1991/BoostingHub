@@ -133,7 +133,7 @@ export class BotApiClient {
   setCharacterOffers(
     runId: string,
     discordUserId: string,
-    input: { offers: Array<{ characterId: string; role?: string }> },
+    input: { offers: Array<{ characterId: string; offeredRoles: string[] }> },
   ) {
     return this.request<{ created: number; reactivated: number; withdrawn: number; kept: number }>(
       `/api/bot/runs/${runId}/signup`,

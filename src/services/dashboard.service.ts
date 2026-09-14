@@ -71,7 +71,7 @@ export const dashboardService = {
         scheduledStartAt: signup.run.scheduledStartAt,
         status: signup.status,
         characterName: signup.character?.name ?? null,
-        role: signup.role,
+        offeredRoles: signup.offeredRoles,
         participationType: signup.participationType,
         isBackup: signup.isBackup,
       })),

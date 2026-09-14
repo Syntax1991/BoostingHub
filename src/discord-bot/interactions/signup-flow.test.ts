@@ -24,7 +24,7 @@ describe("buildCharacterSelectOptions", () => {
   it("labels a fresh selection with its specialization-derived default role", () => {
     const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: [],
-      roleByCharacterId: {},
+      offeredRolesByCharacterId: {},
     }).map((option) => option.toJSON());
 
     expect(options).toHaveLength(1);
@@ -35,7 +35,7 @@ describe("buildCharacterSelectOptions", () => {
   it("labels an existing offer with its persisted role, not the specialization default, when they differ", () => {
     const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: ["c-mist"],
-      roleByCharacterId: { "c-mist": "TANK" },
+      offeredRolesByCharacterId: { "c-mist": ["TANK"] },
     }).map((option) => option.toJSON());
     expect(options[0]?.label).toBe("Synmist-Antonidas — Tank");
   });
@@ -43,7 +43,7 @@ describe("buildCharacterSelectOptions", () => {
   it("preselects a Character with an active booster offer", () => {
     const options = buildCharacterSelectOptions([mistweaver], {
       characterIds: ["c-mist"],
-      roleByCharacterId: { "c-mist": "HEALER" },
+      offeredRolesByCharacterId: { "c-mist": ["HEALER"] },
     }).map((option) => option.toJSON());
     expect(options[0]?.default).toBe(true);
   });
@@ -51,7 +51,7 @@ describe("buildCharacterSelectOptions", () => {
   it("shows no role suffix for a Character with neither an existing offer nor a specialization default", () => {
     const options = buildCharacterSelectOptions(
       [{ characterId: "c-1", characterName: "A", realm: "R", roles: ["DPS", "HEALER"] as ("TANK" | "HEALER" | "DPS")[], defaultRole: null }],
-      { characterIds: [], roleByCharacterId: {} },
+      { characterIds: [], offeredRolesByCharacterId: {} },
     ).map((option) => option.toJSON());
     expect(options[0]?.label).toBe("A-R");
   });
@@ -76,7 +76,7 @@ const SYNMIST = "c1111111-1111-4111-8111-111111111111"; // hybrid Monk
 const FROSTBOLT = "c2222222-2222-4222-8222-222222222222"; // single-role Mage
 
 function signupOptionsPayload(overrides: {
-  roleByCharacterId?: Record<string, string>;
+  offeredRolesByCharacterId?: Record<string, ("TANK" | "HEALER" | "DPS")[]>;
   activeCharacterIds?: string[];
   synmistDefaultRole?: "TANK" | "HEALER" | "DPS" | null;
 } = {}) {
@@ -109,7 +109,7 @@ function signupOptionsPayload(overrides: {
     },
     activeBoosterOffers: {
       characterIds: overrides.activeCharacterIds ?? [],
-      roleByCharacterId: overrides.roleByCharacterId ?? {},
+      offeredRolesByCharacterId: overrides.offeredRolesByCharacterId ?? {},
     },
     activeLootbuddies: [],
   };
@@ -190,13 +190,13 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const session = getSession("user-a", RUN_ID)!;
     // Synmist's class-order first role is TANK (Brewmaster listed first); the
     // seeded role must be its specialization default (HEALER), never that.
-    expect(session.offers.get(SYNMIST)).toBe("HEALER");
+    expect(session.offers.get(SYNMIST)).toEqual(["HEALER"]);
   });
 
   it("existing signup preselects each Character's persisted role, which wins over the specialization default", async () => {
     const api = fakeApi({
       getSignupOptions: vi.fn().mockResolvedValue(
-        signupOptionsPayload({ activeCharacterIds: [SYNMIST], roleByCharacterId: { [SYNMIST]: "TANK" } }),
+        signupOptionsPayload({ activeCharacterIds: [SYNMIST], offeredRolesByCharacterId: { [SYNMIST]: ["TANK"] } }),
       ),
     });
     const interaction = fakeInteraction("user-a", [SYNMIST]);
@@ -204,7 +204,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     await characterSelect(interaction, api, RUN_ID);
 
     const session = getSession("user-a", RUN_ID)!;
-    expect(session.offers.get(SYNMIST)).toBe("TANK");
+    expect(session.offers.get(SYNMIST)).toEqual(["TANK"]);
     expect(session.isExistingSignup).toBe(true);
   });
 
@@ -214,7 +214,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
 
     await characterSelect(interaction, api, RUN_ID);
 
-    expect(getSession("user-a", RUN_ID)!.offers.get(FROSTBOLT)).toBe("DPS");
+    expect(getSession("user-a", RUN_ID)!.offers.get(FROSTBOLT)).toEqual(["DPS"]);
   });
 
   it("a hybrid Character with no specialization default stays unresolved — never guessed from class order", async () => {
@@ -223,7 +223,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
 
     await characterSelect(interaction, api, RUN_ID);
 
-    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBeNull();
+    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toEqual([]);
   });
 
   it("changing a staged role does NOT call setCharacterOffers", async () => {
@@ -235,7 +235,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     await roleSelect(roleInteraction, api, RUN_ID, SYNMIST);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
-    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBe("TANK");
+    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toEqual(["TANK"]);
   });
 
   it("Confirm persists the full staged set exactly once, with each Character's own role", async () => {
@@ -251,8 +251,8 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const [, , body] = setCharacterOffers.mock.calls[0];
     expect(body.offers).toEqual(
       expect.arrayContaining([
-        { characterId: SYNMIST, role: "TANK" },
-        { characterId: FROSTBOLT, role: "DPS" },
+        { characterId: SYNMIST, offeredRoles: ["TANK"] },
+        { characterId: FROSTBOLT, offeredRoles: ["DPS"] },
       ]),
     );
     expect(body.offers).toHaveLength(2);
@@ -272,7 +272,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     const [, , body] = setCharacterOffers.mock.calls[0];
     const characterIds = body.offers.map((offer: { characterId: string }) => offer.characterId);
     expect(new Set(characterIds).size).toBe(characterIds.length);
-    expect(body.offers).toEqual([{ characterId: SYNMIST, role: "HEALER" }]);
+    expect(body.offers).toEqual([{ characterId: SYNMIST, offeredRoles: ["HEALER"] }]);
   });
 
   it("Cancel discards the session and never calls setCharacterOffers", async () => {
@@ -321,7 +321,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
       expect.objectContaining({ content: expect.stringContaining("expired") }),
     );
     // User A's own session is completely unaffected by User B's attempt.
-    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toBe("HEALER");
+    expect(getSession("user-a", RUN_ID)!.offers.get(SYNMIST)).toEqual(["HEALER"]);
   });
 
   it("a failed Confirm keeps the staged session so the User can retry, and mutates nothing", async () => {
@@ -352,7 +352,7 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
     expect(setCharacterOffers).not.toHaveBeenCalled();
     expect(getSession("user-a", RUN_ID)).not.toBeUndefined();
     expect(confirmInteraction.editReply).toHaveBeenCalledWith(
-      expect.objectContaining({ content: expect.stringContaining("Choose a role") }),
+      expect.objectContaining({ content: expect.stringContaining("Choose at least one role") }),
     );
   });
 });
@@ -457,6 +457,6 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     await characterSelect(fakeInteraction("user-a", [SYNMIST]), api, RUN_ID);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
-    expect(getSession("user-a", RUN_ID)?.offers.get(SYNMIST)).toBe("HEALER");
+    expect(getSession("user-a", RUN_ID)?.offers.get(SYNMIST)).toEqual(["HEALER"]);
   });
 });
