@@ -33,6 +33,29 @@ type InspectedSignup = RosterSignupRow & {
   issue: string | null;
 };
 
+/**
+ * One UI projection of a signup into a role (or lootbuddy) section.
+ * Multi-role BOOSTERs produce one card per offered role — visual duplication is
+ * intentional. Domain identity stays `signup.id` (one staged/persisted slot).
+ */
+type RosterSignupCard = InspectedSignup & {
+  /** Section this card is rendered in; null for LOOTBUDDY. */
+  groupRole: CharacterRole | null;
+};
+
+/**
+ * Discovery grouping: a hybrid offering Healer and DPS appears under both role
+ * sections. Selection identity remains the signup id — never the projection.
+ */
+function boosterCardsFor(candidates: InspectedSignup[], role: CharacterRole): RosterSignupCard[] {
+  return candidates
+    .filter((item) => item.participationType === "BOOSTER" && item.offeredRoles.includes(role))
+    .map((item) => ({
+      ...item,
+      groupRole: role,
+    }));
+}
+
 /** Prefer character name; characterless Lootbuddy falls back to Class label. */
 function participationLabel(input: {
   character: { name: string; realm: string } | null;
@@ -319,9 +342,12 @@ export const rosterService = {
       raidBuffCoverage,
       validation,
       groups: {
-        /** One card per BOOSTER signup — role discovery uses the client filter on offeredRoles. */
-        boosters: candidates.filter((item) => item.participationType === "BOOSTER"),
-        lootbuddies: candidates.filter((item) => item.participationType === "LOOTBUDDY"),
+        tanks: boosterCardsFor(candidates, "TANK"),
+        healers: boosterCardsFor(candidates, "HEALER"),
+        dps: boosterCardsFor(candidates, "DPS"),
+        lootbuddies: candidates
+          .filter((item) => item.participationType === "LOOTBUDDY")
+          .map((item): RosterSignupCard => ({ ...item, groupRole: null })),
       },
       summary: {
         tanks: composition.tanks.selected,
@@ -729,5 +755,5 @@ export const rosterService = {
 
 export type { RosterIssue };
 export type RosterManagementView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
-export type RosterSignupView = RosterManagementView["groups"]["boosters"][number];
+export type RosterSignupView = RosterManagementView["groups"]["tanks"][number];
 export type { ParticipationType, CharacterRole, SignupStatus };

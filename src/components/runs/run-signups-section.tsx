@@ -15,7 +15,7 @@ import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
-type ManagerSignup = RosterManagementView["groups"]["boosters"][number];
+type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
 type ManagerRun = Pick<RosterManagementView["run"], "difficulty" | "totalBossCount" | "lootType">;
 
 function boosterLockoutLabel(signup: ManagerSignup, run: ManagerRun) {
@@ -51,10 +51,31 @@ function characterLabel(signup: {
   return wowClass ? CLASS_LABELS[wowClass] : "Unknown character";
 }
 
+function uniqueManagerSignups(manager: NonNullable<RunDetailView["manager"]>): ManagerSignup[] {
+  const seen = new Set<string>();
+  const out: ManagerSignup[] = [];
+  for (const signup of [
+    ...manager.groups.tanks,
+    ...manager.groups.healers,
+    ...manager.groups.dps,
+    ...manager.groups.lootbuddies,
+  ]) {
+    if (seen.has(signup.id)) continue;
+    seen.add(signup.id);
+    out.push(signup);
+  }
+  return out;
+}
+
 export function RunSignupsSection({ data }: { data: RunDetailView }) {
   if (data.permissions.canViewManagerSignups && data.manager) {
-    const all = [...data.manager.groups.boosters, ...data.manager.groups.lootbuddies];
-    return <ManagerSignupList runId={data.run.id} run={data.manager.run} signups={all} />;
+    return (
+      <ManagerSignupList
+        runId={data.run.id}
+        run={data.manager.run}
+        signups={uniqueManagerSignups(data.manager)}
+      />
+    );
   }
 
   return <OwnSignupList signups={data.viewerSignups} />;

@@ -37,6 +37,20 @@ const ids = {
 
 const lockoutIds: string[] = [];
 
+/** Unique BOOSTER signups across role projections (dedupe by signup id). */
+function rosterBoosters<T extends { id: string }>(view: {
+  groups: { tanks: T[]; healers: T[]; dps: T[] };
+}): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps]) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
 function asUser(
   id: string,
   name: string,
@@ -108,7 +122,7 @@ describe("rosterService authorization", () => {
 describe("rosterService groups — active offer filtering", () => {
   it("excludes a WITHDRAWN offer from the roster candidate groups while keeping the same User's other active offer", async () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    const allIds = [...view.groups.boosters, ...view.groups.lootbuddies].map(
+    const allIds = [...rosterBoosters(view), ...view.groups.lootbuddies].map(
       (item) => item.id,
     );
     // Brann has two offers on this run: labBrannTank (PENDING) and labBrannHoly (WITHDRAWN).
@@ -127,7 +141,7 @@ describe("rosterService draft", () => {
       version: before.roster.version,
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
-    const selected = after.groups.boosters.find((item) => item.id === ids.labKaelResto);
+    const selected = rosterBoosters(after).find((item) => item.id === ids.labKaelResto);
     expect(selected?.draftSelected).toBe(true);
     expect(after.run.status).toBe("ROSTERING");
     const roster = await rosterRepository.findByRunId(ids.lab);
@@ -143,7 +157,7 @@ describe("rosterService draft", () => {
       version: view.roster.version,
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
   });
 
   it("rejects withdrawn signups, unknown IDs, and signups from another run", async () => {
@@ -193,8 +207,8 @@ describe("rosterService draft", () => {
       version: view.roster.version,
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelEle)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelEle)?.draftSelected).toBe(true);
   });
 
   it("rejects a stale roster version", async () => {
@@ -228,9 +242,9 @@ describe("rosterService saveDraftSelection", () => {
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
     expect(after.roster.version).toBe(lab.roster.version + 1);
-    expect(after.groups.boosters.find((item) => item.id === ids.labThorne)?.draftSelected).toBe(true);
-    expect(after.groups.boosters.find((item) => item.id === ids.labBrannTank)?.draftSelected).toBe(true);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labThorne)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labBrannTank)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
     const roster = await rosterRepository.findByRunId(ids.lab);
     expect(roster?.selectedSignupIds.sort()).toEqual([...selectedSignupIds].sort());
   });
@@ -243,10 +257,10 @@ describe("rosterService saveDraftSelection", () => {
       selections: [{ signupId: ids.labBrannTank, selectedRole: null }, { signupId: ids.labKaelEle, selectedRole: null }],
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
-    expect(after.groups.boosters.find((item) => item.id === ids.labThorne)?.draftSelected).toBe(false);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
-    expect(after.groups.boosters.find((item) => item.id === ids.labBrannTank)?.draftSelected).toBe(true);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelEle)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labThorne)?.draftSelected).toBe(false);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labBrannTank)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelEle)?.draftSelected).toBe(true);
   });
 
   it("rejects two booster offers from the same user in one batch", async () => {
@@ -288,7 +302,7 @@ describe("rosterService saveDraftSelection", () => {
       selections: [{ signupId: ids.labKaelResto, selectedRole: null }, { signupId: ids.labMira, selectedRole: null }, { signupId: secondLootbuddyId, selectedRole: null }],
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
-    expect(after.groups.boosters.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
     expect(after.groups.lootbuddies.find((item) => item.id === ids.labMira)?.draftSelected).toBe(true);
     expect(after.groups.lootbuddies.find((item) => item.id === secondLootbuddyId)?.draftSelected).toBe(true);
   });
@@ -413,7 +427,7 @@ describe("rosterService publish validation", () => {
     });
 
     let view = await rosterService.getRosterManagementView(thorne, ids.lab);
-    if (!view.groups.boosters.find((item) => item.id === ids.labKaelResto)?.draftSelected) {
+    if (!rosterBoosters(view).find((item) => item.id === ids.labKaelResto)?.draftSelected) {
       await rosterService.setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labKaelResto,
@@ -422,7 +436,7 @@ describe("rosterService publish validation", () => {
       });
       view = await rosterService.getRosterManagementView(thorne, ids.lab);
     }
-    const candidate = view.groups.boosters.find((item) => item.id === ids.labKaelResto);
+    const candidate = rosterBoosters(view).find((item) => item.id === ids.labKaelResto);
     expect(candidate?.raidSave).toEqual({
       raidId: ids.raid,
       difficulty: "HEROIC",
@@ -470,7 +484,7 @@ describe("rosterService publish and republish", () => {
     let view = await rosterService.getRosterManagementView(thorne, ids.lab);
     for (const signupId of [ids.labThorne, ids.labBrannTank, ids.labKaelResto, ids.labMira]) {
       const current = await rosterService.getRosterManagementView(thorne, ids.lab);
-      if (![...current.groups.boosters, ...current.groups.lootbuddies]
+      if (![...rosterBoosters(current), ...current.groups.lootbuddies]
         .find((item) => item.id === signupId)?.draftSelected) {
         await rosterService.setDraftSelection(thorne, {
           runId: ids.lab,
@@ -481,7 +495,7 @@ describe("rosterService publish and republish", () => {
       }
     }
     const kaelEle = await rosterService.getRosterManagementView(thorne, ids.lab);
-    if (kaelEle.groups.boosters.find((item) => item.id === ids.labKaelEle)?.draftSelected) {
+    if (rosterBoosters(kaelEle).find((item) => item.id === ids.labKaelEle)?.draftSelected) {
       await rosterService.setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labKaelEle,
@@ -562,7 +576,7 @@ describe("rosterService publish and republish", () => {
       version: view.roster.version,
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.published);
-    expect(after.groups.boosters.find((item) => item.id === ids.publishedKael)?.draftSelected).toBe(true);
+    expect(rosterBoosters(after).find((item) => item.id === ids.publishedKael)?.draftSelected).toBe(true);
     expect((await signupRepository.findById(ids.publishedKael))?.status).toBe("SELECTED");
   });
 
@@ -651,10 +665,14 @@ describe("rosterService publishedRole snapshot", () => {
     )!;
 
     let view = await rosterService.getRosterManagementView(thorne, run.id);
-    // One signup → one booster card (never mirrored across HEALER and DPS buckets).
-    expect(view.groups.boosters.filter((item) => item.id === signup.id)).toHaveLength(1);
-    expect(view.groups.boosters.filter((item) => item.offeredRoles.includes("HEALER") && item.id === signup.id)).toHaveLength(1);
-    expect(view.groups.boosters.filter((item) => item.offeredRoles.includes("DPS") && item.id === signup.id)).toHaveLength(1);
+    // Multi-role offer projects into every offered role section (visual duplication).
+    expect(view.groups.healers.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.groups.dps.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.groups.tanks.filter((item) => item.id === signup.id)).toHaveLength(0);
+    expect(view.groups.healers.find((item) => item.id === signup.id)?.groupRole).toBe("HEALER");
+    expect(view.groups.dps.find((item) => item.id === signup.id)?.groupRole).toBe("DPS");
+    // Domain identity remains one signup.
+    expect(rosterBoosters(view).filter((item) => item.id === signup.id)).toHaveLength(1);
 
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
@@ -685,7 +703,7 @@ describe("rosterService publishedRole snapshot", () => {
       version: view.roster.version,
     });
     view = await rosterService.getRosterManagementView(thorne, run.id);
-    expect(view.groups.boosters.find((item) => item.id === signup.id)?.selectedRole).toBe("HEALER");
+    expect(rosterBoosters(view).find((item) => item.id === signup.id)?.selectedRole).toBe("HEALER");
 
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
@@ -720,5 +738,72 @@ describe("rosterService publishedRole snapshot", () => {
     const detailAfter = await runDetailService.getRunDetail(thorne, run.id);
     expect(detailAfter.finalSetupPreview?.groups.dps.some((m) => m.characterName === "Synblast")).toBe(true);
     expect(detailAfter.finalSetupPreview?.groups.healers.some((m) => m.characterName === "Synblast")).toBe(false);
+  });
+
+  it("projects a three-role offer into tanks/healers/dps once each and counts composition once", async () => {
+    const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
+    const kael = asUser(ids.kael, "Kael Stormeye");
+    const now = new Date().toISOString();
+    const paladinId = crypto.randomUUID();
+    createdCharacterIds.push(paladinId);
+
+    await orm.Character.create({
+      id: paladinId,
+      userId: ids.kael,
+      name: "Synpal",
+      realm: "Antonidas",
+      normalizedName: "synpal",
+      normalizedRealm: "antonidas",
+      region: "EU",
+      wowClass: "PALADIN",
+      specialization: "Holy",
+      primaryRole: "HEALER",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const run = await runService.createRun(thorne, {
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
+      desiredTankCount: 1,
+      desiredHealerCount: 1,
+      desiredDpsCount: 1,
+    });
+    createdRunIds.push(run.id);
+    await runService.openRun(thorne, run.id);
+
+    await signupService.setCharacterOffers(kael, {
+      runId: run.id,
+      offers: [{ characterId: paladinId, offeredRoles: ["TANK", "HEALER", "DPS"] }],
+    });
+    const signup = (await signupRepository.listByRunAndUser(run.id, ids.kael)).find(
+      (row) => row.status === "PENDING",
+    )!;
+
+    let view = await rosterService.getRosterManagementView(thorne, run.id);
+    expect(view.groups.tanks.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.groups.healers.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.groups.dps.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(rosterBoosters(view).filter((item) => item.id === signup.id)).toHaveLength(1);
+
+    await rosterService.saveDraftSelection(thorne, {
+      runId: run.id,
+      version: view.roster.version,
+      selections: [{ signupId: signup.id, selectedRole: "HEALER" }],
+    });
+    view = await rosterService.getRosterManagementView(thorne, run.id);
+    expect(view.composition.tanks.selected).toBe(0);
+    expect(view.composition.healers.selected).toBe(1);
+    expect(view.composition.dps.selected).toBe(0);
+    expect(view.composition.boosterTotal).toBe(1);
+
+    const draft = await rosterRepository.findByRunId(run.id);
+    expect(draft?.selections.filter((s) => s.signupId === signup.id)).toHaveLength(1);
+    expect(draft?.selections.find((s) => s.signupId === signup.id)?.selectedRole).toBe("HEALER");
   });
 });

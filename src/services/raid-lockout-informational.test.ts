@@ -32,6 +32,19 @@ const createdCharacterIds: string[] = [];
 const createdQualificationIds: string[] = [];
 const createdLockoutIds: string[] = [];
 
+function rosterBoosters<T extends { id: string }>(view: {
+  groups: { tanks: T[]; healers: T[]; dps: T[] };
+}): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps]) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
   return {
     id,
@@ -272,7 +285,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] });
 
     const view = await rosterService.getRosterManagementView(lead, runA);
-    const candidate = view.groups.boosters.find((item) => item.character?.id === saved);
+    const candidate = rosterBoosters(view).find((item) => item.character?.id === saved);
     expect(candidate).toBeTruthy();
     expect(candidate?.raidSave?.bossesDefeated).toBe(8);
     expect(candidate?.issue).toBeNull();
@@ -305,7 +318,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     // Reserve on runA via draft selection.
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] });
     const viewA = await rosterService.getRosterManagementView(lead, runA);
-    const signupA = viewA.groups.boosters.find((item) => item.character?.id === saved)!;
+    const signupA = rosterBoosters(viewA).find((item) => item.character?.id === saved)!;
     await rosterService.setDraftSelection(lead, { runId: runA, signupId: signupA.id, selected: true, version: viewA.roster.version });
 
     // Now runB must block on the cross-run reservation reason, not lockout —
@@ -347,7 +360,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
         offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
       });
       const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
-      const candidate = tuesdayView.groups.boosters.find((item) => item.character?.id === saved);
+      const candidate = rosterBoosters(tuesdayView).find((item) => item.character?.id === saved);
       expect(candidate?.raidSave?.resetIdentifier).toBe("2026-W37");
       expect(candidate?.raidSave?.bossesDefeated).toBe(7);
     } finally {
@@ -369,7 +382,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
         offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
       });
       const view = await rosterService.getRosterManagementView(lead, runId);
-      expect(view.groups.boosters.find((item) => item.character?.id === saved)?.raidSave).toEqual({
+      expect(rosterBoosters(view).find((item) => item.character?.id === saved)?.raidSave).toEqual({
         raidId,
         difficulty: "HEROIC",
         resetIdentifier: "2026-W37",

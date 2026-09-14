@@ -26,13 +26,13 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
-import { buildRosterSavedSelectionKey } from "@/components/manage/roster-staged-selection";
+import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
-type SignupRow = RosterView["groups"]["boosters"][number];
+type SignupRow = RosterView["groups"]["tanks"][number];
 
 function lootbuddyDisplayClass(signup: SignupRow): WowClass | null {
   return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
@@ -59,8 +59,21 @@ function boosterLockoutLabel(
   });
 }
 
-function collectSignups(data: RosterView): SignupRow[] {
-  return data.groups.boosters.concat(data.groups.lootbuddies);
+/** All role projections + lootbuddies (may contain duplicate signup ids). */
+function collectProjections(data: RosterView): SignupRow[] {
+  return data.groups.tanks.concat(data.groups.healers, data.groups.dps, data.groups.lootbuddies);
+}
+
+/** Unique domain signups — one entry per signupId for save/replacement logic. */
+function uniqueSignups(data: RosterView): SignupRow[] {
+  const seen = new Set<string>();
+  const out: SignupRow[] = [];
+  for (const signup of collectProjections(data)) {
+    if (seen.has(signup.id)) continue;
+    seen.add(signup.id);
+    out.push(signup);
+  }
+  return out;
 }
 
 /** A draft slot is a signup plus the role the raid lead assigned it, so both take part in dirty detection. */
@@ -76,18 +89,12 @@ function selectionKey(selections: StagedSelections) {
 
 function collectSavedSelections(data: RosterView): StagedSelections {
   const selections: StagedSelections = new Map();
-  for (const signup of collectSignups(data)) {
+  for (const signup of uniqueSignups(data)) {
     if (signup.draftSelected) {
       selections.set(signup.id, signup.selectedRole);
     }
   }
   return selections;
-}
-
-/** The role a newly selected slot starts on: an unambiguous single-role offer needs no choice. */
-function defaultSelectedRole(signup: SignupRow): CharacterRole | null {
-  if (signup.participationType !== "BOOSTER") return null;
-  return signup.selectedRole ?? (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null);
 }
 
 /**
@@ -129,7 +136,7 @@ function RosterBuilderEditor({
   const [acknowledge, setAcknowledge] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const allSignups = useMemo(() => collectSignups(data), [data]);
+  const domainSignups = useMemo(() => uniqueSignups(data), [data]);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
 
   const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
@@ -152,43 +159,61 @@ function RosterBuilderEditor({
     return stagedSelections.get(signupId) ?? null;
   }
 
+  /** Checked highlight follows the assigned role copy, not every projection of a selected signup. */
+  function isRoleCopyChecked(signup: SignupRow) {
+    return roleCopyIsChecked({
+      stagedRole: stagedSelections.has(signup.id) ? stagedRole(signup.id) : undefined,
+      groupRole: signup.groupRole,
+    });
+  }
+
   function matches(signup: SignupRow) {
     const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""} ${signup.lootbuddyClass ?? ""}`.toLowerCase();
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation !== "ALL" && signup.participationType !== participation) return false;
-    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) return false;
+    if (roleFilter !== "ALL") {
+      // Prefer the matching role section; hide lootbuddies and other role buckets.
+      if (signup.groupRole == null || signup.groupRole !== roleFilter) return false;
+    }
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
     if (backupFilter === "PRIMARY" && signup.isBackup) return false;
     const staged = isStagedSelected(signup.id);
-    if (selectedFilter === "SELECTED" && !staged) return false;
+    if (selectedFilter === "SELECTED") {
+      // Draft-selected identity: only the assigned role copy (or lootbuddy) counts as selected.
+      if (!isRoleCopyChecked(signup)) return false;
+    }
     if (selectedFilter === "UNSELECTED" && staged) return false;
     return true;
   }
 
-  function toggleStaged(signup: SignupRow, selected: boolean) {
+  /**
+   * Role-section click: assign this groupRole, reassign if already selected as
+   * another role, or deselect when clicking the currently assigned copy off.
+   */
+  function toggleRoleCopy(signup: SignupRow, checked: boolean) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (signup.status === "WITHDRAWN") return;
     setError(null);
     setErrorCode(null);
     setStagedSelections((previous) => {
-      const next = new Map(previous);
-      if (!selected) {
-        next.delete(signup.id);
-        return next;
-      }
-      if (signup.participationType === "BOOSTER") {
-        for (const other of allSignups) {
-          if (
-            other.userId === signup.userId &&
-            other.participationType === "BOOSTER" &&
-            other.id !== signup.id
-          ) {
-            next.delete(other.id);
-          }
-        }
-      }
-      next.set(signup.id, defaultSelectedRole(signup));
-      return next;
+      const replaceBoosterSignupIds =
+        signup.participationType === "BOOSTER"
+          ? domainSignups
+              .filter(
+                (other) =>
+                  other.userId === signup.userId &&
+                  other.participationType === "BOOSTER" &&
+                  other.id !== signup.id,
+              )
+              .map((other) => other.id)
+          : [];
+      return applyRoleCopyToggle({
+        staged: previous,
+        signupId: signup.id,
+        groupRole: signup.groupRole,
+        checked,
+        replaceBoosterSignupIds,
+      });
     });
   }
 
@@ -346,15 +371,39 @@ function RosterBuilderEditor({
       </Card>
 
       <SignupSection
-        title="Boosters"
-        empty="No booster signups"
-        signups={data.groups.boosters.filter(matches)}
+        title="Tanks"
+        empty="No tank signups"
+        signups={data.groups.tanks.filter(matches)}
         run={data.run}
         editing={editing}
         locked={togglesLocked}
-        isStagedSelected={isStagedSelected}
+        isRoleCopyChecked={isRoleCopyChecked}
         stagedRole={stagedRole}
-        onToggle={toggleStaged}
+        onToggle={toggleRoleCopy}
+        onAssignRole={assignRole}
+      />
+      <SignupSection
+        title="Healers"
+        empty="No healer signups"
+        signups={data.groups.healers.filter(matches)}
+        run={data.run}
+        editing={editing}
+        locked={togglesLocked}
+        isRoleCopyChecked={isRoleCopyChecked}
+        stagedRole={stagedRole}
+        onToggle={toggleRoleCopy}
+        onAssignRole={assignRole}
+      />
+      <SignupSection
+        title="DPS"
+        empty="No DPS signups"
+        signups={data.groups.dps.filter(matches)}
+        run={data.run}
+        editing={editing}
+        locked={togglesLocked}
+        isRoleCopyChecked={isRoleCopyChecked}
+        stagedRole={stagedRole}
+        onToggle={toggleRoleCopy}
         onAssignRole={assignRole}
       />
       <SignupSection
@@ -364,9 +413,9 @@ function RosterBuilderEditor({
         run={data.run}
         editing={editing}
         locked={togglesLocked}
-        isStagedSelected={isStagedSelected}
+        isRoleCopyChecked={isRoleCopyChecked}
         stagedRole={stagedRole}
-        onToggle={toggleStaged}
+        onToggle={toggleRoleCopy}
         onAssignRole={assignRole}
       />
 
@@ -500,7 +549,7 @@ function SignupSection({
   run,
   editing,
   locked,
-  isStagedSelected,
+  isRoleCopyChecked,
   stagedRole,
   onToggle,
   onAssignRole,
@@ -511,7 +560,7 @@ function SignupSection({
   run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   locked: boolean;
-  isStagedSelected: (signupId: string) => boolean;
+  isRoleCopyChecked: (signup: SignupRow) => boolean;
   stagedRole: (signupId: string) => CharacterRole | null;
   onToggle: (signup: SignupRow, selected: boolean) => void;
   onAssignRole: (signup: SignupRow, role: CharacterRole) => void;
@@ -530,12 +579,12 @@ function SignupSection({
               <div className="space-y-2">
                 {group.signups.map((signup) => (
                   <SignupRowCard
-                    key={signup.id}
+                    key={`${signup.id}:${signup.groupRole ?? "lootbuddy"}`}
                     signup={signup}
                     run={run}
                     editing={editing}
                     locked={locked}
-                    selected={isStagedSelected(signup.id)}
+                    selected={isRoleCopyChecked(signup)}
                     assignedRole={stagedRole(signup.id)}
                     onToggle={onToggle}
                     onAssignRole={onAssignRole}
@@ -569,7 +618,7 @@ function SignupRowCard({
   onToggle: (signup: SignupRow, selected: boolean) => void;
   onAssignRole: (signup: SignupRow, role: CharacterRole) => void;
 }) {
-  const checkboxId = `signup-${signup.id}`;
+  const checkboxId = `signup-${signup.id}-${signup.groupRole ?? "lootbuddy"}`;
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
   const lockout = boosterLockoutLabel(signup, run);

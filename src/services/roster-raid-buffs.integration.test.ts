@@ -26,6 +26,19 @@ const createdQualificationIds: string[] = [];
 let runId = "";
 let shamanId = "";
 
+function rosterBoosters<T extends { id: string }>(view: {
+  groups: { tanks: T[]; healers: T[]; dps: T[] };
+}): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps]) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
   return {
     id,
@@ -182,7 +195,7 @@ describe("rosterService Class Buff Checker integration", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, runId);
-    const booster = view.groups.boosters.find((item) => item.character?.id === shamanId);
+    const booster = rosterBoosters(view).find((item) => item.character?.id === shamanId);
     expect(booster).toBeTruthy();
     expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(false);
 
@@ -224,7 +237,7 @@ describe("rosterService Class Buff Checker integration", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, runId);
-    const booster = view.groups.boosters.find((item) => item.character?.id === shamanId)!;
+    const booster = rosterBoosters(view).find((item) => item.character?.id === shamanId)!;
     const mage = view.groups.lootbuddies.find(
       (item) => item.lootbuddyClass === "MAGE" && item.lootbuddyMode === "PLAYING",
     )!;
@@ -250,7 +263,7 @@ describe("rosterService Class Buff Checker integration", () => {
     // Deselect protected rows before withdrawing offers.
     for (const signupId of [booster.id, mage.id, priest.id]) {
       if (
-        [...view.groups.boosters, ...view.groups.lootbuddies].find((item) => item.id === signupId)?.draftSelected
+        [...rosterBoosters(view), ...view.groups.lootbuddies].find((item) => item.id === signupId)?.draftSelected
       ) {
         await rosterService.setDraftSelection(lead, {
           runId,
