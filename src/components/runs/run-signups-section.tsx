@@ -15,7 +15,7 @@ import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
-type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
+type ManagerSignup = RosterManagementView["groups"]["boosters"][number];
 type ManagerRun = Pick<RosterManagementView["run"], "difficulty" | "totalBossCount" | "lootType">;
 
 function boosterLockoutLabel(signup: ManagerSignup, run: ManagerRun) {
@@ -53,14 +53,7 @@ function characterLabel(signup: {
 
 export function RunSignupsSection({ data }: { data: RunDetailView }) {
   if (data.permissions.canViewManagerSignups && data.manager) {
-    // Canonical cards only: a multi-role offer appears in several role
-    // buckets for discovery, but is one signup here.
-    const all = [
-      ...data.manager.groups.tanks,
-      ...data.manager.groups.healers,
-      ...data.manager.groups.dps,
-      ...data.manager.groups.lootbuddies,
-    ].filter((signup) => signup.isCanonicalCard);
+    const all = [...data.manager.groups.boosters, ...data.manager.groups.lootbuddies];
     return <ManagerSignupList runId={data.run.id} run={data.manager.run} signups={all} />;
   }
 

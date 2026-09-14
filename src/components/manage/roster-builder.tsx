@@ -32,7 +32,7 @@ import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
-type SignupRow = RosterView["groups"]["tanks"][number];
+type SignupRow = RosterView["groups"]["boosters"][number];
 
 function lootbuddyDisplayClass(signup: SignupRow): WowClass | null {
   return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
@@ -60,7 +60,7 @@ function boosterLockoutLabel(
 }
 
 function collectSignups(data: RosterView): SignupRow[] {
-  return data.groups.tanks.concat(data.groups.healers, data.groups.dps, data.groups.lootbuddies);
+  return data.groups.boosters.concat(data.groups.lootbuddies);
 }
 
 /** A draft slot is a signup plus the role the raid lead assigned it, so both take part in dirty detection. */
@@ -77,7 +77,7 @@ function selectionKey(selections: StagedSelections) {
 function collectSavedSelections(data: RosterView): StagedSelections {
   const selections: StagedSelections = new Map();
   for (const signup of collectSignups(data)) {
-    if (signup.draftSelected && signup.isCanonicalCard) {
+    if (signup.draftSelected) {
       selections.set(signup.id, signup.selectedRole);
     }
   }
@@ -346,33 +346,9 @@ function RosterBuilderEditor({
       </Card>
 
       <SignupSection
-        title="Tanks"
-        empty="No tank signups"
-        signups={data.groups.tanks.filter(matches)}
-        run={data.run}
-        editing={editing}
-        locked={togglesLocked}
-        isStagedSelected={isStagedSelected}
-        stagedRole={stagedRole}
-        onToggle={toggleStaged}
-        onAssignRole={assignRole}
-      />
-      <SignupSection
-        title="Healers"
-        empty="No healer signups"
-        signups={data.groups.healers.filter(matches)}
-        run={data.run}
-        editing={editing}
-        locked={togglesLocked}
-        isStagedSelected={isStagedSelected}
-        stagedRole={stagedRole}
-        onToggle={toggleStaged}
-        onAssignRole={assignRole}
-      />
-      <SignupSection
-        title="DPS"
-        empty="No DPS signups"
-        signups={data.groups.dps.filter(matches)}
+        title="Boosters"
+        empty="No booster signups"
+        signups={data.groups.boosters.filter(matches)}
         run={data.run}
         editing={editing}
         locked={togglesLocked}
@@ -597,9 +573,7 @@ function SignupRowCard({
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
   const lockout = boosterLockoutLabel(signup, run);
-  // A multi-role offer is listed under every role it volunteered, but only
-  // the canonical card can be selected — one offer never fills two slots.
-  const disabled = !editing || locked || signup.status === "WITHDRAWN" || !signup.isCanonicalCard;
+  const disabled = !editing || locked || signup.status === "WITHDRAWN";
   const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
   return (
     <label
@@ -646,15 +620,9 @@ function SignupRowCard({
             <span className={lockout.attention ? "text-warning" : undefined}>{lockout.text}</span>
           ) : null}
         </span>
-        {!signup.isCanonicalCard ? (
-          <span className="mt-1 block text-xs text-muted">
-            Also offered here. Select this player under {signup.selectedRole
-              ? CHARACTER_ROLE_LABELS[signup.selectedRole]
-              : CHARACTER_ROLE_LABELS[signup.offeredRoles[0]!]}.
-          </span>
-        ) : null}
         {selected && needsRoleChoice ? (
-          <span className="mt-2 block">
+          <span className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted">Assigned role:</span>
             <select
               aria-label={`Assigned role for ${signupDisplayName(signup)}`}
               value={assignedRole ?? ""}
