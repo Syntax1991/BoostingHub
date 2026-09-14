@@ -24,6 +24,7 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
+import { normalizeOfferedRoles } from "@/lib/offered-roles";
 
 export type SignupListRecord = {
   id: string;
@@ -31,7 +32,8 @@ export type SignupListRecord = {
   status: SignupStatus;
   participationType: ParticipationType;
   isBackup: boolean;
-  role: CharacterRole | null;
+  /** Every role this BOOSTER offer volunteers for, TANK → HEALER → DPS. Always empty for LOOTBUDDY. */
+  offeredRoles: CharacterRole[];
   /** Own Class snapshot for a characterless Lootbuddy row; null for BOOSTER and for legacy Character-backed Lootbuddy rows (fall back to character.wowClass for those). */
   lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
@@ -47,6 +49,14 @@ export type SignupListRecord = {
   };
 };
 
+/** Reads a `RunSignupRole[]` relation payload into a deterministically ordered role list. */
+export function mapOfferedRoles(value: unknown): CharacterRole[] {
+  if (!Array.isArray(value)) return [];
+  return normalizeOfferedRoles(
+    value.map((item) => mapCharacterRole((item as Record<string, unknown>).role)),
+  );
+}
+
 function mapSignup(row: Record<string, unknown>): SignupListRecord {
   const run = (row.run ?? {}) as Record<string, unknown>;
   const raid = (run.raid ?? {}) as Record<string, unknown>;
@@ -58,7 +68,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
     status: mapSignupStatus(row.status),
     participationType: mapParticipation(row.participationType),
     isBackup: asBoolean(row.isBackup),
-    role: row.role == null ? null : mapCharacterRole(row.role),
+    offeredRoles: mapOfferedRoles(row.offeredRoles),
     lootbuddyClass: row.lootbuddyClass == null ? null : mapWowClass(row.lootbuddyClass),
     lootbuddyMode: row.lootbuddyMode == null ? null : mapLootbuddyMode(row.lootbuddyMode),
     lootbuddyVerification:
@@ -155,13 +165,48 @@ export type SignupWriteInput = {
   userId: string;
   characterId: string;
   participationType: ParticipationType;
-  role: CharacterRole | null;
+  /** The volunteered BOOSTER role set; empty for LOOTBUDDY. Persisted as RunSignupRole rows. */
+  offeredRoles: CharacterRole[];
   isBackup: boolean;
   status: SignupStatus;
   lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
 };
+
+/**
+ * Reconciles one signup's RunSignupRole rows towards the desired set inside an
+ * open transaction: roles that stay keep their existing row (and createdAt), so
+ * changing a role set never withdraws and recreates the offer itself.
+ */
+async function syncOfferedRoles(
+  ormLike: TxOrm,
+  signupId: string,
+  offeredRoles: readonly CharacterRole[],
+  now: string,
+) {
+  const desired = new Set(normalizeOfferedRoles(offeredRoles));
+  const existing = (await ormLike.RunSignupRole.where({ signupId }).all()) as Record<string, unknown>[];
+  const current = new Set<CharacterRole>();
+
+  for (const row of existing) {
+    const role = mapCharacterRole(row.role);
+    if (desired.has(role)) {
+      current.add(role);
+      continue;
+    }
+    await ormLike.RunSignupRole.where({ id: asString(row.id) }).delete();
+  }
+  for (const role of desired) {
+    if (current.has(role)) continue;
+    await ormLike.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId,
+      role,
+      createdAt: now,
+    });
+  }
+}
 
 export const signupRepository = {
   async findReservationConflicts(input: {
@@ -177,6 +222,7 @@ export const signupRepository = {
       .where({ userId })
       .include("run", (run) => run.include("raid").include("raidLead"))
       .include("character")
+      .include("offeredRoles")
       .orderBy((signup) => signup.createdAt.desc())
       .all();
 
@@ -188,6 +234,7 @@ export const signupRepository = {
       .where({ id })
       .include("run", (run) => run.include("raid"))
       .include("character")
+      .include("offeredRoles")
       .first();
 
     return signup ? mapSignup(signup as Record<string, unknown>) : null;
@@ -208,43 +255,58 @@ export const signupRepository = {
       })
       .include("run", (run) => run.include("raid"))
       .include("character")
+      .include("offeredRoles")
       .first();
 
     return signup ? mapSignup(signup as Record<string, unknown>) : null;
   },
 
+  /** The signup row and its offered-role rows are written together — a BOOSTER offer is never briefly roleless. */
   async create(input: SignupWriteInput): Promise<{ id: string }> {
     const now = new Date().toISOString();
-    const created = await orm.RunSignup.create({
-      id: crypto.randomUUID(),
-      runId: input.runId,
-      userId: input.userId,
-      characterId: input.characterId,
-      participationType: input.participationType,
-      role: input.role,
-      isBackup: input.isBackup,
-      status: input.status,
-      lootbuddyClass: input.lootbuddyClass,
-      lootbuddyMode: input.lootbuddyMode,
-      lootbuddyVerification: input.lootbuddyVerification,
-      createdAt: now,
-      updatedAt: now,
+    const id = crypto.randomUUID();
+
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await txOrm.RunSignup.create({
+        id,
+        runId: input.runId,
+        userId: input.userId,
+        characterId: input.characterId,
+        participationType: input.participationType,
+        isBackup: input.isBackup,
+        status: input.status,
+        lootbuddyClass: input.lootbuddyClass,
+        lootbuddyMode: input.lootbuddyMode,
+        lootbuddyVerification: input.lootbuddyVerification,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await syncOfferedRoles(txOrm, id, input.offeredRoles, now);
     });
 
-    return { id: asString((created as Record<string, unknown>).id) };
+    return { id };
   },
 
   async update(id: string, input: Partial<SignupWriteInput>) {
     const patch: Record<string, unknown> = {};
     if (input.characterId !== undefined) patch.characterId = input.characterId;
     if (input.participationType !== undefined) patch.participationType = input.participationType;
-    if (input.role !== undefined) patch.role = input.role;
     if (input.isBackup !== undefined) patch.isBackup = input.isBackup;
     if (input.status !== undefined) patch.status = input.status;
     if (input.lootbuddyClass !== undefined) patch.lootbuddyClass = input.lootbuddyClass;
     if (input.lootbuddyMode !== undefined) patch.lootbuddyMode = input.lootbuddyMode;
     if (input.lootbuddyVerification !== undefined) patch.lootbuddyVerification = input.lootbuddyVerification;
-    await orm.RunSignup.where({ id }).update(patch);
+
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      if (Object.keys(patch).length > 0) {
+        await txOrm.RunSignup.where({ id }).update(patch);
+      }
+      if (input.offeredRoles !== undefined) {
+        await syncOfferedRoles(txOrm, id, input.offeredRoles, new Date().toISOString());
+      }
+    });
   },
 
   async listByRunId(runId: string): Promise<SignupListRecord[]> {
@@ -252,6 +314,7 @@ export const signupRepository = {
       .where({ runId })
       .include("run", (run) => run.include("raid"))
       .include("character")
+      .include("offeredRoles")
       .orderBy((signup) => signup.createdAt.asc())
       .all();
 
@@ -264,6 +327,7 @@ export const signupRepository = {
       .where({ runId, userId })
       .include("run", (run) => run.include("raid"))
       .include("character")
+      .include("offeredRoles")
       .orderBy((signup) => signup.createdAt.asc())
       .all();
 
@@ -286,9 +350,10 @@ export const signupRepository = {
     /** Required only to re-verify cross-Run reservation for offers newly becoming active. */
     scheduledStartAt: string;
     toWithdraw: string[];
-    toReactivate: Array<{ id: string; characterId: string; role: CharacterRole | null }>;
-    toCreate: Array<{ characterId: string; role: CharacterRole | null }>;
-    toUpdateRole: Array<{ id: string; role: CharacterRole | null }>;
+    toReactivate: Array<{ id: string; characterId: string; offeredRoles: CharacterRole[] }>;
+    toCreate: Array<{ characterId: string; offeredRoles: CharacterRole[] }>;
+    /** Kept offers whose volunteered role set changed — reconciled in place, never withdrawn and recreated. */
+    toUpdateRoles: Array<{ id: string; offeredRoles: CharacterRole[] }>;
   }): Promise<{ created: string[]; reactivated: string[]; withdrawn: string[] }> {
     const created: string[] = [];
     const reactivated: string[] = [];
@@ -350,10 +415,10 @@ export const signupRepository = {
         }
         await txOrm.RunSignup.where({ id: offer.id }).update({
           status: "PENDING",
-          role: offer.role,
           isBackup: false,
           updatedAt: now,
         });
+        await syncOfferedRoles(txOrm, offer.id, offer.offeredRoles, now);
         reactivated.push(offer.id);
       }
 
@@ -365,7 +430,6 @@ export const signupRepository = {
           userId: input.userId,
           characterId: offer.characterId,
           participationType: "BOOSTER",
-          role: offer.role,
           isBackup: false,
           status: "PENDING",
           lootbuddyClass: null,
@@ -374,11 +438,13 @@ export const signupRepository = {
           createdAt: now,
           updatedAt: now,
         });
+        await syncOfferedRoles(txOrm, id, offer.offeredRoles, now);
         created.push(id);
       }
 
-      for (const update of input.toUpdateRole) {
-        await txOrm.RunSignup.where({ id: update.id }).update({ role: update.role, updatedAt: now });
+      for (const update of input.toUpdateRoles) {
+        await syncOfferedRoles(txOrm, update.id, update.offeredRoles, now);
+        await txOrm.RunSignup.where({ id: update.id }).update({ updatedAt: now });
       }
     });
 
@@ -457,7 +523,6 @@ export const signupRepository = {
           userId: input.userId,
           characterId: null,
           participationType: "LOOTBUDDY",
-          role: null,
           isBackup: false,
           status: "PENDING",
           lootbuddyClass: entry.lootbuddyClass,

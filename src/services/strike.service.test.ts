@@ -109,20 +109,28 @@ async function createSignup(input: {
   participationType: ParticipationType;
 }) {
   const id = crypto.randomUUID();
+  const now = new Date().toISOString();
   await orm.RunSignup.create({
     id,
     runId: input.runId,
     userId: input.userId,
     characterId: input.characterId,
     participationType: input.participationType,
-    role: "DPS",
     isBackup: false,
     status: "PENDING",
     lootbuddyMode: null,
     lootbuddyVerification: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   });
+  if (input.participationType === "BOOSTER") {
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: id,
+      role: "DPS",
+      createdAt: now,
+    });
+  }
   return id;
 }
 
@@ -142,7 +150,12 @@ async function cleanupRun(runId: string) {
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
-    await deleteIfPresent("RunSignup", (row as { id: string }).id);
+    const signupId = (row as { id: string }).id;
+    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const offer of offered) {
+      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+    }
+    await deleteIfPresent("RunSignup", signupId);
   }
   await deleteIfPresent("Run", runId);
 }

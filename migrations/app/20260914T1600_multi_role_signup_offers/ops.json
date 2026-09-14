@@ -1,0 +1,390 @@
+[
+  {
+    "id": "table.run_signup_role",
+    "label": "Create table \"run_signup_role\"",
+    "summary": "Creates table \"run_signup_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_signup_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_signup_role\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_signup_role\"",
+        "sql": "CREATE TABLE \"public\".\"run_signup_role\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"role\" text NOT NULL,\n  \"signupId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_signup_role_role_check_b1616ae6\" CHECK (\"role\" IN ('TANK', 'HEALER', 'DPS'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_signup_role\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_signup_role.run_signup_role_signupId_role_key",
+    "label": "Add unique constraint on \"run_signup_role\" (signupId, role)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_signup_role_signupId_role_key",
+        "table": "run_signup_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_role_signupId_role_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_signupId_role_key",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_signup_role_signupId_role_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup_role\" ADD CONSTRAINT \"run_signup_role_signupId_role_key\" UNIQUE (\"signupId\", \"role\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_role_signupId_role_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_signupId_role_key",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_signup_role.run_signup_role_signupId_idx_acdbc7f1",
+    "label": "Create index \"run_signup_role_signupId_idx_acdbc7f1\" on \"run_signup_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_signup_role_signupId_idx_acdbc7f1",
+        "table": "run_signup_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_signup_role_signupId_idx_acdbc7f1\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_role_signupId_idx_acdbc7f1\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_signup_role_signupId_idx_acdbc7f1\"",
+        "sql": "CREATE INDEX \"run_signup_role_signupId_idx_acdbc7f1\" ON \"public\".\"run_signup_role\" (\"signupId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_signup_role_signupId_idx_acdbc7f1\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_signup_role_signupId_idx_acdbc7f1\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_signup_role.run_signup_role_signupId_fkey",
+    "label": "Add foreign key \"run_signup_role_signupId_fkey\" on \"run_signup_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_signup_role_signupId_fkey",
+        "table": "run_signup_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_signup_role_signupId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_signupId_fkey",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_signup_role_signupId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup_role\"\nADD CONSTRAINT \"run_signup_role_signupId_fkey\"\nFOREIGN KEY (\"signupId\")\nREFERENCES \"public\".\"run_signup\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_signup_role_signupId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_signupId_fkey",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_roster_entry.selectedRole",
+    "label": "Add column \"selectedRole\" to \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "selectedRole",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"selectedRole\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_roster_entry",
+          "selectedRole"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"selectedRole\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\" ADD COLUMN \"selectedRole\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"selectedRole\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_roster_entry",
+          "selectedRole"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_roster_entry.run_roster_entry_selectedRole_check_e659d19f",
+    "label": "Add check constraint \"run_roster_entry_selectedRole_check_e659d19f\" on \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_roster_entry_selectedRole_check_e659d19f",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_roster_entry_selectedRole_check_e659d19f\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_selectedRole_check_e659d19f",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_roster_entry_selectedRole_check_e659d19f\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\" ADD CONSTRAINT \"run_roster_entry_selectedRole_check_e659d19f\" CHECK (\"selectedRole\" IN ('TANK', 'HEALER', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_roster_entry_selectedRole_check_e659d19f\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_selectedRole_check_e659d19f",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-run-signup-role-from-legacy",
+    "label": "Data transform: backfill RunSignupRole from RunSignup.role",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow offered-role backfill (idempotent insert)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Insert one RunSignupRole per legacy BOOSTER role",
+        "sql": "INSERT INTO \"run_signup_role\" (\"id\", \"signupId\", \"role\", \"createdAt\")\nSELECT gen_random_uuid()::text, s.\"id\", s.\"role\", now()\nFROM \"run_signup\" s\nWHERE s.\"participationType\" = 'BOOSTER'\n  AND s.\"role\" IS NOT NULL\n  AND NOT EXISTS (\n    SELECT 1 FROM \"run_signup_role\" r\n    WHERE r.\"signupId\" = s.\"id\" AND r.\"role\" = s.\"role\"\n  )",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every BOOSTER with a legacy role has a RunSignupRole row",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1 FROM \"run_signup\" s\n  WHERE s.\"participationType\" = 'BOOSTER'\n    AND s.\"role\" IS NOT NULL\n    AND NOT EXISTS (\n      SELECT 1 FROM \"run_signup_role\" r\n      WHERE r.\"signupId\" = s.\"id\" AND r.\"role\" = s.\"role\"\n    )\n) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-roster-selected-role-from-legacy",
+    "label": "Data transform: backfill RunRosterEntry.selectedRole from RunSignup.role",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow selectedRole backfill (idempotent update)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Copy legacy BOOSTER role onto selected roster entries",
+        "sql": "UPDATE \"run_roster_entry\" AS e\nSET \"selectedRole\" = s.\"role\",\n    \"updatedAt\" = now()\nFROM \"run_signup\" AS s\nWHERE e.\"signupId\" = s.\"id\"\n  AND e.\"selected\" = true\n  AND s.\"participationType\" = 'BOOSTER'\n  AND s.\"role\" IS NOT NULL\n  AND e.\"selectedRole\" IS NULL",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every selected BOOSTER entry with a legacy role has selectedRole",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1\n  FROM \"run_roster_entry\" e\n  INNER JOIN \"run_signup\" s ON s.\"id\" = e.\"signupId\"\n  WHERE e.\"selected\" = true\n    AND s.\"participationType\" = 'BOOSTER'\n    AND s.\"role\" IS NOT NULL\n    AND e.\"selectedRole\" IS NULL\n) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_signup.run_signup_role_check_b1616ae6",
+    "label": "Drop check constraint \"run_signup_role_check_b1616ae6\" on \"run_signup\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_role_check_b1616ae6",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_role_check_b1616ae6\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_signup_role_check_b1616ae6\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" DROP CONSTRAINT \"run_signup_role_check_b1616ae6\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_role_check_b1616ae6\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.run_signup.role",
+    "label": "Drop column \"role\" from \"run_signup\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "role",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"role\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "role"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"role\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" DROP COLUMN \"role\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"role\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "role"
+        ]
+      }
+    ]
+  }
+]
