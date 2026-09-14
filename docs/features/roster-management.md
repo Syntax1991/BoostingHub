@@ -28,7 +28,9 @@ Account roles are not booster/lootbuddy identities. `BOOSTER` and `LOOTBUDDY` re
 
 ## Draft roster
 
-Draft selection is **not** `RunSignup.status`. Checkbox clicks must not immediately become public `SELECTED`.
+Draft selection is **not** `RunSignup.status`. Card clicks must not immediately become public `SELECTED`.
+
+The Roster Builder stages draft selection **locally**. Clicking signup cards toggles the staged set without a server round-trip. **Save Roster** persists the full staged ID set in one mutation (`saveDraftSelection` / `saveRosterDraftAction`), bumps `version` once, then refreshes. Composition, Class Buffs, and Validation continue to reflect the **saved** draft until that Save. Publish stays disabled while the staged set is dirty.
 
 Each run has at most one `RunRoster` row:
 
@@ -45,7 +47,7 @@ Chosen over a JSON blob or a `rosterDraftSelected` column because:
 - publication metadata is relational
 - signup status stays the live published roster
 
-Opening `/runs/[runId]` as a manager may create an empty `RunRoster` (`ensure`). A USER view does **not** call `ensure`. That does **not** change `RunStatus`. The first persisted draft selection on an `OPEN` run transitions `OPEN → ROSTERING` without closing signups (`signupsOpen` stays independent).
+Opening `/runs/[runId]` as a manager may create an empty `RunRoster` (`ensure`). A USER view does **not** call `ensure`. That does **not** change `RunStatus`. The first **saved** non-empty draft selection on an `OPEN` run transitions `OPEN → ROSTERING` without closing signups (`signupsOpen` stays independent). Local card clicks alone never change Run status.
 
 ## Roster entries
 
@@ -151,7 +153,7 @@ The published roster stays live until a replacement publish succeeds. The lead m
 | --- | --- |
 | Model | `RunRoster`, `RunRosterEntry`, `RosterState` |
 | View | `/manage/runs`, `/runs/[runId]` Roster tab, `roster-builder.tsx`. `/manage/runs/[runId]` redirects. |
-| Controller | `managementController.getRosterPage`, `toggleRosterDraftSelectionAction`, `prepareRosterEditAction`, `validateRosterAction`, `publishRosterAction` |
+| Controller | `managementController.getRosterPage`, `saveRosterDraftAction`, `prepareRosterEditAction`, `validateRosterAction`, `publishRosterAction` |
 | Service | `RosterService`, `roster-composition`, `roster-validation`, plus `Run` / signup / access / lockout helpers |
 | Repository | `RosterRepository` (Prisma stays here) |
 

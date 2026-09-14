@@ -140,6 +140,14 @@ enum SettlementStatus {
   PAID      = "PAID"
 }
 
+/// Settlement-time Raid Lead payout mode for the 3% Raid Lead cut.
+/// KEEP: Raid Lead keeps 3% separately. SHARE: 3% joins the Booster Pool.
+enum RaidLeadCutMode {
+  @@type("pg/text@1")
+  KEEP  = "KEEP"
+  SHARE = "SHARE"
+}
+
 /// No hard delete. REVOKED is a staff correction, not an expiry — there is no
 /// automatic expiry status in this contract.
 enum StrikeStatus {
@@ -187,6 +195,7 @@ model User {
   strikes              Strike[]        @relation("StrikeSubject")
   createdStrikes       Strike[]        @relation("StrikeCreator")
   revokedStrikes       Strike[]        @relation("StrikeRevoker")
+  startedRunSnapshots  RunStartSnapshot[] @relation("RunStartStarter")
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
 
@@ -446,17 +455,34 @@ model Run {
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
 
-  signups     RunSignup[]
-  roster      RunRoster?
-  attendance  RunAttendance[]
-  settlement  RunSettlement?
-  strikes     Strike[]
-  discordPost RunDiscordPost?
+  signups       RunSignup[]
+  roster        RunRoster?
+  attendance    RunAttendance[]
+  startSnapshot RunStartSnapshot?
+  settlement    RunSettlement?
+  strikes       Strike[]
+  discordPost   RunDiscordPost?
 
   @@index([scheduledStartAt])
   @@index([status])
   @@index([archivedAt])
   @@map("run")
+}
+
+/// Immutable operational audit record that a Run Start occurred (who/when).
+/// Participant roster is snapshotted into RunAttendance; Discord Final Setup
+/// is posted asynchronously from that attendance.
+model RunStartSnapshot {
+  id          String   @id @default(uuid())
+  runId       String   @unique
+  run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  startedAt   TimestamptzString
+  startedById String
+  startedBy   User     @relation("RunStartStarter", fields: [startedById], references: [id], onDelete: Restrict)
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@map("run_start_snapshot")
 }
 
 /// A reusable Run-planning preset, always owned by one specific Raid Lead
@@ -604,26 +630,34 @@ model RunRosterEntry {
 
 /// One gold settlement per completed Run. Amounts are whole WoW gold integers.
 /// Display snapshots are frozen at finalize; DRAFT may still refresh from live joins.
+/// totalGold is the GROSS pot: mutable while DRAFT, frozen at FINALIZED.
+/// Community cut BPS fields are snapshotted at prepare from current Dawn policy
+/// (Booster 62.5%, Raid Lead 3%, Advertiser 30%; Dawn is residual).
+/// raidLeadCutMode selects KEEP (RL keeps 3%) or SHARE (3% joins Booster Pool).
 model RunSettlement {
-  id            String           @id @default(uuid())
-  runId         String           @unique
-  run           Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
-  totalGold     Int
-  status        SettlementStatus @default(DRAFT)
-  preparedById  String
-  preparedBy    User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
-  finalizedAt   TimestamptzString?
-  finalizedById String?
-  finalizedBy   User?            @relation("SettlementFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
-  paidAt        TimestamptzString?
-  paidById      String?
-  paidBy        User?            @relation("SettlementPayer", fields: [paidById], references: [id], onDelete: SetNull)
-  runTitle      String
-  raidName      String
-  difficulty    RaidDifficulty
-  raidLeadName  String
-  createdAt     TimestamptzString @default(now())
-  updatedAt     temporal.updatedAtString()
+  id               String           @id @default(uuid())
+  runId            String           @unique
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  totalGold        Int
+  raidLeadCutMode  RaidLeadCutMode  @default(SHARE)
+  boosterCutBps    Int              @default(6250)
+  raidLeadCutBps   Int              @default(300)
+  advertiserCutBps Int              @default(3000)
+  status           SettlementStatus @default(DRAFT)
+  preparedById     String
+  preparedBy       User             @relation("SettlementPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
+  finalizedAt      TimestamptzString?
+  finalizedById    String?
+  finalizedBy      User?            @relation("SettlementFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
+  paidAt           TimestamptzString?
+  paidById         String?
+  paidBy           User?            @relation("SettlementPayer", fields: [paidById], references: [id], onDelete: SetNull)
+  runTitle         String
+  raidName         String
+  difficulty       RaidDifficulty
+  raidLeadName     String
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
 
   entries RunPayoutEntry[]
 
@@ -736,6 +770,10 @@ model RunDiscordPost {
   rosterPostedAt      TimestamptzString?
   /// RunRoster.version at last successful roster post, to detect republish.
   lastRosterVersion   Int?
+  /// Operational Run Start roster post (separate from signup + published roster).
+  startChannelId      String?
+  startMessageId      String?
+  startPostedAt       TimestamptzString?
   createdAt           TimestamptzString @default(now())
   updatedAt           temporal.updatedAtString()
 

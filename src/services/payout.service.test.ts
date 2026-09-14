@@ -5,13 +5,18 @@ import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
+import { attendanceRepository } from "@/repositories/attendance.repository";
 import { attendanceService } from "@/services/attendance.service";
-import { allocateGold } from "@/services/payout-calculation";
+import { calculateSettlementPool } from "@/services/payout-calculation";
 import { payoutService } from "@/services/payout.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
 import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
+
+function expectedSettlement(totalGold: number, raidLeadCutMode: "KEEP" | "SHARE", entries: Array<{ attendanceId: string; shareUnits: number }>) {
+  return calculateSettlementPool({ totalGold, raidLeadCutMode, entries });
+}
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -349,23 +354,17 @@ async function completedRun(statuses: Array<{
     );
   }
   await selectAndPublish(lead, runId, signupIds);
-  await runService.startRun(lead, runId);
-  const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
-  const byCharacter = Object.fromEntries(rows.map((row) => [row.characterName, row]));
+  await runService.startRun(lead, { runId: runId });
+  const rows = await attendanceRepository.listByRunId(runId);
+  const byCharacterId = Object.fromEntries(
+    rows
+      .filter((row) => row.characterId)
+      .map((row) => [row.characterId as string, row]),
+  );
   for (const row of statuses) {
-    const characterName =
-      row.userId === ids.user
-        ? "Pykael"
-        : row.userId === ids.playerB
-          ? "Pymira"
-          : row.userId === ids.playerC
-            ? "Pybrann"
-            : row.userId === ids.playerD
-              ? "Pysylva"
-              : "Pyaelira";
-    const target = byCharacter[characterName];
+    const target = row.characterId ? byCharacterId[row.characterId] : undefined;
     if (!target) {
-      throw new Error(`Missing attendance for ${characterName}`);
+      throw new Error(`Missing attendance for character ${row.characterId}`);
     }
     await attendanceService.setStatus(lead, { attendanceId: target.id, status: row.status });
   }
@@ -423,57 +422,69 @@ describe("prepare settlement", () => {
   it("rejects non-completed runs, USER, and other raid leads", { timeout: 20_000 }, async () => {
     const openId = await createDraft(lead, { title: "Payout open" });
     await runService.openRun(lead, openId);
-    await expectDomainCode(payoutService.prepareSettlement(lead, openId, 1000), "PAYOUT_RUN_NOT_COMPLETED");
-    await expectDomainCode(payoutService.prepareSettlement(user, openId, 1000), "PAYOUT_NOT_MANAGEABLE");
+    await expectDomainCode(payoutService.prepareSettlement(lead, openId, { totalGold: 1000 }), "PAYOUT_RUN_NOT_COMPLETED");
+    await expectDomainCode(payoutService.prepareSettlement(user, openId, { totalGold: 1000 }), "PAYOUT_NOT_MANAGEABLE");
 
     const runId = await completedRun(rosterWithCharacters());
-    await expectDomainCode(payoutService.prepareSettlement(user, runId, 1000), "PAYOUT_NOT_MANAGEABLE");
-    await expectDomainCode(payoutService.prepareSettlement(otherLead, runId, 1000), "PAYOUT_NOT_MANAGEABLE");
+    await expectDomainCode(payoutService.prepareSettlement(user, runId, { totalGold: 1000 }), "PAYOUT_NOT_MANAGEABLE");
+    await expectDomainCode(payoutService.prepareSettlement(otherLead, runId, { totalGold: 1000 }), "PAYOUT_NOT_MANAGEABLE");
   });
 
   it("lets assigned RAID_LEAD and ADMIN prepare one settlement per completed attendance set", { timeout: 20_000 }, async () => {
     const runId = await completedRun(rosterWithCharacters());
-    await payoutService.prepareSettlement(lead, runId, 1000);
+    await payoutService.prepareSettlement(lead, runId, { totalGold: 1000 });
     const view = await payoutService.getPayoutView(lead, runId);
     expect(view.manager?.status).toBe("DRAFT");
     expect(view.manager?.entries).toHaveLength(4);
-    expect(view.manager?.summary.distributedGold).toBe(1000);
-    expect(view.manager?.summary.remainder).toBe(0);
-    await expectDomainCode(payoutService.prepareSettlement(admin, runId, 2000), "PAYOUT_ALREADY_EXISTS");
+    const preparedExpected = expectedSettlement(
+      1000,
+      view.manager!.raidLeadCutMode,
+      view.manager!.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
+    );
+    expect(view.manager?.summary.attendanceDistributedGold).toBe(preparedExpected.distributableBoosterPool);
+    expect(view.manager?.summary.dedicatedRaidLeadPayout).toBe(0);
+    expect(view.manager?.summary.boosterCutBps).toBe(6250);
+    await expectDomainCode(payoutService.prepareSettlement(admin, runId, { totalGold: 2000 }), "PAYOUT_ALREADY_EXISTS");
 
     const adminRun = await completedRun([
       ...rosterWithCharacters().slice(0, 2),
       { userId: ids.playerE, characterId: characters.playerE, participationType: "BOOSTER", role: "HEALER", status: "LEFT_EARLY" },
     ]);
-    await payoutService.prepareSettlement(admin, adminRun, 500);
+    await payoutService.prepareSettlement(admin, adminRun, { totalGold: 500 });
     const adminView = await payoutService.getPayoutView(admin, adminRun);
     expect(adminView.manager?.entries).toHaveLength(3);
   });
 });
 
 describe("default share mapping", () => {
-  it("maps attendance defaults the same for BOOSTER and LOOTBUDDY and ignores backup alone", { timeout: 20_000 }, async () => {
+  it("defaults BOOSTER from attendance and LOOTBUDDY to 0 Cuts", { timeout: 20_000 }, async () => {
     const runId = await completedRun(rosterWithCharacters());
-    await payoutService.prepareSettlement(lead, runId, 1000);
+    await payoutService.prepareSettlement(lead, runId, { totalGold: 1000 });
     const entries = (await payoutService.getPayoutView(lead, runId)).manager!.entries;
     const byStatus = Object.fromEntries(entries.map((row) => [row.attendanceStatus, row]));
     expect(byStatus.PRESENT?.shareUnits).toBe(100);
-    expect(byStatus.LATE?.shareUnits).toBe(100);
+    expect(byStatus.LATE?.shareUnits).toBe(0);
+    expect(byStatus.LATE?.participationType).toBe("LOOTBUDDY");
     expect(byStatus.NO_SHOW?.shareUnits).toBe(0);
     expect(byStatus.STANDBY?.shareUnits).toBe(0);
-    expect(byStatus.LATE?.participationType).toBe("LOOTBUDDY");
     expect(byStatus.STANDBY?.isBackup).toBe(true);
-    expect(byStatus.PRESENT?.amountGold + byStatus.LATE?.amountGold).toBe(1000);
+    const expected = expectedSettlement(
+      1000,
+      "SHARE",
+      entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
+    );
+    expect(byStatus.PRESENT?.amountGold).toBe(expected.distributableBoosterPool);
+    expect(byStatus.LATE?.amountGold).toBe(0);
 
     const extraId = await completedRun([
       { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "LEFT_EARLY" },
-      { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "EXCUSED" },
+      { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
     ]);
-    await payoutService.prepareSettlement(lead, extraId, 100);
+    await payoutService.prepareSettlement(lead, extraId, { totalGold: 100 });
     const extra = (await payoutService.getPayoutView(lead, extraId)).manager!.entries;
     expect(extra.find((row) => row.attendanceStatus === "LEFT_EARLY")?.shareUnits).toBe(100);
-    expect(extra.find((row) => row.attendanceStatus === "EXCUSED")?.shareUnits).toBe(0);
-    expect(extra.find((row) => row.attendanceStatus === "EXCUSED")?.amountGold).toBe(0);
+    expect(extra.find((row) => row.participationType === "LOOTBUDDY")?.shareUnits).toBe(0);
+    expect(extra.find((row) => row.participationType === "LOOTBUDDY")?.amountGold).toBe(0);
   });
 });
 
@@ -485,9 +496,12 @@ describe("draft editing and calculation", () => {
       { userId: ids.playerC, characterId: characters.playerC, participationType: "BOOSTER", role: "TANK", status: "LEFT_EARLY" },
       { userId: ids.playerD, characterId: characters.playerD, participationType: "BOOSTER", role: "DPS", isBackup: true, status: "EXCUSED" },
     ]);
-    await payoutService.prepareSettlement(lead, runId, 1000);
+    await payoutService.prepareSettlement(lead, runId, { totalGold: 1000 });
     const prepared = (await payoutService.getPayoutView(lead, runId)).manager!;
-    await payoutService.updateDraftTotal(lead, prepared.id, 1001);
+    await payoutService.updateDraftFinancials(lead, prepared.id, {
+      totalGold: 1001,
+      raidLeadCutMode: prepared.raidLeadCutMode,
+    });
     const byName = Object.fromEntries(prepared.entries.map((row) => [row.characterName, row]));
     await payoutService.updateShareUnits(lead, { payoutEntryId: byName.Pykael.id, shareUnits: 100 });
     await payoutService.updateShareUnits(lead, { payoutEntryId: byName.Pymira.id, shareUnits: 100 });
@@ -498,16 +512,21 @@ describe("draft editing and calculation", () => {
       adjustmentReason: "excused unpaid",
     });
     const after = (await payoutService.getPayoutView(lead, runId)).manager!;
-    const expected = allocateGold(
+    const expected = expectedSettlement(
       1001,
+      after.raidLeadCutMode,
       after.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
     );
-    const expectedByAttendance = Object.fromEntries(expected.map((row) => [row.attendanceId, row.amountGold]));
+    const expectedByAttendance = Object.fromEntries(
+      expected.attendancePayouts.map((row) => [row.attendanceId, row.amountGold]),
+    );
     for (const row of after.entries) {
       expect(row.amountGold).toBe(expectedByAttendance[row.attendanceId]);
     }
-    expect(after.entries.reduce((sum, row) => sum + row.amountGold, 0)).toBe(1001);
-    expect(after.summary.remainder).toBe(0);
+    expect(after.entries.reduce((sum, row) => sum + row.amountGold, 0)).toBe(expected.distributableBoosterPool);
+    expect(after.summary.attendanceDistributedGold).toBe(expected.distributableBoosterPool);
+    expect(after.summary.dedicatedRaidLeadPayout).toBe(0);
+    expect(after.summary.boosterBaseGold + after.summary.raidLeadCutGold).toBe(expected.distributableBoosterPool);
     expect(after.entries.find((row) => row.characterName === "Pysylva")?.adjustmentReason).toBe("excused unpaid");
 
     await expectDomainCode(
@@ -518,7 +537,13 @@ describe("draft editing and calculation", () => {
       payoutService.updateShareUnits(lead, { payoutEntryId: byName.Pykael.id, shareUnits: 10001 }),
       "PAYOUT_INVALID_SHARE",
     );
-    await expectDomainCode(payoutService.updateDraftTotal(lead, prepared.id, 0), "PAYOUT_INVALID_TOTAL");
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(lead, prepared.id, {
+        totalGold: 0,
+        raidLeadCutMode: prepared.raidLeadCutMode,
+      }),
+      "PAYOUT_INVALID_TOTAL",
+    );
     await expectDomainCode(
       payoutService.updateShareUnits(user, { payoutEntryId: byName.Pykael.id, shareUnits: 50 }),
       "PAYOUT_NOT_MANAGEABLE",
@@ -533,7 +558,7 @@ describe("draft editing and calculation", () => {
 describe("finalize and paid", () => {
   it("finalizes from authoritative state, snapshots names, and rejects later draft edits", { timeout: 20_000 }, async () => {
     const runId = await completedRun(rosterWithCharacters());
-    await payoutService.prepareSettlement(lead, runId, 800);
+    await payoutService.prepareSettlement(lead, runId, { totalGold: 800 });
     const draft = (await payoutService.getPayoutView(lead, runId)).manager!;
     await payoutService.finalizeSettlement(lead, draft.id);
     await orm.Character.where({ id: characters.user }).update({
@@ -547,11 +572,22 @@ describe("finalize and paid", () => {
     const finalized = await payoutService.getPayoutView(lead, runId);
     expect(finalized.manager?.status).toBe("FINALIZED");
     expect(finalized.manager?.finalizedAt).toBeTruthy();
-    expect(finalized.manager?.summary.distributedGold).toBe(800);
+    const finalizedExpected = expectedSettlement(
+      800,
+      finalized.manager!.raidLeadCutMode,
+      finalized.manager!.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
+    );
+    expect(finalized.manager?.summary.attendanceDistributedGold).toBe(finalizedExpected.distributableBoosterPool);
     expect(finalized.manager?.entries.some((row) => row.characterName === "Pykael")).toBe(true);
     expect(finalized.manager?.entries.some((row) => row.characterName === "RenamedAfterFinalize")).toBe(false);
     expect(finalized.manager?.entries.some((row) => row.userDisplayName === "Payout User")).toBe(true);
-    await expectDomainCode(payoutService.updateDraftTotal(lead, draft.id, 900), "PAYOUT_FINALIZED");
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(lead, draft.id, {
+        totalGold: 900,
+        raidLeadCutMode: draft.raidLeadCutMode,
+      }),
+      "PAYOUT_FINALIZED",
+    );
     await expectDomainCode(
       payoutService.updateShareUnits(lead, { payoutEntryId: draft.entries[0].id, shareUnits: 50 }),
       "PAYOUT_FINALIZED",
@@ -569,7 +605,7 @@ describe("finalize and paid", () => {
 
   it("lets only ADMIN mark paid and keeps PAID immutable", { timeout: 20_000 }, async () => {
     const runId = await completedRun(rosterWithCharacters());
-    await payoutService.prepareSettlement(admin, runId, 600);
+    await payoutService.prepareSettlement(admin, runId, { totalGold: 600 });
     const draft = (await payoutService.getPayoutView(admin, runId)).manager!;
     await expectDomainCode(payoutService.markPaid(admin, draft.id), "PAYOUT_NOT_DRAFT");
     await payoutService.finalizeSettlement(lead, draft.id);
@@ -579,14 +615,20 @@ describe("finalize and paid", () => {
     expect(paid.manager?.status).toBe("PAID");
     expect(paid.manager?.paidAt).toBeTruthy();
     await expectDomainCode(payoutService.markPaid(admin, draft.id), "PAYOUT_ALREADY_PAID");
-    await expectDomainCode(payoutService.updateDraftTotal(admin, draft.id, 700), "PAYOUT_ALREADY_PAID");
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(admin, draft.id, {
+        totalGold: 700,
+        raidLeadCutMode: draft.raidLeadCutMode,
+      }),
+      "PAYOUT_ALREADY_PAID",
+    );
   });
 });
 
 describe("user payout DTO", () => {
   it("hides draft splits and returns only own finalized lines", { timeout: 20_000 }, async () => {
     const runId = await completedRun(rosterWithCharacters());
-    await payoutService.prepareSettlement(lead, runId, 1000);
+    await payoutService.prepareSettlement(lead, runId, { totalGold: 1000 });
     const draftView = await runDetailService.getRunDetail(user, runId);
     expect(draftView.payout.manager).toBeNull();
     expect(draftView.payout.own).toEqual([]);
@@ -613,5 +655,185 @@ describe("user payout DTO", () => {
     expect(leadView.payout.capabilities.canMarkPaid).toBe(false);
     const adminView = await runDetailService.getRunDetail(admin, runId);
     expect(adminView.payout.capabilities.canMarkPaid).toBe(true);
+  });
+});
+
+describe("raid lead cut KEEP / SHARE", () => {
+  it("recalculates KEEP buckets when pot changes from 1.3M to 1.45M", { timeout: 20_000 }, async () => {
+    const runId = await completedRun([
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
+    ]);
+    await payoutService.prepareSettlement(lead, runId, {
+      totalGold: 1_300_000,
+      raidLeadCutMode: "KEEP",
+    });
+    let view = (await payoutService.getPayoutView(lead, runId)).manager!;
+    const settlementId = view.id;
+    const shareEntries = view.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits }));
+    let expected = expectedSettlement(1_300_000, "KEEP", shareEntries);
+    expect(view.summary.boosterBaseGold).toBe(expected.boosterBaseGold);
+    expect(view.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+    expect(view.summary.distributableBoosterPool).toBe(expected.distributableBoosterPool);
+    expect(view.summary.attendanceDistributedGold).toBe(expected.attendanceDistributedGold);
+    expect(view.summary.totalAllocatedGold).toBe(expected.boosterBaseGold + expected.raidLeadCutGold);
+    expect(view.entries.find((row) => row.participationType === "LOOTBUDDY")?.shareUnits).toBe(0);
+
+    await payoutService.updateDraftFinancials(lead, settlementId, {
+      totalGold: 1_450_000,
+      raidLeadCutMode: "KEEP",
+    });
+    view = (await payoutService.getPayoutView(lead, runId)).manager!;
+    expected = expectedSettlement(1_450_000, "KEEP", shareEntries);
+    expect(view.id).toBe(settlementId);
+    expect(view.totalGold).toBe(1_450_000);
+    expect(view.raidLeadCutMode).toBe("KEEP");
+    expect(view.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+    expect(view.summary.attendanceDistributedGold).toBe(expected.attendanceDistributedGold);
+    expect(view.summary.totalAllocatedGold).toBe(expected.totalAllocatedGold);
+    expect(view.summary.advertiserCutGold).toBe(expected.advertiserCutGold);
+    expect(view.summary.dawnCutGold).toBe(expected.dawnCutGold);
+
+    await payoutService.finalizeSettlement(lead, settlementId);
+    const finalized = (await payoutService.getPayoutView(lead, runId)).manager!;
+    expect(finalized.status).toBe("FINALIZED");
+    expect(finalized.totalGold).toBe(1_450_000);
+    expect(finalized.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+    await expectDomainCode(
+      payoutService.updateDraftFinancials(lead, settlementId, {
+        totalGold: 1_500_000,
+        raidLeadCutMode: "KEEP",
+      }),
+      "PAYOUT_FINALIZED",
+    );
+  });
+
+  it("SHARE folds Raid Lead 3% into Booster Pool; KEEP pays dedicated 3%", { timeout: 20_000 }, async () => {
+    const runId = await completedRun([
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
+    ]);
+    await payoutService.prepareSettlement(lead, runId, {
+      totalGold: 1_450_000,
+      raidLeadCutMode: "SHARE",
+    });
+    let view = (await payoutService.getPayoutView(lead, runId)).manager!;
+    const shareEntries = view.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits }));
+    let expected = expectedSettlement(1_450_000, "SHARE", shareEntries);
+    expect(view.raidLeadCutMode).toBe("SHARE");
+    expect(view.summary.dedicatedRaidLeadPayout).toBe(0);
+    expect(view.summary.raidLeadSharedGold).toBe(expected.raidLeadCutGold);
+    expect(view.summary.distributableBoosterPool).toBe(expected.distributableBoosterPool);
+    expect(view.summary.attendanceDistributedGold).toBe(expected.distributableBoosterPool);
+    expect(view.summary.totalAllocatedGold).toBe(expected.distributableBoosterPool);
+    expect(view.entries.reduce((sum, row) => sum + row.amountGold, 0)).toBe(expected.distributableBoosterPool);
+
+    await payoutService.updateDraftFinancials(lead, view.id, {
+      totalGold: 1_450_000,
+      raidLeadCutMode: "KEEP",
+    });
+    view = (await payoutService.getPayoutView(lead, runId)).manager!;
+    expected = expectedSettlement(1_450_000, "KEEP", shareEntries);
+    expect(view.raidLeadCutMode).toBe("KEEP");
+    expect(view.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+    expect(view.summary.raidLeadSharedGold).toBe(0);
+    expect(view.summary.attendanceDistributedGold).toBe(expected.attendanceDistributedGold);
+    expect(view.summary.totalAllocatedGold).toBe(expected.totalAllocatedGold);
+    expect(view.entries.every((row) => row.userId !== ids.lead)).toBe(true);
+    expect(view.summary.ordinaryRaidLeadPayout).toBe(0);
+    expect(view.summary.raidLeadTotalPayout).toBe(view.summary.dedicatedRaidLeadPayout);
+
+    await payoutService.finalizeSettlement(lead, view.id);
+    const finalized = (await payoutService.getPayoutView(lead, runId)).manager!;
+    expect(finalized.status).toBe("FINALIZED");
+    expect(finalized.raidLeadCutMode).toBe("KEEP");
+    expect(finalized.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+  });
+
+  it("KEEP RL as attendee gets ordinary Booster payout plus dedicated 3%", { timeout: 20_000 }, async () => {
+    const leadCharacterId = await createCharacter({
+      userId: ids.lead,
+      name: "Pylead",
+      wowClass: "WARRIOR",
+      specialization: "Arms",
+      primaryRole: "DPS",
+    });
+    await approveAccess(leadCharacterId, ids.lead);
+    const runId = await completedRun([
+      {
+        userId: ids.lead,
+        characterId: leadCharacterId,
+        participationType: "BOOSTER",
+        role: "DPS",
+        status: "PRESENT",
+      },
+      {
+        userId: ids.playerC,
+        characterId: characters.playerC,
+        participationType: "BOOSTER",
+        role: "TANK",
+        status: "PRESENT",
+      },
+    ]);
+    await payoutService.prepareSettlement(lead, runId, {
+      totalGold: 1_450_000,
+      raidLeadCutMode: "KEEP",
+    });
+    const view = (await payoutService.getPayoutView(lead, runId)).manager!;
+    const shareEntries = view.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits }));
+    const expected = expectedSettlement(1_450_000, "KEEP", shareEntries);
+    const leadEntry = view.entries.find((row) => row.userId === ids.lead)!;
+    const expectedLeadOrdinary =
+      expected.attendancePayouts.find((row) => row.attendanceId === leadEntry.attendanceId)!.amountGold;
+    expect(view.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+    expect(leadEntry.amountGold).toBe(expectedLeadOrdinary);
+    expect(view.summary.ordinaryRaidLeadPayout).toBe(expectedLeadOrdinary);
+    expect(leadEntry.amountGold + view.summary.dedicatedRaidLeadPayout).toBe(view.summary.raidLeadTotalPayout);
+    expect(view.summary.totalAllocatedGold).toBe(expected.totalAllocatedGold);
+  });
+
+  it("KEEP RL not in attendance still receives dedicated cut only", { timeout: 20_000 }, async () => {
+    const runId = await completedRun([
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
+    ]);
+    await payoutService.prepareSettlement(lead, runId, {
+      totalGold: 1_000,
+      raidLeadCutMode: "KEEP",
+    });
+    const view = (await payoutService.getPayoutView(lead, runId)).manager!;
+    const expected = expectedSettlement(
+      1_000,
+      "KEEP",
+      view.entries.map((row) => ({ attendanceId: row.attendanceId, shareUnits: row.shareUnits })),
+    );
+    expect(view.entries.every((row) => row.userId !== ids.lead)).toBe(true);
+    expect(view.summary.ordinaryRaidLeadPayout).toBe(0);
+    expect(view.summary.dedicatedRaidLeadPayout).toBe(expected.dedicatedRaidLeadPayout);
+    expect(view.summary.raidLeadTotalPayout).toBe(expected.dedicatedRaidLeadPayout);
+    expect(view.summary.totalAllocatedGold).toBe(expected.totalAllocatedGold);
+  });
+
+  it("ordinary USER view does not expose manager community breakdown", { timeout: 20_000 }, async () => {
+    const runId = await completedRun([
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+    ]);
+    await payoutService.prepareSettlement(lead, runId, {
+      totalGold: 5_000_000,
+      raidLeadCutMode: "KEEP",
+    });
+    const settlementId = (await payoutService.getPayoutView(lead, runId)).manager!.id;
+    await payoutService.finalizeSettlement(lead, settlementId);
+    const userView = await payoutService.getPayoutView(user, runId);
+    expect(userView.manager).toBeNull();
+    expect(userView.own.length).toBe(1);
+    expect(userView.own[0]).not.toHaveProperty("raidLeadCutGold");
+    expect(userView.own[0]).not.toHaveProperty("advertiserCutGold");
+    expect(userView.own[0]).not.toHaveProperty("dawnCutGold");
+    const managerView = await payoutService.getPayoutView(lead, runId);
+    expect(managerView.manager?.summary.boosterCutBps).toBe(6250);
+    expect(managerView.manager?.summary.raidLeadCutGold).toBe(150_000);
+    expect(managerView.manager?.summary.advertiserCutGold).toBe(1_500_000);
+    expect(managerView.manager?.summary.dawnCutGold).toBe(225_000);
   });
 });

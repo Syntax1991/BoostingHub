@@ -1,0 +1,170 @@
+[
+  {
+    "id": "dropColumn.run_start_snapshot.goldCollector1Name",
+    "label": "Drop column \"goldCollector1Name\" from \"run_start_snapshot\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "goldCollector1Name",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"goldCollector1Name\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector1Name"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"goldCollector1Name\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\" DROP COLUMN \"goldCollector1Name\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"goldCollector1Name\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector1Name"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.run_start_snapshot.goldCollector1Realm",
+    "label": "Drop column \"goldCollector1Realm\" from \"run_start_snapshot\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "goldCollector1Realm",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"goldCollector1Realm\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector1Realm"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"goldCollector1Realm\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\" DROP COLUMN \"goldCollector1Realm\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"goldCollector1Realm\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector1Realm"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.run_start_snapshot.goldCollector2Name",
+    "label": "Drop column \"goldCollector2Name\" from \"run_start_snapshot\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "goldCollector2Name",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"goldCollector2Name\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector2Name"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"goldCollector2Name\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\" DROP COLUMN \"goldCollector2Name\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"goldCollector2Name\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector2Name"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.run_start_snapshot.goldCollector2Realm",
+    "label": "Drop column \"goldCollector2Realm\" from \"run_start_snapshot\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "goldCollector2Realm",
+        "table": "run_start_snapshot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"goldCollector2Realm\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector2Realm"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"goldCollector2Realm\"",
+        "sql": "ALTER TABLE \"public\".\"run_start_snapshot\" DROP COLUMN \"goldCollector2Realm\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"goldCollector2Realm\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_start_snapshot",
+          "goldCollector2Realm"
+        ]
+      }
+    ]
+  }
+]

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RAID_LEAD_CUT_MODES } from "@/models/enums";
 import {
   PAYOUT_ADJUSTMENT_REASON_MAX,
   SHARE_UNITS_MAX,
@@ -8,14 +9,18 @@ import {
 } from "@/services/payout-state";
 import { entityIdSchema } from "@/validators/ids";
 
+const raidLeadCutModeSchema = z.enum(RAID_LEAD_CUT_MODES);
+
 export const prepareRunPayoutSchema = z.object({
   runId: entityIdSchema,
   totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),
+  raidLeadCutMode: raidLeadCutModeSchema.optional().default("SHARE"),
 });
 
-export const updateRunPayoutTotalSchema = z.object({
+export const updateRunPayoutFinancialsSchema = z.object({
   settlementId: entityIdSchema,
   totalGold: z.number().int().min(TOTAL_GOLD_MIN).max(TOTAL_GOLD_MAX),
+  raidLeadCutMode: raidLeadCutModeSchema,
 });
 
 export const updateRunPayoutShareSchema = z.object({

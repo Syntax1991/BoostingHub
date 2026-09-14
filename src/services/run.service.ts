@@ -29,7 +29,7 @@ import {
 } from "@/services/run-state";
 import { rosterActionLabel } from "@/lib/run-routes";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import type { CreateRunInput, UpdateRunInput } from "@/validators/run";
+import type { CreateRunInput, StartRunInput, UpdateRunInput } from "@/validators/run";
 import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
 import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";
 import type { RaidRecord } from "@/repositories/raid.repository";
@@ -748,8 +748,8 @@ export const runService = {
     return { id: run.id };
   },
 
-  async startRun(user: AuthenticatedUser, runId: string) {
-    const run = await loadManagedRun(user, runId);
+  async startRun(user: AuthenticatedUser, input: StartRunInput) {
+    const run = await loadManagedRun(user, input.runId);
     if (run.status === "IN_PROGRESS") {
       throw new DomainError("RUN_ALREADY_STARTED", "This run has already started.");
     }
@@ -764,7 +764,9 @@ export const runService = {
       );
     }
 
-    await attendanceService.snapshotSelectedRoster(run.id);
+    await attendanceService.snapshotSelectedRoster(run.id, {
+      startedById: user.id,
+    });
     await activityRepository.create({
       userId: user.id,
       type: "RUN_STARTED",

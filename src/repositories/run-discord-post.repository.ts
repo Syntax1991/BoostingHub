@@ -12,6 +12,9 @@ export type RunDiscordPostRecord = {
   rosterMessageId: string | null;
   rosterPostedAt: string | null;
   lastRosterVersion: number | null;
+  startChannelId: string | null;
+  startMessageId: string | null;
+  startPostedAt: string | null;
 };
 
 function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
@@ -26,6 +29,9 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     rosterMessageId: asStringOrNull(row.rosterMessageId),
     rosterPostedAt: asStringOrNull(row.rosterPostedAt),
     lastRosterVersion: asNumberOrNull(row.lastRosterVersion),
+    startChannelId: asStringOrNull(row.startChannelId),
+    startMessageId: asStringOrNull(row.startMessageId),
+    startPostedAt: asStringOrNull(row.startPostedAt),
   };
 }
 
@@ -73,6 +79,18 @@ export const runDiscordPostRepository = {
     });
   },
 
+  async recordStartPost(input: {
+    runId: string;
+    startChannelId: string;
+    startMessageId: string;
+  }): Promise<void> {
+    await upsert(input.runId, {
+      startChannelId: input.startChannelId,
+      startMessageId: input.startMessageId,
+      startPostedAt: new Date().toISOString(),
+    });
+  },
+
   /**
    * Recorded as soon as the Run's dedicated channel is created — before any
    * message is posted into it — so a crash between creation and posting
@@ -102,6 +120,9 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
     rosterMessageId: null,
     rosterPostedAt: null,
     lastRosterVersion: null,
+    startChannelId: null,
+    startMessageId: null,
+    startPostedAt: null,
     ...patch,
     createdAt: now,
     updatedAt: now,

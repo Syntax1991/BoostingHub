@@ -12,17 +12,20 @@ import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
+import type { FinalSetupInput } from "@/lib/run-start-message";
 
 export function RunManagerActions({
   run,
   capabilities,
   editor,
   unmarkedCount = 0,
+  finalSetupPreview,
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
   editor: RunDetailView["editor"];
   unmarkedCount?: number;
+  finalSetupPreview?: FinalSetupInput | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +122,9 @@ export function RunManagerActions({
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
-      {startOpen ? <RunStartDialog runId={runId} onClose={() => setStartOpen(false)} /> : null}
+      {startOpen ? (
+        <RunStartDialog runId={runId} finalSetup={finalSetupPreview} onClose={() => setStartOpen(false)} />
+      ) : null}
       {completeOpen ? (
         <RunCompleteDialog runId={runId} unmarkedCount={unmarkedCount} onClose={() => setCompleteOpen(false)} />
       ) : null}

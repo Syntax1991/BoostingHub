@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe("BotApiClient", () => {
   it("attaches the bot token and base URL on every request", async () => {
-    const spy = mockFetchOnce(200, { ok: true, data: { signups: [], roster: [] } });
+    const spy = mockFetchOnce(200, { ok: true, data: { signups: [], roster: [], start: [] } });
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
 
     await client.listSyncWork();
@@ -33,7 +33,7 @@ describe("BotApiClient", () => {
         scheduledStartAt: "2026-01-17T22:00:00.000Z",
       },
     ];
-    mockFetchOnce(200, { ok: true, data: { channels, signups: [], roster: [] } });
+    mockFetchOnce(200, { ok: true, data: { channels, signups: [], roster: [], start: [] } });
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
 
     const work = await client.listSyncWork();

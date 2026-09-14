@@ -42,7 +42,13 @@ export function RunAttendanceSection({ data }: { data: RunDetailView }) {
               </Button>
             ) : null}
           </div>
-          {startOpen ? <RunStartDialog runId={data.run.id} onClose={() => setStartOpen(false)} /> : null}
+          {startOpen ? (
+            <RunStartDialog
+              runId={data.run.id}
+              finalSetup={data.finalSetupPreview}
+              onClose={() => setStartOpen(false)}
+            />
+          ) : null}
         </Card>
       );
     }

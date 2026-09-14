@@ -76,6 +76,10 @@
       "model": "RunSignup",
       "namespace": "public"
     },
+    "run_start_snapshot": {
+      "model": "RunStartSnapshot",
+      "namespace": "public"
+    },
     "run_template": {
       "model": "RunTemplate",
       "namespace": "public"
@@ -272,6 +276,19 @@
               {
                 "name": "MYTHIC",
                 "value": "MYTHIC"
+              }
+            ]
+          },
+          "RaidLeadCutMode": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "KEEP",
+                "value": "KEEP"
+              },
+              {
+                "name": "SHARE",
+                "value": "SHARE"
               }
             ]
           },
@@ -2236,6 +2253,21 @@
                   "namespace": "public"
                 }
               },
+              "startSnapshot": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunStartSnapshot",
+                  "namespace": "public"
+                }
+              },
               "strikes": {
                 "cardinality": "1:N",
                 "on": {
@@ -2567,6 +2599,27 @@
                   "kind": "scalar"
                 }
               },
+              "startChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startPostedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
@@ -2629,6 +2682,15 @@
                 },
                 "signupPostedAt": {
                   "column": "signupPostedAt"
+                },
+                "startChannelId": {
+                  "column": "startChannelId"
+                },
+                "startMessageId": {
+                  "column": "startMessageId"
+                },
+                "startPostedAt": {
+                  "column": "startPostedAt"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -3241,6 +3303,20 @@
           },
           "RunSettlement": {
             "fields": {
+              "advertiserCutBps": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "boosterCutBps": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -3301,6 +3377,26 @@
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
+                }
+              },
+              "raidLeadCutBps": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidLeadCutMode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidLeadCutMode",
+                  "namespaceId": "public",
+                  "plane": "domain"
                 }
               },
               "raidLeadName": {
@@ -3438,6 +3534,12 @@
             },
             "storage": {
               "fields": {
+                "advertiserCutBps": {
+                  "column": "advertiserCutBps"
+                },
+                "boosterCutBps": {
+                  "column": "boosterCutBps"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -3461,6 +3563,12 @@
                 },
                 "preparedById": {
                   "column": "preparedById"
+                },
+                "raidLeadCutBps": {
+                  "column": "raidLeadCutBps"
+                },
+                "raidLeadCutMode": {
+                  "column": "raidLeadCutMode"
                 },
                 "raidLeadName": {
                   "column": "raidLeadName"
@@ -3749,6 +3857,108 @@
               },
               "namespaceId": "public",
               "table": "run_signup"
+            }
+          },
+          "RunStartSnapshot": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "startedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "startedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "startedAt": {
+                  "column": "startedAt"
+                },
+                "startedById": {
+                  "column": "startedById"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_start_snapshot"
             }
           },
           "RunTemplate": {
@@ -4750,6 +4960,21 @@
                 },
                 "to": {
                   "model": "RunSignup",
+                  "namespace": "public"
+                }
+              },
+              "startedRunSnapshots": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "startedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunStartSnapshot",
                   "namespace": "public"
                 }
               },
@@ -6668,6 +6893,21 @@
                   "nativeType": "timestamptz",
                   "nullable": true
                 },
+                "startChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "startMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "startPostedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -7263,12 +7503,35 @@
                   "prefix": "run_settlement_difficulty_check"
                 },
                 {
+                  "expression": "\"raidLeadCutMode\" IN ('KEEP', 'SHARE')",
+                  "name": "run_settlement_raidLeadCutMode_check_8050fe6d",
+                  "prefix": "run_settlement_raidLeadCutMode_check"
+                },
+                {
                   "expression": "\"status\" IN ('DRAFT', 'FINALIZED', 'PAID')",
                   "name": "run_settlement_status_check_54af39d0",
                   "prefix": "run_settlement_status_check"
                 }
               ],
               "columns": {
+                "advertiserCutBps": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 3000
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "boosterCutBps": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 6250
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -7318,6 +7581,30 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "raidLeadCutBps": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 300
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "raidLeadCutMode": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "SHARE"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidLeadCutMode",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "raidLeadName": {
                   "codecId": "pg/text@1",
@@ -7722,6 +8009,102 @@
                     "userId",
                     "characterId",
                     "participationType"
+                  ]
+                }
+              ]
+            },
+            "run_start_snapshot": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "startedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_start_snapshot"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "startedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_start_snapshot"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "startedById"
+                  ],
+                  "name": "run_start_snapshot_startedById_idx_a8358300",
+                  "prefix": "run_start_snapshot_startedById_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId"
                   ]
                 }
               ]
@@ -8492,6 +8875,13 @@
                 "MYTHIC"
               ]
             },
+            "RaidLeadCutMode": {
+              "kind": "valueSet",
+              "values": [
+                "KEEP",
+                "SHARE"
+              ]
+            },
             "RosterState": {
               "kind": "valueSet",
               "values": [
@@ -8574,10 +8964,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "40a32a4868bfdb44beb2a152a157bab172c5b30044b41969861f2122dd0b4071"
+    "storageHash": "60c56dbcad0eaa2dc5cc7234e8a78e3df3cf3abbe41bd3c63f92b3e978279fa4"
   },
   "execution": {
-    "executionHash": "3b0de0edab5c2f5ef1f4d26ea7a9866fc16f6a515fbcb7726c0fb8ce7618bd6b",
+    "executionHash": "e360afc15d9acb3a64cba5a920edaddddd531ee2246e5ae03f7da92ddec5d4a7",
     "mutations": {
       "defaults": [
         {
@@ -9001,6 +9391,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_signup"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_start_snapshot"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_start_snapshot"
           }
         },
         {

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { formatDate, formatTime } from "@/lib/datetime";
-import { Card, PageHeader } from "@/components/ui/primitives";
+import { formatDate, formatDateTime, formatTime } from "@/lib/datetime";
+import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
 import { RunDetailTabs } from "@/components/runs/run-detail-tabs";
@@ -42,12 +42,13 @@ export function RunDetailView({
       />
       {data.permissions.canManageRun ? (
         <div className="mb-4">
-            <RunManagerActions
-              run={data.run}
-              capabilities={data.capabilities}
-              editor={data.editor}
-              unmarkedCount={data.attendance.manager?.summary.unmarked ?? 0}
-            />
+          <RunManagerActions
+            run={data.run}
+            capabilities={data.capabilities}
+            editor={data.editor}
+            unmarkedCount={data.attendance.manager?.summary.unmarked ?? 0}
+            finalSetupPreview={data.finalSetupPreview}
+          />
         </div>
       ) : null}
       <Card className="mb-4">
@@ -64,6 +65,17 @@ export function RunDetailView({
           <span className="text-sm text-muted">{run.activeSignupCount} signed</span>
         </div>
       </Card>
+      {data.startSnapshot ? (
+        <Card className="mb-4">
+          <CardHeader title="Run started" description="Operational start audit." />
+          <div className="space-y-1 px-4 py-3 text-sm">
+            <p>
+              Started {formatDateTime(data.startSnapshot.startedAt)}
+              {data.startSnapshot.startedByName ? ` · ${data.startSnapshot.startedByName}` : ""}
+            </p>
+          </div>
+        </Card>
+      ) : null}
       <RunDetailTabs data={data} initialTab={initialTab} />
     </div>
   );

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "column.public.run_settlement.advertiserCutBps",
+    "label": "Add column \"advertiserCutBps\" to \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "advertiserCutBps",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"advertiserCutBps\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "advertiserCutBps"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"advertiserCutBps\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD COLUMN \"advertiserCutBps\" int4 DEFAULT 3000 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"advertiserCutBps\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "advertiserCutBps"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_settlement.boosterCutBps",
+    "label": "Add column \"boosterCutBps\" to \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "boosterCutBps",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"boosterCutBps\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "boosterCutBps"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"boosterCutBps\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD COLUMN \"boosterCutBps\" int4 DEFAULT 6250 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"boosterCutBps\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "boosterCutBps"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_settlement.raidLeadCutBps",
+    "label": "Add column \"raidLeadCutBps\" to \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "raidLeadCutBps",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"raidLeadCutBps\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "raidLeadCutBps"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"raidLeadCutBps\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD COLUMN \"raidLeadCutBps\" int4 DEFAULT 300 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"raidLeadCutBps\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "raidLeadCutBps"
+        ]
+      }
+    ]
+  }
+]

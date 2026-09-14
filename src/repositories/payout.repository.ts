@@ -9,6 +9,7 @@ import {
   mapCharacterRole,
   mapDifficulty,
   mapParticipation,
+  mapRaidLeadCutMode,
   mapRegion,
   mapSettlementStatus,
 } from "@/lib/persistence";
@@ -17,6 +18,7 @@ import type {
   CharacterRole,
   ParticipationType,
   RaidDifficulty,
+  RaidLeadCutMode,
   SettlementStatus,
   WowRegion,
 } from "@/models/enums";
@@ -46,6 +48,10 @@ export type SettlementRecord = {
   id: string;
   runId: string;
   totalGold: number;
+  raidLeadCutMode: RaidLeadCutMode;
+  boosterCutBps: number;
+  raidLeadCutBps: number;
+  advertiserCutBps: number;
   status: SettlementStatus;
   preparedById: string;
   finalizedAt: string | null;
@@ -94,6 +100,10 @@ function mapSettlement(row: Record<string, unknown>): SettlementRecord {
     id: asString(row.id),
     runId: asString(row.runId),
     totalGold: asNumber(row.totalGold),
+    raidLeadCutMode: mapRaidLeadCutMode(row.raidLeadCutMode),
+    boosterCutBps: asNumber(row.boosterCutBps),
+    raidLeadCutBps: asNumber(row.raidLeadCutBps),
+    advertiserCutBps: asNumber(row.advertiserCutBps),
     status: mapSettlementStatus(row.status),
     preparedById: asString(row.preparedById),
     finalizedAt: asStringOrNull(row.finalizedAt),
@@ -133,6 +143,10 @@ export const payoutRepository = {
   async createDraft(input: {
     runId: string;
     totalGold: number;
+    raidLeadCutMode: RaidLeadCutMode;
+    boosterCutBps: number;
+    raidLeadCutBps: number;
+    advertiserCutBps: number;
     preparedById: string;
     runTitle: string;
     raidName: string;
@@ -152,6 +166,10 @@ export const payoutRepository = {
         id: settlementId,
         runId: input.runId,
         totalGold: input.totalGold,
+        raidLeadCutMode: input.raidLeadCutMode,
+        boosterCutBps: input.boosterCutBps,
+        raidLeadCutBps: input.raidLeadCutBps,
+        advertiserCutBps: input.advertiserCutBps,
         status: "DRAFT",
         preparedById: input.preparedById,
         runTitle: input.runTitle,
@@ -196,6 +214,7 @@ export const payoutRepository = {
   async replaceDraftAmounts(input: {
     settlementId: string;
     totalGold: number;
+    raidLeadCutMode: RaidLeadCutMode;
     entries: Array<{ id: string; shareUnits: number; amountGold: number; adjustmentReason?: string | null }>;
   }) {
     const now = new Date().toISOString();
@@ -207,6 +226,7 @@ export const payoutRepository = {
       }
       await txOrm.RunSettlement.where({ id: input.settlementId }).update({
         totalGold: input.totalGold,
+        raidLeadCutMode: input.raidLeadCutMode,
         updatedAt: now,
       });
       for (const entry of input.entries) {
@@ -224,6 +244,7 @@ export const payoutRepository = {
     settlementId: string;
     finalizedById: string;
     totalGold: number;
+    raidLeadCutMode: RaidLeadCutMode;
     runTitle: string;
     raidName: string;
     difficulty: RaidDifficulty;
@@ -253,6 +274,7 @@ export const payoutRepository = {
       await txOrm.RunSettlement.where({ id: input.settlementId }).update({
         status: "FINALIZED",
         totalGold: input.totalGold,
+        raidLeadCutMode: input.raidLeadCutMode,
         runTitle: input.runTitle,
         raidName: input.raidName,
         difficulty: input.difficulty,

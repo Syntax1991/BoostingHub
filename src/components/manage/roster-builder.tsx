@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   prepareRosterEditAction,
   publishRosterAction,
-  toggleRosterDraftSelectionAction,
+  saveRosterDraftAction,
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,7 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
+import { buildRosterSavedSelectionKey } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
@@ -57,10 +58,53 @@ function boosterLockoutLabel(
   });
 }
 
+function collectSignups(data: RosterView): SignupRow[] {
+  return data.groups.tanks.concat(data.groups.healers, data.groups.dps, data.groups.lootbuddies);
+}
+
+function selectionKey(ids: Iterable<string>) {
+  return [...ids].sort().join(",");
+}
+
+function collectSavedSelectedIds(data: RosterView): Set<string> {
+  const ids = new Set<string>();
+  for (const signup of collectSignups(data)) {
+    if (signup.draftSelected) ids.add(signup.id);
+  }
+  return ids;
+}
+
+/**
+ * Remount the editor only when the authoritative server draft snapshot changes
+ * (version and/or saved selected ids). Harmless parent rerenders keep local staged
+ * edits and filters because the key stays stable.
+ */
 export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
+  const savedSelectedIds = collectSavedSelectedIds(data);
+  const savedSelectionKey = buildRosterSavedSelectionKey(data.roster.version, savedSelectedIds);
+  return (
+    <RosterBuilderEditor
+      key={savedSelectionKey}
+      data={data}
+      embedded={embedded}
+      savedSelectedIds={savedSelectedIds}
+    />
+  );
+}
+
+function RosterBuilderEditor({
+  data,
+  embedded = false,
+  savedSelectedIds,
+}: {
+  data: RosterView;
+  embedded?: boolean;
+  savedSelectedIds: Set<string>;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [participation, setParticipation] = useState("ALL");
   const [roleFilter, setRoleFilter] = useState("ALL");
@@ -69,6 +113,25 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
   const [acknowledge, setAcknowledge] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  const allSignups = useMemo(() => collectSignups(data), [data]);
+  const [stagedSelectedIds, setStagedSelectedIds] = useState<Set<string>>(() => new Set(savedSelectedIds));
+
+  const isDirty = selectionKey(stagedSelectedIds) !== selectionKey(savedSelectedIds);
+  const unsavedChangeCount = useMemo(() => {
+    let count = 0;
+    for (const id of stagedSelectedIds) {
+      if (!savedSelectedIds.has(id)) count += 1;
+    }
+    for (const id of savedSelectedIds) {
+      if (!stagedSelectedIds.has(id)) count += 1;
+    }
+    return count;
+  }, [stagedSelectedIds, savedSelectedIds]);
+
+  function isStagedSelected(signupId: string) {
+    return stagedSelectedIds.has(signupId);
+  }
+
   function matches(signup: SignupRow) {
     const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""} ${signup.lootbuddyClass ?? ""}`.toLowerCase();
     if (search && !haystack.includes(search.toLowerCase())) return false;
@@ -76,23 +139,58 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
     if (roleFilter !== "ALL" && signup.role !== roleFilter) return false;
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
     if (backupFilter === "PRIMARY" && signup.isBackup) return false;
-    if (selectedFilter === "SELECTED" && !signup.draftSelected) return false;
-    if (selectedFilter === "UNSELECTED" && signup.draftSelected) return false;
+    const staged = isStagedSelected(signup.id);
+    if (selectedFilter === "SELECTED" && !staged) return false;
+    if (selectedFilter === "UNSELECTED" && staged) return false;
     return true;
   }
 
-  function toggle(signup: SignupRow, selected: boolean) {
-    if (!data.roster.canEdit || data.roster.needsPublishSeed) return;
+  function toggleStaged(signup: SignupRow, selected: boolean) {
+    if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
+    if (signup.status === "WITHDRAWN") return;
     setError(null);
+    setErrorCode(null);
+    setStagedSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (!selected) {
+        next.delete(signup.id);
+        return next;
+      }
+      if (signup.participationType === "BOOSTER") {
+        for (const other of allSignups) {
+          if (
+            other.userId === signup.userId &&
+            other.participationType === "BOOSTER" &&
+            other.id !== signup.id
+          ) {
+            next.delete(other.id);
+          }
+        }
+      }
+      next.add(signup.id);
+      return next;
+    });
+  }
+
+  function discardChanges() {
+    setError(null);
+    setErrorCode(null);
+    setStagedSelectedIds(new Set(savedSelectedIds));
+  }
+
+  function saveRoster() {
+    if (!isDirty || pending) return;
+    setError(null);
+    setErrorCode(null);
     startTransition(async () => {
-      const result = await toggleRosterDraftSelectionAction({
+      const result = await saveRosterDraftAction({
         runId: data.run.id,
-        signupId: signup.id,
-        selected,
         version: data.roster.version,
+        selectedSignupIds: [...stagedSelectedIds],
       });
       if (!result.ok) {
         setError(result.message);
+        setErrorCode(result.code);
         return;
       }
       router.refresh();
@@ -101,10 +199,12 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
 
   function seedPublished() {
     setError(null);
+    setErrorCode(null);
     startTransition(async () => {
       const result = await prepareRosterEditAction({ runId: data.run.id, version: data.roster.version });
       if (!result.ok) {
         setError(result.message);
+        setErrorCode(result.code);
         return;
       }
       router.refresh();
@@ -113,6 +213,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
 
   function publish() {
     setError(null);
+    setErrorCode(null);
     startTransition(async () => {
       const result = await publishRosterAction({
         runId: data.run.id,
@@ -121,6 +222,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
       });
       if (!result.ok) {
         setError(result.message);
+        setErrorCode(result.code);
         return;
       }
       dialogRef.current?.close();
@@ -129,13 +231,19 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
   }
 
   const editing = data.roster.canEdit && !data.roster.needsPublishSeed;
+  const togglesLocked = pending;
 
   return (
     <div className="space-y-4">
       {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-sm text-danger">
+          <p>{error}</p>
+          {errorCode === "ROSTER_ALREADY_CHANGED" ? (
+            <Button type="button" variant="ghost" disabled={pending} onClick={() => router.refresh()}>
+              Refresh roster
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       {embedded ? null : (
       <Card>
@@ -167,7 +275,14 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
       )}
 
       <Card>
-        <CardHeader title="Composition" description="Targets come from this run. Over/under is a warning, not a hard block." />
+        <CardHeader
+          title="Composition"
+          description={
+            isDirty
+              ? "Saved draft state. Save roster to recalculate composition, buffs, and validation."
+              : "Targets come from this run. Over/under is a warning, not a hard block."
+          }
+        />
         <div className="grid grid-cols-2 gap-3 px-4 py-4 text-sm md:grid-cols-4">
           <CompositionMeter label="Tanks" slot={data.composition.tanks} />
           <CompositionMeter label="Healers" slot={data.composition.healers} />
@@ -176,7 +291,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         </div>
       </Card>
 
-      <ClassBuffChecker coverage={data.raidBuffCoverage} />
+      <ClassBuffChecker coverage={data.raidBuffCoverage} dirty={isDirty} />
 
       <Card>
         <CardHeader title="Filters" />
@@ -203,8 +318,9 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         signups={data.groups.tanks.filter(matches)}
         run={data.run}
         editing={editing}
-        pending={pending}
-        onToggle={toggle}
+        locked={togglesLocked}
+        isStagedSelected={isStagedSelected}
+        onToggle={toggleStaged}
       />
       <SignupSection
         title="Healers"
@@ -212,8 +328,9 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         signups={data.groups.healers.filter(matches)}
         run={data.run}
         editing={editing}
-        pending={pending}
-        onToggle={toggle}
+        locked={togglesLocked}
+        isStagedSelected={isStagedSelected}
+        onToggle={toggleStaged}
       />
       <SignupSection
         title="DPS"
@@ -221,8 +338,9 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         signups={data.groups.dps.filter(matches)}
         run={data.run}
         editing={editing}
-        pending={pending}
-        onToggle={toggle}
+        locked={togglesLocked}
+        isStagedSelected={isStagedSelected}
+        onToggle={toggleStaged}
       />
       <SignupSection
         title="Lootbuddies"
@@ -230,13 +348,21 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
         signups={data.groups.lootbuddies.filter(matches)}
         run={data.run}
         editing={editing}
-        pending={pending}
-        onToggle={toggle}
+        locked={togglesLocked}
+        isStagedSelected={isStagedSelected}
+        onToggle={toggleStaged}
       />
 
       <Card>
         <CardHeader title="Roster validation" />
         <div className="space-y-2 px-4 py-4 text-sm">
+          {isDirty ? (
+            <p className="text-warning">
+              Unsaved roster changes
+              {unsavedChangeCount > 0 ? ` · ${unsavedChangeCount} change${unsavedChangeCount === 1 ? "" : "s"}` : ""}
+              . Save roster to recalculate composition, buffs, and validation.
+            </p>
+          ) : null}
           {data.validation.blockers.length === 0 && data.validation.warnings.length === 0 ? (
             <p className="text-muted">No blockers or composition warnings.</p>
           ) : null}
@@ -250,21 +376,34 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
               Warning — {issue.message}
             </p>
           ))}
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap items-center gap-2 pt-2">
             {data.roster.needsPublishSeed ? (
               <Button type="button" disabled={pending} onClick={seedPublished}>
                 {pending ? "Loading…" : "Edit Published Roster"}
               </Button>
             ) : (
-              <Button
-                type="button"
-                disabled={pending || !data.roster.canEdit || !data.validation.canPublish}
-                onClick={() => dialogRef.current?.showModal()}
-              >
-                Publish Roster
-              </Button>
+              <>
+                <Button type="button" disabled={pending || !editing || !isDirty} onClick={saveRoster}>
+                  {pending && isDirty ? "Saving…" : "Save Roster"}
+                </Button>
+                {isDirty ? (
+                  <Button type="button" variant="ghost" disabled={pending} onClick={discardChanges}>
+                    Discard changes
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={pending || isDirty || !data.roster.canEdit || !data.validation.canPublish}
+                  onClick={() => dialogRef.current?.showModal()}
+                >
+                  Publish Roster
+                </Button>
+              </>
             )}
           </div>
+          {isDirty && !data.roster.needsPublishSeed ? (
+            <p className="text-xs text-muted">Save roster changes before publishing.</p>
+          ) : null}
         </div>
       </Card>
 
@@ -323,6 +462,7 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
             type="button"
             disabled={
               pending ||
+              isDirty ||
               !data.validation.canPublish ||
               (data.validation.warnings.length > 0 && !acknowledge)
             }
@@ -342,7 +482,8 @@ function SignupSection({
   signups,
   run,
   editing,
-  pending,
+  locked,
+  isStagedSelected,
   onToggle,
 }: {
   title: string;
@@ -350,7 +491,8 @@ function SignupSection({
   signups: SignupRow[];
   run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
-  pending: boolean;
+  locked: boolean;
+  isStagedSelected: (signupId: string) => boolean;
   onToggle: (signup: SignupRow, selected: boolean) => void;
 }) {
   const grouped = groupByUser(signups);
@@ -371,7 +513,8 @@ function SignupSection({
                     signup={signup}
                     run={run}
                     editing={editing}
-                    pending={pending}
+                    locked={locked}
+                    selected={isStagedSelected(signup.id)}
                     onToggle={onToggle}
                   />
                 ))}
@@ -388,39 +531,46 @@ function SignupRowCard({
   signup,
   run,
   editing,
-  pending,
+  locked,
+  selected,
   onToggle,
 }: {
   signup: SignupRow;
   run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
-  pending: boolean;
+  locked: boolean;
+  selected: boolean;
   onToggle: (signup: SignupRow, selected: boolean) => void;
 }) {
   const checkboxId = `signup-${signup.id}`;
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
   const lockout = boosterLockoutLabel(signup, run);
+  const disabled = !editing || locked || signup.status === "WITHDRAWN";
   return (
-    <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2">
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 ${
+        selected ? "border-accent bg-accent/10" : "border-border bg-transparent"
+      } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
+    >
       <input
         id={checkboxId}
         type="checkbox"
         className="mt-1"
-        checked={signup.draftSelected}
-        disabled={!editing || pending || signup.status === "WITHDRAWN"}
+        checked={selected}
+        disabled={disabled}
         onChange={(event) => onToggle(signup, event.target.checked)}
       />
-      <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer text-sm">
-        <div className="flex flex-wrap items-center gap-2">
+      <span className="min-w-0 flex-1 text-sm">
+        <span className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{signupDisplayName(signup)}</span>
           {displayClass ? <ClassBadge wowClass={displayClass} /> : null}
           {signup.role ? <RoleBadge role={signup.role} /> : null}
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
-        </div>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+        </span>
+        <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
           {character ? (
             <span>
               {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"} ilvl ·{" "}
@@ -441,12 +591,12 @@ function SignupRowCard({
           {lockout ? (
             <span className={lockout.attention ? "text-warning" : undefined}>{lockout.text}</span>
           ) : null}
-        </div>
+        </span>
         {signup.issue ? (
-          <p className="mt-1 text-xs text-danger">{signup.issue}</p>
+          <span className="mt-1 block text-xs text-danger">{signup.issue}</span>
         ) : null}
-      </label>
-    </div>
+      </span>
+    </label>
   );
 }
 
@@ -477,14 +627,16 @@ function Stat({ label, value }: { label: string; value: string }) {
  * Coverage means a selected composition contains a class that can provide the
  * buff — not that the aura is cast or talented in-game.
  */
-function ClassBuffChecker({ coverage }: { coverage: RaidBuffCoverage }) {
+function ClassBuffChecker({ coverage, dirty }: { coverage: RaidBuffCoverage; dirty: boolean }) {
   return (
     <Card>
       <CardHeader
         title="Class Buffs"
         description={`${coverage.coveredCount} / ${coverage.totalCount} covered${
           coverage.missingCount > 0 ? ` · ${coverage.missingCount} missing` : ""
-        }. Class availability only — not live aura verification.`}
+        }. Class availability only — not live aura verification.${
+          dirty ? " Save roster to recalculate." : ""
+        }`}
       />
       <ul className="grid gap-1.5 px-4 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label="Class buff coverage">
         {coverage.buffs.map((buff) => {

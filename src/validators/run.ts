@@ -60,5 +60,10 @@ export const runIdSchema = z.object({
   runId: entityIdSchema,
 });
 
+export const startRunSchema = z.object({
+  runId: entityIdSchema,
+});
+
 export type CreateRunInput = z.infer<typeof createRunSchema>;
 export type UpdateRunInput = z.infer<typeof updateRunSchema>;
+export type StartRunInput = z.infer<typeof startRunSchema>;

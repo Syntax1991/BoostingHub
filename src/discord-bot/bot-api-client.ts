@@ -95,6 +95,14 @@ export class BotApiClient {
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
       }>;
+      start: Array<{
+        runId: string;
+        existingChannelId: string | null;
+        existingMessageId: string | null;
+        existingRunChannelId: string | null;
+        desiredChannelName: string;
+        targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+      }>;
     }>("/api/bot/discord/sync");
   }
 
@@ -102,11 +110,15 @@ export class BotApiClient {
     return this.request<unknown>(`/api/bot/runs/${runId}/roster`);
   }
 
+  getRunStartEmbedData(runId: string) {
+    return this.request<unknown>(`/api/bot/runs/${runId}/start`);
+  }
+
   recordDiscordState(
     runId: string,
     input:
       | { kind: "channel"; channelId: string }
-      | { kind: "signup" | "roster"; channelId: string; messageId: string },
+      | { kind: "signup" | "roster" | "start"; channelId: string; messageId: string },
   ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
       method: "PUT",

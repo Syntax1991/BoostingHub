@@ -259,39 +259,86 @@ export const rosterRepository = {
     }
   },
 
-  async replaceSelectedSignupIds(rosterId: string, expectedVersion: number, signupIds: string[]) {
-    const roster = await orm.RunRoster.where({ id: rosterId }).include("entries").first();
-    if (!roster) {
-      throw new DomainError("NOT_FOUND", "Roster was not found.");
-    }
-    const mapped = mapRoster(roster as Record<string, unknown>);
-    await this.assertVersion(mapped, expectedVersion);
-
-    const current = new Set(mapped.selectedSignupIds);
-    const next = new Set(signupIds);
-    const now = new Date().toISOString();
-
-    for (const signupId of current) {
-      if (!next.has(signupId)) {
-        await orm.RunRosterEntry.where({ rosterId, signupId }).delete();
+  /**
+   * Atomically replace the full draft selection set and bump version once.
+   * Optional race-safety nets re-check WITHDRAWN and cross-Run reservations
+   * inside the transaction (batch save path). Seed/prepare callers may omit them.
+   */
+  async replaceSelectedSignupIds(
+    rosterId: string,
+    expectedVersion: number,
+    signupIds: string[],
+    options?: {
+      targetRunId?: string;
+      scheduledStartAt?: string;
+      selectedCharacterIds?: string[];
+    },
+  ) {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const roster = await txOrm.RunRoster.where({ id: rosterId }).include("entries").first();
+      if (!roster) {
+        throw new DomainError("NOT_FOUND", "Roster was not found.");
       }
-    }
-    for (const signupId of next) {
-      if (!current.has(signupId)) {
-        await orm.RunRosterEntry.create({
-          id: crypto.randomUUID(),
-          rosterId,
-          signupId,
-          selected: true,
-          createdAt: now,
-          updatedAt: now,
+      const mapped = mapRoster(roster as Record<string, unknown>);
+      await this.assertVersion(mapped, expectedVersion);
+
+      const next = new Set(signupIds);
+      const now = new Date().toISOString();
+
+      for (const signupId of next) {
+        const signupRow = await txOrm.RunSignup.where({ id: signupId }).first();
+        if (!signupRow) {
+          throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+        }
+        const status = mapSignupStatus((signupRow as Record<string, unknown>).status);
+        if (status === "WITHDRAWN") {
+          throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+        }
+      }
+
+      if (
+        options?.selectedCharacterIds &&
+        options.selectedCharacterIds.length > 0 &&
+        options.targetRunId &&
+        options.scheduledStartAt
+      ) {
+        const conflicts = await queryReservationConflicts(txOrm, {
+          characterIds: options.selectedCharacterIds,
+          targetRunId: options.targetRunId,
+          scheduledStartAt: options.scheduledStartAt,
         });
+        if (conflicts.length > 0) {
+          throw new DomainError(
+            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+            `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
+          );
+        }
       }
-    }
 
-    await orm.RunRoster.where({ id: rosterId }).update({
-      version: mapped.version + 1,
-      updatedAt: now,
+      const current = new Set(mapped.selectedSignupIds);
+      for (const signupId of current) {
+        if (!next.has(signupId)) {
+          await txOrm.RunRosterEntry.where({ rosterId, signupId }).delete();
+        }
+      }
+      for (const signupId of next) {
+        if (!current.has(signupId)) {
+          await txOrm.RunRosterEntry.create({
+            id: crypto.randomUUID(),
+            rosterId,
+            signupId,
+            selected: true,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      await txOrm.RunRoster.where({ id: rosterId }).update({
+        version: mapped.version + 1,
+        updatedAt: now,
+      });
     });
   },
 

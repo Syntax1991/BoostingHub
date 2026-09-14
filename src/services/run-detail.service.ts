@@ -8,8 +8,51 @@ import { emptyRunCapabilities, getRunLifecycleCapabilities, isSignupWindowOpen }
 import { hasAdminAccess } from "@/auth/authorization";
 import { attendanceService } from "@/services/attendance.service";
 import { payoutService } from "@/services/payout.service";
+import { CLASS_LABELS } from "@/lib/labels";
+import {
+  groupFinalSetupParticipants,
+  type FinalSetupInput,
+  type FinalSetupParticipant,
+} from "@/lib/run-start-message";
+import { rosterRepository } from "@/repositories/roster.repository";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
+import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+
+function toFinalSetupParticipant(signup: {
+  userName: string;
+  discordUserId: string | null;
+  character: { name: string; realm: string; wowClass: keyof typeof CLASS_LABELS } | null;
+  lootbuddyClass: keyof typeof CLASS_LABELS | null;
+  participationType: "BOOSTER" | "LOOTBUDDY";
+  role: FinalSetupParticipant["role"];
+}): FinalSetupParticipant {
+  const lootbuddyClass = signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
+  const classLabel =
+    signup.participationType === "BOOSTER"
+      ? signup.character
+        ? CLASS_LABELS[signup.character.wowClass]
+        : null
+      : lootbuddyClass
+        ? CLASS_LABELS[lootbuddyClass]
+        : null;
+  return {
+    discordUserId: signup.discordUserId,
+    userName: signup.userName,
+    characterName:
+      signup.character?.name ??
+      (signup.lootbuddyClass ? CLASS_LABELS[signup.lootbuddyClass] : null) ??
+      "Unknown character",
+    characterRealm: signup.character?.realm ?? "",
+    wowClass:
+      signup.participationType === "BOOSTER"
+        ? (signup.character?.wowClass ?? null)
+        : lootbuddyClass,
+    classLabel,
+    participationType: signup.participationType,
+    role: signup.role,
+  };
+}
 
 /**
  * Options for the Edit Run raid selector: every currently-available raid,
@@ -109,6 +152,27 @@ export const runDetailService = {
     const ownAttendance = manage ? [] : await attendanceService.getOwnAttendance(user, runId);
     const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
     const payout = await payoutService.getPayoutView(user, runId);
+    const startSnapshot = manage ? await runStartSnapshotRepository.findByRunId(runId) : null;
+
+    let finalSetupPreview: FinalSetupInput | null = null;
+    if (manage && publishedRoster && run.status === "PUBLISHED") {
+      const selectedSignups = (await rosterRepository.listSignups(runId)).filter(
+        (signup) => signup.status === "SELECTED",
+      );
+      if (selectedSignups.length > 0) {
+        finalSetupPreview = {
+          raidName: run.raidName,
+          difficulty: run.difficulty,
+          lootType: run.lootType,
+          targets: {
+            tanks: run.desiredTankCount,
+            healers: run.desiredHealerCount,
+            dps: run.desiredDpsCount,
+          },
+          groups: groupFinalSetupParticipants(selectedSignups.map(toFinalSetupParticipant)),
+        };
+      }
+    }
 
     let editor: {
       hasSignupHistory: boolean;
@@ -161,6 +225,8 @@ export const runDetailService = {
       viewerSignups,
       publishedRoster,
       manager,
+      startSnapshot,
+      finalSetupPreview,
       attendance: {
         own: ownAttendance,
         manager: managerAttendance,

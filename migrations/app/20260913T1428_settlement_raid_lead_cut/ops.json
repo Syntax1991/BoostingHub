@@ -1,0 +1,86 @@
+[
+  {
+    "id": "column.public.run_settlement.raidLeadCutMode",
+    "label": "Add column \"raidLeadCutMode\" to \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "raidLeadCutMode",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"raidLeadCutMode\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "raidLeadCutMode"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"raidLeadCutMode\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD COLUMN \"raidLeadCutMode\" text DEFAULT 'SHARE' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"raidLeadCutMode\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_settlement",
+          "raidLeadCutMode"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_settlement.run_settlement_raidLeadCutMode_check_8050fe6d",
+    "label": "Add check constraint \"run_settlement_raidLeadCutMode_check_8050fe6d\" on \"run_settlement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_settlement_raidLeadCutMode_check_8050fe6d",
+        "table": "run_settlement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_settlement_raidLeadCutMode_check_8050fe6d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_raidLeadCutMode_check_8050fe6d",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_settlement_raidLeadCutMode_check_8050fe6d\"",
+        "sql": "ALTER TABLE \"public\".\"run_settlement\" ADD CONSTRAINT \"run_settlement_raidLeadCutMode_check_8050fe6d\" CHECK (\"raidLeadCutMode\" IN ('KEEP', 'SHARE'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_settlement_raidLeadCutMode_check_8050fe6d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_settlement_raidLeadCutMode_check_8050fe6d",
+          "public",
+          "\"public\".\"run_settlement\""
+        ]
+      }
+    ]
+  }
+]

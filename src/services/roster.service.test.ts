@@ -2,11 +2,13 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { activityRepository } from "@/repositories/activity.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
+import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 
 const ids = {
@@ -211,6 +213,156 @@ describe("rosterService draft", () => {
       }),
       "ROSTER_ALREADY_CHANGED",
     );
+  });
+});
+
+describe("rosterService saveDraftSelection", () => {
+  it("saves multiple selections atomically and increments version once", async () => {
+    const lab = await rosterService.getRosterManagementView(thorne, ids.lab);
+    const selectedSignupIds = [ids.labThorne, ids.labBrannTank, ids.labKaelResto];
+    await rosterService.saveDraftSelection(thorne, {
+      runId: ids.lab,
+      version: lab.roster.version,
+      selectedSignupIds,
+    });
+    const after = await rosterService.getRosterManagementView(thorne, ids.lab);
+    expect(after.roster.version).toBe(lab.roster.version + 1);
+    expect(after.groups.tanks.find((item) => item.id === ids.labThorne)?.draftSelected).toBe(true);
+    expect(after.groups.tanks.find((item) => item.id === ids.labBrannTank)?.draftSelected).toBe(true);
+    expect(after.groups.healers.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
+    const roster = await rosterRepository.findByRunId(ids.lab);
+    expect(roster?.selectedSignupIds.sort()).toEqual([...selectedSignupIds].sort());
+  });
+
+  it("replaces the previous draft selection set", async () => {
+    const view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    await rosterService.saveDraftSelection(thorne, {
+      runId: ids.lab,
+      version: view.roster.version,
+      selectedSignupIds: [ids.labBrannTank, ids.labKaelEle],
+    });
+    const after = await rosterService.getRosterManagementView(thorne, ids.lab);
+    expect(after.groups.tanks.find((item) => item.id === ids.labThorne)?.draftSelected).toBe(false);
+    expect(after.groups.healers.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(false);
+    expect(after.groups.tanks.find((item) => item.id === ids.labBrannTank)?.draftSelected).toBe(true);
+    expect(after.groups.dps.find((item) => item.id === ids.labKaelEle)?.draftSelected).toBe(true);
+  });
+
+  it("rejects two booster offers from the same user in one batch", async () => {
+    const view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    await expectDomainCode(
+      rosterService.saveDraftSelection(thorne, {
+        runId: ids.lab,
+        version: view.roster.version,
+        selectedSignupIds: [ids.labKaelResto, ids.labKaelEle],
+      }),
+      "INVALID_ROSTER_SELECTION",
+    );
+  });
+
+  it("allows booster plus lootbuddy and multiple lootbuddies", async () => {
+    const secondLootbuddyId = "s8888888-8888-4888-8888-888888888889";
+    if (!(await signupRepository.findById(secondLootbuddyId))) {
+      await orm.RunSignup.create({
+        id: secondLootbuddyId,
+        runId: ids.lab,
+        userId: ids.aelira,
+        characterId: null,
+        participationType: "LOOTBUDDY",
+        role: null,
+        isBackup: false,
+        status: "PENDING",
+        lootbuddyClass: "MAGE",
+        lootbuddyMode: "LOOT_ONLY",
+        lootbuddyVerification: "NONE",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    const view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    await rosterService.saveDraftSelection(thorne, {
+      runId: ids.lab,
+      version: view.roster.version,
+      selectedSignupIds: [ids.labKaelResto, ids.labMira, secondLootbuddyId],
+    });
+    const after = await rosterService.getRosterManagementView(thorne, ids.lab);
+    expect(after.groups.healers.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
+    expect(after.groups.lootbuddies.find((item) => item.id === ids.labMira)?.draftSelected).toBe(true);
+    expect(after.groups.lootbuddies.find((item) => item.id === secondLootbuddyId)?.draftSelected).toBe(true);
+  });
+
+  it("rejects withdrawn and unapproved booster selections", async () => {
+    const view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    await expectDomainCode(
+      rosterService.saveDraftSelection(thorne, {
+        runId: ids.lab,
+        version: view.roster.version,
+        selectedSignupIds: [ids.labBrannHoly],
+      }),
+      "SIGNUP_WITHDRAWN",
+    );
+    await expectDomainCode(
+      rosterService.saveDraftSelection(thorne, {
+        runId: ids.lab,
+        version: view.roster.version,
+        selectedSignupIds: [ids.labSylva],
+      }),
+      "INVALID_ROSTER_SELECTION",
+    );
+  });
+
+  it("rejects a stale roster version on batch save", async () => {
+    const view = await rosterService.getRosterManagementView(thorne, ids.lab);
+    await rosterService.saveDraftSelection(thorne, {
+      runId: ids.lab,
+      version: view.roster.version,
+      selectedSignupIds: [ids.labThorne],
+    });
+    await expectDomainCode(
+      rosterService.saveDraftSelection(thorne, {
+        runId: ids.lab,
+        version: view.roster.version,
+        selectedSignupIds: [ids.labBrannTank],
+      }),
+      "ROSTER_ALREADY_CHANGED",
+    );
+  });
+
+  it("transitions OPEN to ROSTERING only when the saved selection is non-empty", async () => {
+    const run = await runService.createRun(thorne, {
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: "2030-06-15T18:00:00.000Z",
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
+    await runService.openRun(thorne, run.id);
+    const signup = await signupService.createBoosterSignup(kael, {
+      runId: run.id,
+      characterId: ids.kaelResto,
+      role: "HEALER",
+      isBackup: false,
+    });
+
+    const empty = await rosterService.getRosterManagementView(thorne, run.id);
+    expect(empty.run.status).toBe("OPEN");
+    await rosterService.saveDraftSelection(thorne, {
+      runId: run.id,
+      version: empty.roster.version,
+      selectedSignupIds: [],
+    });
+    expect((await rosterService.getRosterManagementView(thorne, run.id)).run.status).toBe("OPEN");
+
+    const openView = await rosterService.getRosterManagementView(thorne, run.id);
+    await rosterService.saveDraftSelection(thorne, {
+      runId: run.id,
+      version: openView.roster.version,
+      selectedSignupIds: [signup.id],
+    });
+    expect((await rosterService.getRosterManagementView(thorne, run.id)).run.status).toBe("ROSTERING");
   });
 });
 

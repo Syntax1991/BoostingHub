@@ -367,18 +367,18 @@ async function publishedRunWithRoster() {
 describe("start run authorization and preconditions", () => {
   it("rejects USER, other RAID_LEAD, and non-published runs", async () => {
     const { runId } = await publishedRunWithRoster();
-    await expectDomainCode(runService.startRun(user, runId), "RUN_NOT_MANAGEABLE");
-    await expectDomainCode(runService.startRun(otherLead, runId), "RUN_NOT_MANAGEABLE");
+    await expectDomainCode(runService.startRun(user, { runId: runId }), "RUN_NOT_MANAGEABLE");
+    await expectDomainCode(runService.startRun(otherLead, { runId: runId }), "RUN_NOT_MANAGEABLE");
 
     const openId = await createDraft(lead, { title: "Attendance still open" });
     await runService.openRun(lead, openId);
-    await expectDomainCode(runService.startRun(lead, openId), "RUN_NOT_PUBLISHED");
+    await expectDomainCode(runService.startRun(lead, { runId: openId }), "RUN_NOT_PUBLISHED");
   });
 
   it("lets the assigned RAID_LEAD start a published run with selected participants", async () => {
     const { runId, booster, lootbuddy, backup, pending } = await publishedRunWithRoster();
     await runRepository.updateFields(runId, { signupsOpen: true });
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const run = await runRepository.findById(runId);
     expect(run?.status).toBe("IN_PROGRESS");
     expect(run?.signupsOpen).toBe(false);
@@ -400,9 +400,9 @@ describe("start run authorization and preconditions", () => {
 
   it("lets ADMIN start and rejects a second start", async () => {
     const { runId } = await publishedRunWithRoster();
-    await runService.startRun(admin, runId);
+    await runService.startRun(admin, { runId: runId });
     expect((await runRepository.findById(runId))?.status).toBe("IN_PROGRESS");
-    await expectDomainCode(runService.startRun(admin, runId), "RUN_ALREADY_STARTED");
+    await expectDomainCode(runService.startRun(admin, { runId: runId }), "RUN_ALREADY_STARTED");
     const manager = await attendanceService.getManagerAttendance(admin, runId);
     expect(manager.rows).toHaveLength(3);
   });
@@ -417,14 +417,25 @@ describe("start run authorization and preconditions", () => {
       state: "PUBLISHED",
       updatedAt: new Date().toISOString(),
     });
-    await expectDomainCode(runService.startRun(lead, runId), "RUN_CANNOT_START");
+    await expectDomainCode(runService.startRun(lead, { runId: runId }), "RUN_CANNOT_START");
+  });
+
+  it("creates an immutable RunStartSnapshot with startedAt and startedBy", async () => {
+    const { runId } = await publishedRunWithRoster();
+    await runService.startRun(lead, { runId });
+    const snapshot = await orm.RunStartSnapshot.where({ runId }).include("startedBy").first();
+    expect(snapshot).toBeTruthy();
+    expect((snapshot as { startedById: string }).startedById).toBe(lead.id);
+    expect((snapshot as { startedAt: string }).startedAt).toBeTruthy();
+    expect((await runRepository.findById(runId))?.status).toBe("IN_PROGRESS");
+    expect((await runRepository.findById(runId))?.signupsOpen).toBe(false);
   });
 });
 
 describe("attendance mutation and bulk present", () => {
   it("lets assigned RAID_LEAD and ADMIN update statuses and rejects USER and other leads", async () => {
     const { runId } = await publishedRunWithRoster();
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const target = rows[0];
 
@@ -455,7 +466,7 @@ describe("attendance mutation and bulk present", () => {
 
   it("persists every supported attendance status", async () => {
     const { runId } = await publishedRunWithRoster();
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const statuses: AttendanceStatus[] = ["PRESENT", "LATE", "LEFT_EARLY", "NO_SHOW", "EXCUSED", "STANDBY"];
     await attendanceService.setStatus(lead, { attendanceId: rows[0].id, status: statuses[0] });
@@ -509,7 +520,7 @@ describe("attendance mutation and bulk present", () => {
       role: null,
     });
     await selectAndPublish(lead, runId, [a, b, c, d, e]);
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const byName = Object.fromEntries(rows.map((row) => [row.characterName, row]));
     await attendanceService.setStatus(lead, { attendanceId: byName.Atbrann.id, status: "NO_SHOW" });
@@ -529,7 +540,7 @@ describe("attendance mutation and bulk present", () => {
 
   it("rejects attendance mutation outside IN_PROGRESS", async () => {
     const { runId } = await publishedRunWithRoster();
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     for (const row of rows) {
       await attendanceService.setStatus(lead, { attendanceId: row.id, status: "PRESENT" });
@@ -545,7 +556,7 @@ describe("attendance mutation and bulk present", () => {
 describe("complete run", () => {
   it("blocks completion while unmarked attendance remains and allows it when fully marked", async () => {
     const { runId } = await publishedRunWithRoster();
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     await expectDomainCode(runService.completeRun(lead, runId), "ATTENDANCE_INCOMPLETE");
     await expectDomainCode(runService.completeRun(user, runId), "RUN_NOT_MANAGEABLE");
     await expectDomainCode(runService.completeRun(otherLead, runId), "RUN_NOT_MANAGEABLE");
@@ -565,7 +576,7 @@ describe("complete run", () => {
 describe("roster freeze after start", () => {
   it("rejects roster mutation and republish on IN_PROGRESS and COMPLETED", async () => {
     const { runId, pending } = await publishedRunWithRoster();
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const inProgress = await rosterService.getRosterManagementView(lead, runId);
     await expectDomainCode(
       rosterService.setDraftSelection(lead, {
@@ -613,7 +624,7 @@ describe("roster freeze after start", () => {
 describe("user attendance data protection", () => {
   it("gives USER own attendance without manager list, notes, or mutation capabilities", async () => {
     const { runId } = await publishedRunWithRoster();
-    await runService.startRun(lead, runId);
+    await runService.startRun(lead, { runId: runId });
     const rows = (await attendanceService.getManagerAttendance(lead, runId)).rows;
     const ownRow = rows.find((row) => row.userName === "Attendance User");
     expect(ownRow).toBeTruthy();
