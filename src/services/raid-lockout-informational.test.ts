@@ -11,6 +11,7 @@ import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { freezeSystemTime, restoreSystemTime } from "@/test/time";
 
 /**
  * Raid lockouts (raid saves) are informational only — a Character already
@@ -320,52 +321,64 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
   });
 
   it("EU Monday/Tuesday Runs find HC lockouts persisted under the Wednesday regional reset start", async () => {
-    const monday = await createOpenRun("2026-09-14T00:00:00.000Z"); // Mon 02:00 Berlin
-    const tuesday = await createOpenRun("2026-09-15T01:00:00.000Z"); // Tue 03:00 Berlin VIP-style
-    const { resetIdentifier } = await markSaved(monday, saved, 7, false);
-    expect(resetIdentifier).toBe("2026-W37");
-    // Same regional key for Tuesday — reusing markSaved would recreate the same unique row.
-    await markSaved(tuesday, saved, 7, false);
+    // Freeze Date only: keep the Wed-reset geometry (Mon/Tue → 2026-W37) while
+    // still satisfying createRun's "schedule not in the past" rule.
+    freezeSystemTime("2026-09-10T12:00:00.000Z");
+    try {
+      const monday = await createOpenRun("2026-09-14T00:00:00.000Z"); // Mon 02:00 Berlin
+      const tuesday = await createOpenRun("2026-09-15T01:00:00.000Z"); // Tue 03:00 Berlin VIP-style
+      const { resetIdentifier } = await markSaved(monday, saved, 7, false);
+      expect(resetIdentifier).toBe("2026-W37");
+      // Same regional key for Tuesday — reusing markSaved would recreate the same unique row.
+      await markSaved(tuesday, saved, 7, false);
 
-    const mondayOptions = await signupService.getSignupOptions(target, monday);
-    expect(mondayOptions.booster.eligible.find((item) => item.characterId === saved)?.raidSave).toEqual({
-      raidId,
-      difficulty: "HEROIC",
-      resetIdentifier: "2026-W37",
-      bossesDefeated: 7,
-      totalBossCount: 8,
-      isComplete: false,
-    });
+      const mondayOptions = await signupService.getSignupOptions(target, monday);
+      expect(mondayOptions.booster.eligible.find((item) => item.characterId === saved)?.raidSave).toEqual({
+        raidId,
+        difficulty: "HEROIC",
+        resetIdentifier: "2026-W37",
+        bossesDefeated: 7,
+        totalBossCount: 8,
+        isComplete: false,
+      });
 
-    await signupService.setCharacterOffers(target, {
-      runId: tuesday,
-      offers: [{ characterId: saved, role: "DPS" }],
-    });
-    const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
-    const candidate = tuesdayView.groups.dps.find((item) => item.character?.id === saved);
-    expect(candidate?.raidSave?.resetIdentifier).toBe("2026-W37");
-    expect(candidate?.raidSave?.bossesDefeated).toBe(7);
+      await signupService.setCharacterOffers(target, {
+        runId: tuesday,
+        offers: [{ characterId: saved, role: "DPS" }],
+      });
+      const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
+      const candidate = tuesdayView.groups.dps.find((item) => item.character?.id === saved);
+      expect(candidate?.raidSave?.resetIdentifier).toBe("2026-W37");
+      expect(candidate?.raidSave?.bossesDefeated).toBe(7);
+    } finally {
+      restoreSystemTime();
+    }
   });
 
   it("verified HC 0/8 surfaces on signup options and roster (not Unknown)", async () => {
-    const runId = await createOpenRun("2026-09-14T00:00:00.000Z");
-    await markSaved(runId, saved, 0, false);
+    freezeSystemTime("2026-09-10T12:00:00.000Z");
+    try {
+      const runId = await createOpenRun("2026-09-14T00:00:00.000Z");
+      await markSaved(runId, saved, 0, false);
 
-    const options = await signupService.getSignupOptions(target, runId);
-    expect(options.booster.eligible.find((item) => item.characterId === saved)?.raidSave?.bossesDefeated).toBe(0);
+      const options = await signupService.getSignupOptions(target, runId);
+      expect(options.booster.eligible.find((item) => item.characterId === saved)?.raidSave?.bossesDefeated).toBe(0);
 
-    await signupService.setCharacterOffers(target, {
-      runId,
-      offers: [{ characterId: saved, role: "DPS" }],
-    });
-    const view = await rosterService.getRosterManagementView(lead, runId);
-    expect(view.groups.dps.find((item) => item.character?.id === saved)?.raidSave).toEqual({
-      raidId,
-      difficulty: "HEROIC",
-      resetIdentifier: "2026-W37",
-      bossesDefeated: 0,
-      totalBossCount: 8,
-      isComplete: false,
-    });
+      await signupService.setCharacterOffers(target, {
+        runId,
+        offers: [{ characterId: saved, role: "DPS" }],
+      });
+      const view = await rosterService.getRosterManagementView(lead, runId);
+      expect(view.groups.dps.find((item) => item.character?.id === saved)?.raidSave).toEqual({
+        raidId,
+        difficulty: "HEROIC",
+        resetIdentifier: "2026-W37",
+        bossesDefeated: 0,
+        totalBossCount: 8,
+        isComplete: false,
+      });
+    } finally {
+      restoreSystemTime();
+    }
   });
 });

@@ -11,6 +11,7 @@ import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { ParticipationType, CharacterRole } from "@/models/enums";
+import { currentWeekFutureIso } from "@/test/time";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -71,14 +72,10 @@ async function deleteIfPresent(table: string, id: string) {
   }
 }
 
-// Small default offset: guaranteed to classify CURRENT or NEXT regardless of
-// where "now" falls in the current raid-ID week (see wow-run-week.ts — the
-// minimum reach into NEXT from any point in CURRENT is always > 7 days), so
-// these fixtures stay eligible for first-channel provisioning no matter when
-// the suite actually runs. Explicit larger offsets used elsewhere in this
-// file are all reschedules of a Run that already has a posted message/
-// channel, which is exempt from the week-eligibility gate (see
-// discord-sync.service.ts's `eligibleForFirstProvisioning`).
+// Small default offset: usually CURRENT or NEXT (both eligible for first
+// channel provisioning). Near the end of a raid-ID week, +2 days can land in
+// NEXT — that is fine for most cases here. Tests that assert CURRENT must use
+// `currentWeekFutureIso()` instead.
 function futureIso(days = 2) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
@@ -640,13 +637,14 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
 describe("discordSyncService — archive category movement", () => {
   it("flags targetBucket ARCHIVE after Archive and reverts to schedule-derived CURRENT after Restore, with the channel identity untouched", async () => {
+    const scheduleInCurrent = currentWeekFutureIso();
     const archiveRunId = await runService
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
       lootType: "UNSAVED",
       plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
+        scheduledStartAt: scheduleInCurrent,
         desiredTankCount: 1,
         desiredHealerCount: 1,
         desiredDpsCount: 2,
@@ -677,7 +675,7 @@ describe("discordSyncService — archive category movement", () => {
     work = await discordSyncService.listSyncWork();
     const restored = work.signups.find((entry) => entry.runId === archiveRunId);
     // Restore is never "back to the one active category" — placement is
-    // re-derived from the schedule, and this Run's futureIso(2) schedule is CURRENT.
+    // re-derived from the schedule, and this Run is deliberately CURRENT-week.
     expect(restored?.targetBucket).toBe("CURRENT");
     expect(restored?.existingRunChannelId).toBe("archive-chan-1");
   });
@@ -707,14 +705,14 @@ describe("discordSyncService — archive category movement", () => {
 });
 
 describe("discordSyncService.listSyncWork — channel reconciliation is independent of message state", () => {
-  async function createOpenRunWithChannel(channelId: string) {
+  async function createOpenRunWithChannel(channelId: string, scheduledStartAt = futureIso()) {
     const id = await runService
       .createRun(lead, {
         raidId,
         difficulty: "HEROIC",
         lootType: "UNSAVED",
         plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
+        scheduledStartAt,
         desiredTankCount: 1,
         desiredHealerCount: 1,
         desiredDpsCount: 2,
@@ -751,7 +749,7 @@ describe("discordSyncService.listSyncWork — channel reconciliation is independ
   });
 
   it("RESTORE: the channels[] item reflects schedule-derived CURRENT immediately after Restore, independent of message settlement", async () => {
-    const id = await createOpenRunWithChannel("restore-chan-1");
+    const id = await createOpenRunWithChannel("restore-chan-1", currentWeekFutureIso());
     await discordSyncService.recordSignupPost({ runId: id, channelId: "restore-chan-1", messageId: "restore-msg-1" });
     await runRepository.updateFields(id, { status: "CANCELLED" });
     await runService.archiveRun(lead, id);
