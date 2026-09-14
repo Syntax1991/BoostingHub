@@ -118,6 +118,7 @@ async function createSignup(input: {
     participationType: input.participationType,
     isBackup: false,
     status: "PENDING",
+    publishedRole: null,
     lootbuddyMode: null,
     lootbuddyVerification: null,
     createdAt: now,

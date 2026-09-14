@@ -28,6 +28,8 @@ export type SignupOnRun = {
   participationType: ParticipationType;
   isBackup: boolean;
   offeredRoles: CharacterRole[];
+  /** Live published BOOSTER role; null unless SELECTED booster. */
+  publishedRole: CharacterRole | null;
 };
 
 export type RosterSelectionOnRun = {
@@ -113,6 +115,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
         participationType: mapParticipation(signup.participationType),
         isBackup: asBoolean(signup.isBackup),
         offeredRoles: mapOfferedRoles(signup.offeredRoles),
+        publishedRole: signup.publishedRole == null ? null : mapCharacterRole(signup.publishedRole),
       };
     }),
     roster: roster

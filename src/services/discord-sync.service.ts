@@ -76,7 +76,8 @@ export type SignupEmbedData = {
   /**
    * Per-role volunteered (signed) vs authoritative roster (picked) counts.
    * A multi-role Character increments signed once per offered role, but picked
-   * only under selectedRole.
+   * only under the authoritative role for the Run's phase (draft selectedRole
+   * while OPEN/ROSTERING; publishedRole once PUBLISHED+).
    */
   roleStatus: {
     tank: SignupEmbedRoleStatus;
@@ -261,7 +262,7 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
 
 /**
  * OPEN / ROSTERING (and pre-publish): picked = saved draft selections.
- * PUBLISHED+: picked = live SELECTED signups (replacement drafts stay private).
+ * PUBLISHED+: picked = live SELECTED signups + publishedRole (replacement drafts stay private).
  */
 function buildSignupRoleStatus(
   run: RunListRecord,
@@ -286,10 +287,9 @@ function buildSignupRoleStatus(
   if (usePublishedPicks) {
     for (const signup of run.signups) {
       if (signup.status !== "SELECTED") continue;
-      const entry = run.roster?.selections.find((selection) => selection.signupId === signup.id);
       picks.push({
         participationType: signup.participationType,
-        selectedRole: entry?.selectedRole ?? null,
+        selectedRole: signup.publishedRole,
       });
     }
   } else {
@@ -371,9 +371,9 @@ function toMember(row: RosterSignupRow): RosterEmbedMember {
   };
 }
 
-/** Published projections group by the Raid Lead's assignment — a hybrid appears in exactly one section. */
+/** Published projections group by the snapshotted publishedRole — a hybrid appears in exactly one section. */
 function boosterByRole(selected: RosterSignupRow[], role: CharacterRole): RosterSignupRow[] {
-  return selected.filter((row) => row.participationType === "BOOSTER" && row.selectedRole === role);
+  return selected.filter((row) => row.participationType === "BOOSTER" && row.publishedRole === role);
 }
 
 function shortSaveLabel(kind: ReturnType<typeof formatTargetRaidLockoutLabel>["kind"]): string {
@@ -439,7 +439,7 @@ function toStartMember(
     classLabel,
     saveLabel,
     participationType: row.participationType,
-    selectedRole: row.selectedRole,
+    selectedRole: row.publishedRole,
   };
 }
 

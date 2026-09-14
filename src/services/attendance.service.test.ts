@@ -159,6 +159,7 @@ async function createSignup(input: {
     participationType: input.participationType,
     isBackup: input.isBackup ?? false,
     status: input.status ?? "PENDING",
+    publishedRole: null,
     lootbuddyMode: input.participationType === "LOOTBUDDY" ? "LOOT_ONLY" : null,
     lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "ACCESS" : null,
     createdAt: now,
@@ -640,6 +641,60 @@ describe("roster freeze after start", () => {
       }),
       "INVALID_ROSTER_SELECTION",
     );
+  });
+
+  it("Start snapshots publishedRole even when the replacement draft role differs", async () => {
+    const runId = await createDraft(lead, { title: "Attendance published role snapshot" });
+    await runService.openRun(lead, runId);
+    const shamanChar = characters.user;
+    // Offer HEALER + DPS on the existing user character (seeded as DPS-capable for attendance tests).
+    const signupId = await createSignup({
+      runId,
+      userId: ids.user,
+      characterId: shamanChar,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId,
+      role: "DPS",
+      createdAt: new Date().toISOString(),
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "HEALER" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, {
+      runId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.preparePublishedRosterForEditing(lead, {
+      runId,
+      version: view.roster.version,
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "DPS" }],
+    });
+
+    const preview = await runDetailService.getRunDetail(lead, runId);
+    expect(preview.finalSetupPreview?.groups.healers.some((m) => m.participationType === "BOOSTER")).toBe(true);
+    expect(preview.finalSetupPreview?.groups.dps.some((m) => m.participationType === "BOOSTER")).toBe(false);
+
+    await runService.startRun(lead, { runId });
+    const manager = await attendanceService.getManagerAttendance(lead, runId);
+    expect(manager.rows).toHaveLength(1);
+    expect(manager.rows[0]?.selectedRole).toBe("HEALER");
   });
 });
 

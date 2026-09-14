@@ -62,8 +62,10 @@ export type RosterSignupRow = {
   participationType: ParticipationType;
   /** Every role this BOOSTER offer volunteers for, TANK → HEALER → DPS. Always empty for LOOTBUDDY. */
   offeredRoles: CharacterRole[];
-  /** The Raid Lead's assignment on the draft roster entry — null unless draft-selected as a BOOSTER. */
+  /** Mutable saved draft assignment on the selected RunRosterEntry — null unless draft-selected as a BOOSTER. */
   selectedRole: CharacterRole | null;
+  /** Live published BOOSTER role (null unless status is SELECTED and participation is BOOSTER). */
+  publishedRole: CharacterRole | null;
   isBackup: boolean;
   /** Own Class snapshot for a characterless Lootbuddy row; null for BOOSTER and for legacy Character-backed Lootbuddy rows (fall back to character.wowClass for those). */
   lootbuddyClass: WowClass | null;
@@ -134,6 +136,7 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
     offeredRoles: mapOfferedRoles(row.offeredRoles),
     selectedRole:
       selectedEntry?.selectedRole == null ? null : mapCharacterRole(selectedEntry.selectedRole),
+    publishedRole: row.publishedRole == null ? null : mapCharacterRole(row.publishedRole),
     isBackup: asBoolean(row.isBackup),
     lootbuddyClass: row.lootbuddyClass == null ? null : mapWowClass(row.lootbuddyClass),
     lootbuddyMode: row.lootbuddyMode == null ? null : mapLootbuddyMode(row.lootbuddyMode),
@@ -480,15 +483,16 @@ export const rosterRepository = {
   },
 
   /**
-   * Publication is one transaction: signup statuses, run status, roster metadata.
-   * A thrown DomainError rolls the whole write back.
+   * Publication is one transaction: signup statuses + publishedRole snapshot,
+   * run status, and roster metadata. A thrown DomainError rolls the whole write back.
    */
   async publishAtomic(input: {
     runId: string;
     rosterId: string;
     expectedVersion: number;
-    selectedSignupIds: string[];
-    /** Characters behind selectedSignupIds — re-verified for cross-Run reservation immediately before publish. */
+    /** Draft selections being published — each BOOSTER carries its assigned role. */
+    selectedSelections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+    /** Characters behind selectedSelections — re-verified for cross-Run reservation immediately before publish. */
     selectedCharacterIds: string[];
     scheduledStartAt: string;
     notSelectedSignupIds: string[];
@@ -528,11 +532,17 @@ export const rosterRepository = {
       }
 
       const now = new Date().toISOString();
-      for (const signupId of input.selectedSignupIds) {
-        await txOrm.RunSignup.where({ id: signupId }).update({ status: "SELECTED" });
+      for (const selection of input.selectedSelections) {
+        await txOrm.RunSignup.where({ id: selection.signupId }).update({
+          status: "SELECTED",
+          publishedRole: selection.selectedRole,
+        });
       }
       for (const signupId of input.notSelectedSignupIds) {
-        await txOrm.RunSignup.where({ id: signupId }).update({ status: "NOT_SELECTED" });
+        await txOrm.RunSignup.where({ id: signupId }).update({
+          status: "NOT_SELECTED",
+          publishedRole: null,
+        });
       }
       if (input.fromStatus === "OPEN") {
         await txOrm.Run.where({ id: input.runId }).update({ status: "ROSTERING" });

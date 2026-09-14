@@ -272,7 +272,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] });
 
     const view = await rosterService.getRosterManagementView(lead, runA);
-    const candidate = view.groups.dps.find((item) => item.character?.id === saved);
+    const candidate = view.groups.boosters.find((item) => item.character?.id === saved);
     expect(candidate).toBeTruthy();
     expect(candidate?.raidSave?.bossesDefeated).toBe(8);
     expect(candidate?.issue).toBeNull();
@@ -305,7 +305,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     // Reserve on runA via draft selection.
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] });
     const viewA = await rosterService.getRosterManagementView(lead, runA);
-    const signupA = viewA.groups.dps.find((item) => item.character?.id === saved)!;
+    const signupA = viewA.groups.boosters.find((item) => item.character?.id === saved)!;
     await rosterService.setDraftSelection(lead, { runId: runA, signupId: signupA.id, selected: true, version: viewA.roster.version });
 
     // Now runB must block on the cross-run reservation reason, not lockout —
@@ -347,7 +347,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
         offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
       });
       const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
-      const candidate = tuesdayView.groups.dps.find((item) => item.character?.id === saved);
+      const candidate = tuesdayView.groups.boosters.find((item) => item.character?.id === saved);
       expect(candidate?.raidSave?.resetIdentifier).toBe("2026-W37");
       expect(candidate?.raidSave?.bossesDefeated).toBe(7);
     } finally {
@@ -369,7 +369,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
         offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
       });
       const view = await rosterService.getRosterManagementView(lead, runId);
-      expect(view.groups.dps.find((item) => item.character?.id === saved)?.raidSave).toEqual({
+      expect(view.groups.boosters.find((item) => item.character?.id === saved)?.raidSave).toEqual({
         raidId,
         difficulty: "HEROIC",
         resetIdentifier: "2026-W37",

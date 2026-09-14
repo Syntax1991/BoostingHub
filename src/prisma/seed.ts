@@ -1432,6 +1432,11 @@ async function seed() {
       participationType: signup.participationType,
       isBackup: signup.isBackup,
       status: signup.status,
+      // Live published assignment — only SELECTED BOOSTERs carry a snapshotted role.
+      publishedRole:
+        signup.status === "SELECTED" && signup.participationType === "BOOSTER" && signup.role
+          ? signup.role
+          : null,
       lootbuddyClass: "lootbuddyClass" in signup ? signup.lootbuddyClass : null,
       lootbuddyMode: "lootbuddyMode" in signup ? signup.lootbuddyMode : null,
       lootbuddyVerification: "lootbuddyVerification" in signup ? signup.lootbuddyVerification : null,
@@ -1473,6 +1478,7 @@ async function seed() {
     const { role, ...signupRow } = row;
     await orm.RunSignup.create({
       ...signupRow,
+      publishedRole: role,
       lootbuddyClass: null,
       lootbuddyMode: null,
       lootbuddyVerification: null,
@@ -1531,6 +1537,7 @@ async function seed() {
           participationType: "BOOSTER",
           isBackup: false,
           status: fillerStatus,
+          publishedRole: null,
           lootbuddyClass: null,
           lootbuddyMode: null,
           lootbuddyVerification: null,
@@ -1560,6 +1567,7 @@ async function seed() {
         participationType: "LOOTBUDDY",
         isBackup: false,
         status: fillerStatus,
+        publishedRole: null,
         lootbuddyClass: WOW_CLASSES[i % WOW_CLASSES.length]!,
         lootbuddyMode: "LOOT_ONLY",
         lootbuddyVerification: "NONE",

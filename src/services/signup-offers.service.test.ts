@@ -802,6 +802,7 @@ describe("signupService.setCharacterOffers — per-Character role choice, restor
       participationType: "BOOSTER",
       isBackup: false,
       status: "WITHDRAWN",
+      publishedRole: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

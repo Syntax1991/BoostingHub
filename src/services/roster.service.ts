@@ -33,14 +33,6 @@ type InspectedSignup = RosterSignupRow & {
   issue: string | null;
 };
 
-/** One rendered card in one role bucket. See `boosterCardsFor` for why a signup can produce several. */
-type RosterSignupCard = InspectedSignup & {
-  /** The bucket this card was rendered into; null for the lootbuddy bucket. */
-  groupRole: CharacterRole | null;
-  /** True on the single selectable card for this signup — mirror cards in other buckets are read-only. */
-  isCanonicalCard: boolean;
-};
-
 /** Prefer character name; characterless Lootbuddy falls back to Class label. */
 function participationLabel(input: {
   character: { name: string; realm: string } | null;
@@ -144,9 +136,10 @@ function inspectSignup(
 }
 
 /**
- * Composition, validation, and every published projection count the Raid
- * Lead's assignment (`selectedRole`) — never the volunteered `offeredRoles`,
- * which would double-count a hybrid across two buckets.
+ * Composition and draft validation count the Raid Lead's draft assignment
+ * (`selectedRole`) — never the volunteered `offeredRoles`, which would
+ * double-count a hybrid across two buckets. Published projections use
+ * `publishedRole` instead (see getPublishedRosterView).
  */
 function asMember(row: InspectedSignup) {
   return {
@@ -160,31 +153,6 @@ function asMember(row: InspectedSignup) {
     characterActive: row.characterActive,
     boosterApproved: row.boosterApproved,
   };
-}
-
-/**
- * The bucket that owns a multi-role offer's one selectable card. Once the
- * Raid Lead has assigned a role the card lives there; before that it lives
- * under the offer's first volunteered role (TANK → HEALER → DPS).
- */
-function canonicalGroupRole(row: InspectedSignup): CharacterRole | null {
-  return row.selectedRole ?? row.offeredRoles[0] ?? null;
-}
-
-/**
- * Discovery grouping: a hybrid offering Healer and DPS is visible under both
- * role filters, but exactly one of those cards is selectable — the canonical
- * one, keyed by signupId — so selecting a hybrid can never create two roster
- * slots for one offer.
- */
-function boosterCardsFor(candidates: InspectedSignup[], role: CharacterRole): RosterSignupCard[] {
-  return candidates
-    .filter((item) => item.participationType === "BOOSTER" && item.offeredRoles.includes(role))
-    .map((item) => ({
-      ...item,
-      groupRole: role,
-      isCanonicalCard: canonicalGroupRole(item) === role,
-    }));
 }
 
 /** Maps a draft-selected signup into the pure Class Buff Checker participant shape. */
@@ -207,8 +175,9 @@ function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
 /**
  * Roster orchestration. Draft selection is persisted on RunRosterEntry and is
  * not RunSignup.status. Publish copies the draft into SELECTED / NOT_SELECTED
- * in one transaction and re-checks BoosterAccess plus lockouts because those
- * can change after signup.
+ * and snapshots each BOOSTER's draft selectedRole onto RunSignup.publishedRole
+ * in one transaction. Replacement-draft edits never mutate publishedRole until
+ * Publish runs again.
  */
 export const rosterService = {
   async listManagedRuns(user: AuthenticatedUser) {
@@ -241,8 +210,9 @@ export const rosterService = {
   },
 
   /**
-   * Participant-safe published roster. Uses live SELECTED signup rows, never draft
-   * selection. Does not call ensure(), so a USER view cannot create a roster row.
+   * Participant-safe published roster. Uses live SELECTED signup rows and their
+   * publishedRole snapshot — never mutable draft selection.
+   * Does not call ensure(), so a USER view cannot create a roster row.
    */
   async getPublishedRosterView(runId: string) {
     const roster = await rosterRepository.findByRunId(runId);
@@ -261,7 +231,7 @@ export const rosterService = {
           characterName: signup.character?.name ?? (wowClass ? CLASS_LABELS[wowClass] : "Unknown character"),
           characterRealm: signup.character?.realm ?? "",
           wowClass,
-          selectedRole: signup.selectedRole,
+          selectedRole: signup.publishedRole,
           participationType: signup.participationType,
           isBackup: signup.isBackup,
         };
@@ -349,12 +319,9 @@ export const rosterService = {
       raidBuffCoverage,
       validation,
       groups: {
-        tanks: boosterCardsFor(candidates, "TANK"),
-        healers: boosterCardsFor(candidates, "HEALER"),
-        dps: boosterCardsFor(candidates, "DPS"),
-        lootbuddies: candidates
-          .filter((item) => item.participationType === "LOOTBUDDY")
-          .map((item): RosterSignupCard => ({ ...item, groupRole: null, isCanonicalCard: true })),
+        /** One card per BOOSTER signup — role discovery uses the client filter on offeredRoles. */
+        boosters: candidates.filter((item) => item.participationType === "BOOSTER"),
+        lootbuddies: candidates.filter((item) => item.participationType === "LOOTBUDDY"),
       },
       summary: {
         tanks: composition.tanks.selected,
@@ -606,9 +573,10 @@ export const rosterService = {
       return;
     }
     const signups = await rosterRepository.listSignups(input.runId);
-    // Seeds the replacement draft from the live published selection. Each
-    // slot keeps the role it was published with; a published slot predating
-    // assigned roles falls back to its only offered role, if it has one.
+    // Seeds the replacement draft from the live published selection and its
+    // publishedRole snapshot — never from a previously mutated draft role.
+    // A published slot predating assigned roles falls back only when the offer
+    // has exactly one volunteered role.
     const selections: RosterSelection[] = signups
       .filter((signup) => signup.status === "SELECTED")
       .map((signup) => ({
@@ -616,7 +584,8 @@ export const rosterService = {
         selectedRole:
           signup.participationType !== "BOOSTER"
             ? null
-            : (signup.selectedRole ?? (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null)),
+            : (signup.publishedRole ??
+              (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null)),
       }));
     await rosterRepository.replaceSelectedSignupIds(view.roster.id, input.version, selections);
   },
@@ -734,11 +703,18 @@ export const rosterService = {
       nextStatus = "PUBLISHED";
     }
 
+    const selectedSelections = selected.map((item) => ({
+      signupId: item.id,
+      // LOOTBUDDY slots publish with null publishedRole; BOOSTER slots carry
+      // the draft assignment (already validated by resolveSelectedRole / validateRosterDraft).
+      selectedRole: item.participationType === "BOOSTER" ? item.selectedRole : null,
+    }));
+
     await rosterRepository.publishAtomic({
       runId: run.id,
       rosterId: roster.id,
       expectedVersion: input.version,
-      selectedSignupIds: selectedIds,
+      selectedSelections,
       selectedCharacterIds,
       scheduledStartAt: run.scheduledStartAt,
       notSelectedSignupIds: notSelectedIds,
@@ -753,5 +729,5 @@ export const rosterService = {
 
 export type { RosterIssue };
 export type RosterManagementView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
-export type RosterSignupView = RosterManagementView["groups"]["tanks"][number];
+export type RosterSignupView = RosterManagementView["groups"]["boosters"][number];
 export type { ParticipationType, CharacterRole, SignupStatus };

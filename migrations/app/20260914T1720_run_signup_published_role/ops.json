@@ -1,0 +1,120 @@
+[
+  {
+    "id": "column.public.run_signup.publishedRole",
+    "label": "Add column \"publishedRole\" to \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "publishedRole",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"publishedRole\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "publishedRole"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"publishedRole\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD COLUMN \"publishedRole\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"publishedRole\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "publishedRole"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_signup.run_signup_publishedRole_check_17f7e8a4",
+    "label": "Add check constraint \"run_signup_publishedRole_check_17f7e8a4\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_publishedRole_check_17f7e8a4",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_publishedRole_check_17f7e8a4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_publishedRole_check_17f7e8a4",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_signup_publishedRole_check_17f7e8a4\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD CONSTRAINT \"run_signup_publishedRole_check_17f7e8a4\" CHECK (\"publishedRole\" IN ('TANK', 'HEALER', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_publishedRole_check_17f7e8a4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_publishedRole_check_17f7e8a4",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-run-signup-published-role",
+    "label": "Data transform: backfill RunSignup.publishedRole from selected draft / sole offer",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow publishedRole backfill (idempotent update)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Copy selected RunRosterEntry.selectedRole onto SELECTED BOOSTER signups",
+        "sql": "UPDATE \"run_signup\" AS s\nSET \"publishedRole\" = e.\"selectedRole\",\n    \"updatedAt\" = now()\nFROM \"run_roster_entry\" AS e\nWHERE e.\"signupId\" = s.\"id\"\n  AND e.\"selected\" = true\n  AND s.\"status\" = 'SELECTED'\n  AND s.\"participationType\" = 'BOOSTER'\n  AND e.\"selectedRole\" IS NOT NULL\n  AND s.\"publishedRole\" IS NULL",
+        "params": []
+      },
+      {
+        "description": "Infer publishedRole from a sole offered role when no selectedRole exists",
+        "sql": "UPDATE \"run_signup\" AS s\nSET \"publishedRole\" = sole.\"role\",\n    \"updatedAt\" = now()\nFROM (\n  SELECT r.\"signupId\", MIN(r.\"role\") AS \"role\"\n  FROM \"run_signup_role\" r\n  GROUP BY r.\"signupId\"\n  HAVING COUNT(*) = 1\n) AS sole\nWHERE sole.\"signupId\" = s.\"id\"\n  AND s.\"status\" = 'SELECTED'\n  AND s.\"participationType\" = 'BOOSTER'\n  AND s.\"publishedRole\" IS NULL",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every SELECTED BOOSTER with a resolvable role has publishedRole (selectedRole or sole offer)",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1\n  FROM \"run_signup\" s\n  WHERE s.\"status\" = 'SELECTED'\n    AND s.\"participationType\" = 'BOOSTER'\n    AND s.\"publishedRole\" IS NULL\n    AND (\n      EXISTS (\n        SELECT 1 FROM \"run_roster_entry\" e\n        WHERE e.\"signupId\" = s.\"id\"\n          AND e.\"selected\" = true\n          AND e.\"selectedRole\" IS NOT NULL\n      )\n      OR (\n        SELECT COUNT(*) FROM \"run_signup_role\" r WHERE r.\"signupId\" = s.\"id\"\n      ) = 1\n    )\n) AS ok",
+        "params": []
+      }
+    ]
+  }
+]

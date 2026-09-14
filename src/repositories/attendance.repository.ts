@@ -11,7 +11,6 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { CLASS_LABELS } from "@/lib/labels";
-import { mapOfferedRoles } from "@/repositories/signup.repository";
 import type {
   AttendanceStatus,
   CharacterRole,
@@ -76,7 +75,15 @@ function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
       : signup.lootbuddyClass == null
         ? null
         : mapWowClass(signup.lootbuddyClass),
-    selectedRole: entry.selectedRole == null ? null : mapCharacterRole(entry.selectedRole),
+    selectedRole:
+      // Prefer the published snapshot when present so Start/Attendance never
+      // leak a later replacement-draft mutation. After Start, publishedRole is
+      // frozen (no republish) and the roster entry was synced from it.
+      signup.publishedRole == null
+        ? entry.selectedRole == null
+          ? null
+          : mapCharacterRole(entry.selectedRole)
+        : mapCharacterRole(signup.publishedRole),
     participationType: mapParticipation(signup.participationType),
     isBackup: asBoolean(signup.isBackup),
   };
@@ -186,22 +193,39 @@ export const attendanceRepository = {
       for (const signup of selected) {
         const signupRow = signup as Record<string, unknown>;
         const signupId = asString(signupRow.id);
+        const participationType = mapParticipation(signupRow.participationType);
+        const publishedRole =
+          signupRow.publishedRole == null ? null : mapCharacterRole(signupRow.publishedRole);
+
+        // A PUBLISHED Run starts from the published roster. BOOSTER slots must
+        // already carry publishedRole — never guess from a mutable draft role.
+        if (participationType === "BOOSTER" && !publishedRole) {
+          throw new DomainError(
+            "RUN_CANNOT_START",
+            "A selected booster is missing its published role. Republish the roster before starting.",
+          );
+        }
+
         const existingEntry = await txOrm.RunRosterEntry.where({ rosterId, signupId }).first();
         let rosterEntryId = existingEntry ? asString((existingEntry as Record<string, unknown>).id) : "";
         if (!rosterEntryId) {
-          // A SELECTED signup with no entry predates roster entries (seeded or
-          // legacy data). Only an unambiguous single-role offer can have its
-          // assignment inferred here; anything else stays unassigned rather
-          // than guessing the Raid Lead's decision.
-          const offeredRoles = mapOfferedRoles(signupRow.offeredRoles);
           rosterEntryId = crypto.randomUUID();
           await txOrm.RunRosterEntry.create({
             id: rosterEntryId,
             rosterId,
             signupId,
             selected: true,
-            selectedRole: offeredRoles.length === 1 ? offeredRoles[0] : null,
+            // Freeze the published role onto the entry attendance joins.
+            selectedRole: publishedRole,
             createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          // Align any replacement-draft mutation back to the published role so
+          // Attendance's roster-entry join matches what was actually published.
+          await txOrm.RunRosterEntry.where({ id: rosterEntryId }).update({
+            selected: true,
+            selectedRole: publishedRole,
             updatedAt: now,
           });
         }

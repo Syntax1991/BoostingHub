@@ -182,7 +182,7 @@ describe("rosterService Class Buff Checker integration", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, runId);
-    const booster = view.groups.healers.find((item) => item.character?.id === shamanId);
+    const booster = view.groups.boosters.find((item) => item.character?.id === shamanId);
     expect(booster).toBeTruthy();
     expect(view.raidBuffCoverage.buffs.find((item) => item.id === "SKYFURY")?.covered).toBe(false);
 
@@ -224,7 +224,7 @@ describe("rosterService Class Buff Checker integration", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, runId);
-    const booster = view.groups.healers.find((item) => item.character?.id === shamanId)!;
+    const booster = view.groups.boosters.find((item) => item.character?.id === shamanId)!;
     const mage = view.groups.lootbuddies.find(
       (item) => item.lootbuddyClass === "MAGE" && item.lootbuddyMode === "PLAYING",
     )!;
@@ -250,7 +250,7 @@ describe("rosterService Class Buff Checker integration", () => {
     // Deselect protected rows before withdrawing offers.
     for (const signupId of [booster.id, mage.id, priest.id]) {
       if (
-        [...view.groups.healers, ...view.groups.lootbuddies].find((item) => item.id === signupId)?.draftSelected
+        [...view.groups.boosters, ...view.groups.lootbuddies].find((item) => item.id === signupId)?.draftSelected
       ) {
         await rosterService.setDraftSelection(lead, {
           runId,

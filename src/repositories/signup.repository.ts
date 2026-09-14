@@ -34,6 +34,8 @@ export type SignupListRecord = {
   isBackup: boolean;
   /** Every role this BOOSTER offer volunteers for, TANK → HEALER → DPS. Always empty for LOOTBUDDY. */
   offeredRoles: CharacterRole[];
+  /** Live published BOOSTER role; null unless SELECTED booster. */
+  publishedRole: CharacterRole | null;
   /** Own Class snapshot for a characterless Lootbuddy row; null for BOOSTER and for legacy Character-backed Lootbuddy rows (fall back to character.wowClass for those). */
   lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
@@ -69,6 +71,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
     participationType: mapParticipation(row.participationType),
     isBackup: asBoolean(row.isBackup),
     offeredRoles: mapOfferedRoles(row.offeredRoles),
+    publishedRole: row.publishedRole == null ? null : mapCharacterRole(row.publishedRole),
     lootbuddyClass: row.lootbuddyClass == null ? null : mapWowClass(row.lootbuddyClass),
     lootbuddyMode: row.lootbuddyMode == null ? null : mapLootbuddyMode(row.lootbuddyMode),
     lootbuddyVerification:
@@ -276,6 +279,7 @@ export const signupRepository = {
         participationType: input.participationType,
         isBackup: input.isBackup,
         status: input.status,
+        publishedRole: null,
         lootbuddyClass: input.lootbuddyClass,
         lootbuddyMode: input.lootbuddyMode,
         lootbuddyVerification: input.lootbuddyVerification,
@@ -293,7 +297,14 @@ export const signupRepository = {
     if (input.characterId !== undefined) patch.characterId = input.characterId;
     if (input.participationType !== undefined) patch.participationType = input.participationType;
     if (input.isBackup !== undefined) patch.isBackup = input.isBackup;
-    if (input.status !== undefined) patch.status = input.status;
+    if (input.status !== undefined) {
+      patch.status = input.status;
+      // publishedRole is only meaningful for SELECTED BOOSTERs — clear it on any
+      // status write so WITHDRAWN / PENDING / NOT_SELECTED never keep a stale role.
+      if (input.status !== "SELECTED") {
+        patch.publishedRole = null;
+      }
+    }
     if (input.lootbuddyClass !== undefined) patch.lootbuddyClass = input.lootbuddyClass;
     if (input.lootbuddyMode !== undefined) patch.lootbuddyMode = input.lootbuddyMode;
     if (input.lootbuddyVerification !== undefined) patch.lootbuddyVerification = input.lootbuddyVerification;
@@ -397,7 +408,11 @@ export const signupRepository = {
         if (!row) continue;
         const status = mapSignupStatus((row as Record<string, unknown>).status);
         if (status === "WITHDRAWN") continue;
-        await txOrm.RunSignup.where({ id }).update({ status: "WITHDRAWN", updatedAt: now });
+        await txOrm.RunSignup.where({ id }).update({
+          status: "WITHDRAWN",
+          publishedRole: null,
+          updatedAt: now,
+        });
         withdrawn.push(id);
       }
 
@@ -415,6 +430,7 @@ export const signupRepository = {
         }
         await txOrm.RunSignup.where({ id: offer.id }).update({
           status: "PENDING",
+          publishedRole: null,
           isBackup: false,
           updatedAt: now,
         });
@@ -432,6 +448,7 @@ export const signupRepository = {
           participationType: "BOOSTER",
           isBackup: false,
           status: "PENDING",
+          publishedRole: null,
           lootbuddyClass: null,
           lootbuddyMode: null,
           lootbuddyVerification: null,
@@ -490,7 +507,11 @@ export const signupRepository = {
         if (!row) continue;
         const status = mapSignupStatus((row as Record<string, unknown>).status);
         if (status === "WITHDRAWN") continue;
-        await txOrm.RunSignup.where({ id }).update({ status: "WITHDRAWN", updatedAt: now });
+        await txOrm.RunSignup.where({ id }).update({
+          status: "WITHDRAWN",
+          publishedRole: null,
+          updatedAt: now,
+        });
         withdrawn.push(id);
       }
 
@@ -525,6 +546,7 @@ export const signupRepository = {
           participationType: "LOOTBUDDY",
           isBackup: false,
           status: "PENDING",
+          publishedRole: null,
           lootbuddyClass: entry.lootbuddyClass,
           lootbuddyMode: entry.lootbuddyMode,
           lootbuddyVerification: entry.lootbuddyVerification,

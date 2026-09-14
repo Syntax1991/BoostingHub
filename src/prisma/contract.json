@@ -3705,6 +3705,19 @@
                   "plane": "domain"
                 }
               },
+              "publishedRole": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "runId": {
                 "nullable": false,
                 "type": {
@@ -3860,6 +3873,9 @@
                 },
                 "participationType": {
                   "column": "participationType"
+                },
+                "publishedRole": {
+                  "column": "publishedRole"
                 },
                 "runId": {
                   "column": "runId"
@@ -7902,6 +7918,11 @@
                   "prefix": "run_signup_participationType_check"
                 },
                 {
+                  "expression": "\"publishedRole\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_signup_publishedRole_check_17f7e8a4",
+                  "prefix": "run_signup_publishedRole_check"
+                },
+                {
                   "expression": "\"status\" IN ('PENDING', 'SELECTED', 'NOT_SELECTED', 'WITHDRAWN')",
                   "name": "run_signup_status_check_d46a9d36",
                   "prefix": "run_signup_status_check"
@@ -7981,6 +8002,17 @@
                   "valueSet": {
                     "entityKind": "valueSet",
                     "entityName": "ParticipationType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "publishedRole": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
                     "namespaceId": "public",
                     "plane": "storage"
                   }
@@ -9141,7 +9173,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "1d845e0a9988c3cc7fa105ee1c5d78e15260f9a99e314b008ab6114152b1bda4"
+    "storageHash": "ef31069df7e990253bb121096193155ce91c322f9c4da10a3b400c9ece4fe9ed"
   },
   "execution": {
     "executionHash": "96f45257e34e0e4cfc1ae2b7d442d566b56bafc7d98c96696521955cd991db30",
