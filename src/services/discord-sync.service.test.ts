@@ -28,6 +28,10 @@ const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
 const createdQualificationIds: string[] = [];
 
+function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
+  return view.boosters;
+}
+
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
   return {
     id,
@@ -509,7 +513,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     await createSignup({ runId, userId: ids.loot, characterId: lootChar, participationType: "LOOTBUDDY", role: null });
 
     const view = await rosterService.getRosterManagementView(lead, runId);
-    const all = [...view.groups.boosters, ...view.groups.lootbuddies];
+    const all = [...rosterBoosters(view), ...view.groups.lootbuddies];
     let version = view.roster.version;
     for (const signup of all) {
       await rosterService.setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version });
@@ -713,7 +717,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
     await createSignup({ runId: orphanRunId, userId: ids.tank, characterId: orphanCharId, participationType: "BOOSTER", role: "TANK" });
 
     const view = await rosterService.getRosterManagementView(lead, orphanRunId);
-    const tankSignup = view.groups.boosters[0];
+    const tankSignup = rosterBoosters(view)[0];
     await rosterService.setDraftSelection(lead, { runId: orphanRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
     const afterSelect = await rosterService.getRosterManagementView(lead, orphanRunId);
     await rosterService.publishRoster(lead, { runId: orphanRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
@@ -1121,7 +1125,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
     await createSignup({ runId: publishedRunId, userId: ids.tank, characterId: soloCharId, participationType: "BOOSTER", role: "TANK" });
 
     const view = await rosterService.getRosterManagementView(lead, publishedRunId);
-    const tankSignup = view.groups.boosters[0];
+    const tankSignup = rosterBoosters(view)[0];
     await rosterService.setDraftSelection(lead, { runId: publishedRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
     const afterSelect = await rosterService.getRosterManagementView(lead, publishedRunId);
     await rosterService.publishRoster(lead, { runId: publishedRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
@@ -1293,7 +1297,7 @@ describe("discordSyncService — run start operational post", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, id);
-    for (const group of [view.groups.boosters, view.groups.lootbuddies]) {
+    for (const group of [rosterBoosters(view), view.groups.lootbuddies]) {
       for (const signup of group) {
         view = await rosterService.getRosterManagementView(lead, id);
         if (!signup.draftSelected) {

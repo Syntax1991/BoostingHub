@@ -56,6 +56,10 @@ async function expectDomainCode(promise: Promise<unknown>, code: string) {
   }
 }
 
+function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
+  return view.boosters;
+}
+
 async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {
   await orm.User.create({
     id,
@@ -205,7 +209,7 @@ afterAll(async () => {
 
 async function selectIntoRoster(runId: string, characterId: string) {
   const view = await rosterService.getRosterManagementView(lead, runId);
-  const all = [...view.groups.boosters, ...view.groups.lootbuddies];
+  const all = [...rosterBoosters(view), ...view.groups.lootbuddies];
   const signup = all.find((item) => item.character?.id === characterId);
   if (!signup) throw new Error("signup not found for character");
   await rosterService.setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version: view.roster.version });
@@ -418,7 +422,7 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
 
     // runA's original selection is untouched.
     const viewA = await rosterService.getRosterManagementView(lead, runA);
-    const stillSelected = viewA.groups.boosters.find((item) => item.id === signupIdA)?.draftSelected;
+    const stillSelected = rosterBoosters(viewA).find((item) => item.id === signupIdA)?.draftSelected;
     expect(stillSelected).toBe(true);
   });
 
@@ -464,7 +468,7 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
     );
     const after = await rosterService.getRosterManagementView(lead, runB);
     expect(after.roster.version).toBe(viewB.roster.version);
-    expect(after.groups.boosters.find((item) => item.id === bypassSignupId)?.draftSelected).toBe(false);
+    expect(rosterBoosters(after).find((item) => item.id === bypassSignupId)?.draftSelected).toBe(false);
   });
 
   it("publishRoster is blocked when a draft-selected Character became reserved on another colliding Run before publish", async () => {
