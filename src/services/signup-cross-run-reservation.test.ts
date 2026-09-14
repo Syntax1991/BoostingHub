@@ -56,17 +56,8 @@ async function expectDomainCode(promise: Promise<unknown>, code: string) {
   }
 }
 
-function rosterBoosters<T extends { id: string }>(view: {
-  groups: { tanks: T[]; healers: T[]; dps: T[] };
-}): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const item of [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps]) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    out.push(item);
-  }
-  return out;
+function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
+  return view.boosters;
 }
 
 async function createTestUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"]) {

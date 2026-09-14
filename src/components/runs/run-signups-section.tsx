@@ -52,19 +52,7 @@ function characterLabel(signup: {
 }
 
 function uniqueManagerSignups(manager: NonNullable<RunDetailView["manager"]>): ManagerSignup[] {
-  const seen = new Set<string>();
-  const out: ManagerSignup[] = [];
-  for (const signup of [
-    ...manager.groups.tanks,
-    ...manager.groups.healers,
-    ...manager.groups.dps,
-    ...manager.groups.lootbuddies,
-  ]) {
-    if (seen.has(signup.id)) continue;
-    seen.add(signup.id);
-    out.push(signup);
-  }
-  return out;
+  return [...manager.boosters, ...manager.groups.lootbuddies];
 }
 
 export function RunSignupsSection({ data }: { data: RunDetailView }) {

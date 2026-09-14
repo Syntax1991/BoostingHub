@@ -38,17 +38,8 @@ const ids = {
 const lockoutIds: string[] = [];
 
 /** Unique BOOSTER signups across role projections (dedupe by signup id). */
-function rosterBoosters<T extends { id: string }>(view: {
-  groups: { tanks: T[]; healers: T[]; dps: T[] };
-}): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const item of [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps]) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    out.push(item);
-  }
-  return out;
+function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
+  return view.boosters;
 }
 
 function asUser(
@@ -789,7 +780,9 @@ describe("rosterService publishedRole snapshot", () => {
     expect(view.groups.tanks.filter((item) => item.id === signup.id)).toHaveLength(1);
     expect(view.groups.healers.filter((item) => item.id === signup.id)).toHaveLength(1);
     expect(view.groups.dps.filter((item) => item.id === signup.id)).toHaveLength(1);
-    expect(rosterBoosters(view).filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.boosters.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.boosters).toHaveLength(1);
+    expect(view.groups.tanks.length + view.groups.healers.length + view.groups.dps.length).toBe(3);
 
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
@@ -805,5 +798,64 @@ describe("rosterService publishedRole snapshot", () => {
     const draft = await rosterRepository.findByRunId(run.id);
     expect(draft?.selections.filter((s) => s.signupId === signup.id)).toHaveLength(1);
     expect(draft?.selections.find((s) => s.signupId === signup.id)?.selectedRole).toBe("HEALER");
+  });
+
+  it("keeps unique Booster count below projected role-card total for multi-role offers", async () => {
+    const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
+    const kael = asUser(ids.kael, "Kael Stormeye");
+    const now = new Date().toISOString();
+
+    const defs: Array<{ name: string; wowClass: "MAGE" | "PRIEST" | "SHAMAN"; roles: Array<"TANK" | "HEALER" | "DPS">; primary: "DPS" | "HEALER" }> = [
+      { name: "CountA", wowClass: "MAGE", roles: ["DPS"], primary: "DPS" },
+      { name: "CountB", wowClass: "PRIEST", roles: ["HEALER"], primary: "HEALER" },
+      { name: "CountC", wowClass: "SHAMAN", roles: ["HEALER", "DPS"], primary: "HEALER" },
+    ];
+    const characterIds: string[] = [];
+    for (const def of defs) {
+      const characterId = crypto.randomUUID();
+      characterIds.push(characterId);
+      createdCharacterIds.push(characterId);
+      await orm.Character.create({
+        id: characterId,
+        userId: ids.kael,
+        name: def.name,
+        realm: "Antonidas",
+        normalizedName: def.name.toLowerCase(),
+        normalizedRealm: "antonidas",
+        region: "EU",
+        wowClass: def.wowClass,
+        specialization: def.primary === "HEALER" ? "Restoration" : "Frost",
+        primaryRole: def.primary,
+        itemLevel: 700,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const run = await runService.createRun(thorne, {
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      scheduledStartAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      desiredTankCount: 0,
+      desiredHealerCount: 2,
+      desiredDpsCount: 2,
+    });
+    createdRunIds.push(run.id);
+    await runService.openRun(thorne, run.id);
+
+    await signupService.setCharacterOffers(kael, {
+      runId: run.id,
+      offers: defs.map((def, i) => ({ characterId: characterIds[i]!, offeredRoles: def.roles })),
+    });
+
+    const view = await rosterService.getRosterManagementView(thorne, run.id);
+    expect(view.boosters).toHaveLength(3);
+    expect(view.groups.healers).toHaveLength(2);
+    expect(view.groups.dps).toHaveLength(2);
+    expect(view.groups.tanks).toHaveLength(0);
+    expect(view.groups.healers.length + view.groups.dps.length).toBe(4);
   });
 });

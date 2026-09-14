@@ -59,21 +59,9 @@ function boosterLockoutLabel(
   });
 }
 
-/** All role projections + lootbuddies (may contain duplicate signup ids). */
-function collectProjections(data: RosterView): SignupRow[] {
-  return data.groups.tanks.concat(data.groups.healers, data.groups.dps, data.groups.lootbuddies);
-}
-
-/** Unique domain signups — one entry per signupId for save/replacement logic. */
-function uniqueSignups(data: RosterView): SignupRow[] {
-  const seen = new Set<string>();
-  const out: SignupRow[] = [];
-  for (const signup of collectProjections(data)) {
-    if (seen.has(signup.id)) continue;
-    seen.add(signup.id);
-    out.push(signup);
-  }
-  return out;
+/** Canonical unique BOOSTERs + lootbuddies — never flatten role projections. */
+function domainSignupsFrom(data: RosterView): SignupRow[] {
+  return data.boosters.concat(data.groups.lootbuddies);
 }
 
 /** A draft slot is a signup plus the role the raid lead assigned it, so both take part in dirty detection. */
@@ -89,7 +77,7 @@ function selectionKey(selections: StagedSelections) {
 
 function collectSavedSelections(data: RosterView): StagedSelections {
   const selections: StagedSelections = new Map();
-  for (const signup of uniqueSignups(data)) {
+  for (const signup of domainSignupsFrom(data)) {
     if (signup.draftSelected) {
       selections.set(signup.id, signup.selectedRole);
     }
@@ -136,7 +124,7 @@ function RosterBuilderEditor({
   const [acknowledge, setAcknowledge] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const domainSignups = useMemo(() => uniqueSignups(data), [data]);
+  const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
 
   const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
@@ -167,7 +155,7 @@ function RosterBuilderEditor({
     });
   }
 
-  function matches(signup: SignupRow) {
+  function matchesProjection(signup: SignupRow) {
     const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""} ${signup.lootbuddyClass ?? ""}`.toLowerCase();
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation !== "ALL" && signup.participationType !== participation) return false;
@@ -185,6 +173,27 @@ function RosterBuilderEditor({
     if (selectedFilter === "UNSELECTED" && staged) return false;
     return true;
   }
+
+  /** Identity-level match for unique Booster totals — never sum projected rows. */
+  function matchesCanonicalBooster(signup: SignupRow) {
+    const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""}`.toLowerCase();
+    if (search && !haystack.includes(search.toLowerCase())) return false;
+    if (participation === "LOOTBUDDY") return false;
+    if (participation !== "ALL" && participation !== "BOOSTER") return false;
+    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) return false;
+    if (backupFilter === "BACKUP" && !signup.isBackup) return false;
+    if (backupFilter === "PRIMARY" && signup.isBackup) return false;
+    const staged = isStagedSelected(signup.id);
+    if (selectedFilter === "SELECTED" && !staged) return false;
+    if (selectedFilter === "UNSELECTED" && staged) return false;
+    return true;
+  }
+
+  const filteredTanks = data.groups.tanks.filter(matchesProjection);
+  const filteredHealers = data.groups.healers.filter(matchesProjection);
+  const filteredDps = data.groups.dps.filter(matchesProjection);
+  const filteredLootbuddies = data.groups.lootbuddies.filter(matchesProjection);
+  const uniqueFilteredBoosters = data.boosters.filter(matchesCanonicalBooster).length;
 
   /**
    * Role-section click: assign this groupRole, reassign if already selected as
@@ -370,10 +379,21 @@ function RosterBuilderEditor({
         </div>
       </Card>
 
+      <Card>
+        <CardHeader
+          title="Boosters"
+          description={`${uniqueFilteredBoosters} signup${uniqueFilteredBoosters === 1 ? "" : "s"}`}
+        />
+        <p className="border-t border-border px-4 py-3 text-xs text-muted">
+          Unique Booster signups. Multi-role offers appear in every matching role section below — section
+          counts are role offers and may sum higher than this total.
+        </p>
+      </Card>
+
       <SignupSection
         title="Tanks"
         empty="No tank signups"
-        signups={data.groups.tanks.filter(matches)}
+        signups={filteredTanks}
         run={data.run}
         editing={editing}
         locked={togglesLocked}
@@ -385,7 +405,7 @@ function RosterBuilderEditor({
       <SignupSection
         title="Healers"
         empty="No healer signups"
-        signups={data.groups.healers.filter(matches)}
+        signups={filteredHealers}
         run={data.run}
         editing={editing}
         locked={togglesLocked}
@@ -397,7 +417,7 @@ function RosterBuilderEditor({
       <SignupSection
         title="DPS"
         empty="No DPS signups"
-        signups={data.groups.dps.filter(matches)}
+        signups={filteredDps}
         run={data.run}
         editing={editing}
         locked={togglesLocked}
@@ -409,7 +429,7 @@ function RosterBuilderEditor({
       <SignupSection
         title="Lootbuddies"
         empty="No lootbuddy signups"
-        signups={data.groups.lootbuddies.filter(matches)}
+        signups={filteredLootbuddies}
         run={data.run}
         editing={editing}
         locked={togglesLocked}

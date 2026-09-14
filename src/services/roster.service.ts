@@ -56,6 +56,16 @@ function boosterCardsFor(candidates: InspectedSignup[], role: CharacterRole): Ro
     }));
 }
 
+/** Unique BOOSTER candidates — never flatten role projections to derive this. */
+function canonicalBoosters(candidates: InspectedSignup[]): RosterSignupCard[] {
+  return candidates
+    .filter((item) => item.participationType === "BOOSTER")
+    .map((item) => ({
+      ...item,
+      groupRole: null,
+    }));
+}
+
 /** Prefer character name; characterless Lootbuddy falls back to Class label. */
 function participationLabel(input: {
   character: { name: string; realm: string } | null;
@@ -341,6 +351,11 @@ export const rosterService = {
       composition,
       raidBuffCoverage,
       validation,
+      /**
+       * Canonical unique BOOSTER candidates (one card per RunSignup).
+       * Role sections below are visual projections and may repeat the same id.
+       */
+      boosters: canonicalBoosters(candidates),
       groups: {
         tanks: boosterCardsFor(candidates, "TANK"),
         healers: boosterCardsFor(candidates, "HEALER"),
