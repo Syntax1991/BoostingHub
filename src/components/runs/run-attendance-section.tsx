@@ -88,10 +88,10 @@ export function RunAttendanceSection({ data }: { data: RunDetailView }) {
       <CardHeader title="Your Attendance" description="Your recorded result for this run." />
       <ul className="divide-y divide-border">
         {own.map((row) => (
-          <li key={`${row.characterName}-${row.role ?? "none"}`} className="px-4 py-3 text-sm">
+          <li key={`${row.characterName}-${row.selectedRole ?? "none"}`} className="px-4 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{row.characterName}</span>
-              {row.role ? <RoleBadge role={row.role} /> : null}
+              {row.selectedRole ? <RoleBadge role={row.selectedRole} /> : null}
               <ParticipationBadge type={row.participationType} />
               {row.isBackup ? <span className="text-xs text-muted">Backup</span> : null}
               <AttendanceStatusBadge status={row.status} />
@@ -198,7 +198,7 @@ function ManagerAttendancePanel({
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
                     {row.wowClass ? <ClassBadge wowClass={row.wowClass} /> : <span className="text-muted">—</span>}
-                    {row.role ? <RoleBadge role={row.role} /> : null}
+                    {row.selectedRole ? <RoleBadge role={row.selectedRole} /> : null}
                   </div>
                 </td>
                 <td className="px-3 py-2">

@@ -7,12 +7,12 @@ describe("composeRoster", () => {
   it("counts booster roles against run targets and excludes lootbuddies", () => {
     const composition = composeRoster(
       [
-        { participationType: "BOOSTER", role: "TANK" },
-        { participationType: "BOOSTER", role: "TANK" },
-        { participationType: "BOOSTER", role: "HEALER" },
-        { participationType: "BOOSTER", role: "DPS" },
-        { participationType: "LOOTBUDDY", role: null },
-        { participationType: "LOOTBUDDY", role: "DPS" },
+        { participationType: "BOOSTER", selectedRole: "TANK" },
+        { participationType: "BOOSTER", selectedRole: "TANK" },
+        { participationType: "BOOSTER", selectedRole: "HEALER" },
+        { participationType: "BOOSTER", selectedRole: "DPS" },
+        { participationType: "LOOTBUDDY", selectedRole: null },
+        { participationType: "LOOTBUDDY", selectedRole: "DPS" },
       ],
       targets,
     );
@@ -26,14 +26,14 @@ describe("composeRoster", () => {
   });
 
   it("reports under, exact, and over target deltas", () => {
-    expect(composeRoster([{ participationType: "BOOSTER", role: "HEALER" }], { tanks: 2, healers: 4, dps: 14 }).healers.delta).toBe(-3);
+    expect(composeRoster([{ participationType: "BOOSTER", selectedRole: "HEALER" }], { tanks: 2, healers: 4, dps: 14 }).healers.delta).toBe(-3);
     expect(
       composeRoster(
         [
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
         ],
         { tanks: 2, healers: 4, dps: 14 },
       ).healers.delta,
@@ -41,11 +41,11 @@ describe("composeRoster", () => {
     expect(
       composeRoster(
         [
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
-          { participationType: "BOOSTER", role: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
+          { participationType: "BOOSTER", selectedRole: "HEALER" },
         ],
         { tanks: 2, healers: 4, dps: 14 },
       ).healers.delta,
@@ -55,9 +55,9 @@ describe("composeRoster", () => {
   it("does not treat LOOT_ONLY or PLAYING lootbuddies as tank/healer/DPS capacity", () => {
     const composition = composeRoster(
       [
-        { participationType: "LOOTBUDDY", role: "TANK" },
-        { participationType: "LOOTBUDDY", role: "HEALER" },
-        { participationType: "LOOTBUDDY", role: "DPS" },
+        { participationType: "LOOTBUDDY", selectedRole: "TANK" },
+        { participationType: "LOOTBUDDY", selectedRole: "HEALER" },
+        { participationType: "LOOTBUDDY", selectedRole: "DPS" },
       ],
       targets,
     );
@@ -72,12 +72,12 @@ describe("compositionWarnings", () => {
   it("emits under and over warnings without treating them as exclusive", () => {
     const composition = composeRoster(
       [
-        { participationType: "BOOSTER", role: "TANK" },
-        { participationType: "BOOSTER", role: "HEALER" },
-        { participationType: "BOOSTER", role: "HEALER" },
-        { participationType: "BOOSTER", role: "HEALER" },
-        { participationType: "BOOSTER", role: "HEALER" },
-        { participationType: "BOOSTER", role: "HEALER" },
+        { participationType: "BOOSTER", selectedRole: "TANK" },
+        { participationType: "BOOSTER", selectedRole: "HEALER" },
+        { participationType: "BOOSTER", selectedRole: "HEALER" },
+        { participationType: "BOOSTER", selectedRole: "HEALER" },
+        { participationType: "BOOSTER", selectedRole: "HEALER" },
+        { participationType: "BOOSTER", selectedRole: "HEALER" },
       ],
       targets,
     );

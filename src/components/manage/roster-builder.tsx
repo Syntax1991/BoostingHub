@@ -12,7 +12,7 @@ import {
   ClassBadge,
   DifficultyBadge,
   ParticipationBadge,
-  RoleBadge,
+  OfferedRolesBadges,
   RunStatusBadge,
   SignupStatusBadge,
   AccessBadge,
@@ -20,6 +20,7 @@ import {
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import {
+  CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
@@ -27,7 +28,7 @@ import {
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { buildRosterSavedSelectionKey } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
-import type { WowClass } from "@/models/enums";
+import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
@@ -62,16 +63,31 @@ function collectSignups(data: RosterView): SignupRow[] {
   return data.groups.tanks.concat(data.groups.healers, data.groups.dps, data.groups.lootbuddies);
 }
 
-function selectionKey(ids: Iterable<string>) {
-  return [...ids].sort().join(",");
+/** A draft slot is a signup plus the role the raid lead assigned it, so both take part in dirty detection. */
+type StagedSelections = Map<string, CharacterRole | null>;
+
+function selectionEntries(selections: StagedSelections): string[] {
+  return [...selections].map(([signupId, role]) => `${signupId}:${role ?? ""}`);
 }
 
-function collectSavedSelectedIds(data: RosterView): Set<string> {
-  const ids = new Set<string>();
+function selectionKey(selections: StagedSelections) {
+  return selectionEntries(selections).sort().join(",");
+}
+
+function collectSavedSelections(data: RosterView): StagedSelections {
+  const selections: StagedSelections = new Map();
   for (const signup of collectSignups(data)) {
-    if (signup.draftSelected) ids.add(signup.id);
+    if (signup.draftSelected && signup.isCanonicalCard) {
+      selections.set(signup.id, signup.selectedRole);
+    }
   }
-  return ids;
+  return selections;
+}
+
+/** The role a newly selected slot starts on: an unambiguous single-role offer needs no choice. */
+function defaultSelectedRole(signup: SignupRow): CharacterRole | null {
+  if (signup.participationType !== "BOOSTER") return null;
+  return signup.selectedRole ?? (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null);
 }
 
 /**
@@ -80,14 +96,14 @@ function collectSavedSelectedIds(data: RosterView): Set<string> {
  * edits and filters because the key stays stable.
  */
 export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
-  const savedSelectedIds = collectSavedSelectedIds(data);
-  const savedSelectionKey = buildRosterSavedSelectionKey(data.roster.version, savedSelectedIds);
+  const savedSelections = collectSavedSelections(data);
+  const savedSelectionKey = buildRosterSavedSelectionKey(data.roster.version, selectionEntries(savedSelections));
   return (
     <RosterBuilderEditor
       key={savedSelectionKey}
       data={data}
       embedded={embedded}
-      savedSelectedIds={savedSelectedIds}
+      savedSelections={savedSelections}
     />
   );
 }
@@ -95,11 +111,11 @@ export function RosterBuilderView({ data, embedded = false }: { data: RosterView
 function RosterBuilderEditor({
   data,
   embedded = false,
-  savedSelectedIds,
+  savedSelections,
 }: {
   data: RosterView;
   embedded?: boolean;
-  savedSelectedIds: Set<string>;
+  savedSelections: StagedSelections;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -114,29 +130,33 @@ function RosterBuilderEditor({
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   const allSignups = useMemo(() => collectSignups(data), [data]);
-  const [stagedSelectedIds, setStagedSelectedIds] = useState<Set<string>>(() => new Set(savedSelectedIds));
+  const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
 
-  const isDirty = selectionKey(stagedSelectedIds) !== selectionKey(savedSelectedIds);
+  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
   const unsavedChangeCount = useMemo(() => {
     let count = 0;
-    for (const id of stagedSelectedIds) {
-      if (!savedSelectedIds.has(id)) count += 1;
+    for (const [id, role] of stagedSelections) {
+      if (!savedSelections.has(id) || savedSelections.get(id) !== role) count += 1;
     }
-    for (const id of savedSelectedIds) {
-      if (!stagedSelectedIds.has(id)) count += 1;
+    for (const id of savedSelections.keys()) {
+      if (!stagedSelections.has(id)) count += 1;
     }
     return count;
-  }, [stagedSelectedIds, savedSelectedIds]);
+  }, [stagedSelections, savedSelections]);
 
   function isStagedSelected(signupId: string) {
-    return stagedSelectedIds.has(signupId);
+    return stagedSelections.has(signupId);
+  }
+
+  function stagedRole(signupId: string) {
+    return stagedSelections.get(signupId) ?? null;
   }
 
   function matches(signup: SignupRow) {
     const haystack = `${signup.userName} ${signup.character?.name ?? ""} ${signup.character?.realm ?? ""} ${signup.lootbuddyClass ?? ""}`.toLowerCase();
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation !== "ALL" && signup.participationType !== participation) return false;
-    if (roleFilter !== "ALL" && signup.role !== roleFilter) return false;
+    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) return false;
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
     if (backupFilter === "PRIMARY" && signup.isBackup) return false;
     const staged = isStagedSelected(signup.id);
@@ -150,8 +170,8 @@ function RosterBuilderEditor({
     if (signup.status === "WITHDRAWN") return;
     setError(null);
     setErrorCode(null);
-    setStagedSelectedIds((previous) => {
-      const next = new Set(previous);
+    setStagedSelections((previous) => {
+      const next = new Map(previous);
       if (!selected) {
         next.delete(signup.id);
         return next;
@@ -167,7 +187,20 @@ function RosterBuilderEditor({
           }
         }
       }
-      next.add(signup.id);
+      next.set(signup.id, defaultSelectedRole(signup));
+      return next;
+    });
+  }
+
+  /** Reassigning a selected slot's role is its own edit — it never deselects the slot. */
+  function assignRole(signup: SignupRow, role: CharacterRole) {
+    if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
+    setError(null);
+    setErrorCode(null);
+    setStagedSelections((previous) => {
+      if (!previous.has(signup.id)) return previous;
+      const next = new Map(previous);
+      next.set(signup.id, role);
       return next;
     });
   }
@@ -175,7 +208,7 @@ function RosterBuilderEditor({
   function discardChanges() {
     setError(null);
     setErrorCode(null);
-    setStagedSelectedIds(new Set(savedSelectedIds));
+    setStagedSelections(new Map(savedSelections));
   }
 
   function saveRoster() {
@@ -186,7 +219,7 @@ function RosterBuilderEditor({
       const result = await saveRosterDraftAction({
         runId: data.run.id,
         version: data.roster.version,
-        selectedSignupIds: [...stagedSelectedIds],
+        selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
       });
       if (!result.ok) {
         setError(result.message);
@@ -320,7 +353,9 @@ function RosterBuilderEditor({
         editing={editing}
         locked={togglesLocked}
         isStagedSelected={isStagedSelected}
+        stagedRole={stagedRole}
         onToggle={toggleStaged}
+        onAssignRole={assignRole}
       />
       <SignupSection
         title="Healers"
@@ -330,7 +365,9 @@ function RosterBuilderEditor({
         editing={editing}
         locked={togglesLocked}
         isStagedSelected={isStagedSelected}
+        stagedRole={stagedRole}
         onToggle={toggleStaged}
+        onAssignRole={assignRole}
       />
       <SignupSection
         title="DPS"
@@ -340,7 +377,9 @@ function RosterBuilderEditor({
         editing={editing}
         locked={togglesLocked}
         isStagedSelected={isStagedSelected}
+        stagedRole={stagedRole}
         onToggle={toggleStaged}
+        onAssignRole={assignRole}
       />
       <SignupSection
         title="Lootbuddies"
@@ -350,7 +389,9 @@ function RosterBuilderEditor({
         editing={editing}
         locked={togglesLocked}
         isStagedSelected={isStagedSelected}
+        stagedRole={stagedRole}
         onToggle={toggleStaged}
+        onAssignRole={assignRole}
       />
 
       <Card>
@@ -484,7 +525,9 @@ function SignupSection({
   editing,
   locked,
   isStagedSelected,
+  stagedRole,
   onToggle,
+  onAssignRole,
 }: {
   title: string;
   empty: string;
@@ -493,7 +536,9 @@ function SignupSection({
   editing: boolean;
   locked: boolean;
   isStagedSelected: (signupId: string) => boolean;
+  stagedRole: (signupId: string) => CharacterRole | null;
   onToggle: (signup: SignupRow, selected: boolean) => void;
+  onAssignRole: (signup: SignupRow, role: CharacterRole) => void;
 }) {
   const grouped = groupByUser(signups);
   return (
@@ -515,7 +560,9 @@ function SignupSection({
                     editing={editing}
                     locked={locked}
                     selected={isStagedSelected(signup.id)}
+                    assignedRole={stagedRole(signup.id)}
                     onToggle={onToggle}
+                    onAssignRole={onAssignRole}
                   />
                 ))}
               </div>
@@ -533,20 +580,27 @@ function SignupRowCard({
   editing,
   locked,
   selected,
+  assignedRole,
   onToggle,
+  onAssignRole,
 }: {
   signup: SignupRow;
   run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   locked: boolean;
   selected: boolean;
+  assignedRole: CharacterRole | null;
   onToggle: (signup: SignupRow, selected: boolean) => void;
+  onAssignRole: (signup: SignupRow, role: CharacterRole) => void;
 }) {
   const checkboxId = `signup-${signup.id}`;
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
   const lockout = boosterLockoutLabel(signup, run);
-  const disabled = !editing || locked || signup.status === "WITHDRAWN";
+  // A multi-role offer is listed under every role it volunteered, but only
+  // the canonical card can be selected — one offer never fills two slots.
+  const disabled = !editing || locked || signup.status === "WITHDRAWN" || !signup.isCanonicalCard;
+  const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
   return (
     <label
       className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 ${
@@ -565,7 +619,7 @@ function SignupRowCard({
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{signupDisplayName(signup)}</span>
           {displayClass ? <ClassBadge wowClass={displayClass} /> : null}
-          {signup.role ? <RoleBadge role={signup.role} /> : null}
+          <OfferedRolesBadges roles={signup.offeredRoles} />
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
@@ -592,6 +646,32 @@ function SignupRowCard({
             <span className={lockout.attention ? "text-warning" : undefined}>{lockout.text}</span>
           ) : null}
         </span>
+        {!signup.isCanonicalCard ? (
+          <span className="mt-1 block text-xs text-muted">
+            Also offered here. Select this player under {signup.selectedRole
+              ? CHARACTER_ROLE_LABELS[signup.selectedRole]
+              : CHARACTER_ROLE_LABELS[signup.offeredRoles[0]!]}.
+          </span>
+        ) : null}
+        {selected && needsRoleChoice ? (
+          <span className="mt-2 block">
+            <select
+              aria-label={`Assigned role for ${signupDisplayName(signup)}`}
+              value={assignedRole ?? ""}
+              disabled={!editing || locked}
+              onChange={(event) => onAssignRole(signup, event.target.value as CharacterRole)}
+              onClick={(event) => event.stopPropagation()}
+              className="h-8 rounded-md border border-border bg-surface px-2 text-xs"
+            >
+              <option value="">Choose assigned role…</option>
+              {signup.offeredRoles.map((role) => (
+                <option key={role} value={role}>
+                  {CHARACTER_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+          </span>
+        ) : null}
         {signup.issue ? (
           <span className="mt-1 block text-xs text-danger">{signup.issue}</span>
         ) : null}

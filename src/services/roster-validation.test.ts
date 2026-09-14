@@ -8,7 +8,7 @@ function member(overrides: Partial<RosterValidationMember>): RosterValidationMem
     userName: "Kael",
     characterName: "Stormhowl",
     participationType: "BOOSTER",
-    role: "HEALER",
+    selectedRole: "HEALER",
     status: "PENDING",
     characterActive: true,
     boosterApproved: true,
@@ -57,13 +57,13 @@ describe("validateRosterDraft", () => {
     const result = validateRosterDraft({
       runStatus: "ROSTERING",
       selected: [
-        member({ signupId: "b1", userId: "u1", participationType: "BOOSTER", role: "HEALER" }),
+        member({ signupId: "b1", userId: "u1", participationType: "BOOSTER", selectedRole: "HEALER" }),
         member({
           signupId: "l1",
           userId: "u1",
           characterName: "Mage",
           participationType: "LOOTBUDDY",
-          role: null,
+          selectedRole: null,
           boosterApproved: true,
         }),
         member({
@@ -71,7 +71,7 @@ describe("validateRosterDraft", () => {
           userId: "u1",
           characterName: "Priest",
           participationType: "LOOTBUDDY",
-          role: null,
+          selectedRole: null,
           boosterApproved: true,
         }),
       ],
@@ -89,7 +89,7 @@ describe("validateRosterDraft", () => {
           signupId: "l1",
           characterName: "Mage",
           participationType: "LOOTBUDDY",
-          role: null,
+          selectedRole: null,
           characterActive: true,
           boosterApproved: true,
         }),

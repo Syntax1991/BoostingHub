@@ -223,7 +223,7 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: ids.lab,
       version: lab.roster.version,
-      selectedSignupIds,
+      selections: selectedSignupIds.map((signupId) => ({ signupId, selectedRole: null })),
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
     expect(after.roster.version).toBe(lab.roster.version + 1);
@@ -239,7 +239,7 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: ids.lab,
       version: view.roster.version,
-      selectedSignupIds: [ids.labBrannTank, ids.labKaelEle],
+      selections: [{ signupId: ids.labBrannTank, selectedRole: null }, { signupId: ids.labKaelEle, selectedRole: null }],
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
     expect(after.groups.tanks.find((item) => item.id === ids.labThorne)?.draftSelected).toBe(false);
@@ -254,7 +254,7 @@ describe("rosterService saveDraftSelection", () => {
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
-        selectedSignupIds: [ids.labKaelResto, ids.labKaelEle],
+        selections: [{ signupId: ids.labKaelResto, selectedRole: null }, { signupId: ids.labKaelEle, selectedRole: null }],
       }),
       "INVALID_ROSTER_SELECTION",
     );
@@ -269,7 +269,7 @@ describe("rosterService saveDraftSelection", () => {
         userId: ids.aelira,
         characterId: null,
         participationType: "LOOTBUDDY",
-        role: null,
+
         isBackup: false,
         status: "PENDING",
         lootbuddyClass: "MAGE",
@@ -283,7 +283,7 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: ids.lab,
       version: view.roster.version,
-      selectedSignupIds: [ids.labKaelResto, ids.labMira, secondLootbuddyId],
+      selections: [{ signupId: ids.labKaelResto, selectedRole: null }, { signupId: ids.labMira, selectedRole: null }, { signupId: secondLootbuddyId, selectedRole: null }],
     });
     const after = await rosterService.getRosterManagementView(thorne, ids.lab);
     expect(after.groups.healers.find((item) => item.id === ids.labKaelResto)?.draftSelected).toBe(true);
@@ -297,7 +297,7 @@ describe("rosterService saveDraftSelection", () => {
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
-        selectedSignupIds: [ids.labBrannHoly],
+        selections: [{ signupId: ids.labBrannHoly, selectedRole: null }],
       }),
       "SIGNUP_WITHDRAWN",
     );
@@ -305,7 +305,7 @@ describe("rosterService saveDraftSelection", () => {
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
-        selectedSignupIds: [ids.labSylva],
+        selections: [{ signupId: ids.labSylva, selectedRole: null }],
       }),
       "INVALID_ROSTER_SELECTION",
     );
@@ -316,13 +316,13 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: ids.lab,
       version: view.roster.version,
-      selectedSignupIds: [ids.labThorne],
+      selections: [{ signupId: ids.labThorne, selectedRole: null }],
     });
     await expectDomainCode(
       rosterService.saveDraftSelection(thorne, {
         runId: ids.lab,
         version: view.roster.version,
-        selectedSignupIds: [ids.labBrannTank],
+        selections: [{ signupId: ids.labBrannTank, selectedRole: null }],
       }),
       "ROSTER_ALREADY_CHANGED",
     );
@@ -352,7 +352,7 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
       version: empty.roster.version,
-      selectedSignupIds: [],
+      selections: [],
     });
     expect((await rosterService.getRosterManagementView(thorne, run.id)).run.status).toBe("OPEN");
 
@@ -360,7 +360,7 @@ describe("rosterService saveDraftSelection", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
       version: openView.roster.version,
-      selectedSignupIds: [signup.id],
+      selections: [{ signupId: signup.id, selectedRole: null }],
     });
     expect((await rosterService.getRosterManagementView(thorne, run.id)).run.status).toBe("ROSTERING");
   });

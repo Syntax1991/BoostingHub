@@ -63,7 +63,12 @@ async function cleanupRun(id: string) {
   }
   const signups = await orm.RunSignup.where({ runId: id }).select("id").all();
   for (const row of signups) {
-    await deleteIfPresent("RunSignup", (row as { id: string }).id);
+    const signupId = (row as { id: string }).id;
+    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const offer of offered) {
+      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+    }
+    await deleteIfPresent("RunSignup", signupId);
   }
   await deleteIfPresent("Run", id);
 }
@@ -173,7 +178,7 @@ describe("rosterService Class Buff Checker integration", () => {
   it("updates coverage when a Shaman Booster is draft-selected and deselected", async () => {
     await signupService.setCharacterOffers(player, {
       runId,
-      offers: [{ characterId: shamanId, role: "HEALER" }],
+      offers: [{ characterId: shamanId, offeredRoles: ["HEALER"] }],
     });
 
     let view = await rosterService.getRosterManagementView(lead, runId);
@@ -208,7 +213,7 @@ describe("rosterService Class Buff Checker integration", () => {
   it("PR #27: same User Booster + Mage PLAYING + Priest LOOT_ONLY", async () => {
     await signupService.setCharacterOffers(player, {
       runId,
-      offers: [{ characterId: shamanId, role: "HEALER" }],
+      offers: [{ characterId: shamanId, offeredRoles: ["HEALER"] }],
     });
     await signupService.setLootbuddies(player, {
       runId,

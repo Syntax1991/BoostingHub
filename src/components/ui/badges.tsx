@@ -106,6 +106,17 @@ export function RoleBadge({ role }: { role: CharacterRole }) {
   );
 }
 
+/** Every role a booster offer volunteers for. Renders nothing for a lootbuddy entry. */
+export function OfferedRolesBadges({ roles }: { roles: readonly CharacterRole[] }) {
+  return (
+    <>
+      {roles.map((role) => (
+        <RoleBadge key={role} role={role} />
+      ))}
+    </>
+  );
+}
+
 export function ClassBadge({ wowClass }: { wowClass: WowClass }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm font-medium">

@@ -11,6 +11,7 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { CLASS_LABELS } from "@/lib/labels";
+import { mapOfferedRoles } from "@/repositories/signup.repository";
 import type {
   AttendanceStatus,
   CharacterRole,
@@ -36,7 +37,8 @@ export type AttendanceRecord = {
   characterRealm: string;
   characterRegion: WowRegion | null;
   wowClass: WowClass | null;
-  role: CharacterRole | null;
+  /** The Raid Lead's assigned BOOSTER role, read from the roster entry this attendance row snapshots. */
+  selectedRole: CharacterRole | null;
   participationType: ParticipationType;
   isBackup: boolean;
 };
@@ -74,7 +76,7 @@ function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
       : signup.lootbuddyClass == null
         ? null
         : mapWowClass(signup.lootbuddyClass),
-    role: signup.role == null ? null : mapCharacterRole(signup.role),
+    selectedRole: entry.selectedRole == null ? null : mapCharacterRole(entry.selectedRole),
     participationType: mapParticipation(signup.participationType),
     isBackup: asBoolean(signup.isBackup),
   };
@@ -169,7 +171,10 @@ export const attendanceRepository = {
       if (existing.length > 0) {
         throw new DomainError("RUN_ALREADY_STARTED", "This run already has attendance records.");
       }
-      const selected = await txOrm.RunSignup.where({ runId, status: "SELECTED" }).select("id").all();
+      const selected = await txOrm.RunSignup
+        .where({ runId, status: "SELECTED" })
+        .include("offeredRoles")
+        .all();
       if (selected.length === 0) {
         throw new DomainError(
           "RUN_CANNOT_START",
@@ -179,16 +184,23 @@ export const attendanceRepository = {
       const now = new Date().toISOString();
       const rosterId = asString(rosterRow.id);
       for (const signup of selected) {
-        const signupId = asString((signup as Record<string, unknown>).id);
+        const signupRow = signup as Record<string, unknown>;
+        const signupId = asString(signupRow.id);
         const existingEntry = await txOrm.RunRosterEntry.where({ rosterId, signupId }).first();
         let rosterEntryId = existingEntry ? asString((existingEntry as Record<string, unknown>).id) : "";
         if (!rosterEntryId) {
+          // A SELECTED signup with no entry predates roster entries (seeded or
+          // legacy data). Only an unambiguous single-role offer can have its
+          // assignment inferred here; anything else stays unassigned rather
+          // than guessing the Raid Lead's decision.
+          const offeredRoles = mapOfferedRoles(signupRow.offeredRoles);
           rosterEntryId = crypto.randomUUID();
           await txOrm.RunRosterEntry.create({
             id: rosterEntryId,
             rosterId,
             signupId,
             selected: true,
+            selectedRole: offeredRoles.length === 1 ? offeredRoles[0] : null,
             createdAt: now,
             updatedAt: now,
           });

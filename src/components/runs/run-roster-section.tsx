@@ -41,7 +41,7 @@ export function RunRosterSection({ data }: { data: RunDetailView }) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {member.wowClass ? <ClassBadge wowClass={member.wowClass} /> : null}
-                {member.role ? <RoleBadge role={member.role} /> : null}
+                {member.selectedRole ? <RoleBadge role={member.selectedRole} /> : null}
                 <ParticipationBadge type={member.participationType} />
                 {member.isBackup ? <span className="text-xs text-muted">Backup</span> : null}
               </div>

@@ -37,7 +37,7 @@ function loadSnapshot(row: AttendanceRecord): PayoutEntryWrite {
     characterRegion: row.characterRegion,
     participationType: row.participationType,
     attendanceStatus: row.status,
-    role: row.role,
+    role: row.selectedRole,
     isBackup: row.isBackup,
     shareUnits: defaultShareUnits({
       participationType: row.participationType,
@@ -459,7 +459,7 @@ export const payoutService = {
         characterRegion: live.characterRegion,
         participationType: live.participationType,
         attendanceStatus: live.status as AttendanceStatus,
-        role: live.role,
+        role: live.selectedRole,
         isBackup: live.isBackup,
       };
     });
