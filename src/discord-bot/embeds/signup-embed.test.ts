@@ -16,9 +16,27 @@ const base: SignupEmbedData = {
   runStatus: "OPEN",
   signupWindowOpen: true,
   uniqueSignupCount: 5,
+  roleStatus: {
+    tank: { signed: 4, picked: 2, target: 2 },
+    healer: { signed: 7, picked: 2, target: 2 },
+    dps: { signed: 16, picked: 8, target: 8 },
+    lootbuddy: { signed: 6, picked: 5 },
+  },
 };
 
 describe("buildSignupEmbed", () => {
+  it("shows signed and picked role counts without listing Characters", () => {
+    const embed = buildSignupEmbed(base).toJSON();
+    const rolesField = embed.fields?.find((field) => field.name === "Roles");
+    expect(rolesField?.value).toContain("4 signed · 2/2 picked");
+    expect(rolesField?.value).toContain("7 signed · 2/2 picked");
+    expect(rolesField?.value).toContain("16 signed · 8/8 picked");
+    expect(rolesField?.value).toContain("6 signed · 5 picked");
+    expect(rolesField?.value).not.toMatch(/5\/5/);
+    const serialized = JSON.stringify(embed);
+    expect(serialized).not.toMatch(/Stormhowl|character/i);
+  });
+
   it("shows the unique signup count, never a row count, and never lists offered Characters", () => {
     const embed = buildSignupEmbed(base).toJSON();
     const signupsField = embed.fields?.find((field) => field.name === "Signups");

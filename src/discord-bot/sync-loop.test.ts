@@ -48,6 +48,12 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
     runStatus: "OPEN",
     signupWindowOpen: true,
     uniqueSignupCount: 0,
+    roleStatus: {
+      tank: { signed: 0, picked: 0, target: 2 },
+      healer: { signed: 0, picked: 0, target: 4 },
+      dps: { signed: 0, picked: 0, target: 14 },
+      lootbuddy: { signed: 0, picked: 0 },
+    },
   };
 }
 

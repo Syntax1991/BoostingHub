@@ -136,22 +136,30 @@ async function createSignup(input: {
   lootbuddyMode?: "LOOT_ONLY" | "PLAYING" | null;
 }) {
   const id = crypto.randomUUID();
+  const now = new Date().toISOString();
   await orm.RunSignup.create({
     id,
     runId: input.runId,
     userId: input.userId,
     characterId: input.characterId,
     participationType: input.participationType,
-    role: input.role,
     isBackup: false,
     status: "PENDING",
     lootbuddyClass: input.lootbuddyClass ?? null,
     lootbuddyMode:
       input.lootbuddyMode ?? (input.participationType === "LOOTBUDDY" ? "PLAYING" : null),
     lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "NONE" : null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   });
+  if (input.participationType === "BOOSTER" && input.role) {
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: id,
+      role: input.role,
+      createdAt: now,
+    });
+  }
   return id;
 }
 
@@ -173,7 +181,12 @@ async function cleanupRun(runId: string) {
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
-    await deleteIfPresent("RunSignup", (row as { id: string }).id);
+    const signupId = (row as { id: string }).id;
+    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const offer of offered) {
+      await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete().catch(() => {});
+    }
+    await orm.RunSignup.where({ id: signupId }).delete().catch(() => {});
   }
   await deleteIfPresent("Run", runId);
 }
