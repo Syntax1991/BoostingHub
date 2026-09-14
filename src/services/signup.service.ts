@@ -8,6 +8,7 @@ import type {
 import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
+import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import { activityRepository } from "@/repositories/activity.repository";
 import type { CharacterPageRecord } from "@/repositories/character.repository";
 import { characterRepository } from "@/repositories/character.repository";
@@ -56,6 +57,11 @@ function uniqueViolation(error: unknown): boolean {
   return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
 }
 
+/** Both sides are already normalized, so set equality is a plain element-wise compare. */
+function sameRoleSet(a: readonly CharacterRole[], b: readonly CharacterRole[]): boolean {
+  return a.length === b.length && a.every((role, index) => role === b[index]);
+}
+
 /**
  * User-side run signup. BOOSTER and LOOTBUDDY are per-run participation types,
  * not account identities. Roster selection remains a later phase.
@@ -74,7 +80,7 @@ export const signupService = {
       runStatus: signup.run.status,
       characterName: signup.character?.name ?? null,
       characterRealm: signup.character?.realm ?? null,
-      role: signup.role,
+      offeredRoles: signup.offeredRoles,
       participationType: signup.participationType,
       isBackup: signup.isBackup,
       status: signup.status,
@@ -102,7 +108,7 @@ export const signupService = {
         id: signup.id,
         characterName: signup.character?.name ?? null,
         characterRealm: signup.character?.realm ?? null,
-        role: signup.role,
+        offeredRoles: signup.offeredRoles,
         participationType: signup.participationType,
         isBackup: signup.isBackup,
         status: signup.status,
@@ -142,10 +148,10 @@ export const signupService = {
     const activeBoosterSignups = activeSignups.filter((signup) => signup.participationType === "BOOSTER");
     const activeLootbuddySignups = activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY");
 
-    const roleByCharacterId: Partial<Record<string, CharacterRole>> = {};
+    const offeredRolesByCharacterId: Partial<Record<string, CharacterRole[]>> = {};
     for (const signup of activeBoosterSignups) {
-      if (signup.character && signup.role) {
-        roleByCharacterId[signup.character.id] = signup.role;
+      if (signup.character && signup.offeredRoles.length > 0) {
+        offeredRolesByCharacterId[signup.character.id] = signup.offeredRoles;
       }
     }
 
@@ -167,7 +173,7 @@ export const signupService = {
         characterIds: activeBoosterSignups
           .map((signup) => signup.character?.id)
           .filter((id): id is string => Boolean(id)),
-        roleByCharacterId,
+        offeredRolesByCharacterId,
       },
       /** Every currently active Lootbuddy entry, identified by RunSignup.id — never collapsed into one intent. */
       activeLootbuddies: activeLootbuddySignups.map((signup) => ({
@@ -179,6 +185,7 @@ export const signupService = {
     };
   },
 
+  /** Single-role convenience entry point; the offer it writes is a one-element `offeredRoles` set. */
   async createBoosterSignup(
     user: AuthenticatedUser,
     input: { runId: string; characterId: string; role: CharacterRole; isBackup: boolean },
@@ -223,7 +230,7 @@ export const signupService = {
       userId: user.id,
       characterId: character.id,
       participationType: "BOOSTER",
-      role: input.role,
+      offeredRoles: [input.role],
       isBackup: input.isBackup,
       status: "PENDING",
       lootbuddyClass: null,
@@ -249,10 +256,17 @@ export const signupService = {
    * Character removes it. BOOSTER-only — never touches the User's Lootbuddy
    * entries on this Run (see `setLootbuddies`); a User may hold Booster
    * participation and any number of Lootbuddy entries on the same Run at once.
+   *
+   * Each offer carries the complete set of roles that Character volunteers
+   * for — a hybrid offered as both Healer and DPS is ONE offer row the Raid
+   * Lead later assigns a single `selectedRole` to, never two competing rows.
+   * Narrowing a role set can therefore invalidate a decision the Raid Lead
+   * already made, so a draft-selected offer whose assigned role is dropped
+   * is rejected outright rather than silently rewriting that decision.
    */
   async setCharacterOffers(
     actor: AuthenticatedUser,
-    input: { runId: string; offers: Array<{ characterId: string; role?: CharacterRole }> },
+    input: { runId: string; offers: Array<{ characterId: string; offeredRoles: CharacterRole[] }> },
   ) {
     const seen = new Set<string>();
     for (const offer of input.offers) {
@@ -270,7 +284,7 @@ export const signupService = {
       throw new DomainError("NOT_FOUND", "Run was not found.", 404);
     }
 
-    const { plan, currentSignups } = await buildReconciliationPlan(actor.id, run, {
+    const { plan, currentSignups, rosterSelections } = await buildReconciliationPlan(actor.id, run, {
       desiredCharacterIds: input.offers.map((offer) => offer.characterId),
     });
 
@@ -289,28 +303,39 @@ export const signupService = {
       return { offer, character };
     });
 
-    const roleByCharacterId = await validateOfferedCharacters(offeredCharacters, run);
+    const rolesByCharacterId = await validateOfferedCharacters(offeredCharacters, run);
 
     const toReactivate = plan.toReactivate.map((offer) => ({
       id: offer.id,
       characterId: offer.characterId,
-      role: roleByCharacterId.get(offer.characterId) ?? null,
+      offeredRoles: rolesByCharacterId.get(offer.characterId) ?? [],
     }));
     const toCreate = plan.toCreate.map((characterId) => ({
       characterId,
-      role: roleByCharacterId.get(characterId) ?? null,
+      offeredRoles: rolesByCharacterId.get(characterId) ?? [],
     }));
 
     const currentById = new Map(currentSignups.map((signup) => [signup.id, signup]));
-    const toUpdateRole = plan.kept
-      .map((signupId) => {
-        const existing = currentById.get(signupId);
-        const characterId = existing?.character?.id;
-        if (!existing || !characterId) return null;
-        const desiredRole = roleByCharacterId.get(characterId) ?? null;
-        return existing.role !== desiredRole ? { id: signupId, role: desiredRole } : null;
-      })
-      .filter((item): item is { id: string; role: CharacterRole | null } => item !== null);
+    const selectedRoleBySignupId = new Map(
+      rosterSelections.map((selection) => [selection.signupId, selection.selectedRole]),
+    );
+    const toUpdateRoles: Array<{ id: string; offeredRoles: CharacterRole[] }> = [];
+    for (const signupId of plan.kept) {
+      const existing = currentById.get(signupId);
+      const characterId = existing?.character?.id;
+      if (!existing || !characterId) continue;
+      const desiredRoles = rolesByCharacterId.get(characterId) ?? [];
+      if (sameRoleSet(existing.offeredRoles, desiredRoles)) continue;
+
+      const selectedRole = selectedRoleBySignupId.get(signupId) ?? null;
+      if (selectedRole && !desiredRoles.includes(selectedRole)) {
+        throw new DomainError(
+          "SIGNUP_OFFER_ROSTER_SELECTED",
+          `${existing.character?.name ?? "That character"} is already rostered as ${CHARACTER_ROLE_LABELS[selectedRole]}. Keep that role offered, or ask the raid lead to change the roster selection first.`,
+        );
+      }
+      toUpdateRoles.push({ id: signupId, offeredRoles: desiredRoles });
+    }
 
     const result = await signupRepository.applyOfferPlan({
       runId: input.runId,
@@ -319,7 +344,7 @@ export const signupService = {
       toWithdraw: plan.toWithdraw,
       toReactivate,
       toCreate,
-      toUpdateRole,
+      toUpdateRoles,
     });
 
     await activityRepository.create({
@@ -504,7 +529,7 @@ export const signupService = {
       toWithdraw: plan.toWithdraw,
       toReactivate: [],
       toCreate: [],
-      toUpdateRole: [],
+      toUpdateRoles: [],
     });
 
     await activityRepository.create({
@@ -624,6 +649,7 @@ async function buildReconciliationPlan(
   const currentSignups = await signupRepository.listByRunAndUser(run.id, userId);
   const roster = await rosterRepository.findByRunId(run.id);
   const rosterSelectedSignupIds = roster?.selectedSignupIds ?? [];
+  const rosterSelections = roster?.selections ?? [];
 
   const { plan, blocked } = planCharacterOfferReconciliation({
     participationType: "BOOSTER",
@@ -654,26 +680,30 @@ async function buildReconciliationPlan(
     throw new DomainError("VALIDATION_FAILED", "Could not compute an offer plan.");
   }
 
-  return { plan, currentSignups };
+  return { plan, currentSignups, rosterSelections };
 }
 
 /**
  * Validates every offered BOOSTER Character against the same eligibility
  * rules a single-Character signup already enforces (ownership already
- * checked by the caller). Every offer must carry an explicit role that the
- * Character's class can actually perform (`option.roles`, from
- * `rolesForClass`) — the server never trusts an arbitrary client role, but it
- * also no longer restricts the choice to the specialization-derived default.
- * Also the Confirm-time cross-Run reservation revalidation boundary:
- * eligibility-time and Confirm-time can disagree if another Run reserved the
- * same Character in between, so this re-queries fresh immediately before the
- * caller's atomic write rather than trusting the read the User's client
- * loaded earlier. Returns the resolved role per characterId.
+ * checked by the caller). Every offer must volunteer at least one role, name
+ * no role twice, and name only roles the Character's class can actually
+ * perform (`option.roles`, from `rolesForClass`) — the server never trusts
+ * an arbitrary client role, but it also no longer restricts the choice to
+ * the specialization-derived default. Also the Confirm-time cross-Run
+ * reservation revalidation boundary: eligibility-time and Confirm-time can
+ * disagree if another Run reserved the same Character in between, so this
+ * re-queries fresh immediately before the caller's atomic write rather than
+ * trusting the read the User's client loaded earlier. Returns the normalized
+ * role set per characterId.
  */
 async function validateOfferedCharacters(
-  offeredCharacters: Array<{ offer: { characterId: string; role?: CharacterRole }; character: CharacterPageRecord }>,
+  offeredCharacters: Array<{
+    offer: { characterId: string; offeredRoles: CharacterRole[] };
+    character: CharacterPageRecord;
+  }>,
   run: LoadedRun,
-): Promise<Map<string, CharacterRole>> {
+): Promise<Map<string, CharacterRole[]>> {
   const eligibilityRun = {
     id: run.id,
     raidId: run.raidId,
@@ -683,7 +713,7 @@ async function validateOfferedCharacters(
     totalBossCount: run.totalBossCount,
     scheduledStartAt: run.scheduledStartAt,
   };
-  const roleByCharacterId = new Map<string, CharacterRole>();
+  const rolesByCharacterId = new Map<string, CharacterRole[]>();
 
   const enrichedCharacters = await withReservationConflicts(
     offeredCharacters.map(({ character }) => character),
@@ -696,16 +726,25 @@ async function validateOfferedCharacters(
     if (!option) {
       throw boosterRejection(ineligible.find((item) => item.characterId === offer.characterId));
     }
-    if (!offer.role) {
-      throw new DomainError("INVALID_CHARACTER_ROLE", `Choose a role for ${character.name}.`);
+    if (offer.offeredRoles.length === 0) {
+      throw new DomainError("INVALID_CHARACTER_ROLE", `Choose at least one role for ${character.name}.`);
     }
-    if (!option.roles.includes(offer.role)) {
+    const normalized = normalizeOfferedRoles(offer.offeredRoles);
+    if (normalized.length !== offer.offeredRoles.length) {
       throw new DomainError(
         "INVALID_CHARACTER_ROLE",
-        `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[offer.role]}.`,
+        `${character.name} was offered the same role twice.`,
       );
     }
-    roleByCharacterId.set(offer.characterId, offer.role);
+    for (const role of normalized) {
+      if (!option.roles.includes(role)) {
+        throw new DomainError(
+          "INVALID_CHARACTER_ROLE",
+          `${character.name} cannot be offered as ${CHARACTER_ROLE_LABELS[role]}.`,
+        );
+      }
+    }
+    rolesByCharacterId.set(offer.characterId, normalized);
   }
-  return roleByCharacterId;
+  return rolesByCharacterId;
 }

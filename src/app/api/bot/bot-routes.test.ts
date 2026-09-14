@@ -290,7 +290,7 @@ describe("bot API acting-user resolution", () => {
         body: {
           userId: "aaaaaaaa-aaaa-4aaa-8aaa-000000000099",
           participationType: "BOOSTER",
-          offers: [{ characterId: targetCharacterId, role: "DPS" }],
+          offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }],
         },
       }),
       params(runId),
@@ -341,7 +341,7 @@ describe("bot API domain reuse", () => {
           "x-discord-user-id": TARGET_DISCORD_ID,
           "content-type": "application/json",
         },
-        body: { participationType: "BOOSTER", offers: [{ characterId: foreignCharacterId, role: "DPS" }] },
+        body: { participationType: "BOOSTER", offers: [{ characterId: foreignCharacterId, offeredRoles: ["DPS"] }] },
       }),
       params(runId),
     );
@@ -382,7 +382,7 @@ describe("bot API domain reuse", () => {
           "x-discord-user-id": TARGET_DISCORD_ID,
           "content-type": "application/json",
         },
-        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, role: "DPS" }] },
+        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }] },
       }),
       params(mythicRun.id),
     );
@@ -422,7 +422,7 @@ describe("bot API domain reuse", () => {
           "x-discord-user-id": TARGET_DISCORD_ID,
           "content-type": "application/json",
         },
-        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, role: "DPS" }] },
+        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }] },
       }),
       params(draftRun.id),
     );
@@ -458,7 +458,7 @@ describe("bot API domain reuse", () => {
           "x-discord-user-id": TARGET_DISCORD_ID,
           "content-type": "application/json",
         },
-        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, role: "DPS" }] },
+        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }] },
       }),
       params(runId),
     );
@@ -498,7 +498,7 @@ describe("bot API roster and discord-state endpoints", () => {
           "x-discord-user-id": TARGET_DISCORD_ID,
           "content-type": "application/json",
         },
-        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, role: "DPS" }] },
+        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }] },
       }),
       params(runId),
     );

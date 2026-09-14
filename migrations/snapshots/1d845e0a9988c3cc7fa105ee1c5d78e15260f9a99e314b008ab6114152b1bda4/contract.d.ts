@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'ef31069df7e990253bb121096193155ce91c322f9c4da10a3b400c9ece4fe9ed'>;
+  StorageHashBase<'1d845e0a9988c3cc7fa105ee1c5d78e15260f9a99e314b008ab6114152b1bda4'>;
 export type ExecutionHash =
   ExecutionHashBase<'96f45257e34e0e4cfc1ae2b7d442d566b56bafc7d98c96696521955cd991db30'>;
 export type ProfileHash =
@@ -506,7 +506,6 @@ export type FieldOutputTypes = {
       readonly participationType: 'BOOSTER' | 'LOOTBUDDY';
       readonly isBackup: CodecTypes['pg/bool@1']['output'];
       readonly status: 'PENDING' | 'SELECTED' | 'NOT_SELECTED' | 'WITHDRAWN';
-      readonly publishedRole: 'TANK' | 'HEALER' | 'DPS' | null;
       readonly lootbuddyClass:
         | 'DEATH_KNIGHT'
         | 'DEMON_HUNTER'
@@ -874,7 +873,6 @@ export type FieldInputTypes = {
       readonly participationType: 'BOOSTER' | 'LOOTBUDDY';
       readonly isBackup: CodecTypes['pg/bool@1']['input'];
       readonly status: 'PENDING' | 'SELECTED' | 'NOT_SELECTED' | 'WITHDRAWN';
-      readonly publishedRole: 'TANK' | 'HEALER' | 'DPS' | null;
       readonly lootbuddyClass:
         | 'DEATH_KNIGHT'
         | 'DEMON_HUNTER'
@@ -1258,7 +1256,6 @@ export type StorageColumnTypes = {
       readonly lootbuddyVerification: 'NONE' | 'ACCESS' | 'TRIAL' | null;
       readonly notes: CodecTypes['pg/text@1']['output'] | null;
       readonly participationType: 'BOOSTER' | 'LOOTBUDDY';
-      readonly publishedRole: 'TANK' | 'HEALER' | 'DPS' | null;
       readonly runId: CodecTypes['pg/text@1']['output'];
       readonly status: 'PENDING' | 'SELECTED' | 'NOT_SELECTED' | 'WITHDRAWN';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1626,7 +1623,6 @@ export type StorageColumnInputTypes = {
       readonly lootbuddyVerification: 'NONE' | 'ACCESS' | 'TRIAL' | null;
       readonly notes: CodecTypes['pg/text@1']['input'] | null;
       readonly participationType: 'BOOSTER' | 'LOOTBUDDY';
-      readonly publishedRole: 'TANK' | 'HEALER' | 'DPS' | null;
       readonly runId: CodecTypes['pg/text@1']['input'];
       readonly status: 'PENDING' | 'SELECTED' | 'NOT_SELECTED' | 'WITHDRAWN';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -3683,11 +3679,6 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
-                };
-                readonly publishedRole: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
                 };
                 readonly lootbuddyClass: {
                   readonly nativeType: 'text';
@@ -6507,10 +6498,6 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly publishedRole: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly lootbuddyClass: {
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -6615,7 +6602,6 @@ type ContractBase = Omit<
                 readonly participationType: { readonly column: 'participationType' };
                 readonly isBackup: { readonly column: 'isBackup' };
                 readonly status: { readonly column: 'status' };
-                readonly publishedRole: { readonly column: 'publishedRole' };
                 readonly lootbuddyClass: { readonly column: 'lootbuddyClass' };
                 readonly lootbuddyMode: { readonly column: 'lootbuddyMode' };
                 readonly lootbuddyVerification: { readonly column: 'lootbuddyVerification' };

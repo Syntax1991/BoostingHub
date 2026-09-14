@@ -113,7 +113,8 @@ export function RunSignupButton({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<string>>(new Set());
-  const [roleByCharacterId, setRoleByCharacterId] = useState<Record<string, CharacterRole>>({});
+  /** Every role each offered Character volunteers for — a hybrid may offer several at once. */
+  const [rolesByCharacterId, setRolesByCharacterId] = useState<Record<string, CharacterRole[]>>({});
   const [lootbuddies, setLootbuddies] = useState<LootbuddyEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [boosterPending, startBoosterTransition] = useTransition();
@@ -135,10 +136,10 @@ export function RunSignupButton({
     }
     setOptions(result.data);
     setSelectedCharacterIds(new Set(result.data.activeBoosterOffers.characterIds));
-    // Existing persisted RunSignup.role wins over the specialization default —
-    // the User explicitly chose this role for this Run; reopening the dialog
-    // must never silently revert it.
-    setRoleByCharacterId({ ...result.data.activeBoosterOffers.roleByCharacterId } as Record<string, CharacterRole>);
+    // The already-offered role set wins over the specialization default — the
+    // User explicitly chose these roles for this Run; reopening the dialog
+    // must never silently revert them.
+    setRolesByCharacterId({ ...result.data.activeBoosterOffers.offeredRolesByCharacterId } as Record<string, CharacterRole[]>);
     setLootbuddies(toLootbuddyEntries(result.data.activeLootbuddies));
   }
 
@@ -158,7 +159,7 @@ export function RunSignupButton({
       setError(null);
       setSuccess(null);
       setSelectedCharacterIds(new Set());
-      setRoleByCharacterId({});
+      setRolesByCharacterId({});
       setLootbuddies([]);
     };
     dialog.addEventListener("close", onClose);
@@ -166,10 +167,10 @@ export function RunSignupButton({
   }, [dialogOpen]);
 
   /**
-   * When a Character first becomes selected, initialize its role from the
-   * specialization-derived default — never from class order, never a single
-   * global role. A Character re-checked after being unchecked keeps whatever
-   * role it already had in this dialog session.
+   * When a Character first becomes selected, initialize its offered roles
+   * from the specialization-derived default — never from class order, never a
+   * single global role. A Character re-checked after being unchecked keeps
+   * whatever roles it already had in this dialog session.
    */
   function toggleBoosterCharacter(characterId: string) {
     setSelectedCharacterIds((current) => {
@@ -181,25 +182,32 @@ export function RunSignupButton({
       }
       return next;
     });
-    setRoleByCharacterId((current) => {
-      if (current[characterId]) return current;
+    setRolesByCharacterId((current) => {
+      if (current[characterId]?.length) return current;
       const group = boosterGroups.find((item) => item.characterId === characterId);
-      return group?.defaultRole ? { ...current, [characterId]: group.defaultRole } : current;
+      return group?.defaultRole ? { ...current, [characterId]: [group.defaultRole] } : current;
     });
   }
 
-  function setBoosterRole(characterId: string, role: CharacterRole) {
-    setRoleByCharacterId((current) => ({ ...current, [characterId]: role }));
+  /** Offering is additive per Character: unchecking the last role leaves the offer incomplete until one is chosen again. */
+  function toggleBoosterRole(characterId: string, role: CharacterRole) {
+    setRolesByCharacterId((current) => {
+      const existing = current[characterId] ?? [];
+      const next = existing.includes(role)
+        ? existing.filter((item) => item !== role)
+        : orderedRoles([...existing, role]);
+      return { ...current, [characterId]: next };
+    });
   }
 
-  /** Each newly-selected Character is initialized independently: its own existing role or its own specialization default — never one role for the whole batch. */
+  /** Each newly-selected Character is initialized independently: its own existing roles or its own specialization default — never one role for the whole batch. */
   function selectAllEligibleBooster() {
     setSelectedCharacterIds(new Set(boosterGroups.map((group) => group.characterId)));
-    setRoleByCharacterId((current) => {
+    setRolesByCharacterId((current) => {
       const next = { ...current };
       for (const group of boosterGroups) {
-        if (!next[group.characterId] && group.defaultRole) {
-          next[group.characterId] = group.defaultRole;
+        if (!next[group.characterId]?.length && group.defaultRole) {
+          next[group.characterId] = [group.defaultRole];
         }
       }
       return next;
@@ -208,17 +216,19 @@ export function RunSignupButton({
 
   function submitBooster() {
     setError(null);
-    const missingRole = [...selectedCharacterIds].find((characterId) => !roleByCharacterId[characterId]);
+    const missingRole = [...selectedCharacterIds].find(
+      (characterId) => (rolesByCharacterId[characterId] ?? []).length === 0,
+    );
     if (missingRole) {
       const group = boosterGroups.find((item) => item.characterId === missingRole);
-      setError(`Choose a role for ${group?.characterName ?? "the selected character"}.`);
+      setError(`Choose at least one role for ${group?.characterName ?? "the selected character"}.`);
       return;
     }
 
     startBoosterTransition(async () => {
       const offers = [...selectedCharacterIds].map((characterId) => ({
         characterId,
-        role: roleByCharacterId[characterId],
+        offeredRoles: rolesByCharacterId[characterId] ?? [],
       }));
       const result = await setCharacterOffersAction({ runId, offers });
       if (!result.ok) {
@@ -310,9 +320,9 @@ export function RunSignupButton({
                 ineligible={options.booster.ineligible}
                 run={options.run}
                 selected={selectedCharacterIds}
-                roleByCharacterId={roleByCharacterId}
+                rolesByCharacterId={rolesByCharacterId}
                 onToggle={toggleBoosterCharacter}
-                onRoleChange={setBoosterRole}
+                onRoleToggle={toggleBoosterRole}
                 onSelectAll={selectAllEligibleBooster}
               />
               {selectedCharacterIds.size === 0 ? (
@@ -385,18 +395,18 @@ function BoosterCharacterChecklist({
   ineligible,
   run,
   selected,
-  roleByCharacterId,
+  rolesByCharacterId,
   onToggle,
-  onRoleChange,
+  onRoleToggle,
   onSelectAll,
 }: {
   groups: BoosterGroup[];
   ineligible: SignupOptions["booster"]["ineligible"];
   run: Pick<SignupOptions["run"], "difficulty" | "totalBossCount" | "lootType">;
   selected: Set<string>;
-  roleByCharacterId: Record<string, CharacterRole>;
+  rolesByCharacterId: Record<string, CharacterRole[]>;
   onToggle: (characterId: string) => void;
-  onRoleChange: (characterId: string, role: CharacterRole) => void;
+  onRoleToggle: (characterId: string, role: CharacterRole) => void;
   onSelectAll: () => void;
 }) {
   // Already-selected-elsewhere is shown inline (visible but disabled) rather
@@ -426,7 +436,7 @@ function BoosterCharacterChecklist({
         <ul className="space-y-2">
           {groups.map((group) => {
             const isChecked = selected.has(group.characterId);
-            const currentRole = roleByCharacterId[group.characterId];
+            const currentRoles = rolesByCharacterId[group.characterId] ?? [];
             const lockout = formatBoosterLockout(group.raidSave, run);
             return (
               <li
@@ -448,24 +458,25 @@ function BoosterCharacterChecklist({
                     </span>
                   </span>
                 </label>
-                <select
-                  aria-label={`Role for ${group.characterName}`}
-                  value={currentRole ?? ""}
+                <fieldset
+                  className="flex shrink-0 flex-wrap items-center gap-2"
                   disabled={!isChecked}
-                  onChange={(event) => onRoleChange(group.characterId, event.target.value as CharacterRole)}
-                  className="h-8 shrink-0 rounded-md border border-border bg-surface px-2 text-xs disabled:opacity-50"
                 >
-                  {!currentRole ? (
-                    <option value="" disabled>
-                      Choose a role
-                    </option>
-                  ) : null}
+                  <legend className="sr-only">Roles offered for {group.characterName}</legend>
                   {orderedRoles(group.roles).map((role) => (
-                    <option key={role} value={role}>
+                    <label
+                      key={role}
+                      className="flex items-center gap-1 text-xs text-muted has-[:disabled]:opacity-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={currentRoles.includes(role)}
+                        onChange={() => onRoleToggle(group.characterId, role)}
+                      />
                       {CHARACTER_ROLE_LABELS[role]}
-                    </option>
+                    </label>
                   ))}
-                </select>
+                </fieldset>
               </li>
             );
           })}

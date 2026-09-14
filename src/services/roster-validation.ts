@@ -20,7 +20,8 @@ export type RosterValidationMember = {
   userName: string;
   characterName: string;
   participationType: ParticipationType;
-  role: CharacterRole | null;
+  /** The Raid Lead's assignment for this slot; required for BOOSTER, always null for LOOTBUDDY. */
+  selectedRole: CharacterRole | null;
   status: SignupStatus;
   characterActive: boolean;
   boosterApproved: boolean;
@@ -73,6 +74,15 @@ export function validateRosterDraft(input: {
       blockers.push({
         code: "BOOSTER_ACCESS_INVALID",
         message: `${item.characterName} no longer has approved booster access for this role and difficulty.`,
+        signupId: item.signupId,
+      });
+    }
+    // A published BOOSTER slot is what attendance and payout are grouped by,
+    // so it can never ship without the Raid Lead's role assignment.
+    if (item.participationType === "BOOSTER" && !item.selectedRole) {
+      blockers.push({
+        code: "INVALID_ROSTER_SELECTION",
+        message: `${item.characterName} needs an assigned role before the roster can be published.`,
         signupId: item.signupId,
       });
     }

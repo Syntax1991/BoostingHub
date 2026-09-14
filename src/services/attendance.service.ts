@@ -26,7 +26,7 @@ function toManagerRow(row: AttendanceRecord) {
     characterRealm: row.characterRealm,
     userName: row.userName,
     wowClass: row.wowClass,
-    role: row.role,
+    selectedRole: row.selectedRole,
     participationType: row.participationType,
     isBackup: row.isBackup,
     status: row.status,
@@ -40,7 +40,7 @@ function toOwnRow(row: AttendanceRecord) {
   return {
     characterName: row.characterName,
     characterRealm: row.characterRealm,
-    role: row.role,
+    selectedRole: row.selectedRole,
     participationType: row.participationType,
     isBackup: row.isBackup,
     status: row.status,

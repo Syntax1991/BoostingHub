@@ -12,11 +12,12 @@ import {
   type RaidBuffCoverage,
   type RaidBuffParticipant,
 } from "@/services/roster-raid-buffs";
-import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
+import { rosterRepository, type RosterSelection, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { activityRepository } from "@/repositories/activity.repository";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
+import { formatOfferedRoles } from "@/lib/offered-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus, WowClass } from "@/models/enums";
 import type { SignupRaidSaveInfo } from "@/models/records";
@@ -50,6 +51,45 @@ function resolvedLootbuddyClass(signup: RosterSignupRow): WowClass | null {
   return signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
 }
 
+/**
+ * The Raid Lead's role assignment for one slot being selected. A BOOSTER slot
+ * must end up with exactly one of the roles its offer volunteered — an offer
+ * with only one such role resolves itself, so a raid lead never has to
+ * restate the obvious. A LOOTBUDDY slot has no booster role at all.
+ */
+function resolveSelectedRole(
+  signup: RosterSignupRow,
+  requested: CharacterRole | null | undefined,
+): CharacterRole | null {
+  const label = participationLabel(signup);
+  if (signup.participationType !== "BOOSTER") {
+    if (requested) {
+      throw new DomainError(
+        "INVALID_ROSTER_SELECTION",
+        `${label} is a lootbuddy entry and cannot be assigned a booster role.`,
+      );
+    }
+    return null;
+  }
+
+  const role = requested ?? (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null);
+  if (!role) {
+    throw new DomainError(
+      "INVALID_ROSTER_SELECTION",
+      signup.offeredRoles.length === 0
+        ? `${label} offered no role and cannot be rostered as a booster.`
+        : `Choose a role for ${label} — offered ${formatOfferedRoles(signup.offeredRoles)}.`,
+    );
+  }
+  if (!signup.offeredRoles.includes(role)) {
+    throw new DomainError(
+      "INVALID_ROSTER_SELECTION",
+      `${label} did not offer ${CHARACTER_ROLE_LABELS[role]}.`,
+    );
+  }
+  return role;
+}
+
 function inspectSignup(
   signup: RosterSignupRow,
   run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number; scheduledStartAt: string },
@@ -67,7 +107,7 @@ function inspectSignup(
     ? lockoutService.toRaidSaveInfo(matchingLockout, run.totalBossCount)
     : null;
   const boosterApproved =
-    signup.participationType !== "BOOSTER" || !signup.role || !character
+    signup.participationType !== "BOOSTER" || signup.offeredRoles.length === 0 || !character
       ? signup.participationType !== "BOOSTER"
       : boosterQualificationService.isApprovedFor(
           character.boosterQualifications,
@@ -81,7 +121,8 @@ function inspectSignup(
   if (signup.status === "WITHDRAWN") issue = "Withdrawn";
   else if (!characterActive) issue = "Character is inactive.";
   else if (signup.participationType === "BOOSTER" && !boosterApproved) {
-    const roleLabel = signup.role ? CHARACTER_ROLE_LABELS[signup.role].toLowerCase() : "role";
+    const roleLabel =
+      signup.offeredRoles.length > 0 ? formatOfferedRoles(signup.offeredRoles).toLowerCase() : "role";
     issue = `${DIFFICULTY_LABELS[run.difficulty]} ${roleLabel} access is no longer approved`;
   }
 
@@ -94,6 +135,12 @@ function inspectSignup(
   };
 }
 
+/**
+ * Composition and draft validation count the Raid Lead's draft assignment
+ * (`selectedRole`) — never the volunteered `offeredRoles`, which would
+ * double-count a hybrid across two buckets. Published projections use
+ * `publishedRole` instead (see getPublishedRosterView).
+ */
 function asMember(row: InspectedSignup) {
   return {
     signupId: row.id,
@@ -101,7 +148,7 @@ function asMember(row: InspectedSignup) {
     userName: row.userName,
     characterName: participationLabel(row),
     participationType: row.participationType,
-    role: row.role,
+    selectedRole: row.selectedRole,
     status: row.status,
     characterActive: row.characterActive,
     boosterApproved: row.boosterApproved,
@@ -128,8 +175,9 @@ function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
 /**
  * Roster orchestration. Draft selection is persisted on RunRosterEntry and is
  * not RunSignup.status. Publish copies the draft into SELECTED / NOT_SELECTED
- * in one transaction and re-checks BoosterAccess plus lockouts because those
- * can change after signup.
+ * and snapshots each BOOSTER's draft selectedRole onto RunSignup.publishedRole
+ * in one transaction. Replacement-draft edits never mutate publishedRole until
+ * Publish runs again.
  */
 export const rosterService = {
   async listManagedRuns(user: AuthenticatedUser) {
@@ -162,8 +210,9 @@ export const rosterService = {
   },
 
   /**
-   * Participant-safe published roster. Uses live SELECTED signup rows, never draft
-   * selection. Does not call ensure(), so a USER view cannot create a roster row.
+   * Participant-safe published roster. Uses live SELECTED signup rows and their
+   * publishedRole snapshot — never mutable draft selection.
+   * Does not call ensure(), so a USER view cannot create a roster row.
    */
   async getPublishedRosterView(runId: string) {
     const roster = await rosterRepository.findByRunId(runId);
@@ -182,7 +231,7 @@ export const rosterService = {
           characterName: signup.character?.name ?? (wowClass ? CLASS_LABELS[wowClass] : "Unknown character"),
           characterRealm: signup.character?.realm ?? "",
           wowClass,
-          role: signup.role,
+          selectedRole: signup.publishedRole,
           participationType: signup.participationType,
           isBackup: signup.isBackup,
         };
@@ -270,9 +319,8 @@ export const rosterService = {
       raidBuffCoverage,
       validation,
       groups: {
-        tanks: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "TANK"),
-        healers: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "HEALER"),
-        dps: candidates.filter((item) => item.participationType === "BOOSTER" && item.role === "DPS"),
+        /** One card per BOOSTER signup — role discovery uses the client filter on offeredRoles. */
+        boosters: candidates.filter((item) => item.participationType === "BOOSTER"),
         lootbuddies: candidates.filter((item) => item.participationType === "LOOTBUDDY"),
       },
       summary: {
@@ -288,7 +336,14 @@ export const rosterService = {
 
   async setDraftSelection(
     user: AuthenticatedUser,
-    input: { runId: string; signupId: string; selected: boolean; version: number },
+    input: {
+      runId: string;
+      signupId: string;
+      selected: boolean;
+      version: number;
+      /** Omit for a single-role offer (auto-resolved) and for LOOTBUDDY. */
+      selectedRole?: CharacterRole | null;
+    },
   ) {
     const run = await runRepository.findById(input.runId);
     if (!run) {
@@ -356,6 +411,7 @@ export const rosterService = {
       expectedVersion: input.version,
       signupId: input.signupId,
       selected: input.selected,
+      selectedRole: input.selected ? resolveSelectedRole(signup, input.selectedRole) : null,
       replaceSignupIds,
       characterId: signup.participationType === "BOOSTER" ? (signup.character?.id ?? null) : null,
       targetRunId: input.runId,
@@ -374,14 +430,21 @@ export const rosterService = {
   },
 
   /**
-   * Persist a complete draft selection in one mutation. Validates every
-   * requested signup before writing; rejects malformed same-user Booster
-   * batches instead of silently normalizing. OPEN → ROSTERING only when the
-   * saved selection is non-empty.
+   * Persist a complete draft selection in one mutation. Each selection names
+   * the role the Raid Lead is assigning that slot — the decision that drives
+   * composition, publish, attendance, and payout. A BOOSTER slot must resolve
+   * to exactly one of its offered roles (a single-role offer resolves itself);
+   * a LOOTBUDDY slot must carry none. Validates every requested signup before
+   * writing; rejects malformed same-user Booster batches instead of silently
+   * normalizing. OPEN → ROSTERING only when the saved selection is non-empty.
    */
   async saveDraftSelection(
     user: AuthenticatedUser,
-    input: { runId: string; version: number; selectedSignupIds: string[] },
+    input: {
+      runId: string;
+      version: number;
+      selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+    },
   ) {
     const run = await runRepository.findById(input.runId);
     if (!run) {
@@ -395,10 +458,23 @@ export const rosterService = {
     const roster = await rosterRepository.ensure(input.runId);
     await rosterRepository.assertVersion(roster, input.version);
 
-    const selectedIds = [...new Set(input.selectedSignupIds)];
+    const requested = new Map<string, CharacterRole | null>();
+    for (const selection of input.selections) {
+      const existing = requested.get(selection.signupId);
+      if (requested.has(selection.signupId) && existing !== selection.selectedRole) {
+        throw new DomainError(
+          "INVALID_ROSTER_SELECTION",
+          "The same signup was selected twice with different roles.",
+        );
+      }
+      requested.set(selection.signupId, selection.selectedRole);
+    }
+
+    const selectedIds = [...requested.keys()];
     const signups = await rosterRepository.listSignups(input.runId);
     const byId = new Map(signups.map((item) => [item.id, item]));
     const selectedRows: RosterSignupRow[] = [];
+    const selections: RosterSelection[] = [];
 
     for (const signupId of selectedIds) {
       const signup = byId.get(signupId);
@@ -427,6 +503,10 @@ export const rosterService = {
         );
       }
       selectedRows.push(signup);
+      selections.push({
+        signupId,
+        selectedRole: resolveSelectedRole(signup, requested.get(signupId)),
+      });
     }
 
     const boosterByUser = new Map<string, string>();
@@ -463,7 +543,7 @@ export const rosterService = {
       }
     }
 
-    await rosterRepository.replaceSelectedSignupIds(roster.id, input.version, selectedIds, {
+    await rosterRepository.replaceSelectedSignupIds(roster.id, input.version, selections, {
       targetRunId: input.runId,
       scheduledStartAt: run.scheduledStartAt,
       selectedCharacterIds,
@@ -488,14 +568,26 @@ export const rosterService = {
     if (view.roster.version !== input.version) {
       throw new DomainError("ROSTER_ALREADY_CHANGED", "This roster changed since you loaded it. Refresh and try again.");
     }
-    if (view.groups.tanks.concat(view.groups.healers, view.groups.dps, view.groups.lootbuddies).some((item) => item.draftSelected)) {
+    const draft = await rosterRepository.findByRunIdFromId(view.roster.id);
+    if (draft.selectedSignupIds.length > 0) {
       return;
     }
-    const selectedIds = view.groups.tanks
-      .concat(view.groups.healers, view.groups.dps, view.groups.lootbuddies)
-      .filter((item) => item.status === "SELECTED")
-      .map((item) => item.id);
-    await rosterRepository.replaceSelectedSignupIds(view.roster.id, input.version, selectedIds);
+    const signups = await rosterRepository.listSignups(input.runId);
+    // Seeds the replacement draft from the live published selection and its
+    // publishedRole snapshot — never from a previously mutated draft role.
+    // A published slot predating assigned roles falls back only when the offer
+    // has exactly one volunteered role.
+    const selections: RosterSelection[] = signups
+      .filter((signup) => signup.status === "SELECTED")
+      .map((signup) => ({
+        signupId: signup.id,
+        selectedRole:
+          signup.participationType !== "BOOSTER"
+            ? null
+            : (signup.publishedRole ??
+              (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null)),
+      }));
+    await rosterRepository.replaceSelectedSignupIds(view.roster.id, input.version, selections);
   },
 
   async validateDraft(user: AuthenticatedUser, runId: string): Promise<RosterValidationResult> {
@@ -611,11 +703,18 @@ export const rosterService = {
       nextStatus = "PUBLISHED";
     }
 
+    const selectedSelections = selected.map((item) => ({
+      signupId: item.id,
+      // LOOTBUDDY slots publish with null publishedRole; BOOSTER slots carry
+      // the draft assignment (already validated by resolveSelectedRole / validateRosterDraft).
+      selectedRole: item.participationType === "BOOSTER" ? item.selectedRole : null,
+    }));
+
     await rosterRepository.publishAtomic({
       runId: run.id,
       rosterId: roster.id,
       expectedVersion: input.version,
-      selectedSignupIds: selectedIds,
+      selectedSelections,
       selectedCharacterIds,
       scheduledStartAt: run.scheduledStartAt,
       notSelectedSignupIds: notSelectedIds,
@@ -630,5 +729,5 @@ export const rosterService = {
 
 export type { RosterIssue };
 export type RosterManagementView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
-export type RosterSignupView = RosterManagementView["groups"]["tanks"][number];
+export type RosterSignupView = RosterManagementView["groups"]["boosters"][number];
 export type { ParticipationType, CharacterRole, SignupStatus };

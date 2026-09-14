@@ -25,7 +25,8 @@ function toFinalSetupParticipant(signup: {
   character: { name: string; realm: string; wowClass: keyof typeof CLASS_LABELS } | null;
   lootbuddyClass: keyof typeof CLASS_LABELS | null;
   participationType: "BOOSTER" | "LOOTBUDDY";
-  role: FinalSetupParticipant["role"];
+  /** Published role for the Start preview — never the mutable draft selectedRole. */
+  publishedRole: FinalSetupParticipant["selectedRole"];
 }): FinalSetupParticipant {
   const lootbuddyClass = signup.lootbuddyClass ?? signup.character?.wowClass ?? null;
   const classLabel =
@@ -50,7 +51,7 @@ function toFinalSetupParticipant(signup: {
         : lootbuddyClass,
     classLabel,
     participationType: signup.participationType,
-    role: signup.role,
+    selectedRole: signup.publishedRole,
   };
 }
 

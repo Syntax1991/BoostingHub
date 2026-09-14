@@ -15,9 +15,10 @@ export type RosterComposition = {
   total: number;
 };
 
+/** Counted by the Raid Lead's assignment, never by volunteered offers — a hybrid fills exactly one slot. */
 export type CompositionMember = {
   participationType: ParticipationType;
-  role: CharacterRole | null;
+  selectedRole: CharacterRole | null;
 };
 
 function slot(selected: number, target: number): RosterCompositionSlot {
@@ -33,9 +34,9 @@ export function composeRoster(
   targets: { tanks: number; healers: number; dps: number },
 ): RosterComposition {
   const boosters = selected.filter((item) => item.participationType === "BOOSTER");
-  const tanks = boosters.filter((item) => item.role === "TANK").length;
-  const healers = boosters.filter((item) => item.role === "HEALER").length;
-  const dps = boosters.filter((item) => item.role === "DPS").length;
+  const tanks = boosters.filter((item) => item.selectedRole === "TANK").length;
+  const healers = boosters.filter((item) => item.selectedRole === "HEALER").length;
+  const dps = boosters.filter((item) => item.selectedRole === "DPS").length;
   const lootbuddies = selected.filter((item) => item.participationType === "LOOTBUDDY").length;
 
   return {

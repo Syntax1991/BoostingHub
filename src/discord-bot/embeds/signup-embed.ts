@@ -14,6 +14,16 @@ const RUN_STATUS_LABEL: Record<SignupEmbedData["runStatus"], string> = {
   CANCELLED: "Cancelled",
 };
 
+function formatRoleStatusLines(data: SignupEmbedData): string {
+  const { tank, healer, dps, lootbuddy } = data.roleStatus;
+  return [
+    `🛡 **Tanks** — ${tank.signed} signed · ${tank.picked}/${tank.target} picked`,
+    `✚ **Healers** — ${healer.signed} signed · ${healer.picked}/${healer.target} picked`,
+    `⚔ **DPS** — ${dps.signed} signed · ${dps.picked}/${dps.target} picked`,
+    `📦 **Lootbuddies** — ${lootbuddy.signed} signed · ${lootbuddy.picked} picked`,
+  ].join("\n");
+}
+
 /**
  * The public signup embed. Content only — this never renders a User's
  * offered Characters (that stays in the ephemeral, per-User reply).
@@ -28,6 +38,7 @@ export function buildSignupEmbed(data: SignupEmbedData): EmbedBuilder {
       { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
       { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
       { name: "Bosses", value: `${data.plannedBossCount}/${data.totalBossCount}`, inline: true },
+      { name: "Roles", value: formatRoleStatusLines(data), inline: false },
     )
     .setColor(data.signupWindowOpen ? 0xd4af37 : 0x555555)
     .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });

@@ -159,10 +159,16 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 1. `interaction.deferReply({ ephemeral: true })`.
 2. `GET .../signup-options` for the acting Discord User.
 3. If the window is closed or there are no eligible Booster Characters, say so and stop.
-4. Show an ephemeral multi-select of eligible Characters (preselect current `activeBoosterOffers`). Labels show persisted role or specialization default.
+4. Show an ephemeral multi-select of eligible Characters (preselect current `activeBoosterOffers`). Labels show specialization default.
 5. Submitting stages a BOOSTER session (`handleCharacterSelect`) — nothing persisted yet.
-6. Staging editor: per-Character role selects, Confirm / Cancel. Confirm calls `setCharacterOffers` once; Cancel discards staging only.
+6. Staging editor: per-Character **offered-role** multi-selects (`minValues=1`; single-role classes show a fixed label), Confirm / Cancel. Confirm calls `setCharacterOffers` once with `{ characterId, offeredRoles[] }`; Cancel discards staging only.
 7. Staging is in-memory (`signup-staging.ts`), TTL ~15 minutes, wiped on bot restart without touching DB.
+
+Public signup embed Roles field:
+
+- **Signed** = PENDING/SELECTED offers containing that role (hybrids count once per offered role)
+- **Picked** = authoritative roster by `selectedRole` (saved draft while OPEN/ROSTERING; published SELECTED after publish)
+- Lootbuddies: `N signed · M picked` (no target denominator)
 
 **Sign as Lootbuddy** — staged Class + Mode collection (no Character selector):
 

@@ -3,19 +3,19 @@ import { isActiveSignupOffer } from "@/services/signup-state";
 import {
   ClassBadge,
   ParticipationBadge,
-  RoleBadge,
+  OfferedRolesBadges,
   SignupStatusBadge,
   AccessBadge,
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
-import { CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
-type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
+type ManagerSignup = RosterManagementView["groups"]["boosters"][number];
 type ManagerRun = Pick<RosterManagementView["run"], "difficulty" | "totalBossCount" | "lootType">;
 
 function boosterLockoutLabel(signup: ManagerSignup, run: ManagerRun) {
@@ -53,12 +53,7 @@ function characterLabel(signup: {
 
 export function RunSignupsSection({ data }: { data: RunDetailView }) {
   if (data.permissions.canViewManagerSignups && data.manager) {
-    const all = [
-      ...data.manager.groups.tanks,
-      ...data.manager.groups.healers,
-      ...data.manager.groups.dps,
-      ...data.manager.groups.lootbuddies,
-    ];
+    const all = [...data.manager.groups.boosters, ...data.manager.groups.lootbuddies];
     return <ManagerSignupList runId={data.run.id} run={data.manager.run} signups={all} />;
   }
 
@@ -102,7 +97,7 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
                   {resolvedClass(signup) ? <ClassBadge wowClass={resolvedClass(signup)!} /> : null}
                   <ParticipationBadge type={signup.participationType} />
-                  {signup.role ? <RoleBadge role={signup.role} /> : null}
+                  <OfferedRolesBadges roles={signup.offeredRoles} />
                   <SignupStatusBadge status={signup.status} />
                   {signup.participationType === "BOOSTER" ? (
                     <span>{signup.isBackup ? "Backup" : "Primary"}</span>
@@ -214,7 +209,10 @@ function ManagerSignupList({
                   <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
                     <span>{characterLabel(signup)}</span>
                     {wowClass ? <ClassBadge wowClass={wowClass} /> : null}
-                    {signup.role ? <RoleBadge role={signup.role} /> : null}
+                    <OfferedRolesBadges roles={signup.offeredRoles} />
+                    {signup.selectedRole ? (
+                      <span className="text-xs text-muted">Rostered as {CHARACTER_ROLE_LABELS[signup.selectedRole]}</span>
+                    ) : null}
                     {signup.participationType === "LOOTBUDDY" ? (
                       <span className="text-xs text-muted">
                         {signup.lootbuddyMode ? LOOTBUDDY_MODE_LABELS[signup.lootbuddyMode] : "Lootbuddy"}

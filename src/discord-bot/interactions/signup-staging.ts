@@ -2,8 +2,8 @@
  * In-memory, per-(Discord User, Run) staging area for a BOOSTER signup being
  * configured through Discord. Nothing here is a second source of truth for
  * RunSignup data — it exists only so a User can pick Characters, adjust each
- * one's role, and back out, before a single `setCharacterOffers` call
- * commits the whole desired set on Confirm.
+ * one's volunteered roles, and back out, before a single `setCharacterOffers`
+ * call commits the whole desired set on Confirm.
  *
  * Deliberately disposable: keyed by `${discordUserId}:${runId}` (never by an
  * ephemeral message id, so it survives Discord editing the same message
@@ -20,8 +20,8 @@ export type CharacterRole = "TANK" | "HEALER" | "DPS";
 export type StagedBoosterSession = {
   discordUserId: string;
   runId: string;
-  /** characterId -> chosen role, or null when a Character has no specialization default and none has been chosen yet. */
-  offers: Map<string, CharacterRole | null>;
+  /** characterId -> volunteered roles, empty when a Character has no specialization default and nothing has been chosen yet. */
+  offers: Map<string, CharacterRole[]>;
   /** Whether this User already had an active BOOSTER offer on this Run when the editor was opened — controls "Confirm Signup" vs "Confirm Changes" copy. */
   isExistingSignup: boolean;
   expiresAt: number;
@@ -39,13 +39,13 @@ function key(discordUserId: string, runId: string): string {
 export function startSession(input: {
   discordUserId: string;
   runId: string;
-  offers: Array<{ characterId: string; role: CharacterRole | null }>;
+  offers: Array<{ characterId: string; offeredRoles: CharacterRole[] }>;
   isExistingSignup: boolean;
 }): StagedBoosterSession {
   const session: StagedBoosterSession = {
     discordUserId: input.discordUserId,
     runId: input.runId,
-    offers: new Map(input.offers.map((offer) => [offer.characterId, offer.role])),
+    offers: new Map(input.offers.map((offer) => [offer.characterId, offer.offeredRoles])),
     isExistingSignup: input.isExistingSignup,
     expiresAt: Date.now() + SESSION_TTL_MS,
   };
@@ -65,11 +65,16 @@ export function getSession(discordUserId: string, runId: string): StagedBoosterS
   return session;
 }
 
-/** Sets one Character's staged role. Renews the TTL — an active editor never expires mid-use. */
-export function setStagedRole(discordUserId: string, runId: string, characterId: string, role: CharacterRole): boolean {
+/** Replaces one Character's staged role set. Renews the TTL — an active editor never expires mid-use. */
+export function setStagedRoles(
+  discordUserId: string,
+  runId: string,
+  characterId: string,
+  roles: CharacterRole[],
+): boolean {
   const session = getSession(discordUserId, runId);
   if (!session) return false;
-  session.offers.set(characterId, role);
+  session.offers.set(characterId, roles);
   session.expiresAt = Date.now() + SESSION_TTL_MS;
   return true;
 }

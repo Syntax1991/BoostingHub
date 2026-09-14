@@ -85,6 +85,30 @@ const FILLER_BOOSTERS: FillerBooster[] = FILLER_BOOSTER_DEFS.map((def, index) =>
   ...def,
 }));
 
+/**
+ * Every seeded BOOSTER offer volunteers exactly the one role its fixture
+ * names, so seeded data keeps the single-role shape the older fixtures
+ * described while still living on RunSignupRole. Roster entries then read the
+ * same role back as their `selectedRole` via `seededRoleBySignupId`.
+ */
+const seededRoleBySignupId = new Map<string, FillerBoosterRole>();
+
+async function seedOfferedRole(signupId: string, role: FillerBoosterRole | null) {
+  if (!role) return;
+  seededRoleBySignupId.set(signupId, role);
+  await orm.RunSignupRole.create({
+    id: crypto.randomUUID(),
+    signupId,
+    role,
+    createdAt: SEED_NOW,
+  });
+}
+
+/** The role a seeded roster slot is assigned — the fixture's own offered role, or none for a Lootbuddy. */
+function seededSelectedRole(signupId: string): FillerBoosterRole | null {
+  return seededRoleBySignupId.get(signupId) ?? null;
+}
+
 function characterIdentity(name: string, realm: string) {
   return {
     name,
@@ -210,6 +234,9 @@ async function wipe() {
   }
   for (const row of await orm.RunRoster.select("id").all()) {
     await orm.RunRoster.where({ id: row.id }).delete();
+  }
+  for (const row of await orm.RunSignupRole.select("id").all()) {
+    await orm.RunSignupRole.where({ id: row.id }).delete();
   }
   for (const row of await orm.RunSignup.select("id").all()) {
     await orm.RunSignup.where({ id: row.id }).delete();
@@ -1403,15 +1430,20 @@ async function seed() {
       userId: signup.userId,
       characterId: signup.characterId,
       participationType: signup.participationType,
-      role: signup.role,
       isBackup: signup.isBackup,
       status: signup.status,
+      // Live published assignment — only SELECTED BOOSTERs carry a snapshotted role.
+      publishedRole:
+        signup.status === "SELECTED" && signup.participationType === "BOOSTER" && signup.role
+          ? signup.role
+          : null,
       lootbuddyClass: "lootbuddyClass" in signup ? signup.lootbuddyClass : null,
       lootbuddyMode: "lootbuddyMode" in signup ? signup.lootbuddyMode : null,
       lootbuddyVerification: "lootbuddyVerification" in signup ? signup.lootbuddyVerification : null,
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
+    await seedOfferedRole(signup.id, signup.role);
   }
 
   // Settlement QA: 16 extra SELECTED Boosters so named 4 + fillers 16 = 20 full Cuts.
@@ -1443,8 +1475,10 @@ async function seed() {
       status: "SELECTED" as const,
     };
     settlementQaFillerSignups.push(row);
+    const { role, ...signupRow } = row;
     await orm.RunSignup.create({
-      ...row,
+      ...signupRow,
+      publishedRole: role,
       lootbuddyClass: null,
       lootbuddyMode: null,
       lootbuddyVerification: null,
@@ -1452,6 +1486,7 @@ async function seed() {
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
+    await seedOfferedRole(row.id, role);
   }
 
   // Pad every run to composition minima (2/4/14 BOOSTER) then MIN_SIGNUPS_PER_RUN.
@@ -1493,15 +1528,16 @@ async function seed() {
         if (need <= 0) break;
         if (filler.role !== role) continue;
         if (usedCharacterIds.has(filler.characterId)) continue;
+        const fillerSignupId = crypto.randomUUID();
         await orm.RunSignup.create({
-          id: crypto.randomUUID(),
+          id: fillerSignupId,
           runId: run.id,
           userId: filler.userId,
           characterId: filler.characterId,
           participationType: "BOOSTER",
-          role: filler.role,
           isBackup: false,
           status: fillerStatus,
+          publishedRole: null,
           lootbuddyClass: null,
           lootbuddyMode: null,
           lootbuddyVerification: null,
@@ -1509,6 +1545,7 @@ async function seed() {
           createdAt: SEED_NOW,
           updatedAt: SEED_NOW,
         });
+        await seedOfferedRole(fillerSignupId, filler.role);
         usedCharacterIds.add(filler.characterId);
         need -= 1;
         created += 1;
@@ -1528,9 +1565,9 @@ async function seed() {
         userId: lootbuddyFillerOwners[i % lootbuddyFillerOwners.length]!,
         characterId: null,
         participationType: "LOOTBUDDY",
-        role: null,
         isBackup: false,
         status: fillerStatus,
+        publishedRole: null,
         lootbuddyClass: WOW_CLASSES[i % WOW_CLASSES.length]!,
         lootbuddyMode: "LOOT_ONLY",
         lootbuddyVerification: "NONE",
@@ -1561,6 +1598,7 @@ async function seed() {
       rosterId: ids.rosters.sunday,
       signupId,
       selected: true,
+      selectedRole: seededSelectedRole(signupId),
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
@@ -1600,6 +1638,7 @@ async function seed() {
       rosterId: ids.rosters.inProgress,
       signupId: entry.signupId,
       selected: true,
+      selectedRole: seededSelectedRole(entry.signupId),
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
@@ -1646,6 +1685,7 @@ async function seed() {
       rosterId: ids.rosters.completed,
       signupId: entry.signupId,
       selected: true,
+      selectedRole: seededSelectedRole(entry.signupId),
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
@@ -1734,6 +1774,7 @@ async function seed() {
       rosterId: ids.rosters.settlementQa,
       signupId: member.signupId,
       selected: true,
+      selectedRole: seededSelectedRole(member.signupId),
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
     });
@@ -1793,6 +1834,7 @@ async function seed() {
         rosterId: input.rosterId,
         signupId: member.signupId,
         selected: true,
+        selectedRole: seededSelectedRole(member.signupId),
         createdAt: SEED_NOW,
         updatedAt: SEED_NOW,
       });

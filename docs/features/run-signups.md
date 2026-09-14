@@ -69,11 +69,20 @@ Updating one side never clears the other. Removing one Lootbuddy does not affect
 4. Save each section separately (`setCharacterOffers` / `setLootbuddies`).
 5. Review on `/my-runs` or the Run detail Signups tab — both participation types can appear for the same Run.
 
-## Booster signup role
+## Booster offered roles vs selected role
 
-A Character's specialization (`roleForSpecialization`) determines only the **default** role offered in the Web dialog and the Discord character-select label — never a restriction. The actual allowed set is everything the Character's *class* can perform (`rolesForClass` / `isRoleValidForClass`, in `src/lib/wow-specializations.ts`). `RunSignup.role` is the only place the chosen role lives — offering a Character as a different role never mutates `Character.specialization` or `Character.primaryRole`.
+These are different domain facts:
 
-The server requires an explicit `role` on every BOOSTER offer and validates it with `isRoleValidForClass` (`INVALID_CHARACTER_ROLE`).
+| Concept | Storage | Meaning |
+| --- | --- | --- |
+| **Offered roles** | `RunSignupRole` (`RunSignup.offeredRoles`) | Roles the Booster volunteers this Character can play for this Run (1+) |
+| **Selected role** | `RunRosterEntry.selectedRole` | The single final role the Raid Lead assigns in the roster |
+
+A Character's specialization (`roleForSpecialization`) determines only the **default** hint in Web/Discord — never a restriction. The allowed offered set is everything the Character's *class* can perform (`rolesForClass` / `isRoleValidForClass`). Offering roles never mutates `Character.specialization` or `Character.primaryRole`.
+
+`setCharacterOffers` takes `{ characterId, offeredRoles: CharacterRole[] }` (deterministic order TANK → HEALER → DPS, ≥1, class-validated). One Character remains one `RunSignup` row even when volunteering multiple roles.
+
+If a signup is already draft-selected with `selectedRole = X` and the Booster removes `X` from offered roles, the offer update is **rejected** — the Raid Lead must change the roster first.
 
 ## Participation types
 

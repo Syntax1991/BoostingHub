@@ -62,11 +62,12 @@ async function createTestUser(id: string, name: string, accountRole: Authenticat
   });
 }
 
-async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "BoosterAccess" | "BoosterQualification" | "Run", id: string) {
+async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "RunSignupRole" | "BoosterAccess" | "BoosterQualification" | "Run", id: string) {
   try {
     if (table === "User") await orm.User.where({ id }).delete();
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
+    else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
     else if (table === "BoosterAccess") await orm.BoosterAccess.where({ id }).delete();
     else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
     else await orm.Run.where({ id }).delete();
@@ -144,6 +145,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const id of createdSignupIds) {
+    const offered = await orm.RunSignupRole.where({ signupId: id }).select("id").all();
+    for (const offer of offered) {
+      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+    }
     await deleteIfPresent("RunSignup", id);
   }
   for (const id of createdRunIds) {
@@ -378,7 +383,6 @@ describe("edit run", () => {
       userId: ids.user,
       characterId: null,
       participationType: "LOOTBUDDY",
-      role: null,
       isBackup: false,
       status: "WITHDRAWN",
       createdAt: new Date().toISOString(),

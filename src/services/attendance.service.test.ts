@@ -150,20 +150,29 @@ async function createSignup(input: {
 }) {
   const id = crypto.randomUUID();
   createdSignupIds.push(id);
+  const now = new Date().toISOString();
   await orm.RunSignup.create({
     id,
     runId: input.runId,
     userId: input.userId,
     characterId: input.characterId,
     participationType: input.participationType,
-    role: input.role,
     isBackup: input.isBackup ?? false,
     status: input.status ?? "PENDING",
+    publishedRole: null,
     lootbuddyMode: input.participationType === "LOOTBUDDY" ? "LOOT_ONLY" : null,
     lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "ACCESS" : null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   });
+  if (input.participationType === "BOOSTER" && input.role) {
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: id,
+      role: input.role,
+      createdAt: now,
+    });
+  }
   return id;
 }
 
@@ -218,7 +227,12 @@ async function cleanupRun(runId: string) {
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
-    await deleteIfPresent("RunSignup", (row as { id: string }).id);
+    const signupId = (row as { id: string }).id;
+    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const offer of offered) {
+      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+    }
+    await deleteIfPresent("RunSignup", signupId);
   }
   await deleteIfPresent("Run", runId);
 }
@@ -239,7 +253,12 @@ beforeAll(async () => {
     }
     const signups = await orm.RunSignup.where({ userId }).select("id").all();
     for (const row of signups) {
-      await deleteIfPresent("RunSignup", (row as { id: string }).id);
+      const signupId = (row as { id: string }).id;
+      const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+      for (const offer of offered) {
+        await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+      }
+      await deleteIfPresent("RunSignup", signupId);
     }
     const access = await orm.BoosterQualification.where({ userId }).select("id").all();
     for (const row of access) {
@@ -315,6 +334,10 @@ afterAll(async () => {
     await cleanupRun(runId);
   }
   for (const id of createdSignupIds) {
+    const offered = await orm.RunSignupRole.where({ signupId: id }).select("id").all();
+    for (const offer of offered) {
+      await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
+    }
     await deleteIfPresent("RunSignup", id);
   }
   for (const id of createdAccessIds) {
@@ -618,6 +641,60 @@ describe("roster freeze after start", () => {
       }),
       "INVALID_ROSTER_SELECTION",
     );
+  });
+
+  it("Start snapshots publishedRole even when the replacement draft role differs", async () => {
+    const runId = await createDraft(lead, { title: "Attendance published role snapshot" });
+    await runService.openRun(lead, runId);
+    const shamanChar = characters.user;
+    // Offer HEALER + DPS on the existing user character (seeded as DPS-capable for attendance tests).
+    const signupId = await createSignup({
+      runId,
+      userId: ids.user,
+      characterId: shamanChar,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId,
+      role: "DPS",
+      createdAt: new Date().toISOString(),
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "HEALER" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, {
+      runId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.preparePublishedRosterForEditing(lead, {
+      runId,
+      version: view.roster.version,
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId, selectedRole: "DPS" }],
+    });
+
+    const preview = await runDetailService.getRunDetail(lead, runId);
+    expect(preview.finalSetupPreview?.groups.healers.some((m) => m.participationType === "BOOSTER")).toBe(true);
+    expect(preview.finalSetupPreview?.groups.dps.some((m) => m.participationType === "BOOSTER")).toBe(false);
+
+    await runService.startRun(lead, { runId });
+    const manager = await attendanceService.getManagerAttendance(lead, runId);
+    expect(manager.rows).toHaveLength(1);
+    expect(manager.rows[0]?.selectedRole).toBe("HEALER");
   });
 });
 

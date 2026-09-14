@@ -22,9 +22,10 @@ export const signupOptionsSchema = z.object({
   runId: entityIdSchema,
 });
 
+/** A BOOSTER offer volunteers one or more roles; the server re-checks them against the Character's class. */
 const characterOfferSchema = z.object({
   characterId: entityIdSchema,
-  role: z.enum(CHARACTER_ROLES).optional(),
+  offeredRoles: z.array(z.enum(CHARACTER_ROLES)).min(1).max(CHARACTER_ROLES.length),
 });
 
 /** The complete desired BOOSTER Character-offer set for one Run — not additive, never touches Lootbuddy entries. */

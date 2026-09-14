@@ -36,7 +36,8 @@ export type AttendanceRecord = {
   characterRealm: string;
   characterRegion: WowRegion | null;
   wowClass: WowClass | null;
-  role: CharacterRole | null;
+  /** The Raid Lead's assigned BOOSTER role, read from the roster entry this attendance row snapshots. */
+  selectedRole: CharacterRole | null;
   participationType: ParticipationType;
   isBackup: boolean;
 };
@@ -74,7 +75,15 @@ function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
       : signup.lootbuddyClass == null
         ? null
         : mapWowClass(signup.lootbuddyClass),
-    role: signup.role == null ? null : mapCharacterRole(signup.role),
+    selectedRole:
+      // Prefer the published snapshot when present so Start/Attendance never
+      // leak a later replacement-draft mutation. After Start, publishedRole is
+      // frozen (no republish) and the roster entry was synced from it.
+      signup.publishedRole == null
+        ? entry.selectedRole == null
+          ? null
+          : mapCharacterRole(entry.selectedRole)
+        : mapCharacterRole(signup.publishedRole),
     participationType: mapParticipation(signup.participationType),
     isBackup: asBoolean(signup.isBackup),
   };
@@ -169,7 +178,10 @@ export const attendanceRepository = {
       if (existing.length > 0) {
         throw new DomainError("RUN_ALREADY_STARTED", "This run already has attendance records.");
       }
-      const selected = await txOrm.RunSignup.where({ runId, status: "SELECTED" }).select("id").all();
+      const selected = await txOrm.RunSignup
+        .where({ runId, status: "SELECTED" })
+        .include("offeredRoles")
+        .all();
       if (selected.length === 0) {
         throw new DomainError(
           "RUN_CANNOT_START",
@@ -179,7 +191,21 @@ export const attendanceRepository = {
       const now = new Date().toISOString();
       const rosterId = asString(rosterRow.id);
       for (const signup of selected) {
-        const signupId = asString((signup as Record<string, unknown>).id);
+        const signupRow = signup as Record<string, unknown>;
+        const signupId = asString(signupRow.id);
+        const participationType = mapParticipation(signupRow.participationType);
+        const publishedRole =
+          signupRow.publishedRole == null ? null : mapCharacterRole(signupRow.publishedRole);
+
+        // A PUBLISHED Run starts from the published roster. BOOSTER slots must
+        // already carry publishedRole — never guess from a mutable draft role.
+        if (participationType === "BOOSTER" && !publishedRole) {
+          throw new DomainError(
+            "RUN_CANNOT_START",
+            "A selected booster is missing its published role. Republish the roster before starting.",
+          );
+        }
+
         const existingEntry = await txOrm.RunRosterEntry.where({ rosterId, signupId }).first();
         let rosterEntryId = existingEntry ? asString((existingEntry as Record<string, unknown>).id) : "";
         if (!rosterEntryId) {
@@ -189,7 +215,17 @@ export const attendanceRepository = {
             rosterId,
             signupId,
             selected: true,
+            // Freeze the published role onto the entry attendance joins.
+            selectedRole: publishedRole,
             createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          // Align any replacement-draft mutation back to the published role so
+          // Attendance's roster-entry join matches what was actually published.
+          await txOrm.RunRosterEntry.where({ id: rosterEntryId }).update({
+            selected: true,
+            selectedRole: publishedRole,
             updatedAt: now,
           });
         }

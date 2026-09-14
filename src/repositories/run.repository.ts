@@ -1,5 +1,6 @@
 import { db, orm } from "@/lib/prisma";
 import { DomainError } from "@/lib/errors";
+import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import type { RaidDifficulty, RunLootType, RunStatus, SignupStatus, ParticipationType, CharacterRole } from "@/models/enums";
 import {
   asBoolean,
@@ -26,7 +27,15 @@ export type SignupOnRun = {
   status: SignupStatus;
   participationType: ParticipationType;
   isBackup: boolean;
-  role: CharacterRole | null;
+  offeredRoles: CharacterRole[];
+  /** Live published BOOSTER role; null unless SELECTED booster. */
+  publishedRole: CharacterRole | null;
+};
+
+export type RosterSelectionOnRun = {
+  signupId: string;
+  selected: boolean;
+  selectedRole: CharacterRole | null;
 };
 
 export type RunListRecord = {
@@ -57,8 +66,16 @@ export type RunListRecord = {
     version: number;
     publishedAt: string | null;
     draftSelectedCount: number;
+    selections: RosterSelectionOnRun[];
   } | null;
 };
+
+function mapOfferedRoles(value: unknown): CharacterRole[] {
+  if (!Array.isArray(value)) return [];
+  return normalizeOfferedRoles(
+    value.map((item) => mapCharacterRole((item as Record<string, unknown>).role)),
+  );
+}
 
 function mapRun(run: Record<string, unknown>): RunListRecord {
   const raid = (run.raid ?? {}) as Record<string, unknown>;
@@ -97,7 +114,8 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
         status: mapSignupStatus(signup.status),
         participationType: mapParticipation(signup.participationType),
         isBackup: asBoolean(signup.isBackup),
-        role: signup.role == null ? null : mapCharacterRole(signup.role),
+        offeredRoles: mapOfferedRoles(signup.offeredRoles),
+        publishedRole: signup.publishedRole == null ? null : mapCharacterRole(signup.publishedRole),
       };
     }),
     roster: roster
@@ -108,17 +126,26 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
           publishedAt: asStringOrNull(roster.publishedAt),
           draftSelectedCount: rosterEntries.filter((entry) => asBoolean((entry as Record<string, unknown>).selected, true))
             .length,
+          selections: rosterEntries.map((entry) => {
+            const row = entry as Record<string, unknown>;
+            return {
+              signupId: asString(row.signupId),
+              selected: asBoolean(row.selected, true),
+              selectedRole: row.selectedRole == null ? null : mapCharacterRole(row.selectedRole),
+            };
+          }),
         }
       : null,
   };
 }
+
 
 export const runRepository = {
   async listUpcoming(filters: RunListFilters = {}): Promise<RunListRecord[]> {
     let query = orm.Run
       .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
-      .include("signups")
+      .include("signups", (signup) => signup.include("offeredRoles"))
       .include("roster", (roster) => roster.include("entries"))
       .orderBy((run) => run.scheduledStartAt.asc());
 
@@ -141,7 +168,7 @@ export const runRepository = {
       .where({ id })
       .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
-      .include("signups")
+      .include("signups", (signup) => signup.include("offeredRoles"))
       .include("roster", (roster) => roster.include("entries"))
       .first();
 
@@ -152,7 +179,7 @@ export const runRepository = {
     const runs = await orm.Run
       .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
-      .include("signups")
+      .include("signups", (signup) => signup.include("offeredRoles"))
       .include("roster", (roster) => roster.include("entries"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();

@@ -76,6 +76,10 @@
       "model": "RunSignup",
       "namespace": "public"
     },
+    "run_signup_role": {
+      "model": "RunSignupRole",
+      "namespace": "public"
+    },
     "run_start_snapshot": {
       "model": "RunStartSnapshot",
       "namespace": "public"
@@ -3199,6 +3203,19 @@
                   "kind": "scalar"
                 }
               },
+              "selectedRole": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "signupId": {
                 "nullable": false,
                 "type": {
@@ -3289,6 +3306,9 @@
                 },
                 "selected": {
                   "column": "selected"
+                },
+                "selectedRole": {
+                  "column": "selectedRole"
                 },
                 "signupId": {
                   "column": "signupId"
@@ -3685,7 +3705,7 @@
                   "plane": "domain"
                 }
               },
-              "role": {
+              "publishedRole": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
@@ -3746,6 +3766,21 @@
                 },
                 "to": {
                   "model": "Character",
+                  "namespace": "public"
+                }
+              },
+              "offeredRoles": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "signupId"
+                  ]
+                },
+                "to": {
+                  "model": "RunSignupRole",
                   "namespace": "public"
                 }
               },
@@ -3839,8 +3874,8 @@
                 "participationType": {
                   "column": "participationType"
                 },
-                "role": {
-                  "column": "role"
+                "publishedRole": {
+                  "column": "publishedRole"
                 },
                 "runId": {
                   "column": "runId"
@@ -3857,6 +3892,79 @@
               },
               "namespaceId": "public",
               "table": "run_signup"
+            }
+          },
+          "RunSignupRole": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "signupId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "signup": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "signupId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunSignup",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "signupId": {
+                  "column": "signupId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_signup_role"
             }
           },
           "RunStartSnapshot": {
@@ -7387,6 +7495,13 @@
               ]
             },
             "run_roster_entry": {
+              "checks": [
+                {
+                  "expression": "\"selectedRole\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_roster_entry_selectedRole_check_e659d19f",
+                  "prefix": "run_roster_entry_selectedRole_check"
+                }
+              ],
               "columns": {
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -7415,6 +7530,17 @@
                   },
                   "nativeType": "bool",
                   "nullable": false
+                },
+                "selectedRole": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "signupId": {
                   "codecId": "pg/text@1",
@@ -7792,9 +7918,9 @@
                   "prefix": "run_signup_participationType_check"
                 },
                 {
-                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_signup_role_check_b1616ae6",
-                  "prefix": "run_signup_role_check"
+                  "expression": "\"publishedRole\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_signup_publishedRole_check_17f7e8a4",
+                  "prefix": "run_signup_publishedRole_check"
                 },
                 {
                   "expression": "\"status\" IN ('PENDING', 'SELECTED', 'NOT_SELECTED', 'WITHDRAWN')",
@@ -7880,7 +8006,7 @@
                     "plane": "storage"
                   }
                 },
-                "role": {
+                "publishedRole": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true,
@@ -8009,6 +8135,89 @@
                     "userId",
                     "characterId",
                     "participationType"
+                  ]
+                }
+              ]
+            },
+            "run_signup_role": {
+              "checks": [
+                {
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_signup_role_role_check_b1616ae6",
+                  "prefix": "run_signup_role_role_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "signupId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "signupId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_signup_role"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_signup"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "signupId"
+                  ],
+                  "name": "run_signup_role_signupId_idx_acdbc7f1",
+                  "prefix": "run_signup_role_signupId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "signupId",
+                    "role"
                   ]
                 }
               ]
@@ -8964,10 +9173,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "60c56dbcad0eaa2dc5cc7234e8a78e3df3cf3abbe41bd3c63f92b3e978279fa4"
+    "storageHash": "ef31069df7e990253bb121096193155ce91c322f9c4da10a3b400c9ece4fe9ed"
   },
   "execution": {
-    "executionHash": "e360afc15d9acb3a64cba5a920edaddddd531ee2246e5ae03f7da92ddec5d4a7",
+    "executionHash": "96f45257e34e0e4cfc1ae2b7d442d566b56bafc7d98c96696521955cd991db30",
     "mutations": {
       "defaults": [
         {
@@ -9391,6 +9600,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_signup"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_signup_role"
           }
         },
         {

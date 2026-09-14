@@ -30,7 +30,7 @@ Account roles are not booster/lootbuddy identities. `BOOSTER` and `LOOTBUDDY` re
 
 Draft selection is **not** `RunSignup.status`. Card clicks must not immediately become public `SELECTED`.
 
-The Roster Builder stages draft selection **locally**. Clicking signup cards toggles the staged set without a server round-trip. **Save Roster** persists the full staged ID set in one mutation (`saveDraftSelection` / `saveRosterDraftAction`), bumps `version` once, then refreshes. Composition, Class Buffs, and Validation continue to reflect the **saved** draft until that Save. Publish stays disabled while the staged set is dirty.
+The Roster Builder stages draft selection **locally**, including each BOOSTER's `selectedRole`. Clicking signup cards toggles the staged set without a server round-trip. **Save Roster** persists the full staged selections (`{ signupId, selectedRole }[]`) in one mutation (`saveDraftSelection` / `saveRosterDraftAction`), bumps `version` once, then refreshes. Composition, Class Buffs, and Validation continue to reflect the **saved** draft until that Save. Publish stays disabled while the staged set is dirty.
 
 Each run has at most one `RunRoster` row:
 
@@ -38,7 +38,7 @@ Each run has at most one `RunRoster` row:
 - `version` increments on draft writes and on publish (stale clients get `ROSTER_ALREADY_CHANGED`)
 - `publishedAt` / `publishedById` are set on successful publish
 
-`RunRosterEntry` stores **currently draft-selected** signups (`selected = true`). Absence of a row means not draft-selected.
+`RunRosterEntry` stores **currently draft-selected** signups (`selected = true`) plus the Raid Lead's final `selectedRole` for BOOSTER rows (null for LOOTBUDDY). Absence of a row means not draft-selected. Composition, Final Setup, Attendance display, and Discord picked counts use `selectedRole` — never the volunteered `offeredRoles`.
 
 Chosen over a JSON blob or a `rosterDraftSelected` column because:
 
@@ -76,7 +76,8 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 
 Targets come from the run (`desiredTankCount`, `desiredHealerCount`, `desiredDpsCount`), never hardcoded 2/4/14.
 
-- Booster `TANK` / `HEALER` / `DPS` count toward those slots
+- Booster slots count by `RunRosterEntry.selectedRole` (`TANK` / `HEALER` / `DPS`)
+- A multi-role Character selected once contributes to exactly one slot
 - Lootbuddies (`LOOT_ONLY` and `PLAYING`) do **not** count as booster composition
 - `PLAYING` has no assigned booster role, so it stays in the lootbuddy bucket
 

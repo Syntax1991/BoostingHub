@@ -20,7 +20,7 @@ import {
   getLootbuddySession,
   removeLootbuddyEntry,
   setPendingLootbuddyClass,
-  setStagedRole,
+  setStagedRoles,
   startSession,
   startLootbuddySession,
   discardLootbuddySession,
@@ -104,7 +104,7 @@ export type IneligibleCharacterOption = {
 };
 type ActiveBoosterOffers = {
   characterIds: string[];
-  roleByCharacterId: Record<string, CharacterRole>;
+  offeredRolesByCharacterId: Record<string, CharacterRole[]>;
 };
 type ActiveLootbuddy = {
   signupId: string;
@@ -176,9 +176,9 @@ type ReplyableInteraction = {
 
 /**
  * One option per Character, BOOSTER only. The label shows the Character's
- * current or specialization-derived default role for information only —
- * selecting this menu only stages the choice (see `handleCharacterSelect`);
- * nothing is persisted until Confirm.
+ * currently offered roles, or its specialization-derived default, for
+ * information only — selecting this menu only stages the choice (see
+ * `handleCharacterSelect`); nothing is persisted until Confirm.
  */
 export function buildCharacterSelectOptions(
   eligible: EligibleCharacterOption[],
@@ -187,9 +187,9 @@ export function buildCharacterSelectOptions(
 ): StringSelectMenuOptionBuilder[] {
   const activeIds = new Set(activeOffer.characterIds);
   return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) => {
-    const existingRole = activeOffer.roleByCharacterId[option.characterId];
-    const roleLabel = existingRole
-      ? ROLE_LABELS[existingRole]
+    const existingRoles = activeOffer.offeredRolesByCharacterId[option.characterId] ?? [];
+    const roleLabel = existingRoles.length > 0
+      ? existingRoles.map((role) => ROLE_LABELS[role]).join("/")
       : option.defaultRole
         ? `${ROLE_LABELS[option.defaultRole]} (default)`
         : null;
@@ -276,10 +276,10 @@ export async function handleSignupButton(interaction: ButtonInteraction, api: Bo
 
 /**
  * The Character select's submission. Stages a configuration session instead
- * of persisting anything — each selected Character's role resolves to its
- * existing offer's role, else its specialization default, else (for a
+ * of persisting anything — each selected Character's role set resolves to
+ * its existing offer's roles, else its specialization default, else (for a
  * single-role class) the only role it can perform, else stays unresolved
- * until the User picks one in the role editor.
+ * until the User picks at least one in the role editor.
  */
 export async function handleCharacterSelect(interaction: StringSelectMenuInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferUpdate();
@@ -301,12 +301,12 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
     isExistingSignup,
     offers: interaction.values.map((characterId) => {
       const option = byId.get(characterId);
-      const role =
-        options.activeBoosterOffers.roleByCharacterId[characterId] ??
-        option?.defaultRole ??
-        (option ? singleRoleFallback(option) : null) ??
-        null;
-      return { characterId, role };
+      const existing = options.activeBoosterOffers.offeredRolesByCharacterId[characterId];
+      if (existing?.length) {
+        return { characterId, offeredRoles: orderedRoles(existing) };
+      }
+      const fallback = option?.defaultRole ?? (option ? singleRoleFallback(option) : null);
+      return { characterId, offeredRoles: fallback ? [fallback] : [] };
     }),
   });
 
@@ -341,25 +341,28 @@ async function renderStagingEditor(
   const staged = [...session.offers.entries()];
 
   const hybrids = staged
-    .map(([characterId, role]) => ({ characterId, role, option: byId.get(characterId) }))
+    .map(([characterId, roles]) => ({ characterId, roles, option: byId.get(characterId) }))
     .filter((entry) => (entry.option?.roles?.length ?? 0) > 1);
   const singleRole = staged
-    .map(([characterId, role]) => ({ characterId, role, option: byId.get(characterId) }))
+    .map(([characterId, roles]) => ({ characterId, roles, option: byId.get(characterId) }))
     .filter((entry) => (entry.option?.roles?.length ?? 0) <= 1);
 
   const shownHybrids = hybrids.slice(0, MAX_ROLE_SELECT_ROWS);
-  const roleRows = shownHybrids.map(({ characterId, role, option }) => {
+  // One multi-value select per hybrid: a Character may volunteer for several
+  // roles at once, and the Raid Lead picks exactly one of them later.
+  const roleRows = shownHybrids.map(({ characterId, roles, option }) => {
+    const candidates = orderedRoles(option?.roles ?? []);
     const menu = new StringSelectMenuBuilder()
       .setCustomId(buildCharacterScopedCustomId("signup-role", runId, characterId))
-      .setPlaceholder(`Role for ${option?.characterName ?? "character"}`)
+      .setPlaceholder(`Roles for ${option?.characterName ?? "character"}`)
       .setMinValues(1)
-      .setMaxValues(1)
+      .setMaxValues(Math.max(candidates.length, 1))
       .addOptions(
-        orderedRoles(option?.roles ?? []).map((candidate) =>
+        candidates.map((candidate) =>
           new StringSelectMenuOptionBuilder()
             .setLabel(`${option?.characterName}-${option?.realm}: ${ROLE_LABELS[candidate]}`)
             .setValue(candidate)
-            .setDefault(candidate === role),
+            .setDefault(roles.includes(candidate)),
         ),
       );
     return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
@@ -383,7 +386,7 @@ async function renderStagingEditor(
   lines.push(
     staged.length === 0
       ? "No characters selected — confirming will clear your booster signup on this run."
-      : `Configure a role for each character, then ${confirmLabel.toLowerCase()}.`,
+      : `Choose every role each character can fill, then ${confirmLabel.toLowerCase()}.`,
   );
   if (singleRole.length > 0) {
     lines.push(
@@ -395,16 +398,16 @@ async function renderStagingEditor(
         .join("\n"),
     );
   }
-  const unresolved = staged.filter(([, role]) => !role);
+  const unresolved = staged.filter(([, roles]) => roles.length === 0);
   if (unresolved.length > 0) {
     lines.push(
-      `Choose a role for: ${unresolved
+      `Choose at least one role for: ${unresolved
         .map(([characterId]) => byId.get(characterId)?.characterName ?? characterId)
         .join(", ")}.`,
     );
   }
   if (remaining > 0) {
-    lines.push(`${remaining} more character${remaining === 1 ? "" : "s"} can have their role changed from the Web signup dialog.`);
+    lines.push(`${remaining} more character${remaining === 1 ? "" : "s"} can have their roles changed from the Web signup dialog.`);
   }
 
   await interaction.editReply({
@@ -421,9 +424,9 @@ export async function handleRoleSelect(
   characterId: string,
 ): Promise<void> {
   await interaction.deferUpdate();
-  const role = interaction.values[0] as CharacterRole;
+  const roles = orderedRoles(interaction.values as CharacterRole[]);
 
-  const updated = setStagedRole(interaction.user.id, runId, characterId, role);
+  const updated = setStagedRoles(interaction.user.id, runId, characterId, roles);
   if (!updated) {
     await interaction.editReply({
       content: "This signup editor has expired. Click Signup again to continue.",
@@ -455,19 +458,19 @@ export async function handleConfirmSignupButton(interaction: ButtonInteraction, 
     return;
   }
 
-  const unresolved = [...session.offers.entries()].filter(([, role]) => !role);
+  const unresolved = [...session.offers.entries()].filter(([, roles]) => roles.length === 0);
   if (unresolved.length > 0) {
     await renderStagingEditor(
       interaction,
       api,
       runId,
       session,
-      "Choose a role for every character before confirming.",
+      "Choose at least one role for every character before confirming.",
     );
     return;
   }
 
-  const offers = [...session.offers.entries()].map(([characterId, role]) => ({ characterId, role: role! }));
+  const offers = [...session.offers.entries()].map(([characterId, offeredRoles]) => ({ characterId, offeredRoles }));
 
   try {
     const result = await api.setCharacterOffers(runId, interaction.user.id, { offers });

@@ -28,7 +28,8 @@ export type FinalSetupParticipant = {
   wowClass: WowClass | null;
   classLabel: string | null;
   participationType: "BOOSTER" | "LOOTBUDDY";
-  role: CharacterRole | null;
+  /** The Raid Lead's assignment for this roster slot; null for LOOTBUDDY. */
+  selectedRole: CharacterRole | null;
 };
 
 export type FinalSetupInput = {
@@ -94,9 +95,9 @@ export function compareFinalSetupParticipants(a: FinalSetupParticipant, b: Final
 
 export function groupFinalSetupParticipants(members: FinalSetupParticipant[]): FinalSetupInput["groups"] {
   return {
-    tanks: members.filter((m) => m.participationType === "BOOSTER" && m.role === "TANK").sort(compareFinalSetupParticipants),
-    healers: members.filter((m) => m.participationType === "BOOSTER" && m.role === "HEALER").sort(compareFinalSetupParticipants),
-    dps: members.filter((m) => m.participationType === "BOOSTER" && m.role === "DPS").sort(compareFinalSetupParticipants),
+    tanks: members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "TANK").sort(compareFinalSetupParticipants),
+    healers: members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "HEALER").sort(compareFinalSetupParticipants),
+    dps: members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "DPS").sort(compareFinalSetupParticipants),
     lootbuddies: members.filter((m) => m.participationType === "LOOTBUDDY").sort(compareFinalSetupParticipants),
   };
 }

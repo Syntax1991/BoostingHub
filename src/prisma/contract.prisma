@@ -530,6 +530,10 @@ model RunTemplate {
 /// Duplicate prevention is per run + user + character + participation type.
 /// Withdrawn rows still occupy that unique key; a later signup of the same
 /// combination revives the row instead of inserting a second record.
+///
+/// BOOSTER role volunteering lives on RunSignupRole (offeredRoles).
+/// Mutable draft assignment lives on RunRosterEntry.selectedRole.
+/// Live published assignment lives here as publishedRole (null until SELECTED).
 model RunSignup {
   id                    String                 @id @default(uuid())
   runId                 String
@@ -539,9 +543,12 @@ model RunSignup {
   characterId           String?
   character             Character?             @relation(fields: [characterId], references: [id], onDelete: SetNull)
   participationType     ParticipationType
-  role                  CharacterRole?
   isBackup              Boolean                @default(false)
   status                SignupStatus
+  /// Role assigned when the roster was last published. Set only for SELECTED
+  /// BOOSTER rows; always null for LOOTBUDDY and for non-SELECTED statuses.
+  /// Replacement-draft edits never mutate this until Publish runs again.
+  publishedRole         CharacterRole?
   /// Characterless Lootbuddy's own Class snapshot — required for a new (characterId
   /// null) Lootbuddy row going forward. Null on Booster rows and on legacy
   /// Character-backed Lootbuddy rows predating this field (display falls back to
@@ -553,6 +560,7 @@ model RunSignup {
   createdAt             TimestamptzString      @default(now())
   updatedAt             temporal.updatedAtString()
 
+  offeredRoles  RunSignupRole[]
   rosterEntries RunRosterEntry[]
   payoutEntries RunPayoutEntry[]
 
@@ -566,6 +574,20 @@ model RunSignup {
   @@index([userId])
   @@index([runId])
   @@map("run_signup")
+}
+
+/// One volunteered role for a BOOSTER RunSignup. A Character may offer multiple
+/// roles on the same Run without creating multiple signup rows or roster slots.
+model RunSignupRole {
+  id        String        @id @default(uuid())
+  signupId  String
+  signup    RunSignup     @relation(fields: [signupId], references: [id], onDelete: Cascade)
+  role      CharacterRole
+  createdAt TimestamptzString @default(now())
+
+  @@unique([signupId, role])
+  @@index([signupId])
+  @@map("run_signup_role")
 }
 
 /// One persisted roster per run. Draft selection lives in RunRosterEntry and is
@@ -611,14 +633,18 @@ model RunAttendance {
 }
 
 model RunRosterEntry {
-  id        String     @id @default(uuid())
-  rosterId  String
-  roster    RunRoster  @relation(fields: [rosterId], references: [id], onDelete: Cascade)
-  signupId  String
-  signup    RunSignup  @relation(fields: [signupId], references: [id], onDelete: Cascade)
-  selected  Boolean    @default(true)
-  createdAt TimestamptzString @default(now())
-  updatedAt temporal.updatedAtString()
+  id           String         @id @default(uuid())
+  rosterId     String
+  roster       RunRoster      @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  signupId     String
+  signup       RunSignup      @relation(fields: [signupId], references: [id], onDelete: Cascade)
+  selected     Boolean        @default(true)
+  /// Final role the Raid Lead assigns in the *current saved draft* for this
+  /// BOOSTER roster slot. Mutable independently of RunSignup.publishedRole.
+  /// Required when selected and participation is BOOSTER; always null for LOOTBUDDY.
+  selectedRole CharacterRole?
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
 
   attendance   RunAttendance?
   payoutEntries RunPayoutEntry[]

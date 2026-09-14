@@ -45,6 +45,17 @@ function resolveDiscordTarget(
   return "ARCHIVE";
 }
 
+export type SignupEmbedRoleStatus = {
+  signed: number;
+  picked: number;
+  target: number;
+};
+
+export type SignupEmbedLootbuddyStatus = {
+  signed: number;
+  picked: number;
+};
+
 export type SignupEmbedData = {
   runId: string;
   runTitle: string;
@@ -57,8 +68,23 @@ export type SignupEmbedData = {
   scheduledStartAt: string;
   runStatus: RunStatus;
   signupWindowOpen: boolean;
-  /** Distinct Users with an active (PENDING or SELECTED) offer — never a row count, never WITHDRAWN/NOT_SELECTED. */
+  /**
+   * Distinct Users with an active (PENDING or SELECTED) offer — never a row
+   * count, never WITHDRAWN/NOT_SELECTED, and never the sum of per-role signed.
+   */
   uniqueSignupCount: number;
+  /**
+   * Per-role volunteered (signed) vs authoritative roster (picked) counts.
+   * A multi-role Character increments signed once per offered role, but picked
+   * only under the authoritative role for the Run's phase (draft selectedRole
+   * while OPEN/ROSTERING; publishedRole once PUBLISHED+).
+   */
+  roleStatus: {
+    tank: SignupEmbedRoleStatus;
+    healer: SignupEmbedRoleStatus;
+    dps: SignupEmbedRoleStatus;
+    lootbuddy: SignupEmbedLootbuddyStatus;
+  };
 };
 
 export type RosterEmbedMember = {
@@ -161,7 +187,8 @@ export type RunStartEmbedMember = {
   /** Informational lockout label; not rendered in the compact Final Setup post. */
   saveLabel: string;
   participationType: "BOOSTER" | "LOOTBUDDY";
-  role: CharacterRole | null;
+  /** The Raid Lead's assignment for this slot; null for LOOTBUDDY. */
+  selectedRole: CharacterRole | null;
 };
 
 export type RunStartEmbedData = {
@@ -213,6 +240,9 @@ function desiredChannelNameFor(run: {
  * old hand-maintained signature field list).
  */
 function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
+  const active = run.signups.filter((signup) => isActiveSignupOffer(signup.status));
+  const roleStatus = buildSignupRoleStatus(run, active);
+
   return {
     runId: run.id,
     runTitle: run.title,
@@ -225,9 +255,75 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     scheduledStartAt: run.scheduledStartAt,
     runStatus: run.status,
     signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
-    uniqueSignupCount: new Set(
-      run.signups.filter((signup) => isActiveSignupOffer(signup.status)).map((signup) => signup.userId),
-    ).size,
+    uniqueSignupCount: new Set(active.map((signup) => signup.userId)).size,
+    roleStatus,
+  };
+}
+
+/**
+ * OPEN / ROSTERING (and pre-publish): picked = saved draft selections.
+ * PUBLISHED+: picked = live SELECTED signups + publishedRole (replacement drafts stay private).
+ */
+function buildSignupRoleStatus(
+  run: RunListRecord,
+  activeSignups: RunListRecord["signups"],
+): SignupEmbedData["roleStatus"] {
+  const tankSigned = activeSignups.filter(
+    (signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"),
+  ).length;
+  const healerSigned = activeSignups.filter(
+    (signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"),
+  ).length;
+  const dpsSigned = activeSignups.filter(
+    (signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"),
+  ).length;
+  const lootbuddySigned = activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY").length;
+
+  const usePublishedPicks =
+    run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED";
+  const byId = new Map(run.signups.map((signup) => [signup.id, signup]));
+  const picks: Array<{ participationType: "BOOSTER" | "LOOTBUDDY"; selectedRole: CharacterRole | null }> = [];
+
+  if (usePublishedPicks) {
+    for (const signup of run.signups) {
+      if (signup.status !== "SELECTED") continue;
+      picks.push({
+        participationType: signup.participationType,
+        selectedRole: signup.publishedRole,
+      });
+    }
+  } else {
+    for (const selection of run.roster?.selections ?? []) {
+      if (!selection.selected) continue;
+      const signup = byId.get(selection.signupId);
+      if (!signup || !isActiveSignupOffer(signup.status)) continue;
+      picks.push({
+        participationType: signup.participationType,
+        selectedRole: selection.selectedRole,
+      });
+    }
+  }
+
+  return {
+    tank: {
+      signed: tankSigned,
+      picked: picks.filter((pick) => pick.participationType === "BOOSTER" && pick.selectedRole === "TANK").length,
+      target: run.desiredTankCount,
+    },
+    healer: {
+      signed: healerSigned,
+      picked: picks.filter((pick) => pick.participationType === "BOOSTER" && pick.selectedRole === "HEALER").length,
+      target: run.desiredHealerCount,
+    },
+    dps: {
+      signed: dpsSigned,
+      picked: picks.filter((pick) => pick.participationType === "BOOSTER" && pick.selectedRole === "DPS").length,
+      target: run.desiredDpsCount,
+    },
+    lootbuddy: {
+      signed: lootbuddySigned,
+      picked: picks.filter((pick) => pick.participationType === "LOOTBUDDY").length,
+    },
   };
 }
 
@@ -257,6 +353,7 @@ function buildSignupEmbedSignature(
     runStatus: data.runStatus,
     signupWindowOpen: data.signupWindowOpen,
     uniqueSignupCount: data.uniqueSignupCount,
+    roleStatus: data.roleStatus,
     channelName: extra.channelName,
     targetBucket: extra.targetBucket,
   });
@@ -274,8 +371,9 @@ function toMember(row: RosterSignupRow): RosterEmbedMember {
   };
 }
 
+/** Published projections group by the snapshotted publishedRole — a hybrid appears in exactly one section. */
 function boosterByRole(selected: RosterSignupRow[], role: CharacterRole): RosterSignupRow[] {
-  return selected.filter((row) => row.participationType === "BOOSTER" && row.role === role);
+  return selected.filter((row) => row.participationType === "BOOSTER" && row.publishedRole === role);
 }
 
 function shortSaveLabel(kind: ReturnType<typeof formatTargetRaidLockoutLabel>["kind"]): string {
@@ -341,7 +439,7 @@ function toStartMember(
     classLabel,
     saveLabel,
     participationType: row.participationType,
-    role: row.role,
+    selectedRole: row.publishedRole,
   };
 }
 
@@ -587,9 +685,9 @@ export const discordSyncService = {
       members.push(toStartMember(signup, run));
     }
 
-    const tanks = members.filter((m) => m.participationType === "BOOSTER" && m.role === "TANK").sort(compareStartMembers);
-    const healers = members.filter((m) => m.participationType === "BOOSTER" && m.role === "HEALER").sort(compareStartMembers);
-    const dps = members.filter((m) => m.participationType === "BOOSTER" && m.role === "DPS").sort(compareStartMembers);
+    const tanks = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "TANK").sort(compareStartMembers);
+    const healers = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "HEALER").sort(compareStartMembers);
+    const dps = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "DPS").sort(compareStartMembers);
     const lootbuddies = members.filter((m) => m.participationType === "LOOTBUDDY").sort(compareStartMembers);
 
     return {

@@ -30,7 +30,7 @@ import {
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
-import { queryReservationConflicts } from "@/repositories/signup.repository";
+import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signup.repository";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -60,13 +60,24 @@ export type RosterSignupRow = {
   discordUserId: string | null;
   status: SignupStatus;
   participationType: ParticipationType;
-  role: CharacterRole | null;
+  /** Every role this BOOSTER offer volunteers for, TANK → HEALER → DPS. Always empty for LOOTBUDDY. */
+  offeredRoles: CharacterRole[];
+  /** Mutable saved draft assignment on the selected RunRosterEntry — null unless draft-selected as a BOOSTER. */
+  selectedRole: CharacterRole | null;
+  /** Live published BOOSTER role (null unless status is SELECTED and participation is BOOSTER). */
+  publishedRole: CharacterRole | null;
   isBackup: boolean;
   /** Own Class snapshot for a characterless Lootbuddy row; null for BOOSTER and for legacy Character-backed Lootbuddy rows (fall back to character.wowClass for those). */
   lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
   character: RosterCharacterSnapshot | null;
+};
+
+/** One draft-selected roster slot: which signup, and the role the Raid Lead assigned it. */
+export type RosterSelection = {
+  signupId: string;
+  selectedRole: CharacterRole | null;
 };
 
 export type RosterRecord = {
@@ -78,6 +89,8 @@ export type RosterRecord = {
   publishedById: string | null;
   publishedByName: string | null;
   selectedSignupIds: string[];
+  /** Same slots as `selectedSignupIds`, carrying each slot's assigned role. */
+  selections: RosterSelection[];
 };
 
 function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
@@ -110,6 +123,8 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
 function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
   const user = (row.user ?? {}) as Record<string, unknown>;
   const character = row.character ? (row.character as Record<string, unknown>) : null;
+  const rosterEntries = Array.isArray(row.rosterEntries) ? (row.rosterEntries as Record<string, unknown>[]) : [];
+  const selectedEntry = rosterEntries.find((entry) => asBoolean(entry.selected, true));
   return {
     id: asString(row.id),
     runId: asString(row.runId),
@@ -118,7 +133,10 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
     discordUserId: asStringOrNull(user.discordUserId),
     status: mapSignupStatus(row.status),
     participationType: mapParticipation(row.participationType),
-    role: row.role == null ? null : mapCharacterRole(row.role),
+    offeredRoles: mapOfferedRoles(row.offeredRoles),
+    selectedRole:
+      selectedEntry?.selectedRole == null ? null : mapCharacterRole(selectedEntry.selectedRole),
+    publishedRole: row.publishedRole == null ? null : mapCharacterRole(row.publishedRole),
     isBackup: asBoolean(row.isBackup),
     lootbuddyClass: row.lootbuddyClass == null ? null : mapWowClass(row.lootbuddyClass),
     lootbuddyMode: row.lootbuddyMode == null ? null : mapLootbuddyMode(row.lootbuddyMode),
@@ -154,7 +172,13 @@ async function withAccountBoosterQualifications(signups: RosterSignupRow[]): Pro
 
 function mapRoster(row: Record<string, unknown>): RosterRecord {
   const publisher = row.publishedBy ? (row.publishedBy as Record<string, unknown>) : null;
-  const entries = Array.isArray(row.entries) ? row.entries : [];
+  const entries = Array.isArray(row.entries) ? (row.entries as Record<string, unknown>[]) : [];
+  const selections: RosterSelection[] = entries
+    .filter((entry) => asBoolean(entry.selected, true))
+    .map((entry) => ({
+      signupId: asString(entry.signupId),
+      selectedRole: entry.selectedRole == null ? null : mapCharacterRole(entry.selectedRole),
+    }));
   return {
     id: asString(row.id),
     runId: asString(row.runId),
@@ -163,9 +187,8 @@ function mapRoster(row: Record<string, unknown>): RosterRecord {
     publishedAt: asStringOrNull(row.publishedAt),
     publishedById: asStringOrNull(row.publishedById),
     publishedByName: publisher ? asString(publisher.name) : null,
-    selectedSignupIds: entries
-      .filter((entry) => asBoolean((entry as Record<string, unknown>).selected, true))
-      .map((entry) => asString((entry as Record<string, unknown>).signupId)),
+    selectedSignupIds: selections.map((selection) => selection.signupId),
+    selections,
   };
 }
 
@@ -215,6 +238,8 @@ export const rosterRepository = {
       .where({ runId })
       .include("user")
       .include("character", (character) => character.include("lockouts"))
+      .include("offeredRoles")
+      .include("rosterEntries")
       .orderBy((signup) => signup.createdAt.asc())
       .all();
     const signups = rows.map((row) => mapSignupRow(row as Record<string, unknown>));
@@ -260,14 +285,17 @@ export const rosterRepository = {
   },
 
   /**
-   * Atomically replace the full draft selection set and bump version once.
-   * Optional race-safety nets re-check WITHDRAWN and cross-Run reservations
-   * inside the transaction (batch save path). Seed/prepare callers may omit them.
+   * Atomically replace the full draft selection set — including each slot's
+   * assigned role — and bump version once. A slot that stays selected keeps
+   * its existing entry row (and therefore its attendance/payout identity);
+   * only its `selectedRole` is rewritten. Optional race-safety nets re-check
+   * WITHDRAWN and cross-Run reservations inside the transaction (batch save
+   * path). Seed/prepare callers may omit them.
    */
   async replaceSelectedSignupIds(
     rosterId: string,
     expectedVersion: number,
-    signupIds: string[],
+    selections: RosterSelection[],
     options?: {
       targetRunId?: string;
       scheduledStartAt?: string;
@@ -283,7 +311,8 @@ export const rosterRepository = {
       const mapped = mapRoster(roster as Record<string, unknown>);
       await this.assertVersion(mapped, expectedVersion);
 
-      const next = new Set(signupIds);
+      const nextBySignupId = new Map(selections.map((selection) => [selection.signupId, selection]));
+      const next = new Set(nextBySignupId.keys());
       const now = new Date().toISOString();
 
       for (const signupId of next) {
@@ -316,20 +345,29 @@ export const rosterRepository = {
         }
       }
 
-      const current = new Set(mapped.selectedSignupIds);
-      for (const signupId of current) {
+      const current = new Map(mapped.selections.map((selection) => [selection.signupId, selection]));
+      for (const signupId of current.keys()) {
         if (!next.has(signupId)) {
           await txOrm.RunRosterEntry.where({ rosterId, signupId }).delete();
         }
       }
-      for (const signupId of next) {
-        if (!current.has(signupId)) {
+      for (const [signupId, selection] of nextBySignupId) {
+        const existing = current.get(signupId);
+        if (!existing) {
           await txOrm.RunRosterEntry.create({
             id: crypto.randomUUID(),
             rosterId,
             signupId,
             selected: true,
+            selectedRole: selection.selectedRole,
             createdAt: now,
+            updatedAt: now,
+          });
+          continue;
+        }
+        if (existing.selectedRole !== selection.selectedRole) {
+          await txOrm.RunRosterEntry.where({ rosterId, signupId }).update({
+            selectedRole: selection.selectedRole,
             updatedAt: now,
           });
         }
@@ -355,6 +393,8 @@ export const rosterRepository = {
     expectedVersion: number;
     signupId: string;
     selected: boolean;
+    /** The role assigned to this slot; always null for LOOTBUDDY and when deselecting. */
+    selectedRole: CharacterRole | null;
     replaceSignupIds: string[];
     /** Null when the signup's Character was deleted — no reservation is possible for it. */
     characterId: string | null;
@@ -412,7 +452,14 @@ export const rosterRepository = {
           rosterId: input.rosterId,
           signupId: input.signupId,
           selected: true,
+          selectedRole: input.selectedRole,
           createdAt: now,
+          updatedAt: now,
+        });
+      }
+      if (input.selected && existing) {
+        await txOrm.RunRosterEntry.where({ id: asString((existing as Record<string, unknown>).id) }).update({
+          selectedRole: input.selectedRole,
           updatedAt: now,
         });
       }
@@ -436,15 +483,16 @@ export const rosterRepository = {
   },
 
   /**
-   * Publication is one transaction: signup statuses, run status, roster metadata.
-   * A thrown DomainError rolls the whole write back.
+   * Publication is one transaction: signup statuses + publishedRole snapshot,
+   * run status, and roster metadata. A thrown DomainError rolls the whole write back.
    */
   async publishAtomic(input: {
     runId: string;
     rosterId: string;
     expectedVersion: number;
-    selectedSignupIds: string[];
-    /** Characters behind selectedSignupIds — re-verified for cross-Run reservation immediately before publish. */
+    /** Draft selections being published — each BOOSTER carries its assigned role. */
+    selectedSelections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+    /** Characters behind selectedSelections — re-verified for cross-Run reservation immediately before publish. */
     selectedCharacterIds: string[];
     scheduledStartAt: string;
     notSelectedSignupIds: string[];
@@ -484,11 +532,17 @@ export const rosterRepository = {
       }
 
       const now = new Date().toISOString();
-      for (const signupId of input.selectedSignupIds) {
-        await txOrm.RunSignup.where({ id: signupId }).update({ status: "SELECTED" });
+      for (const selection of input.selectedSelections) {
+        await txOrm.RunSignup.where({ id: selection.signupId }).update({
+          status: "SELECTED",
+          publishedRole: selection.selectedRole,
+        });
       }
       for (const signupId of input.notSelectedSignupIds) {
-        await txOrm.RunSignup.where({ id: signupId }).update({ status: "NOT_SELECTED" });
+        await txOrm.RunSignup.where({ id: signupId }).update({
+          status: "NOT_SELECTED",
+          publishedRole: null,
+        });
       }
       if (input.fromStatus === "OPEN") {
         await txOrm.Run.where({ id: input.runId }).update({ status: "ROSTERING" });

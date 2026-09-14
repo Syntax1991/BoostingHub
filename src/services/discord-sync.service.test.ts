@@ -136,22 +136,31 @@ async function createSignup(input: {
   lootbuddyMode?: "LOOT_ONLY" | "PLAYING" | null;
 }) {
   const id = crypto.randomUUID();
+  const now = new Date().toISOString();
   await orm.RunSignup.create({
     id,
     runId: input.runId,
     userId: input.userId,
     characterId: input.characterId,
     participationType: input.participationType,
-    role: input.role,
     isBackup: false,
     status: "PENDING",
+    publishedRole: null,
     lootbuddyClass: input.lootbuddyClass ?? null,
     lootbuddyMode:
       input.lootbuddyMode ?? (input.participationType === "LOOTBUDDY" ? "PLAYING" : null),
     lootbuddyVerification: input.participationType === "LOOTBUDDY" ? "NONE" : null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   });
+  if (input.participationType === "BOOSTER" && input.role) {
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: id,
+      role: input.role,
+      createdAt: now,
+    });
+  }
   return id;
 }
 
@@ -173,7 +182,12 @@ async function cleanupRun(runId: string) {
   }
   const signups = await orm.RunSignup.where({ runId }).select("id").all();
   for (const row of signups) {
-    await deleteIfPresent("RunSignup", (row as { id: string }).id);
+    const signupId = (row as { id: string }).id;
+    const offered = await orm.RunSignupRole.where({ signupId }).select("id").all();
+    for (const offer of offered) {
+      await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete().catch(() => {});
+    }
+    await orm.RunSignup.where({ id: signupId }).delete().catch(() => {});
   }
   await deleteIfPresent("Run", runId);
 }
@@ -323,6 +337,84 @@ describe("discordSyncService.getSignupEmbedData", () => {
     await orm.RunSignup.where({ id: healerSignupId }).update({ status: "NOT_SELECTED" });
     expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(0);
   });
+
+  it("PUBLISHED picked counts use publishedRole, not a mutated replacement draft role", async () => {
+    const freezeRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 0,
+        desiredHealerCount: 1,
+        desiredDpsCount: 0,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(freezeRunId);
+    await runService.openRun(lead, freezeRunId);
+
+    const shamanId = await createCharacter(ids.healer, "SynblastEmbed", "PRIEST", "Holy", "HEALER");
+    await createSignup({
+      runId: freezeRunId,
+      userId: ids.healer,
+      characterId: shamanId,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    // Multi-role offer: HEALER + DPS
+    const rows = await orm.RunSignup.where({ runId: freezeRunId, userId: ids.healer }).include("offeredRoles").all();
+    const signupRow = rows[0] as { id: string };
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: signupRow.id,
+      role: "DPS",
+      createdAt: new Date().toISOString(),
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupRow.id, selectedRole: "HEALER" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.publishRoster(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    let embed = await discordSyncService.getSignupEmbedData(freezeRunId);
+    expect(embed?.roleStatus.healer.picked).toBe(1);
+    expect(embed?.roleStatus.dps.picked).toBe(0);
+
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.preparePublishedRosterForEditing(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+    });
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      selections: [{ signupId: signupRow.id, selectedRole: "DPS" }],
+    });
+
+    embed = await discordSyncService.getSignupEmbedData(freezeRunId);
+    expect(embed?.roleStatus.healer.picked).toBe(1);
+    expect(embed?.roleStatus.dps.picked).toBe(0);
+
+    view = await rosterService.getRosterManagementView(lead, freezeRunId);
+    await rosterService.publishRoster(lead, {
+      runId: freezeRunId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+    embed = await discordSyncService.getSignupEmbedData(freezeRunId);
+    expect(embed?.roleStatus.healer.picked).toBe(0);
+    expect(embed?.roleStatus.dps.picked).toBe(1);
+  });
 });
 
 describe("discordSyncService.listSyncWork", () => {
@@ -417,7 +509,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     await createSignup({ runId, userId: ids.loot, characterId: lootChar, participationType: "LOOTBUDDY", role: null });
 
     const view = await rosterService.getRosterManagementView(lead, runId);
-    const all = [...view.groups.tanks, ...view.groups.healers, ...view.groups.dps, ...view.groups.lootbuddies];
+    const all = [...view.groups.boosters, ...view.groups.lootbuddies];
     let version = view.roster.version;
     for (const signup of all) {
       await rosterService.setDraftSelection(lead, { runId, signupId: signup.id, selected: true, version });
@@ -621,7 +713,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
     await createSignup({ runId: orphanRunId, userId: ids.tank, characterId: orphanCharId, participationType: "BOOSTER", role: "TANK" });
 
     const view = await rosterService.getRosterManagementView(lead, orphanRunId);
-    const tankSignup = view.groups.tanks[0];
+    const tankSignup = view.groups.boosters[0];
     await rosterService.setDraftSelection(lead, { runId: orphanRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
     const afterSelect = await rosterService.getRosterManagementView(lead, orphanRunId);
     await rosterService.publishRoster(lead, { runId: orphanRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
@@ -1029,7 +1121,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
     await createSignup({ runId: publishedRunId, userId: ids.tank, characterId: soloCharId, participationType: "BOOSTER", role: "TANK" });
 
     const view = await rosterService.getRosterManagementView(lead, publishedRunId);
-    const tankSignup = view.groups.tanks[0];
+    const tankSignup = view.groups.boosters[0];
     await rosterService.setDraftSelection(lead, { runId: publishedRunId, signupId: tankSignup.id, selected: true, version: view.roster.version });
     const afterSelect = await rosterService.getRosterManagementView(lead, publishedRunId);
     await rosterService.publishRoster(lead, { runId: publishedRunId, version: afterSelect.roster.version, acknowledgeWarnings: true });
@@ -1201,7 +1293,7 @@ describe("discordSyncService — run start operational post", () => {
     });
 
     let view = await rosterService.getRosterManagementView(lead, id);
-    for (const group of [view.groups.tanks, view.groups.healers, view.groups.dps, view.groups.lootbuddies]) {
+    for (const group of [view.groups.boosters, view.groups.lootbuddies]) {
       for (const signup of group) {
         view = await rosterService.getRosterManagementView(lead, id);
         if (!signup.draftSelected) {
