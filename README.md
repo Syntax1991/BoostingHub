@@ -155,7 +155,7 @@ Roster Lab Heroic is seeded for automated tests; prefer Sunday / Weekend / Publi
 
 Seeded runs are fixtures. A real raid lead does not need them.
 
-- **Thorne (RAID_LEAD)** — `/manage/runs` → **Create Run**. Raid lead is fixed to Thorne. The new run is a draft with signups closed. Open it from `/runs/[runId]`, then close/reopen signups. Thorne cannot reassign the lead or manage Aelira’s runs.
+- **Thorne (RAID_LEAD)** — `/runs` → **Create Run**. Raid lead is fixed to Thorne. The new run is a draft with signups closed. Open it from `/runs/[runId]`, then close/reopen signups. Thorne cannot reassign the lead or manage Aelira’s runs.
 - **Aelira (ADMIN)** — can assign Thorne (or herself) as raid lead, edit any run before publish, and cancel.
 - **Kael (USER)** — no Create Run. Drafts are not listed on `/runs` and draft URLs 404.
 
@@ -178,15 +178,16 @@ See [docs/features/character-management.md](docs/features/character-management.m
 | --- | --- |
 | `/` | Public login |
 | `/dashboard` | Authenticated |
-| `/runs` | Authenticated |
+| `/runs` | Authenticated; Create Run CTA for RAID_LEAD/ADMIN |
+| `/runs/create` | RAID_LEAD or ADMIN |
 | `/runs/[runId]` | Authenticated; manager tools only when authorized |
 | `/my-runs` | Authenticated |
 | `/characters` | Authenticated |
 | `/characters/[characterId]` | Owner only |
 | `/profile` | Authenticated |
 | `/manage` | RAID_LEAD or ADMIN |
-| `/manage/runs` | RAID_LEAD or ADMIN |
-| `/manage/runs/new` | RAID_LEAD or ADMIN |
+| `/manage/runs` | RAID_LEAD or ADMIN (existing-run management) |
+| `/manage/runs/create` | Compatibility redirect to `/runs/create` |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
 | `/manage/booster-access` | ADMIN |
 | `/manage/users` | ADMIN |

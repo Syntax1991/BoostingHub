@@ -13,6 +13,7 @@ import {
 function revalidateTemplateSurfaces() {
   revalidatePath("/profile/templates");
   revalidatePath("/manage/templates");
+  revalidatePath("/runs/create");
   revalidatePath("/manage/runs/create");
 }
 

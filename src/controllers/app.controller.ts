@@ -1,4 +1,6 @@
 import { requireUserOrRedirect } from "@/auth/session";
+import { canAccessManagement } from "@/auth/authorization";
+import { redirect } from "next/navigation";
 import { parseRunFilters } from "@/validators/run-filters";
 import { parseManageRunFilters } from "@/validators/manage-run-filters";
 import { characterService } from "@/services/character.service";
@@ -18,6 +20,7 @@ import { userRepository } from "@/repositories/user.repository";
 import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
 import { parseAdminUserFilters } from "@/validators/user-management";
 import { isDomainError } from "@/lib/errors";
+import { runCreatePath } from "@/lib/run-routes";
 
 function firstParam(value: string | string[] | undefined): string | null {
   if (typeof value === "string" && value.length > 0) return value;
@@ -92,6 +95,7 @@ export const runController = {
     const filters = parseRunFilters(searchParams);
     return {
       filters,
+      canCreate: canAccessManagement(user.accountRole),
       runs: await runService.listRuns(user, filters),
     };
   },
@@ -99,6 +103,15 @@ export const runController = {
   async getRunDetailPage(runId: string) {
     const user = await requireUserOrRedirect(`/runs/${runId}`);
     return runDetailService.getRunDetail(user, runId);
+  },
+
+  /** Canonical Create Run page — RAID_LEAD/ADMIN only. */
+  async getCreateRunsPage() {
+    const user = await requireUserOrRedirect(runCreatePath());
+    if (!canAccessManagement(user.accountRole)) {
+      redirect("/dashboard");
+    }
+    return runService.getCreateManyForm(user);
   },
 };
 
@@ -155,9 +168,11 @@ export const managementController = {
   },
 
   // Note: no single-Run getCreateRunPage anymore — Run creation is one
-  // canonical workflow at /manage/runs/create. runService.getCreateForm
+  // canonical workflow at /runs/create. runService.getCreateForm
   // remains for internal/test use only.
+  // Legacy /manage/runs/create redirects to runController.getCreateRunsPage.
 
+  /** @deprecated Prefer runController.getCreateRunsPage — kept for any residual callers. */
   async getCreateManyRunsPage() {
     const user = await requireManagerOrRedirect();
     return runService.getCreateManyForm(user);

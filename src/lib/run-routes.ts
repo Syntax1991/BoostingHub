@@ -8,6 +8,27 @@ export const RUN_DETAIL_TABS = ["overview", "signups", "roster", "attendance", "
 
 export type RunDetailTab = (typeof RUN_DETAIL_TABS)[number];
 
+/** Canonical Create Run workflow (1–25 drafts). Legacy /manage/runs/create redirects here. */
+export const RUN_CREATE_PATH = "/runs/create";
+
+export function runCreatePath(): string {
+  return RUN_CREATE_PATH;
+}
+
+/**
+ * Post-submit destination after createManyRunsAction succeeds.
+ * One draft → canonical detail; multiple drafts → Manage Runs mass-created banner.
+ */
+export function runCreateSuccessPath(runIds: string[]): string {
+  if (runIds.length === 1) {
+    return runDetailPath(runIds[0]!);
+  }
+  if (runIds.length > 1) {
+    return `/manage/runs?massCreated=${runIds.length}`;
+  }
+  return "/runs";
+}
+
 export function parseRunDetailTab(value: unknown): RunDetailTab {
   if (Array.isArray(value)) {
     return parseRunDetailTab(value[0]);

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Persistent, reusable Run-creation presets so a Raid Lead does not have to re-enter the same raid/difficulty/loot type/composition every time they open [Create Runs](run-management.md#creation). A template stores planning defaults only — it is never a schedule, a status, or a second source of truth for an existing Run.
+Persistent, reusable Run-creation presets so a Raid Lead does not have to re-enter the same raid/difficulty/loot type/composition every time they open [Create Run](run-management.md#creation). A template stores planning defaults only — it is never a schedule, a status, or a second source of truth for an existing Run.
 
 ```text
 RAID_LEAD (self-service, /profile/templates)
@@ -13,7 +13,7 @@ ADMIN (global management, /manage/templates)
   → Create a template for any eligible Raid Lead
   → Edit / reassign owner / deactivate / reactivate any template
 
-Create Runs (/manage/runs/create)
+Create Run (/runs/create)
   → Optionally select a usable template
   → Template's raid lead becomes authoritative for every resulting Run
 ```
@@ -70,9 +70,9 @@ Template create/update reuses the exact same Run-planning validators Run creatio
 
 These were extracted from `run.service.ts` into the shared `src/services/run-state.ts` so both `run.service.ts` and `run-template.service.ts` import one definition — never two copies that could drift apart.
 
-## Create Runs integration (`/manage/runs/create`)
+## Create Run integration (`/runs/create`)
 
-A template selector sits **above Shared Defaults** on the canonical [Create Runs](run-management.md#creation) page. RAID_LEAD sees only their own usable active templates; ADMIN sees every usable active template across every Raid Lead, labeled to disambiguate the owner (e.g. "Thorne — HC Unsaved 8/8").
+A template selector sits **above Shared Defaults** on the canonical [Create Run](run-management.md#creation) page. RAID_LEAD sees only their own usable active templates; ADMIN sees every usable active template across every Raid Lead, labeled to disambiguate the owner (e.g. "Thorne — HC Unsaved 8/8").
 
 Applying a template copies its planning defaults (raid, difficulty, loot type, planned boss count, composition, notes) into Shared Defaults and sets the effective Raid Lead to the template's owner. Per-row `scheduledStartAt` values are never touched. This is staged, client-side form state — no Run is created yet.
 
