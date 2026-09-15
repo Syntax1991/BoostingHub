@@ -33,3 +33,15 @@ export async function resolveGuildClassIndicators(
   }
   return indicators;
 }
+
+/** Stable fingerprint so signup posts refresh when Guild class emojis change. */
+export function fingerprintClassIndicators(
+  indicators: Partial<Record<WowClass, string>>,
+): string {
+  // Keep this compact (ids only) — full <:name:id> markup blows URL/query limits.
+  return WOW_CLASSES.map((wowClass) => {
+    const markup = indicators[wowClass] ?? "";
+    const idMatch = /:(\d+)>/.exec(markup);
+    return `${wowClass}:${idMatch?.[1] ?? ""}`;
+  }).join("|");
+}
