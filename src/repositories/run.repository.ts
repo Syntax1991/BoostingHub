@@ -92,6 +92,67 @@ export type RunListRecord = {
   } | null;
 };
 
+/** Ordered real-raid contents for one Run (foundation for multi-raid Bundles). */
+export type RunRaidContentRecord = {
+  id: string;
+  runId: string;
+  raidId: string;
+  raidName: string;
+  season: string;
+  sortOrder: number;
+  plannedBossCount: number;
+  totalBossCount: number;
+};
+
+type TxOrm = typeof orm;
+
+function mapRaidContent(row: Record<string, unknown>): RunRaidContentRecord {
+  const raid = (row.raid ?? {}) as Record<string, unknown>;
+  const bosses = Array.isArray(raid.bosses) ? raid.bosses : [];
+  return {
+    id: asString(row.id),
+    runId: asString(row.runId),
+    raidId: asString(row.raidId ?? raid.id),
+    raidName: asString(raid.name, "Unknown raid"),
+    season: asString(raid.season),
+    sortOrder: asNumber(row.sortOrder),
+    plannedBossCount: asNumber(row.plannedBossCount),
+    totalBossCount: bosses.length,
+  };
+}
+
+/**
+ * Transitional write: keep the sole sortOrder=1 RunRaidContent row aligned with
+ * legacy Run.raidId / Run.plannedBossCount until those columns are dropped.
+ */
+async function syncSoleRaidContent(
+  ormLike: TxOrm,
+  input: { runId: string; raidId: string; plannedBossCount: number; now: string },
+) {
+  const existing = (await ormLike.RunRaidContent.where({ runId: input.runId }).all()) as Record<
+    string,
+    unknown
+  >[];
+  if (existing.length === 0) {
+    await ormLike.RunRaidContent.create({
+      id: crypto.randomUUID(),
+      runId: input.runId,
+      raidId: input.raidId,
+      sortOrder: 1,
+      plannedBossCount: input.plannedBossCount,
+      createdAt: input.now,
+    });
+    return;
+  }
+  const sole =
+    existing.find((row) => asNumber(row.sortOrder) === 1) ??
+    existing.slice().sort((a, b) => asNumber(a.sortOrder) - asNumber(b.sortOrder))[0]!;
+  await ormLike.RunRaidContent.where({ id: asString(sole.id) }).update({
+    raidId: input.raidId,
+    plannedBossCount: input.plannedBossCount,
+  });
+}
+
 function mapOfferedRoles(value: unknown): CharacterRole[] {
   if (!Array.isArray(value)) return [];
   return normalizeOfferedRoles(
@@ -210,6 +271,14 @@ export const runRepository = {
     return run ? mapRun(run as Record<string, unknown>) : null;
   },
 
+  /** Ordered RunRaidContent rows for foundation / Bundle cutover. */
+  async listRaidContents(runId: string): Promise<RunRaidContentRecord[]> {
+    const rows = await orm.RunRaidContent.where({ runId }).include("raid", (raid) => raid.include("bosses")).all();
+    return rows
+      .map((row) => mapRaidContent(row as Record<string, unknown>))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
   async listManaged(): Promise<RunListRecord[]> {
     const runs = await orm.Run
       .include("raid", (raid) => raid.include("bosses"))
@@ -271,6 +340,14 @@ export const runRepository = {
         signupsOpen: false,
         createdAt: now,
         updatedAt: now,
+      });
+      await txOrm.RunRaidContent.create({
+        id: crypto.randomUUID(),
+        runId: id,
+        raidId: input.raidId,
+        sortOrder: 1,
+        plannedBossCount: input.plannedBossCount,
+        createdAt: now,
       });
       await txOrm.RunRoster.create({
         id: crypto.randomUUID(),
@@ -335,6 +412,14 @@ export const runRepository = {
           createdAt: now,
           updatedAt: now,
         });
+        await txOrm.RunRaidContent.create({
+          id: crypto.randomUUID(),
+          runId: id,
+          raidId: input.raidId,
+          sortOrder: 1,
+          plannedBossCount: input.plannedBossCount,
+          createdAt: now,
+        });
         await txOrm.RunRoster.create({
           id: crypto.randomUUID(),
           runId: id,
@@ -367,9 +452,30 @@ export const runRepository = {
       signupsOpen?: boolean;
     },
   ) {
-    await orm.Run.where({ id }).update({
-      ...fields,
-      updatedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+    const syncContent = fields.raidId !== undefined || fields.plannedBossCount !== undefined;
+    if (!syncContent) {
+      await orm.Run.where({ id }).update({
+        ...fields,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      await txOrm.Run.where({ id }).update({
+        ...fields,
+        updatedAt: now,
+      });
+      const run = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
+      if (!run) return;
+      await syncSoleRaidContent(txOrm, {
+        runId: id,
+        raidId: asString(run.raidId),
+        plannedBossCount: asNumber(run.plannedBossCount),
+        now,
+      });
     });
   },
 
@@ -406,6 +512,15 @@ export const runRepository = {
         ...fields,
         updatedAt: new Date().toISOString(),
       });
+      const updated = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
+      if (updated) {
+        await syncSoleRaidContent(txOrm, {
+          runId: id,
+          raidId: asString(updated.raidId),
+          plannedBossCount: asNumber(updated.plannedBossCount),
+          now: asString(updated.updatedAt),
+        });
+      }
       const after = await txOrm.RunSignup.where({ runId: id }).select("id").all();
       if (after.length > 0) {
         throw new DomainError(
@@ -494,5 +609,3 @@ export const runRepository = {
     });
   },
 };
-
-type TxOrm = typeof orm;

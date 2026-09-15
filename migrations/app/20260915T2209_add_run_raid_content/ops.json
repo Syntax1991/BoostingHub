@@ -1,0 +1,316 @@
+[
+  {
+    "id": "table.run_raid_content",
+    "label": "Create table \"run_raid_content\"",
+    "summary": "Creates table \"run_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_raid_content\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_raid_content\"",
+        "sql": "CREATE TABLE \"public\".\"run_raid_content\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"plannedBossCount\" int4 NOT NULL,\n  \"raidId\" text NOT NULL,\n  \"runId\" text NOT NULL,\n  \"sortOrder\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_raid_content\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_raid_content.run_raid_content_runId_raidId_key",
+    "label": "Add unique constraint on \"run_raid_content\" (runId, raidId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_raid_content_runId_raidId_key",
+        "table": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_raid_content_runId_raidId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_runId_raidId_key",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_raid_content_runId_raidId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_raid_content\" ADD CONSTRAINT \"run_raid_content_runId_raidId_key\" UNIQUE (\"runId\", \"raidId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_raid_content_runId_raidId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_runId_raidId_key",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_raid_content.run_raid_content_runId_sortOrder_key",
+    "label": "Add unique constraint on \"run_raid_content\" (runId, sortOrder)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_raid_content_runId_sortOrder_key",
+        "table": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_raid_content_runId_sortOrder_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_runId_sortOrder_key",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_raid_content_runId_sortOrder_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_raid_content\" ADD CONSTRAINT \"run_raid_content_runId_sortOrder_key\" UNIQUE (\"runId\", \"sortOrder\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_raid_content_runId_sortOrder_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_runId_sortOrder_key",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_raid_content.run_raid_content_raidId_idx_996eeca9",
+    "label": "Create index \"run_raid_content_raidId_idx_996eeca9\" on \"run_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_raid_content_raidId_idx_996eeca9",
+        "table": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_raid_content_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raid_content_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_raid_content_raidId_idx_996eeca9\"",
+        "sql": "CREATE INDEX \"run_raid_content_raidId_idx_996eeca9\" ON \"public\".\"run_raid_content\" (\"raidId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_raid_content_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raid_content_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_raid_content.run_raid_content_runId_idx_a6016437",
+    "label": "Create index \"run_raid_content_runId_idx_a6016437\" on \"run_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_raid_content_runId_idx_a6016437",
+        "table": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_raid_content_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raid_content_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_raid_content_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_raid_content_runId_idx_a6016437\" ON \"public\".\"run_raid_content\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_raid_content_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raid_content_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_raid_content.run_raid_content_runId_fkey",
+    "label": "Add foreign key \"run_raid_content_runId_fkey\" on \"run_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_raid_content_runId_fkey",
+        "table": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_raid_content_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_runId_fkey",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_raid_content_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_raid_content\"\nADD CONSTRAINT \"run_raid_content_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_raid_content_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_runId_fkey",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_raid_content.run_raid_content_raidId_fkey",
+    "label": "Add foreign key \"run_raid_content_raidId_fkey\" on \"run_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_raid_content_raidId_fkey",
+        "table": "run_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_raid_content_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_raidId_fkey",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_raid_content_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_raid_content\"\nADD CONSTRAINT \"run_raid_content_raidId_fkey\"\nFOREIGN KEY (\"raidId\")\nREFERENCES \"public\".\"raid\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_raid_content_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raid_content_raidId_fkey",
+          "public",
+          "\"public\".\"run_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-run-raid-content-from-legacy",
+    "label": "Data transform: backfill RunRaidContent from Run.raidId/plannedBossCount",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow RunRaidContent backfill (idempotent insert)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Insert sortOrder=1 content mirroring each Run singular raid fields",
+        "sql": "INSERT INTO \"run_raid_content\" (\"id\", \"runId\", \"raidId\", \"sortOrder\", \"plannedBossCount\", \"createdAt\")\nSELECT gen_random_uuid()::text, r.\"id\", r.\"raidId\", 1, r.\"plannedBossCount\", r.\"createdAt\"\nFROM \"run\" r\nWHERE NOT EXISTS (\n  SELECT 1 FROM \"run_raid_content\" c WHERE c.\"runId\" = r.\"id\"\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every Run has a matching sortOrder=1 content for its singular raid fields",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1 FROM \"run\" r\n  WHERE NOT EXISTS (\n    SELECT 1 FROM \"run_raid_content\" c\n    WHERE c.\"runId\" = r.\"id\"\n      AND c.\"raidId\" = r.\"raidId\"\n      AND c.\"plannedBossCount\" = r.\"plannedBossCount\"\n      AND c.\"sortOrder\" = 1\n  )\n) AS ok",
+        "params": []
+      }
+    ]
+  }
+]

@@ -3,7 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { MANAFORGE_OMEGA_RAID_ID, TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runDetailService } from "@/services/run-detail.service";
@@ -971,10 +971,14 @@ describe("raid reference bootstrap", () => {
 
     const manaforge = await raidRepository.findById(MANAFORGE_OMEGA_RAID_ID);
     const venomous = await raidRepository.findById(VENOMOUS_ABYSS_RAID_ID);
+    const tidebound = await raidRepository.findById(TIDEBOUND_GROTTO_RAID_ID);
     expect(manaforge?.id).toBe(MANAFORGE_OMEGA_RAID_ID);
     expect(venomous?.id).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(tidebound?.id).toBe(TIDEBOUND_GROTTO_RAID_ID);
     expect(manaforge?.name).toBe("Manaforge Omega");
     expect(venomous?.name).toBe("The Venomous Abyss");
+    expect(tidebound?.name).toBe("The Tidebound Grotto");
+    expect(tidebound?.totalBossCount).toBe(1);
   });
 });
 
@@ -983,20 +987,25 @@ describe("historical raid availability", () => {
     await raidRepository.ensureReferenceRaids();
     const manaforge = await raidRepository.findById(MANAFORGE_OMEGA_RAID_ID);
     const venomous = await raidRepository.findById(VENOMOUS_ABYSS_RAID_ID);
+    const tidebound = await raidRepository.findById(TIDEBOUND_GROTTO_RAID_ID);
     expect(manaforge?.availableForRuns).toBe(false);
     expect(venomous?.availableForRuns).toBe(true);
+    // Tidebound is real raid content for Bundles — not a Create Run product yet.
+    expect(tidebound?.availableForRuns).toBe(false);
   });
 
   it("listAvailableForRuns excludes historical raids but includes the current one", async () => {
     const available = await raidRepository.listAvailableForRuns();
     expect(available.some((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
     expect(available.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
+    expect(available.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(false);
   });
 
   it("the Create Run form omits historical raids and offers the current one", async () => {
     const form = await runService.getCreateForm(lead);
     expect(form.raids.some((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
     expect(form.raids.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
+    expect(form.raids.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(false);
   });
 
   it("rejects creating a new Run targeting a historical raid, with no Run row created", async () => {

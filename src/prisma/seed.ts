@@ -241,6 +241,9 @@ async function wipe() {
   for (const row of await orm.RunSignup.select("id").all()) {
     await orm.RunSignup.where({ id: row.id }).delete();
   }
+  for (const row of await orm.RunRaidContent.select("id").all()) {
+    await orm.RunRaidContent.where({ id: row.id }).delete();
+  }
   for (const row of await orm.CharacterRaidLockout.select("id").all()) {
     await orm.CharacterRaidLockout.where({ id: row.id }).delete();
   }
@@ -859,6 +862,14 @@ async function seed() {
             : null,
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
+    });
+    await orm.RunRaidContent.create({
+      id: crypto.randomUUID(),
+      runId: run.id,
+      raidId: ids.raid,
+      sortOrder: 1,
+      plannedBossCount: run.plannedBossCount,
+      createdAt: SEED_NOW,
     });
   }
 
