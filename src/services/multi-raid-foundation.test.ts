@@ -148,6 +148,7 @@ describe("RunRaidContent transitional invariant", () => {
         desiredHealerCount: 4,
         desiredDpsCount: 14,
         plannedBossCount: 4,
+        contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 4 }],
       },
       {
         title: "Mass B",
@@ -161,6 +162,7 @@ describe("RunRaidContent transitional invariant", () => {
         desiredHealerCount: 4,
         desiredDpsCount: 14,
         plannedBossCount: 5,
+        contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 5 }],
       },
     ]);
     createdRunIds.push(...idsCreated);
@@ -175,7 +177,7 @@ describe("RunRaidContent transitional invariant", () => {
     }
   });
 
-  it("updateFields keeps sole content plannedBossCount synchronized", async () => {
+  it("updateFields does not rewrite RunRaidContent (Bundle-safe)", async () => {
     const created = await runService.createRun(asLead(), {
       raidId: VENOMOUS_ABYSS_RAID_ID,
       difficulty: "HEROIC",
@@ -193,7 +195,8 @@ describe("RunRaidContent transitional invariant", () => {
     const contents = await runRepository.listRaidContents(created.id);
     expect(run?.plannedBossCount).toBe(7);
     expect(contents).toHaveLength(1);
-    expect(contents[0]?.plannedBossCount).toBe(7);
+    // Content remains authoritative until an explicit content-aware identity update.
+    expect(contents[0]?.plannedBossCount).toBe(3);
   });
 
   it("rejects duplicate runId+raidId and runId+sortOrder", async () => {

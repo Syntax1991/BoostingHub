@@ -581,12 +581,18 @@ describe("runRepository.createManyDraftsAtomic — atomic rollback", () => {
       desiredHealerCount: 4,
       desiredDpsCount: 14,
       plannedBossCount: raid!.totalBossCount,
+      contents: [{ raidId, sortOrder: 1, plannedBossCount: raid!.totalBossCount }],
     };
     // A nonexistent raidId violates the Run.raidId foreign key at the DB
     // level on the SECOND insert, after the first would otherwise have
     // already written successfully — proving the whole transaction, not
     // just Service-level pre-validation, rolls back.
-    const badInput = { ...goodInput, raidId: crypto.randomUUID(), scheduledStartAt: futureIso(701) };
+    const badInput = {
+      ...goodInput,
+      raidId: crypto.randomUUID(),
+      scheduledStartAt: futureIso(701),
+      contents: [{ raidId: crypto.randomUUID(), sortOrder: 1, plannedBossCount: raid!.totalBossCount }],
+    };
 
     await expect(runRepository.createManyDraftsAtomic([goodInput, badInput])).rejects.toThrow();
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import type { RunContentPresetKey } from "@/lib/run-content-presets";
 import { buildRunTitle } from "@/lib/run-title";
 import { runCreateSuccessPath } from "@/lib/run-routes";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
@@ -14,7 +15,8 @@ import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootTyp
 import type { CreateManyRunsForm } from "@/services/run.service";
 
 type RowOverrides = {
-  raidId?: string;
+  contentPreset?: RunContentPresetKey;
+  venomousPlannedBossCount?: number;
   difficulty?: RaidDifficulty;
   lootType?: RunLootType;
   raidLeadId?: string;
@@ -23,7 +25,6 @@ type RowOverrides = {
   desiredTankCount?: number;
   desiredHealerCount?: number;
   desiredDpsCount?: number;
-  plannedBossCount?: number;
 };
 
 type Row = {
@@ -43,16 +44,24 @@ function nextDefaultLocal(afterLocal: string): string {
   }
 }
 
+function presetLabel(form: CreateManyRunsForm, key: RunContentPresetKey): string {
+  return form.contentPresets.find((preset) => preset.key === key)?.displayName ?? key;
+}
+
 export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const router = useRouter();
   const errorId = useId();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Shared defaults.
   const [templateId, setTemplateId] = useState("");
   const templateLocked = Boolean(templateId);
-  const [raidId, setRaidId] = useState(form.raids[0]?.id ?? "");
+  const [contentPreset, setContentPreset] = useState<RunContentPresetKey>(
+    form.defaults.contentPreset ?? "VENOMOUS_ABYSS",
+  );
+  const [venomousPlannedBossCount, setVenomousPlannedBossCount] = useState(
+    form.defaults.venomousPlannedBossCount ?? form.venomousBossMax,
+  );
   const [difficulty, setDifficulty] = useState<RaidDifficulty>(form.defaults.difficulty);
   const [lootType, setLootType] = useState<RunLootType>(form.defaults.lootType);
   const [raidLeadId, setRaidLeadId] = useState(form.defaultRaidLeadId);
@@ -61,31 +70,25 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const [desiredHealerCount, setDesiredHealerCount] = useState(form.defaults.desiredHealerCount);
   const [desiredDpsCount, setDesiredDpsCount] = useState(form.defaults.desiredDpsCount);
 
-  const sharedRaid = form.raids.find((raid) => raid.id === raidId) ?? form.raids[0] ?? null;
-  const [plannedBossCount, setPlannedBossCount] = useState(sharedRaid?.totalBossCount ?? 1);
-
   const [rows, setRows] = useState<Row[]>([
-    { key: crypto.randomUUID(), scheduledLocal: toDatetimeLocalValue(form.defaults.scheduledStartAt), overrides: {}, expanded: false },
+    {
+      key: crypto.randomUUID(),
+      scheduledLocal: toDatetimeLocalValue(form.defaults.scheduledStartAt),
+      overrides: {},
+      expanded: false,
+    },
   ]);
 
-  /**
-   * Applying a template copies its planning defaults into Shared Defaults and
-   * locks the effective Raid Lead to the template's owner — staged per-row
-   * raidLeadId overrides are cleared (they'd otherwise hide a mismatch),
-   * while schedules and every other row override are preserved. Selecting
-   * "No template" (empty id) only detaches — it deliberately does not reset
-   * any value already copied in, matching today's fully-editable behavior.
-   */
   function applyTemplate(nextTemplateId: string) {
     setTemplateId(nextTemplateId);
     if (!nextTemplateId) return;
     const template = form.templates.find((candidate) => candidate.id === nextTemplateId);
     if (!template) return;
 
-    setRaidId(template.raidId);
+    setContentPreset(template.contentPreset);
+    setVenomousPlannedBossCount(template.venomousPlannedBossCount);
     setDifficulty(template.difficulty);
     setLootType(template.lootType);
-    setPlannedBossCount(template.plannedBossCount);
     setDesiredTankCount(template.desiredTankCount);
     setDesiredHealerCount(template.desiredHealerCount);
     setDesiredDpsCount(template.desiredDpsCount);
@@ -99,12 +102,6 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         return { ...row, overrides: nextOverrides };
       }),
     );
-  }
-
-  function selectSharedRaid(nextRaidId: string) {
-    setRaidId(nextRaidId);
-    const raid = form.raids.find((candidate) => candidate.id === nextRaidId);
-    setPlannedBossCount(raid?.totalBossCount ?? 1);
   }
 
   function selectSharedDifficulty(nextDifficulty: RaidDifficulty) {
@@ -135,11 +132,11 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     );
   }
 
-  function effectiveRaidId(row: Row) {
-    return row.overrides.raidId ?? raidId;
+  function effectivePreset(row: Row): RunContentPresetKey {
+    return row.overrides.contentPreset ?? contentPreset;
   }
-  function effectiveRaid(row: Row) {
-    return form.raids.find((raid) => raid.id === effectiveRaidId(row)) ?? sharedRaid;
+  function effectiveVenomous(row: Row): number {
+    return row.overrides.venomousPlannedBossCount ?? venomousPlannedBossCount;
   }
   function effectiveDifficulty(row: Row): RaidDifficulty {
     return row.overrides.difficulty ?? difficulty;
@@ -154,29 +151,20 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     if (!form.canAssignRaidLead) return form.defaultRaidLeadName;
     return form.raidLeads.find((lead) => lead.id === effectiveRaidLeadId(row))?.name ?? "";
   }
-  function effectivePlannedBossCount(row: Row) {
-    return row.overrides.plannedBossCount ?? plannedBossCount;
-  }
 
   function previewTitle(row: Row) {
     try {
-      const raid = effectiveRaid(row);
       return buildRunTitle({
         scheduledStartAt: fromDatetimeLocalValue(row.scheduledLocal),
         difficulty: effectiveDifficulty(row),
         lootType: effectiveLootType(row),
-        plannedBossCount: effectivePlannedBossCount(row),
-        totalBossCount: raid?.totalBossCount ?? 1,
+        plannedBossCount: effectiveVenomous(row),
+        totalBossCount: form.venomousBossMax,
         raidLeadName: effectiveRaidLeadName(row) || "TBD",
       });
     } catch {
       return "—";
     }
-  }
-
-  function selectRowRaid(row: Row, nextRaidId: string) {
-    const raid = form.raids.find((candidate) => candidate.id === nextRaidId);
-    updateOverrides(row.key, { raidId: nextRaidId, plannedBossCount: raid?.totalBossCount ?? 1 });
   }
 
   function selectRowDifficulty(row: Row, nextDifficulty: RaidDifficulty) {
@@ -195,7 +183,9 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
       ...rows,
       {
         key: crypto.randomUUID(),
-        scheduledLocal: last ? nextDefaultLocal(last.scheduledLocal) : toDatetimeLocalValue(form.defaults.scheduledStartAt),
+        scheduledLocal: last
+          ? nextDefaultLocal(last.scheduledLocal)
+          : toDatetimeLocalValue(form.defaults.scheduledStartAt),
         overrides: {},
         expanded: false,
       },
@@ -208,7 +198,12 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     if (!source) return;
     setRows((current) => {
       const index = current.findIndex((row) => row.key === key);
-      const copy: Row = { key: crypto.randomUUID(), scheduledLocal: source.scheduledLocal, overrides: { ...source.overrides }, expanded: false };
+      const copy: Row = {
+        key: crypto.randomUUID(),
+        scheduledLocal: source.scheduledLocal,
+        overrides: { ...source.overrides },
+        expanded: false,
+      };
       const next = [...current];
       next.splice(index + 1, 0, copy);
       return next;
@@ -235,7 +230,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     startTransition(async () => {
       const result = await createManyRunsAction({
         defaults: {
-          raidId,
+          contentPreset,
+          venomousPlannedBossCount,
           difficulty,
           lootType,
           raidLeadId: form.canAssignRaidLead ? raidLeadId : undefined,
@@ -243,7 +239,6 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           desiredTankCount,
           desiredHealerCount,
           desiredDpsCount,
-          plannedBossCount,
         },
         runs: rows.map((row, index) => ({
           scheduledStartAt: scheduledByRow[index],
@@ -262,7 +257,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     });
   }
 
-  const canSubmit = form.raids.length > 0 && rows.length >= 1 && rows.length <= form.maxRuns;
+  const canSubmit = form.contentPresets.length > 0 && rows.length >= 1 && rows.length <= form.maxRuns;
+  const sharedIsBundle = contentPreset === "MIDNIGHT_S2_BUNDLE";
 
   return (
     <form className="space-y-4" onSubmit={submit}>
@@ -271,9 +267,9 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           {error}
         </p>
       ) : null}
-      {form.raids.length === 0 ? (
+      {form.contentPresets.length === 0 ? (
         <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
-          No raid content is available. Reference raids could not be loaded.
+          No run products are available.
         </p>
       ) : null}
 
@@ -308,20 +304,40 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         <CardHeader title="Shared defaults" description="Applied to every run below unless a row overrides it." />
         <div className="space-y-3 px-4 py-4">
           <label className="block text-sm">
-            <span className="mb-1 block text-muted">Raid</span>
+            <span className="mb-1 block text-muted">Product</span>
             <select
-              aria-label="Shared raid"
-              value={raidId}
-              onChange={(event) => selectSharedRaid(event.target.value)}
+              aria-label="Shared product"
+              value={contentPreset}
+              onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
               className="h-9 w-full rounded-md border border-border bg-surface px-2"
               required
             >
-              {form.raids.map((raid) => (
-                <option key={raid.id} value={raid.id}>
-                  {raid.name} · {raid.season}
+              {form.contentPresets.map((preset) => (
+                <option key={preset.key} value={preset.key}>
+                  {preset.displayName}
                 </option>
               ))}
             </select>
+          </label>
+          {sharedIsBundle ? (
+            <p className="rounded-md border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
+              Nymrissa 1/1 (fixed) · The Venomous Abyss selectable below
+            </p>
+          ) : null}
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted">The Venomous Abyss bosses</span>
+            <input
+              type="number"
+              min={1}
+              max={form.venomousBossMax}
+              value={venomousPlannedBossCount}
+              onChange={(event) => setVenomousPlannedBossCount(Number(event.target.value))}
+              className="h-9 w-full rounded-md border border-border bg-surface px-2"
+              aria-label="Shared Venomous planned bosses"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Out of {form.venomousBossMax} bosses in The Venomous Abyss.
+            </span>
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">
@@ -355,19 +371,6 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
               </select>
             </label>
           </div>
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted">Planned bosses</span>
-            <input
-              type="number"
-              min={1}
-              max={sharedRaid?.totalBossCount ?? 1}
-              value={plannedBossCount}
-              onChange={(event) => setPlannedBossCount(Number(event.target.value))}
-              className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              aria-label="Shared planned bosses"
-            />
-            <span className="mt-1 block text-xs text-muted">Out of {sharedRaid?.totalBossCount ?? 1} total bosses in this raid.</span>
-          </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Raid Lead</span>
             {form.canAssignRaidLead ? (
@@ -463,8 +466,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         />
         <ul className="divide-y divide-border">
           {rows.map((row, index) => {
-            const raid = effectiveRaid(row);
             const hasOverrides = Object.keys(row.overrides).length > 0;
+            const rowPreset = effectivePreset(row);
             return (
               <li key={row.key} className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -477,18 +480,32 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                     aria-label={`Run ${index + 1} scheduled start`}
                     required
                   />
-                  <span className="text-sm">{raid?.name ?? "—"}</span>
+                  <span className="text-sm">{presetLabel(form, rowPreset)}</span>
+                  <span className="text-sm text-muted">
+                    VA {effectiveVenomous(row)}/{form.venomousBossMax}
+                  </span>
                   <span className="text-sm text-muted">{DIFFICULTY_LABELS[effectiveDifficulty(row)]}</span>
                   <span className="text-sm text-muted">{RUN_LOOT_TYPE_LABELS[effectiveLootType(row)]}</span>
                   <span className="text-sm text-muted">{effectiveRaidLeadName(row) || "—"}</span>
                   {hasOverrides ? (
-                    <span className="rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">Overridden</span>
+                    <span className="rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
+                      Overridden
+                    </span>
                   ) : null}
                   <div className="ml-auto flex gap-2">
-                    <Button type="button" variant="ghost" onClick={() => updateRow(row.key, { expanded: !row.expanded })}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => updateRow(row.key, { expanded: !row.expanded })}
+                    >
                       {row.expanded ? "Hide" : "Configure"}
                     </Button>
-                    <Button type="button" variant="ghost" onClick={() => duplicateRow(row.key)} disabled={rows.length >= form.maxRuns}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => duplicateRow(row.key)}
+                      disabled={rows.length >= form.maxRuns}
+                    >
                       Duplicate
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => removeRow(row.key)} disabled={rows.length <= 1}>
@@ -500,19 +517,51 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
 
                 {row.expanded ? (
                   <div className="mt-3 space-y-3 rounded-md border border-border bg-surface-raised p-3">
-                    <OverrideField label="Raid" active={row.overrides.raidId !== undefined} onReset={() => resetOverride(row.key, "raidId")}>
+                    <OverrideField
+                      label="Product"
+                      active={row.overrides.contentPreset !== undefined}
+                      onReset={() => resetOverride(row.key, "contentPreset")}
+                    >
                       <select
-                        aria-label={`Run ${index + 1} raid override`}
-                        value={effectiveRaidId(row)}
-                        onChange={(event) => selectRowRaid(row, event.target.value)}
+                        aria-label={`Run ${index + 1} product override`}
+                        value={rowPreset}
+                        onChange={(event) =>
+                          updateOverrides(row.key, {
+                            contentPreset: event.target.value as RunContentPresetKey,
+                          })
+                        }
                         className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
                       >
-                        {form.raids.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {candidate.name} · {candidate.season}
+                        {form.contentPresets.map((preset) => (
+                          <option key={preset.key} value={preset.key}>
+                            {preset.displayName}
                           </option>
                         ))}
                       </select>
+                    </OverrideField>
+
+                    {rowPreset === "MIDNIGHT_S2_BUNDLE" ? (
+                      <p className="text-xs text-muted">Nymrissa 1/1 is fixed for the Season 2 Bundle.</p>
+                    ) : null}
+
+                    <OverrideField
+                      label="Venomous bosses"
+                      active={row.overrides.venomousPlannedBossCount !== undefined}
+                      onReset={() => resetOverride(row.key, "venomousPlannedBossCount")}
+                    >
+                      <input
+                        type="number"
+                        min={1}
+                        max={form.venomousBossMax}
+                        value={effectiveVenomous(row)}
+                        onChange={(event) =>
+                          updateOverrides(row.key, {
+                            venomousPlannedBossCount: Number(event.target.value),
+                          })
+                        }
+                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                        aria-label={`Run ${index + 1} Venomous bosses override`}
+                      />
                     </OverrideField>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -542,33 +591,23 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                         <select
                           aria-label={`Run ${index + 1} loot type override`}
                           value={effectiveLootType(row)}
-                          onChange={(event) => updateOverrides(row.key, { lootType: event.target.value as RunLootType })}
+                          onChange={(event) =>
+                            updateOverrides(row.key, { lootType: event.target.value as RunLootType })
+                          }
                           className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
                         >
                           {RUN_LOOT_TYPES.map((value) => (
-                            <option key={value} value={value} disabled={!isLootTypeAllowedForDifficulty(effectiveDifficulty(row), value)}>
+                            <option
+                              key={value}
+                              value={value}
+                              disabled={!isLootTypeAllowedForDifficulty(effectiveDifficulty(row), value)}
+                            >
                               {RUN_LOOT_TYPE_LABELS[value]}
                             </option>
                           ))}
                         </select>
                       </OverrideField>
                     </div>
-
-                    <OverrideField
-                      label="Planned bosses"
-                      active={row.overrides.plannedBossCount !== undefined}
-                      onReset={() => resetOverride(row.key, "plannedBossCount")}
-                    >
-                      <input
-                        type="number"
-                        min={1}
-                        max={raid?.totalBossCount ?? 1}
-                        value={effectivePlannedBossCount(row)}
-                        onChange={(event) => updateOverrides(row.key, { plannedBossCount: Number(event.target.value) })}
-                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                        aria-label={`Run ${index + 1} planned bosses override`}
-                      />
-                    </OverrideField>
 
                     {form.canAssignRaidLead && !templateLocked ? (
                       <OverrideField
@@ -602,7 +641,9 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                           min={0}
                           max={40}
                           value={row.overrides.desiredTankCount ?? desiredTankCount}
-                          onChange={(event) => updateOverrides(row.key, { desiredTankCount: Number(event.target.value) })}
+                          onChange={(event) =>
+                            updateOverrides(row.key, { desiredTankCount: Number(event.target.value) })
+                          }
                           className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
                           aria-label={`Run ${index + 1} desired tanks override`}
                         />
@@ -617,7 +658,9 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                           min={0}
                           max={40}
                           value={row.overrides.desiredHealerCount ?? desiredHealerCount}
-                          onChange={(event) => updateOverrides(row.key, { desiredHealerCount: Number(event.target.value) })}
+                          onChange={(event) =>
+                            updateOverrides(row.key, { desiredHealerCount: Number(event.target.value) })
+                          }
                           className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
                           aria-label={`Run ${index + 1} desired healers override`}
                         />
@@ -632,14 +675,20 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                           min={0}
                           max={40}
                           value={row.overrides.desiredDpsCount ?? desiredDpsCount}
-                          onChange={(event) => updateOverrides(row.key, { desiredDpsCount: Number(event.target.value) })}
+                          onChange={(event) =>
+                            updateOverrides(row.key, { desiredDpsCount: Number(event.target.value) })
+                          }
                           className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
                           aria-label={`Run ${index + 1} desired DPS override`}
                         />
                       </OverrideField>
                     </div>
 
-                    <OverrideField label="Notes" active={row.overrides.notes !== undefined} onReset={() => resetOverride(row.key, "notes")}>
+                    <OverrideField
+                      label="Notes"
+                      active={row.overrides.notes !== undefined}
+                      onReset={() => resetOverride(row.key, "notes")}
+                    >
                       <textarea
                         value={row.overrides.notes ?? notes}
                         onChange={(event) => updateOverrides(row.key, { notes: event.target.value })}

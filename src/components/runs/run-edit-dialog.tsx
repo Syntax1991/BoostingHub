@@ -5,6 +5,7 @@ import { updateRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import type { RunContentPresetKey } from "@/lib/run-content-presets";
 import { buildRunTitle } from "@/lib/run-title";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
@@ -18,7 +19,7 @@ export function RunEditDialog({
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
-  editor: RunDetailView["editor"];
+  editor: NonNullable<RunDetailView["editor"]>;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -27,6 +28,11 @@ export function RunEditDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const isCustom = editor.contentPreset === "CUSTOM";
+  const [contentPreset, setContentPreset] = useState<RunContentPresetKey>(
+    editor.contentPreset === "CUSTOM" ? "VENOMOUS_ABYSS" : editor.contentPreset,
+  );
+  const [venomousPlannedBossCount, setVenomousPlannedBossCount] = useState(editor.venomousPlannedBossCount);
   const [raidId, setRaidId] = useState(run.raidId);
   const [difficulty, setDifficulty] = useState<RaidDifficulty>(run.difficulty);
   const [lootType, setLootType] = useState<RunLootType>(run.lootType);
@@ -38,11 +44,11 @@ export function RunEditDialog({
   const [desiredDpsCount, setDesiredDpsCount] = useState(run.desiredDpsCount);
   const [plannedBossCount, setPlannedBossCount] = useState(run.plannedBossCount);
 
-  const selectedRaid = editor?.raids.find((raid) => raid.id === raidId);
+  const selectedRaid = editor.raids.find((raid) => raid.id === raidId);
   const totalBossCount = selectedRaid?.totalBossCount ?? run.totalBossCount;
 
   const raidLeadName =
-    editor?.raidLeads.find((lead) => lead.id === raidLeadId)?.name ?? run.raidLeadName;
+    editor.raidLeads.find((lead) => lead.id === raidLeadId)?.name ?? run.raidLeadName;
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -60,7 +66,7 @@ export function RunEditDialog({
 
   function selectRaid(nextRaidId: string) {
     setRaidId(nextRaidId);
-    const raid = editor?.raids.find((candidate) => candidate.id === nextRaidId);
+    const raid = editor.raids.find((candidate) => candidate.id === nextRaidId);
     if (raid) {
       setPlannedBossCount(raid.totalBossCount);
     }
@@ -80,14 +86,24 @@ export function RunEditDialog({
         scheduledStartAt,
         difficulty,
         lootType,
-        plannedBossCount,
-        totalBossCount,
+        plannedBossCount: isCustom ? plannedBossCount : venomousPlannedBossCount,
+        totalBossCount: isCustom ? totalBossCount : editor.venomousBossMax,
         raidLeadName,
       });
     } catch {
       return "—";
     }
-  }, [scheduledLocal, difficulty, lootType, plannedBossCount, totalBossCount, raidLeadName]);
+  }, [
+    scheduledLocal,
+    difficulty,
+    lootType,
+    plannedBossCount,
+    venomousPlannedBossCount,
+    totalBossCount,
+    editor.venomousBossMax,
+    isCustom,
+    raidLeadName,
+  ]);
 
   function submit(event: { preventDefault(): void }) {
     event.preventDefault();
@@ -101,9 +117,8 @@ export function RunEditDialog({
         return;
       }
 
-      const result = await updateRunAction({
+      const base = {
         runId: run.id,
-        raidId,
         difficulty,
         lootType,
         scheduledStartAt,
@@ -112,8 +127,13 @@ export function RunEditDialog({
         desiredTankCount,
         desiredHealerCount,
         desiredDpsCount,
-        plannedBossCount,
-      });
+      };
+
+      const result = await updateRunAction(
+        isCustom
+          ? { ...base, raidId, plannedBossCount }
+          : { ...base, contentPreset, venomousPlannedBossCount },
+      );
       if (!result.ok) {
         setError(result.message);
         return;
@@ -121,10 +141,6 @@ export function RunEditDialog({
       close();
       window.location.reload();
     });
-  }
-
-  if (!editor) {
-    return null;
   }
 
   return (
@@ -139,8 +155,8 @@ export function RunEditDialog({
         </h2>
         <p className="mt-1 text-xs text-muted">
           {capabilities.canEditIdentity
-            ? "Raid and difficulty can still be changed because no signup history exists."
-            : "Raid and difficulty are locked after signup history exists."}
+            ? "Product and difficulty can still be changed because no signup history exists."
+            : "Product and difficulty are locked after signup history exists."}
         </p>
       </div>
       <form className="space-y-3 px-4 py-4" onSubmit={submit}>
@@ -149,24 +165,89 @@ export function RunEditDialog({
             {error}
           </p>
         ) : null}
-        <label className="block text-sm">
-          <span className="mb-1 block text-muted">Raid</span>
-          <select
-            aria-label="Raid"
-            value={raidId}
-            disabled={!capabilities.canEditIdentity}
-            title={!capabilities.canEditIdentity ? "Raid cannot change after signup history exists." : undefined}
-            onChange={(event) => selectRaid(event.target.value)}
-            className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {editor.raids.map((raid) => (
-              <option key={raid.id} value={raid.id} disabled={!raid.availableForRuns}>
-                {raid.name} · {raid.season}
-                {raid.availableForRuns ? "" : " (Historical)"}
-              </option>
-            ))}
-          </select>
-        </label>
+
+        {isCustom ? (
+          <>
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted">Raid</span>
+              <select
+                aria-label="Raid"
+                value={raidId}
+                disabled={!capabilities.canEditIdentity}
+                title={!capabilities.canEditIdentity ? "Raid cannot change after signup history exists." : undefined}
+                onChange={(event) => selectRaid(event.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {editor.raids.map((raid) => (
+                  <option key={raid.id} value={raid.id} disabled={!raid.availableForRuns}>
+                    {raid.name} · {raid.season}
+                    {raid.availableForRuns ? "" : " (Historical)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted">Planned bosses</span>
+              <input
+                type="number"
+                min={1}
+                max={totalBossCount}
+                value={plannedBossCount}
+                disabled={!capabilities.canEditIdentity}
+                onChange={(event) => setPlannedBossCount(Number(event.target.value))}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Planned bosses"
+              />
+              <span className="mt-1 block text-xs text-muted">Out of {totalBossCount} total bosses in this raid.</span>
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted">Product</span>
+              <select
+                aria-label="Product"
+                value={contentPreset}
+                disabled={!capabilities.canEditIdentity}
+                title={
+                  !capabilities.canEditIdentity
+                    ? "Product cannot change after signup history exists."
+                    : undefined
+                }
+                onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {editor.contentPresets.map((preset) => (
+                  <option key={preset.key} value={preset.key}>
+                    {preset.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {contentPreset === "MIDNIGHT_S2_BUNDLE" ? (
+              <p className="rounded-md border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
+                Nymrissa 1/1 (fixed)
+              </p>
+            ) : null}
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted">The Venomous Abyss bosses</span>
+              <input
+                type="number"
+                min={1}
+                max={editor.venomousBossMax}
+                value={venomousPlannedBossCount}
+                disabled={!capabilities.canEditIdentity}
+                onChange={(event) => setVenomousPlannedBossCount(Number(event.target.value))}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Venomous planned bosses"
+              />
+              <span className="mt-1 block text-xs text-muted">
+                Out of {editor.venomousBossMax} bosses in The Venomous Abyss.
+              </span>
+            </label>
+          </>
+        )}
+
         <label className="block text-sm">
           <span className="mb-1 block text-muted">Difficulty</span>
           <select
@@ -212,20 +293,6 @@ export function RunEditDialog({
             onChange={(event) => setScheduledLocal(event.target.value)}
             className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-muted">Planned bosses</span>
-          <input
-            type="number"
-            min={1}
-            max={totalBossCount}
-            value={plannedBossCount}
-            disabled={!capabilities.canEditPlanning}
-            onChange={(event) => setPlannedBossCount(Number(event.target.value))}
-            className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Planned bosses"
-          />
-          <span className="mt-1 block text-xs text-muted">Out of {totalBossCount} total bosses in this raid.</span>
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-muted">Raid Lead</span>
@@ -309,12 +376,12 @@ export function RunEditDialog({
           <span className="block text-muted">Generated title</span>
           <span className="font-medium">{generatedTitle}</span>
         </div>
-        <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
-          <Button type="button" variant="secondary" onClick={close}>
-            Close
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={close} disabled={pending}>
+            Cancel
           </Button>
           <Button type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
+            {pending ? "Saving…" : "Save"}
           </Button>
         </div>
       </form>

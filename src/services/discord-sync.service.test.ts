@@ -1039,6 +1039,13 @@ describe("discordSyncService — raid identity invalidation (embed content signa
       desiredHealerCount: 1,
       desiredDpsCount: 2,
       plannedBossCount: 8,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
     });
     createdRunIds.push(raidEditRunId);
     await runService.openRun(lead, raidEditRunId);
@@ -1154,6 +1161,13 @@ describe("discordSyncService — raid identity invalidation (embed content signa
       desiredHealerCount: 1,
       desiredDpsCount: 2,
       plannedBossCount: 8,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
     });
     createdRunIds.push(comboRunId);
     await runService.openRun(lead, comboRunId);
@@ -1199,6 +1213,13 @@ describe("discordSyncService — raid identity invalidation (embed content signa
       desiredHealerCount: 0,
       desiredDpsCount: 0,
       plannedBossCount: 8,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
     });
     createdRunIds.push(publishedRunId);
     await runService.openRun(lead, publishedRunId);

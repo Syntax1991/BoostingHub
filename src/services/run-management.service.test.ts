@@ -117,6 +117,13 @@ async function createHistoricalDraft(extra: Record<string, unknown> = {}) {
     desiredHealerCount: 4,
     desiredDpsCount: 14,
     plannedBossCount: 8,
+    contents: [
+      {
+        raidId: MANAFORGE_OMEGA_RAID_ID,
+        sortOrder: 1,
+        plannedBossCount: 8,
+      },
+    ],
     ...extra,
   });
   createdRunIds.push(id);
@@ -1001,11 +1008,13 @@ describe("historical raid availability", () => {
     expect(available.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(false);
   });
 
-  it("the Create Run form omits historical raids and offers the current one", async () => {
+  it("the Create Run form offers commercial products and omits Tidebound standalone", async () => {
     const form = await runService.getCreateForm(lead);
-    expect(form.raids.some((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
-    expect(form.raids.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
-    expect(form.raids.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(false);
+    expect(form.contentPresets.map((preset) => preset.key)).toEqual([
+      "VENOMOUS_ABYSS",
+      "MIDNIGHT_S2_BUNDLE",
+    ]);
+    expect(form.contentPresets.some((preset) => preset.displayName.includes("Tidebound"))).toBe(false);
   });
 
   it("rejects creating a new Run targeting a historical raid, with no Run row created", async () => {

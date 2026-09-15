@@ -118,7 +118,7 @@ export function RunManagerActions({
           {error}
         </p>
       ) : null}
-      {editOpen ? (
+      {editOpen && editor ? (
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}

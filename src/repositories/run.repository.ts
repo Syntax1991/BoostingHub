@@ -121,36 +121,63 @@ function mapRaidContent(row: Record<string, unknown>): RunRaidContentRecord {
   };
 }
 
-/**
- * Transitional write: keep the sole sortOrder=1 RunRaidContent row aligned with
- * legacy Run.raidId / Run.plannedBossCount until those columns are dropped.
- */
-async function syncSoleRaidContent(
+export type RunContentWriteSpec = {
+  raidId: string;
+  sortOrder: number;
+  plannedBossCount: number;
+};
+
+export type RunCreateWithContentsInput = {
+  title: string;
+  /** Transitional singular mirror — Venomous primary for Bundle products. */
+  raidId: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  scheduledStartAt: string;
+  raidLeadId: string;
+  notes: string | null;
+  desiredTankCount: number;
+  desiredHealerCount: number;
+  desiredDpsCount: number;
+  /** Transitional singular mirror — Venomous planned count for Bundle products. */
+  plannedBossCount: number;
+  contents: RunContentWriteSpec[];
+};
+
+async function insertRaidContents(
   ormLike: TxOrm,
-  input: { runId: string; raidId: string; plannedBossCount: number; now: string },
+  runId: string,
+  contents: RunContentWriteSpec[],
+  now: string,
 ) {
-  const existing = (await ormLike.RunRaidContent.where({ runId: input.runId }).all()) as Record<
-    string,
-    unknown
-  >[];
-  if (existing.length === 0) {
+  if (contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run must include at least one raid content row.");
+  }
+  const sorted = [...contents].sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const content of sorted) {
     await ormLike.RunRaidContent.create({
       id: crypto.randomUUID(),
-      runId: input.runId,
-      raidId: input.raidId,
-      sortOrder: 1,
-      plannedBossCount: input.plannedBossCount,
-      createdAt: input.now,
+      runId,
+      raidId: content.raidId,
+      sortOrder: content.sortOrder,
+      plannedBossCount: content.plannedBossCount,
+      createdAt: now,
     });
-    return;
   }
-  const sole =
-    existing.find((row) => asNumber(row.sortOrder) === 1) ??
-    existing.slice().sort((a, b) => asNumber(a.sortOrder) - asNumber(b.sortOrder))[0]!;
-  await ormLike.RunRaidContent.where({ id: asString(sole.id) }).update({
-    raidId: input.raidId,
-    plannedBossCount: input.plannedBossCount,
-  });
+}
+
+/** Replace the full content set inside an open transaction (delete + recreate). */
+async function replaceRaidContentsTx(
+  ormLike: TxOrm,
+  runId: string,
+  contents: RunContentWriteSpec[],
+  now: string,
+) {
+  const existing = (await ormLike.RunRaidContent.where({ runId }).all()) as Record<string, unknown>[];
+  for (const row of existing) {
+    await ormLike.RunRaidContent.where({ id: asString(row.id) }).delete();
+  }
+  await insertRaidContents(ormLike, runId, contents, now);
 }
 
 function mapOfferedRoles(value: unknown): CharacterRole[] {
@@ -306,19 +333,7 @@ export const runRepository = {
     return rows.length;
   },
 
-  async create(input: {
-    title: string;
-    raidId: string;
-    difficulty: RaidDifficulty;
-    lootType: RunLootType;
-    scheduledStartAt: string;
-    raidLeadId: string;
-    notes: string | null;
-    desiredTankCount: number;
-    desiredHealerCount: number;
-    desiredDpsCount: number;
-    plannedBossCount: number;
-  }): Promise<string> {
+  async create(input: RunCreateWithContentsInput): Promise<string> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await db.transaction(async (tx) => {
@@ -341,14 +356,7 @@ export const runRepository = {
         createdAt: now,
         updatedAt: now,
       });
-      await txOrm.RunRaidContent.create({
-        id: crypto.randomUUID(),
-        runId: id,
-        raidId: input.raidId,
-        sortOrder: 1,
-        plannedBossCount: input.plannedBossCount,
-        createdAt: now,
-      });
+      await insertRaidContents(txOrm, id, input.contents, now);
       await txOrm.RunRoster.create({
         id: crypto.randomUUID(),
         runId: id,
@@ -362,30 +370,12 @@ export const runRepository = {
   },
 
   /**
-   * Atomic batch persistence for Mass Create Runs: every input's Run + its
-   * initial empty RunRoster are created inside ONE transaction, so a batch is
-   * truly all-or-nothing (a fault partway through rolls back everything
-   * already written, never leaving a partial batch). Every domain decision
-   * (raid availability, raid lead eligibility, title, effective field
-   * merging) must already be resolved by the caller — this method only
-   * persists already-prepared rows, in the order given, and returns their
-   * new ids in that same order.
+   * Atomic batch persistence for Mass Create Runs: every input's Run + all
+   * RunRaidContent rows + initial empty RunRoster are created inside ONE
+   * transaction (all-or-nothing). Domain decisions must already be resolved
+   * by the caller — this method only persists prepared rows.
    */
-  async createManyDraftsAtomic(
-    inputs: Array<{
-      title: string;
-      raidId: string;
-      difficulty: RaidDifficulty;
-      lootType: RunLootType;
-      scheduledStartAt: string;
-      raidLeadId: string;
-      notes: string | null;
-      desiredTankCount: number;
-      desiredHealerCount: number;
-      desiredDpsCount: number;
-      plannedBossCount: number;
-    }>,
-  ): Promise<string[]> {
+  async createManyDraftsAtomic(inputs: RunCreateWithContentsInput[]): Promise<string[]> {
     const now = new Date().toISOString();
     const ids = inputs.map(() => crypto.randomUUID());
 
@@ -412,14 +402,7 @@ export const runRepository = {
           createdAt: now,
           updatedAt: now,
         });
-        await txOrm.RunRaidContent.create({
-          id: crypto.randomUUID(),
-          runId: id,
-          raidId: input.raidId,
-          sortOrder: 1,
-          plannedBossCount: input.plannedBossCount,
-          createdAt: now,
-        });
+        await insertRaidContents(txOrm, id, input.contents, now);
         await txOrm.RunRoster.create({
           id: crypto.randomUUID(),
           runId: id,
@@ -434,6 +417,12 @@ export const runRepository = {
     return ids;
   },
 
+  /**
+   * Non-content field updates only. Does not touch RunRaidContent — Bundle
+   * compositions must never be collapsed by singular raidId/plannedBossCount
+   * sync. Content identity changes use updateIdentityIfNoSignupHistory with
+   * an explicit contents payload.
+   */
   async updateFields(
     id: string,
     fields: {
@@ -452,36 +441,17 @@ export const runRepository = {
       signupsOpen?: boolean;
     },
   ) {
-    const now = new Date().toISOString();
-    const syncContent = fields.raidId !== undefined || fields.plannedBossCount !== undefined;
-    if (!syncContent) {
-      await orm.Run.where({ id }).update({
-        ...fields,
-        updatedAt: now,
-      });
-      return;
-    }
-
-    await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      await txOrm.Run.where({ id }).update({
-        ...fields,
-        updatedAt: now,
-      });
-      const run = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
-      if (!run) return;
-      await syncSoleRaidContent(txOrm, {
-        runId: id,
-        raidId: asString(run.raidId),
-        plannedBossCount: asNumber(run.plannedBossCount),
-        now,
-      });
+    await orm.Run.where({ id }).update({
+      ...fields,
+      updatedAt: new Date().toISOString(),
     });
   },
 
   /**
-   * Identity fields (raid/difficulty) may change only when no RunSignup row exists,
-   * including WITHDRAWN history. The second count aborts if a signup arrives mid-write.
+   * Identity fields (content composition / difficulty / transitional raid mirror)
+   * may change only when no RunSignup row exists, including WITHDRAWN history.
+   * When `contents` is provided, the full RunRaidContent set is replaced
+   * atomically with the Run row update.
    */
   async updateIdentityIfNoSignupHistory(
     id: string,
@@ -497,6 +467,7 @@ export const runRepository = {
       desiredHealerCount?: number;
       desiredDpsCount?: number;
       plannedBossCount?: number;
+      contents?: RunContentWriteSpec[];
     },
   ) {
     await db.transaction(async (tx) => {
@@ -508,18 +479,14 @@ export const runRepository = {
           "Raid and difficulty cannot change after a signup has been recorded.",
         );
       }
+      const now = new Date().toISOString();
+      const { contents, ...runFields } = fields;
       await txOrm.Run.where({ id }).update({
-        ...fields,
-        updatedAt: new Date().toISOString(),
+        ...runFields,
+        updatedAt: now,
       });
-      const updated = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
-      if (updated) {
-        await syncSoleRaidContent(txOrm, {
-          runId: id,
-          raidId: asString(updated.raidId),
-          plannedBossCount: asNumber(updated.plannedBossCount),
-          now: asString(updated.updatedAt),
-        });
+      if (contents) {
+        await replaceRaidContentsTx(txOrm, id, contents, now);
       }
       const after = await txOrm.RunSignup.where({ runId: id }).select("id").all();
       if (after.length > 0) {

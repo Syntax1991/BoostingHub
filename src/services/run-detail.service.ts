@@ -1,6 +1,12 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import {
+  classifyRunContents,
+  listCreateRunContentPresets,
+  type RunContentPresetKey,
+} from "@/lib/run-content-presets";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { runRepository } from "@/repositories/run.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository } from "@/repositories/user.repository";
@@ -178,6 +184,11 @@ export const runDetailService = {
     let editor: {
       hasSignupHistory: boolean;
       canAssignRaidLead: boolean;
+      contentPresets: Array<{ key: RunContentPresetKey; displayName: string }>;
+      contentPreset: RunContentPresetKey | "CUSTOM";
+      venomousPlannedBossCount: number;
+      venomousBossMax: number;
+      /** Historical CUSTOM Runs still expose singular raid options. */
       raids: Array<{
         id: string;
         name: string;
@@ -190,6 +201,9 @@ export const runDetailService = {
 
     if (manage && capabilities.canEdit) {
       await raidRepository.ensureReferenceRaids();
+      const contents = await runRepository.listRaidContents(run.id);
+      const product = contents.length === 0 ? "CUSTOM" : classifyRunContents(contents);
+      const venomousRow = contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID);
       const raids = await listEditableRaidOptions(run.raidId);
       const raidLeads = capabilities.canReassignRaidLead
         ? await userRepository.listEligibleRaidLeads()
@@ -197,6 +211,10 @@ export const runDetailService = {
       editor = {
         hasSignupHistory,
         canAssignRaidLead: capabilities.canReassignRaidLead,
+        contentPresets: listCreateRunContentPresets(),
+        contentPreset: product === "CUSTOM" ? "CUSTOM" : product,
+        venomousPlannedBossCount: venomousRow?.plannedBossCount ?? run.plannedBossCount,
+        venomousBossMax: 8,
         raids,
         raidLeads,
       };
