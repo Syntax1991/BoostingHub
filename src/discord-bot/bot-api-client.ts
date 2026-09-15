@@ -68,7 +68,7 @@ export class BotApiClient {
     return envelope.data;
   }
 
-  listSyncWork() {
+  listSyncWork(classEmojiFingerprint = "") {
     return this.request<{
       channels: Array<{
         runId: string;
@@ -103,7 +103,11 @@ export class BotApiClient {
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
       }>;
-    }>("/api/bot/discord/sync");
+    }>("/api/bot/discord/sync", {
+      headers: classEmojiFingerprint
+        ? { "x-class-emoji-fingerprint": classEmojiFingerprint }
+        : undefined,
+    });
   }
 
   getRosterEmbedData(runId: string) {
@@ -118,7 +122,13 @@ export class BotApiClient {
     runId: string,
     input:
       | { kind: "channel"; channelId: string }
-      | { kind: "signup" | "roster" | "start"; channelId: string; messageId: string },
+      | {
+          kind: "signup";
+          channelId: string;
+          messageId: string;
+          classEmojiFingerprint?: string;
+        }
+      | { kind: "roster" | "start"; channelId: string; messageId: string },
   ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
       method: "PUT",

@@ -43,21 +43,21 @@ type RoleColumnSpec = {
   members: SignupEmbedMember[];
 };
 
-/** Discord mention preferred; fall back to @UserName when discordUserId is missing. */
+/** Discord mention + class indicator — Character-Realm lives in Final Setup / Web.
+ * Mentions show the server nickname when set (`syntax_1991`); that is a real
+ * ping. Plain `@discordUsername` is only the fallback when no Discord id is linked.
+ */
 export function formatSignupParticipantLine(
   member: SignupEmbedMember,
   classIndicators?: Partial<Record<WowClass, string>>,
 ): string {
-  const mention = member.discordUserId ? `<@${member.discordUserId}>` : `@${member.userName}`;
+  const mention = member.discordUserId
+    ? `<@${member.discordUserId}>`
+    : `@${(member.discordUsername?.trim() || member.userName).replace(/^@/, "")}`;
   const indicator = classIndicator(member.wowClass, null, classIndicators);
-  const character =
-    member.characterName && member.characterRealm
-      ? `${member.characterName}-${member.characterRealm}`
-      : null;
 
   const parts = [mention];
   if (indicator) parts.push(indicator);
-  if (character) parts.push(character);
   return parts.join(" ");
 }
 

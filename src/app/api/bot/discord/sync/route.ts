@@ -16,7 +16,11 @@ import { discordSyncService } from "@/services/discord-sync.service";
 export async function GET(request: NextRequest) {
   try {
     assertBotServiceAuthorized(request);
-    const work = await discordSyncService.listSyncWork();
+    const classEmojiFingerprint =
+      request.headers.get("x-class-emoji-fingerprint") ??
+      request.nextUrl.searchParams.get("classEmojiFingerprint") ??
+      "";
+    const work = await discordSyncService.listSyncWork(new Date(), { classEmojiFingerprint });
     const signups = await Promise.all(
       work.signups.map(async (item) => ({
         ...item,

@@ -6,7 +6,12 @@ import { discordSyncService } from "@/services/discord-sync.service";
 
 const discordStateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("channel"), channelId: z.string().min(1).max(64) }),
-  z.object({ kind: z.literal("signup"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
+  z.object({
+    kind: z.literal("signup"),
+    channelId: z.string().min(1).max(64),
+    messageId: z.string().min(1).max(64),
+    classEmojiFingerprint: z.string().max(4000).optional(),
+  }),
   z.object({ kind: z.literal("roster"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
   z.object({ kind: z.literal("start"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
 ]);
@@ -29,7 +34,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (body.kind === "channel") {
       await discordSyncService.recordRunChannel({ runId, channelId: body.channelId });
     } else if (body.kind === "signup") {
-      await discordSyncService.recordSignupPost({ runId, channelId: body.channelId, messageId: body.messageId });
+      await discordSyncService.recordSignupPost({
+        runId,
+        channelId: body.channelId,
+        messageId: body.messageId,
+        classEmojiFingerprint: body.classEmojiFingerprint,
+      });
     } else if (body.kind === "roster") {
       await discordSyncService.recordRosterPost({ runId, channelId: body.channelId, messageId: body.messageId });
     } else {

@@ -23,6 +23,26 @@ describe("BotApiClient", () => {
     expect((init?.headers as Headers).get("authorization")).toBe("Bearer secret-token");
   });
 
+  it("sends x-class-emoji-fingerprint when listSyncWork receives a fingerprint", async () => {
+    const spy = mockFetchOnce(200, { ok: true, data: { channels: [], signups: [], roster: [], start: [] } });
+    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
+
+    await client.listSyncWork("SHAMAN:123|MAGE:456");
+
+    const [, init] = spy.mock.calls[0];
+    expect((init?.headers as Headers).get("x-class-emoji-fingerprint")).toBe("SHAMAN:123|MAGE:456");
+  });
+
+  it("omits x-class-emoji-fingerprint when listSyncWork has no fingerprint", async () => {
+    const spy = mockFetchOnce(200, { ok: true, data: { channels: [], signups: [], roster: [], start: [] } });
+    const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
+
+    await client.listSyncWork();
+
+    const [, init] = spy.mock.calls[0];
+    expect((init?.headers as Headers).get("x-class-emoji-fingerprint")).toBeNull();
+  });
+
   it("listSyncWork returns channels[] alongside signups/roster, unmodified", async () => {
     const channels = [
       {

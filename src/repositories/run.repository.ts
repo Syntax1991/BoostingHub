@@ -40,6 +40,8 @@ export type SignupOnRun = {
   id: string;
   userId: string;
   userName: string;
+  /** Discord handle (not server nickname) — preferred for public signup embed lines. */
+  discordUsername: string | null;
   discordUserId: string | null;
   status: SignupStatus;
   participationType: ParticipationType;
@@ -134,6 +136,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
         id: asString(signup.id),
         userId: asString(signup.userId),
         userName: asString(user.name, "Unknown"),
+        discordUsername: asStringOrNull(user.discordUsername),
         discordUserId: asStringOrNull(user.discordUserId),
         status: mapSignupStatus(signup.status),
         participationType: mapParticipation(signup.participationType),

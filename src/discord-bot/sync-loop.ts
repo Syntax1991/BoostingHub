@@ -3,7 +3,7 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
-import { resolveGuildClassIndicators } from "@/discord-bot/class-emoji-lookup";
+import { resolveGuildClassIndicators, fingerprintClassIndicators } from "@/discord-bot/class-emoji-lookup";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -161,7 +161,9 @@ function makePositionSetter(client: Client, guildId: string): PositionSetter {
  * new CURRENT channel could remain below `#next-id` until the next poll.
  */
 export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
-  const work: SyncWork = await api.listSyncWork();
+  const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
+  const classEmojiFingerprint = fingerprintClassIndicators(classIndicators);
+  const work: SyncWork = await api.listSyncWork(classEmojiFingerprint);
 
   // Channel reconciliation (name + parent category) runs first and
   // independently of message state — a Run's channel should already be in
@@ -193,6 +195,8 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
           item,
           item.embed as SignupEmbedData,
           resolvedChannels,
+          classIndicators,
+          classEmojiFingerprint,
         );
         if (createdSection) newlyProvisionedSections.push(createdSection);
       } catch (error) {
@@ -216,7 +220,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
       try {
         const data = (await api.getRunStartEmbedData(item.runId).catch(() => null)) as RunStartEmbedData | null;
         if (!data) continue;
-        await syncStartPost(client, env, api, item, data, resolvedChannels);
+        await syncStartPost(client, env, api, item, data, resolvedChannels, classIndicators);
       } catch (error) {
         console.error(`[discord-bot] start sync failed for run ${item.runId}`, error);
         messagePhaseError ??= error;
@@ -365,6 +369,8 @@ async function syncSignupPost(
   item: ChannelWorkItem & { existingMessageId: string | null; scheduledStartAt: string },
   data: SignupEmbedData,
   resolvedChannels: Map<string, string>,
+  classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  classEmojiFingerprint: string,
 ): Promise<WeekSectionItem | null> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
   if (!resolved) return null;
@@ -375,7 +381,6 @@ async function syncSignupPost(
   const section = createdSectionItem(item, channelId, created);
 
   try {
-    const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
     const embed = buildSignupEmbed(data, { classIndicators });
     const row = buildSignupButtons(data);
     const payload: MessageEditOptions = { embeds: [embed], components: [row] };
@@ -388,7 +393,12 @@ async function syncSignupPost(
     if (existingId && !isLegacyMulti) {
       const edited = await tryEditMessage(client, channelId, existingId, payload);
       if (edited) {
-        await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: existingId });
+        await api.recordDiscordState(data.runId, {
+          kind: "signup",
+          channelId,
+          messageId: existingId,
+          classEmojiFingerprint,
+        });
         return section;
       }
       // The stored message is gone (deleted in Discord) — fall through and repost.
@@ -415,6 +425,7 @@ async function syncSignupPost(
       kind: "signup",
       channelId: message.channelId,
       messageId: message.id,
+      classEmojiFingerprint,
     });
   } catch (error) {
     // Channel identity is already persisted; message work retries next poll.
@@ -475,12 +486,12 @@ async function syncStartPost(
   item: ChannelWorkItem & { existingMessageId: string | null },
   data: RunStartEmbedData,
   resolvedChannels: Map<string, string>,
+  classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
 ): Promise<void> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
   if (!resolved) return;
   const { channelId } = resolved;
 
-  const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
   const content = renderRunStartMessageText(data, { classIndicators });
   const editPayload: MessageEditOptions = { content, embeds: [] };
 
