@@ -1,19 +1,38 @@
 import type { CharacterRole, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
-import { CLASS_LABELS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { CLASS_LABELS } from "@/lib/labels";
 
-/**
- * Optional Discord custom emoji strings for Final Setup class indicators.
- * Leave empty until real guild emoji IDs are configured — never invent IDs.
- * Example value shape: "<:deathknight:1234567890>"
- */
-export const CLASS_DISCORD_EMOJIS: Partial<Record<WowClass, string>> = {
-  // Intentionally empty. Populate with real custom emoji markup when available.
+/** Guild custom emoji names for WowClass — IDs are resolved at runtime from Discord. */
+export const CLASS_DISCORD_EMOJI_NAMES: Record<WowClass, string> = {
+  DEATH_KNIGHT: "dk",
+  DEMON_HUNTER: "dh",
+  DRUID: "druid",
+  EVOKER: "evoker",
+  HUNTER: "hunter",
+  MAGE: "mage",
+  MONK: "monk",
+  PALADIN: "paladin",
+  PRIEST: "priest",
+  ROGUE: "rogue",
+  SHAMAN: "shaman",
+  WARLOCK: "warlock",
+  WARRIOR: "warrior",
 };
 
-/** Prefer a configured Discord class emoji; otherwise the human class label. */
-export function classIndicator(wowClass: WowClass | null, classLabel: string | null): string | null {
+export const FINAL_SETUP_LFG_LINE = "**LFG HM Krum write your discord name in the note!**";
+
+export type FinalSetupRenderOptions = {
+  /** Pre-resolved Discord custom emoji markup (<:name:id>) keyed by WowClass. */
+  classIndicators?: Partial<Record<WowClass, string>>;
+};
+
+/** Prefer a resolved Discord class emoji; otherwise the human class label. */
+export function classIndicator(
+  wowClass: WowClass | null,
+  classLabel: string | null,
+  classIndicators?: Partial<Record<WowClass, string>>,
+): string | null {
   if (wowClass) {
-    const emoji = CLASS_DISCORD_EMOJIS[wowClass];
+    const emoji = classIndicators?.[wowClass];
     if (emoji) return emoji;
     return CLASS_LABELS[wowClass];
   }
@@ -52,28 +71,20 @@ export type FinalSetupInput = {
 export type FinalSetupMessage = {
   title: "Final Setup";
   body: string;
-  footer: string;
 };
 
 function mentionDisplay(discordUserId: string | null, userName: string): string {
   return discordUserId ? `<@${discordUserId}>` : `@${userName}`;
 }
 
-function characterLabel(name: string, realm: string): string {
-  return realm ? `${name}-${realm}` : name;
-}
-
-function boosterLine(member: FinalSetupParticipant): string {
+function boosterLine(member: FinalSetupParticipant, options?: FinalSetupRenderOptions): string {
   const mention = mentionDisplay(member.discordUserId, member.userName);
-  const character = characterLabel(member.characterName, member.characterRealm);
-  const indicator = classIndicator(member.wowClass, member.classLabel);
-  return indicator ? `${mention} — ${character} — ${indicator}` : `${mention} — ${character}`;
+  const indicator = classIndicator(member.wowClass, member.classLabel, options?.classIndicators);
+  return indicator ? `${mention} ${indicator}` : mention;
 }
 
 function lootbuddyLine(member: FinalSetupParticipant): string {
-  const mention = mentionDisplay(member.discordUserId, member.userName);
-  const indicator = classIndicator(member.wowClass, member.classLabel);
-  return indicator ? `${mention} — ${indicator}` : mention;
+  return mentionDisplay(member.discordUserId, member.userName);
 }
 
 function roleSection(emoji: string, label: string, selected: number, target: number, lines: string[]): string {
@@ -103,26 +114,28 @@ export function groupFinalSetupParticipants(members: FinalSetupParticipant[]): F
 }
 
 /**
- * Pure Final Setup formatter shared by the Start Run web preview and Discord embed.
+ * Pure Final Setup formatter shared by the Start Run web preview and Discord plain-text post.
  * No React / discord.js / browser APIs.
  */
-export function formatFinalSetup(data: FinalSetupInput): FinalSetupMessage {
+export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRenderOptions): FinalSetupMessage {
   const body = [
-    roleSection("🛡", "Tanks", data.groups.tanks.length, data.targets.tanks, data.groups.tanks.map(boosterLine)),
-    roleSection("✚", "Healers", data.groups.healers.length, data.targets.healers, data.groups.healers.map(boosterLine)),
-    roleSection("⚔", "DPS", data.groups.dps.length, data.targets.dps, data.groups.dps.map(boosterLine)),
+    roleSection("🛡", "Tanks", data.groups.tanks.length, data.targets.tanks, data.groups.tanks.map((m) => boosterLine(m, options))),
+    roleSection("✚", "Healers", data.groups.healers.length, data.targets.healers, data.groups.healers.map((m) => boosterLine(m, options))),
+    roleSection("⚔", "DPS", data.groups.dps.length, data.targets.dps, data.groups.dps.map((m) => boosterLine(m, options))),
     lootbuddySection(data.groups.lootbuddies.length, data.groups.lootbuddies.map(lootbuddyLine)),
   ].join("\n\n");
 
   return {
     title: "Final Setup",
     body,
-    footer: `${data.raidName} · ${DIFFICULTY_LABELS[data.difficulty]} · ${RUN_LOOT_TYPE_LABELS[data.lootType]}`,
   };
 }
 
-/** Plain-text projection for copy/paste and unit tests. */
-export function renderFinalSetupText(data: FinalSetupInput): string {
-  const message = formatFinalSetup(data);
-  return `${message.title}\n\n${message.body}`;
+/**
+ * Authoritative plain-text Final Setup for Discord content / web Copy message.
+ * Title uses Discord markdown bold. Appends the LFG line once at the bottom.
+ */
+export function renderFinalSetupText(data: FinalSetupInput, options?: FinalSetupRenderOptions): string {
+  const message = formatFinalSetup(data, options);
+  return `**${message.title}**\n\n${message.body}\n\n${FINAL_SETUP_LFG_LINE}`;
 }
