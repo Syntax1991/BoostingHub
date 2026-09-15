@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SignupEmbedData, SignupEmbedMember } from "@/services/discord-sync.service";
 import {
   buildSignupButtons,
-  buildSignupEmbeds,
-  decodeSignupMessageIds,
-  encodeSignupMessageIds,
+  buildSignupEmbed,
   emptySignupEmbedMembers,
   formatSignupParticipantLine,
   measureEmbedJsonSize,
@@ -17,7 +15,9 @@ import {
   chunkEmbedFieldLines,
 } from "@/lib/discord-embed-field-chunking";
 
-function member(partial: Partial<SignupEmbedMember> & Pick<SignupEmbedMember, "signupId" | "userId" | "userName">): SignupEmbedMember {
+function member(
+  partial: Partial<SignupEmbedMember> & Pick<SignupEmbedMember, "signupId" | "userId" | "userName">,
+): SignupEmbedMember {
   return {
     discordUserId: null,
     characterName: null,
@@ -131,7 +131,7 @@ describe("formatSignupParticipantLine", () => {
 describe("chunkEmbedFieldLines", () => {
   it("never splits a line, never drops lines, and keeps order", () => {
     const lines = Array.from({ length: 40 }, (_, i) => {
-      const id = String(100000000000000000 + i);
+      const id = `1${String(i).padStart(17, "0")}`;
       return `<@${id}> <:shaman:987654321012345678> Char${i}-Antonidas`;
     });
     const chunks = chunkEmbedFieldLines(lines);
@@ -143,8 +143,15 @@ describe("chunkEmbedFieldLines", () => {
   });
 });
 
-describe("buildSignupEmbeds", () => {
-  it("renders Tank|Healer|DPS as the primary inline grid with Lootbuddy after", () => {
+describe("buildSignupEmbed", () => {
+  it("returns exactly one EmbedBuilder", () => {
+    const embed = buildSignupEmbed(emptyData());
+    expect(embed).toBeTruthy();
+    expect(Array.isArray(embed)).toBe(false);
+    expect(embed.toJSON().title).toBe("Weekend Heroic Catch-up");
+  });
+
+  it("renders Tank|Healer|DPS as the primary inline grid with Lootbuddy after, Signups then Picked", () => {
     const tanks = [
       member({
         signupId: "t1",
@@ -188,7 +195,7 @@ describe("buildSignupEmbeds", () => {
       }),
     ];
 
-    const [summary, signups, picked] = buildSignupEmbeds(
+    const json = buildSignupEmbed(
       emptyData({
         uniqueSignupCount: 4,
         roleStatus: {
@@ -209,12 +216,20 @@ describe("buildSignupEmbeds", () => {
           MAGE: "<:mage:3>",
         },
       },
-    ).map((embed) => embed.toJSON());
+    ).toJSON();
 
-    expect(summary.fields?.find((f) => f.name === "Signed users")?.value).toBe("4");
-    expect(signups.title).toBe("Signups by role");
-    const signupFields = signups.fields ?? [];
-    const signupPrimaries = signupFields.slice(0, 4);
+    const fields = json.fields ?? [];
+    expect(fields.find((f) => f.name === "Signed users")?.value).toBe("4");
+
+    const signupsHeading = fields.findIndex((f) => f.name === "Signups by role");
+    const pickedHeading = fields.findIndex((f) => f.name === "Picked");
+    expect(signupsHeading).toBeGreaterThanOrEqual(0);
+    expect(pickedHeading).toBeGreaterThan(signupsHeading);
+    expect(fields[signupsHeading]?.inline).toBe(false);
+    expect(fields[pickedHeading]?.inline).toBe(false);
+    expect(fields[signupsHeading]?.value).toBe("\u200b");
+
+    const signupPrimaries = fields.slice(signupsHeading + 1, signupsHeading + 5);
     expect(signupPrimaries.map((f) => f.name)).toEqual([
       "🛡 Tanks — 1",
       "✚ Healers — 1",
@@ -225,54 +240,90 @@ describe("buildSignupEmbeds", () => {
     expect(signupPrimaries[0]?.value).toContain("<@111111111111111111> <:paladin:1> Tankone-Antonidas");
     expect(signupPrimaries[3]?.value).toBe("<@444444444444444444> <:mage:3>");
 
-    expect(picked.title).toBe("Picked");
-    const pickedFields = picked.fields ?? [];
-    expect(pickedFields.some((f) => f.name === "🛡 Tanks — 1/2")).toBe(true);
-    expect(JSON.stringify([summary, signups, picked])).not.toMatch(/\d+ signed · /);
+    const pickedPrimaries = fields.slice(pickedHeading + 1, pickedHeading + 5);
+    expect(pickedPrimaries.map((f) => f.name)).toEqual([
+      "🛡 Tanks — 1/2",
+      "✚ Healers — 1/4",
+      "⚔ DPS — 1/14",
+      "📦 Lootbuddies — 1",
+    ]);
+    expect(JSON.stringify(json)).not.toMatch(/\d+ signed · /);
   });
 
   it("keeps empty role columns so the grid stays stable", () => {
-    const [, signups, picked] = buildSignupEmbeds(emptyData()).map((e) => e.toJSON());
-    expect((signups.fields ?? []).some((f) => f.name === "🛡 Tanks — 0")).toBe(true);
-    expect((signups.fields ?? []).find((f) => f.name === "🛡 Tanks — 0")?.value).toBe("—");
-    expect((picked.fields ?? []).some((f) => f.name === "🛡 Tanks — 0/2")).toBe(true);
+    const fields = buildSignupEmbed(emptyData()).toJSON().fields ?? [];
+    expect(fields.some((f) => f.name === "🛡 Tanks — 0")).toBe(true);
+    expect(fields.find((f) => f.name === "🛡 Tanks — 0")?.value).toBe("—");
+    expect(fields.some((f) => f.name === "🛡 Tanks — 0/2")).toBe(true);
   });
 
-  it("shows unique Signed users on the summary message, never a projected role-offer sum", () => {
-    const [summary] = buildSignupEmbeds(
-      emptyData({
-        uniqueSignupCount: 34,
-      }),
-    ).map((e) => e.toJSON());
-    expect(summary.fields?.find((f) => f.name === "Signed users")?.value).toBe("34");
-    expect(summary.fields?.find((f) => f.name === "Signups")).toBeUndefined();
+  it("shows unique Signed users, never a projected role-offer sum", () => {
+    const fields = buildSignupEmbed(emptyData({ uniqueSignupCount: 34 })).toJSON().fields ?? [];
+    expect(fields.find((f) => f.name === "Signed users")?.value).toBe("34");
+    expect(fields.find((f) => f.name === "Signups")).toBeUndefined();
   });
 
-  it("fits a realistic QA-scale roster using three messages without truncation", () => {
-    function makeMembers(count: number, prefix: string, wowClass: SignupEmbedMember["wowClass"]): SignupEmbedMember[] {
-      return Array.from({ length: count }, (_, i) =>
-        member({
-          signupId: `${prefix}-${i}`,
-          userId: `user-${prefix}-${i}`,
-          userName: `${prefix}User${i}`,
-          discordUserId: `2${String(i).padStart(17, "0")}`,
-          characterName: `${prefix}Char${i}`,
+  it("fits a realistic 25-user product capacity in ONE Embed without truncation", () => {
+    function makeMembers(
+      count: number,
+      prefix: string,
+      wowClass: SignupEmbedMember["wowClass"],
+      startIndex = 0,
+    ): SignupEmbedMember[] {
+      return Array.from({ length: count }, (_, i) => {
+        const n = startIndex + i;
+        return member({
+          signupId: `${prefix}-${n}`,
+          userId: `user-${prefix}-${n}`,
+          userName: `${prefix}User${n}`,
+          discordUserId: `2${String(n).padStart(17, "0")}`,
+          characterName: `${prefix}Char${n}`,
           characterRealm: "Twisting Nether",
           wowClass,
-        }),
-      );
+        });
+      });
     }
 
+    // 25 unique users: 4 tank / 6 healer / 15 dps boosters + 3 lootbuddies,
+    // with 2 Tank+Healer and 2 Healer+DPS hybrids (duplicate role projections).
+    const pureTanks = makeMembers(2, "T", "PALADIN", 0);
+    const tankHealerHybrids = makeMembers(2, "TH", "PALADIN", 0).map((m, i) => ({
+      ...m,
+      signupId: `th-${i}`,
+      userId: `user-th-${i}`,
+    }));
+    const pureHealers = makeMembers(2, "H", "SHAMAN", 0);
+    const healerDpsHybrids = makeMembers(2, "HD", "SHAMAN", 0).map((m, i) => ({
+      ...m,
+      signupId: `hd-${i}`,
+      userId: `user-hd-${i}`,
+      wowClass: "PRIEST" as const,
+    }));
+    const pureDps = makeMembers(13, "D", "MAGE", 0);
+    const lootbuddies = makeMembers(3, "L", "WARLOCK", 0).map((m) => ({
+      ...m,
+      characterName: null,
+      characterRealm: null,
+    }));
+
     const signed = {
-      tanks: makeMembers(13, "T", "PALADIN"),
-      healers: makeMembers(20, "H", "SHAMAN"),
-      dps: makeMembers(39, "D", "MAGE"),
-      lootbuddies: makeMembers(5, "L", "WARLOCK").map((m) => ({
-        ...m,
-        characterName: null,
-        characterRealm: null,
-      })),
+      tanks: [...pureTanks, ...tankHealerHybrids],
+      healers: [...pureHealers, ...tankHealerHybrids, ...healerDpsHybrids],
+      dps: [...pureDps, ...healerDpsHybrids],
+      lootbuddies,
     };
+    // unique users: 2+2+2+2+13+3 = 24… add one more pure dps for 25
+    const extraDps = makeMembers(1, "DX", "HUNTER", 0);
+    signed.dps = [...signed.dps, ...extraDps];
+
+    const uniqueUsers = new Set([
+      ...signed.tanks.map((m) => m.userId),
+      ...signed.healers.map((m) => m.userId),
+      ...signed.dps.map((m) => m.userId),
+      ...signed.lootbuddies.map((m) => m.userId),
+    ]);
+    expect(uniqueUsers.size).toBe(25);
+
     const pickedMembers = {
       tanks: signed.tanks.slice(0, 2),
       healers: signed.healers.slice(0, 4),
@@ -283,37 +334,33 @@ describe("buildSignupEmbeds", () => {
     const indicators = {
       PALADIN: "<:paladin:1549226889409863761>",
       SHAMAN: "<:shaman:1549227028408963113>",
+      PRIEST: "<:priest:1549227000000000000>",
       MAGE: "<:mage:1549226645443969125>",
+      HUNTER: "<:hunter:1549226757536751636>",
       WARLOCK: "<:warlock:1549227100000000000>",
     } as const;
 
-    const embeds = buildSignupEmbeds(
+    const embed = buildSignupEmbed(
       emptyData({
-        uniqueSignupCount: 57,
+        uniqueSignupCount: 25,
         roleStatus: {
-          tank: { signed: 13, picked: 2, target: 2 },
-          healer: { signed: 20, picked: 4, target: 4 },
-          dps: { signed: 39, picked: 14, target: 14 },
-          lootbuddy: { signed: 5, picked: 5 },
+          tank: { signed: signed.tanks.length, picked: 2, target: 2 },
+          healer: { signed: signed.healers.length, picked: 4, target: 4 },
+          dps: { signed: signed.dps.length, picked: 14, target: 14 },
+          lootbuddy: { signed: 3, picked: 3 },
         },
         members: { signed, picked: pickedMembers },
       }),
       { classIndicators: indicators },
     );
 
-    expect(embeds).toHaveLength(3);
-    for (const embed of embeds) {
-      const json = embed.toJSON();
-      const size = measureEmbedJsonSize(json);
-      expect(size.fieldCount).toBeLessThanOrEqual(DISCORD_EMBED_FIELD_COUNT_LIMIT);
-      expect(size.maxFieldChars).toBeLessThanOrEqual(DISCORD_EMBED_FIELD_VALUE_LIMIT);
-      expect(size.totalChars).toBeLessThanOrEqual(DISCORD_EMBED_TOTAL_CHAR_LIMIT);
-    }
+    const json = embed.toJSON();
+    const size = measureEmbedJsonSize(json);
+    expect(size.fieldCount).toBeLessThanOrEqual(DISCORD_EMBED_FIELD_COUNT_LIMIT);
+    expect(size.maxFieldChars).toBeLessThanOrEqual(DISCORD_EMBED_FIELD_VALUE_LIMIT);
+    expect(size.totalChars).toBeLessThanOrEqual(DISCORD_EMBED_TOTAL_CHAR_LIMIT);
 
-    const blob = embeds
-      .flatMap((e) => e.toJSON().fields ?? [])
-      .map((f) => f.value)
-      .join("\n");
+    const blob = (json.fields ?? []).map((f) => f.value).join("\n");
     for (const group of [signed.tanks, signed.healers, signed.dps, signed.lootbuddies]) {
       for (const row of group) {
         expect(blob).toContain(`<@${row.discordUserId}>`);
@@ -331,24 +378,15 @@ describe("buildSignupEmbeds", () => {
     }
   });
 
-  it("reflects a closed signup window in the summary footer", () => {
-    const [summary] = buildSignupEmbeds(emptyData({ signupWindowOpen: false })).map((e) => e.toJSON());
-    expect(summary.footer?.text).toMatch(/closed/i);
+  it("reflects a closed signup window in the footer", () => {
+    const json = buildSignupEmbed(emptyData({ signupWindowOpen: false })).toJSON();
+    expect(json.footer?.text).toMatch(/closed/i);
   });
 
-  it("shows the loot type and boss coverage on the summary message", () => {
-    const [summary] = buildSignupEmbeds(emptyData()).map((e) => e.toJSON());
-    expect(summary.fields?.find((field) => field.name === "Loot")?.value).toBe("VIP");
-    expect(summary.fields?.find((field) => field.name === "Bosses")?.value).toBe("7/9");
-  });
-});
-
-describe("encodeSignupMessageIds", () => {
-  it("round-trips comma-separated Discord snowflakes", () => {
-    const encoded = encodeSignupMessageIds(["111", "222", "333"]);
-    expect(encoded).toBe("111,222,333");
-    expect(decodeSignupMessageIds(encoded)).toEqual(["111", "222", "333"]);
-    expect(decodeSignupMessageIds("legacy-single")).toEqual(["legacy-single"]);
+  it("shows the loot type and boss coverage", () => {
+    const fields = buildSignupEmbed(emptyData()).toJSON().fields ?? [];
+    expect(fields.find((field) => field.name === "Loot")?.value).toBe("VIP");
+    expect(fields.find((field) => field.name === "Bosses")?.value).toBe("7/9");
   });
 });
 

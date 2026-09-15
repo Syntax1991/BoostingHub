@@ -4,7 +4,7 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
 import { FINAL_SETUP_LFG_LINE } from "@/lib/run-start-message";
-import { buildSignupEmbeds } from "@/discord-bot/embeds/signup-embed";
+import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 
 const CATEGORY_ID = "cat-weekly";
@@ -111,7 +111,7 @@ describe("syncOnce — Final Setup plain-text start posts", () => {
 
 describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
   it("does not put the Final Setup LFG line into signup or roster embeds", () => {
-    const signup = buildSignupEmbeds({
+    const signup = buildSignupEmbed({
       runId: "r1",
       runTitle: "Test",
       raidId: "raid",
@@ -147,12 +147,11 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
       totalSelected: 0,
     });
 
-    const signupBlob = JSON.stringify(signup.map((e) => e.data));
+    const signupBlob = JSON.stringify(signup.data);
     const rosterBlob = JSON.stringify(roster.data);
     expect(signupBlob).not.toContain("LFG HM Krum");
     expect(rosterBlob).not.toContain("LFG HM Krum");
-    expect(signup).toHaveLength(3);
-    expect(signup[0]?.data.title || signup[0]?.data.description).toBeTruthy();
+    expect(signup.data.title || signup.data.description).toBeTruthy();
     expect(roster.data.title).toBeTruthy();
   });
 });
