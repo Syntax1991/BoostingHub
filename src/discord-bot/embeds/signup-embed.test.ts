@@ -72,6 +72,9 @@ describe("formatSignupParticipantLine", () => {
       { SHAMAN: "<:shaman:987654321012345678>" },
     );
     expect(line).toBe("<@123456789012345678> <:shaman:987654321012345678>");
+    expect(line).not.toContain("Synblast");
+    expect(line).not.toContain("Antonidas");
+    expect(line).not.toContain("Synblast-Antonidas");
   });
 
   it("falls back to @discordUsername when discordUserId is null", () => {
@@ -88,6 +91,24 @@ describe("formatSignupParticipantLine", () => {
       { SHAMAN: "<:shaman:1>" },
     );
     expect(line).toBe("@syntaxgg_1991 <:shaman:1>");
+  });
+
+  it("falls back to @userName when discordUserId and discordUsername are null", () => {
+    const line = formatSignupParticipantLine(
+      member({
+        signupId: "s1",
+        userId: "u1",
+        userName: "UserName",
+        discordUsername: null,
+        characterName: "Synblast",
+        characterRealm: "Antonidas",
+        wowClass: "SHAMAN",
+      }),
+      { SHAMAN: "<:shaman:1>" },
+    );
+    expect(line).toBe("@UserName <:shaman:1>");
+    expect(line).not.toContain("Synblast");
+    expect(line).not.toContain("Antonidas");
   });
 
   it("falls back to the class label when Guild emoji is missing", () => {
