@@ -54,7 +54,7 @@ Button visibility is not authorization.
 
 **Legacy URLs**: `/manage/runs/create` and `/manage/runs/create-many` redirect to `/runs/create` rather than rendering a second form, so old links/bookmarks still work.
 
-**After success**: the client navigates to the first created Run's canonical detail (`/runs/[runId]`). Cancel returns to `/runs`.
+**After success**: one draft navigates to its canonical detail (`/runs/[runId]`); multiple drafts navigate to `/manage/runs?massCreated=N` so every new DRAFT is visible under Manage Runs. Cancel returns to `/runs`.
 
 **Templates**: a Raid Lead may optionally apply a saved planning preset from the template selector above Shared Defaults instead of re-entering raid/difficulty/loot type/composition by hand. Applying a template also locks the effective Raid Lead to the template's owner — the server always re-resolves the template fresh at submit time and rejects a forged Raid Lead override rather than silently overriding it. See [run-templates.md](run-templates.md) for the full ownership model, usability rules, and the Raid Lead authority guarantee.
 

@@ -8,7 +8,7 @@ import { Card, CardHeader } from "@/components/ui/primitives";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { buildRunTitle } from "@/lib/run-title";
-import { runDetailPath } from "@/lib/run-routes";
+import { runCreateSuccessPath } from "@/lib/run-routes";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 import type { CreateManyRunsForm } from "@/services/run.service";
@@ -257,8 +257,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         return;
       }
 
-      const firstRunId = result.runIds[0];
-      router.push(firstRunId ? runDetailPath(firstRunId) : "/runs");
+      router.push(runCreateSuccessPath(result.runIds));
       router.refresh();
     });
   }
