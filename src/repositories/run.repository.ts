@@ -1,7 +1,15 @@
 import { db, orm } from "@/lib/prisma";
 import { DomainError } from "@/lib/errors";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
-import type { RaidDifficulty, RunLootType, RunStatus, SignupStatus, ParticipationType, CharacterRole } from "@/models/enums";
+import type {
+  RaidDifficulty,
+  RunLootType,
+  RunStatus,
+  SignupStatus,
+  ParticipationType,
+  CharacterRole,
+  WowClass,
+} from "@/models/enums";
 import {
   asBoolean,
   asNumber,
@@ -13,6 +21,7 @@ import {
   mapParticipation,
   mapRunStatus,
   mapSignupStatus,
+  mapWowClass,
 } from "@/lib/persistence";
 
 export type RunListFilters = {
@@ -21,15 +30,26 @@ export type RunListFilters = {
   signupsOpen?: boolean;
 };
 
+export type SignupCharacterOnRun = {
+  name: string;
+  realm: string;
+  wowClass: WowClass;
+};
+
 export type SignupOnRun = {
   id: string;
   userId: string;
+  userName: string;
+  discordUserId: string | null;
   status: SignupStatus;
   participationType: ParticipationType;
   isBackup: boolean;
   offeredRoles: CharacterRole[];
   /** Live published BOOSTER role; null unless SELECTED booster. */
   publishedRole: CharacterRole | null;
+  /** Characterless Lootbuddy class snapshot; null for BOOSTER / legacy Character-backed loot. */
+  lootbuddyClass: WowClass | null;
+  character: SignupCharacterOnRun | null;
 };
 
 export type RosterSelectionOnRun = {
@@ -108,14 +128,26 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     archivedById: asStringOrNull(run.archivedById),
     signups: signups.map((row) => {
       const signup = row as Record<string, unknown>;
+      const user = (signup.user ?? {}) as Record<string, unknown>;
+      const character = signup.character ? (signup.character as Record<string, unknown>) : null;
       return {
         id: asString(signup.id),
         userId: asString(signup.userId),
+        userName: asString(user.name, "Unknown"),
+        discordUserId: asStringOrNull(user.discordUserId),
         status: mapSignupStatus(signup.status),
         participationType: mapParticipation(signup.participationType),
         isBackup: asBoolean(signup.isBackup),
         offeredRoles: mapOfferedRoles(signup.offeredRoles),
         publishedRole: signup.publishedRole == null ? null : mapCharacterRole(signup.publishedRole),
+        lootbuddyClass: signup.lootbuddyClass == null ? null : mapWowClass(signup.lootbuddyClass),
+        character: character
+          ? {
+              name: asString(character.name),
+              realm: asString(character.realm),
+              wowClass: mapWowClass(character.wowClass),
+            }
+          : null,
       };
     }),
     roster: roster
@@ -145,7 +177,7 @@ export const runRepository = {
     let query = orm.Run
       .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
-      .include("signups", (signup) => signup.include("offeredRoles"))
+      .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
       .include("roster", (roster) => roster.include("entries"))
       .orderBy((run) => run.scheduledStartAt.asc());
 
@@ -168,7 +200,7 @@ export const runRepository = {
       .where({ id })
       .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
-      .include("signups", (signup) => signup.include("offeredRoles"))
+      .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
       .include("roster", (roster) => roster.include("entries"))
       .first();
 
@@ -179,7 +211,7 @@ export const runRepository = {
     const runs = await orm.Run
       .include("raid", (raid) => raid.include("bosses"))
       .include("raidLead")
-      .include("signups", (signup) => signup.include("offeredRoles"))
+      .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
       .include("roster", (roster) => roster.include("entries"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();

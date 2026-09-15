@@ -375,16 +375,20 @@ async function syncSignupPost(
   const section = createdSectionItem(item, channelId, created);
 
   try {
-    const embed = buildSignupEmbed(data);
+    const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
+    const embed = buildSignupEmbed(data, { classIndicators });
     const row = buildSignupButtons(data);
+    const payload: MessageEditOptions = { embeds: [embed], components: [row] };
 
-    if (item.existingMessageId) {
-      const edited = await tryEditMessage(client, channelId, item.existingMessageId, {
-        embeds: [embed],
-        components: [row],
-      });
+    // Local QA may still hold comma-separated multi-message ids from an earlier
+    // experiment — treat those as invalid and repost a single message.
+    const existingId = item.existingMessageId;
+    const isLegacyMulti = Boolean(existingId && existingId.includes(","));
+
+    if (existingId && !isLegacyMulti) {
+      const edited = await tryEditMessage(client, channelId, existingId, payload);
       if (edited) {
-        await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: item.existingMessageId });
+        await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: existingId });
         return section;
       }
       // The stored message is gone (deleted in Discord) — fall through and repost.
@@ -394,8 +398,24 @@ async function syncSignupPost(
     if (!channel?.isTextBased() || !("send" in channel)) {
       return section;
     }
+
+    if (isLegacyMulti && existingId) {
+      for (const staleId of existingId.split(",").map((part) => part.trim()).filter(Boolean)) {
+        try {
+          const stale = await channel.messages.fetch(staleId);
+          await stale.delete();
+        } catch {
+          // Missing/stale ids are fine — we are about to post one fresh message.
+        }
+      }
+    }
+
     const message = await channel.send({ embeds: [embed], components: [row] });
-    await api.recordDiscordState(data.runId, { kind: "signup", channelId: message.channelId, messageId: message.id });
+    await api.recordDiscordState(data.runId, {
+      kind: "signup",
+      channelId: message.channelId,
+      messageId: message.id,
+    });
   } catch (error) {
     // Channel identity is already persisted; message work retries next poll.
     // Still return `section` so same-pass CURRENT/NEXT positioning includes

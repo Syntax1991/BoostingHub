@@ -45,6 +45,23 @@ function resolveDiscordTarget(
   return "ARCHIVE";
 }
 
+export type SignupEmbedMember = {
+  signupId: string;
+  userId: string;
+  userName: string;
+  discordUserId: string | null;
+  characterName: string | null;
+  characterRealm: string | null;
+  wowClass: WowClass | null;
+};
+
+export type SignupEmbedRoleMembers = {
+  tanks: SignupEmbedMember[];
+  healers: SignupEmbedMember[];
+  dps: SignupEmbedMember[];
+  lootbuddies: SignupEmbedMember[];
+};
+
 export type SignupEmbedRoleStatus = {
   signed: number;
   picked: number;
@@ -75,15 +92,22 @@ export type SignupEmbedData = {
   uniqueSignupCount: number;
   /**
    * Per-role volunteered (signed) vs authoritative roster (picked) counts.
-   * A multi-role Character increments signed once per offered role, but picked
-   * only under the authoritative role for the Run's phase (draft selectedRole
-   * while OPEN/ROSTERING; publishedRole once PUBLISHED+).
+   * Counts are derived from `members` so they cannot drift from the lists.
    */
   roleStatus: {
     tank: SignupEmbedRoleStatus;
     healer: SignupEmbedRoleStatus;
     dps: SignupEmbedRoleStatus;
     lootbuddy: SignupEmbedLootbuddyStatus;
+  };
+  /**
+   * Participants behind those counts. Signed is offered-role projection
+   * (multi-role boosters appear in every offered role). Picked is one
+   * authoritative role (draft selectedRole or publishedRole).
+   */
+  members: {
+    signed: SignupEmbedRoleMembers;
+    picked: SignupEmbedRoleMembers;
   };
 };
 
@@ -241,7 +265,7 @@ function desiredChannelNameFor(run: {
  */
 function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
   const active = run.signups.filter((signup) => isActiveSignupOffer(signup.status));
-  const roleStatus = buildSignupRoleStatus(run, active);
+  const projection = buildSignupRoleProjection(run, active);
 
   return {
     runId: run.id,
@@ -256,75 +280,148 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     runStatus: run.status,
     signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
     uniqueSignupCount: new Set(active.map((signup) => signup.userId)).size,
-    roleStatus,
+    roleStatus: projection.roleStatus,
+    members: projection.members,
   };
 }
 
 /**
  * OPEN / ROSTERING (and pre-publish): picked = saved draft selections.
  * PUBLISHED+: picked = live SELECTED signups + publishedRole (replacement drafts stay private).
+ * Counts are length-derived from the same member lists rendered in the embed.
  */
-function buildSignupRoleStatus(
+function buildSignupRoleProjection(
   run: RunListRecord,
   activeSignups: RunListRecord["signups"],
-): SignupEmbedData["roleStatus"] {
-  const tankSigned = activeSignups.filter(
-    (signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"),
-  ).length;
-  const healerSigned = activeSignups.filter(
-    (signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"),
-  ).length;
-  const dpsSigned = activeSignups.filter(
-    (signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"),
-  ).length;
-  const lootbuddySigned = activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY").length;
+): Pick<SignupEmbedData, "roleStatus" | "members"> {
+  const signedTanks = sortSignupEmbedMembers(
+    activeSignups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"))
+      .map(toSignupEmbedMember),
+  );
+  const signedHealers = sortSignupEmbedMembers(
+    activeSignups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"))
+      .map(toSignupEmbedMember),
+  );
+  const signedDps = sortSignupEmbedMembers(
+    activeSignups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"))
+      .map(toSignupEmbedMember),
+  );
+  const signedLoot = sortSignupEmbedMembers(
+    activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
+  );
 
   const usePublishedPicks =
     run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED";
   const byId = new Map(run.signups.map((signup) => [signup.id, signup]));
-  const picks: Array<{ participationType: "BOOSTER" | "LOOTBUDDY"; selectedRole: CharacterRole | null }> = [];
+  const pickedRows: RunListRecord["signups"] = [];
 
   if (usePublishedPicks) {
     for (const signup of run.signups) {
       if (signup.status !== "SELECTED") continue;
-      picks.push({
-        participationType: signup.participationType,
-        selectedRole: signup.publishedRole,
-      });
+      pickedRows.push(signup);
     }
   } else {
     for (const selection of run.roster?.selections ?? []) {
       if (!selection.selected) continue;
       const signup = byId.get(selection.signupId);
       if (!signup || !isActiveSignupOffer(signup.status)) continue;
-      picks.push({
-        participationType: signup.participationType,
-        selectedRole: selection.selectedRole,
+      pickedRows.push({
+        ...signup,
+        // Draft picks use selectedRole as the authoritative display role.
+        publishedRole: selection.selectedRole,
       });
     }
   }
 
-  return {
-    tank: {
-      signed: tankSigned,
-      picked: picks.filter((pick) => pick.participationType === "BOOSTER" && pick.selectedRole === "TANK").length,
-      target: run.desiredTankCount,
+  const pickedTanks = sortSignupEmbedMembers(
+    pickedRows
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "TANK")
+      .map(toSignupEmbedMember),
+  );
+  const pickedHealers = sortSignupEmbedMembers(
+    pickedRows
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "HEALER")
+      .map(toSignupEmbedMember),
+  );
+  const pickedDps = sortSignupEmbedMembers(
+    pickedRows
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "DPS")
+      .map(toSignupEmbedMember),
+  );
+  const pickedLoot = sortSignupEmbedMembers(
+    pickedRows.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
+  );
+
+  const members = {
+    signed: {
+      tanks: signedTanks,
+      healers: signedHealers,
+      dps: signedDps,
+      lootbuddies: signedLoot,
     },
-    healer: {
-      signed: healerSigned,
-      picked: picks.filter((pick) => pick.participationType === "BOOSTER" && pick.selectedRole === "HEALER").length,
-      target: run.desiredHealerCount,
-    },
-    dps: {
-      signed: dpsSigned,
-      picked: picks.filter((pick) => pick.participationType === "BOOSTER" && pick.selectedRole === "DPS").length,
-      target: run.desiredDpsCount,
-    },
-    lootbuddy: {
-      signed: lootbuddySigned,
-      picked: picks.filter((pick) => pick.participationType === "LOOTBUDDY").length,
+    picked: {
+      tanks: pickedTanks,
+      healers: pickedHealers,
+      dps: pickedDps,
+      lootbuddies: pickedLoot,
     },
   };
+
+  return {
+    members,
+    roleStatus: {
+      tank: {
+        signed: members.signed.tanks.length,
+        picked: members.picked.tanks.length,
+        target: run.desiredTankCount,
+      },
+      healer: {
+        signed: members.signed.healers.length,
+        picked: members.picked.healers.length,
+        target: run.desiredHealerCount,
+      },
+      dps: {
+        signed: members.signed.dps.length,
+        picked: members.picked.dps.length,
+        target: run.desiredDpsCount,
+      },
+      lootbuddy: {
+        signed: members.signed.lootbuddies.length,
+        picked: members.picked.lootbuddies.length,
+      },
+    },
+  };
+}
+
+function toSignupEmbedMember(signup: RunListRecord["signups"][number]): SignupEmbedMember {
+  const wowClass =
+    signup.participationType === "LOOTBUDDY"
+      ? (signup.lootbuddyClass ?? signup.character?.wowClass ?? null)
+      : (signup.character?.wowClass ?? null);
+  return {
+    signupId: signup.id,
+    userId: signup.userId,
+    userName: signup.userName,
+    discordUserId: signup.discordUserId,
+    characterName: signup.character?.name ?? null,
+    characterRealm: signup.character?.realm ?? null,
+    wowClass,
+  };
+}
+
+function sortSignupEmbedMembers(members: SignupEmbedMember[]): SignupEmbedMember[] {
+  return [...members].sort((a, b) => {
+    const nameCmp = (a.characterName ?? "").localeCompare(b.characterName ?? "");
+    if (nameCmp !== 0) return nameCmp;
+    const realmCmp = (a.characterRealm ?? "").localeCompare(b.characterRealm ?? "");
+    if (realmCmp !== 0) return realmCmp;
+    const userCmp = a.userName.localeCompare(b.userName);
+    if (userCmp !== 0) return userCmp;
+    return a.signupId.localeCompare(b.signupId);
+  });
 }
 
 /**
@@ -354,6 +451,7 @@ function buildSignupEmbedSignature(
     signupWindowOpen: data.signupWindowOpen,
     uniqueSignupCount: data.uniqueSignupCount,
     roleStatus: data.roleStatus,
+    members: data.members,
     channelName: extra.channelName,
     targetBucket: extra.targetBucket,
   });
