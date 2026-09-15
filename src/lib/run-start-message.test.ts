@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
+  FINAL_SETUP_LFG_LINE,
   formatFinalSetup,
   renderFinalSetupText,
   type FinalSetupInput,
+  type FinalSetupParticipant,
 } from "@/lib/run-start-message";
-import { buildRunStartEmbed, renderRunStartMessageText } from "@/discord-bot/embeds/run-start-embed";
+import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import type { RunStartEmbedData } from "@/services/discord-sync.service";
+import type { WowClass } from "@/models/enums";
+
+function participant(
+  overrides: Partial<FinalSetupParticipant> & Pick<FinalSetupParticipant, "userName" | "participationType">,
+): FinalSetupParticipant {
+  return {
+    discordUserId: null,
+    characterName: overrides.userName,
+    characterRealm: "",
+    wowClass: null,
+    classLabel: null,
+    selectedRole: overrides.participationType === "LOOTBUDDY" ? null : "DPS",
+    ...overrides,
+  };
+}
 
 function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput {
   return {
@@ -15,7 +32,7 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
     targets: { tanks: 2, healers: 2, dps: 8 },
     groups: {
       tanks: [
-        {
+        participant({
           discordUserId: "111",
           userName: "Dusk",
           characterName: "Duskmaven",
@@ -24,8 +41,8 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
           classLabel: "Death Knight",
           participationType: "BOOSTER",
           selectedRole: "TANK",
-        },
-        {
+        }),
+        participant({
           discordUserId: "112",
           userName: "Ceravian",
           characterName: "Ceravian",
@@ -34,11 +51,28 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
           classLabel: "Death Knight",
           participationType: "BOOSTER",
           selectedRole: "TANK",
-        },
+        }),
       ],
-      healers: [],
+      healers: [
+        participant({
+          discordUserId: "211",
+          userName: "HealOne",
+          wowClass: "SHAMAN",
+          classLabel: "Shaman",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+        }),
+        participant({
+          discordUserId: "212",
+          userName: "HealTwo",
+          wowClass: "EVOKER",
+          classLabel: "Evoker",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+        }),
+      ],
       dps: [
-        {
+        participant({
           discordUserId: null,
           userName: "Kael",
           characterName: "Kaelstorm",
@@ -47,29 +81,26 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
           classLabel: "Shaman",
           participationType: "BOOSTER",
           selectedRole: "DPS",
-        },
+        }),
       ],
       lootbuddies: [
-        {
+        participant({
           discordUserId: "222",
           userName: "Mira",
           characterName: "Mage",
-          characterRealm: "",
           wowClass: "MAGE",
           classLabel: "Mage",
           participationType: "LOOTBUDDY",
-          selectedRole: null,
-        },
-        {
+        }),
+        participant({
           discordUserId: null,
           userName: "NoDiscord",
           characterName: "Priest",
-          characterRealm: "",
-          wowClass: null,
-          classLabel: null,
           participationType: "LOOTBUDDY",
-          selectedRole: null,
-        },
+        }),
+        participant({ discordUserId: "223", userName: "L3", participationType: "LOOTBUDDY" }),
+        participant({ discordUserId: "224", userName: "L4", participationType: "LOOTBUDDY" }),
+        participant({ discordUserId: "225", userName: "L5", participationType: "LOOTBUDDY" }),
       ],
     },
     ...overrides,
@@ -87,19 +118,9 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
     scheduledStartAt: "2026-09-18T17:00:00.000Z",
     targets: input.targets,
     groups: {
-      tanks: input.groups.tanks.map((m, i) => ({
-        signupId: `t${i}`,
-        userId: `u${i}`,
-        ...m,
-        saveLabel: "Unsaved",
-      })),
-      healers: [],
-      dps: input.groups.dps.map((m, i) => ({
-        signupId: `d${i}`,
-        userId: `ud${i}`,
-        ...m,
-        saveLabel: "Fully saved",
-      })),
+      tanks: input.groups.tanks.map((m, i) => ({ signupId: `t${i}`, userId: `u${i}`, ...m, saveLabel: "Unsaved" })),
+      healers: input.groups.healers.map((m, i) => ({ signupId: `h${i}`, userId: `uh${i}`, ...m, saveLabel: "Unsaved" })),
+      dps: input.groups.dps.map((m, i) => ({ signupId: `d${i}`, userId: `ud${i}`, ...m, saveLabel: "Fully saved" })),
       lootbuddies: input.groups.lootbuddies.map((m, i) => ({
         signupId: `l${i}`,
         userId: `ul${i}`,
@@ -107,30 +128,68 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
         saveLabel: "Unknown",
       })),
     },
-    totalSelected: 5,
+    totalSelected: 10,
     ...overrides,
   };
 }
 
-describe("formatFinalSetup", () => {
-  it("renders Final Setup title and selected/target role counts", () => {
-    const message = formatFinalSetup(sampleInput());
-    expect(message.title).toBe("Final Setup");
+describe("renderFinalSetupText — plain Discord Final Setup", () => {
+  it("starts with bold Final Setup, role headers, and exact LFG footer once", () => {
     const text = renderFinalSetupText(sampleInput());
+    expect(text.startsWith("**Final Setup**\n\n")).toBe(true);
     expect(text).toContain("🛡 **Tanks** 🛡 2/2");
-    expect(text).toContain("✚ **Healers** ✚ 0/2");
+    expect(text).toContain("✚ **Healers** ✚ 2/2");
     expect(text).toContain("⚔ **DPS** ⚔ 1/8");
-    expect(text).toContain("📦 **Lootbuddies** 📦 2");
-    expect(text).not.toMatch(/Melee DPS|Ranged DPS/i);
+    expect(text).toContain("📦 **Lootbuddies** 📦 5");
+    expect(text.endsWith(FINAL_SETUP_LFG_LINE)).toBe(true);
+    expect(text.match(/\*\*LFG HM Krum write your discord name in the note!\*\*/g)).toHaveLength(1);
+    const lootIdx = text.indexOf("📦 **Lootbuddies**");
+    const lfgIdx = text.indexOf(FINAL_SETUP_LFG_LINE);
+    expect(lfgIdx).toBeGreaterThan(lootIdx);
   });
 
-  it("renders compact participant lines without save status or collectors", () => {
+  it("renders compact booster rows: mention + class indicator, no character/realm", () => {
+    const text = renderFinalSetupText(sampleInput(), {
+      classIndicators: { SHAMAN: "<:shaman:999>" },
+    });
+    expect(text).toContain("<@211> <:shaman:999>");
+    expect(text).toContain("@Kael <:shaman:999>");
+    expect(text).not.toContain("Duskmaven");
+    expect(text).not.toContain("Draenor");
+    expect(text).not.toContain("Kaelstorm");
+    expect(text).not.toMatch(/Unsaved|Fully saved|Gold Collector/);
+  });
+
+  it("falls back to class label when custom emoji is missing (e.g. Priest)", () => {
+    const text = renderFinalSetupText(
+      sampleInput({
+        groups: {
+          tanks: [
+            participant({
+              discordUserId: "111",
+              userName: "PriestTank",
+              wowClass: "PRIEST",
+              classLabel: "Priest",
+              participationType: "BOOSTER",
+              selectedRole: "TANK",
+            }),
+          ],
+          healers: [],
+          dps: [],
+          lootbuddies: [],
+        },
+      }),
+      { classIndicators: {} },
+    );
+    expect(text).toContain("<@111> Priest");
+    expect(text).not.toContain("<:priest:");
+  });
+
+  it("keeps lootbuddy lines as mentions only", () => {
     const text = renderFinalSetupText(sampleInput());
-    expect(text).toContain("<@111> — Duskmaven-Draenor — Death Knight");
-    expect(text).toContain("@Kael — Kaelstorm-Draenor — Shaman");
-    expect(text).toContain("<@222> — Mage");
+    expect(text).toContain("<@222>");
     expect(text).toContain("@NoDiscord");
-    expect(text).not.toMatch(/Unsaved|Fully saved|Gold Collector|\/w |Duskgc|Duskalli/);
+    expect(text).not.toMatch(/<@222> Mage/);
   });
 
   it("uses Run desired composition targets for denominators", () => {
@@ -152,13 +211,85 @@ describe("formatFinalSetup", () => {
 });
 
 describe("web / Discord Final Setup parity", () => {
-  it("uses the same body from the shared formatter", () => {
+  it("shares the same plain-text body from the formatter", () => {
     const input = sampleInput();
     const shared = formatFinalSetup(input);
-    const embed = buildRunStartEmbed(sampleEmbedData());
-    expect(embed.data.title).toBe(shared.title);
-    expect(embed.data.description).toBe(shared.body);
-    expect(embed.data.footer?.text).toBe(shared.footer);
-    expect(renderRunStartMessageText(sampleEmbedData())).toBe(renderFinalSetupText(input));
+    const discordText = renderRunStartMessageText(sampleEmbedData());
+    expect(discordText).toBe(renderFinalSetupText(input));
+    expect(discordText).toContain(`**${shared.title}**`);
+    expect(discordText).toContain(shared.body);
+  });
+});
+
+describe("Final Setup Discord length safety", () => {
+  it("keeps a full 2/4/14 + 5 lootbuddy roster under Discord's 2000-char content limit", () => {
+    const classes: WowClass[] = [
+      "WARRIOR",
+      "PALADIN",
+      "DEATH_KNIGHT",
+      "DRUID",
+      "MONK",
+      "PRIEST",
+      "SHAMAN",
+      "MAGE",
+      "WARLOCK",
+      "HUNTER",
+      "ROGUE",
+      "DEMON_HUNTER",
+      "EVOKER",
+    ];
+    const indicators: Partial<Record<WowClass, string>> = {};
+    for (const [i, wowClass] of classes.entries()) {
+      indicators[wowClass] = `<:${wowClass.toLowerCase()}:${1000 + i}>`;
+    }
+
+    const tanks = Array.from({ length: 2 }, (_, i) =>
+      participant({
+        discordUserId: String(10_000 + i),
+        userName: `Tank${i}`,
+        wowClass: "WARRIOR",
+        participationType: "BOOSTER",
+        selectedRole: "TANK",
+      }),
+    );
+    const healers = Array.from({ length: 4 }, (_, i) =>
+      participant({
+        discordUserId: String(20_000 + i),
+        userName: `Heal${i}`,
+        wowClass: "PRIEST",
+        participationType: "BOOSTER",
+        selectedRole: "HEALER",
+      }),
+    );
+    const dps = Array.from({ length: 14 }, (_, i) =>
+      participant({
+        discordUserId: String(30_000 + i),
+        userName: `Dps${i}`,
+        wowClass: classes[i % classes.length]!,
+        participationType: "BOOSTER",
+        selectedRole: "DPS",
+      }),
+    );
+    const lootbuddies = Array.from({ length: 5 }, (_, i) =>
+      participant({
+        discordUserId: String(40_000 + i),
+        userName: `Loot${i}`,
+        participationType: "LOOTBUDDY",
+      }),
+    );
+
+    const text = renderFinalSetupText(
+      sampleInput({
+        targets: { tanks: 2, healers: 4, dps: 14 },
+        groups: { tanks, healers, dps, lootbuddies },
+      }),
+      { classIndicators: indicators },
+    );
+
+    expect(text.length).toBeLessThan(2000);
+    expect(text).toContain("🛡 **Tanks** 🛡 2/2");
+    expect(text).toContain("✚ **Healers** ✚ 4/4");
+    expect(text).toContain("⚔ **DPS** ⚔ 14/14");
+    expect(text).toContain("📦 **Lootbuddies** 📦 5");
   });
 });

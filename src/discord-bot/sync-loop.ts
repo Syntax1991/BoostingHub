@@ -2,8 +2,9 @@ import { ChannelType, type CategoryChannel, type Client, type MessageEditOptions
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
-import { buildRunStartEmbed } from "@/discord-bot/embeds/run-start-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
+import { resolveGuildClassIndicators } from "@/discord-bot/class-emoji-lookup";
+import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
   reconcileChannels,
@@ -459,10 +460,12 @@ async function syncStartPost(
   if (!resolved) return;
   const { channelId } = resolved;
 
-  const embed = buildRunStartEmbed(data);
+  const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
+  const content = renderRunStartMessageText(data, { classIndicators });
+  const editPayload: MessageEditOptions = { content, embeds: [] };
 
   if (item.existingMessageId) {
-    const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });
+    const edited = await tryEditMessage(client, channelId, item.existingMessageId, editPayload);
     if (edited) {
       await api.recordDiscordState(item.runId, { kind: "start", channelId, messageId: item.existingMessageId });
       return;
@@ -471,7 +474,7 @@ async function syncStartPost(
 
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isTextBased() || !("send" in channel)) return;
-  const message = await channel.send({ embeds: [embed] });
+  const message = await channel.send({ content });
   await api.recordDiscordState(item.runId, { kind: "start", channelId: message.channelId, messageId: message.id });
 }
 
