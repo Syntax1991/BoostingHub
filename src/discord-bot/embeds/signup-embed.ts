@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import type { SignupEmbedData } from "@/services/discord-sync.service";
 import { buildCustomId } from "@/discord-bot/custom-ids";
-import { discordTimestamp, pluralize } from "@/discord-bot/format";
+import { discordTimestamp } from "@/discord-bot/format";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 
 const RUN_STATUS_LABEL: Record<SignupEmbedData["runStatus"], string> = {
@@ -14,13 +14,25 @@ const RUN_STATUS_LABEL: Record<SignupEmbedData["runStatus"], string> = {
   CANCELLED: "Cancelled",
 };
 
-function formatRoleStatusLines(data: SignupEmbedData): string {
+/** Offered-role projection — multi-role boosters count once per offered role. */
+function formatSignupsByRole(data: SignupEmbedData): string {
   const { tank, healer, dps, lootbuddy } = data.roleStatus;
   return [
-    `🛡 **Tanks** — ${tank.signed} signed · ${tank.picked}/${tank.target} picked`,
-    `✚ **Healers** — ${healer.signed} signed · ${healer.picked}/${healer.target} picked`,
-    `⚔ **DPS** — ${dps.signed} signed · ${dps.picked}/${dps.target} picked`,
-    `📦 **Lootbuddies** — ${lootbuddy.signed} signed · ${lootbuddy.picked} picked`,
+    `🛡 **Tanks** — ${tank.signed}`,
+    `✚ **Healers** — ${healer.signed}`,
+    `⚔ **DPS** — ${dps.signed}`,
+    `📦 **Lootbuddies** — ${lootbuddy.signed}`,
+  ].join("\n");
+}
+
+/** Authoritative picked counts — booster roles show picked/target; lootbuddies have no target. */
+function formatPicked(data: SignupEmbedData): string {
+  const { tank, healer, dps, lootbuddy } = data.roleStatus;
+  return [
+    `🛡 **Tanks** — ${tank.picked}/${tank.target}`,
+    `✚ **Healers** — ${healer.picked}/${healer.target}`,
+    `⚔ **DPS** — ${dps.picked}/${dps.target}`,
+    `📦 **Lootbuddies** — ${lootbuddy.picked}`,
   ].join("\n");
 }
 
@@ -34,11 +46,12 @@ export function buildSignupEmbed(data: SignupEmbedData): EmbedBuilder {
     .setDescription(`${DIFFICULTY_LABELS[data.difficulty]} · ${data.raidName}`)
     .addFields(
       { name: "Scheduled", value: discordTimestamp(data.scheduledStartAt), inline: true },
-      { name: "Signups", value: pluralize(data.uniqueSignupCount, "signup"), inline: true },
+      { name: "Signed users", value: String(data.uniqueSignupCount), inline: true },
       { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
       { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
       { name: "Bosses", value: `${data.plannedBossCount}/${data.totalBossCount}`, inline: true },
-      { name: "Roles", value: formatRoleStatusLines(data), inline: false },
+      { name: "Signups by role", value: formatSignupsByRole(data), inline: true },
+      { name: "Picked", value: formatPicked(data), inline: true },
     )
     .setColor(data.signupWindowOpen ? 0xd4af37 : 0x555555)
     .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });

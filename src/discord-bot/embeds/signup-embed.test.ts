@@ -25,24 +25,69 @@ const base: SignupEmbedData = {
 };
 
 describe("buildSignupEmbed", () => {
-  it("shows signed and picked role counts without listing Characters", () => {
+  it("splits offered and picked role counts into separate inline fields", () => {
     const embed = buildSignupEmbed(base).toJSON();
-    const rolesField = embed.fields?.find((field) => field.name === "Roles");
-    expect(rolesField?.value).toContain("4 signed · 2/2 picked");
-    expect(rolesField?.value).toContain("7 signed · 2/2 picked");
-    expect(rolesField?.value).toContain("16 signed · 8/8 picked");
-    expect(rolesField?.value).toContain("6 signed · 5 picked");
-    expect(rolesField?.value).not.toMatch(/5\/5/);
+    const signupsByRole = embed.fields?.find((field) => field.name === "Signups by role");
+    const picked = embed.fields?.find((field) => field.name === "Picked");
+
+    expect(signupsByRole?.inline).toBe(true);
+    expect(picked?.inline).toBe(true);
+
+    expect(signupsByRole?.value).toContain("Tanks");
+    expect(signupsByRole?.value).toContain("Healers");
+    expect(signupsByRole?.value).toContain("DPS");
+    expect(signupsByRole?.value).toContain("Lootbuddies");
+    expect(signupsByRole?.value).toContain("— 4");
+    expect(signupsByRole?.value).toContain("— 7");
+    expect(signupsByRole?.value).toContain("— 16");
+    expect(signupsByRole?.value).toContain("— 6");
+
+    expect(picked?.value).toContain("Tanks");
+    expect(picked?.value).toContain("Healers");
+    expect(picked?.value).toContain("DPS");
+    expect(picked?.value).toContain("Lootbuddies");
+    expect(picked?.value).toContain("2/2");
+    expect(picked?.value).toContain("8/8");
+    expect(picked?.value).toMatch(/Lootbuddies\*\* — 5(?!\/)/);
+    expect(picked?.value).not.toMatch(/5\/5/);
+
     const serialized = JSON.stringify(embed);
     expect(serialized).not.toMatch(/Stormhowl|character/i);
   });
 
-  it("shows the unique signup count, never a row count, and never lists offered Characters", () => {
+  it("does not use the old combined signed · picked role lines", () => {
     const embed = buildSignupEmbed(base).toJSON();
-    const signupsField = embed.fields?.find((field) => field.name === "Signups");
-    expect(signupsField?.value).toBe("5 signups");
+    const rolesField = embed.fields?.find((field) => field.name === "Roles");
+    expect(rolesField).toBeUndefined();
+
     const serialized = JSON.stringify(embed);
-    expect(serialized).not.toMatch(/Stormhowl|character/i);
+    expect(serialized).not.toMatch(/\d+ signed · /);
+    expect(serialized).not.toMatch(/ signed · /);
+    expect(serialized).not.toMatch(/\/\d+ picked/);
+  });
+
+  it("shows unique Signed users, never a projected role-offer sum", () => {
+    const embed = buildSignupEmbed({
+      ...base,
+      uniqueSignupCount: 34,
+      roleStatus: {
+        tank: { signed: 10, picked: 2, target: 2 },
+        healer: { signed: 12, picked: 4, target: 4 },
+        dps: { signed: 16, picked: 14, target: 14 },
+        lootbuddy: { signed: 0, picked: 0 },
+      },
+    }).toJSON();
+
+    const signedUsers = embed.fields?.find((field) => field.name === "Signed users");
+    expect(signedUsers?.value).toBe("34");
+    expect(embed.fields?.find((field) => field.name === "Signups")).toBeUndefined();
+
+    const signupsByRole = embed.fields?.find((field) => field.name === "Signups by role")?.value ?? "";
+    expect(signupsByRole).toContain("— 10");
+    expect(signupsByRole).toContain("— 12");
+    expect(signupsByRole).toContain("— 16");
+    // Projected role cards sum to 38 — must not appear as the global unique count.
+    expect(signedUsers?.value).not.toBe("38");
   });
 
   it("reflects a closed signup window in the footer", () => {

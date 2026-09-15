@@ -419,6 +419,89 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.healer.picked).toBe(0);
     expect(embed?.roleStatus.dps.picked).toBe(1);
   });
+
+  it("OPEN/ROSTERING: multi-role offers count in each signed role, but draft picked uses only selectedRole", async () => {
+    const hybridRunId = await runService
+      .createRun(lead, {
+        raidId,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 2,
+        desiredHealerCount: 2,
+        desiredDpsCount: 2,
+      })
+      .then((run) => run.id);
+    createdRunIds.push(hybridRunId);
+    await runService.openRun(lead, hybridRunId);
+
+    const hybridChar = await createCharacter(ids.extra, "HybridOffer", "PALADIN", "Holy", "HEALER");
+    await grantQualification(ids.extra);
+    const hybridSignupId = await createSignup({
+      runId: hybridRunId,
+      userId: ids.extra,
+      characterId: hybridChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    await orm.RunSignupRole.create({
+      id: crypto.randomUUID(),
+      signupId: hybridSignupId,
+      role: "HEALER",
+      createdAt: new Date().toISOString(),
+    });
+
+    const healerOnly = await createCharacter(ids.healer, "HealOnlyEmbed", "PRIEST", "Holy", "HEALER");
+    await createSignup({
+      runId: hybridRunId,
+      userId: ids.healer,
+      characterId: healerOnly,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    const dpsOnly = await createCharacter(ids.melee, "DpsOnlyEmbed", "WARRIOR", "Fury", "DPS");
+    await createSignup({
+      runId: hybridRunId,
+      userId: ids.melee,
+      characterId: dpsOnly,
+      participationType: "BOOSTER",
+      role: "DPS",
+    });
+
+    let embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    expect(embed?.uniqueSignupCount).toBe(3);
+    expect(embed?.roleStatus.tank.signed).toBe(1);
+    expect(embed?.roleStatus.healer.signed).toBe(2);
+    expect(embed?.roleStatus.dps.signed).toBe(1);
+    // Projected role offers sum to 4 — must not become unique users.
+    expect(embed?.uniqueSignupCount).not.toBe(
+      (embed?.roleStatus.tank.signed ?? 0) +
+        (embed?.roleStatus.healer.signed ?? 0) +
+        (embed?.roleStatus.dps.signed ?? 0),
+    );
+
+    let view = await rosterService.getRosterManagementView(lead, hybridRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: hybridRunId,
+      version: view.roster.version,
+      selections: [{ signupId: hybridSignupId, selectedRole: "HEALER" }],
+    });
+    embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    expect(embed?.roleStatus.tank.picked).toBe(0);
+    expect(embed?.roleStatus.healer.picked).toBe(1);
+    expect(embed?.roleStatus.dps.picked).toBe(0);
+
+    view = await rosterService.getRosterManagementView(lead, hybridRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: hybridRunId,
+      version: view.roster.version,
+      selections: [{ signupId: hybridSignupId, selectedRole: "TANK" }],
+    });
+    embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    expect(embed?.roleStatus.tank.picked).toBe(1);
+    expect(embed?.roleStatus.healer.picked).toBe(0);
+  });
 });
 
 describe("discordSyncService.listSyncWork", () => {
