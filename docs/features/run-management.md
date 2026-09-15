@@ -32,7 +32,7 @@ Button visibility is not authorization.
 
 ## Creation
 
-**One canonical workflow, 1–25 drafts.** Route: `/manage/runs/create`. There is no separate "single create" vs. "mass create" UI — the same page and the same server action handle a Raid Lead preparing one Run for tonight and an Admin preparing a whole week at once. Same authorization as every other manager action (`RAID_LEAD`/`ADMIN`, enforced server-side regardless of navigation).
+**One canonical workflow, 1–25 drafts.** Route: `/runs/create` (operational Runs hub). There is no separate "single create" vs. "mass create" UI — the same page and the same server action handle a Raid Lead preparing one Run for tonight and an Admin preparing a whole week at once. Same authorization as every other manager action (`RAID_LEAD`/`ADMIN`, enforced server-side regardless of navigation). Legacy `/manage/runs/create` and `/manage/runs/create-many` redirect here.
 
 **Model**: shared defaults (raid, difficulty, loot type, raid lead, composition, planned boss count, notes) + one row per concrete run, each with its own required `scheduledStartAt` and optional per-field overrides, submitted once. The page starts with exactly one staged row — the ordinary one-off experience — and a manager only sees more than one if they explicitly click Add Run or Duplicate. This is a convenience for preparing concrete runs — **not** a recurrence engine; there is no weekly/RRULE templating or scheduled-generation job, and each row is one specific run a manager already has in mind.
 
@@ -52,7 +52,9 @@ Button visibility is not authorization.
 
 **Activity**: one summary `RUN_CREATED` Activity row per successful submission ("Created N run draft(s)."), never one row per created run.
 
-**Legacy URL**: `/manage/runs/create-many` (this feature's route during initial development) redirects to `/manage/runs/create` rather than rendering a second form, so old links/bookmarks still work.
+**Legacy URLs**: `/manage/runs/create` and `/manage/runs/create-many` redirect to `/runs/create` rather than rendering a second form, so old links/bookmarks still work.
+
+**After success**: the client navigates to the first created Run's canonical detail (`/runs/[runId]`). Cancel returns to `/runs`.
 
 **Templates**: a Raid Lead may optionally apply a saved planning preset from the template selector above Shared Defaults instead of re-entering raid/difficulty/loot type/composition by hand. Applying a template also locks the effective Raid Lead to the template's owner — the server always re-resolves the template fresh at submit time and rejects a forged Raid Lead override rather than silently overriding it. See [run-templates.md](run-templates.md) for the full ownership model, usability rules, and the Raid Lead authority guarantee.
 
@@ -144,13 +146,14 @@ The Run Detail DTO includes server-derived `capabilities`. USER payloads keep `e
 
 ## Manage runs
 
-`/manage/runs` is the global index and create entry:
+`/manage/runs` is the managerial index for **existing** Runs (not the home of creation):
 
-- one **Create Runs** action, linking to `/manage/runs/create`
 - content, difficulty, schedule, raid lead, status, signup window, signup count, roster state
 - filters: status, upcoming/past, raid lead (admin)
 - empty state: “No runs created yet.”
 - row actions open canonical `/runs/[runId]`
+
+**Create Run** lives on `/runs` (header action for RAID_LEAD/ADMIN) and opens `/runs/create`.
 
 ## Visibility
 

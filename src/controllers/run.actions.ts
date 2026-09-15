@@ -18,7 +18,7 @@ function revalidateRunSurfaces(runId?: string) {
 }
 
 // Note: there is no single-Run createRunAction anymore — Run creation is one
-// canonical workflow (createManyRunsAction, 1-25 rows) at /manage/runs/create.
+// canonical workflow (createManyRunsAction, 1-25 rows) at /runs/create.
 // runService.createRun / createRunSchema remain for internal/test use only.
 
 export type CreateManyRunsActionResult =

@@ -8,6 +8,13 @@ export const RUN_DETAIL_TABS = ["overview", "signups", "roster", "attendance", "
 
 export type RunDetailTab = (typeof RUN_DETAIL_TABS)[number];
 
+/** Canonical Create Run workflow (1–25 drafts). Legacy /manage/runs/create redirects here. */
+export const RUN_CREATE_PATH = "/runs/create";
+
+export function runCreatePath(): string {
+  return RUN_CREATE_PATH;
+}
+
 export function parseRunDetailTab(value: unknown): RunDetailTab {
   if (Array.isArray(value)) {
     return parseRunDetailTab(value[0]);

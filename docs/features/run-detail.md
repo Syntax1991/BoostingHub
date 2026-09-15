@@ -10,12 +10,13 @@ This is the long-term surface for participant information and, when authorized, 
 
 | Route | Role |
 | --- | --- |
-| `/runs` | Discovery/list. Cards link to canonical detail. Signup from the list remains. |
+| `/runs` | Discovery/list. Cards link to canonical detail. Signup from the list remains. RAID_LEAD/ADMIN see a Create Run header action. |
+| `/runs/create` | Create Run draft(s) — one canonical workflow, 1–25 rows (see [run-management.md § Creation](run-management.md#creation)) |
 | `/runs/[runId]` | Canonical Run entity view |
 | `/my-runs` | Current user's participation overview; each row links to canonical detail |
 | `/manage` | Global administration entry |
-| `/manage/runs` | Manager Run index and create entry. Actions link to `/runs/[runId]` |
-| `/manage/runs/create` | Create Run draft(s) — one canonical workflow, 1–25 rows (see [run-management.md § Creation](run-management.md#creation)) |
+| `/manage/runs` | Manager Run index for existing Runs. Actions link to `/runs/[runId]` |
+| `/manage/runs/create` | Compatibility redirect to `/runs/create` |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
 | `/manage/booster-access` | Global ADMIN BoosterAccess queue (not moved onto a Run) |
 

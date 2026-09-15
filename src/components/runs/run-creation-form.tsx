@@ -8,6 +8,7 @@ import { Card, CardHeader } from "@/components/ui/primitives";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { buildRunTitle } from "@/lib/run-title";
+import { runDetailPath } from "@/lib/run-routes";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 import type { CreateManyRunsForm } from "@/services/run.service";
@@ -256,7 +257,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         return;
       }
 
-      router.push(`/manage/runs?massCreated=${result.runIds.length}`);
+      const firstRunId = result.runIds[0];
+      router.push(firstRunId ? runDetailPath(firstRunId) : "/runs");
       router.refresh();
     });
   }
@@ -656,8 +658,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={() => router.push("/manage/runs")}>
-          Back
+        <Button type="button" variant="secondary" onClick={() => router.push("/runs")}>
+          Cancel
         </Button>
         <Button type="submit" disabled={pending || !canSubmit}>
           {pending ? "Creating…" : `Create ${rows.length} Draft${rows.length === 1 ? "" : "s"}`}

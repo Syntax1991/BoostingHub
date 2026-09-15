@@ -4,7 +4,7 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge, SignupStatusBadge } from "@/components/ui/badges";
 import { RunsFilters } from "@/components/runs/runs-filters";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
-import { runDetailPath } from "@/lib/run-routes";
+import { runCreatePath, runDetailPath } from "@/lib/run-routes";
 import type { runController } from "@/controllers/app.controller";
 
 type RunsPage = Awaited<ReturnType<typeof runController.getRunsPage>>;
@@ -15,6 +15,16 @@ export function RunsView({ data }: { data: RunsPage }) {
       <PageHeader
         title="Runs"
         description="Browse scheduled boosting operations and sign as booster or lootbuddy for the current run."
+        actions={
+          data.canCreate ? (
+            <Link
+              href={runCreatePath()}
+              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-black hover:bg-[#d8b436]"
+            >
+              Create Run
+            </Link>
+          ) : null
+        }
       />
       <RunsFilters difficulty={data.filters.difficulty} status={data.filters.status} />
       <Card>
