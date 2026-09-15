@@ -103,6 +103,23 @@ export type ReservationConflictRow = {
 };
 
 /**
+ * Minimum gap between two Run start times for the same Character to be
+ * draft-selected / SELECTED on both. Runs closer than this collide for
+ * cross-Run reservation. Exactly 2h apart is allowed.
+ */
+export const CROSS_RUN_RESERVATION_MIN_GAP_MS = 2 * 60 * 60 * 1000;
+
+export function scheduledStartsCollideForReservation(
+  scheduledStartAtA: string | Date | number,
+  scheduledStartAtB: string | Date | number,
+  minGapMs: number = CROSS_RUN_RESERVATION_MIN_GAP_MS,
+): boolean {
+  const a = typeof scheduledStartAtA === "number" ? scheduledStartAtA : new Date(scheduledStartAtA).getTime();
+  const b = typeof scheduledStartAtB === "number" ? scheduledStartAtB : new Date(scheduledStartAtB).getTime();
+  return Math.abs(a - b) < minGapMs;
+}
+
+/**
  * Cross-Run Character reservation (double-booking) check. A Character is
  * reserved on a Run when either its signup is draft-selected into that Run's
  * roster (a RunRosterEntry with `selected: true`) or its RunSignup.status is
@@ -110,9 +127,10 @@ export type ReservationConflictRow = {
  * same Run. Only Runs still occupying a real scheduling slot
  * (UPCOMING_RUN_STATUSES) can hold a reservation; the target Run itself is
  * always excluded (editing an existing signup is never a conflict with
- * itself). Collision is MVP-exact: same `scheduledStartAt` instant, compared
- * by parsed time rather than raw string equality since the Run model has no
- * authoritative end time yet.
+ * itself). Collision: another upcoming Run's start is within
+ * {@link CROSS_RUN_RESERVATION_MIN_GAP_MS} (2 hours) of the target start —
+ * compared by parsed time rather than raw string equality since the Run
+ * model has no authoritative end time yet.
  *
  * Exported (not a `signupRepository` method) so `roster.repository.ts` can
  * re-run the same check with a transaction's own `txOrm` for a race-safe
@@ -142,7 +160,7 @@ export async function queryReservationConflicts(
     const run = (raw.run ?? {}) as Record<string, unknown>;
     const runId = asString(run.id);
     if (runId === input.targetRunId) continue;
-    if (new Date(asString(run.scheduledStartAt)).getTime() !== targetTime) continue;
+    if (!scheduledStartsCollideForReservation(asString(run.scheduledStartAt), targetTime)) continue;
     if (!UPCOMING_RUN_STATUSES.includes(mapRunStatus(run.status))) continue;
 
     const status = mapSignupStatus(raw.status);

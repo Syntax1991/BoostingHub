@@ -6,7 +6,11 @@ import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { signupRepository } from "@/repositories/signup.repository";
+import {
+  CROSS_RUN_RESERVATION_MIN_GAP_MS,
+  scheduledStartsCollideForReservation,
+  signupRepository,
+} from "@/repositories/signup.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
@@ -14,11 +18,11 @@ import { signupService } from "@/services/signup.service";
 /**
  * Cross-Run Character reservation: a Character already draft-selected or
  * SELECTED on one Run must not be offerable/selectable/publishable on a
- * different Run scheduled at the exact same instant. Every fixture Run in
- * this file shares `raidId`/`difficulty`/lootType/plannedBossCount so the
- * desired Discord channel name would collide too if this ever regressed into
- * a naming-based check — the real invariant under test is purely
- * `scheduledStartAt` + reservation source (RunRosterEntry / SELECTED).
+ * different Run whose start is within 2 hours of that reservation. Every
+ * fixture Run in this file shares `raidId`/`difficulty`/lootType/plannedBossCount
+ * so the desired Discord channel name would collide too if this ever regressed
+ * into a naming-based check — the real invariant under test is the start-time
+ * gap + reservation source (RunRosterEntry / SELECTED).
  */
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
@@ -216,6 +220,40 @@ async function selectIntoRoster(runId: string, characterId: string) {
   return signup.id;
 }
 
+describe("scheduledStartsCollideForReservation", () => {
+  const base = "2026-09-20T18:00:00.000Z";
+  const baseMs = Date.parse(base);
+
+  it("collides for identical starts and for every gap under 2 hours", () => {
+    expect(CROSS_RUN_RESERVATION_MIN_GAP_MS).toBe(2 * 60 * 60 * 1000);
+    expect(scheduledStartsCollideForReservation(base, base)).toBe(true);
+    expect(scheduledStartsCollideForReservation(baseMs, baseMs + 1)).toBe(true);
+    expect(scheduledStartsCollideForReservation(base, "2026-09-20T19:00:00.000Z")).toBe(true);
+    expect(
+      scheduledStartsCollideForReservation(baseMs, baseMs + CROSS_RUN_RESERVATION_MIN_GAP_MS - 1),
+    ).toBe(true);
+  });
+
+  it("does not collide at exactly 2 hours or further", () => {
+    expect(
+      scheduledStartsCollideForReservation(baseMs, baseMs + CROSS_RUN_RESERVATION_MIN_GAP_MS),
+    ).toBe(false);
+    expect(
+      scheduledStartsCollideForReservation(baseMs, baseMs + CROSS_RUN_RESERVATION_MIN_GAP_MS + 1),
+    ).toBe(false);
+    expect(scheduledStartsCollideForReservation(base, "2026-09-21T18:00:00.000Z")).toBe(false);
+  });
+
+  it("is symmetric for colliding and non-colliding pairs", () => {
+    const near = "2026-09-20T19:30:00.000Z";
+    const far = "2026-09-20T20:00:00.000Z";
+    expect(scheduledStartsCollideForReservation(base, near)).toBe(true);
+    expect(scheduledStartsCollideForReservation(near, base)).toBe(true);
+    expect(scheduledStartsCollideForReservation(base, far)).toBe(false);
+    expect(scheduledStartsCollideForReservation(far, base)).toBe(false);
+  });
+});
+
 describe("cross-Run Character reservation — signup eligibility", () => {
   it("A: a Character draft-selected (still PENDING) into another Run's roster is unavailable in a colliding Run", async () => {
     const sched = futureIso(200);
@@ -272,15 +310,28 @@ describe("cross-Run Character reservation — signup eligibility", () => {
     expect(conflicts[0]?.runId).toBe(runA);
   });
 
-  it("D: a different scheduledStartAt never conflicts", async () => {
+  it("D: starts at least 2 hours apart never conflict", async () => {
     const runA = await createOpenRun(lead, futureIso(230));
-    const runC = await createOpenRun(lead, futureIso(231)); // one hour later — no collision
+    const runC = await createOpenRun(lead, futureIso(232)); // exactly 2 hours later — allowed
 
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, offeredRoles: ["DPS"] }] });
     await selectIntoRoster(runA, hybrid);
 
     const options = await signupService.getSignupOptions(target, runC);
     expect(options.booster.eligible.some((item) => item.characterId === hybrid)).toBe(true);
+  });
+
+  it("D2: starts less than 2 hours apart collide even when not identical", async () => {
+    const runA = await createOpenRun(lead, futureIso(233));
+    const runB = await createOpenRun(lead, futureIso(234)); // one hour later — collision window
+
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: hybrid, offeredRoles: ["DPS"] }] });
+    await selectIntoRoster(runA, hybrid);
+
+    const options = await signupService.getSignupOptions(target, runB);
+    const ineligible = options.booster.ineligible.find((item) => item.characterId === hybrid);
+    expect(ineligible?.reason).toBe("ALREADY_SELECTED_OTHER_RUN");
+    expect(options.booster.eligible.some((item) => item.characterId === hybrid)).toBe(false);
   });
 
   it("E: the target Run's own existing offer/roster state is never a conflict with itself", async () => {
