@@ -83,8 +83,13 @@ async function deleteIfPresent(table: string, id: string) {
   }
 }
 
+/** Each call advances by 3h so same-Character SELECTED fixtures never collide under the 2h cross-run reservation window. */
+let attendanceScheduleSlot = 0;
 function futureIso(days = 10) {
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  const slot = attendanceScheduleSlot++;
+  return new Date(
+    Date.now() + days * 24 * 60 * 60 * 1000 + slot * 3 * 60 * 60 * 1000,
+  ).toISOString();
 }
 
 async function createCharacter(input: {
