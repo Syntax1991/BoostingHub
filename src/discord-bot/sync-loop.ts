@@ -2,7 +2,13 @@ import { ChannelType, type CategoryChannel, type Client, type MessageEditOptions
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
-import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
+import {
+  buildSignupButtons,
+  buildSignupEmbeds,
+  decodeSignupMessageIds,
+  encodeSignupMessageIds,
+  SIGNUP_POST_MESSAGE_COUNT,
+} from "@/discord-bot/embeds/signup-embed";
 import { resolveGuildClassIndicators } from "@/discord-bot/class-emoji-lookup";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
@@ -375,27 +381,62 @@ async function syncSignupPost(
   const section = createdSectionItem(item, channelId, created);
 
   try {
-    const embed = buildSignupEmbed(data);
+    const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
+    const [summary, signups, picked] = buildSignupEmbeds(data, { classIndicators });
     const row = buildSignupButtons(data);
+    const payloads: MessageEditOptions[] = [
+      { embeds: [summary], components: [row] },
+      { embeds: [signups], components: [] },
+      { embeds: [picked], components: [] },
+    ];
 
-    if (item.existingMessageId) {
-      const edited = await tryEditMessage(client, channelId, item.existingMessageId, {
-        embeds: [embed],
-        components: [row],
-      });
-      if (edited) {
-        await api.recordDiscordState(data.runId, { kind: "signup", channelId, messageId: item.existingMessageId });
+    const existingIds = decodeSignupMessageIds(item.existingMessageId);
+    if (existingIds.length === SIGNUP_POST_MESSAGE_COUNT) {
+      const editedFlags = await Promise.all(
+        existingIds.map((messageId, index) =>
+          tryEditMessage(client, channelId, messageId, payloads[index]!),
+        ),
+      );
+      if (editedFlags.every(Boolean)) {
+        await api.recordDiscordState(data.runId, {
+          kind: "signup",
+          channelId,
+          messageId: encodeSignupMessageIds(existingIds),
+        });
         return section;
       }
-      // The stored message is gone (deleted in Discord) — fall through and repost.
+      // One or more stored messages are gone — fall through and repost the set.
     }
 
     const channel = await client.channels.fetch(channelId);
     if (!channel?.isTextBased() || !("send" in channel)) {
       return section;
     }
-    const message = await channel.send({ embeds: [embed], components: [row] });
-    await api.recordDiscordState(data.runId, { kind: "signup", channelId: message.channelId, messageId: message.id });
+
+    // Best-effort cleanup of stale single-message or partial multi-message posts.
+    for (const staleId of existingIds) {
+      try {
+        const stale = await channel.messages.fetch(staleId);
+        await stale.delete();
+      } catch {
+        // Missing/stale ids are fine — we are about to post a fresh set.
+      }
+    }
+
+    const sentIds: string[] = [];
+    for (let index = 0; index < payloads.length; index += 1) {
+      const payload = payloads[index]!;
+      const message = await channel.send({
+        embeds: payload.embeds,
+        components: payload.components,
+      });
+      sentIds.push(message.id);
+    }
+    await api.recordDiscordState(data.runId, {
+      kind: "signup",
+      channelId: channelId,
+      messageId: encodeSignupMessageIds(sentIds),
+    });
   } catch (error) {
     // Channel identity is already persisted; message work retries next poll.
     // Still return `section` so same-pass CURRENT/NEXT positioning includes

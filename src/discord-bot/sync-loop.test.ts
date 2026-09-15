@@ -54,6 +54,10 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
       dps: { signed: 0, picked: 0, target: 14 },
       lootbuddy: { signed: 0, picked: 0 },
     },
+    members: {
+      signed: { tanks: [], healers: [], dps: [], lootbuddies: [] },
+      picked: { tanks: [], healers: [], dps: [], lootbuddies: [] },
+    },
   };
 }
 
@@ -531,6 +535,7 @@ function makeDiscordClient(
   }
 
   function toDiscordChannel(child: Child, sendFails: boolean) {
+    let sendSeq = 0;
     return {
       id: child.id,
       name: child.name,
@@ -540,7 +545,10 @@ function makeDiscordClient(
       isTextBased: () => true,
       send: sendFails
         ? vi.fn().mockRejectedValue(new Error("send failed"))
-        : vi.fn().mockResolvedValue({ id: `msg-${child.id}`, channelId: child.id }),
+        : vi.fn().mockImplementation(async () => {
+            sendSeq += 1;
+            return { id: `msg-${child.id}-${sendSeq}`, channelId: child.id };
+          }),
       setName: vi.fn().mockResolvedValue(undefined),
       setParent: vi.fn().mockResolvedValue(undefined),
       messages: {
@@ -619,6 +627,10 @@ function makeDiscordClient(
     },
     guilds: {
       fetch: vi.fn(async () => ({
+        emojis: {
+          fetch: vi.fn(async () => undefined),
+          cache: new Collection(),
+        },
         channels: {
           cache: guildChannelCache,
           setPositions,

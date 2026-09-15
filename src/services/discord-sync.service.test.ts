@@ -392,6 +392,8 @@ describe("discordSyncService.getSignupEmbedData", () => {
     let embed = await discordSyncService.getSignupEmbedData(freezeRunId);
     expect(embed?.roleStatus.healer.picked).toBe(1);
     expect(embed?.roleStatus.dps.picked).toBe(0);
+    expect(embed?.members.picked.healers).toHaveLength(1);
+    expect(embed?.members.picked.dps).toHaveLength(0);
 
     view = await rosterService.getRosterManagementView(lead, freezeRunId);
     await rosterService.preparePublishedRosterForEditing(lead, {
@@ -408,6 +410,8 @@ describe("discordSyncService.getSignupEmbedData", () => {
     embed = await discordSyncService.getSignupEmbedData(freezeRunId);
     expect(embed?.roleStatus.healer.picked).toBe(1);
     expect(embed?.roleStatus.dps.picked).toBe(0);
+    expect(embed?.members.picked.healers).toHaveLength(1);
+    expect(embed?.members.picked.dps).toHaveLength(0);
 
     view = await rosterService.getRosterManagementView(lead, freezeRunId);
     await rosterService.publishRoster(lead, {
@@ -418,6 +422,8 @@ describe("discordSyncService.getSignupEmbedData", () => {
     embed = await discordSyncService.getSignupEmbedData(freezeRunId);
     expect(embed?.roleStatus.healer.picked).toBe(0);
     expect(embed?.roleStatus.dps.picked).toBe(1);
+    expect(embed?.members.picked.healers).toHaveLength(0);
+    expect(embed?.members.picked.dps).toHaveLength(1);
   });
 
   it("OPEN/ROSTERING: multi-role offers count in each signed role, but draft picked uses only selectedRole", async () => {
@@ -469,11 +475,17 @@ describe("discordSyncService.getSignupEmbedData", () => {
       role: "DPS",
     });
 
-    let embed = await discordSyncService.getSignupEmbedData(hybridRunId);
+    let     embed = await discordSyncService.getSignupEmbedData(hybridRunId);
     expect(embed?.uniqueSignupCount).toBe(3);
     expect(embed?.roleStatus.tank.signed).toBe(1);
     expect(embed?.roleStatus.healer.signed).toBe(2);
     expect(embed?.roleStatus.dps.signed).toBe(1);
+    expect(embed?.members.signed.tanks).toHaveLength(1);
+    expect(embed?.members.signed.healers).toHaveLength(2);
+    expect(embed?.members.signed.dps).toHaveLength(1);
+    expect(embed?.roleStatus.tank.signed).toBe(embed?.members.signed.tanks.length);
+    expect(embed?.roleStatus.healer.signed).toBe(embed?.members.signed.healers.length);
+    expect(embed?.roleStatus.dps.signed).toBe(embed?.members.signed.dps.length);
     // Projected role offers sum to 4 — must not become unique users.
     expect(embed?.uniqueSignupCount).not.toBe(
       (embed?.roleStatus.tank.signed ?? 0) +
@@ -491,6 +503,8 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.tank.picked).toBe(0);
     expect(embed?.roleStatus.healer.picked).toBe(1);
     expect(embed?.roleStatus.dps.picked).toBe(0);
+    expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.picked.healers.filter((m) => m.signupId === hybridSignupId)).toHaveLength(1);
 
     view = await rosterService.getRosterManagementView(lead, hybridRunId);
     await rosterService.saveDraftSelection(lead, {
@@ -501,6 +515,8 @@ describe("discordSyncService.getSignupEmbedData", () => {
     embed = await discordSyncService.getSignupEmbedData(hybridRunId);
     expect(embed?.roleStatus.tank.picked).toBe(1);
     expect(embed?.roleStatus.healer.picked).toBe(0);
+    expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
+    expect(embed?.members.picked.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
   });
 });
 

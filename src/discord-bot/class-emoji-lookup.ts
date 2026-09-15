@@ -4,7 +4,8 @@ import type { WowClass } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
 
 /**
- * Resolve Guild custom class emojis once per Final Setup sync.
+ * Resolve Guild custom class emojis once per Discord sync render that needs them
+ * (Final Setup and Signup Embed).
  * Maps WowClass → Discord custom-emoji markup (<:name:id> / <a:name:id>).
  * Missing guild emojis are omitted so the formatter falls back to class labels.
  */
