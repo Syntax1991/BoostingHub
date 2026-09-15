@@ -50,8 +50,8 @@ export function buildSignupEmbed(data: SignupEmbedData): EmbedBuilder {
       { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
       { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
       { name: "Bosses", value: `${data.plannedBossCount}/${data.totalBossCount}`, inline: true },
-      { name: "Signups by role", value: formatSignupsByRole(data), inline: true },
-      { name: "Picked", value: formatPicked(data), inline: true },
+      { name: "Signups by role", value: formatSignupsByRole(data), inline: false },
+      { name: "Picked", value: formatPicked(data), inline: false },
     )
     .setColor(data.signupWindowOpen ? 0xd4af37 : 0x555555)
     .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });

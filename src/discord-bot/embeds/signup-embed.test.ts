@@ -25,13 +25,18 @@ const base: SignupEmbedData = {
 };
 
 describe("buildSignupEmbed", () => {
-  it("splits offered and picked role counts into separate inline fields", () => {
+  it("splits offered and picked role counts into full-width stacked fields", () => {
     const embed = buildSignupEmbed(base).toJSON();
-    const signupsByRole = embed.fields?.find((field) => field.name === "Signups by role");
-    const picked = embed.fields?.find((field) => field.name === "Picked");
+    const fields = embed.fields ?? [];
+    const signupsByRoleIndex = fields.findIndex((field) => field.name === "Signups by role");
+    const pickedIndex = fields.findIndex((field) => field.name === "Picked");
+    const signupsByRole = fields[signupsByRoleIndex];
+    const picked = fields[pickedIndex];
 
-    expect(signupsByRole?.inline).toBe(true);
-    expect(picked?.inline).toBe(true);
+    expect(signupsByRoleIndex).toBeGreaterThanOrEqual(0);
+    expect(pickedIndex).toBe(signupsByRoleIndex + 1);
+    expect(signupsByRole?.inline).toBe(false);
+    expect(picked?.inline).toBe(false);
 
     expect(signupsByRole?.value).toContain("Tanks");
     expect(signupsByRole?.value).toContain("Healers");
