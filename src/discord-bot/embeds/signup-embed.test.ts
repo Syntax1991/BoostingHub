@@ -34,6 +34,8 @@ function emptyData(overrides: Partial<SignupEmbedData> = {}): SignupEmbedData {
     runTitle: "Weekend Heroic Catch-up",
     raidId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     raidName: "Manaforge Omega",
+    productLabel: "Manaforge Omega",
+    contentSummary: "Manaforge Omega 7/9",
     difficulty: "HEROIC",
     lootType: "VIP",
     plannedBossCount: 7,
@@ -415,10 +417,10 @@ describe("buildSignupEmbed", () => {
     expect(json.footer?.text).toMatch(/closed/i);
   });
 
-  it("shows the loot type and boss coverage", () => {
+  it("shows the loot type and content summary", () => {
     const fields = buildSignupEmbed(emptyData()).toJSON().fields ?? [];
     expect(fields.find((field) => field.name === "Loot")?.value).toBe("VIP");
-    expect(fields.find((field) => field.name === "Bosses")?.value).toBe("7/9");
+    expect(fields.find((field) => field.name === "Content")?.value).toBe("Manaforge Omega 7/9");
   });
 });
 

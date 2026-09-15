@@ -8,6 +8,8 @@ import type { RunStartEmbedData } from "@/services/discord-sync.service";
 export function toFinalSetupInput(data: RunStartEmbedData): FinalSetupInput {
   return {
     raidName: data.raidName,
+    productLabel: data.productLabel,
+    contentSummary: data.contentSummary,
     difficulty: data.difficulty,
     lootType: data.lootType,
     targets: data.targets,

@@ -40,6 +40,8 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
     runTitle: "Test Run",
     raidId: "raid-1",
     raidName: "The Venomous Abyss",
+    productLabel: "The Venomous Abyss",
+    contentSummary: "The Venomous Abyss 8/8",
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     plannedBossCount: 8,

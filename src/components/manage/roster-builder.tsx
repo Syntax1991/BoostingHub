@@ -25,7 +25,7 @@ import {
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
-import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
+import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
@@ -46,17 +46,12 @@ function signupDisplayName(signup: SignupRow): string {
   return wowClass ? CLASS_LABELS[wowClass] : "Unknown character";
 }
 
-function boosterLockoutLabel(
-  signup: SignupRow,
-  run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">,
-): ReturnType<typeof formatTargetRaidLockoutLabel> | null {
-  if (signup.participationType !== "BOOSTER" || !signup.character) return null;
-  return formatTargetRaidLockoutLabel({
-    difficulty: run.difficulty,
-    totalBossCount: run.totalBossCount,
-    raidSave: signup.raidSave,
-    lootType: run.lootType,
-  });
+function boosterLockoutLines(signup: SignupRow): string[] {
+  if (signup.participationType !== "BOOSTER" || !signup.character) return [];
+  if (signup.contentSaves?.length) {
+    return formatContentLockoutLines(signup.contentSaves);
+  }
+  return [];
 }
 
 /** Canonical unique BOOSTERs + lootbuddies — never flatten role projections. */
@@ -316,7 +311,9 @@ function RosterBuilderEditor({
       <Card>
         <CardHeader
           title={data.run.title}
-          description={`${data.run.raidName} · ${formatDateTime(data.run.scheduledStartAt)} · Lead ${data.run.raidLeadName}`}
+          description={`${data.run.productLabel ?? data.run.raidName}${
+            data.run.contentSummary ? ` · ${data.run.contentSummary}` : ""
+          } · ${formatDateTime(data.run.scheduledStartAt)} · Lead ${data.run.raidLeadName}`}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <DifficultyBadge difficulty={data.run.difficulty} />
@@ -394,7 +391,6 @@ function RosterBuilderEditor({
         title="Tanks"
         empty="No tank signups"
         signups={filteredTanks}
-        run={data.run}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -406,7 +402,6 @@ function RosterBuilderEditor({
         title="Healers"
         empty="No healer signups"
         signups={filteredHealers}
-        run={data.run}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -418,7 +413,6 @@ function RosterBuilderEditor({
         title="DPS"
         empty="No DPS signups"
         signups={filteredDps}
-        run={data.run}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -430,7 +424,6 @@ function RosterBuilderEditor({
         title="Lootbuddies"
         empty="No lootbuddy signups"
         signups={filteredLootbuddies}
-        run={data.run}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -566,7 +559,6 @@ function SignupSection({
   title,
   empty,
   signups,
-  run,
   editing,
   locked,
   isRoleCopyChecked,
@@ -577,7 +569,6 @@ function SignupSection({
   title: string;
   empty: string;
   signups: SignupRow[];
-  run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   locked: boolean;
   isRoleCopyChecked: (signup: SignupRow) => boolean;
@@ -601,7 +592,6 @@ function SignupSection({
                   <SignupRowCard
                     key={`${signup.id}:${signup.groupRole ?? "lootbuddy"}`}
                     signup={signup}
-                    run={run}
                     editing={editing}
                     locked={locked}
                     selected={isRoleCopyChecked(signup)}
@@ -621,7 +611,6 @@ function SignupSection({
 
 function SignupRowCard({
   signup,
-  run,
   editing,
   locked,
   selected,
@@ -630,7 +619,6 @@ function SignupRowCard({
   onAssignRole,
 }: {
   signup: SignupRow;
-  run: Pick<RosterView["run"], "difficulty" | "totalBossCount" | "lootType">;
   editing: boolean;
   locked: boolean;
   selected: boolean;
@@ -641,7 +629,8 @@ function SignupRowCard({
   const checkboxId = `signup-${signup.id}-${signup.groupRole ?? "lootbuddy"}`;
   const character = signup.character;
   const displayClass = lootbuddyDisplayClass(signup);
-  const lockout = boosterLockoutLabel(signup, run);
+  const lockoutLines = boosterLockoutLines(signup);
+  const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
   const disabled = !editing || locked || signup.status === "WITHDRAWN";
   const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
   return (
@@ -685,8 +674,10 @@ function SignupRowCard({
                 : ""}
             </span>
           ) : null}
-          {lockout ? (
-            <span className={lockout.attention ? "text-warning" : undefined}>{lockout.text}</span>
+          {lockoutLines.length > 0 ? (
+            <span className={lockoutAttention ? "text-warning" : undefined}>
+              {lockoutLines.join(" · ")}
+            </span>
           ) : null}
         </span>
         {selected && needsRoleChoice ? (

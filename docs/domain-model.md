@@ -90,11 +90,14 @@ Verified `0/N` (a `CharacterRaidLockout` row with `bossesDefeated = 0`) means **
 
 ## Run
 
-- title, raid, difficulty, loot type, scheduled start (UTC)
+- title, difficulty, loot type, scheduled start (UTC)
 - status, raid lead, notes
 - desired tank / healer / DPS counts
-- planned boss count
 - `signupsOpen`
+- **Authoritative multi-raid contents:** ordered `RunRaidContent` rows (`Run.contents`) — each row is one real raid instance with its own `plannedBossCount` / boss total. Product labels and UI/Discord summaries are projected from these rows (`projectRunContentDisplay`). Never sum bosses across contents into a fake aggregate (e.g. Bundle is `Nymrissa 1/1 · The Venomous Abyss 8/8`, never `9/9`).
+- **Compatibility-only singular columns:** `Run.raidId` and `Run.plannedBossCount` remain for transitional writers (title derivation, Discord channel naming mirror, templates). They are **not** the source of truth for run-content domain logic. For Season 2 Bundle they mirror the Venomous slot.
+
+Commercial Create products (`VENOMOUS_ABYSS`, `MIDNIGHT_S2_BUNDLE`) expand into contents at create/edit time. Standalone Tidebound/Nymrissa is reference content only — not a Create product.
 
 ### Derived title (no manual title entry)
 
@@ -118,7 +121,14 @@ A raid is never deleted when superseded — `RaidRecord.availableForRuns` (catal
 
 ### Discord channel naming
 
-Discord run-channel names are derived from the same structured fields as the title — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{planned}of{total}-{raidLead}`, e.g. `thu-2100-hc-vip-7of9-titan`. Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`), so an invalid state like `my-saved` can never render. Any change to a naming-source field (schedule, difficulty, loot type, planned boss count, or raid lead) renames the Run's existing Discord channel in place — the bot never creates a replacement channel or reposts existing messages for a rename.
+Discord run-channel names are derived from structured Run fields — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`, e.g. `thu-2100-hc-vip-7of9-titan`.
+
+Coverage:
+
+- single-raid Runs: `{planned}of{total}` (legacy mirror / primary content)
+- Season 2 Bundle: `s2b-{venomousPlanned}of8` — never `9of9`
+
+Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`). Any change to a naming-source field renames the Run's existing Discord channel in place.
 
 Run statuses:
 

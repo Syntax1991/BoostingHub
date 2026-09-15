@@ -27,6 +27,8 @@ function participant(
 function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput {
   return {
     raidName: "Venomous Abyss",
+    productLabel: "The Venomous Abyss",
+    contentSummary: "The Venomous Abyss 8/8",
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     targets: { tanks: 2, healers: 2, dps: 8 },
@@ -113,6 +115,8 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
     runId: "run-1",
     runTitle: "Thu 19:00 HC Unsaved 8/8 Lead",
     raidName: input.raidName,
+    productLabel: input.productLabel ?? input.raidName,
+    contentSummary: input.contentSummary ?? "",
     difficulty: input.difficulty,
     lootType: input.lootType,
     scheduledStartAt: "2026-09-18T17:00:00.000Z",

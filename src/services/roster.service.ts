@@ -19,8 +19,13 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
-import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus, WowClass } from "@/models/enums";
+import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, RunStatus, SignupStatus, WowClass } from "@/models/enums";
 import type { SignupRaidSaveInfo } from "@/models/records";
+import {
+  projectRunContentLockouts,
+  type RunContentRaidSaveInfo,
+} from "@/lib/run-content-lockouts";
+import type { RunRaidContentRecord } from "@/repositories/run.repository";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 
@@ -28,8 +33,10 @@ type InspectedSignup = RosterSignupRow & {
   draftSelected: boolean;
   characterActive: boolean;
   boosterApproved: boolean;
-  /** Informational only — never a roster blocker. See signup-eligibility.ts. */
+  /** @deprecated Prefer `contentSaves`. */
   raidSave: SignupRaidSaveInfo | null;
+  /** Informational per-content lockouts — never roster blockers. */
+  contentSaves: RunContentRaidSaveInfo[];
   issue: string | null;
 };
 
@@ -125,20 +132,52 @@ function resolveSelectedRole(
 
 function inspectSignup(
   signup: RosterSignupRow,
-  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number; scheduledStartAt: string },
+  run: {
+    raidId: string;
+    difficulty: RaidDifficulty;
+    totalBossCount: number;
+    scheduledStartAt: string;
+    lootType: RunLootType;
+    contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
+  },
 ): Omit<InspectedSignup, "draftSelected"> {
   const character = signup.character;
-  const matchingLockout =
+  const contents =
+    run.contents.length > 0
+      ? run.contents
+      : [
+          {
+            raidId: run.raidId,
+            raidName: "Raid",
+            sortOrder: 1,
+            plannedBossCount: run.totalBossCount,
+            totalBossCount: run.totalBossCount,
+          },
+        ];
+  const contentSaves =
     character == null
-      ? null
-      : lockoutService.findExactLockout(character.lockouts, {
-          raidId: run.raidId,
+      ? projectRunContentLockouts({
+          contents,
           difficulty: run.difficulty,
-          resetIdentifier: lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt),
+          lootType: run.lootType,
+          findSave: () => null,
+        })
+      : projectRunContentLockouts({
+          contents,
+          difficulty: run.difficulty,
+          lootType: run.lootType,
+          findSave: (content) => {
+            const matchingLockout = lockoutService.findExactLockout(character.lockouts, {
+              raidId: content.raidId,
+              difficulty: run.difficulty,
+              resetIdentifier: lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt),
+            });
+            return matchingLockout
+              ? lockoutService.toRaidSaveInfo(matchingLockout, content.totalBossCount)
+              : null;
+          },
         });
-  const raidSave: SignupRaidSaveInfo | null = matchingLockout
-    ? lockoutService.toRaidSaveInfo(matchingLockout, run.totalBossCount)
-    : null;
+  const raidSave = contentSaves[0]?.raidSave ?? null;
   const boosterApproved =
     signup.participationType !== "BOOSTER" || signup.offeredRoles.length === 0 || !character
       ? signup.participationType !== "BOOSTER"
@@ -164,6 +203,7 @@ function inspectSignup(
     characterActive,
     boosterApproved,
     raidSave,
+    contentSaves,
     issue,
   };
 }
@@ -315,6 +355,8 @@ export const rosterService = {
         id: run.id,
         title: run.title,
         raidName: run.raidName,
+        productLabel: run.contentDisplay.productLabel,
+        contentSummary: run.contentDisplay.summary,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,

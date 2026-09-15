@@ -2,6 +2,7 @@ import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   findRaidCatalogById,
+  raidContentDisplayName,
 } from "@/lib/wow-raid-catalog";
 
 /**
@@ -140,8 +141,7 @@ function bossSegment(name: string, planned: number, total: number): string {
 }
 
 function contentDisplayName(raidId: string, raidName: string): string {
-  if (raidId === TIDEBOUND_GROTTO_RAID_ID) return "Nymrissa";
-  return raidName;
+  return raidContentDisplayName(raidId, raidName);
 }
 
 export function projectRunContentDisplay(

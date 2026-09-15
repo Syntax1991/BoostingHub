@@ -8,6 +8,8 @@ function sampleData(): RunStartEmbedData {
     runId: "run-1",
     runTitle: "Thu 19:00 HC Unsaved 8/8 Lead",
     raidName: "Venomous Abyss",
+    productLabel: "The Venomous Abyss",
+    contentSummary: "The Venomous Abyss 8/8",
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     scheduledStartAt: "2026-09-18T17:00:00.000Z",
@@ -59,6 +61,8 @@ describe("renderRunStartMessageText", () => {
       renderFinalSetupText(
         {
           raidName: "Venomous Abyss",
+          productLabel: "The Venomous Abyss",
+          contentSummary: "The Venomous Abyss 8/8",
           difficulty: "HEROIC",
           lootType: "UNSAVED",
           targets: { tanks: 2, healers: 2, dps: 8 },

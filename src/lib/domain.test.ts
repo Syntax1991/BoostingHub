@@ -164,6 +164,7 @@ describe("lockout summaries", () => {
   it("flags incomplete progress and complete lockouts as attention items", () => {
     const summary = lockoutService.summarize([
       {
+        raidId: "raid-1",
         raid: { name: "Manaforge Omega" },
         difficulty: "HEROIC",
         resetIdentifier: "2026-W37",
@@ -171,6 +172,7 @@ describe("lockout summaries", () => {
         bossesDefeated: 3,
       },
       {
+        raidId: "raid-1",
         raid: { name: "Manaforge Omega" },
         difficulty: "MYTHIC",
         resetIdentifier: "2026-W37",

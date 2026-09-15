@@ -1,6 +1,10 @@
 import { db, orm } from "@/lib/prisma";
 import { DomainError } from "@/lib/errors";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
+import {
+  projectRunContentDisplay,
+  type RunContentDisplay,
+} from "@/lib/run-content-presets";
 import type {
   RaidDifficulty,
   RunLootType,
@@ -63,6 +67,7 @@ export type RosterSelectionOnRun = {
 export type RunListRecord = {
   id: string;
   title: string;
+  /** Transitional singular mirror — prefer `contents` / `contentDisplay` for domain UI. */
   raidId: string;
   raidName: string;
   season: string;
@@ -76,8 +81,13 @@ export type RunListRecord = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Transitional singular mirror — Venomous primary for Bundles. */
   plannedBossCount: number;
   totalBossCount: number;
+  /** Authoritative ordered raid contents for this Run. */
+  contents: RunRaidContentRecord[];
+  /** Pure display projection from persisted contents (never regenerated from presets). */
+  contentDisplay: RunContentDisplay;
   signupsOpen: boolean;
   archivedAt: string | null;
   archivedById: string | null;
@@ -194,6 +204,11 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
   const roster = run.roster ? (run.roster as Record<string, unknown>) : null;
   const rosterEntries = roster && Array.isArray(roster.entries) ? roster.entries : [];
   const raidBosses = Array.isArray(raid.bosses) ? raid.bosses : [];
+  const contentRows = Array.isArray(run.contents) ? run.contents : [];
+  const contents = contentRows
+    .map((row) => mapRaidContent(row as Record<string, unknown>))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const contentDisplay = projectRunContentDisplay(contents);
 
   return {
     id: asString(run.id),
@@ -213,6 +228,8 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     desiredDpsCount: asNumber(run.desiredDpsCount),
     plannedBossCount: asNumber(run.plannedBossCount),
     totalBossCount: raidBosses.length,
+    contents,
+    contentDisplay,
     signupsOpen: asBoolean(run.signupsOpen),
     archivedAt: asStringOrNull(run.archivedAt),
     archivedById: asStringOrNull(run.archivedById),
@@ -263,10 +280,12 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
 }
 
 
+
 export const runRepository = {
   async listUpcoming(filters: RunListFilters = {}): Promise<RunListRecord[]> {
     let query = orm.Run
       .include("raid", (raid) => raid.include("bosses"))
+      .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
       .include("roster", (roster) => roster.include("entries"))
@@ -290,6 +309,7 @@ export const runRepository = {
     const run = await orm.Run
       .where({ id })
       .include("raid", (raid) => raid.include("bosses"))
+      .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
       .include("roster", (roster) => roster.include("entries"))
@@ -309,6 +329,7 @@ export const runRepository = {
   async listManaged(): Promise<RunListRecord[]> {
     const runs = await orm.Run
       .include("raid", (raid) => raid.include("bosses"))
+      .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
       .include("roster", (roster) => roster.include("entries"))

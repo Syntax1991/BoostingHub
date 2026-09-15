@@ -3,10 +3,12 @@ import { DEFAULT_TIME_ZONE, zonedParts } from "@/lib/datetime";
 import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
 
 /**
- * Discord raid-channel naming: `{weekday}-{HHMM}-{difficulty}-{lootType}-{planned}of{total}-{raidLead}`
- * (e.g. `sat-2300-hc-vip-7of9-titan`), all computed from the same structured
- * Run fields the derived title uses — never a raw concatenation of
- * user-provided strings, and never parsed from `Run.title`.
+ * Discord raid-channel naming:
+ * `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`
+ *
+ * Coverage:
+ * - single-raid Runs: `{planned}of{total}` (existing behavior)
+ * - Season 2 Bundle: `s2b-{venomous}of8` (never 9of9)
  */
 export type RunChannelNameInput = {
   scheduledStartAt: string;
@@ -16,6 +18,11 @@ export type RunChannelNameInput = {
   totalBossCount: number;
   raidLeadName: string;
   timeZone?: string;
+  /**
+   * When true, encode Bundle coverage as `s2b-{venomousPlanned}of8` using
+   * plannedBossCount as the Venomous slot (legacy mirror).
+   */
+  season2Bundle?: boolean;
 };
 
 /** Discord text channel names are capped at 100 characters. */
@@ -45,7 +52,9 @@ export function buildDiscordRunChannelName(input: RunChannelNameInput): string {
   const hhmm = `${String(parts.hour).padStart(2, "0")}${String(parts.minute).padStart(2, "0")}`;
   const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty].toLowerCase();
   const lootType = input.lootType.toLowerCase();
-  const bossCoverage = `${input.plannedBossCount}of${input.totalBossCount}`;
+  const bossCoverage = input.season2Bundle
+    ? `s2b-${input.plannedBossCount}of8`
+    : `${input.plannedBossCount}of${input.totalBossCount}`;
   const raidLead = slugSegment(input.raidLeadName);
 
   const segments = [weekday, hhmm, difficulty, lootType, bossCoverage, raidLead].filter(

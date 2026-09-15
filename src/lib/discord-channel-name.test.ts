@@ -74,4 +74,31 @@ describe("buildDiscordRunChannelName", () => {
     expect(name.length).toBeLessThanOrEqual(100);
     expect(name.endsWith("-")).toBe(false);
   });
+
+  it("encodes Season 2 Bundle coverage as s2b-Nof8, never 9of9", () => {
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        plannedBossCount: 8,
+        totalBossCount: 8,
+        season2Bundle: true,
+      }),
+    ).toBe("sat-2200-hc-vip-s2b-8of8-titan");
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        plannedBossCount: 6,
+        totalBossCount: 8,
+        season2Bundle: true,
+      }),
+    ).toContain("s2b-6of8");
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        plannedBossCount: 8,
+        totalBossCount: 9,
+        season2Bundle: true,
+      }),
+    ).not.toContain("9of9");
+  });
 });

@@ -3,7 +3,7 @@ import type { WowClass, WowRegion } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
-import { getCurrentLockoutRaid, getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
+import { getCurrentLockoutRaid, getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import {
   isValidCharacterName,
   isValidRealmName,
@@ -101,18 +101,23 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
     const characters = await characterRepository.listByUserId(user.id);
+    const currentRaids = getCurrentLockoutRaids();
     const currentRaid = getCurrentLockoutRaid();
-    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
-    const bossTotal = defaultRaidBossTotal(currentRaid?.id);
+    const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
 
     return {
       currentResetByRegion: {
         EU: getRegionalWeeklyReset("EU").resetIdentifier,
         US: getRegionalWeeklyReset("US").resetIdentifier,
       },
+      /** @deprecated Prefer `currentLockoutRaids` — singular Venomous preference for transitional callers. */
       currentLockoutRaid: currentRaid
-        ? { id: currentRaid.id, name: currentRaid.name }
+        ? { id: currentRaid.id, name: raidContentDisplayName(currentRaid.id, currentRaid.name) }
         : null,
+      currentLockoutRaids: currentRaids.map((raid) => ({
+        id: raid.id,
+        name: raidContentDisplayName(raid.id, raid.name),
+      })),
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
       characters: characters.map((character) => {
@@ -127,7 +132,8 @@ export const characterService = {
           )
           .map((lockout) => ({
             ...lockout,
-            bossTotal,
+            raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
+            bossTotal: defaultRaidBossTotal(lockout.raidId),
             verified: true,
           }));
 
@@ -162,9 +168,9 @@ export const characterService = {
     assertOwned(user, character);
 
     const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
+    const currentRaids = getCurrentLockoutRaids();
     const currentRaid = getCurrentLockoutRaid();
-    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
-    const bossTotal = defaultRaidBossTotal(currentRaid?.id);
+    const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const currentLockouts = lockoutService
       .summarize(
         character.lockouts.filter(
@@ -174,7 +180,8 @@ export const characterService = {
       )
       .map((lockout) => ({
         ...lockout,
-        bossTotal,
+        raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
+        bossTotal: defaultRaidBossTotal(lockout.raidId),
         verified: true,
       }));
 
@@ -200,9 +207,14 @@ export const characterService = {
         character.boosterQualifications,
       ),
       currentReset,
+      /** @deprecated Prefer `currentLockoutRaids`. */
       currentLockoutRaid: currentRaid
-        ? { id: currentRaid.id, name: currentRaid.name }
+        ? { id: currentRaid.id, name: raidContentDisplayName(currentRaid.id, currentRaid.name) }
         : null,
+      currentLockoutRaids: currentRaids.map((raid) => ({
+        id: raid.id,
+        name: raidContentDisplayName(raid.id, raid.name),
+      })),
       lockouts: currentLockouts,
     };
   },

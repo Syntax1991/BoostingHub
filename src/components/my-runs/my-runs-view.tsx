@@ -89,6 +89,8 @@ type RunGroup = {
   runId: string;
   runTitle: string;
   raidName: string;
+  productLabel?: string;
+  contentSummary?: string;
   difficulty: SignupItem["difficulty"];
   scheduledStartAt: string;
   participationTypes: Array<SignupItem["participationType"]>;
@@ -108,6 +110,8 @@ function groupByRun(items: SignupItem[]): RunGroup[] {
         runId: item.runId,
         runTitle: item.runTitle,
         raidName: item.raidName,
+        productLabel: item.productLabel,
+        contentSummary: item.contentSummary,
         difficulty: item.difficulty,
         scheduledStartAt: item.scheduledStartAt,
         participationTypes: [],
@@ -153,7 +157,10 @@ function SignupTable({ items }: { items: SignupItem[] }) {
                     {group.runTitle}
                   </Link>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                    <span className="max-w-[160px] truncate">{group.raidName}</span>
+                    <span className="max-w-[200px] truncate">
+                      {group.productLabel ?? group.raidName}
+                      {group.contentSummary ? ` · ${group.contentSummary}` : ""}
+                    </span>
                     <DifficultyBadge difficulty={group.difficulty} />
                   </div>
                 </td>

@@ -132,6 +132,8 @@ export const runDetailService = {
       title: run.title,
       raidId: run.raidId,
       raidName: run.raidName,
+      productLabel: run.contentDisplay.productLabel,
+      contentSummary: run.contentDisplay.summary,
       season: run.season,
       difficulty: run.difficulty,
       lootType: run.lootType,
@@ -169,6 +171,8 @@ export const runDetailService = {
       if (selectedSignups.length > 0) {
         finalSetupPreview = {
           raidName: run.raidName,
+          productLabel: run.contentDisplay.productLabel,
+          contentSummary: run.contentDisplay.summary,
           difficulty: run.difficulty,
           lootType: run.lootType,
           targets: {

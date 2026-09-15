@@ -185,7 +185,7 @@ export function buildSignupEmbed(
 ): EmbedBuilder {
   const classIndicators = options?.classIndicators;
   const color = data.signupWindowOpen ? 0xd4af37 : 0x555555;
-  const description = `${DIFFICULTY_LABELS[data.difficulty]} · ${data.raidName}`;
+  const description = `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
 
   return new EmbedBuilder()
     .setTitle(data.runTitle)
@@ -195,7 +195,7 @@ export function buildSignupEmbed(
       { name: "Signed users", value: String(data.uniqueSignupCount), inline: true },
       { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
       { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
-      { name: "Bosses", value: `${data.plannedBossCount}/${data.totalBossCount}`, inline: true },
+      { name: "Content", value: data.contentSummary, inline: true },
       { name: "Signups by role", value: SECTION_HEADING_VALUE, inline: false },
       ...buildRoleSectionFields(signedRoleColumns(data), classIndicators),
       { name: "Picked", value: SECTION_HEADING_VALUE, inline: false },

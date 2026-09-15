@@ -39,7 +39,10 @@ export function DashboardView({ data }: { data: DashboardData }) {
                           </Link>
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                          <span>{run.raidName}</span>
+                          <span>
+                            {run.productLabel ?? run.raidName}
+                            {run.contentSummary ? ` · ${run.contentSummary}` : ""}
+                          </span>
                           <DifficultyBadge difficulty={run.difficulty} />
                         </div>
                       </td>

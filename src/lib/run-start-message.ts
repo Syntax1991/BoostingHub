@@ -52,7 +52,10 @@ export type FinalSetupParticipant = {
 };
 
 export type FinalSetupInput = {
+  /** Prefer productLabel; kept for older callers. */
   raidName: string;
+  productLabel?: string;
+  contentSummary?: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   targets: {
@@ -118,7 +121,10 @@ export function groupFinalSetupParticipants(members: FinalSetupParticipant[]): F
  * No React / discord.js / browser APIs.
  */
 export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRenderOptions): FinalSetupMessage {
+  const product = data.productLabel ?? data.raidName;
+  const contentLine = data.contentSummary ? `\n${data.contentSummary}` : "";
   const body = [
+    `**${product}**${contentLine}`,
     roleSection("🛡", "Tanks", data.groups.tanks.length, data.targets.tanks, data.groups.tanks.map((m) => boosterLine(m, options))),
     roleSection("✚", "Healers", data.groups.healers.length, data.targets.healers, data.groups.healers.map((m) => boosterLine(m, options))),
     roleSection("⚔", "DPS", data.groups.dps.length, data.targets.dps, data.groups.dps.map((m) => boosterLine(m, options))),

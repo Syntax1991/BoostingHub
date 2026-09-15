@@ -2,11 +2,13 @@ import type { BoosterQualificationMatch, CharacterRunReservationConflict, Signup
 import type {
   CharacterRole,
   RaidDifficulty,
+  RunLootType,
   RunStatus,
   WowClass,
   WowRegion,
 } from "@/models/enums";
 import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
+import { projectRunContentLockouts, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -41,14 +43,24 @@ export type EligibilityCharacter = {
 
 export type EligibilityRun = {
   id: string;
+  /** @deprecated Prefer `contents` — transitional singular mirror only. */
   raidId: string;
   difficulty: RaidDifficulty;
   status: RunStatus;
   signupsOpen: boolean;
-  /** The target Run's raid's total boss count — needed only to render raid-save progress (e.g. "8/8"), never for eligibility. */
+  /** @deprecated Prefer per-content totals on `contents`. */
   totalBossCount: number;
   /** Used with each Character's region to resolve the regional WoW reset containing this instant. */
   scheduledStartAt: string;
+  lootType: RunLootType;
+  /** Authoritative ordered raid contents for lockout projection. */
+  contents: Array<{
+    raidId: string;
+    raidName: string;
+    sortOrder: number;
+    plannedBossCount: number;
+    totalBossCount: number;
+  }>;
 };
 
 export type BoosterIneligibilityReason =
@@ -75,11 +87,11 @@ export type EligibleBoosterOption = {
   /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
   defaultRole: CharacterRole | null;
   /**
-   * Informational verified lockout for the target Run's exact raid/difficulty
-   * and this Character's regional reset containing `scheduledStartAt`.
-   * Includes verified 0/x. Null means unknown/unverified — never affects eligibility.
+   * @deprecated Prefer `contentSaves` — singular mirror of the primary content only.
    */
   raidSave: SignupRaidSaveInfo | null;
+  /** Informational per-content lockouts for this Run — never eligibility blockers. */
+  contentSaves: RunContentRaidSaveInfo[];
 };
 
 export type IneligibleBoosterCharacter = {
@@ -95,21 +107,39 @@ export type IneligibleBoosterCharacter = {
 };
 
 /**
- * Verified lockout for the target Run's own raid/difficulty and the Character's
- * regional reset containing the Run schedule — including verified 0/x.
- * A different raid, difficulty, or reset is never surfaced. Informational only.
+ * Verified lockouts for every RunRaidContent on the target Run.
+ * Informational only — never eligibility blockers.
  */
-function findRaidSave(
+function findContentSaves(
   character: Pick<EligibilityCharacter, "lockouts" | "region">,
   run: EligibilityRun,
-): SignupRaidSaveInfo | null {
+): RunContentRaidSaveInfo[] {
+  const contents =
+    run.contents.length > 0
+      ? run.contents
+      : [
+          {
+            raidId: run.raidId,
+            raidName: "Raid",
+            sortOrder: 1,
+            plannedBossCount: run.totalBossCount,
+            totalBossCount: run.totalBossCount,
+          },
+        ];
   const resetIdentifier = lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt);
-  const lockout = lockoutService.findExactLockout(character.lockouts, {
-    raidId: run.raidId,
+  return projectRunContentLockouts({
+    contents,
     difficulty: run.difficulty,
-    resetIdentifier,
+    lootType: run.lootType,
+    findSave: (content) => {
+      const lockout = lockoutService.findExactLockout(character.lockouts, {
+        raidId: content.raidId,
+        difficulty: run.difficulty,
+        resetIdentifier,
+      });
+      return lockout ? lockoutService.toRaidSaveInfo(lockout, content.totalBossCount) : null;
+    },
   });
-  return lockout ? lockoutService.toRaidSaveInfo(lockout, run.totalBossCount) : null;
 }
 
 /**
@@ -185,6 +215,7 @@ export function evaluateBoosterOptions(
       ? roleForSpecialization(character.wowClass, character.specialization)
       : null;
 
+    const contentSaves = findContentSaves(character, run);
     eligible.push({
       characterId: character.id,
       characterName: character.name,
@@ -193,7 +224,8 @@ export function evaluateBoosterOptions(
       specialization: character.specialization,
       roles: rolesForClass(character.wowClass),
       defaultRole,
-      raidSave: findRaidSave(character, run),
+      raidSave: contentSaves[0]?.raidSave ?? null,
+      contentSaves,
     });
   }
 

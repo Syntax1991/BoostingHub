@@ -79,7 +79,12 @@ export type SignupEmbedData = {
   runId: string;
   runTitle: string;
   raidId: string;
+  /** Transitional singular mirror name — prefer `productLabel` / `contentSummary`. */
   raidName: string;
+  /** Commercial / classified product label (e.g. Season 2 Bundle). */
+  productLabel: string;
+  /** Ordered content summary — never an aggregated 9/9. */
+  contentSummary: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   plannedBossCount: number;
@@ -125,6 +130,8 @@ export type RosterEmbedData = {
   runId: string;
   runTitle: string;
   raidName: string;
+  productLabel: string;
+  contentSummary: string;
   difficulty: RaidDifficulty;
   publishedAt: string;
   version: number;
@@ -221,6 +228,8 @@ export type RunStartEmbedData = {
   runId: string;
   runTitle: string;
   raidName: string;
+  productLabel: string;
+  contentSummary: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
@@ -246,6 +255,7 @@ function desiredChannelNameFor(run: {
   plannedBossCount: number;
   totalBossCount: number;
   raidLeadName: string;
+  contentDisplay?: { productKey: string | null };
 }): string {
   return buildDiscordRunChannelName({
     scheduledStartAt: run.scheduledStartAt,
@@ -254,6 +264,7 @@ function desiredChannelNameFor(run: {
     plannedBossCount: run.plannedBossCount,
     totalBossCount: run.totalBossCount,
     raidLeadName: run.raidLeadName,
+    season2Bundle: run.contentDisplay?.productKey === "MIDNIGHT_S2_BUNDLE",
   });
 }
 
@@ -274,6 +285,8 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     runTitle: run.title,
     raidId: run.raidId,
     raidName: run.raidName,
+    productLabel: run.contentDisplay.productLabel,
+    contentSummary: run.contentDisplay.summary,
     difficulty: run.difficulty,
     lootType: run.lootType,
     plannedBossCount: run.plannedBossCount,
@@ -729,6 +742,8 @@ export const discordSyncService = {
       runId: run.id,
       runTitle: run.title,
       raidName: run.raidName,
+      productLabel: run.contentDisplay.productLabel,
+      contentSummary: run.contentDisplay.summary,
       difficulty: run.difficulty,
       publishedAt: run.roster.publishedAt,
       version: run.roster.version,
@@ -813,6 +828,8 @@ export const discordSyncService = {
       runId: run.id,
       runTitle: run.title,
       raidName: run.raidName,
+      productLabel: run.contentDisplay.productLabel,
+      contentSummary: run.contentDisplay.summary,
       difficulty: run.difficulty,
       lootType: run.lootType,
       scheduledStartAt: run.scheduledStartAt,

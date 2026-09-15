@@ -15,8 +15,18 @@ const heroicRun: EligibilityRun = {
   status: "OPEN",
   signupsOpen: true,
   totalBossCount: 8,
+  lootType: "UNSAVED",
   // Monday 14 Sep 2026 02:00 Berlin — still EU reset that started Wed 09 Sep (2026-W37).
   scheduledStartAt: "2026-09-14T00:00:00.000Z",
+  contents: [
+    {
+      raidId: "raid-1",
+      raidName: "The Venomous Abyss",
+      sortOrder: 1,
+      plannedBossCount: 8,
+      totalBossCount: 8,
+    },
+  ],
 };
 
 const mythicRun: EligibilityRun = {

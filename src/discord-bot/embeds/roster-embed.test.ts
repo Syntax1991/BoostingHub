@@ -6,6 +6,8 @@ const data: RosterEmbedData = {
   runId: "r7777777-7777-4777-8777-777777777777",
   runTitle: "Weekend Heroic Catch-up",
   raidName: "Manaforge Omega",
+  productLabel: "Manaforge Omega",
+  contentSummary: "Manaforge Omega 8/8",
   difficulty: "HEROIC",
   publishedAt: "2026-09-20T20:00:00.000Z",
   version: 3,
