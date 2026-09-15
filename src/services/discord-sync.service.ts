@@ -49,6 +49,8 @@ export type SignupEmbedMember = {
   signupId: string;
   userId: string;
   userName: string;
+  /** Discord handle for plain `@username` lines (never a guild nickname mention). */
+  discordUsername: string | null;
   discordUserId: string | null;
   characterName: string | null;
   characterRealm: string | null;
@@ -405,6 +407,7 @@ function toSignupEmbedMember(signup: RunListRecord["signups"][number]): SignupEm
     signupId: signup.id,
     userId: signup.userId,
     userName: signup.userName,
+    discordUsername: signup.discordUsername,
     discordUserId: signup.discordUserId,
     characterName: signup.character?.name ?? null,
     characterRealm: signup.character?.realm ?? null,
@@ -436,7 +439,12 @@ function sortSignupEmbedMembers(members: SignupEmbedMember[]): SignupEmbedMember
  */
 function buildSignupEmbedSignature(
   data: SignupEmbedData,
-  extra: { channelName: string; targetBucket: DiscordRunChannelTarget },
+  extra: {
+    channelName: string;
+    targetBucket: DiscordRunChannelTarget;
+    /** Guild class-emoji markup fingerprint from the bot — omit only in tests. */
+    classEmojiFingerprint?: string;
+  },
 ): string {
   return JSON.stringify({
     runTitle: data.runTitle,
@@ -454,6 +462,10 @@ function buildSignupEmbedSignature(
     members: data.members,
     channelName: extra.channelName,
     targetBucket: extra.targetBucket,
+    classEmojiFingerprint: extra.classEmojiFingerprint ?? "",
+    // Bump when participant line rendering changes without member-data changes
+    // (e.g. mention vs plain @username) so existing posts refresh.
+    participantLineFormat: "mention-v1",
   });
 }
 
@@ -571,7 +583,10 @@ export const discordSyncService = {
    * holding) all the way through completion, which is deliberate
    * informational continuity, not a re-trigger of the creation gate.
    */
-  async listSyncWork(now: Date = new Date()): Promise<{
+  async listSyncWork(
+    now: Date = new Date(),
+    options: { classEmojiFingerprint?: string } = {},
+  ): Promise<{
     channels: ChannelSyncWorkItem[];
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
@@ -582,6 +597,7 @@ export const discordSyncService = {
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
     const start: RunStartSyncWorkItem[] = [];
+    const classEmojiFingerprint = options.classEmojiFingerprint ?? "";
 
     for (const run of runs) {
       const post = await runDiscordPostRepository.findByRunId(run.id);
@@ -617,6 +633,7 @@ export const discordSyncService = {
         const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
           channelName: desiredChannelNameFor(run),
           targetBucket,
+          classEmojiFingerprint,
         });
         if (!hasExistingSignupPost || post!.lastSignupSignature !== signature) {
           signups.push({
@@ -732,12 +749,16 @@ export const discordSyncService = {
     await runDiscordPostRepository.recordRunChannel(input);
   },
 
-  async recordSignupPost(input: { runId: string; channelId: string; messageId: string }, now: Date = new Date()): Promise<void> {
+  async recordSignupPost(
+    input: { runId: string; channelId: string; messageId: string; classEmojiFingerprint?: string },
+    now: Date = new Date(),
+  ): Promise<void> {
     const run = await runRepository.findById(input.runId);
     if (!run) return;
     const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
       channelName: desiredChannelNameFor(run),
       targetBucket: resolveDiscordTarget(run, now),
+      classEmojiFingerprint: input.classEmojiFingerprint ?? "",
     });
     await runDiscordPostRepository.recordSignupPost({
       runId: input.runId,

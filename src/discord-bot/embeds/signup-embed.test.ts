@@ -19,6 +19,7 @@ function member(
   partial: Partial<SignupEmbedMember> & Pick<SignupEmbedMember, "signupId" | "userId" | "userName">,
 ): SignupEmbedMember {
   return {
+    discordUsername: null,
     discordUserId: null,
     characterName: null,
     characterRealm: null,
@@ -56,12 +57,13 @@ function emptyData(overrides: Partial<SignupEmbedData> = {}): SignupEmbedData {
 }
 
 describe("formatSignupParticipantLine", () => {
-  it("formats Discord mention + class emoji + Character-Realm", () => {
+  it("formats Discord mention + class emoji without Character-Realm", () => {
     const line = formatSignupParticipantLine(
       member({
         signupId: "s1",
         userId: "u1",
-        userName: "syntax_1991",
+        userName: "Display Name",
+        discordUsername: "syntaxgg_1991",
         discordUserId: "123456789012345678",
         characterName: "Synblast",
         characterRealm: "Antonidas",
@@ -69,22 +71,23 @@ describe("formatSignupParticipantLine", () => {
       }),
       { SHAMAN: "<:shaman:987654321012345678>" },
     );
-    expect(line).toBe("<@123456789012345678> <:shaman:987654321012345678> Synblast-Antonidas");
+    expect(line).toBe("<@123456789012345678> <:shaman:987654321012345678>");
   });
 
-  it("falls back to @UserName when discordUserId is null", () => {
+  it("falls back to @discordUsername when discordUserId is null", () => {
     const line = formatSignupParticipantLine(
       member({
         signupId: "s1",
         userId: "u1",
-        userName: "syntax_1991",
+        userName: "Display Name",
+        discordUsername: "syntaxgg_1991",
         characterName: "Synblast",
         characterRealm: "Antonidas",
         wowClass: "SHAMAN",
       }),
       { SHAMAN: "<:shaman:1>" },
     );
-    expect(line.startsWith("@syntax_1991 ")).toBe(true);
+    expect(line).toBe("@syntaxgg_1991 <:shaman:1>");
   });
 
   it("falls back to the class label when Guild emoji is missing", () => {
@@ -93,6 +96,7 @@ describe("formatSignupParticipantLine", () => {
         signupId: "s1",
         userId: "u1",
         userName: "PriestUser",
+        discordUsername: "priest_user",
         discordUserId: "123456789012345678",
         characterName: "Holyone",
         characterRealm: "Antonidas",
@@ -100,7 +104,7 @@ describe("formatSignupParticipantLine", () => {
       }),
       {},
     );
-    expect(line).toBe("<@123456789012345678> Priest Holyone-Antonidas");
+    expect(line).toBe("<@123456789012345678> Priest");
   });
 
   it("renders characterless Lootbuddy without inventing Character-Realm", () => {
@@ -109,6 +113,7 @@ describe("formatSignupParticipantLine", () => {
         signupId: "s1",
         userId: "u1",
         userName: "Loot",
+        discordUsername: "loot_user",
         discordUserId: "123456789012345678",
         wowClass: "MAGE",
       }),
@@ -121,6 +126,7 @@ describe("formatSignupParticipantLine", () => {
         signupId: "s2",
         userId: "u2",
         userName: "Loot2",
+        discordUsername: "loot2",
         discordUserId: "123456789012345678",
       }),
     );
@@ -157,6 +163,7 @@ describe("buildSignupEmbed", () => {
         signupId: "t1",
         userId: "u1",
         userName: "Tank",
+        discordUsername: "tank_user",
         discordUserId: "111111111111111111",
         characterName: "Tankone",
         characterRealm: "Antonidas",
@@ -168,6 +175,7 @@ describe("buildSignupEmbed", () => {
         signupId: "h1",
         userId: "u2",
         userName: "Heal",
+        discordUsername: "heal_user",
         discordUserId: "222222222222222222",
         characterName: "Healone",
         characterRealm: "Antonidas",
@@ -179,6 +187,7 @@ describe("buildSignupEmbed", () => {
         signupId: "d1",
         userId: "u3",
         userName: "Dps",
+        discordUsername: "dps_user",
         discordUserId: "333333333333333333",
         characterName: "Dpsone",
         characterRealm: "Antonidas",
@@ -190,6 +199,7 @@ describe("buildSignupEmbed", () => {
         signupId: "l1",
         userId: "u4",
         userName: "Loot",
+        discordUsername: "loot_user",
         discordUserId: "444444444444444444",
         wowClass: "MAGE",
       }),
@@ -237,7 +247,8 @@ describe("buildSignupEmbed", () => {
       "📦 Lootbuddies — 1",
     ]);
     expect(signupPrimaries.every((f) => f.inline === true)).toBe(true);
-    expect(signupPrimaries[0]?.value).toContain("<@111111111111111111> <:paladin:1> Tankone-Antonidas");
+    expect(signupPrimaries[0]?.value).toContain("<@111111111111111111> <:paladin:1>");
+    expect(signupPrimaries[0]?.value).not.toContain("Tankone");
     expect(signupPrimaries[3]?.value).toBe("<@444444444444444444> <:mage:3>");
 
     const pickedPrimaries = fields.slice(pickedHeading + 1, pickedHeading + 5);
