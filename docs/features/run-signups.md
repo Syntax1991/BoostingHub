@@ -100,7 +100,7 @@ Required: run, user (server session), character, role, `isBackup`, status `PENDI
 5. Progress lockouts are informational only (never a hard blocker at signup). Target reset is the Character region's regional WoW reset window containing `Run.scheduledStartAt` (`lockoutService.getResetIdentifierForRun`). Verified `0/x` is Unsaved; missing row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
 6. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
 7. No active duplicate for run + user + character + BOOSTER
-8. Cross-run Character reservation (SELECTED booster Character on a colliding scheduled start) still applies — BOOSTER only
+8. Cross-run Character reservation (BOOSTER only): a Character that is **draft-selected** or **SELECTED** on another upcoming Run blocks reuse when that Run's `scheduledStartAt` is **less than 2 hours** from the target Run's start (`Math.abs(Δt) < 2h`). Exact **2 hours or more** is allowed. Comparison is symmetric on absolute start timestamps — there is **no** Run-duration / end-time model. Same-Run self-edits are excluded. Mere PENDING offers (not draft-selected / SELECTED) do not reserve. Characterless Lootbuddies are unaffected. Raid lockouts remain informational and never hard-block.
 
 ## Lootbuddy signup eligibility
 
