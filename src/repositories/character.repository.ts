@@ -324,6 +324,21 @@ export const characterRepository = {
   },
 
   /**
+   * Persist a discovered Warcraft Logs character identity.
+   * External enrichment only — never part of user-editable Character fields.
+   */
+  async setWarcraftLogsId(characterId: string, warcraftLogsId: string): Promise<void> {
+    const id = warcraftLogsId.trim();
+    if (!id) {
+      throw new Error("warcraftLogsId must be a non-empty string.");
+    }
+    await orm.Character.where({ id: characterId }).update({
+      warcraftLogsId: id,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  /**
    * Global candidate list for the scheduled Blizzard character sync job:
    * active, Blizzard-linked characters whose owner has a BattleNetConnection
    * for that character's own region, and which are stale per `staleBefore`.

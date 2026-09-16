@@ -19,6 +19,7 @@ import { lockoutRepository } from "@/repositories/lockout.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 
 /**
  * Owns refreshing already Blizzard-linked characters: single refresh,
@@ -247,6 +248,11 @@ export async function refreshLinkedCharacterProfile(
         ? `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile + current-raid lockouts verified).`
         : `Refreshed ${nextName}-${character.realm} (${character.region}) from Blizzard (profile only; lockouts not verified).`,
     });
+  }
+
+  // Best-effort: only when still missing — never re-query already linked IDs.
+  if (!character.warcraftLogsId?.trim()) {
+    await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
   }
 
   return { lockoutSynced };

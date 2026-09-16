@@ -16,6 +16,7 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { characterAvailabilityService } from "@/services/character-availability.service";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
 
@@ -235,13 +236,16 @@ export const characterService = {
         isActive: true,
       });
 
+      // Best-effort WCL identity enrichment — never rolls back Character create.
+      await characterWarcraftLogsService.tryAutoLinkIfMissing(created.id);
+
       await activityRepository.create({
         userId: user.id,
         type: "CHARACTER_CREATED",
         message: `Added character ${characterLabel(created)}.`,
       });
 
-      return created;
+      return (await characterRepository.findById(created.id)) ?? created;
     } catch (error) {
       if (uniqueViolation(error)) {
         throw new DomainError(

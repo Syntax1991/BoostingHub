@@ -23,6 +23,7 @@ import {
   MIN_IMPORT_CHARACTER_LEVEL,
 } from "@/lib/blizzard/import-rules";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -466,6 +467,7 @@ export const characterBlizzardImportService = {
           lastSyncedAt: item.lastSyncedAt,
         });
         importedCharacterIds.push(created.id);
+        await characterWarcraftLogsService.tryAutoLinkIfMissing(created.id);
       } catch (error) {
         if (isUniqueConstraintViolation(error)) {
           throw new DomainError(
@@ -520,6 +522,8 @@ export const characterBlizzardImportService = {
       }
 
       linkedCharacterIds.push(character.id);
+      // Best-effort: fill missing WCL ID after a successful Battle.net link.
+      await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
     }
 
     const connection = await battleNetConnectionRepository.findByUserAndRegion(
