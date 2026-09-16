@@ -37,7 +37,7 @@ export function CharacterAvailabilitySection({
       {upcoming.length === 0 ? (
         <EmptyState
           title="No upcoming unavailability"
-          description="This Character is available for BoostingHub signups unless blocked by another Run reservation."
+          description="Manual blocks only. BoostingHub Run reservations for this Character are listed under BoostingHub commitments."
         />
       ) : (
         <ul className="divide-y divide-border">

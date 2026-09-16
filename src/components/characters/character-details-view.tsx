@@ -11,6 +11,7 @@ import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/component
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { CharacterAvailabilitySection } from "@/components/characters/character-availability-section";
+import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
 import { projectCurrentRaidLockoutSlots } from "@/lib/lockout-display";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
@@ -252,7 +253,8 @@ export function CharacterDetailsView({ data }: { data: Details }) {
           )}
         </Card>
       </div>
-      <div className="mt-4">
+      <div className="mt-4 grid gap-4">
+        <CharacterScheduleCommitmentsSection commitments={data.scheduleCommitments} />
         <CharacterAvailabilitySection
           characterId={data.id}
           upcoming={data.availability.upcoming}
