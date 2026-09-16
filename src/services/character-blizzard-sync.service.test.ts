@@ -842,7 +842,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
           ),
         ).toBe(true);
 
-        expect(characterIds.sort()).toEqual([idA, idB].sort());
+        expect([...characterIds].sort()).toEqual([idA, idB].sort());
         return {
           total: 2,
           attempted: 0,
