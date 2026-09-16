@@ -1,9 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const linkForOwner = vi.fn();
-const tryAutoLinkManyIfMissing = vi.fn();
-const listByUserId = vi.fn();
-const isConfigured = vi.fn();
+const linkMissingForOwner = vi.fn();
 const requireUser = vi.fn();
 const revalidatePath = vi.fn();
 
@@ -18,19 +16,7 @@ vi.mock("next/cache", () => ({
 vi.mock("@/services/character-warcraft-logs.service", () => ({
   characterWarcraftLogsService: {
     linkForOwner: (...args: unknown[]) => linkForOwner(...args),
-    tryAutoLinkManyIfMissing: (...args: unknown[]) => tryAutoLinkManyIfMissing(...args),
-  },
-}));
-
-vi.mock("@/repositories/character.repository", () => ({
-  characterRepository: {
-    listByUserId: (...args: unknown[]) => listByUserId(...args),
-  },
-}));
-
-vi.mock("@/integrations/warcraft-logs/warcraft-logs-api-client", () => ({
-  warcraftLogsApiClient: {
-    isConfigured: (...args: unknown[]) => isConfigured(...args),
+    linkMissingForOwner: (...args: unknown[]) => linkMissingForOwner(...args),
   },
 }));
 
@@ -112,92 +98,70 @@ describe("linkWarcraftLogsCharacterAction", () => {
 describe("linkMissingWarcraftLogsCharactersAction", () => {
   beforeEach(() => {
     requireUser.mockReset();
-    listByUserId.mockReset();
-    tryAutoLinkManyIfMissing.mockReset();
-    isConfigured.mockReset();
+    linkMissingForOwner.mockReset();
     revalidatePath.mockReset();
     requireUser.mockResolvedValue(owner);
-    isConfigured.mockReturnValue(true);
   });
 
-  it("batches only active owned Characters missing warcraftLogsId", async () => {
-    listByUserId.mockResolvedValue([
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", isActive: true, warcraftLogsId: null },
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", isActive: true, warcraftLogsId: "   " },
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", isActive: true, warcraftLogsId: "already" },
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4", isActive: false, warcraftLogsId: null },
-    ]);
-    tryAutoLinkManyIfMissing.mockResolvedValue({
-      total: 2,
-      attempted: 2,
-      linked: 2,
-      alreadyLinked: 0,
-      notFound: 0,
-      mismatch: 0,
-      unsupportedRegion: 0,
-      temporaryFailure: 0,
-      skippedAfterFailure: 0,
-    });
-
+  it("maps NO_MISSING to a success ActionResult", async () => {
+    linkMissingForOwner.mockResolvedValue({ status: "NO_MISSING" });
     const result = await linkMissingWarcraftLogsCharactersAction();
-
-    expect(listByUserId).toHaveBeenCalledWith("user-1");
-    expect(tryAutoLinkManyIfMissing).toHaveBeenCalledTimes(1);
-    expect(tryAutoLinkManyIfMissing).toHaveBeenCalledWith([
-      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
-      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
-    ]);
-    expect(result).toEqual({ ok: true, message: "2 Warcraft Logs characters linked." });
-    expect(revalidatePath).toHaveBeenCalledWith("/characters");
-  });
-
-  it("returns nothing-to-do without calling the batch service", async () => {
-    listByUserId.mockResolvedValue([
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", isActive: true, warcraftLogsId: "already" },
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4", isActive: false, warcraftLogsId: null },
-    ]);
-
-    const result = await linkMissingWarcraftLogsCharactersAction();
-
-    expect(tryAutoLinkManyIfMissing).not.toHaveBeenCalled();
+    expect(requireUser).toHaveBeenCalled();
+    expect(linkMissingForOwner).toHaveBeenCalledWith(owner);
     expect(result).toEqual({
       ok: true,
       message: "No active characters are missing Warcraft Logs links.",
     });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("returns not configured without batching", async () => {
-    listByUserId.mockResolvedValue([
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", isActive: true, warcraftLogsId: null },
-    ]);
-    isConfigured.mockReturnValue(false);
-
+  it("maps NOT_CONFIGURED to WCL_NOT_CONFIGURED", async () => {
+    linkMissingForOwner.mockResolvedValue({ status: "NOT_CONFIGURED" });
     const result = await linkMissingWarcraftLogsCharactersAction();
-
-    expect(tryAutoLinkManyIfMissing).not.toHaveBeenCalled();
     expect(result).toEqual({
       ok: false,
       code: "WCL_NOT_CONFIGURED",
       message: "Warcraft Logs API is not configured on this server.",
     });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("formats temporary-failure summaries with skipped remainder", async () => {
-    listByUserId.mockResolvedValue([
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", isActive: true, warcraftLogsId: null },
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", isActive: true, warcraftLogsId: null },
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", isActive: true, warcraftLogsId: null },
-    ]);
-    tryAutoLinkManyIfMissing.mockResolvedValue({
-      total: 3,
-      attempted: 1,
-      linked: 0,
-      alreadyLinked: 0,
-      notFound: 0,
-      mismatch: 0,
-      unsupportedRegion: 0,
-      temporaryFailure: 1,
-      skippedAfterFailure: 2,
+  it("formats COMPLETED summaries and revalidates /characters", async () => {
+    linkMissingForOwner.mockResolvedValue({
+      status: "COMPLETED",
+      summary: {
+        total: 2,
+        attempted: 2,
+        linked: 2,
+        alreadyLinked: 0,
+        notFound: 0,
+        mismatch: 0,
+        unsupportedRegion: 0,
+        temporaryFailure: 0,
+        skippedAfterFailure: 0,
+      },
+    });
+
+    const result = await linkMissingWarcraftLogsCharactersAction();
+    expect(linkMissingForOwner).toHaveBeenCalledWith(owner);
+    expect(result).toEqual({ ok: true, message: "2 Warcraft Logs characters linked." });
+    expect(revalidatePath).toHaveBeenCalledWith("/characters");
+  });
+
+  it("formats temporary-failure COMPLETED summaries", async () => {
+    linkMissingForOwner.mockResolvedValue({
+      status: "COMPLETED",
+      summary: {
+        total: 3,
+        attempted: 1,
+        linked: 0,
+        alreadyLinked: 0,
+        notFound: 0,
+        mismatch: 0,
+        unsupportedRegion: 0,
+        temporaryFailure: 1,
+        skippedAfterFailure: 2,
+      },
     });
 
     const result = await linkMissingWarcraftLogsCharactersAction();
@@ -207,26 +171,11 @@ describe("linkMissingWarcraftLogsCharactersAction", () => {
     });
   });
 
-  it("does not accept client Character IDs as ownership authority", async () => {
-    listByUserId.mockResolvedValue([
-      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", isActive: true, warcraftLogsId: null },
-    ]);
-    tryAutoLinkManyIfMissing.mockResolvedValue({
-      total: 1,
-      attempted: 1,
-      linked: 1,
-      alreadyLinked: 0,
-      notFound: 0,
-      mismatch: 0,
-      unsupportedRegion: 0,
-      temporaryFailure: 0,
-      skippedAfterFailure: 0,
+  it("maps unexpected service errors through mapActionError", async () => {
+    linkMissingForOwner.mockRejectedValue(new Error("boom"));
+    await expect(linkMissingWarcraftLogsCharactersAction()).resolves.toMatchObject({
+      ok: false,
+      code: "UNEXPECTED",
     });
-
-    // Action takes no input — foreign IDs cannot be injected.
-    await linkMissingWarcraftLogsCharactersAction();
-    expect(tryAutoLinkManyIfMissing.mock.calls[0]?.[0]).toEqual([
-      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
-    ]);
   });
 });
