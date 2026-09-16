@@ -115,8 +115,9 @@ export function CharactersView({ data }: { data: Page }) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      {formatCompactMultiRaidLockoutProgress(character.lockouts) ?? (
-                        <span className="text-muted">Unknown</span>
+                      {formatCompactMultiRaidLockoutProgress(
+                        character.lockouts,
+                        data.currentLockoutRaids ?? [],
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">

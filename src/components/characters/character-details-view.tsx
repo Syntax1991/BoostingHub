@@ -11,6 +11,7 @@ import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/component
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { CharacterAvailabilitySection } from "@/components/characters/character-availability-section";
+import { projectCurrentRaidLockoutSlots } from "@/lib/lockout-display";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
@@ -67,6 +68,10 @@ function BlizzardRefreshButton({ characterId }: { characterId: string }) {
 
 export function CharacterDetailsView({ data }: { data: Details }) {
   const panel = data.accessPanel;
+  const lockoutSlots = projectCurrentRaidLockoutSlots(
+    data.lockouts,
+    data.currentLockoutRaids ?? [],
+  );
   return (
     <div>
       <PageHeader
@@ -212,25 +217,37 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                 : ""
             }. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Missing difficulties show as unknown — never invented 0/N. Mythic is boss-kill progress only.`}
           />
-          {data.lockouts.length === 0 ? (
+          {lockoutSlots.length === 0 ? (
             <EmptyState
               title="Unknown"
               description="No verified current-reset lockout data. Missing or stale rows are not treated as clear."
             />
           ) : (
             <ul className="divide-y divide-border">
-              {data.lockouts.map((lockout) => (
-                <li key={`${lockout.raidName}-${lockout.difficulty}-${lockout.resetIdentifier}`} className="px-4 py-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{lockout.raidName}</span>
-                    <DifficultyBadge difficulty={lockout.difficulty} />
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    {lockout.resetIdentifier} · {lockout.bossesDefeated}/{lockout.bossTotal}
-                    {lockout.isComplete ? " complete" : ""}
-                  </p>
-                </li>
-              ))}
+              {lockoutSlots.map((slot) =>
+                slot.status === "UNKNOWN" ? (
+                  <li key={slot.raidId} className="px-4 py-3 text-sm">
+                    <span className="font-medium">{slot.raidName}</span>
+                    <p className="mt-1 text-xs text-muted">Unknown — no verified current-reset data.</p>
+                  </li>
+                ) : (
+                  slot.rows.map((lockout) => (
+                    <li
+                      key={`${slot.raidId}-${lockout.difficulty}`}
+                      className="px-4 py-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{slot.raidName}</span>
+                        <DifficultyBadge difficulty={lockout.difficulty} />
+                      </div>
+                      <p className="mt-1 text-xs text-muted">
+                        {data.currentReset} · {lockout.bossesDefeated}/{lockout.bossTotal}
+                        {lockout.isComplete ? " complete" : ""}
+                      </p>
+                    </li>
+                  ))
+                ),
+              )}
             </ul>
           )}
         </Card>

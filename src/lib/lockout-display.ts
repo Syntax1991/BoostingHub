@@ -12,6 +12,16 @@ export type LockoutDisplayRow = {
   verified?: boolean;
 };
 
+/** Authoritative current-reset raid slots from `getCurrentLockoutRaids()`. */
+export type CurrentLockoutRaidDescriptor = {
+  id: string;
+  name: string;
+};
+
+export type RaidLockoutSlot =
+  | { raidId: string; raidName: string; status: "UNKNOWN" }
+  | { raidId: string; raidName: string; status: "VERIFIED"; rows: LockoutDisplayRow[] };
+
 const TRACKED: RaidDifficulty[] = ["NORMAL", "HEROIC", "MYTHIC"];
 
 /**
@@ -31,40 +41,63 @@ export function formatCompactLockoutProgress(rows: LockoutDisplayRow[]): string 
 }
 
 /**
- * Multi-raid compact progress: one segment per raid, never merged across raids.
- * Example: `Nymrissa: HC 1/1 · The Venomous Abyss: N 8/8 · HC 3/8 · M ?`
+ * Project every authoritative current raid in catalog order.
+ * Raids with zero current-reset rows are UNKNOWN — never invented as 0/N.
  */
-export function formatCompactMultiRaidLockoutProgress(rows: LockoutDisplayRow[]): string | null {
-  if (rows.length === 0) return null;
-
-  const order: string[] = [];
-  const byRaid = new Map<string, { label: string; rows: LockoutDisplayRow[] }>();
-
+export function projectCurrentRaidLockoutSlots(
+  rows: LockoutDisplayRow[],
+  currentRaids: readonly CurrentLockoutRaidDescriptor[],
+): RaidLockoutSlot[] {
+  const byRaidId = new Map<string, LockoutDisplayRow[]>();
   for (const row of rows) {
-    const key = row.raidId ?? row.raidName ?? "raid";
-    if (!byRaid.has(key)) {
-      order.push(key);
-      const label =
-        row.raidId && row.raidName
-          ? raidContentDisplayName(row.raidId, row.raidName)
-          : row.raidName ?? "Raid";
-      byRaid.set(key, { label, rows: [] });
-    }
-    byRaid.get(key)!.rows.push(row);
+    if (!row.raidId) continue;
+    const bucket = byRaidId.get(row.raidId);
+    if (bucket) bucket.push(row);
+    else byRaidId.set(row.raidId, [row]);
   }
 
-  const parts = order
-    .map((key) => {
-      const group = byRaid.get(key)!;
-      const progress = formatCompactLockoutProgress(group.rows);
-      return progress ? `${group.label}: ${progress}` : null;
-    })
-    .filter((part): part is string => Boolean(part));
+  return currentRaids.map((raid) => {
+    const raidRows = byRaidId.get(raid.id) ?? [];
+    if (raidRows.length === 0) {
+      return { raidId: raid.id, raidName: raid.name, status: "UNKNOWN" as const };
+    }
+    return {
+      raidId: raid.id,
+      raidName: raid.name,
+      status: "VERIFIED" as const,
+      rows: raidRows,
+    };
+  });
+}
 
-  return parts.length > 0 ? parts.join(" · ") : null;
+/**
+ * Multi-raid compact progress for Character list cells.
+ * Always emits one segment per `currentRaids` entry in that order.
+ * Fully missing raid → `<Name>: Unknown` (never omit the raid; never invent 0/N).
+ */
+export function formatCompactMultiRaidLockoutProgress(
+  rows: LockoutDisplayRow[],
+  currentRaids: readonly CurrentLockoutRaidDescriptor[],
+): string {
+  if (currentRaids.length === 0) {
+    return "Unknown";
+  }
+
+  return projectCurrentRaidLockoutSlots(rows, currentRaids)
+    .map((slot) => {
+      if (slot.status === "UNKNOWN") {
+        return `${slot.raidName}: Unknown`;
+      }
+      const progress = formatCompactLockoutProgress(slot.rows);
+      return progress ? `${slot.raidName}: ${progress}` : `${slot.raidName}: Unknown`;
+    })
+    .join(" · ");
 }
 
 /** Catalog boss count for an explicit raid id — never an implicit "current" raid. */
 export function defaultRaidBossTotal(raidId: string): number {
   return findRaidCatalogById(raidId)?.bosses.length ?? 0;
 }
+
+/** Re-export for callers that still resolve display names at the service boundary. */
+export { raidContentDisplayName };
