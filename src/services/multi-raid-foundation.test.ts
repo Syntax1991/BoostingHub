@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
+import { futureTestIso, venomousCreateInput } from "@/lib/test-run-input";
 import {
   MANAFORGE_OMEGA_RAID_ID,
   NYMRISSA_WAVECALLER_BOSS_ID,
@@ -48,7 +50,6 @@ async function cleanupRun(runId: string) {
   if (roster) {
     await orm.RunRoster.where({ id: String((roster as { id: string }).id) }).delete();
   }
-  // RunRaidContent cascades on Run delete; delete Run last.
   await deleteIfPresent("Run", runId);
 }
 
@@ -109,36 +110,32 @@ describe("Tidebound / Nymrissa catalog (verified Blizzard ids)", () => {
   });
 });
 
-describe("RunRaidContent transitional invariant", () => {
-  it("createRun writes exactly one matching content row", async () => {
-    const created = await runService.createRun(asLead(), {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 6,
-      scheduledStartAt: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+describe("RunRaidContent — contents authority", () => {
+  it("createRun writes exactly one matching content row from contentPreset", async () => {
+    const created = await runService.createRun(
+      asLead(),
+      venomousCreateInput({
+        venomousPlannedBossCount: 6,
+        scheduledStartAt: futureTestIso(40),
+      }),
+    );
     createdRunIds.push(created.id);
 
     const run = await runRepository.findById(created.id);
     const contents = await runRepository.listRaidContents(created.id);
-    expect(run?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
-    expect(run?.plannedBossCount).toBe(6);
+    expect(run?.contents).toHaveLength(1);
+    expect(run?.contentDisplay.titleCoverage).toBe("6/8");
     expect(contents).toHaveLength(1);
-    expect(contents[0]?.raidId).toBe(run?.raidId);
-    expect(contents[0]?.plannedBossCount).toBe(run?.plannedBossCount);
+    expect(contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(contents[0]?.plannedBossCount).toBe(6);
     expect(contents[0]?.sortOrder).toBe(1);
   });
 
-  it("createManyDraftsAtomic writes one content per Run", async () => {
-    const schedule = new Date(Date.now() + 41 * 24 * 60 * 60 * 1000).toISOString();
+  it("createManyDraftsAtomic writes one content per Run (contents-only Run row)", async () => {
+    const schedule = futureTestIso(41);
     const idsCreated = await runRepository.createManyDraftsAtomic([
       {
         title: "Mass A",
-        raidId: VENOMOUS_ABYSS_RAID_ID,
         difficulty: "NORMAL",
         lootType: "UNSAVED",
         scheduledStartAt: schedule,
@@ -147,12 +144,10 @@ describe("RunRaidContent transitional invariant", () => {
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
-        plannedBossCount: 4,
         contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 4 }],
       },
       {
         title: "Mass B",
-        raidId: VENOMOUS_ABYSS_RAID_ID,
         difficulty: "NORMAL",
         lootType: "UNSAVED",
         scheduledStartAt: new Date(Date.parse(schedule) + 3 * 60 * 60 * 1000).toISOString(),
@@ -161,7 +156,6 @@ describe("RunRaidContent transitional invariant", () => {
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
-        plannedBossCount: 5,
         contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 5 }],
       },
     ]);
@@ -171,45 +165,40 @@ describe("RunRaidContent transitional invariant", () => {
       const run = await runRepository.findById(runId);
       const contents = await runRepository.listRaidContents(runId);
       expect(contents).toHaveLength(1);
-      expect(contents[0]?.raidId).toBe(run?.raidId);
-      expect(contents[0]?.plannedBossCount).toBe(run?.plannedBossCount);
+      expect(contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+      expect(contents[0]?.plannedBossCount).toBe(
+        run?.contents[0]?.plannedBossCount,
+      );
       expect(contents[0]?.sortOrder).toBe(1);
     }
   });
 
   it("updateFields does not rewrite RunRaidContent (Bundle-safe)", async () => {
-    const created = await runService.createRun(asLead(), {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 3,
-      scheduledStartAt: new Date(Date.now() + 42 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    const created = await runService.createRun(
+      asLead(),
+      venomousCreateInput({
+        venomousPlannedBossCount: 3,
+        scheduledStartAt: futureTestIso(42),
+      }),
+    );
     createdRunIds.push(created.id);
 
-    await runRepository.updateFields(created.id, { plannedBossCount: 7 });
+    await runRepository.updateFields(created.id, { notes: "touch scheduling metadata only" });
     const run = await runRepository.findById(created.id);
     const contents = await runRepository.listRaidContents(created.id);
-    expect(run?.plannedBossCount).toBe(7);
+    expect(run?.notes).toBe("touch scheduling metadata only");
     expect(contents).toHaveLength(1);
-    // Content remains authoritative until an explicit content-aware identity update.
     expect(contents[0]?.plannedBossCount).toBe(3);
   });
 
   it("rejects duplicate runId+raidId and runId+sortOrder", async () => {
-    const created = await runService.createRun(asLead(), {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 2,
-      scheduledStartAt: new Date(Date.now() + 43 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    const created = await runService.createRun(
+      asLead(),
+      venomousCreateInput({
+        venomousPlannedBossCount: 2,
+        scheduledStartAt: futureTestIso(43),
+      }),
+    );
     createdRunIds.push(created.id);
     const now = new Date().toISOString();
 
@@ -237,16 +226,13 @@ describe("RunRaidContent transitional invariant", () => {
   });
 
   it("schema can hold two distinct raid contents on one Run (low-level only)", async () => {
-    const created = await runService.createRun(asLead(), {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: new Date(Date.now() + 44 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    const created = await runService.createRun(
+      asLead(),
+      venomousCreateInput({
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: futureTestIso(44),
+      }),
+    );
     createdRunIds.push(created.id);
 
     await orm.RunRaidContent.create({
@@ -267,16 +253,13 @@ describe("RunRaidContent transitional invariant", () => {
   });
 
   it("deleteRun does not leave orphan RunRaidContent rows", async () => {
-    const created = await runService.createRun(asLead(), {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 1,
-      scheduledStartAt: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    const created = await runService.createRun(
+      asLead(),
+      venomousCreateInput({
+        venomousPlannedBossCount: 1,
+        scheduledStartAt: futureTestIso(45),
+      }),
+    );
     const before = await orm.RunRaidContent.where({ runId: created.id }).all();
     expect(before).toHaveLength(1);
 
@@ -285,15 +268,31 @@ describe("RunRaidContent transitional invariant", () => {
     expect(after).toHaveLength(0);
   });
 
+  it("findById rejects Runs with no persisted raid content", async () => {
+    const created = await runService.createRun(
+      asLead(),
+      venomousCreateInput({ scheduledStartAt: futureTestIso(46) }),
+    );
+    createdRunIds.push(created.id);
+    await orm.RunRaidContent.where({ runId: created.id }).delete();
+
+    try {
+      await runRepository.findById(created.id);
+      throw new Error("Expected domain error");
+    } catch (error) {
+      expect(isDomainError(error) && error.code).toBe("VALIDATION_FAILED");
+      expect(String((error as Error).message)).toContain("no persisted raid content");
+    }
+  });
+
   it("migration backfill left existing Runs with matching sole content", async () => {
-    // Seed/historical Runs on this DB were backfilled by 20260915T2209_add_run_raid_content.
-    const sample = await orm.Run.select("id", "raidId", "plannedBossCount").first();
-    if (!sample) return;
-    const runId = String((sample as { id: string }).id);
+    const sampleContent = await orm.RunRaidContent.select("runId", "raidId", "plannedBossCount", "sortOrder").first();
+    if (!sampleContent) return;
+    const runId = String((sampleContent as { runId: string }).runId);
     const contents = await runRepository.listRaidContents(runId);
     expect(contents.length).toBeGreaterThanOrEqual(1);
     const primary = contents.find((row) => row.sortOrder === 1);
-    expect(primary?.raidId).toBe(String((sample as { raidId: string }).raidId));
-    expect(primary?.plannedBossCount).toBe(Number((sample as { plannedBossCount: number }).plannedBossCount));
+    expect(primary?.raidId).toBe(String((sampleContent as { raidId: string }).raidId));
+    expect(primary?.plannedBossCount).toBe(Number((sampleContent as { plannedBossCount: number }).plannedBossCount));
   });
 });

@@ -70,7 +70,7 @@ Preserved historical applications: User + Class + Role + Difficulty (+ optional 
 
 Reusable **reference content**, not demo users or demo Runs. Catalog: `src/lib/wow-raid-catalog.ts`. `raidRepository.ensureReferenceRaids()` upserts it idempotently (seed and Run create/edit). Dev seed still adds fixture Runs around that content. Blizzard raid ingestion is deferred.
 
-A Raid's **total boss count** is never a stored field — it is computed by counting that Raid's `RaidBoss` rows (`raidRepository` includes the `bosses` relation and returns `totalBossCount` as `bosses.length`). `Run.plannedBossCount` (below) is validated against this computed total, never against a duplicate stored number.
+A Raid's **total boss count** is never a stored field — it is computed by counting that Raid's `RaidBoss` rows (`raidRepository` includes the `bosses` relation and returns `totalBossCount` as `bosses.length`). Each `RunRaidContent.plannedBossCount` is validated against that content raid's computed total, never against a duplicate stored number on `Run`.
 
 ## CharacterRaidLockout
 
@@ -94,26 +94,26 @@ Verified `0/N` (a `CharacterRaidLockout` row with `bossesDefeated = 0`) means **
 - status, raid lead, notes
 - desired tank / healer / DPS counts
 - `signupsOpen`
-- **Authoritative multi-raid contents:** ordered `RunRaidContent` rows (`Run.contents`) — each row is one real raid instance with its own `plannedBossCount` / boss total. Product labels and UI/Discord summaries are projected from these rows (`projectRunContentDisplay`). Never sum bosses across contents into a fake aggregate (e.g. Bundle is `Nymrissa 1/1 · The Venomous Abyss 8/8`, never `9/9`).
-- **Compatibility-only singular columns:** `Run.raidId` and `Run.plannedBossCount` remain for transitional writers (title derivation, Discord channel naming mirror, templates). They are **not** the source of truth for run-content domain logic. For Season 2 Bundle they mirror the Venomous slot.
+- **Authoritative multi-raid contents:** ordered `RunRaidContent` rows (`Run.contents`) — each row is one real raid instance with its own `plannedBossCount` / boss total. Product labels, titles, Discord channel coverage, and UI summaries are projected from these rows (`projectRunContentDisplay` / `projectRunContentCoverage`). Never sum bosses across contents into a fake aggregate (e.g. Bundle is `Nymrissa 1/1 · The Venomous Abyss 8/8`, never `9/9`).
+- **No singular Run raid mirror:** `Run.raidId` and `Run.plannedBossCount` have been removed. Missing `RunRaidContent` is an invariant violation.
 
-Commercial Create products (`VENOMOUS_ABYSS`, `MIDNIGHT_S2_BUNDLE`) expand into contents at create/edit time. Standalone Tidebound/Nymrissa is reference content only — not a Create product.
+Commercial Create products (`VENOMOUS_ABYSS`, `MIDNIGHT_S2_BUNDLE`) expand into contents at create/edit time. Standalone Tidebound/Nymrissa is reference content only — not a Create product. RunTemplate remains Venomous-only (stores its own `raidId` / `plannedBossCount`) and normalizes to the `VENOMOUS_ABYSS` preset at the template → Run boundary.
 
 ### Derived title (no manual title entry)
 
-`Run.title` is **server-derived, never client-authored**. Run creation and Edit Run have no title input — they show a read-only "Generated title" preview that live-updates as the schedule/difficulty/lootType/plannedBossCount/raidLead/raid change, computed client-side with the same pure `buildRunTitle` helper (`src/lib/run-title.ts`) the server uses. `createManyRuns` (via `prepareRunDraft`, per row) and `updateRun` always recompute and persist the title server-side from the final normalized values — a client-sent `title` is never accepted (the validators for Create/Edit Run have no `title` field at all).
+`Run.title` is **server-derived, never client-authored**. Run creation and Edit Run have no title input — they show a read-only "Generated title" preview that live-updates as the schedule/difficulty/lootType/content coverage/raidLead change, computed client-side with the same pure `buildRunTitle` helper (`src/lib/run-title.ts`) the server uses. Coverage comes from persisted contents (`titleCoverage`: e.g. `8/8` or `S2B 8/8`) — never a summed Bundle total. `createManyRuns` (via `prepareRunDraft`, per row) and `updateRun` always recompute and persist the title server-side from the final normalized values — a client-sent `title` is never accepted.
 
-Format: `{weekday} {HH:mm} {difficulty} {lootType} {planned}/{total} {raidLead}` in the Europe/Berlin community timezone — e.g. `Thu 21:00 HC VIP 7/9 Titan`. Difficulty abbreviations are `NM`/`HC`/`MY`; loot-type labels are `Saved`/`Unsaved`/`VIP`. Raid Lead is always the canonical BoostingHub display name, never a Discord nickname.
+Format: `{weekday} {HH:mm} {difficulty} {lootType} {titleCoverage} {raidLead}` in the Europe/Berlin community timezone — e.g. `Thu 21:00 HC VIP 8/8 Titan` or `Thu 21:00 HC Unsaved S2B 8/8 Titan`. Difficulty abbreviations are `NM`/`HC`/`MY`; loot-type labels are `Saved`/`Unsaved`/`VIP`. Raid Lead is always the canonical BoostingHub display name, never a Discord nickname.
 
-Historical Runs are **not** retroactively retitled — a migration backfills `lootType = UNSAVED` and `plannedBossCount = <raid's total boss count>` for existing rows, but their `title` stays whatever it already was until the Run is next edited (which always regenerates it, including for a notes-only or composition-only edit — recomputation is deterministic and cheap, so there's no "did the title's source fields actually change" check).
+Historical Runs are **not** retroactively retitled — their `title` stays whatever it already was until the Run is next edited (which always regenerates it). Content identity always comes from persisted `RunRaidContent`, never from regenerating commercial presets.
 
 ### RunLootType
 
 `SAVED` \| `UNSAVED` \| `VIP` — independent of `RaidDifficulty`, not a combined enum. **Compatibility is a Service-layer rule, not a schema constraint**: every difficulty allows every loot type except `MYTHIC + SAVED`, which is rejected everywhere (Create, Edit, the future Mass Create feature, and Discord naming) via one central helper, `isLootTypeAllowedForDifficulty` / `assertValidRunLootType` in `src/services/run-state.ts` (throwing `RUN_LOOT_TYPE_INVALID`). New Runs default to `UNSAVED` — the only loot type valid for every difficulty including Mythic, so the default never needs a client-side override. The Create/Edit UI disables the `SAVED` option and auto-switches to `UNSAVED` when the selected difficulty is Mythic.
 
-### Planned boss count
+### Planned boss count (per content)
 
-`Run.plannedBossCount` must satisfy `1 <= plannedBossCount <= <raid's total boss count>` (validated by `assertValidPlannedBossCount`, throwing `RUN_BOSS_COUNT_INVALID`). Create defaults it to the raid's full total; selecting a different raid resets it to that raid's total.
+Each `RunRaidContent.plannedBossCount` must satisfy `1 <= plannedBossCount <= <that content raid's total boss count>` (validated by `assertValidPlannedBossCount`, throwing `RUN_BOSS_COUNT_INVALID`). For Create products, Venomous planned count is 1–8; Bundle Tidebound is always 1.
 
 ### Historical raid availability
 
@@ -121,12 +121,12 @@ A raid is never deleted when superseded — `RaidRecord.availableForRuns` (catal
 
 ### Discord channel naming
 
-Discord run-channel names are derived from structured Run fields — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`, e.g. `thu-2100-hc-vip-7of9-titan`.
+Discord run-channel names are derived from structured Run fields — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`, e.g. `thu-2100-hc-vip-8of8-titan`.
 
-Coverage:
+Coverage comes from `contentDisplay.channelCoverage` (same projection as titles):
 
-- single-raid Runs: `{planned}of{total}` (legacy mirror / primary content)
-- Season 2 Bundle: `s2b-{venomousPlanned}of8` — never `9of9`
+- single Venomous: `8of8` / `6of8`
+- Season 2 Bundle: `s2b-8of8` / `s2b-6of8` — never `9of9` / `7of9`
 
 Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`). Any change to a naming-source field renames the Run's existing Discord channel in place.
 

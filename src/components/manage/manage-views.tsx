@@ -62,7 +62,7 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
                       </Link>
                       <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                         <span>
-                          {run.productLabel ?? run.raidName}
+                          {run.productLabel}
                           {run.contentSummary ? ` · ${run.contentSummary}` : ""}
                         </span>
                         <DifficultyBadge difficulty={run.difficulty} />

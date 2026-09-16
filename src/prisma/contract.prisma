@@ -391,7 +391,6 @@ model Raid {
 
   bosses   RaidBoss[]
   lockouts CharacterRaidLockout[]
-  runs     Run[]
   runContents RunRaidContent[]
   templates RunTemplate[]
 
@@ -434,10 +433,7 @@ model Run {
   /// Server-derived (buildRunTitle) from scheduledStartAt/difficulty/lootType/
   /// raid contents/raidLead — never a free-form User-authored value.
   title              String
-  /// Transitional singular fields — authoritative raid identity is RunRaidContent[].
-  /// Kept until reads/writes fully migrate; backfilled into contents then dropped.
-  raidId             String
-  raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  /// Authoritative raid identity is ordered RunRaidContent[] only.
   difficulty         RaidDifficulty
   /// Independent of difficulty; MYTHIC+SAVED is rejected at the Service layer.
   lootType           RunLootType
@@ -449,8 +445,6 @@ model Run {
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
-  /// Transitional — authoritative planned coverage lives on RunRaidContent.
-  plannedBossCount   Int
   signupsOpen        Boolean        @default(false)
   archivedAt         TimestamptzString?
   archivedById       String?

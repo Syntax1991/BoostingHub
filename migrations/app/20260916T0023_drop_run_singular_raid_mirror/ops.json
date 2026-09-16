@@ -1,0 +1,167 @@
+[
+  {
+    "id": "dropColumn.run.plannedBossCount",
+    "label": "Drop column \"plannedBossCount\" from \"run\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "plannedBossCount",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"plannedBossCount\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "plannedBossCount"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"plannedBossCount\"",
+        "sql": "ALTER TABLE \"public\".\"run\" DROP COLUMN \"plannedBossCount\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"plannedBossCount\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "plannedBossCount"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropConstraint.run.run_raidId_fkey",
+    "label": "Drop constraint \"run_raidId_fkey\" on \"run\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_raidId_fkey",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raidId_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop constraint \"run_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run\" DROP CONSTRAINT \"run_raidId_fkey\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_raidId_fkey",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropIndex.run.run_raidId_idx_996eeca9",
+    "label": "Drop index \"run_raidId_idx_996eeca9\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_raidId_idx_996eeca9",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop index \"run_raidId_idx_996eeca9\"",
+        "sql": "DROP INDEX \"public\".\"run_raidId_idx_996eeca9\"",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.run.raidId",
+    "label": "Drop column \"raidId\" from \"run\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "raidId",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"raidId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "raidId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"raidId\"",
+        "sql": "ALTER TABLE \"public\".\"run\" DROP COLUMN \"raidId\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"raidId\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "raidId"
+        ]
+      }
+    ]
+  }
+]

@@ -10,9 +10,9 @@ import { attendanceService } from "@/services/attendance.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import type { AttendanceStatus, CharacterRole, ParticipationType } from "@/models/enums";
 
-const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   user: "aaaaaaaa-aaaa-4aaa-8aaa-at0000000001",
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-at0000000002",
@@ -182,18 +182,8 @@ async function createSignup(input: {
 }
 
 async function createDraft(actor: AuthenticatedUser, extra: Record<string, unknown> = {}) {
-  const created = await runService.createRun(actor, {
-    raidId,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    plannedBossCount: 8,
-    scheduledStartAt: futureIso(),
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-    raidLeadId: actor.accountRole === "ADMIN" ? ids.lead : undefined,
-    ...extra,
-  });
+  const created = await runService.createRun(actor, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14, raidLeadId: actor.accountRole === "ADMIN" ? ids.lead : undefined,
+    ...extra }));
   createdRunIds.push(created.id);
   return created.id;
 }

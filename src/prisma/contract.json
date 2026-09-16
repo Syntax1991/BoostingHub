@@ -1885,21 +1885,6 @@
                   "namespace": "public"
                 }
               },
-              "runs": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "raidId"
-                  ]
-                },
-                "to": {
-                  "model": "Run",
-                  "namespace": "public"
-                }
-              },
               "templates": {
                 "cardinality": "1:N",
                 "on": {
@@ -2092,20 +2077,6 @@
                   "kind": "scalar"
                 }
               },
-              "plannedBossCount": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "raidId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "raidLeadId": {
                 "nullable": false,
                 "type": {
@@ -2213,21 +2184,6 @@
                 },
                 "to": {
                   "model": "RunDiscordPost",
-                  "namespace": "public"
-                }
-              },
-              "raid": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "raidId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "Raid",
                   "namespace": "public"
                 }
               },
@@ -2353,12 +2309,6 @@
                 },
                 "notes": {
                   "column": "notes"
-                },
-                "plannedBossCount": {
-                  "column": "plannedBossCount"
-                },
-                "raidId": {
-                  "column": "raidId"
                 },
                 "raidLeadId": {
                   "column": "raidLeadId"
@@ -6749,16 +6699,6 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "plannedBossCount": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "raidId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
                 "raidLeadId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -6801,23 +6741,6 @@
                 }
               },
               "foreignKeys": [
-                {
-                  "onDelete": "restrict",
-                  "source": {
-                    "columns": [
-                      "raidId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "run"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "raid"
-                  }
-                },
                 {
                   "onDelete": "restrict",
                   "source": {
@@ -6868,14 +6791,6 @@
                   ],
                   "name": "run_archivedById_idx_d546efc6",
                   "prefix": "run_archivedById_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "raidId"
-                  ],
-                  "name": "run_raidId_idx_996eeca9",
-                  "prefix": "run_raidId_idx",
                   "unique": false
                 },
                 {
@@ -9420,7 +9335,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "9472b92f2c500d16a01866a6ef3b535617bcbedba167210e36f5cde896376c5f"
+    "storageHash": "edf19dd6b7c59253e41b335b4b7dde5177c934ab38ad96f8e51cebbf2ead1c7a"
   },
   "execution": {
     "executionHash": "012c92a4e5cf7737647ddb9ed4a26b2fe983624de4f639cd49f4ae08886fa426",

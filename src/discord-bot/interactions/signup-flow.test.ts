@@ -85,7 +85,7 @@ function signupOptionsPayload(overrides: {
       title: "Test Run",
       signupWindowOpen: true,
       difficulty: "HEROIC",
-      totalBossCount: 8,
+      titleCoverage: "8/8",
       lootType: "UNSAVED",
     },
     booster: {
@@ -428,7 +428,25 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
   it("a saved character stays selectable, carries a save description on its option, and is summarized up front", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
-      option.characterId === SYNMIST ? { ...option, raidSave: { bossesDefeated: 8, totalBossCount: 8, isComplete: true } } : option,
+      option.characterId === SYNMIST
+        ? {
+            ...option,
+            contentSaves: [
+              {
+                totalBossCount: 8,
+                raidSave: {
+                  raidId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  difficulty: "HEROIC",
+                  resetIdentifier: "2026-W37",
+                  bossesDefeated: 8,
+                  totalBossCount: 8,
+                  isComplete: true,
+                },
+                label: { text: "HC 8/8 · Fully saved" },
+              },
+            ],
+          }
+        : option,
     );
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
 
@@ -449,7 +467,25 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
   it("selecting a saved character still stages only — no DB call until Confirm", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
-      option.characterId === SYNMIST ? { ...option, raidSave: { bossesDefeated: 8, totalBossCount: 8, isComplete: true } } : option,
+      option.characterId === SYNMIST
+        ? {
+            ...option,
+            contentSaves: [
+              {
+                totalBossCount: 8,
+                raidSave: {
+                  raidId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  difficulty: "HEROIC",
+                  resetIdentifier: "2026-W37",
+                  bossesDefeated: 8,
+                  totalBossCount: 8,
+                  isComplete: true,
+                },
+                label: { text: "HC 8/8 · Fully saved" },
+              },
+            ],
+          }
+        : option,
     );
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload), setCharacterOffers });

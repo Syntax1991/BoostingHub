@@ -9,6 +9,11 @@ import { runRepository } from "@/repositories/run.repository";
 import { runService } from "@/services/run.service";
 import { runTemplateService } from "@/services/run-template.service";
 import { createManyRunsSchema, type CreateManyRunsInput } from "@/validators/mass-create-runs";
+import {
+  primaryRaidIdFromRun,
+  venomousCreateInput,
+  venomousPlannedFromRun,
+} from "@/lib/test-run-input";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -89,13 +94,13 @@ const admin = asUser(ids.admin, "MassCreate Admin", "ADMIN");
 
 function defaultsFor(overrides: Partial<CreateManyRunsInput["defaults"]> = {}): CreateManyRunsInput["defaults"] {
   return {
-    raidId,
+    contentPreset: "VENOMOUS_ABYSS",
+    venomousPlannedBossCount: 8,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
-    plannedBossCount: 8,
     ...overrides,
   };
 }
@@ -271,7 +276,15 @@ describe("runService.createManyRuns — raid availability", () => {
   it("a historical raid anywhere in the batch (default) rejects everything, with row context", async () => {
     try {
       await runService.createManyRuns(lead, {
-        defaults: defaultsFor({ raidId: MANAFORGE_OMEGA_RAID_ID }),
+        defaults: {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          plannedBossCount: 8,
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          desiredTankCount: 2,
+          desiredHealerCount: 4,
+          desiredDpsCount: 14,
+        },
         runs: rowsOf(3, 400),
       });
       expect.unreachable();
@@ -286,7 +299,15 @@ describe("runService.createManyRuns — raid availability", () => {
   it("a historical raid via row override (row 2 of 3) rejects the whole batch, with that row's number in the message", async () => {
     try {
       await runService.createManyRuns(lead, {
-        defaults: defaultsFor(),
+        defaults: {
+          raidId: VENOMOUS_ABYSS_RAID_ID,
+          plannedBossCount: 8,
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          desiredTankCount: 2,
+          desiredHealerCount: 4,
+          desiredDpsCount: 14,
+        },
         runs: [
           { scheduledStartAt: futureIso(410) },
           { scheduledStartAt: futureIso(411), overrides: { raidId: MANAFORGE_OMEGA_RAID_ID } },
@@ -350,13 +371,13 @@ describe("runService.createManyRuns — loot type rules", () => {
 });
 
 describe("runService.createManyRuns — boss count rules", () => {
-  it("plannedBossCount exceeding the effective raid's total rejects the whole batch", async () => {
+  it("venomousPlannedBossCount exceeding the effective raid's total rejects the whole batch", async () => {
     await expectDomainCode(
       runService.createManyRuns(lead, {
         defaults: defaultsFor(),
         runs: [
           { scheduledStartAt: futureIso(450) },
-          { scheduledStartAt: futureIso(451), overrides: { plannedBossCount: 999 } },
+          { scheduledStartAt: futureIso(451), overrides: { venomousPlannedBossCount: 999 } },
         ],
       }),
       "RUN_BOSS_COUNT_INVALID",
@@ -375,12 +396,17 @@ describe("runService.createManyRuns — boss count rules", () => {
     // other stale total).
     const raid = await raidRepository.findById(raidId);
     const result = await runService.createManyRuns(lead, {
-      defaults: defaultsFor({ plannedBossCount: 1 }),
-      runs: [{ scheduledStartAt: futureIso(460), overrides: { raidId, plannedBossCount: raid!.totalBossCount } }],
+      defaults: defaultsFor({ venomousPlannedBossCount: 1 }),
+      runs: [
+        {
+          scheduledStartAt: futureIso(460),
+          overrides: { venomousPlannedBossCount: raid!.totalBossCount },
+        },
+      ],
     });
     createdRunIds.push(...result.ids);
     const run = await runRepository.findById(result.ids[0]!);
-    expect(run?.plannedBossCount).toBe(raid!.totalBossCount);
+    expect(venomousPlannedFromRun(run)).toBe(raid!.totalBossCount);
   });
 });
 
@@ -441,7 +467,10 @@ describe("runService.createManyRuns — title derivation", () => {
       defaults: defaultsFor(),
       runs: [
         { scheduledStartAt: futureIso(500) },
-        { scheduledStartAt: futureIso(501), overrides: { difficulty: "MYTHIC", lootType: "VIP", plannedBossCount: 3 } },
+        {
+          scheduledStartAt: futureIso(501),
+          overrides: { difficulty: "MYTHIC", lootType: "VIP", venomousPlannedBossCount: 3 },
+        },
       ],
     });
     createdRunIds.push(...result.ids);
@@ -502,23 +531,25 @@ describe("runService.createManyRuns — no Discord state", () => {
 describe("runService.createManyRuns — single vs one-row bulk equivalence", () => {
   it("a one-row Mass Create batch produces the same authoritative planning state as single createRun for the same effective input", async () => {
     const scheduledStartAt = futureIso(540);
-    const single = await runService.createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      scheduledStartAt,
-      plannedBossCount: 6,
-      desiredTankCount: 3,
-      desiredHealerCount: 5,
-      desiredDpsCount: 12,
-      notes: "Parity check",
-    });
+    const single = await runService.createRun(
+      lead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "VIP",
+        scheduledStartAt,
+        venomousPlannedBossCount: 6,
+        desiredTankCount: 3,
+        desiredHealerCount: 5,
+        desiredDpsCount: 12,
+        notes: "Parity check",
+      }),
+    );
     createdRunIds.push(single.id);
 
     const bulk = await runService.createManyRuns(lead, {
       defaults: defaultsFor({
         lootType: "VIP",
-        plannedBossCount: 6,
+        venomousPlannedBossCount: 6,
         desiredTankCount: 3,
         desiredHealerCount: 5,
         desiredDpsCount: 12,
@@ -532,7 +563,27 @@ describe("runService.createManyRuns — single vs one-row bulk equivalence", () 
     const bulkRun = await runRepository.findById(bulk.ids[0]!);
 
     expect(bulkRun?.title).toBe(singleRun?.title);
-    expect(bulkRun?.raidId).toBe(singleRun?.raidId);
+    expect(primaryRaidIdFromRun(bulkRun)).toBe(primaryRaidIdFromRun(singleRun));
+    expect(
+      bulkRun?.contents.map(({ raidId, sortOrder, plannedBossCount, totalBossCount, raidName, season }) => ({
+        raidId,
+        sortOrder,
+        plannedBossCount,
+        totalBossCount,
+        raidName,
+        season,
+      })),
+    ).toEqual(
+      singleRun?.contents.map(({ raidId, sortOrder, plannedBossCount, totalBossCount, raidName, season }) => ({
+        raidId,
+        sortOrder,
+        plannedBossCount,
+        totalBossCount,
+        raidName,
+        season,
+      })),
+    );
+    expect(bulkRun?.contentDisplay).toEqual(singleRun?.contentDisplay);
     expect(bulkRun?.difficulty).toBe(singleRun?.difficulty);
     expect(bulkRun?.lootType).toBe(singleRun?.lootType);
     expect(bulkRun?.scheduledStartAt).toBe(singleRun?.scheduledStartAt);
@@ -541,7 +592,7 @@ describe("runService.createManyRuns — single vs one-row bulk equivalence", () 
     expect(bulkRun?.desiredTankCount).toBe(singleRun?.desiredTankCount);
     expect(bulkRun?.desiredHealerCount).toBe(singleRun?.desiredHealerCount);
     expect(bulkRun?.desiredDpsCount).toBe(singleRun?.desiredDpsCount);
-    expect(bulkRun?.plannedBossCount).toBe(singleRun?.plannedBossCount);
+    expect(venomousPlannedFromRun(bulkRun)).toBe(venomousPlannedFromRun(singleRun));
     expect(bulkRun?.status).toBe(singleRun?.status);
     expect(bulkRun?.signupsOpen).toBe(singleRun?.signupsOpen);
   });
@@ -571,7 +622,6 @@ describe("runRepository.createManyDraftsAtomic — atomic rollback", () => {
     const raid = await raidRepository.findById(raidId);
     const goodInput = {
       title: "Atomicity fixture (should not survive)",
-      raidId,
       difficulty: "HEROIC" as const,
       lootType: "UNSAVED" as const,
       scheduledStartAt: futureIso(700),
@@ -580,16 +630,12 @@ describe("runRepository.createManyDraftsAtomic — atomic rollback", () => {
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
-      plannedBossCount: raid!.totalBossCount,
       contents: [{ raidId, sortOrder: 1, plannedBossCount: raid!.totalBossCount }],
     };
-    // A nonexistent raidId violates the Run.raidId foreign key at the DB
-    // level on the SECOND insert, after the first would otherwise have
-    // already written successfully — proving the whole transaction, not
-    // just Service-level pre-validation, rolls back.
+    // A nonexistent content raidId violates RunRaidContent FK at the DB level
+    // on the SECOND insert — proving the whole transaction rolls back.
     const badInput = {
       ...goodInput,
-      raidId: crypto.randomUUID(),
       scheduledStartAt: futureIso(701),
       contents: [{ raidId: crypto.randomUUID(), sortOrder: 1, plannedBossCount: raid!.totalBossCount }],
     };
@@ -632,6 +678,9 @@ describe("runService.createManyRuns — templateId integration", () => {
     const run = await runRepository.findById(result.ids[0]!);
     expect(run?.raidLeadId).toBe(ids.lead);
     expect(run?.notes).toBe("Template notes");
+    expect(primaryRaidIdFromRun(run)).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(run?.contents).toHaveLength(1);
+    expect(run?.contents[0]?.plannedBossCount).toBe(8);
   });
 
   it("ADMIN applying another raid lead's template creates Runs owned by that raid lead, not the ADMIN", async () => {
@@ -859,7 +908,7 @@ describe("runService.createManyRuns — templateId integration", () => {
       const after = await runRepository.findById(result.ids[0]!);
       expect(after?.difficulty).toBe(before?.difficulty);
       expect(after?.lootType).toBe(before?.lootType);
-      expect(after?.plannedBossCount).toBe(before?.plannedBossCount);
+      expect(after?.contents).toEqual(before?.contents);
       expect(after?.desiredTankCount).toBe(before?.desiredTankCount);
       expect(after?.desiredHealerCount).toBe(before?.desiredHealerCount);
       expect(after?.desiredDpsCount).toBe(before?.desiredDpsCount);

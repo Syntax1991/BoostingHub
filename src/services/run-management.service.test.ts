@@ -3,6 +3,14 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
+import {
+  contentLegacyUpdateInput,
+  futureTestIso,
+  primaryRaidIdFromRun,
+  venomousCreateInput,
+  venomousPlannedFromRun,
+  venomousUpdateInput,
+} from "@/lib/test-run-input";
 import { MANAFORGE_OMEGA_RAID_ID, TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -77,22 +85,42 @@ async function deleteIfPresent(table: "User" | "Character" | "RunSignup" | "RunS
 }
 
 function futureIso(days = 7) {
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  return futureTestIso(days);
+}
+
+async function updateVenomous(
+  actor: AuthenticatedUser,
+  runId: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const run = await runRepository.findById(runId);
+  if (!run) throw new Error("Run missing in test fixture");
+  await runService.updateRun(actor, venomousUpdateInput(runId, run, overrides));
+}
+
+async function expectVenomousUpdateDomainCode(
+  actor: AuthenticatedUser,
+  runId: string,
+  overrides: Record<string, unknown>,
+  code: string,
+) {
+  const run = await runRepository.findById(runId);
+  if (!run) throw new Error("Run missing in test fixture");
+  await expectDomainCode(
+    runService.updateRun(actor, venomousUpdateInput(runId, run, overrides)),
+    code,
+  );
 }
 
 async function createDraft(actor: AuthenticatedUser, extra: Record<string, unknown> = {}) {
-  const created = await runService.createRun(actor, {
-    raidId,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    plannedBossCount: 8,
-    scheduledStartAt: futureIso(),
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-    raidLeadId: actor.accountRole === "ADMIN" ? ids.lead : undefined,
-    ...extra,
-  });
+  const created = await runService.createRun(
+    actor,
+    venomousCreateInput({
+      scheduledStartAt: futureIso(),
+      raidLeadId: actor.accountRole === "ADMIN" ? ids.lead : undefined,
+      ...extra,
+    }),
+  );
   createdRunIds.push(created.id);
   return created.id;
 }
@@ -107,7 +135,6 @@ async function createDraft(actor: AuthenticatedUser, extra: Record<string, unkno
 async function createHistoricalDraft(extra: Record<string, unknown> = {}) {
   const id = await runRepository.create({
     title: "Historical fixture run",
-    raidId: MANAFORGE_OMEGA_RAID_ID,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     scheduledStartAt: futureIso(),
@@ -116,7 +143,6 @@ async function createHistoricalDraft(extra: Record<string, unknown> = {}) {
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
-    plannedBossCount: 8,
     contents: [
       {
         raidId: MANAFORGE_OMEGA_RAID_ID,
@@ -182,16 +208,7 @@ afterAll(async () => {
 describe("run creation authorization", () => {
   it("rejects USER create", async () => {
     await expectDomainCode(
-      runService.createRun(user, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+      runService.createRun(user, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })),
       "NOT_AUTHORIZED",
     );
   });
@@ -210,17 +227,7 @@ describe("run creation authorization", () => {
 
   it("rejects a RAID_LEAD forging another raidLeadId", async () => {
     await expectDomainCode(
-      runService.createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 1,
-        raidLeadId: ids.otherLead,
-      }),
+      runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1, raidLeadId: ids.otherLead })),
       "RUN_RAID_LEAD_INVALID",
     );
   });
@@ -231,17 +238,7 @@ describe("run creation authorization", () => {
     expect(run?.raidLeadId).toBe(ids.lead);
 
     await expectDomainCode(
-      runService.createRun(admin, {
-        raidId,
-        difficulty: "NORMAL",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 1,
-        raidLeadId: ids.user,
-      }),
+      runService.createRun(admin, venomousCreateInput({ difficulty: "NORMAL", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1, raidLeadId: ids.user })),
       "RUN_RAID_LEAD_INVALID",
     );
   });
@@ -250,29 +247,11 @@ describe("run creation authorization", () => {
 describe("run creation domain", () => {
   it("rejects an invalid schedule and negative composition", async () => {
     await expectDomainCode(
-      runService.createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: "not-a-date",
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+      runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: "not-a-date", desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })),
       "RUN_SCHEDULE_INVALID",
     );
     await expectDomainCode(
-      runService.createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+      runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })),
       "RUN_SCHEDULE_INVALID",
     );
     await expectDomainCode(
@@ -298,7 +277,7 @@ describe("run creation domain", () => {
     expect(run?.title).toContain("Unsaved");
     expect(run?.title).toContain("8/8");
     expect(run?.title).toContain("Runmgmt Lead");
-    expect(run?.raidId).toBe(raidId);
+    expect(primaryRaidIdFromRun(run)).toBe(raidId);
     expect(run?.difficulty).toBe("HEROIC");
   });
 
@@ -317,7 +296,7 @@ describe("run creation domain", () => {
     await expectDomainCode(createDraft(lead, { plannedBossCount: 0 }), "RUN_BOSS_COUNT_INVALID");
     await expectDomainCode(createDraft(lead, { plannedBossCount: 9 }), "RUN_BOSS_COUNT_INVALID");
     const id = await createDraft(lead, { plannedBossCount: 1 });
-    expect((await runRepository.findById(id))?.plannedBossCount).toBe(1);
+    expect(venomousPlannedFromRun(await runRepository.findById(id))).toBe(1);
   });
 });
 
@@ -353,33 +332,13 @@ describe("open run", () => {
 describe("edit run", () => {
   it("lets DRAFT and OPEN-without-signups change identity, then locks after signup history", async () => {
     const id = await createDraft(lead, { title: "Editable" });
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId,
-      difficulty: "MYTHIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(8),
-      desiredTankCount: 3,
-      desiredHealerCount: 5,
-      desiredDpsCount: 12,
-    });
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "MYTHIC", lootType: "UNSAVED", scheduledStartAt: futureIso(8), desiredTankCount: 3, desiredHealerCount: 5, desiredDpsCount: 12 });
     let run = await runRepository.findById(id);
     expect(run?.difficulty).toBe("MYTHIC");
     expect(run?.desiredTankCount).toBe(3);
 
     await runService.openRun(lead, id);
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId,
-      difficulty: "NORMAL",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(9),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "NORMAL", lootType: "UNSAVED", scheduledStartAt: futureIso(9), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
     run = await runRepository.findById(id);
     expect(run?.difficulty).toBe("NORMAL");
 
@@ -397,32 +356,14 @@ describe("edit run", () => {
     });
     createdSignupIds.push(signupId);
 
-    await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: id,
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(10),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+    await expectVenomousUpdateDomainCode(
+      lead,
+      id,
+      { difficulty: "HEROIC", scheduledStartAt: futureIso(10) },
       "RUN_IDENTITY_LOCKED",
     );
 
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId,
-      difficulty: "NORMAL",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(11),
-      desiredTankCount: 1,
-      desiredHealerCount: 2,
-      desiredDpsCount: 8,
-    });
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "NORMAL", lootType: "UNSAVED", scheduledStartAt: futureIso(11), desiredTankCount: 1, desiredHealerCount: 2, desiredDpsCount: 8 });
     run = await runRepository.findById(id);
     expect(run?.difficulty).toBe("NORMAL");
     expect(run?.desiredTankCount).toBe(1);
@@ -432,48 +373,22 @@ describe("edit run", () => {
   it("rejects planning edits after publish and cross-lead mutation", async () => {
     const id = await createDraft(lead, { title: "Publish lock" });
     await runRepository.updateFields(id, { status: "PUBLISHED", signupsOpen: false });
-    await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: id,
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+    await expectVenomousUpdateDomainCode(
+      lead,
+      id,
+      { scheduledStartAt: futureIso() },
       "RUN_EDIT_LOCKED",
     );
 
     const otherId = await createDraft(otherLead, { title: "Other lead run" });
-    await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: otherId,
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+    await expectVenomousUpdateDomainCode(
+      lead,
+      otherId,
+      { scheduledStartAt: futureIso() },
       "RUN_NOT_MANAGEABLE",
     );
 
-    await runService.updateRun(admin, {
-      runId: otherId,
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await updateVenomous(admin, otherId, { venomousPlannedBossCount: 8, difficulty: "HEROIC", lootType: "UNSAVED", scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
     expect((await runRepository.findById(otherId))?.raidLeadId).toBe(ids.otherLead);
   });
 });
@@ -483,32 +398,12 @@ describe("title regeneration on update", () => {
     const id = await createDraft(lead, { title: "Ignored on create too" });
     const before = (await runRepository.findById(id))?.title;
 
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(3),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "HEROIC", lootType: "VIP", scheduledStartAt: futureIso(3), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
     const afterLootTypeChange = (await runRepository.findById(id))?.title;
     expect(afterLootTypeChange).not.toBe(before);
     expect(afterLootTypeChange).toContain("VIP");
 
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      plannedBossCount: 5,
-      scheduledStartAt: futureIso(3),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 5, difficulty: "HEROIC", lootType: "VIP", scheduledStartAt: futureIso(3), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
     const afterBossCountChange = (await runRepository.findById(id))?.title;
     expect(afterBossCountChange).not.toBe(afterLootTypeChange);
     expect(afterBossCountChange).toContain("5/8");
@@ -516,32 +411,18 @@ describe("title regeneration on update", () => {
     // A notes-only change still regenerates the title (deterministic
     // recomputation is cheap) but produces the same string, since none of
     // the title's own source fields changed.
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      plannedBossCount: 5,
-      scheduledStartAt: futureIso(3),
-      notes: "Just a note",
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 5, difficulty: "HEROIC", lootType: "VIP", scheduledStartAt: futureIso(3), notes: "Just a note", desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
     expect((await runRepository.findById(id))?.title).toBe(afterBossCountChange);
 
-    await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: id,
-        raidId,
+    await expectVenomousUpdateDomainCode(
+      lead,
+      id,
+      {
         difficulty: "MYTHIC",
         lootType: "SAVED",
-        plannedBossCount: 5,
+        venomousPlannedBossCount: 5,
         scheduledStartAt: futureIso(3),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
+      },
       "RUN_LOOT_TYPE_INVALID",
     );
   });
@@ -551,68 +432,30 @@ describe("raid lead reassignment", () => {
   it("blocks RAID_LEAD reassignment and allows ADMIN before publish", async () => {
     const id = await createDraft(lead, { title: "Reassign me" });
     await runService.openRun(lead, id);
-    await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: id,
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-        raidLeadId: ids.otherLead,
-      }),
+    await expectVenomousUpdateDomainCode(
+      lead,
+      id,
+      { scheduledStartAt: futureIso(), raidLeadId: ids.otherLead },
       "RUN_RAID_LEAD_INVALID",
     );
 
-    await runService.updateRun(admin, {
-      runId: id,
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-      raidLeadId: ids.otherLead,
-    });
+    await updateVenomous(admin, id, { venomousPlannedBossCount: 8, difficulty: "HEROIC", lootType: "UNSAVED", scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14, raidLeadId: ids.otherLead });
     expect((await runRepository.findById(id))?.raidLeadId).toBe(ids.otherLead);
     expect((await runDetailService.getRunDetail(lead, id)).permissions.canManageRun).toBe(false);
     expect((await runDetailService.getRunDetail(otherLead, id)).permissions.canManageRun).toBe(true);
 
-    await expectDomainCode(
-      runService.updateRun(admin, {
-        runId: id,
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-        raidLeadId: ids.user,
-      }),
+    await expectVenomousUpdateDomainCode(
+      admin,
+      id,
+      { scheduledStartAt: futureIso(), raidLeadId: ids.user },
       "RUN_RAID_LEAD_INVALID",
     );
 
     await runRepository.updateFields(id, { status: "PUBLISHED" });
-    await expectDomainCode(
-      runService.updateRun(admin, {
-        runId: id,
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-        raidLeadId: ids.lead,
-      }),
+    await expectVenomousUpdateDomainCode(
+      admin,
+      id,
+      { scheduledStartAt: futureIso(), raidLeadId: ids.lead },
       "RUN_EDIT_LOCKED",
     );
   });
@@ -1018,7 +861,7 @@ describe("historical raid availability", () => {
   });
 
   it("rejects creating a new Run targeting a historical raid, with no Run row created", async () => {
-    const before = (await orm.Run.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
+    const before = (await orm.RunRaidContent.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
     await expectDomainCode(
       runService.createRun(lead, {
         raidId: MANAFORGE_OMEGA_RAID_ID,
@@ -1032,60 +875,42 @@ describe("historical raid availability", () => {
       }),
       "RAID_NOT_AVAILABLE_FOR_RUNS",
     );
-    const after = (await orm.Run.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
+    const after = (await orm.RunRaidContent.where({ raidId: MANAFORGE_OMEGA_RAID_ID }).all()).length;
     expect(after).toBe(before);
   });
 
   it("succeeds creating a new Run targeting the current available raid", async () => {
     const id = await createDraft(lead, { title: "Available raid create" });
     const run = await runRepository.findById(id);
-    expect(run?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(primaryRaidIdFromRun(run)).toBe(VENOMOUS_ABYSS_RAID_ID);
   });
 
   it("a historical Run still loads through Run detail and renders its real raid name", async () => {
     const id = await createHistoricalDraft();
     const detail = await runDetailService.getRunDetail(lead, id);
-    expect(detail.run.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
-    expect(detail.run.raidName).toBe("Manaforge Omega");
+    expect(detail.run.contents[0]?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(detail.run.productLabel).toBe("Manaforge Omega");
+    expect(detail.run.contentSummary).toContain("Manaforge Omega");
   });
 
   it("allows an unrelated edit (notes) on a historical Run without touching its raid", async () => {
     const id = await createHistoricalDraft({ notes: "Before" });
     const run = await runRepository.findById(id);
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId: run!.raidId,
-      difficulty: run!.difficulty,
-      lootType: run!.lootType,
-      scheduledStartAt: run!.scheduledStartAt,
-      notes: "After",
-      desiredTankCount: run!.desiredTankCount,
-      desiredHealerCount: run!.desiredHealerCount,
-      desiredDpsCount: run!.desiredDpsCount,
-      plannedBossCount: run!.plannedBossCount,
-    });
+    await runService.updateRun(lead, contentLegacyUpdateInput(id, run!, { notes: "After" }));
     const updated = await runRepository.findById(id);
-    expect(updated?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(primaryRaidIdFromRun(updated)).toBe(MANAFORGE_OMEGA_RAID_ID);
     expect(updated?.notes).toBe("After");
   });
 
   it("allows a difficulty-only change while keeping the same historical raid", async () => {
     const id = await createHistoricalDraft();
     const run = await runRepository.findById(id);
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId: run!.raidId,
-      difficulty: "MYTHIC",
-      lootType: "UNSAVED",
-      scheduledStartAt: run!.scheduledStartAt,
-      notes: run!.notes,
-      desiredTankCount: run!.desiredTankCount,
-      desiredHealerCount: run!.desiredHealerCount,
-      desiredDpsCount: run!.desiredDpsCount,
-      plannedBossCount: run!.plannedBossCount,
-    });
+    await runService.updateRun(
+      lead,
+      contentLegacyUpdateInput(id, run!, { difficulty: "MYTHIC", lootType: "UNSAVED" }),
+    );
     const updated = await runRepository.findById(id);
-    expect(updated?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(primaryRaidIdFromRun(updated)).toBe(MANAFORGE_OMEGA_RAID_ID);
     expect(updated?.difficulty).toBe("MYTHIC");
   });
 
@@ -1093,22 +918,14 @@ describe("historical raid availability", () => {
     const id = await createDraft(lead, { title: "Switch to historical" });
     const before = await runRepository.findById(id);
     await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: id,
-        raidId: MANAFORGE_OMEGA_RAID_ID,
-        difficulty: before!.difficulty,
-        lootType: before!.lootType,
-        scheduledStartAt: before!.scheduledStartAt,
-        notes: before!.notes,
-        desiredTankCount: before!.desiredTankCount,
-        desiredHealerCount: before!.desiredHealerCount,
-        desiredDpsCount: before!.desiredDpsCount,
-        plannedBossCount: before!.plannedBossCount,
-      }),
+      runService.updateRun(
+        lead,
+        contentLegacyUpdateInput(id, before!, { raidId: MANAFORGE_OMEGA_RAID_ID }),
+      ),
       "RAID_NOT_AVAILABLE_FOR_RUNS",
     );
     const after = await runRepository.findById(id);
-    expect(after?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(primaryRaidIdFromRun(after)).toBe(VENOMOUS_ABYSS_RAID_ID);
     expect(after?.difficulty).toBe(before?.difficulty);
     expect(after?.notes).toBe(before?.notes);
   });
@@ -1116,20 +933,12 @@ describe("historical raid availability", () => {
   it("allows changing an existing historical Run's raid to the current available raid", async () => {
     const id = await createHistoricalDraft();
     const before = await runRepository.findById(id);
-    await runService.updateRun(lead, {
-      runId: id,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: before!.difficulty,
-      lootType: before!.lootType,
-      scheduledStartAt: before!.scheduledStartAt,
-      notes: before!.notes,
-      desiredTankCount: before!.desiredTankCount,
-      desiredHealerCount: before!.desiredHealerCount,
-      desiredDpsCount: before!.desiredDpsCount,
-      plannedBossCount: before!.plannedBossCount,
-    });
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(id, before!, { venomousPlannedBossCount: 8 }),
+    );
     const after = await runRepository.findById(id);
-    expect(after?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(primaryRaidIdFromRun(after)).toBe(VENOMOUS_ABYSS_RAID_ID);
   });
 
   it("Edit Run editor data represents the historical current selection without offering other historical raids as alternatives", async () => {
@@ -1154,6 +963,6 @@ describe("historical raid availability", () => {
     await runService.openRun(lead, id);
     const run = await runRepository.findById(id);
     expect(run?.status).toBe("OPEN");
-    expect(run?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
+    expect(primaryRaidIdFromRun(run)).toBe(MANAFORGE_OMEGA_RAID_ID);
   });
 });

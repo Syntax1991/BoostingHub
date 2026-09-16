@@ -7,10 +7,10 @@ import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { strikeRepository } from "@/repositories/strike.repository";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import { strikeService } from "@/services/strike.service";
 import type { ParticipationType } from "@/models/enums";
 
-const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   admin: "aaaaaaaa-aaaa-4aaa-8aaa-sk0000000001",
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-sk0000000002",
@@ -200,16 +200,7 @@ beforeAll(async () => {
 
   targetCharacterId = await createCharacter(ids.target, "Skstriketarget");
 
-  labRunId = await runService.createRun(lead, {
-    raidId,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    plannedBossCount: 8,
-    scheduledStartAt: futureIso(),
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-  }).then((run) => run.id);
+  labRunId = await runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 })).then((run) => run.id);
   createdRunIds.push(labRunId);
   await runService.openRun(lead, labRunId);
   // Association is proven by BoostingHub's own signup history — no roster
@@ -221,17 +212,7 @@ beforeAll(async () => {
     participationType: "BOOSTER",
   });
 
-  otherRunId = await runService.createRun(admin, {
-    raidId,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    plannedBossCount: 8,
-    scheduledStartAt: futureIso(),
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-    raidLeadId: ids.otherLead,
-  }).then((run) => run.id);
+  otherRunId = await runService.createRun(admin, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14, raidLeadId: ids.otherLead })).then((run) => run.id);
   createdRunIds.push(otherRunId);
 }, 60_000);
 

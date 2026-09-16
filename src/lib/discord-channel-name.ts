@@ -6,30 +6,22 @@ import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
  * Discord raid-channel naming:
  * `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`
  *
- * Coverage:
- * - single-raid Runs: `{planned}of{total}` (existing behavior)
- * - Season 2 Bundle: `s2b-{venomous}of8` (never 9of9)
+ * `coverage` comes from `projectRunContentDisplay(...).channelCoverage`
+ * (e.g. `8of8` or `s2b-8of8`) — never from singular Run.plannedBossCount.
  */
 export type RunChannelNameInput = {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  plannedBossCount: number;
-  totalBossCount: number;
+  /** Content-native coverage token (`8of8`, `s2b-6of8`, …). */
+  coverage: string;
   raidLeadName: string;
   timeZone?: string;
-  /**
-   * When true, encode Bundle coverage as `s2b-{venomousPlanned}of8` using
-   * plannedBossCount as the Venomous slot (legacy mirror).
-   */
-  season2Bundle?: boolean;
 };
 
 /** Discord text channel names are capped at 100 characters. */
 const MAX_CHANNEL_NAME_LENGTH = 100;
 
-// Combining diacritical marks (U+0300-U+036F), stripped after NFKD decomposition
-// so e.g. an accented Latin letter reduces to its unaccented ASCII base letter.
 const COMBINING_MARKS_PATTERN = new RegExp("[\\u0300-\\u036f]", "g");
 
 function slugSegment(value: string): string {
@@ -52,9 +44,7 @@ export function buildDiscordRunChannelName(input: RunChannelNameInput): string {
   const hhmm = `${String(parts.hour).padStart(2, "0")}${String(parts.minute).padStart(2, "0")}`;
   const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty].toLowerCase();
   const lootType = input.lootType.toLowerCase();
-  const bossCoverage = input.season2Bundle
-    ? `s2b-${input.plannedBossCount}of8`
-    : `${input.plannedBossCount}of${input.totalBossCount}`;
+  const bossCoverage = slugSegment(input.coverage);
   const raidLead = slugSegment(input.raidLeadName);
 
   const segments = [weekday, hhmm, difficulty, lootType, bossCoverage, raidLead].filter(

@@ -24,6 +24,10 @@ export type RunContentDisplay = {
   productLabel: string;
   summary: string;
   shortSummary: string;
+  /** Compact title coverage — e.g. `8/8` or `S2B 8/8`. Never a summed 9/9. */
+  titleCoverage: string;
+  /** Discord channel coverage token — e.g. `8of8` or `s2b-8of8`. Never `9of9` for Bundle. */
+  channelCoverage: string;
 };
 
 export type ContentIdentitySlice = {
@@ -89,20 +93,41 @@ export function expandRunContentPreset(input: {
   ];
 }
 
-/** Transitional singular Run.raidId / plannedBossCount mirror — Venomous is primary. */
-export function legacyMirrorFromContents(contents: ExpandedRunContent[]): {
-  raidId: string;
-  plannedBossCount: number;
-} {
-  const venomous =
-    contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ??
-    contents.slice().sort((a, b) => a.sortOrder - b.sortOrder)[0];
-  if (!venomous) {
-    throw new Error("Run contents must include at least one raid content row.");
+/**
+ * Coverage tokens for title / Discord channel naming from authoritative contents.
+ * Bundle uses Venomous planned count only — Tidebound is implicit in the S2B token.
+ */
+export function projectRunContentCoverage(
+  contents: ReadonlyArray<{
+    raidId: string;
+    sortOrder: number;
+    plannedBossCount: number;
+    totalBossCount: number;
+  }>,
+): { titleCoverage: string; channelCoverage: string; productKey: RunContentPresetKey | "CUSTOM" } {
+  const ordered = [...contents].sort((a, b) => a.sortOrder - b.sortOrder);
+  const productKey = classifyRunContents(ordered);
+
+  if (productKey === "MIDNIGHT_S2_BUNDLE") {
+    const venomous = ordered.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID)!;
+    const planned = venomous.plannedBossCount;
+    const total = venomous.totalBossCount || 8;
+    return {
+      productKey,
+      titleCoverage: `S2B ${planned}/${total}`,
+      channelCoverage: `s2b-${planned}of${total}`,
+    };
   }
+
+  const primary = ordered[0];
+  if (!primary) {
+    return { productKey: "CUSTOM", titleCoverage: "0/0", channelCoverage: "0of0" };
+  }
+
   return {
-    raidId: venomous.raidId,
-    plannedBossCount: venomous.plannedBossCount,
+    productKey,
+    titleCoverage: `${primary.plannedBossCount}/${primary.totalBossCount}`,
+    channelCoverage: `${primary.plannedBossCount}of${primary.totalBossCount}`,
   };
 }
 
@@ -156,6 +181,7 @@ export function projectRunContentDisplay(
   const ordered = [...contents].sort((a, b) => a.sortOrder - b.sortOrder);
   const productKey = classifyRunContents(ordered);
   const key = productKey === "CUSTOM" ? null : productKey;
+  const coverage = projectRunContentCoverage(ordered);
 
   const productLabel =
     key === "MIDNIGHT_S2_BUNDLE"
@@ -175,9 +201,32 @@ export function projectRunContentDisplay(
     productLabel,
     summary,
     shortSummary: summary,
+    titleCoverage: coverage.titleCoverage,
+    channelCoverage: coverage.channelCoverage,
   };
 }
 
 export function venomousBossMaxFromCatalog(): number {
   return findRaidCatalogById(VENOMOUS_ABYSS_RAID_ID)?.bosses.length ?? VENOMOUS_MAX;
+}
+
+/** Title coverage for Create/Edit previews — matches server `projectRunContentDisplay` tokens. */
+export function titleCoverageFromPreset(input: {
+  preset: RunContentPresetKey;
+  venomousPlannedBossCount: number;
+  venomousTotalBossCount?: number;
+}): string {
+  const venomousTotal = input.venomousTotalBossCount ?? venomousBossMaxFromCatalog();
+  const tideboundTotal = findRaidCatalogById(TIDEBOUND_GROTTO_RAID_ID)?.bosses.length ?? 1;
+  const expanded = expandRunContentPreset(input);
+  const rows = expanded.map((row) => ({
+    ...row,
+    totalBossCount:
+      row.raidId === VENOMOUS_ABYSS_RAID_ID
+        ? venomousTotal
+        : row.raidId === TIDEBOUND_GROTTO_RAID_ID
+          ? tideboundTotal
+          : venomousTotal,
+  }));
+  return projectRunContentCoverage(rows).titleCoverage;
 }

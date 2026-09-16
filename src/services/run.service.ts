@@ -10,8 +10,8 @@ import { DomainError } from "@/lib/errors";
 import { buildRunTitle } from "@/lib/run-title";
 import {
   expandRunContentPreset,
-  legacyMirrorFromContents,
   listCreateRunContentPresets,
+  projectRunContentDisplay,
   type ExpandedRunContent,
   type RunContentPresetKey,
 } from "@/lib/run-content-presets";
@@ -102,33 +102,12 @@ function expandPresetOrThrow(input: {
       venomousPlannedBossCount: input.venomousPlannedBossCount,
     });
   } catch (error) {
-    throw new DomainError(
-      "VALIDATION_FAILED",
-      error instanceof Error ? error.message : "Invalid run content preset.",
-    );
+    const message = error instanceof Error ? error.message : "Invalid run content preset.";
+    if (message.toLowerCase().includes("planned boss count")) {
+      throw new DomainError("RUN_BOSS_COUNT_INVALID", message);
+    }
+    throw new DomainError("VALIDATION_FAILED", message);
   }
-}
-
-/**
- * Update boundary: only rejects on availability when the Run's transitional
- * raid mirror is actually changing to a different non-Tidebound raid.
- */
-async function resolveRaidForUpdate(input: { raidId: string; raidChanged: boolean }) {
-  const raid = await raidRepository.findById(input.raidId);
-  if (!raid) {
-    throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
-  }
-  if (
-    input.raidChanged &&
-    !raid.availableForRuns &&
-    input.raidId !== TIDEBOUND_GROTTO_RAID_ID
-  ) {
-    throw new DomainError(
-      "RAID_NOT_AVAILABLE_FOR_RUNS",
-      "This raid is no longer available for new runs.",
-    );
-  }
-  return raid;
 }
 
 async function requireEligibleRaidLead(raidLeadId: string) {
@@ -205,8 +184,7 @@ function expandEffectiveContents(input: EffectiveRunInput): ExpandedRunContent[]
  * The single normalized preparation path for a new Run draft: schedule
  * normalization/past-date rule, composition bounds, loot-type/difficulty
  * compatibility, expanded contents vs raid totals, notes normalization, and
- * server title derivation. Transitional Run.raidId / plannedBossCount mirror
- * Venomous as the singular primary (Bundle compatibility only).
+ * server title derivation from content coverage tokens.
  */
 function prepareRunDraft(
   input: EffectiveRunInput,
@@ -224,6 +202,10 @@ function prepareRunDraft(
   assertComposition(input.desiredDpsCount, "Desired DPS");
   assertValidRunLootType(input.difficulty, input.lootType);
 
+  if (context.contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run must include at least one raid content row.");
+  }
+
   for (const content of context.contents) {
     const raid = context.raidById.get(content.raidId);
     if (!raid) {
@@ -232,24 +214,28 @@ function prepareRunDraft(
     assertValidPlannedBossCount(content.plannedBossCount, raid.totalBossCount);
   }
 
-  const mirror = legacyMirrorFromContents(context.contents);
-  const primaryRaid = context.raidById.get(mirror.raidId);
-  if (!primaryRaid) {
-    throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
-  }
+  const displayRows = context.contents.map((content) => {
+    const raid = context.raidById.get(content.raidId)!;
+    return {
+      raidId: content.raidId,
+      raidName: raid.name,
+      sortOrder: content.sortOrder,
+      plannedBossCount: content.plannedBossCount,
+      totalBossCount: raid.totalBossCount,
+    };
+  });
+  const display = projectRunContentDisplay(displayRows);
 
   const title = buildRunTitle({
     scheduledStartAt,
     difficulty: input.difficulty,
     lootType: input.lootType,
-    plannedBossCount: mirror.plannedBossCount,
-    totalBossCount: primaryRaid.totalBossCount,
+    titleCoverage: display.titleCoverage,
     raidLeadName: context.raidLeadName,
   });
 
   return {
     title,
-    raidId: mirror.raidId,
     difficulty: input.difficulty,
     lootType: input.lootType,
     scheduledStartAt,
@@ -258,7 +244,6 @@ function prepareRunDraft(
     desiredTankCount: input.desiredTankCount,
     desiredHealerCount: input.desiredHealerCount,
     desiredDpsCount: input.desiredDpsCount,
-    plannedBossCount: mirror.plannedBossCount,
     contents: context.contents,
   };
 }
@@ -358,10 +343,9 @@ export const runService = {
       return {
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
         productLabel: run.contentDisplay.productLabel,
         contentSummary: run.contentDisplay.summary,
-        season: run.season,
+        titleCoverage: run.contentDisplay.titleCoverage,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
@@ -371,8 +355,8 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
-        plannedBossCount: run.plannedBossCount,
-        totalBossCount: run.totalBossCount,
+        contents: run.contents,
+        contentDisplay: run.contentDisplay,
         signupsOpen: run.signupsOpen,
         signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
         signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
@@ -423,9 +407,9 @@ export const runService = {
       runs: managed.map((run) => ({
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
         productLabel: run.contentDisplay.productLabel,
         contentSummary: run.contentDisplay.summary,
+        titleCoverage: run.contentDisplay.titleCoverage,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
@@ -441,8 +425,8 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
-        plannedBossCount: run.plannedBossCount,
-        totalBossCount: run.totalBossCount,
+        contents: run.contents,
+        contentDisplay: run.contentDisplay,
         archivedAt: run.archivedAt,
         actionLabel: rosterActionLabel(
           run.status,
@@ -712,14 +696,12 @@ export const runService = {
         });
     } else {
       // Historical / CUSTOM singular path — replace with one content row only when
-      // the transitional raid mirror or planned count actually changes.
+      // the content identity or planned count actually changes.
       const orderedCurrent = [...currentContents].sort((a, b) => a.sortOrder - b.sortOrder);
       contentChanged =
         orderedCurrent.length !== 1 ||
         orderedCurrent[0]!.raidId !== input.raidId ||
-        orderedCurrent[0]!.plannedBossCount !== input.plannedBossCount ||
-        input.raidId !== run.raidId ||
-        input.plannedBossCount !== run.plannedBossCount;
+        orderedCurrent[0]!.plannedBossCount !== input.plannedBossCount;
       nextContents = contentChanged
         ? [{ raidId: input.raidId, sortOrder: 1, plannedBossCount: input.plannedBossCount }]
         : orderedCurrent.map((row) => ({
@@ -729,9 +711,7 @@ export const runService = {
           }));
     }
 
-    const mirror = legacyMirrorFromContents(nextContents);
-    const identityChanged =
-      contentChanged || input.difficulty !== run.difficulty || mirror.raidId !== run.raidId;
+    const identityChanged = contentChanged || input.difficulty !== run.difficulty;
     const leadChanged = Boolean(input.raidLeadId && input.raidLeadId !== run.raidLeadId);
 
     if (identityChanged && !capabilities.canEditIdentity) {
@@ -769,38 +749,46 @@ export const runService = {
 
     let difficulty = run.difficulty;
     if (identityChanged) {
-      const raidChanged = mirror.raidId !== run.raidId;
-      await resolveRaidForUpdate({ raidId: mirror.raidId, raidChanged });
       difficulty = input.difficulty;
-      if ("contentPreset" in input) {
+      // Availability is only re-checked when content composition changes — a
+      // difficulty-only edit on a historical Run must keep its existing raids.
+      if (contentChanged) {
         await resolveRaidsForContents(nextContents);
-      } else if (contentChanged) {
-        const raid = await raidRepository.findById(mirror.raidId);
-        if (!raid) {
-          throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
-        }
-        if (raidChanged && !raid.availableForRuns && mirror.raidId !== TIDEBOUND_GROTTO_RAID_ID) {
-          throw new DomainError(
-            "RAID_NOT_AVAILABLE_FOR_RUNS",
-            "This raid is no longer available for new runs.",
-          );
-        }
-        assertValidPlannedBossCount(mirror.plannedBossCount, raid.totalBossCount);
       }
     }
 
-    const primaryRaid =
-      (await raidRepository.findById(mirror.raidId)) ??
-      (await resolveRaidForUpdate({ raidId: mirror.raidId, raidChanged: false }));
+    const raidById = new Map(
+      (await raidRepository.listByIds([...new Set(nextContents.map((row) => row.raidId))])).map(
+        (raid) => [raid.id, raid],
+      ),
+    );
+    for (const content of nextContents) {
+      const raid = raidById.get(content.raidId);
+      if (!raid) {
+        throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+      }
+      assertValidPlannedBossCount(content.plannedBossCount, raid.totalBossCount);
+    }
     assertValidRunLootType(difficulty, input.lootType);
-    assertValidPlannedBossCount(mirror.plannedBossCount, primaryRaid.totalBossCount);
+
+    const display = projectRunContentDisplay(
+      nextContents.map((content) => {
+        const raid = raidById.get(content.raidId)!;
+        return {
+          raidId: content.raidId,
+          raidName: raid.name,
+          sortOrder: content.sortOrder,
+          plannedBossCount: content.plannedBossCount,
+          totalBossCount: raid.totalBossCount,
+        };
+      }),
+    );
 
     const title = buildRunTitle({
       scheduledStartAt,
       difficulty,
       lootType: input.lootType,
-      plannedBossCount: mirror.plannedBossCount,
-      totalBossCount: primaryRaid.totalBossCount,
+      titleCoverage: display.titleCoverage,
       raidLeadName,
     });
 
@@ -813,13 +801,11 @@ export const runService = {
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
-      plannedBossCount: mirror.plannedBossCount,
     };
 
     if (identityChanged) {
       await runRepository.updateIdentityIfNoSignupHistory(run.id, {
         ...fields,
-        raidId: mirror.raidId,
         difficulty,
         contents: contentChanged ? nextContents : undefined,
       });

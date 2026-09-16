@@ -49,7 +49,6 @@ export type SignupListRecord = {
     status: RunStatus;
     difficulty: RaidDifficulty;
     scheduledStartAt: string;
-    raid: { name: string };
     productLabel: string;
     contentSummary: string;
   };
@@ -65,7 +64,6 @@ export function mapOfferedRoles(value: unknown): CharacterRole[] {
 
 function mapSignup(row: Record<string, unknown>): SignupListRecord {
   const run = (row.run ?? {}) as Record<string, unknown>;
-  const raid = (run.raid ?? {}) as Record<string, unknown>;
   const character = row.character ? (row.character as Record<string, unknown>) : null;
   const contentRows = Array.isArray(run.contents) ? run.contents : [];
   const contents = contentRows.map((item) => {
@@ -80,13 +78,10 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
       totalBossCount: bosses.length,
     };
   });
-  const display =
-    contents.length > 0
-      ? projectRunContentDisplay(contents)
-      : {
-          productLabel: asString(raid.name, "Unknown raid"),
-          summary: asString(raid.name, "Unknown raid"),
-        };
+  if (contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no persisted raid content.");
+  }
+  const display = projectRunContentDisplay(contents);
 
   return {
     id: asString(row.id),
@@ -114,7 +109,6 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
       status: mapRunStatus(run.status),
       difficulty: mapDifficulty(run.difficulty),
       scheduledStartAt: asString(run.scheduledStartAt),
-      raid: { name: asString(raid.name, "Unknown raid") },
       productLabel: display.productLabel,
       contentSummary: display.summary,
     },
@@ -269,7 +263,6 @@ export const signupRepository = {
       .where({ userId })
       .include("run", (run) =>
         run
-          .include("raid")
           .include("raidLead")
           .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
@@ -286,7 +279,6 @@ export const signupRepository = {
       .where({ id })
       .include("run", (run) =>
         run
-          .include("raid")
           .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
       .include("character")
@@ -311,7 +303,6 @@ export const signupRepository = {
       })
       .include("run", (run) =>
         run
-          .include("raid")
           .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
       .include("character")
@@ -382,7 +373,6 @@ export const signupRepository = {
       .where({ runId })
       .include("run", (run) =>
         run
-          .include("raid")
           .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
       .include("character")
@@ -399,7 +389,6 @@ export const signupRepository = {
       .where({ runId, userId })
       .include("run", (run) =>
         run
-          .include("raid")
           .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
       .include("character")

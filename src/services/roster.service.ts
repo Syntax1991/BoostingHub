@@ -20,7 +20,6 @@ import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/la
 import { formatOfferedRoles } from "@/lib/offered-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, RunStatus, SignupStatus, WowClass } from "@/models/enums";
-import type { SignupRaidSaveInfo } from "@/models/records";
 import {
   projectRunContentLockouts,
   type RunContentRaidSaveInfo,
@@ -33,8 +32,6 @@ type InspectedSignup = RosterSignupRow & {
   draftSelected: boolean;
   characterActive: boolean;
   boosterApproved: boolean;
-  /** @deprecated Prefer `contentSaves`. */
-  raidSave: SignupRaidSaveInfo | null;
   /** Informational per-content lockouts — never roster blockers. */
   contentSaves: RunContentRaidSaveInfo[];
   issue: string | null;
@@ -133,27 +130,17 @@ function resolveSelectedRole(
 function inspectSignup(
   signup: RosterSignupRow,
   run: {
-    raidId: string;
     difficulty: RaidDifficulty;
-    totalBossCount: number;
     scheduledStartAt: string;
     lootType: RunLootType;
     contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
   },
 ): Omit<InspectedSignup, "draftSelected"> {
+  if (run.contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
+  }
   const character = signup.character;
-  const contents =
-    run.contents.length > 0
-      ? run.contents
-      : [
-          {
-            raidId: run.raidId,
-            raidName: "Raid",
-            sortOrder: 1,
-            plannedBossCount: run.totalBossCount,
-            totalBossCount: run.totalBossCount,
-          },
-        ];
+  const contents = run.contents;
   const contentSaves =
     character == null
       ? projectRunContentLockouts({
@@ -177,7 +164,6 @@ function inspectSignup(
               : null;
           },
         });
-  const raidSave = contentSaves[0]?.raidSave ?? null;
   const boosterApproved =
     signup.participationType !== "BOOSTER" || signup.offeredRoles.length === 0 || !character
       ? signup.participationType !== "BOOSTER"
@@ -202,7 +188,6 @@ function inspectSignup(
     ...signup,
     characterActive,
     boosterApproved,
-    raidSave,
     contentSaves,
     issue,
   };
@@ -258,7 +243,8 @@ export const rosterService = {
     return runs.filter((run) => canManageRun(user, run)).map((run) => ({
       id: run.id,
       title: run.title,
-      raidName: run.raidName,
+      productLabel: run.contentDisplay.productLabel,
+      contentSummary: run.contentDisplay.summary,
       difficulty: run.difficulty,
       scheduledStartAt: run.scheduledStartAt,
       status: run.status,
@@ -354,7 +340,6 @@ export const rosterService = {
       run: {
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
         productLabel: run.contentDisplay.productLabel,
         contentSummary: run.contentDisplay.summary,
         difficulty: run.difficulty,
@@ -368,7 +353,6 @@ export const rosterService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
-        totalBossCount: run.totalBossCount,
         activeSignupCount: inspected.filter((item) => item.status !== "WITHDRAWN").length,
         publishedSelectedCount: publishedSelection.length,
         backupCount: inspected.filter((item) => item.isBackup && item.status !== "WITHDRAWN").length,

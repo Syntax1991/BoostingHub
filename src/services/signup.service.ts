@@ -74,7 +74,6 @@ export const signupService = {
       id: signup.id,
       runId: signup.run.id,
       runTitle: signup.run.title,
-      raidName: signup.run.raid.name,
       productLabel: signup.run.productLabel,
       contentSummary: signup.run.contentSummary,
       difficulty: signup.run.difficulty,
@@ -153,7 +152,6 @@ export const signupService = {
       run: {
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
         productLabel: run.contentDisplay.productLabel,
         contentSummary: run.contentDisplay.summary,
         difficulty: run.difficulty,
@@ -161,7 +159,6 @@ export const signupService = {
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         signupWindowOpen: assertSignupWindowOpen(run),
-        totalBossCount: run.totalBossCount,
       },
       booster,
       /** The desired-set the Booster half of the signup dialog should preselect on open. Independent of Lootbuddy — a User may hold both at once. */
@@ -626,11 +623,9 @@ type LoadedRun = NonNullable<Awaited<ReturnType<typeof runRepository.findById>>>
 function toEligibilityRun(run: LoadedRun) {
   return {
     id: run.id,
-    raidId: run.raidId,
     difficulty: run.difficulty,
     status: run.status,
     signupsOpen: run.signupsOpen,
-    totalBossCount: run.totalBossCount,
     scheduledStartAt: run.scheduledStartAt,
     lootType: run.lootType,
     contents: run.contents.map((row) => ({

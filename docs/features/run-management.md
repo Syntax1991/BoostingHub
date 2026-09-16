@@ -34,7 +34,7 @@ Button visibility is not authorization.
 
 **One canonical workflow, 1–25 drafts.** Route: `/runs/create` (operational Runs hub). There is no separate "single create" vs. "mass create" UI — the same page and the same server action handle a Raid Lead preparing one Run for tonight and an Admin preparing a whole week at once. Same authorization as every other manager action (`RAID_LEAD`/`ADMIN`, enforced server-side regardless of navigation). Legacy `/manage/runs/create` and `/manage/runs/create-many` redirect here.
 
-**Creation products** (not raw Raid rows): `VENOMOUS_ABYSS` (1–8 bosses) and `MIDNIGHT_S2_BUNDLE` (Nymrissa 1/1 + Venomous 1–8). Standalone Tidebound is never offered. Each draft persists authoritative `RunRaidContent` rows; legacy `Run.raidId` / `plannedBossCount` are write-through mirrors only (Bundle mirrors Venomous).
+**Creation products** (not raw Raid rows): `VENOMOUS_ABYSS` (1–8 bosses) and `MIDNIGHT_S2_BUNDLE` (Nymrissa 1/1 + Venomous 1–8). Standalone Tidebound is never offered. Each draft persists authoritative `RunRaidContent` rows only — there is no singular `Run.raidId` / `Run.plannedBossCount` mirror.
 
 **Model**: shared defaults (product/preset, difficulty, loot type, raid lead, composition, Venomous planned boss count, notes) + one row per concrete run, each with its own required `scheduledStartAt` and optional per-field overrides, submitted once. The page starts with exactly one staged row — the ordinary one-off experience — and a manager only sees more than one if they explicitly click Add Run or Duplicate. This is a convenience for preparing concrete runs — **not** a recurrence engine; there is no weekly/RRULE templating or scheduled-generation job, and each row is one specific run a manager already has in mind.
 
@@ -48,7 +48,7 @@ Button visibility is not authorization.
 
 **Validate everything, then write once**: every row is fully merged and validated before any persistence is attempted. The first invalid row aborts the whole submission with `Run <n>: <reason>` (1-based, matching the row's position in the request) — including reusing `RAID_NOT_AVAILABLE_FOR_RUNS` when any row (via defaults or an override) targets a raid with `availableForRuns: false` (see [§ Historical raid availability](#historical-raid-availability)).
 
-**Atomicity**: `runRepository.createManyDraftsAtomic` persists every row's `Run` and its initial empty `RunRoster` inside one database transaction — genuinely all-or-nothing, whether the request has 1 row or 25. A fault partway through (proven in tests by a deliberately invalid `raidId` on a later row, which trips the `Run.raidId` foreign key mid-transaction) rolls back every row already written in that same call, never leaving a partial result.
+**Atomicity**: `runRepository.createManyDraftsAtomic` persists every row's `Run` + `RunRaidContent` set and its initial empty `RunRoster` inside one database transaction — genuinely all-or-nothing, whether the request has 1 row or 25. A fault partway through (e.g. invalid content `raidId` on a later row) rolls back every row already written in that same call, never leaving a partial result.
 
 **Result**: every created run is `DRAFT`, `signupsOpen: false`, not archived. No Discord infrastructure is touched (no `RunDiscordPost`, no channel, no message) — a fresh Draft is invisible to `discordSyncService.listSyncWork()` until it is opened normally, one Run at a time, from Manage Runs or the run's own page. Creation never shortcuts opening or publishing.
 
@@ -58,11 +58,11 @@ Button visibility is not authorization.
 
 **After success**: one draft navigates to its canonical detail (`/runs/[runId]`); multiple drafts navigate to `/manage/runs?massCreated=N` so every new DRAFT is visible under Manage Runs. Cancel returns to `/runs`.
 
-**Templates**: a Raid Lead may optionally apply a saved planning preset from the template selector above Shared Defaults instead of re-entering raid/difficulty/loot type/composition by hand. Applying a template also locks the effective Raid Lead to the template's owner — the server always re-resolves the template fresh at submit time and rejects a forged Raid Lead override rather than silently overriding it. See [run-templates.md](run-templates.md) for the full ownership model, usability rules, and the Raid Lead authority guarantee.
+**Templates**: a Raid Lead may optionally apply a saved Venomous-only planning preset from the template selector above Shared Defaults. Bundle templates are intentionally not supported — Create/Mass Create still offer Season 2 Bundle via `contentPreset`. Applying a template expands to `contentPreset: VENOMOUS_ABYSS` + `venomousPlannedBossCount` and locks the effective Raid Lead to the template's owner. The server always re-resolves the template fresh at submit time and rejects a forged Raid Lead override. See [run-templates.md](run-templates.md).
 
 ## Derived identity (title, loot type, boss coverage)
 
-There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, planned boss count, and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured fields. Creation (above) reuses this exact same structured validation and title-generation path per row, never a duplicate implementation.
+There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, content coverage token (`titleCoverage` from `projectRunContentDisplay`), and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured coverage projection. Creation (above) reuses this exact same structured validation and title-generation path per row, never a duplicate implementation.
 
 ## Run lifecycle responsibilities
 

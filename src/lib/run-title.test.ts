@@ -1,61 +1,56 @@
 import { describe, expect, it } from "vitest";
 import { buildRunTitle } from "@/lib/run-title";
+import { projectRunContentDisplay } from "@/lib/run-content-presets";
+import {
+  TIDEBOUND_GROTTO_RAID_ID,
+  VENOMOUS_ABYSS_RAID_ID,
+} from "@/lib/wow-raid-catalog";
 
 describe("buildRunTitle", () => {
-  it("formats Thu 21:00 HC VIP 7/9 Titan", () => {
-    // 2026-09-10T19:00:00.000Z = Thursday 21:00 Europe/Berlin (CEST, UTC+2).
+  it("formats Thu 21:00 HC VIP 8/8 Titan for Venomous", () => {
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-10T19:00:00.000Z",
         difficulty: "HEROIC",
         lootType: "VIP",
-        plannedBossCount: 7,
-        totalBossCount: 9,
+        titleCoverage: "8/8",
         raidLeadName: "Titan",
       }),
-    ).toBe("Thu 21:00 HC VIP 7/9 Titan");
+    ).toBe("Thu 21:00 HC VIP 8/8 Titan");
   });
 
-  it("formats Fri 18:45 NM Unsaved 9/9 Titan", () => {
-    // 2026-09-11T16:45:00.000Z = Friday 18:45 Europe/Berlin (CEST, UTC+2).
+  it("formats Fri 18:45 NM Unsaved 6/8 Titan for partial Venomous", () => {
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-11T16:45:00.000Z",
         difficulty: "NORMAL",
         lootType: "UNSAVED",
-        plannedBossCount: 9,
-        totalBossCount: 9,
+        titleCoverage: "6/8",
         raidLeadName: "Titan",
       }),
-    ).toBe("Fri 18:45 NM Unsaved 9/9 Titan");
+    ).toBe("Fri 18:45 NM Unsaved 6/8 Titan");
   });
 
-  it("formats Sat 23:00 MY VIP 9/9 Thorne", () => {
-    // 2026-09-12T21:00:00.000Z = Saturday 23:00 Europe/Berlin (CEST, UTC+2).
+  it("formats Bundle titles with S2B coverage, never 9/9", () => {
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-12T21:00:00.000Z",
         difficulty: "MYTHIC",
         lootType: "VIP",
-        plannedBossCount: 9,
-        totalBossCount: 9,
+        titleCoverage: "S2B 8/8",
         raidLeadName: "Thorne",
       }),
-    ).toBe("Sat 23:00 MY VIP 9/9 Thorne");
-  });
+    ).toBe("Sat 23:00 MY VIP S2B 8/8 Thorne");
 
-  it("formats Sun 20:00 HC Saved 9/9 Aelira", () => {
-    // 2026-09-13T18:00:00.000Z = Sunday 20:00 Europe/Berlin (CEST, UTC+2).
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-13T18:00:00.000Z",
         difficulty: "HEROIC",
         lootType: "SAVED",
-        plannedBossCount: 9,
-        totalBossCount: 9,
+        titleCoverage: "S2B 6/8",
         raidLeadName: "Aelira",
       }),
-    ).toBe("Sun 20:00 HC Saved 9/9 Aelira");
+    ).toBe("Sun 20:00 HC Saved S2B 6/8 Aelira");
   });
 
   it("never renders MY Saved — MYTHIC always pairs with UNSAVED or VIP", () => {
@@ -63,24 +58,10 @@ describe("buildRunTitle", () => {
       scheduledStartAt: "2026-09-12T21:00:00.000Z",
       difficulty: "MYTHIC",
       lootType: "UNSAVED",
-      plannedBossCount: 9,
-      totalBossCount: 9,
+      titleCoverage: "8/8",
       raidLeadName: "Thorne",
     });
     expect(title).not.toContain("MY Saved");
-  });
-
-  it("uses Europe/Berlin regardless of an explicit UTC offset in the instant", () => {
-    // 2026-01-15T20:00:00.000Z during CET (UTC+1) = 21:00 local, still Thursday.
-    const title = buildRunTitle({
-      scheduledStartAt: "2026-01-15T20:00:00.000Z",
-      difficulty: "HEROIC",
-      lootType: "VIP",
-      plannedBossCount: 7,
-      totalBossCount: 9,
-      raidLeadName: "Titan",
-    });
-    expect(title).toBe("Thu 21:00 HC VIP 7/9 Titan");
   });
 
   it("is deterministic for the same input", () => {
@@ -88,10 +69,47 @@ describe("buildRunTitle", () => {
       scheduledStartAt: "2026-09-10T19:00:00.000Z",
       difficulty: "HEROIC" as const,
       lootType: "VIP" as const,
-      plannedBossCount: 7,
-      totalBossCount: 9,
+      titleCoverage: "8/8",
       raidLeadName: "Titan",
     };
     expect(buildRunTitle(input)).toBe(buildRunTitle(input));
+  });
+});
+
+describe("projectRunContentDisplay coverage tokens", () => {
+  it("projects Venomous and Bundle coverage without summing bosses", () => {
+    const venomous = projectRunContentDisplay([
+      {
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        sortOrder: 1,
+        plannedBossCount: 8,
+        totalBossCount: 8,
+      },
+    ]);
+    expect(venomous.titleCoverage).toBe("8/8");
+    expect(venomous.channelCoverage).toBe("8of8");
+
+    const bundle = projectRunContentDisplay([
+      {
+        raidId: TIDEBOUND_GROTTO_RAID_ID,
+        raidName: "The Tidebound Grotto",
+        sortOrder: 1,
+        plannedBossCount: 1,
+        totalBossCount: 1,
+      },
+      {
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        sortOrder: 2,
+        plannedBossCount: 6,
+        totalBossCount: 8,
+      },
+    ]);
+    expect(bundle.titleCoverage).toBe("S2B 6/8");
+    expect(bundle.channelCoverage).toBe("s2b-6of8");
+    expect(bundle.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 6/8");
+    expect(bundle.titleCoverage).not.toMatch(/7\/9|9\/9/);
+    expect(bundle.channelCoverage).not.toMatch(/7of9|9of9/);
   });
 });

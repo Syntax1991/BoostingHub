@@ -55,7 +55,6 @@ export const dashboardService = {
       upcomingRuns: upcomingRuns.map((run) => ({
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
         productLabel: run.contentDisplay.productLabel,
         contentSummary: run.contentDisplay.summary,
         difficulty: run.difficulty,
@@ -68,7 +67,6 @@ export const dashboardService = {
         id: signup.id,
         runId: signup.run.id,
         runTitle: signup.run.title,
-        raidName: signup.run.raid.name,
         productLabel: signup.run.productLabel,
         contentSummary: signup.run.contentSummary,
         difficulty: signup.run.difficulty,

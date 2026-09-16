@@ -9,10 +9,10 @@ import { runDiscordPostRepository } from "@/repositories/run-discord-post.reposi
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { isActiveSignupOffer } from "@/services/signup-state";
-import type { SignupRaidSaveInfo } from "@/models/records";
 
 /**
  * Where a Run's dedicated Discord channel belongs, decided once here and
@@ -78,17 +78,16 @@ export type SignupEmbedLootbuddyStatus = {
 export type SignupEmbedData = {
   runId: string;
   runTitle: string;
-  raidId: string;
-  /** Transitional singular mirror name — prefer `productLabel` / `contentSummary`. */
+  /** Display alias — same as `productLabel`. */
   raidName: string;
   /** Commercial / classified product label (e.g. Season 2 Bundle). */
   productLabel: string;
   /** Ordered content summary — never an aggregated 9/9. */
   contentSummary: string;
+  /** Compact title coverage from persisted contents (e.g. `8/8`, `S2B 8/8`). */
+  titleCoverage: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  plannedBossCount: number;
-  totalBossCount: number;
   scheduledStartAt: string;
   runStatus: RunStatus;
   signupWindowOpen: boolean;
@@ -252,19 +251,15 @@ function desiredChannelNameFor(run: {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  plannedBossCount: number;
-  totalBossCount: number;
   raidLeadName: string;
-  contentDisplay?: { productKey: string | null };
+  contentDisplay: { channelCoverage: string };
 }): string {
   return buildDiscordRunChannelName({
     scheduledStartAt: run.scheduledStartAt,
     difficulty: run.difficulty,
     lootType: run.lootType,
-    plannedBossCount: run.plannedBossCount,
-    totalBossCount: run.totalBossCount,
+    coverage: run.contentDisplay.channelCoverage,
     raidLeadName: run.raidLeadName,
-    season2Bundle: run.contentDisplay?.productKey === "MIDNIGHT_S2_BUNDLE",
   });
 }
 
@@ -280,17 +275,16 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
   const active = run.signups.filter((signup) => isActiveSignupOffer(signup.status));
   const projection = buildSignupRoleProjection(run, active);
 
+  const productLabel = run.contentDisplay.productLabel;
   return {
     runId: run.id,
     runTitle: run.title,
-    raidId: run.raidId,
-    raidName: run.raidName,
-    productLabel: run.contentDisplay.productLabel,
+    raidName: productLabel,
+    productLabel,
     contentSummary: run.contentDisplay.summary,
+    titleCoverage: run.contentDisplay.titleCoverage,
     difficulty: run.difficulty,
     lootType: run.lootType,
-    plannedBossCount: run.plannedBossCount,
-    totalBossCount: run.totalBossCount,
     scheduledStartAt: run.scheduledStartAt,
     runStatus: run.status,
     signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
@@ -461,12 +455,11 @@ function buildSignupEmbedSignature(
 ): string {
   return JSON.stringify({
     runTitle: data.runTitle,
-    raidId: data.raidId,
-    raidName: data.raidName,
+    productLabel: data.productLabel,
+    contentSummary: data.contentSummary,
+    titleCoverage: data.titleCoverage,
     difficulty: data.difficulty,
     lootType: data.lootType,
-    plannedBossCount: data.plannedBossCount,
-    totalBossCount: data.totalBossCount,
     scheduledStartAt: data.scheduledStartAt,
     runStatus: data.runStatus,
     signupWindowOpen: data.signupWindowOpen,
@@ -514,7 +507,12 @@ function compareStartMembers(a: RunStartEmbedMember, b: RunStartEmbedMember): nu
 
 function toStartMember(
   row: RosterSignupRow,
-  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number; scheduledStartAt: string; lootType: RunLootType },
+  run: {
+    contents: RunListRecord["contents"];
+    difficulty: RaidDifficulty;
+    scheduledStartAt: string;
+    lootType: RunLootType;
+  },
 ): RunStartEmbedMember {
   const lootbuddyClass: WowClass | null = row.lootbuddyClass ?? row.character?.wowClass ?? null;
   const classLabel = row.participationType === "BOOSTER"
@@ -527,22 +525,29 @@ function toStartMember(
 
   let saveLabel = "Unknown";
   if (row.participationType === "BOOSTER" && row.character) {
-    const matchingLockout = lockoutService.findExactLockout(row.character.lockouts, {
-      raidId: run.raidId,
-      difficulty: run.difficulty,
-      resetIdentifier: lockoutService.getResetIdentifierForRun(row.character.region, run.scheduledStartAt),
-    });
-    const raidSave: SignupRaidSaveInfo | null = matchingLockout
-      ? lockoutService.toRaidSaveInfo(matchingLockout, run.totalBossCount)
-      : null;
-    saveLabel = shortSaveLabel(
-      formatTargetRaidLockoutLabel({
-        difficulty: run.difficulty,
-        totalBossCount: run.totalBossCount,
-        raidSave,
-        lootType: run.lootType,
-      }).kind,
+    const resetIdentifier = lockoutService.getResetIdentifierForRun(
+      row.character.region,
+      run.scheduledStartAt,
     );
+    const contentSaves = projectRunContentLockouts({
+      contents: run.contents,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+      findSave: (content) => {
+        const matchingLockout = lockoutService.findExactLockout(row.character!.lockouts, {
+          raidId: content.raidId,
+          difficulty: run.difficulty,
+          resetIdentifier,
+        });
+        return matchingLockout
+          ? lockoutService.toRaidSaveInfo(matchingLockout, content.totalBossCount)
+          : null;
+      },
+    });
+    saveLabel =
+      contentSaves.length === 0
+        ? "Unknown"
+        : contentSaves.map((entry) => shortSaveLabel(entry.label.kind)).join(" · ");
   }
 
   return {
@@ -741,7 +746,7 @@ export const discordSyncService = {
     return {
       runId: run.id,
       runTitle: run.title,
-      raidName: run.raidName,
+      raidName: run.contentDisplay.productLabel,
       productLabel: run.contentDisplay.productLabel,
       contentSummary: run.contentDisplay.summary,
       difficulty: run.difficulty,
@@ -827,7 +832,7 @@ export const discordSyncService = {
     return {
       runId: run.id,
       runTitle: run.title,
-      raidName: run.raidName,
+      raidName: run.contentDisplay.productLabel,
       productLabel: run.contentDisplay.productLabel,
       contentSummary: run.contentDisplay.summary,
       difficulty: run.difficulty,

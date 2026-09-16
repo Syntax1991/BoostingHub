@@ -1,4 +1,5 @@
-import type { BoosterQualificationMatch, CharacterRunReservationConflict, SignupRaidSaveInfo } from "@/models/records";
+import { DomainError } from "@/lib/errors";
+import type { BoosterQualificationMatch, CharacterRunReservationConflict } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
@@ -43,13 +44,9 @@ export type EligibilityCharacter = {
 
 export type EligibilityRun = {
   id: string;
-  /** @deprecated Prefer `contents` — transitional singular mirror only. */
-  raidId: string;
   difficulty: RaidDifficulty;
   status: RunStatus;
   signupsOpen: boolean;
-  /** @deprecated Prefer per-content totals on `contents`. */
-  totalBossCount: number;
   /** Used with each Character's region to resolve the regional WoW reset containing this instant. */
   scheduledStartAt: string;
   lootType: RunLootType;
@@ -86,10 +83,6 @@ export type EligibleBoosterOption = {
   roles: CharacterRole[];
   /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
   defaultRole: CharacterRole | null;
-  /**
-   * @deprecated Prefer `contentSaves` — singular mirror of the primary content only.
-   */
-  raidSave: SignupRaidSaveInfo | null;
   /** Informational per-content lockouts for this Run — never eligibility blockers. */
   contentSaves: RunContentRaidSaveInfo[];
 };
@@ -110,22 +103,18 @@ export type IneligibleBoosterCharacter = {
  * Verified lockouts for every RunRaidContent on the target Run.
  * Informational only — never eligibility blockers.
  */
+function assertRunContents(contents: EligibilityRun["contents"]): asserts contents is [EligibilityRun["contents"][number], ...EligibilityRun["contents"]] {
+  if (contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
+  }
+}
+
 function findContentSaves(
   character: Pick<EligibilityCharacter, "lockouts" | "region">,
   run: EligibilityRun,
 ): RunContentRaidSaveInfo[] {
-  const contents =
-    run.contents.length > 0
-      ? run.contents
-      : [
-          {
-            raidId: run.raidId,
-            raidName: "Raid",
-            sortOrder: 1,
-            plannedBossCount: run.totalBossCount,
-            totalBossCount: run.totalBossCount,
-          },
-        ];
+  assertRunContents(run.contents);
+  const contents = run.contents;
   const resetIdentifier = lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt);
   return projectRunContentLockouts({
     contents,
@@ -150,7 +139,7 @@ function findContentSaves(
  * unrecognized specialization does not block an otherwise-eligible Character;
  * it just means no default is offered (`defaultRole: null`) and the User must
  * choose explicitly. Heroic approval never implies Mythic. Raid save/lockout
- * status is informational only (`raidSave`) — a saved Character remains fully
+ * status is informational only (`contentSaves`) — a saved Character remains fully
  * eligible; the Raid Lead decides operationally whether to use it.
  */
 export function evaluateBoosterOptions(
@@ -160,6 +149,7 @@ export function evaluateBoosterOptions(
   eligible: EligibleBoosterOption[];
   ineligible: IneligibleBoosterCharacter[];
 } {
+  assertRunContents(run.contents);
   const eligible: EligibleBoosterOption[] = [];
   const ineligible: IneligibleBoosterCharacter[] = [];
 
@@ -224,7 +214,6 @@ export function evaluateBoosterOptions(
       specialization: character.specialization,
       roles: rolesForClass(character.wowClass),
       defaultRole,
-      raidSave: contentSaves[0]?.raidSave ?? null,
       contentSaves,
     });
   }

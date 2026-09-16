@@ -5,6 +5,7 @@ import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import type { AuthenticatedUser } from "@/auth/authorization";
 
 import { GET as syncGet } from "@/app/api/bot/discord/sync/route";
@@ -16,7 +17,6 @@ import { GET as rosterGet } from "@/app/api/bot/runs/[runId]/roster/route";
 import { PUT as discordStatePut } from "@/app/api/bot/runs/[runId]/discord-state/route";
 
 const TOKEN = "bot-api-test-token-0123456789";
-const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-ba0000000001",
   target: "aaaaaaaa-aaaa-4aaa-8aaa-ba0000000002",
@@ -162,16 +162,7 @@ beforeAll(async () => {
     accountStatus: "ACTIVE",
   };
   runId = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    })
+    .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
     .then((run) => run.id);
   createdRunIds.push(runId);
   await runService.openRun(lead, runId);
@@ -361,16 +352,7 @@ describe("bot API domain reuse", () => {
       accountRole: "RAID_LEAD",
       accountStatus: "ACTIVE",
     };
-    const mythicRun = await runService.createRun(mythicLead, {
-      raidId,
-      difficulty: "MYTHIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    });
+    const mythicRun = await runService.createRun(mythicLead, venomousCreateInput({ difficulty: "MYTHIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }));
     createdRunIds.push(mythicRun.id);
     await runService.openRun(mythicLead, mythicRun.id);
 
@@ -402,16 +384,7 @@ describe("bot API domain reuse", () => {
       accountRole: "RAID_LEAD",
       accountStatus: "ACTIVE",
     };
-    const draftRun = await runService.createRun(closedLead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    });
+    const draftRun = await runService.createRun(closedLead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }));
     createdRunIds.push(draftRun.id);
 
     const res = await signupPut(

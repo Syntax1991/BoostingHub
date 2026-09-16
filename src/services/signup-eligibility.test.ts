@@ -10,11 +10,9 @@ const reset = "2026-W37";
 
 const heroicRun: EligibilityRun = {
   id: "run-heroic",
-  raidId: "raid-1",
   difficulty: "HEROIC",
   status: "OPEN",
   signupsOpen: true,
-  totalBossCount: 8,
   lootType: "UNSAVED",
   // Monday 14 Sep 2026 02:00 Berlin — still EU reset that started Wed 09 Sep (2026-W37).
   scheduledStartAt: "2026-09-14T00:00:00.000Z",
@@ -157,7 +155,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
     );
     expect(result.eligible).toHaveLength(1);
     expect(result.ineligible).toHaveLength(0);
-    expect(result.eligible[0]?.raidSave).toEqual({
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toEqual({
       raidId: "raid-1",
       difficulty: "HEROIC",
       resetIdentifier: reset,
@@ -177,7 +175,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       heroicRun,
     );
     expect(result.eligible).toHaveLength(1);
-    expect(result.eligible[0]?.raidSave).toEqual({
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toEqual({
       raidId: "raid-1",
       difficulty: "HEROIC",
       resetIdentifier: reset,
@@ -196,7 +194,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       heroicRun,
     );
-    expect(result.eligible[0]?.raidSave).toEqual({
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toEqual({
       raidId: "raid-1",
       difficulty: "HEROIC",
       resetIdentifier: reset,
@@ -206,10 +204,10 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
     });
   });
 
-  it("D: no lockout row — eligible, raidSave null (Unknown)", () => {
+  it("D: no lockout row — eligible, content save null (Unknown)", () => {
     const result = evaluateBoosterOptions([shaman()], heroicRun);
     expect(result.eligible).toHaveLength(1);
-    expect(result.eligible[0]?.raidSave).toBeNull();
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toBeNull();
   });
 
   it("EU Monday Run matches lockout under previous Wednesday reset identifier, not Monday ISO week", () => {
@@ -222,8 +220,8 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       heroicRun,
     );
-    expect(result.eligible[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
-    expect(result.eligible[0]?.raidSave?.bossesDefeated).toBe(7);
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(7);
   });
 
   it("EU Tuesday pre-reset Run still matches Wednesday reset lockout", () => {
@@ -240,8 +238,8 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       tuesdayRun,
     );
-    expect(result.eligible[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
-    expect(result.eligible[0]?.raidSave?.bossesDefeated).toBe(2);
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(2);
   });
 
   it("EU post-reset Run uses the new reset identifier", () => {
@@ -260,8 +258,8 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       postResetRun,
     );
-    expect(result.eligible[0]?.raidSave?.resetIdentifier).toBe("2026-W38");
-    expect(result.eligible[0]?.raidSave?.bossesDefeated).toBe(1);
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave?.resetIdentifier).toBe("2026-W38");
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(1);
   });
 
   it("US Character uses US regional reset, not EU", () => {
@@ -283,8 +281,8 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       region: "EU",
       lockouts: usChar.lockouts,
     });
-    expect(evaluateBoosterOptions([usChar], runDuringUsResetGap).eligible[0]?.raidSave?.resetIdentifier).toBe("2026-W38");
-    expect(evaluateBoosterOptions([euChar], runDuringUsResetGap).eligible[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
+    expect(evaluateBoosterOptions([usChar], runDuringUsResetGap).eligible[0]?.contentSaves[0]?.raidSave?.resetIdentifier).toBe("2026-W38");
+    expect(evaluateBoosterOptions([euChar], runDuringUsResetGap).eligible[0]?.contentSaves[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
   });
 
   it("F: a lockout for a different difficulty never appears as the target Run's save info", () => {
@@ -297,7 +295,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       heroicRun,
     );
-    expect(result.eligible[0]?.raidSave).toBeNull();
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toBeNull();
   });
 
   it("G: a lockout for a different raid never appears as the target Run's save info", () => {
@@ -309,7 +307,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       heroicRun,
     );
-    expect(result.eligible[0]?.raidSave).toBeNull();
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toBeNull();
   });
 
   it("H: an old reset's lockout never appears as the current target Run's save info", () => {
@@ -321,7 +319,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
       ],
       heroicRun,
     );
-    expect(result.eligible[0]?.raidSave).toBeNull();
+    expect(result.eligible[0]?.contentSaves[0]?.raidSave).toBeNull();
   });
 
   it("hard rule priority: a raid save never masks another real ineligibility reason", () => {

@@ -130,11 +130,11 @@ export const runDetailService = {
     const header = {
       id: run.id,
       title: run.title,
-      raidId: run.raidId,
-      raidName: run.raidName,
       productLabel: run.contentDisplay.productLabel,
       contentSummary: run.contentDisplay.summary,
-      season: run.season,
+      titleCoverage: run.contentDisplay.titleCoverage,
+      contents: run.contents,
+      contentDisplay: run.contentDisplay,
       difficulty: run.difficulty,
       lootType: run.lootType,
       scheduledStartAt: run.scheduledStartAt,
@@ -147,8 +147,6 @@ export const runDetailService = {
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,
-      plannedBossCount: run.plannedBossCount,
-      totalBossCount: run.totalBossCount,
       activeSignupCount: activeSignups.length,
       selectedCount,
     };
@@ -170,7 +168,7 @@ export const runDetailService = {
       );
       if (selectedSignups.length > 0) {
         finalSetupPreview = {
-          raidName: run.raidName,
+          raidName: run.contentDisplay.productLabel,
           productLabel: run.contentDisplay.productLabel,
           contentSummary: run.contentDisplay.summary,
           difficulty: run.difficulty,
@@ -192,6 +190,14 @@ export const runDetailService = {
       contentPreset: RunContentPresetKey | "CUSTOM";
       venomousPlannedBossCount: number;
       venomousBossMax: number;
+      contentSummary: string;
+      contents: Array<{
+        raidId: string;
+        raidName: string;
+        sortOrder: number;
+        plannedBossCount: number;
+        totalBossCount: number;
+      }>;
       /** Historical CUSTOM Runs still expose singular raid options. */
       raids: Array<{
         id: string;
@@ -205,10 +211,15 @@ export const runDetailService = {
 
     if (manage && capabilities.canEdit) {
       await raidRepository.ensureReferenceRaids();
-      const contents = await runRepository.listRaidContents(run.id);
-      const product = contents.length === 0 ? "CUSTOM" : classifyRunContents(contents);
+      const contents = run.contents;
+      if (contents.length === 0) {
+        throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
+      }
+      const product = classifyRunContents(contents);
       const venomousRow = contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID);
-      const raids = await listEditableRaidOptions(run.raidId);
+      const primaryContent = contents[0]!;
+      const raids =
+        product === "CUSTOM" ? await listEditableRaidOptions(primaryContent.raidId) : [];
       const raidLeads = capabilities.canReassignRaidLead
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName }];
@@ -217,8 +228,16 @@ export const runDetailService = {
         canAssignRaidLead: capabilities.canReassignRaidLead,
         contentPresets: listCreateRunContentPresets(),
         contentPreset: product === "CUSTOM" ? "CUSTOM" : product,
-        venomousPlannedBossCount: venomousRow?.plannedBossCount ?? run.plannedBossCount,
+        venomousPlannedBossCount: venomousRow?.plannedBossCount ?? primaryContent?.plannedBossCount ?? 1,
         venomousBossMax: 8,
+        contentSummary: run.contentDisplay.summary,
+        contents: contents.map((row) => ({
+          raidId: row.raidId,
+          raidName: row.raidName,
+          sortOrder: row.sortOrder,
+          plannedBossCount: row.plannedBossCount,
+          totalBossCount: row.totalBossCount,
+        })),
         raids,
         raidLeads,
       };

@@ -13,6 +13,7 @@ import {
 } from "@/repositories/signup.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
 
 /**
@@ -25,7 +26,6 @@ import { signupService } from "@/services/signup.service";
  * gap + reservation source (RunRosterEntry / SELECTED).
  */
 
-const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-cr0000000001",
   target: "aaaaaaaa-aaaa-4aaa-8aaa-cr0000000002",
@@ -135,16 +135,7 @@ async function cleanupRun(runId: string) {
 
 async function createOpenRun(lead: AuthenticatedUser, scheduledStartAt: string) {
   const id = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt,
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    })
+    .createRun(lead, venomousCreateInput({ scheduledStartAt }))
     .then((run) => run.id);
   createdRunIds.push(id);
   await runService.openRun(lead, id);

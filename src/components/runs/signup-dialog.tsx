@@ -285,7 +285,7 @@ export function RunSignupButton({
           </h2>
           {options ? (
             <p className="mt-1 truncate text-sm text-muted">
-              {options.run.title} · {options.run.productLabel ?? options.run.raidName}
+              {options.run.title} · {options.run.productLabel}
               {options.run.contentSummary ? ` · ${options.run.contentSummary}` : ""} ·{" "}
               {formatDateTime(options.run.scheduledStartAt)}
             </p>

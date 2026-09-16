@@ -222,7 +222,7 @@ describe("run content products — create / mass-create / edit", () => {
     }
   });
 
-  it("creates Venomous 8 with one content row and Venomous legacy mirror", async () => {
+  it("creates Venomous 8 with one content row and Venomous authoritative contents", async () => {
     const { id } = await runService.createRun(lead, {
       contentPreset: "VENOMOUS_ABYSS",
       venomousPlannedBossCount: 8,
@@ -234,16 +234,13 @@ describe("run content products — create / mass-create / edit", () => {
       desiredDpsCount: 14,
     });
     createdRunIds.push(id);
-    const run = await runRepository.findById(id);
     const contents = await runRepository.listRaidContents(id);
-    expect(run?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
-    expect(run?.plannedBossCount).toBe(8);
-    expect(contents).toHaveLength(1);
+            expect(contents).toHaveLength(1);
     expect(contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
     expect(contents[0]?.plannedBossCount).toBe(8);
   });
 
-  it("creates Bundle 8 with Tidebound 1 + Venomous 8 and Venomous legacy mirror", async () => {
+  it("creates Bundle 8 with Tidebound 1 + Venomous 8 and Venomous authoritative contents", async () => {
     const { id } = await runService.createRun(lead, {
       contentPreset: "MIDNIGHT_S2_BUNDLE",
       venomousPlannedBossCount: 8,
@@ -255,11 +252,8 @@ describe("run content products — create / mass-create / edit", () => {
       desiredDpsCount: 14,
     });
     createdRunIds.push(id);
-    const run = await runRepository.findById(id);
     const contents = await runRepository.listRaidContents(id);
-    expect(run?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
-    expect(run?.plannedBossCount).toBe(8);
-    expect(contents).toHaveLength(2);
+            expect(contents).toHaveLength(2);
     expect(contents[0]).toMatchObject({
       raidId: TIDEBOUND_GROTTO_RAID_ID,
       sortOrder: 1,

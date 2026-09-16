@@ -20,7 +20,7 @@ export function RunDetailView({
     <div>
       <PageHeader
         title={run.title}
-        description={`${run.productLabel ?? run.raidName}${run.contentSummary ? ` · ${run.contentSummary}` : ""} · Lead ${run.raidLeadName}`}
+        description={`${run.productLabel}${run.contentSummary ? ` · ${run.contentSummary}` : ""} · Lead ${run.raidLeadName}`}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {data.permissions.canManageRun ? (

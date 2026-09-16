@@ -311,7 +311,7 @@ function RosterBuilderEditor({
       <Card>
         <CardHeader
           title={data.run.title}
-          description={`${data.run.productLabel ?? data.run.raidName}${
+          description={`${data.run.productLabel}${
             data.run.contentSummary ? ` · ${data.run.contentSummary}` : ""
           } · ${formatDateTime(data.run.scheduledStartAt)} · Lead ${data.run.raidLeadName}`}
           action={

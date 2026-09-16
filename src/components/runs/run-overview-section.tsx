@@ -12,11 +12,11 @@ export function RunOverviewSection({ data }: { data: RunDetailView }) {
         <dl className="grid grid-cols-2 gap-3 px-4 py-4 text-sm">
           <div>
             <dt className="text-muted">Product</dt>
-            <dd className="mt-1">{run.productLabel ?? run.raidName}</dd>
+            <dd className="mt-1">{run.productLabel}</dd>
           </div>
           <div>
             <dt className="text-muted">Content</dt>
-            <dd className="mt-1">{run.contentSummary ?? run.raidName}</dd>
+            <dd className="mt-1">{run.contentSummary}</dd>
           </div>
           <div>
             <dt className="text-muted">Difficulty</dt>

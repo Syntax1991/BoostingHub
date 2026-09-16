@@ -67,10 +67,6 @@ export type RosterSelectionOnRun = {
 export type RunListRecord = {
   id: string;
   title: string;
-  /** Transitional singular mirror — prefer `contents` / `contentDisplay` for domain UI. */
-  raidId: string;
-  raidName: string;
-  season: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
@@ -81,9 +77,6 @@ export type RunListRecord = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
-  /** Transitional singular mirror — Venomous primary for Bundles. */
-  plannedBossCount: number;
-  totalBossCount: number;
   /** Authoritative ordered raid contents for this Run. */
   contents: RunRaidContentRecord[];
   /** Pure display projection from persisted contents (never regenerated from presets). */
@@ -139,8 +132,6 @@ export type RunContentWriteSpec = {
 
 export type RunCreateWithContentsInput = {
   title: string;
-  /** Transitional singular mirror — Venomous primary for Bundle products. */
-  raidId: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
@@ -149,8 +140,6 @@ export type RunCreateWithContentsInput = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
-  /** Transitional singular mirror — Venomous planned count for Bundle products. */
-  plannedBossCount: number;
   contents: RunContentWriteSpec[];
 };
 
@@ -198,24 +187,22 @@ function mapOfferedRoles(value: unknown): CharacterRole[] {
 }
 
 function mapRun(run: Record<string, unknown>): RunListRecord {
-  const raid = (run.raid ?? {}) as Record<string, unknown>;
   const raidLead = (run.raidLead ?? {}) as Record<string, unknown>;
   const signups = Array.isArray(run.signups) ? run.signups : [];
   const roster = run.roster ? (run.roster as Record<string, unknown>) : null;
   const rosterEntries = roster && Array.isArray(roster.entries) ? roster.entries : [];
-  const raidBosses = Array.isArray(raid.bosses) ? raid.bosses : [];
   const contentRows = Array.isArray(run.contents) ? run.contents : [];
   const contents = contentRows
     .map((row) => mapRaidContent(row as Record<string, unknown>))
     .sort((a, b) => a.sortOrder - b.sortOrder);
+  if (contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no persisted raid content.");
+  }
   const contentDisplay = projectRunContentDisplay(contents);
 
   return {
     id: asString(run.id),
     title: asString(run.title),
-    raidId: asString(run.raidId ?? raid.id),
-    raidName: asString(raid.name, "Unknown raid"),
-    season: asString(raid.season),
     difficulty: mapDifficulty(run.difficulty),
     lootType: mapLootType(run.lootType),
     scheduledStartAt: asString(run.scheduledStartAt),
@@ -226,8 +213,6 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     desiredTankCount: asNumber(run.desiredTankCount),
     desiredHealerCount: asNumber(run.desiredHealerCount),
     desiredDpsCount: asNumber(run.desiredDpsCount),
-    plannedBossCount: asNumber(run.plannedBossCount),
-    totalBossCount: raidBosses.length,
     contents,
     contentDisplay,
     signupsOpen: asBoolean(run.signupsOpen),
@@ -284,7 +269,6 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
 export const runRepository = {
   async listUpcoming(filters: RunListFilters = {}): Promise<RunListRecord[]> {
     let query = orm.Run
-      .include("raid", (raid) => raid.include("bosses"))
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
@@ -308,7 +292,6 @@ export const runRepository = {
   async findById(id: string): Promise<RunListRecord | null> {
     const run = await orm.Run
       .where({ id })
-      .include("raid", (raid) => raid.include("bosses"))
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
@@ -328,7 +311,6 @@ export const runRepository = {
 
   async listManaged(): Promise<RunListRecord[]> {
     const runs = await orm.Run
-      .include("raid", (raid) => raid.include("bosses"))
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
@@ -362,7 +344,6 @@ export const runRepository = {
       await txOrm.Run.create({
         id,
         title: input.title,
-        raidId: input.raidId,
         difficulty: input.difficulty,
         lootType: input.lootType,
         scheduledStartAt: input.scheduledStartAt,
@@ -372,7 +353,6 @@ export const runRepository = {
         desiredTankCount: input.desiredTankCount,
         desiredHealerCount: input.desiredHealerCount,
         desiredDpsCount: input.desiredDpsCount,
-        plannedBossCount: input.plannedBossCount,
         signupsOpen: false,
         createdAt: now,
         updatedAt: now,
@@ -408,7 +388,6 @@ export const runRepository = {
         await txOrm.Run.create({
           id,
           title: input.title,
-          raidId: input.raidId,
           difficulty: input.difficulty,
           lootType: input.lootType,
           scheduledStartAt: input.scheduledStartAt,
@@ -418,7 +397,6 @@ export const runRepository = {
           desiredTankCount: input.desiredTankCount,
           desiredHealerCount: input.desiredHealerCount,
           desiredDpsCount: input.desiredDpsCount,
-          plannedBossCount: input.plannedBossCount,
           signupsOpen: false,
           createdAt: now,
           updatedAt: now,
@@ -439,16 +417,14 @@ export const runRepository = {
   },
 
   /**
-   * Non-content field updates only. Does not touch RunRaidContent — Bundle
-   * compositions must never be collapsed by singular raidId/plannedBossCount
-   * sync. Content identity changes use updateIdentityIfNoSignupHistory with
-   * an explicit contents payload.
+   * Non-content field updates only. Does not touch RunRaidContent.
+   * Content identity changes use updateIdentityIfNoSignupHistory with an
+   * explicit contents payload.
    */
   async updateFields(
     id: string,
     fields: {
       title?: string;
-      raidId?: string;
       difficulty?: RaidDifficulty;
       lootType?: RunLootType;
       scheduledStartAt?: string;
@@ -457,7 +433,6 @@ export const runRepository = {
       desiredTankCount?: number;
       desiredHealerCount?: number;
       desiredDpsCount?: number;
-      plannedBossCount?: number;
       status?: RunStatus;
       signupsOpen?: boolean;
     },
@@ -469,16 +444,15 @@ export const runRepository = {
   },
 
   /**
-   * Identity fields (content composition / difficulty / transitional raid mirror)
-   * may change only when no RunSignup row exists, including WITHDRAWN history.
-   * When `contents` is provided, the full RunRaidContent set is replaced
-   * atomically with the Run row update.
+   * Identity fields (content composition / difficulty) may change only when no
+   * RunSignup row exists, including WITHDRAWN history. When `contents` is
+   * provided, the full RunRaidContent set is replaced atomically with the Run
+   * row update.
    */
   async updateIdentityIfNoSignupHistory(
     id: string,
     fields: {
       title?: string;
-      raidId: string;
       difficulty: RaidDifficulty;
       lootType?: RunLootType;
       scheduledStartAt?: string;
@@ -487,7 +461,6 @@ export const runRepository = {
       desiredTankCount?: number;
       desiredHealerCount?: number;
       desiredDpsCount?: number;
-      plannedBossCount?: number;
       contents?: RunContentWriteSpec[];
     },
   ) {

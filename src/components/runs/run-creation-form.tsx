@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import type { RunContentPresetKey } from "@/lib/run-content-presets";
+import { titleCoverageFromPreset, type RunContentPresetKey } from "@/lib/run-content-presets";
 import { buildRunTitle } from "@/lib/run-title";
 import { runCreateSuccessPath } from "@/lib/run-routes";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
@@ -154,12 +154,18 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
 
   function previewTitle(row: Row) {
     try {
+      const preset = row.overrides.contentPreset ?? contentPreset;
+      const venomous = effectiveVenomous(row);
+      const titleCoverage = titleCoverageFromPreset({
+        preset,
+        venomousPlannedBossCount: venomous,
+        venomousTotalBossCount: form.venomousBossMax,
+      });
       return buildRunTitle({
         scheduledStartAt: fromDatetimeLocalValue(row.scheduledLocal),
         difficulty: effectiveDifficulty(row),
         lootType: effectiveLootType(row),
-        plannedBossCount: effectiveVenomous(row),
-        totalBossCount: form.venomousBossMax,
+        titleCoverage,
         raidLeadName: effectiveRaidLeadName(row) || "TBD",
       });
     } catch {
