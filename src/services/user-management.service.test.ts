@@ -91,7 +91,6 @@ async function createRun(input: {
   await orm.Run.create({
     id: input.id,
     title: input.title,
-    raidId,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     scheduledStartAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -100,11 +99,18 @@ async function createRun(input: {
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
-    plannedBossCount: 8,
     raidLeadId: input.raidLeadId,
     notes: null,
     createdAt: now,
     updatedAt: now,
+  });
+  await orm.RunRaidContent.create({
+    id: crypto.randomUUID(),
+    runId: input.id,
+    raidId,
+    sortOrder: 1,
+    plannedBossCount: 8,
+    createdAt: now,
   });
 }
 

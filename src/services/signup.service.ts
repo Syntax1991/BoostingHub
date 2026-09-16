@@ -74,7 +74,8 @@ export const signupService = {
       id: signup.id,
       runId: signup.run.id,
       runTitle: signup.run.title,
-      raidName: signup.run.raid.name,
+      productLabel: signup.run.productLabel,
+      contentSummary: signup.run.contentSummary,
       difficulty: signup.run.difficulty,
       scheduledStartAt: signup.run.scheduledStartAt,
       runStatus: signup.run.status,
@@ -131,15 +132,7 @@ export const signupService = {
 
     const rawCharacters = await characterRepository.listByUserId(user.id);
     const characters = await withReservationConflicts(rawCharacters, run.id, run.scheduledStartAt);
-    const eligibilityRun = {
-      id: run.id,
-      raidId: run.raidId,
-      difficulty: run.difficulty,
-      status: run.status,
-      signupsOpen: run.signupsOpen,
-      totalBossCount: run.totalBossCount,
-      scheduledStartAt: run.scheduledStartAt,
-    };
+    const eligibilityRun = toEligibilityRun(run);
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun);
 
@@ -159,13 +152,13 @@ export const signupService = {
       run: {
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
+        productLabel: run.contentDisplay.productLabel,
+        contentSummary: run.contentDisplay.summary,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
         status: run.status,
         signupWindowOpen: assertSignupWindowOpen(run),
-        totalBossCount: run.totalBossCount,
       },
       booster,
       /** The desired-set the Booster half of the signup dialog should preselect on open. Independent of Lootbuddy — a User may hold both at once. */
@@ -203,15 +196,7 @@ export const signupService = {
     const [enrichedCharacter] = await withReservationConflicts([character], run.id, run.scheduledStartAt);
     const { eligible, ineligible } = evaluateBoosterOptions(
       [enrichedCharacter],
-      {
-        id: run.id,
-        raidId: run.raidId,
-        difficulty: run.difficulty,
-        status: run.status,
-        signupsOpen: run.signupsOpen,
-        totalBossCount: run.totalBossCount,
-        scheduledStartAt: run.scheduledStartAt,
-      },
+      toEligibilityRun(run),
     );
 
     const option = eligible.find((item) => item.characterId === input.characterId);
@@ -635,6 +620,24 @@ async function persistSignup(input: Parameters<typeof signupRepository.create>[0
 
 type LoadedRun = NonNullable<Awaited<ReturnType<typeof runRepository.findById>>>;
 
+function toEligibilityRun(run: LoadedRun) {
+  return {
+    id: run.id,
+    difficulty: run.difficulty,
+    status: run.status,
+    signupsOpen: run.signupsOpen,
+    scheduledStartAt: run.scheduledStartAt,
+    lootType: run.lootType,
+    contents: run.contents.map((row) => ({
+      raidId: row.raidId,
+      raidName: row.raidName,
+      sortOrder: row.sortOrder,
+      plannedBossCount: row.plannedBossCount,
+      totalBossCount: row.totalBossCount,
+    })),
+  };
+}
+
 /**
  * Loads the User's current signup rows and the roster's draft selection, then
  * computes the desired-set reconciliation plan. A blocked removal — protected
@@ -704,15 +707,7 @@ async function validateOfferedCharacters(
   }>,
   run: LoadedRun,
 ): Promise<Map<string, CharacterRole[]>> {
-  const eligibilityRun = {
-    id: run.id,
-    raidId: run.raidId,
-    difficulty: run.difficulty,
-    status: run.status,
-    signupsOpen: run.signupsOpen,
-    totalBossCount: run.totalBossCount,
-    scheduledStartAt: run.scheduledStartAt,
-  };
+  const eligibilityRun = toEligibilityRun(run);
   const rolesByCharacterId = new Map<string, CharacterRole[]>();
 
   const enrichedCharacters = await withReservationConflicts(

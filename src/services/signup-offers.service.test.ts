@@ -3,16 +3,15 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
 
-const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-so0000000001",
   target: "aaaaaaaa-aaaa-4aaa-8aaa-so0000000002",
@@ -188,31 +187,13 @@ beforeAll(async () => {
   });
 
   mainRunId = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    })
+    .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }))
     .then((run) => run.id);
   createdRunIds.push(mainRunId);
   await runService.openRun(lead, mainRunId);
 
   mythicRunId = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "MYTHIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    })
+    .createRun(lead, venomousCreateInput({ difficulty: "MYTHIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }))
     .then((run) => run.id);
   createdRunIds.push(mythicRunId);
   await runService.openRun(lead, mythicRunId);

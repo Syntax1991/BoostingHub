@@ -2,7 +2,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { activityRepository } from "@/repositories/activity.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -10,6 +9,7 @@ import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
 
 const ids = {
@@ -336,16 +336,7 @@ describe("rosterService saveDraftSelection", () => {
   });
 
   it("transitions OPEN to ROSTERING only when the saved selection is non-empty", async () => {
-    const run = await runService.createRun(thorne, {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: "2030-06-15T18:00:00.000Z",
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-    });
+    const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: "2030-06-15T18:00:00.000Z", desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }));
     await runService.openRun(thorne, run.id);
     const signup = await signupService.createBoosterSignup(kael, {
       runId: run.id,
@@ -428,7 +419,7 @@ describe("rosterService publish validation", () => {
       view = await rosterService.getRosterManagementView(thorne, ids.lab);
     }
     const candidate = rosterBoosters(view).find((item) => item.id === ids.labKaelResto);
-    expect(candidate?.raidSave).toEqual({
+    expect(candidate?.contentSaves[0]?.raidSave).toEqual({
       raidId: ids.raid,
       difficulty: "HEROIC",
       resetIdentifier,
@@ -634,16 +625,7 @@ describe("rosterService publishedRole snapshot", () => {
       updatedAt: now,
     });
 
-    const run = await runService.createRun(thorne, {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 0,
-      desiredHealerCount: 1,
-      desiredDpsCount: 0,
-    });
+    const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }));
     createdRunIds.push(run.id);
     await runService.openRun(thorne, run.id);
 
@@ -755,16 +737,7 @@ describe("rosterService publishedRole snapshot", () => {
       updatedAt: now,
     });
 
-    const run = await runService.createRun(thorne, {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 1,
-    });
+    const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }));
     createdRunIds.push(run.id);
     await runService.openRun(thorne, run.id);
 
@@ -833,16 +806,7 @@ describe("rosterService publishedRole snapshot", () => {
       });
     }
 
-    const run = await runService.createRun(thorne, {
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-      desiredTankCount: 0,
-      desiredHealerCount: 2,
-      desiredDpsCount: 2,
-    });
+    const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 2, desiredDpsCount: 2 }));
     createdRunIds.push(run.id);
     await runService.openRun(thorne, run.id);
 

@@ -55,7 +55,10 @@ export function RunsView({ data }: { data: RunsPage }) {
                         {run.title}
                       </Link>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                        <span className="max-w-[180px] truncate">{run.raidName}</span>
+                        <span className="max-w-[220px] truncate">
+                          {run.productLabel}
+                          {run.contentSummary ? ` · ${run.contentSummary}` : ""}
+                        </span>
                         <DifficultyBadge difficulty={run.difficulty} />
                         <RunStatusBadge status={run.status} />
                       </div>

@@ -10,8 +10,10 @@ import type {
   WowClass,
 } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
+import { projectRunContentDisplay } from "@/lib/run-content-presets";
 import {
   asBoolean,
+  asNumber,
   asString,
   asStringOrNull,
   mapCharacterRole,
@@ -47,7 +49,8 @@ export type SignupListRecord = {
     status: RunStatus;
     difficulty: RaidDifficulty;
     scheduledStartAt: string;
-    raid: { name: string };
+    productLabel: string;
+    contentSummary: string;
   };
 };
 
@@ -61,8 +64,24 @@ export function mapOfferedRoles(value: unknown): CharacterRole[] {
 
 function mapSignup(row: Record<string, unknown>): SignupListRecord {
   const run = (row.run ?? {}) as Record<string, unknown>;
-  const raid = (run.raid ?? {}) as Record<string, unknown>;
   const character = row.character ? (row.character as Record<string, unknown>) : null;
+  const contentRows = Array.isArray(run.contents) ? run.contents : [];
+  const contents = contentRows.map((item) => {
+    const content = item as Record<string, unknown>;
+    const contentRaid = (content.raid ?? {}) as Record<string, unknown>;
+    const bosses = Array.isArray(contentRaid.bosses) ? contentRaid.bosses : [];
+    return {
+      raidId: asString(content.raidId ?? contentRaid.id),
+      raidName: asString(contentRaid.name, "Unknown raid"),
+      sortOrder: asNumber(content.sortOrder),
+      plannedBossCount: asNumber(content.plannedBossCount),
+      totalBossCount: bosses.length,
+    };
+  });
+  if (contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no persisted raid content.");
+  }
+  const display = projectRunContentDisplay(contents);
 
   return {
     id: asString(row.id),
@@ -90,7 +109,8 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
       status: mapRunStatus(run.status),
       difficulty: mapDifficulty(run.difficulty),
       scheduledStartAt: asString(run.scheduledStartAt),
-      raid: { name: asString(raid.name, "Unknown raid") },
+      productLabel: display.productLabel,
+      contentSummary: display.summary,
     },
   };
 }
@@ -241,7 +261,11 @@ export const signupRepository = {
   async listByUserId(userId: string): Promise<SignupListRecord[]> {
     const signups = await orm.RunSignup
       .where({ userId })
-      .include("run", (run) => run.include("raid").include("raidLead"))
+      .include("run", (run) =>
+        run
+          .include("raidLead")
+          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
       .include("character")
       .include("offeredRoles")
       .orderBy((signup) => signup.createdAt.desc())
@@ -253,7 +277,10 @@ export const signupRepository = {
   async findById(id: string): Promise<SignupListRecord | null> {
     const signup = await orm.RunSignup
       .where({ id })
-      .include("run", (run) => run.include("raid"))
+      .include("run", (run) =>
+        run
+          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
       .include("character")
       .include("offeredRoles")
       .first();
@@ -274,7 +301,10 @@ export const signupRepository = {
         characterId: input.characterId,
         participationType: input.participationType,
       })
-      .include("run", (run) => run.include("raid"))
+      .include("run", (run) =>
+        run
+          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
       .include("character")
       .include("offeredRoles")
       .first();
@@ -341,7 +371,10 @@ export const signupRepository = {
   async listByRunId(runId: string): Promise<SignupListRecord[]> {
     const signups = await orm.RunSignup
       .where({ runId })
-      .include("run", (run) => run.include("raid"))
+      .include("run", (run) =>
+        run
+          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
       .include("character")
       .include("offeredRoles")
       .orderBy((signup) => signup.createdAt.asc())
@@ -354,7 +387,10 @@ export const signupRepository = {
   async listByRunAndUser(runId: string, userId: string): Promise<SignupListRecord[]> {
     const signups = await orm.RunSignup
       .where({ runId, userId })
-      .include("run", (run) => run.include("raid"))
+      .include("run", (run) =>
+        run
+          .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
       .include("character")
       .include("offeredRoles")
       .orderBy((signup) => signup.createdAt.asc())

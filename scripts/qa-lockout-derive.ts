@@ -4,7 +4,7 @@
  */
 import { deriveCurrentResetLockouts } from "../src/lib/blizzard/raid-lockout-derivation";
 import { formatCompactLockoutProgress } from "../src/lib/lockout-display";
-import { getCurrentLockoutRaid } from "../src/lib/wow-raid-catalog";
+import { getCurrentLockoutRaids } from "../src/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "../src/lib/wow-weekly-reset";
 import { mapBlizzardRaidDifficulty } from "../src/lib/blizzard/raid-difficulty";
 import type { BlizzardCharacterRaidEncounters } from "../src/lib/blizzard/types";
@@ -102,13 +102,16 @@ async function main() {
     console.error("missing blizzard env");
     process.exit(1);
   }
-  const current = getCurrentLockoutRaid()!;
+  const currentRaids = getCurrentLockoutRaids();
   const reset = getRegionalWeeklyReset(REGION);
   console.log(
     JSON.stringify(
       {
-        currentRaid: current.name,
-        blizzardInstanceId: current.blizzardInstanceId,
+        currentRaids: currentRaids.map((raid) => ({
+          name: raid.name,
+          blizzardInstanceId: raid.blizzardInstanceId,
+          bossTotal: raid.bosses.length,
+        })),
         resetStartUtc: reset.start.toISOString(),
         resetEndUtc: reset.end.toISOString(),
         resetIdentifier: reset.resetIdentifier,
@@ -132,8 +135,9 @@ async function main() {
     }
     const encounters = mapPayload(await response.json());
     const derived = deriveCurrentResetLockouts({ region: REGION, encounters, resetWindow: reset });
-    const currentRaidPayload = encounters.raids.find(
-      (raid) => Number(raid.instanceId) === current.blizzardInstanceId,
+    const currentInstanceIds = new Set(currentRaids.map((raid) => raid.blizzardInstanceId));
+    const currentRaidPayloads = encounters.raids.filter((raid) =>
+      currentInstanceIds.has(Number(raid.instanceId)),
     );
     const byDiff = Object.fromEntries(
       (derived.status === "derived" ? derived.difficulties : []).map((row) => [
@@ -145,9 +149,10 @@ async function main() {
       JSON.stringify(
         {
           character: `${character}-antonidas-EU`,
-          currentRaidFound: Boolean(currentRaidPayload),
-          blizzardInstanceId: currentRaidPayload?.instanceId ?? null,
-          modesPresent: currentRaidPayload?.difficulties.map((mode) => mode.difficulty) ?? [],
+          currentRaidsFound: currentRaidPayloads.map((raid) => raid.instanceId),
+          modesPresent: currentRaidPayloads.flatMap((raid) =>
+            raid.difficulties.map((mode) => mode.difficulty),
+          ),
           derivedStatus: derived.status,
           compact: derived.status === "derived" ? formatCompactLockoutProgress(derived.difficulties) : null,
           byDifficulty: byDiff,

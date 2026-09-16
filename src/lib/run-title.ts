@@ -6,8 +6,8 @@ export type BuildRunTitleInput = {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  plannedBossCount: number;
-  totalBossCount: number;
+  /** Compact content coverage from `projectRunContentDisplay(...).titleCoverage`. */
+  titleCoverage: string;
   raidLeadName: string;
   timeZone?: string;
 };
@@ -17,9 +17,10 @@ function pad(value: number): string {
 }
 
 /**
- * Server-side title authority. `{weekday} {HH:mm} {difficulty} {lootType} {planned}/{total} {raidLead}`,
- * e.g. "Thu 21:00 HC VIP 7/9 Titan". The client never sends a title — this is
- * always recomputed from the final, normalized field values.
+ * Server-side title authority.
+ * `{weekday} {HH:mm} {difficulty} {lootType} {titleCoverage} {raidLead}`
+ * e.g. "Thu 21:00 HC VIP 8/8 Titan" or "Thu 21:00 HC VIP S2B 8/8 Titan".
+ * Never invents a summed 9/9 for Bundle Runs.
  */
 export function buildRunTitle(input: BuildRunTitleInput): string {
   const parts = zonedParts(new Date(input.scheduledStartAt), input.timeZone ?? DEFAULT_TIME_ZONE);
@@ -27,7 +28,6 @@ export function buildRunTitle(input: BuildRunTitleInput): string {
   const hhmm = `${pad(parts.hour)}:${pad(parts.minute)}`;
   const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty];
   const lootType = RUN_LOOT_TYPE_LABELS[input.lootType];
-  const bossCoverage = `${input.plannedBossCount}/${input.totalBossCount}`;
 
-  return `${weekday} ${hhmm} ${difficulty} ${lootType} ${bossCoverage} ${input.raidLeadName}`;
+  return `${weekday} ${hhmm} ${difficulty} ${lootType} ${input.titleCoverage} ${input.raidLeadName}`;
 }

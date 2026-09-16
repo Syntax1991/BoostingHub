@@ -32,12 +32,12 @@ function emptyData(overrides: Partial<SignupEmbedData> = {}): SignupEmbedData {
   return {
     runId: "r7777777-7777-4777-8777-777777777777",
     runTitle: "Weekend Heroic Catch-up",
-    raidId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    raidName: "Manaforge Omega",
+    raidName: "The Venomous Abyss",
+    productLabel: "The Venomous Abyss",
+    contentSummary: "The Venomous Abyss 8/8",
+    titleCoverage: "8/8",
     difficulty: "HEROIC",
     lootType: "VIP",
-    plannedBossCount: 7,
-    totalBossCount: 9,
     scheduledStartAt: "2026-09-24T20:00:00.000Z",
     runStatus: "OPEN",
     signupWindowOpen: true,
@@ -415,10 +415,10 @@ describe("buildSignupEmbed", () => {
     expect(json.footer?.text).toMatch(/closed/i);
   });
 
-  it("shows the loot type and boss coverage", () => {
+  it("shows the loot type and content summary", () => {
     const fields = buildSignupEmbed(emptyData()).toJSON().fields ?? [];
     expect(fields.find((field) => field.name === "Loot")?.value).toBe("VIP");
-    expect(fields.find((field) => field.name === "Bosses")?.value).toBe("7/9");
+    expect(fields.find((field) => field.name === "Content")?.value).toBe("The Venomous Abyss 8/8");
   });
 });
 

@@ -60,6 +60,10 @@
       "model": "RunPayoutEntry",
       "namespace": "public"
     },
+    "run_raid_content": {
+      "model": "RunRaidContent",
+      "namespace": "public"
+    },
     "run_roster": {
       "model": "RunRoster",
       "namespace": "public"
@@ -1866,7 +1870,7 @@
                   "namespace": "public"
                 }
               },
-              "runs": {
+              "runContents": {
                 "cardinality": "1:N",
                 "on": {
                   "localFields": [
@@ -1877,7 +1881,7 @@
                   ]
                 },
                 "to": {
-                  "model": "Run",
+                  "model": "RunRaidContent",
                   "namespace": "public"
                 }
               },
@@ -2073,20 +2077,6 @@
                   "kind": "scalar"
                 }
               },
-              "plannedBossCount": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "raidId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "raidLeadId": {
                 "nullable": false,
                 "type": {
@@ -2167,6 +2157,21 @@
                   "namespace": "public"
                 }
               },
+              "contents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunRaidContent",
+                  "namespace": "public"
+                }
+              },
               "discordPost": {
                 "cardinality": "1:1",
                 "on": {
@@ -2179,21 +2184,6 @@
                 },
                 "to": {
                   "model": "RunDiscordPost",
-                  "namespace": "public"
-                }
-              },
-              "raid": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "raidId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "Raid",
                   "namespace": "public"
                 }
               },
@@ -2319,12 +2309,6 @@
                 },
                 "notes": {
                   "column": "notes"
-                },
-                "plannedBossCount": {
-                  "column": "plannedBossCount"
-                },
-                "raidId": {
-                  "column": "raidId"
                 },
                 "raidLeadId": {
                   "column": "raidLeadId"
@@ -3028,6 +3012,108 @@
               },
               "namespaceId": "public",
               "table": "run_payout_entry"
+            }
+          },
+          "RunRaidContent": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "plannedBossCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sortOrder": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "raid": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Raid",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "plannedBossCount": {
+                  "column": "plannedBossCount"
+                },
+                "raidId": {
+                  "column": "raidId"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "sortOrder": {
+                  "column": "sortOrder"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_raid_content"
             }
           },
           "RunRoster": {
@@ -6613,16 +6699,6 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "plannedBossCount": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "raidId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
                 "raidLeadId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -6665,23 +6741,6 @@
                 }
               },
               "foreignKeys": [
-                {
-                  "onDelete": "restrict",
-                  "source": {
-                    "columns": [
-                      "raidId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "run"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "raid"
-                  }
-                },
                 {
                   "onDelete": "restrict",
                   "source": {
@@ -6732,14 +6791,6 @@
                   ],
                   "name": "run_archivedById_idx_d546efc6",
                   "prefix": "run_archivedById_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "raidId"
-                  ],
-                  "name": "run_raidId_idx_996eeca9",
-                  "prefix": "run_raidId_idx",
                   "unique": false
                 },
                 {
@@ -7363,6 +7414,117 @@
                 {
                   "columns": [
                     "attendanceId"
+                  ]
+                }
+              ]
+            },
+            "run_raid_content": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "plannedBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "raidId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sortOrder": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_raid_content"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "raidId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_raid_content"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "raid"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "raidId"
+                  ],
+                  "name": "run_raid_content_raidId_idx_996eeca9",
+                  "prefix": "run_raid_content_raidId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "run_raid_content_runId_idx_a6016437",
+                  "prefix": "run_raid_content_runId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId",
+                    "raidId"
+                  ]
+                },
+                {
+                  "columns": [
+                    "runId",
+                    "sortOrder"
                   ]
                 }
               ]
@@ -9173,10 +9335,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ef31069df7e990253bb121096193155ce91c322f9c4da10a3b400c9ece4fe9ed"
+    "storageHash": "edf19dd6b7c59253e41b335b4b7dde5177c934ab38ad96f8e51cebbf2ead1c7a"
   },
   "execution": {
-    "executionHash": "96f45257e34e0e4cfc1ae2b7d442d566b56bafc7d98c96696521955cd991db30",
+    "executionHash": "012c92a4e5cf7737647ddb9ed4a26b2fe983624de4f639cd49f4ae08886fa426",
     "mutations": {
       "defaults": [
         {
@@ -9496,6 +9658,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_payout_entry"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_raid_content"
           }
         },
         {

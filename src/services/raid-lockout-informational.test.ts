@@ -10,6 +10,7 @@ import { signupRepository } from "@/repositories/signup.repository";
 import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
 import { freezeSystemTime, restoreSystemTime } from "@/test/time";
 
@@ -190,16 +191,15 @@ afterAll(async () => {
 
 async function createOpenRun(scheduledStartAt: string) {
   const id = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt,
-      desiredTankCount: 0,
-      desiredHealerCount: 0,
-      desiredDpsCount: 1,
-    })
+    .createRun(
+      lead,
+      venomousCreateInput({
+        scheduledStartAt,
+        desiredTankCount: 0,
+        desiredHealerCount: 0,
+        desiredDpsCount: 1,
+      }),
+    )
     .then((run) => run.id);
   createdRunIds.push(id);
   await runService.openRun(lead, id);
@@ -244,7 +244,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     const eligibleOption = before.booster.eligible.find((item) => item.characterId === saved);
     expect(eligibleOption).toBeTruthy();
     const runARecord = await runRepository.findById(runA);
-    expect(eligibleOption?.raidSave).toEqual({
+    expect(eligibleOption?.contentSaves[0]?.raidSave).toEqual({
       raidId,
       difficulty: "HEROIC",
       resetIdentifier: lockoutService.getResetIdentifierForRun("EU", runARecord!.scheduledStartAt),
@@ -278,7 +278,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     const view = await rosterService.getRosterManagementView(lead, runA);
     const candidate = rosterBoosters(view).find((item) => item.character?.id === saved);
     expect(candidate).toBeTruthy();
-    expect(candidate?.raidSave?.bossesDefeated).toBe(8);
+    expect(candidate?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(8);
     expect(candidate?.issue).toBeNull();
 
     await rosterService.setDraftSelection(lead, { runId: runA, signupId: candidate!.id, selected: true, version: view.roster.version });
@@ -337,7 +337,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
       await markSaved(tuesday, saved, 7, false);
 
       const mondayOptions = await signupService.getSignupOptions(target, monday);
-      expect(mondayOptions.booster.eligible.find((item) => item.characterId === saved)?.raidSave).toEqual({
+      expect(mondayOptions.booster.eligible.find((item) => item.characterId === saved)?.contentSaves[0]?.raidSave).toEqual({
         raidId,
         difficulty: "HEROIC",
         resetIdentifier: "2026-W37",
@@ -352,8 +352,8 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
       });
       const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
       const candidate = rosterBoosters(tuesdayView).find((item) => item.character?.id === saved);
-      expect(candidate?.raidSave?.resetIdentifier).toBe("2026-W37");
-      expect(candidate?.raidSave?.bossesDefeated).toBe(7);
+      expect(candidate?.contentSaves[0]?.raidSave?.resetIdentifier).toBe("2026-W37");
+      expect(candidate?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(7);
     } finally {
       restoreSystemTime();
     }
@@ -366,14 +366,14 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
       await markSaved(runId, saved, 0, false);
 
       const options = await signupService.getSignupOptions(target, runId);
-      expect(options.booster.eligible.find((item) => item.characterId === saved)?.raidSave?.bossesDefeated).toBe(0);
+      expect(options.booster.eligible.find((item) => item.characterId === saved)?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(0);
 
       await signupService.setCharacterOffers(target, {
         runId,
         offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
       });
       const view = await rosterService.getRosterManagementView(lead, runId);
-      expect(rosterBoosters(view).find((item) => item.character?.id === saved)?.raidSave).toEqual({
+      expect(rosterBoosters(view).find((item) => item.character?.id === saved)?.contentSaves[0]?.raidSave).toEqual({
         raidId,
         difficulty: "HEROIC",
         resetIdentifier: "2026-W37",

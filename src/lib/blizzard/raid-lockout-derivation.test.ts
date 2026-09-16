@@ -4,14 +4,15 @@ import { mapBlizzardRaidDifficulty } from "@/lib/blizzard/raid-difficulty";
 import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
 import {
   MANAFORGE_OMEGA_RAID_ID,
+  TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   WOW_RAID_CATALOG,
-  getCurrentLockoutRaid,
+  getCurrentLockoutRaids,
 } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { formatCompactLockoutProgress } from "@/lib/lockout-display";
+import { defaultRaidBossTotal, formatCompactLockoutProgress } from "@/lib/lockout-display";
 
-const current = getCurrentLockoutRaid()!;
+const current = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
 const historical = WOW_RAID_CATALOG.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)!;
 const now = new Date("2026-09-10T12:00:00.000Z");
 const reset = getRegionalWeeklyReset("EU", now);
@@ -49,13 +50,35 @@ function venomousEncounters(
 }
 
 describe("current raid catalog selection", () => {
-  it("marks The Venomous Abyss as the only current lockout raid", () => {
-    expect(current.id).toBe(VENOMOUS_ABYSS_RAID_ID);
-    expect(current.blizzardInstanceId).toBe(1320);
-    expect(current.bosses).toHaveLength(8);
+  it("marks Venomous and Tidebound as current lockout raids with verified Blizzard ids", () => {
+    const currentRaids = getCurrentLockoutRaids();
+    expect(currentRaids.map((raid) => raid.id).sort()).toEqual(
+      [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
+    );
+
+    const venomous = currentRaids.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
+    expect(venomous.blizzardInstanceId).toBe(1320);
+    expect(venomous.bosses).toHaveLength(8);
+
+    const tidebound = currentRaids.find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
+    expect(tidebound.name).toBe("The Tidebound Grotto");
+    // Verified live Battle.net journal-instance / encounter ids.
+    expect(tidebound.blizzardInstanceId).toBe(1317);
+    expect(tidebound.bosses).toHaveLength(1);
+    expect(tidebound.bosses[0]?.name).toBe("Nymrissa Wavecaller");
+    expect(tidebound.bosses[0]?.blizzardEncounterIds).toEqual([2849]);
+    expect(tidebound.availableForRuns).toBe(false);
+
     expect(historical.currentForLockouts).toBe(false);
     expect(historical.blizzardInstanceId).toBe(1302);
     expect(historical.bosses).toHaveLength(8);
+  });
+
+  it("requires an explicit raid id for catalog boss totals", () => {
+    expect(defaultRaidBossTotal(VENOMOUS_ABYSS_RAID_ID)).toBe(8);
+    expect(defaultRaidBossTotal(TIDEBOUND_GROTTO_RAID_ID)).toBe(1);
+    expect(defaultRaidBossTotal(MANAFORGE_OMEGA_RAID_ID)).toBe(8);
+    expect(defaultRaidBossTotal("00000000-0000-4000-8000-000000000000")).toBe(0);
   });
 
   it("does not select Manaforge solely because it also has 8 bosses", () => {
@@ -175,7 +198,7 @@ describe("deriveCurrentResetLockouts", () => {
     expect(mapBlizzardRaidDifficulty("LFR")).toBeNull();
   });
 
-  it("returns unknown when current raid instance is missing even if historical 8-boss raid exists", () => {
+  it("returns unknown when no current raid instance is present even if historical 8-boss raid exists", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
       now,
@@ -199,6 +222,19 @@ describe("deriveCurrentResetLockouts", () => {
               },
             ],
           },
+        ],
+      },
+    });
+    expect(result.status).toBe("unknown");
+  });
+
+  it("derives from Tidebound alone when Venomous is absent (Tidebound is currentForLockouts)", () => {
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      now,
+      resetWindow: reset,
+      encounters: {
+        raids: [
           {
             instanceId: "1317",
             instanceName: "The Tidebound Grotto",
@@ -221,7 +257,10 @@ describe("deriveCurrentResetLockouts", () => {
         ],
       },
     });
-    expect(result.status).toBe("unknown");
+    expect(result.status).toBe("derived");
+    if (result.status !== "derived") return;
+    expect(result.currentRaidId).toBe(TIDEBOUND_GROTTO_RAID_ID);
+    expect(result.currentBlizzardInstanceId).toBe(1317);
   });
 
   it("treats verified zero kills as 0/N clear for that difficulty only", () => {

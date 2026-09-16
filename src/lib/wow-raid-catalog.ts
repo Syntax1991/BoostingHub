@@ -35,6 +35,15 @@ export const MANAFORGE_OMEGA_RAID_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 /** Midnight Season 2 main raid — current BoostingHub lockout target. */
 export const VENOMOUS_ABYSS_RAID_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
+/**
+ * Midnight Season 2 lair (The Tidebound Grotto / Nymrissa Wavecaller).
+ * Separate Blizzard instance from The Venomous Abyss — never merge lockouts.
+ * Verified via Battle.net `GET /data/wow/journal-instance/1317` (EU static).
+ */
+export const TIDEBOUND_GROTTO_RAID_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+export const NYMRISSA_WAVECALLER_BOSS_ID = "cc000001-cccc-4ccc-8ccc-cccccccccccc";
+
 export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
     id: MANAFORGE_OMEGA_RAID_ID,
@@ -158,14 +167,35 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
       },
     ],
   },
+  {
+    id: TIDEBOUND_GROTTO_RAID_ID,
+    name: "The Tidebound Grotto",
+    season: "Midnight Season 2",
+    // Verified Battle.net journal-instance id (en_US: The Tidebound Grotto).
+    blizzardInstanceId: 1317,
+    currentForLockouts: true,
+    // Real raid identity for Bundle RunRaidContent — not a standalone Create product.
+    availableForRuns: false,
+    bosses: [
+      {
+        id: NYMRISSA_WAVECALLER_BOSS_ID,
+        name: "Nymrissa Wavecaller",
+        sortOrder: 1,
+        // Verified Battle.net journal encounter id on instance 1317.
+        blizzardEncounterIds: [2849],
+      },
+    ],
+  },
 ];
 
 export function getCurrentLockoutRaids(): readonly WowRaidCatalogEntry[] {
   return WOW_RAID_CATALOG.filter((raid) => raid.currentForLockouts);
 }
 
-export function getCurrentLockoutRaid(): WowRaidCatalogEntry | null {
-  return getCurrentLockoutRaids()[0] ?? null;
+/** Short product-facing raid label (Tidebound → Nymrissa). */
+export function raidContentDisplayName(raidId: string, raidName: string): string {
+  if (raidId === TIDEBOUND_GROTTO_RAID_ID) return "Nymrissa";
+  return raidName;
 }
 
 export function findRaidCatalogById(id: string): WowRaidCatalogEntry | null {

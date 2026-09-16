@@ -21,7 +21,7 @@ function memberList(members: RosterEmbedMember[]): string {
 export function buildRosterEmbed(data: RosterEmbedData): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle(`Roster for ${data.runTitle}`)
-    .setDescription(`${DIFFICULTY_LABEL[data.difficulty]} · ${data.raidName}`)
+    .setDescription(`${DIFFICULTY_LABEL[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`)
     .addFields(
       { name: `🛡 Tanks (${data.groups.tanks.length}/${data.targets.tanks})`, value: memberList(data.groups.tanks) },
       { name: `♻ Healers (${data.groups.healers.length}/${data.targets.healers})`, value: memberList(data.groups.healers) },

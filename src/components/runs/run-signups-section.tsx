@@ -10,22 +10,19 @@ import {
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
-import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
+import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
 
 type ManagerSignup = RosterManagementView["groups"]["tanks"][number];
-type ManagerRun = Pick<RosterManagementView["run"], "difficulty" | "totalBossCount" | "lootType">;
 
-function boosterLockoutLabel(signup: ManagerSignup, run: ManagerRun) {
-  if (signup.participationType !== "BOOSTER" || !signup.character) return null;
-  return formatTargetRaidLockoutLabel({
-    difficulty: run.difficulty,
-    totalBossCount: run.totalBossCount,
-    raidSave: signup.raidSave,
-    lootType: run.lootType,
-  });
+function boosterLockoutLines(signup: ManagerSignup): string[] {
+  if (signup.participationType !== "BOOSTER" || !signup.character) return [];
+  if (signup.contentSaves?.length) {
+    return formatContentLockoutLines(signup.contentSaves);
+  }
+  return [];
 }
 
 function resolvedClass(signup: {
@@ -60,7 +57,6 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
     return (
       <ManagerSignupList
         runId={data.run.id}
-        run={data.manager.run}
         signups={uniqueManagerSignups(data.manager)}
       />
     );
@@ -178,11 +174,9 @@ function groupSignupsByUser(signups: ManagerSignup[]): ManagerSignupGroup[] {
  */
 function ManagerSignupList({
   runId,
-  run,
   signups,
 }: {
   runId: string;
-  run: ManagerRun;
   signups: ManagerSignup[];
 }) {
   const groups = groupSignupsByUser(signups);
@@ -213,7 +207,8 @@ function ManagerSignupList({
               <ul className="mt-2 space-y-1.5">
                 {group.signups.map((signup) => {
                   const wowClass = resolvedClass(signup);
-                  const lockout = boosterLockoutLabel(signup, run);
+                  const lockoutLines = boosterLockoutLines(signup);
+                  const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
                   return (
                   <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
                     <span>{characterLabel(signup)}</span>
@@ -231,9 +226,9 @@ function ManagerSignupList({
                       </span>
                     ) : null}
                     <SignupStatusBadge status={signup.status} />
-                    {lockout ? (
-                      <span className={`text-xs ${lockout.attention ? "text-warning" : "text-muted"}`}>
-                        {lockout.text}
+                    {lockoutLines.length > 0 ? (
+                      <span className={`text-xs ${lockoutAttention ? "text-warning" : "text-muted"}`}>
+                        {lockoutLines.join(" · ")}
                       </span>
                     ) : null}
                     {signup.issue ? <span className="text-xs text-danger">{signup.issue}</span> : null}

@@ -26,7 +26,7 @@ import { characterBlizzardSyncService } from "@/services/character-blizzard-sync
 import { characterService } from "@/services/character.service";
 import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
-import { getCurrentLockoutRaid } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
 
@@ -375,7 +375,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 
     const reset = getRegionalWeeklyReset("EU");
     const killMs = reset.start.getTime() + 3_600_000;
-    const catalog = getCurrentLockoutRaid()!;
+    const catalog = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
     const encounters: BlizzardCharacterRaidEncounters = {
       raids: [
         {
@@ -448,7 +448,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     await orm.CharacterRaidLockout.create({
       id: crypto.randomUUID(),
       characterId,
-      raidId: getCurrentLockoutRaid()!.id,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
       difficulty: "NORMAL",
       resetIdentifier: reset.resetIdentifier,
       bossesDefeated: 5,

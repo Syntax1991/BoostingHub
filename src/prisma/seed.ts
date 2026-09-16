@@ -241,6 +241,9 @@ async function wipe() {
   for (const row of await orm.RunSignup.select("id").all()) {
     await orm.RunSignup.where({ id: row.id }).delete();
   }
+  for (const row of await orm.RunRaidContent.select("id").all()) {
+    await orm.RunRaidContent.where({ id: row.id }).delete();
+  }
   for (const row of await orm.CharacterRaidLockout.select("id").all()) {
     await orm.CharacterRaidLockout.where({ id: row.id }).delete();
   }
@@ -620,8 +623,7 @@ async function seed() {
     scheduledStartAt: settlementQaScheduledStartAt,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
-    plannedBossCount: 8,
-    totalBossCount: settlementQaRaid.bosses.length,
+    titleCoverage: `8/${settlementQaRaid.bosses.length}`,
     raidLeadName: "Thorne Ironvein",
   });
 
@@ -848,9 +850,9 @@ async function seed() {
   ] as const;
 
   for (const run of runs) {
+    const { plannedBossCount, ...runFields } = run;
     await orm.Run.create({
-      ...run,
-      raidId: ids.raid,
+      ...runFields,
       notes:
         run.id === ids.runs.settlementQa
           ? "Settlement QA: Dawn gross-pot Prepare Payout fixture (20 Boosters + Lootbuddy 0 Cut). No settlement seeded — Prepare with Gross Pot 5000000."
@@ -859,6 +861,14 @@ async function seed() {
             : null,
       createdAt: SEED_NOW,
       updatedAt: SEED_NOW,
+    });
+    await orm.RunRaidContent.create({
+      id: crypto.randomUUID(),
+      runId: run.id,
+      raidId: ids.raid,
+      sortOrder: 1,
+      plannedBossCount,
+      createdAt: SEED_NOW,
     });
   }
 

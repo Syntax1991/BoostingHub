@@ -82,6 +82,11 @@ type RaidSaveInfo = {
   totalBossCount: number;
   isComplete: boolean;
 };
+type EligibleContentSave = {
+  totalBossCount: number;
+  raidSave: RaidSaveInfo | null;
+  label: { text: string };
+};
 type EligibleCharacterOption = {
   characterId: string;
   characterName: string;
@@ -90,9 +95,13 @@ type EligibleCharacterOption = {
   roles: CharacterRole[];
   /** Specialization-derived default, or null when specialization is missing/unrecognized. */
   defaultRole: CharacterRole | null;
-  /** Informational only — a saved Character remains fully selectable. */
-  raidSave?: RaidSaveInfo | null;
+  /** Informational per-content lockouts — a saved Character remains fully selectable. */
+  contentSaves?: EligibleContentSave[];
 };
+
+function primaryContentLockout(option: EligibleCharacterOption): EligibleContentSave | null {
+  return option.contentSaves?.find((row) => row.raidSave) ?? option.contentSaves?.[0] ?? null;
+}
 export type IneligibleCharacterOption = {
   characterId: string;
   characterName: string;
@@ -142,23 +151,24 @@ function describeSavedCharacters(
   eligible: EligibleCharacterOption[],
   run: Pick<SignupOptionsPayload["run"], "difficulty" | "totalBossCount" | "lootType">,
 ): string[] {
-  const withLockout = eligible.filter((option) => option.raidSave);
+  const withLockout = eligible.filter((option) => primaryContentLockout(option)?.raidSave);
   if (withLockout.length === 0) return [];
   return [
     "",
     "Lockouts this reset:",
     ...withLockout.map((option) => {
+      const row = primaryContentLockout(option)!;
       const label = formatTargetRaidLockoutLabel({
         difficulty: run.difficulty,
-        totalBossCount: run.totalBossCount,
-        raidSave: option.raidSave
+        totalBossCount: row.totalBossCount,
+        raidSave: row.raidSave
           ? {
               raidId: "",
               difficulty: run.difficulty,
               resetIdentifier: "",
-              bossesDefeated: option.raidSave.bossesDefeated,
-              totalBossCount: option.raidSave.totalBossCount,
-              isComplete: option.raidSave.isComplete,
+              bossesDefeated: row.raidSave.bossesDefeated,
+              totalBossCount: row.raidSave.totalBossCount,
+              isComplete: row.raidSave.isComplete,
             }
           : null,
         lootType: run.lootType,
@@ -198,23 +208,24 @@ export function buildCharacterSelectOptions(
       .setValue(option.characterId)
       .setDefault(activeIds.has(option.characterId));
     // Informational only — a saved Character is still fully selectable.
-    if (option.raidSave && run) {
+    const lockoutRow = primaryContentLockout(option);
+    if (lockoutRow?.raidSave && run) {
       const label = formatTargetRaidLockoutLabel({
         difficulty: run.difficulty,
-        totalBossCount: run.totalBossCount,
+        totalBossCount: lockoutRow.totalBossCount,
         raidSave: {
           raidId: "",
           difficulty: run.difficulty,
           resetIdentifier: "",
-          bossesDefeated: option.raidSave.bossesDefeated,
-          totalBossCount: option.raidSave.totalBossCount,
-          isComplete: option.raidSave.isComplete,
+          bossesDefeated: lockoutRow.raidSave.bossesDefeated,
+          totalBossCount: lockoutRow.raidSave.totalBossCount,
+          isComplete: lockoutRow.raidSave.isComplete,
         },
         lootType: run.lootType,
       });
       builder.setDescription(label.text.slice(0, 100));
-    } else if (option.raidSave) {
-      builder.setDescription(`${option.raidSave.bossesDefeated}/${option.raidSave.totalBossCount}`);
+    } else if (lockoutRow?.raidSave) {
+      builder.setDescription(`${lockoutRow.raidSave.bossesDefeated}/${lockoutRow.raidSave.totalBossCount}`);
     }
     return builder;
   });

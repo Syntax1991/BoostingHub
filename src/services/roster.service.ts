@@ -19,8 +19,12 @@ import { activityRepository } from "@/repositories/activity.repository";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
-import type { CharacterRole, ParticipationType, RaidDifficulty, RunStatus, SignupStatus, WowClass } from "@/models/enums";
-import type { SignupRaidSaveInfo } from "@/models/records";
+import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, RunStatus, SignupStatus, WowClass } from "@/models/enums";
+import {
+  projectRunContentLockouts,
+  type RunContentRaidSaveInfo,
+} from "@/lib/run-content-lockouts";
+import type { RunRaidContentRecord } from "@/repositories/run.repository";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 
@@ -28,8 +32,8 @@ type InspectedSignup = RosterSignupRow & {
   draftSelected: boolean;
   characterActive: boolean;
   boosterApproved: boolean;
-  /** Informational only — never a roster blocker. See signup-eligibility.ts. */
-  raidSave: SignupRaidSaveInfo | null;
+  /** Informational per-content lockouts — never roster blockers. */
+  contentSaves: RunContentRaidSaveInfo[];
   issue: string | null;
 };
 
@@ -125,20 +129,41 @@ function resolveSelectedRole(
 
 function inspectSignup(
   signup: RosterSignupRow,
-  run: { raidId: string; difficulty: RaidDifficulty; totalBossCount: number; scheduledStartAt: string },
+  run: {
+    difficulty: RaidDifficulty;
+    scheduledStartAt: string;
+    lootType: RunLootType;
+    contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
+  },
 ): Omit<InspectedSignup, "draftSelected"> {
+  if (run.contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
+  }
   const character = signup.character;
-  const matchingLockout =
+  const contents = run.contents;
+  const contentSaves =
     character == null
-      ? null
-      : lockoutService.findExactLockout(character.lockouts, {
-          raidId: run.raidId,
+      ? projectRunContentLockouts({
+          contents,
           difficulty: run.difficulty,
-          resetIdentifier: lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt),
+          lootType: run.lootType,
+          findSave: () => null,
+        })
+      : projectRunContentLockouts({
+          contents,
+          difficulty: run.difficulty,
+          lootType: run.lootType,
+          findSave: (content) => {
+            const matchingLockout = lockoutService.findExactLockout(character.lockouts, {
+              raidId: content.raidId,
+              difficulty: run.difficulty,
+              resetIdentifier: lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt),
+            });
+            return matchingLockout
+              ? lockoutService.toRaidSaveInfo(matchingLockout, content.totalBossCount)
+              : null;
+          },
         });
-  const raidSave: SignupRaidSaveInfo | null = matchingLockout
-    ? lockoutService.toRaidSaveInfo(matchingLockout, run.totalBossCount)
-    : null;
   const boosterApproved =
     signup.participationType !== "BOOSTER" || signup.offeredRoles.length === 0 || !character
       ? signup.participationType !== "BOOSTER"
@@ -163,7 +188,7 @@ function inspectSignup(
     ...signup,
     characterActive,
     boosterApproved,
-    raidSave,
+    contentSaves,
     issue,
   };
 }
@@ -218,7 +243,8 @@ export const rosterService = {
     return runs.filter((run) => canManageRun(user, run)).map((run) => ({
       id: run.id,
       title: run.title,
-      raidName: run.raidName,
+      productLabel: run.contentDisplay.productLabel,
+      contentSummary: run.contentDisplay.summary,
       difficulty: run.difficulty,
       scheduledStartAt: run.scheduledStartAt,
       status: run.status,
@@ -314,7 +340,8 @@ export const rosterService = {
       run: {
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
+        productLabel: run.contentDisplay.productLabel,
+        contentSummary: run.contentDisplay.summary,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
@@ -326,7 +353,6 @@ export const rosterService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
-        totalBossCount: run.totalBossCount,
         activeSignupCount: inspected.filter((item) => item.status !== "WITHDRAWN").length,
         publishedSelectedCount: publishedSelection.length,
         backupCount: inspected.filter((item) => item.isBackup && item.status !== "WITHDRAWN").length,

@@ -1,12 +1,15 @@
-import type { BoosterQualificationMatch, CharacterRunReservationConflict, SignupRaidSaveInfo } from "@/models/records";
+import { DomainError } from "@/lib/errors";
+import type { BoosterQualificationMatch, CharacterRunReservationConflict } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
+  RunLootType,
   RunStatus,
   WowClass,
   WowRegion,
 } from "@/models/enums";
 import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
+import { projectRunContentLockouts, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -41,14 +44,20 @@ export type EligibilityCharacter = {
 
 export type EligibilityRun = {
   id: string;
-  raidId: string;
   difficulty: RaidDifficulty;
   status: RunStatus;
   signupsOpen: boolean;
-  /** The target Run's raid's total boss count — needed only to render raid-save progress (e.g. "8/8"), never for eligibility. */
-  totalBossCount: number;
   /** Used with each Character's region to resolve the regional WoW reset containing this instant. */
   scheduledStartAt: string;
+  lootType: RunLootType;
+  /** Authoritative ordered raid contents for lockout projection. */
+  contents: Array<{
+    raidId: string;
+    raidName: string;
+    sortOrder: number;
+    plannedBossCount: number;
+    totalBossCount: number;
+  }>;
 };
 
 export type BoosterIneligibilityReason =
@@ -74,12 +83,8 @@ export type EligibleBoosterOption = {
   roles: CharacterRole[];
   /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
   defaultRole: CharacterRole | null;
-  /**
-   * Informational verified lockout for the target Run's exact raid/difficulty
-   * and this Character's regional reset containing `scheduledStartAt`.
-   * Includes verified 0/x. Null means unknown/unverified — never affects eligibility.
-   */
-  raidSave: SignupRaidSaveInfo | null;
+  /** Informational per-content lockouts for this Run — never eligibility blockers. */
+  contentSaves: RunContentRaidSaveInfo[];
 };
 
 export type IneligibleBoosterCharacter = {
@@ -95,21 +100,35 @@ export type IneligibleBoosterCharacter = {
 };
 
 /**
- * Verified lockout for the target Run's own raid/difficulty and the Character's
- * regional reset containing the Run schedule — including verified 0/x.
- * A different raid, difficulty, or reset is never surfaced. Informational only.
+ * Verified lockouts for every RunRaidContent on the target Run.
+ * Informational only — never eligibility blockers.
  */
-function findRaidSave(
+function assertRunContents(contents: EligibilityRun["contents"]): asserts contents is [EligibilityRun["contents"][number], ...EligibilityRun["contents"]] {
+  if (contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
+  }
+}
+
+function findContentSaves(
   character: Pick<EligibilityCharacter, "lockouts" | "region">,
   run: EligibilityRun,
-): SignupRaidSaveInfo | null {
+): RunContentRaidSaveInfo[] {
+  assertRunContents(run.contents);
+  const contents = run.contents;
   const resetIdentifier = lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt);
-  const lockout = lockoutService.findExactLockout(character.lockouts, {
-    raidId: run.raidId,
+  return projectRunContentLockouts({
+    contents,
     difficulty: run.difficulty,
-    resetIdentifier,
+    lootType: run.lootType,
+    findSave: (content) => {
+      const lockout = lockoutService.findExactLockout(character.lockouts, {
+        raidId: content.raidId,
+        difficulty: run.difficulty,
+        resetIdentifier,
+      });
+      return lockout ? lockoutService.toRaidSaveInfo(lockout, content.totalBossCount) : null;
+    },
   });
-  return lockout ? lockoutService.toRaidSaveInfo(lockout, run.totalBossCount) : null;
 }
 
 /**
@@ -120,7 +139,7 @@ function findRaidSave(
  * unrecognized specialization does not block an otherwise-eligible Character;
  * it just means no default is offered (`defaultRole: null`) and the User must
  * choose explicitly. Heroic approval never implies Mythic. Raid save/lockout
- * status is informational only (`raidSave`) — a saved Character remains fully
+ * status is informational only (`contentSaves`) — a saved Character remains fully
  * eligible; the Raid Lead decides operationally whether to use it.
  */
 export function evaluateBoosterOptions(
@@ -130,6 +149,7 @@ export function evaluateBoosterOptions(
   eligible: EligibleBoosterOption[];
   ineligible: IneligibleBoosterCharacter[];
 } {
+  assertRunContents(run.contents);
   const eligible: EligibleBoosterOption[] = [];
   const ineligible: IneligibleBoosterCharacter[] = [];
 
@@ -185,6 +205,7 @@ export function evaluateBoosterOptions(
       ? roleForSpecialization(character.wowClass, character.specialization)
       : null;
 
+    const contentSaves = findContentSaves(character, run);
     eligible.push({
       characterId: character.id,
       characterName: character.name,
@@ -193,7 +214,7 @@ export function evaluateBoosterOptions(
       specialization: character.specialization,
       roles: rolesForClass(character.wowClass),
       defaultRole,
-      raidSave: findRaidSave(character, run),
+      contentSaves,
     });
   }
 

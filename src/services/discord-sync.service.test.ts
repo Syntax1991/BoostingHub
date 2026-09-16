@@ -12,6 +12,11 @@ import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { ParticipationType, CharacterRole } from "@/models/enums";
 import { currentWeekFutureIso } from "@/test/time";
+import {
+  contentLegacyUpdateInput,
+  venomousCreateInput,
+  venomousUpdateInput,
+} from "@/lib/test-run-input";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -240,31 +245,29 @@ beforeAll(async () => {
   await grantQualification(ids.ranged);
 
   runId = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    })
+    .createRun(
+      lead,
+      venomousCreateInput({
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    )
     .then((run) => run.id);
   createdRunIds.push(runId);
   await runService.openRun(lead, runId);
 
   draftRunId = await runService
-    .createRun(lead, {
-      raidId,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: futureIso(),
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    })
+    .createRun(
+      lead,
+      venomousCreateInput({
+        scheduledStartAt: futureIso(),
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    )
     .then((run) => run.id);
   createdRunIds.push(draftRunId);
 }, 60_000);
@@ -304,16 +307,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     // A dedicated run so mutating these signups cannot affect the shared runId
     // that later tests in this file (and getRosterEmbedData) depend on.
     const countRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(countRunId);
     await runService.openRun(lead, countRunId);
@@ -344,16 +338,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
 
   it("PUBLISHED picked counts use publishedRole, not a mutated replacement draft role", async () => {
     const freezeRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 0,
-        desiredHealerCount: 1,
-        desiredDpsCount: 0,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }))
       .then((run) => run.id);
     createdRunIds.push(freezeRunId);
     await runService.openRun(lead, freezeRunId);
@@ -428,16 +413,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
 
   it("OPEN/ROSTERING: multi-role offers count in each signed role, but draft picked uses only selectedRole", async () => {
     const hybridRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 2,
-        desiredHealerCount: 2,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 2, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(hybridRunId);
     await runService.openRun(lead, hybridRunId);
@@ -529,16 +505,7 @@ describe("discordSyncService.listSyncWork", () => {
 
   it("never creates a first signup post for a non-DRAFT run that was never actually signup-available", async () => {
     const neverOpenedRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(neverOpenedRunId);
     await runService.cancelRun(lead, neverOpenedRunId);
@@ -549,16 +516,7 @@ describe("discordSyncService.listSyncWork", () => {
 
   it("keeps updating an already-posted signup embed through to cancellation (continuity, not a re-trigger of the creation gate)", async () => {
     const openedThenCancelledRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(openedThenCancelledRunId);
     await runService.openRun(lead, openedThenCancelledRunId);
@@ -655,16 +613,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
   beforeAll(async () => {
     channelRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(channelRunId);
     await runService.openRun(lead, channelRunId);
@@ -758,16 +707,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
   it("a Run that already reached CANCELLED without ever being signup-available never gets a channel/signup post", async () => {
     const neverOpenedRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(neverOpenedRunId);
     await runService.cancelRun(lead, neverOpenedRunId);
@@ -781,16 +721,7 @@ describe("discordSyncService — per-Run channel provisioning", () => {
 
   it("never generates roster work for a published Run the bot had no Discord presence for (would otherwise let the roster path provision a channel on its own)", async () => {
     const orphanRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 0,
-        desiredDpsCount: 0,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 0, desiredDpsCount: 0 }))
       .then((run) => run.id);
     createdRunIds.push(orphanRunId);
     await runService.openRun(lead, orphanRunId);
@@ -834,16 +765,7 @@ describe("discordSyncService — archive category movement", () => {
   it("flags targetBucket ARCHIVE after Archive and reverts to schedule-derived CURRENT after Restore, with the channel identity untouched", async () => {
     const scheduleInCurrent = currentWeekFutureIso();
     const archiveRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: scheduleInCurrent,
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: scheduleInCurrent, desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(archiveRunId);
     await runService.openRun(lead, archiveRunId);
@@ -877,16 +799,7 @@ describe("discordSyncService — archive category movement", () => {
 
   it("generates no sync work — and so requests no channel — for an archived Run that never had Discord presence", async () => {
     const bareRunId = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(bareRunId);
     await runRepository.updateFields(bareRunId, { status: "CANCELLED" });
@@ -963,16 +876,7 @@ describe("discordSyncService.listSyncWork — channel reconciliation is independ
 
   it("NO CHANNEL: an archived Run with no persisted runChannelId never appears in channels[]", async () => {
     const id = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(id);
     await runRepository.updateFields(id, { status: "CANCELLED" });
@@ -995,16 +899,7 @@ describe("discordSyncService.listSyncWork — channel reconciliation is independ
 
   it("a DRAFT Run with a (legacy/abnormal) persisted channel is still reconcilable, but gets no signup/roster work", async () => {
     const id = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 2,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 2 }))
       .then((run) => run.id);
     createdRunIds.push(id);
     // Never opened — still DRAFT. Recording a channel here simulates an
@@ -1028,8 +923,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
     // historical Run by writing it directly through the repository, exactly
     // as a Run created before the raid became historical would look.
     raidEditRunId = await runRepository.create({
-      title: "Historical raid edit fixture",
-      raidId: MANAFORGE_OMEGA_RAID_ID,
+title: "Historical raid edit fixture",
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(),
@@ -1038,16 +932,22 @@ describe("discordSyncService — raid identity invalidation (embed content signa
       desiredTankCount: 1,
       desiredHealerCount: 1,
       desiredDpsCount: 2,
-      plannedBossCount: 8,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
     });
     createdRunIds.push(raidEditRunId);
     await runService.openRun(lead, raidEditRunId);
   }, 60_000);
 
-  it("exposes raidId on SignupEmbedData", async () => {
+  it("exposes productLabel on SignupEmbedData", async () => {
     const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
-    expect(data?.raidId).toBe(MANAFORGE_OMEGA_RAID_ID);
-    expect(data?.raidName).toBe("Manaforge Omega");
+    expect(data?.productLabel).toBe("Manaforge Omega");
+    expect(data?.raidName).toBe(data?.productLabel);
   });
 
   it("settles after the first post, with no work pending before any edit", async () => {
@@ -1063,18 +963,17 @@ describe("discordSyncService — raid identity invalidation (embed content signa
     expect(beforeItem).toBeUndefined(); // no pending work yet — settled by the prior test
 
     const run = await runRepository.findById(raidEditRunId);
-    await runService.updateRun(lead, {
-      runId: raidEditRunId,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: run!.scheduledStartAt,
-      notes: null,
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    });
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(raidEditRunId, run!, {
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: run!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
 
     const work = await discordSyncService.listSyncWork();
     const item = work.signups.find((entry) => entry.runId === raidEditRunId);
@@ -1091,7 +990,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
 
   it("reflects the new raid in getSignupEmbedData after the edit", async () => {
     const data = await discordSyncService.getSignupEmbedData(raidEditRunId);
-    expect(data?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(data?.productLabel).toBe("The Venomous Abyss");
     expect(data?.raidName).toBe("The Venomous Abyss");
   });
 
@@ -1115,18 +1014,16 @@ describe("discordSyncService — raid identity invalidation (embed content signa
   it("still produces work for a non-raid rendered-field edit after the raid change has settled (schedule)", async () => {
     const run = await runRepository.findById(raidEditRunId);
     const newSchedule = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString();
-    await runService.updateRun(lead, {
-      runId: raidEditRunId,
-      raidId: run!.raidId,
-      difficulty: run!.difficulty,
-      lootType: run!.lootType,
-      plannedBossCount: run!.plannedBossCount,
-      scheduledStartAt: newSchedule,
-      notes: null,
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    });
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(raidEditRunId, run!, {
+        scheduledStartAt: newSchedule,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
 
     const work = await discordSyncService.listSyncWork();
     const item = work.signups.find((entry) => entry.runId === raidEditRunId);
@@ -1143,8 +1040,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
   it("combines with archive: an archived + raid-changed run still flags work, and clears once resynced", async () => {
     // Historical-raid fixture, same reasoning as raidEditRunId above.
     const comboRunId = await runRepository.create({
-      title: "Historical archive+raid-change fixture",
-      raidId: MANAFORGE_OMEGA_RAID_ID,
+title: "Historical archive+raid-change fixture",
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(),
@@ -1153,25 +1049,30 @@ describe("discordSyncService — raid identity invalidation (embed content signa
       desiredTankCount: 1,
       desiredHealerCount: 1,
       desiredDpsCount: 2,
-      plannedBossCount: 8,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
     });
     createdRunIds.push(comboRunId);
     await runService.openRun(lead, comboRunId);
     await discordSyncService.recordSignupPost({ runId: comboRunId, channelId: "combo-chan-1", messageId: "combo-msg-1" });
 
     const run = await runRepository.findById(comboRunId);
-    await runService.updateRun(lead, {
-      runId: comboRunId,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      scheduledStartAt: run!.scheduledStartAt,
-      notes: null,
-      desiredTankCount: 1,
-      desiredHealerCount: 1,
-      desiredDpsCount: 2,
-    });
+    await runService.updateRun(
+      lead,
+      venomousUpdateInput(comboRunId, run!, {
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: run!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
     await runRepository.updateFields(comboRunId, { status: "CANCELLED" });
     await runService.archiveRun(lead, comboRunId);
 
@@ -1188,8 +1089,7 @@ describe("discordSyncService — raid identity invalidation (embed content signa
   it("documents the roster invariant: once a roster is published, the service layer refuses the identity/planning edits that would otherwise change RosterEmbedData content", async () => {
     // Historical-raid fixture, same reasoning as raidEditRunId above.
     const publishedRunId = await runRepository.create({
-      title: "Historical roster-invariant fixture",
-      raidId: MANAFORGE_OMEGA_RAID_ID,
+title: "Historical roster-invariant fixture",
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(),
@@ -1198,7 +1098,13 @@ describe("discordSyncService — raid identity invalidation (embed content signa
       desiredTankCount: 1,
       desiredHealerCount: 0,
       desiredDpsCount: 0,
-      plannedBossCount: 8,
+      contents: [
+        {
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          sortOrder: 1,
+          plannedBossCount: 8,
+        },
+      ],
     });
     createdRunIds.push(publishedRunId);
     await runService.openRun(lead, publishedRunId);
@@ -1233,33 +1139,30 @@ describe("discordSyncService — raid identity invalidation (embed content signa
     expect(published?.status).toBe("PUBLISHED");
 
     await expect(
-      runService.updateRun(lead, {
-        runId: publishedRunId,
-        raidId: VENOMOUS_ABYSS_RAID_ID,
-        difficulty: published!.difficulty,
-        lootType: published!.lootType,
-        plannedBossCount: published!.plannedBossCount,
-        scheduledStartAt: published!.scheduledStartAt,
-        notes: null,
-        desiredTankCount: 1,
-        desiredHealerCount: 0,
-        desiredDpsCount: 0,
-      }),
+      runService.updateRun(
+        lead,
+        venomousUpdateInput(publishedRunId, published!, {
+          scheduledStartAt: published!.scheduledStartAt,
+          notes: null,
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 0,
+        }),
+      ),
     ).rejects.toThrow();
 
     await expect(
-      runService.updateRun(lead, {
-        runId: publishedRunId,
-        raidId: published!.raidId,
-        difficulty: published!.difficulty,
-        lootType: "VIP",
-        plannedBossCount: published!.plannedBossCount,
-        scheduledStartAt: published!.scheduledStartAt,
-        notes: null,
-        desiredTankCount: 1,
-        desiredHealerCount: 0,
-        desiredDpsCount: 0,
-      }),
+      runService.updateRun(
+        lead,
+        contentLegacyUpdateInput(publishedRunId, published!, {
+          lootType: "VIP",
+          scheduledStartAt: published!.scheduledStartAt,
+          notes: null,
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 0,
+        }),
+      ),
     ).rejects.toThrow();
   });
 });
@@ -1365,16 +1268,7 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
 describe("discordSyncService — run start operational post", () => {
   it("exposes start work once, builds grouped DTO from attendance, and disappears after recordStartPost", async () => {
     const id = await runService
-      .createRun(lead, {
-        raidId,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        plannedBossCount: 8,
-        scheduledStartAt: futureIso(3),
-        desiredTankCount: 1,
-        desiredHealerCount: 1,
-        desiredDpsCount: 1,
-      })
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(3), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
       .then((run) => run.id);
     createdRunIds.push(id);
     await runService.openRun(lead, id);

@@ -1,6 +1,12 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import {
+  classifyRunContents,
+  listCreateRunContentPresets,
+  type RunContentPresetKey,
+} from "@/lib/run-content-presets";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { runRepository } from "@/repositories/run.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository } from "@/repositories/user.repository";
@@ -124,9 +130,11 @@ export const runDetailService = {
     const header = {
       id: run.id,
       title: run.title,
-      raidId: run.raidId,
-      raidName: run.raidName,
-      season: run.season,
+      productLabel: run.contentDisplay.productLabel,
+      contentSummary: run.contentDisplay.summary,
+      titleCoverage: run.contentDisplay.titleCoverage,
+      contents: run.contents,
+      contentDisplay: run.contentDisplay,
       difficulty: run.difficulty,
       lootType: run.lootType,
       scheduledStartAt: run.scheduledStartAt,
@@ -139,8 +147,6 @@ export const runDetailService = {
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,
-      plannedBossCount: run.plannedBossCount,
-      totalBossCount: run.totalBossCount,
       activeSignupCount: activeSignups.length,
       selectedCount,
     };
@@ -162,7 +168,9 @@ export const runDetailService = {
       );
       if (selectedSignups.length > 0) {
         finalSetupPreview = {
-          raidName: run.raidName,
+          raidName: run.contentDisplay.productLabel,
+          productLabel: run.contentDisplay.productLabel,
+          contentSummary: run.contentDisplay.summary,
           difficulty: run.difficulty,
           lootType: run.lootType,
           targets: {
@@ -178,6 +186,19 @@ export const runDetailService = {
     let editor: {
       hasSignupHistory: boolean;
       canAssignRaidLead: boolean;
+      contentPresets: Array<{ key: RunContentPresetKey; displayName: string }>;
+      contentPreset: RunContentPresetKey | "CUSTOM";
+      venomousPlannedBossCount: number;
+      venomousBossMax: number;
+      contentSummary: string;
+      contents: Array<{
+        raidId: string;
+        raidName: string;
+        sortOrder: number;
+        plannedBossCount: number;
+        totalBossCount: number;
+      }>;
+      /** Historical CUSTOM Runs still expose singular raid options. */
       raids: Array<{
         id: string;
         name: string;
@@ -190,13 +211,33 @@ export const runDetailService = {
 
     if (manage && capabilities.canEdit) {
       await raidRepository.ensureReferenceRaids();
-      const raids = await listEditableRaidOptions(run.raidId);
+      const contents = run.contents;
+      if (contents.length === 0) {
+        throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
+      }
+      const product = classifyRunContents(contents);
+      const venomousRow = contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID);
+      const primaryContent = contents[0]!;
+      const raids =
+        product === "CUSTOM" ? await listEditableRaidOptions(primaryContent.raidId) : [];
       const raidLeads = capabilities.canReassignRaidLead
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName }];
       editor = {
         hasSignupHistory,
         canAssignRaidLead: capabilities.canReassignRaidLead,
+        contentPresets: listCreateRunContentPresets(),
+        contentPreset: product === "CUSTOM" ? "CUSTOM" : product,
+        venomousPlannedBossCount: venomousRow?.plannedBossCount ?? primaryContent?.plannedBossCount ?? 1,
+        venomousBossMax: 8,
+        contentSummary: run.contentDisplay.summary,
+        contents: contents.map((row) => ({
+          raidId: row.raidId,
+          raidName: row.raidName,
+          sortOrder: row.sortOrder,
+          plannedBossCount: row.plannedBossCount,
+          totalBossCount: row.totalBossCount,
+        })),
         raids,
         raidLeads,
       };

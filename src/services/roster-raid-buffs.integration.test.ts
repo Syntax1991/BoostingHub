@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
 
 /**
@@ -157,16 +157,7 @@ beforeAll(async () => {
     updatedAt: new Date().toISOString(),
   });
 
-  const run = await runService.createRun(lead, {
-    raidId: VENOMOUS_ABYSS_RAID_ID,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    plannedBossCount: 8,
-    scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-    desiredTankCount: 2,
-    desiredHealerCount: 4,
-    desiredDpsCount: 14,
-  });
+  const run = await runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }));
   runId = run.id;
   await runService.openRun(lead, runId);
 }, 60_000);

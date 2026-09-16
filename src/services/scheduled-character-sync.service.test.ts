@@ -6,7 +6,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { raidRepository } from "@/repositories/raid.repository";
-import { getCurrentLockoutRaid } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { WowRegion } from "@/models/enums";
 
 const apiMocks = vi.hoisted(() => ({
@@ -317,7 +317,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     await orm.CharacterRaidLockout.create({
       id: crypto.randomUUID(),
       characterId: character.id,
-      raidId: getCurrentLockoutRaid()!.id,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
       difficulty: "NORMAL",
       resetIdentifier: "2026-W37",
       bossesDefeated: 3,

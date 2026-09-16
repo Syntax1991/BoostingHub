@@ -8,10 +8,18 @@ import {
 } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { buildRunTitle } from "@/lib/run-title";
+import {
+  expandRunContentPreset,
+  listCreateRunContentPresets,
+  projectRunContentDisplay,
+  type ExpandedRunContent,
+  type RunContentPresetKey,
+} from "@/lib/run-content-presets";
+import { TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
 import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { raidRepository } from "@/repositories/raid.repository";
-import { runRepository } from "@/repositories/run.repository";
+import { runRepository, type RunCreateWithContentsInput } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { runTemplateService } from "@/services/run-template.service";
@@ -57,39 +65,49 @@ function assertNewRunSchedule(iso: string): void {
   }
 }
 
-/** New-selection boundary: creating a Run may only target an available raid. */
-async function requireRaidAvailableForNewSelection(raidId: string) {
-  const raid = await raidRepository.findById(raidId);
-  if (!raid) {
-    throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+/**
+ * Resolve every Raid referenced by expanded contents. Tidebound may be
+ * selected as a fixed Bundle companion even when availableForRuns=false;
+ * every other raid must be available for new product selection.
+ */
+async function resolveRaidsForContents(contents: ExpandedRunContent[]): Promise<Map<string, RaidRecord>> {
+  const raidIds = [...new Set(contents.map((row) => row.raidId))];
+  const raids = await raidRepository.listByIds(raidIds);
+  const byId = new Map(raids.map((raid) => [raid.id, raid]));
+
+  for (const content of contents) {
+    const raid = byId.get(content.raidId);
+    if (!raid) {
+      throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+    }
+    if (!raid.availableForRuns && content.raidId !== TIDEBOUND_GROTTO_RAID_ID) {
+      throw new DomainError(
+        "RAID_NOT_AVAILABLE_FOR_RUNS",
+        "This raid is no longer available for new runs.",
+      );
+    }
+    assertValidPlannedBossCount(content.plannedBossCount, raid.totalBossCount);
   }
-  if (!raid.availableForRuns) {
-    throw new DomainError(
-      "RAID_NOT_AVAILABLE_FOR_RUNS",
-      "This raid is no longer available for new runs.",
-    );
-  }
-  return raid;
+
+  return byId;
 }
 
-/**
- * Update boundary: only rejects on availability when the Run's raid is
- * actually changing to a different one. Keeping an existing historical
- * reference (raidId unchanged, or only difficulty changing on the same raid)
- * is never blocked by availability — only *selecting* a different raid is.
- */
-async function resolveRaidForUpdate(input: { raidId: string; raidChanged: boolean }) {
-  const raid = await raidRepository.findById(input.raidId);
-  if (!raid) {
-    throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+function expandPresetOrThrow(input: {
+  contentPreset: RunContentPresetKey;
+  venomousPlannedBossCount: number;
+}): ExpandedRunContent[] {
+  try {
+    return expandRunContentPreset({
+      preset: input.contentPreset,
+      venomousPlannedBossCount: input.venomousPlannedBossCount,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid run content preset.";
+    if (message.toLowerCase().includes("planned boss count")) {
+      throw new DomainError("RUN_BOSS_COUNT_INVALID", message);
+    }
+    throw new DomainError("VALIDATION_FAILED", message);
   }
-  if (input.raidChanged && !raid.availableForRuns) {
-    throw new DomainError(
-      "RAID_NOT_AVAILABLE_FOR_RUNS",
-      "This raid is no longer available for new runs.",
-    );
-  }
-  return raid;
 }
 
 async function requireEligibleRaidLead(raidLeadId: string) {
@@ -126,7 +144,11 @@ function resolveRequestedRaidLeadId(user: AuthenticatedUser, requestedRaidLeadId
  * `defaults + row.overrides` merged by `mergeMassCreateRow` below.
  */
 type EffectiveRunInput = {
-  raidId: string;
+  contentPreset?: RunContentPresetKey;
+  venomousPlannedBossCount?: number;
+  /** Legacy singular create — expanded to one content row when preset absent. */
+  raidId?: string;
+  plannedBossCount?: number;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
@@ -135,37 +157,43 @@ type EffectiveRunInput = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
-  plannedBossCount: number;
 };
 
-type PreparedRunDraft = {
-  title: string;
-  raidId: string;
-  difficulty: RaidDifficulty;
-  lootType: RunLootType;
-  scheduledStartAt: string;
-  raidLeadId: string;
-  notes: string | null;
-  desiredTankCount: number;
-  desiredHealerCount: number;
-  desiredDpsCount: number;
-  plannedBossCount: number;
-};
+type PreparedRunDraft = RunCreateWithContentsInput;
+
+function expandEffectiveContents(input: EffectiveRunInput): ExpandedRunContent[] {
+  if (input.contentPreset) {
+    return expandPresetOrThrow({
+      contentPreset: input.contentPreset,
+      venomousPlannedBossCount: input.venomousPlannedBossCount ?? 8,
+    });
+  }
+  if (!input.raidId || input.plannedBossCount == null) {
+    throw new DomainError("VALIDATION_FAILED", "Choose a supported run product.");
+  }
+  return [
+    {
+      raidId: input.raidId,
+      sortOrder: 1,
+      plannedBossCount: input.plannedBossCount,
+    },
+  ];
+}
 
 /**
  * The single normalized preparation path for a new Run draft: schedule
  * normalization/past-date rule, composition bounds, loot-type/difficulty
- * compatibility, planned-boss-count bounds against the effective raid, notes
- * normalization, and server title derivation. Single create and every row of
- * mass create both funnel through this one function so they can never derive
- * two different Runs from the same effective input. Raid availability and
- * raid-lead eligibility are resolved by the caller (they need DB lookups,
- * which single vs. batched creation resolve differently) and passed in
- * already-validated via `context`.
+ * compatibility, expanded contents vs raid totals, notes normalization, and
+ * server title derivation from content coverage tokens.
  */
 function prepareRunDraft(
   input: EffectiveRunInput,
-  context: { raid: RaidRecord; raidLeadId: string; raidLeadName: string },
+  context: {
+    contents: ExpandedRunContent[];
+    raidById: Map<string, RaidRecord>;
+    raidLeadId: string;
+    raidLeadName: string;
+  },
 ): PreparedRunDraft {
   const scheduledStartAt = parseSchedule(input.scheduledStartAt);
   assertNewRunSchedule(scheduledStartAt);
@@ -173,20 +201,41 @@ function prepareRunDraft(
   assertComposition(input.desiredHealerCount, "Desired healers");
   assertComposition(input.desiredDpsCount, "Desired DPS");
   assertValidRunLootType(input.difficulty, input.lootType);
-  assertValidPlannedBossCount(input.plannedBossCount, context.raid.totalBossCount);
+
+  if (context.contents.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Run must include at least one raid content row.");
+  }
+
+  for (const content of context.contents) {
+    const raid = context.raidById.get(content.raidId);
+    if (!raid) {
+      throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+    }
+    assertValidPlannedBossCount(content.plannedBossCount, raid.totalBossCount);
+  }
+
+  const displayRows = context.contents.map((content) => {
+    const raid = context.raidById.get(content.raidId)!;
+    return {
+      raidId: content.raidId,
+      raidName: raid.name,
+      sortOrder: content.sortOrder,
+      plannedBossCount: content.plannedBossCount,
+      totalBossCount: raid.totalBossCount,
+    };
+  });
+  const display = projectRunContentDisplay(displayRows);
 
   const title = buildRunTitle({
     scheduledStartAt,
     difficulty: input.difficulty,
     lootType: input.lootType,
-    plannedBossCount: input.plannedBossCount,
-    totalBossCount: context.raid.totalBossCount,
+    titleCoverage: display.titleCoverage,
     raidLeadName: context.raidLeadName,
   });
 
   return {
     title,
-    raidId: context.raid.id,
     difficulty: input.difficulty,
     lootType: input.lootType,
     scheduledStartAt,
@@ -195,32 +244,43 @@ function prepareRunDraft(
     desiredTankCount: input.desiredTankCount,
     desiredHealerCount: input.desiredHealerCount,
     desiredDpsCount: input.desiredDpsCount,
-    plannedBossCount: input.plannedBossCount,
+    contents: context.contents,
   };
 }
 
 /**
  * Merges shared defaults with one row's overrides into an effective input.
- * Every field except `notes` treats an absent override as "inherit the
- * default". `notes` is three-valued: override key absent → inherit;
- * override `null` → explicitly clear the row's notes even though a shared
- * default exists; override a string → use that string. This is why `notes`
- * is read directly off `overrides` (checking for `undefined`) rather than
- * via `??`, which would conflate "absent" and "explicitly null".
+ * Supports commercial preset defaults and legacy raidId defaults.
  */
 function mergeMassCreateRow(defaults: MassCreateDefaults, row: MassCreateRunRow): EffectiveRunInput {
-  const overrides = row.overrides ?? {};
+  const overrides = (row.overrides ?? {}) as Record<string, unknown>;
+  const base = defaults as Record<string, unknown>;
+
+  const contentPreset =
+    (overrides.contentPreset as RunContentPresetKey | undefined) ??
+    (base.contentPreset as RunContentPresetKey | undefined);
+  const venomousPlannedBossCount =
+    (overrides.venomousPlannedBossCount as number | undefined) ??
+    (base.venomousPlannedBossCount as number | undefined);
+  const raidId = (overrides.raidId as string | undefined) ?? (base.raidId as string | undefined);
+  const plannedBossCount =
+    (overrides.plannedBossCount as number | undefined) ?? (base.plannedBossCount as number | undefined);
+
   return {
-    raidId: overrides.raidId ?? defaults.raidId,
-    difficulty: overrides.difficulty ?? defaults.difficulty,
-    lootType: overrides.lootType ?? defaults.lootType,
+    contentPreset,
+    venomousPlannedBossCount,
+    raidId,
+    plannedBossCount,
+    difficulty: (overrides.difficulty as RaidDifficulty | undefined) ?? (base.difficulty as RaidDifficulty),
+    lootType: (overrides.lootType as RunLootType | undefined) ?? (base.lootType as RunLootType),
     scheduledStartAt: row.scheduledStartAt,
-    raidLeadId: overrides.raidLeadId ?? defaults.raidLeadId,
-    notes: overrides.notes === undefined ? defaults.notes : overrides.notes,
-    desiredTankCount: overrides.desiredTankCount ?? defaults.desiredTankCount,
-    desiredHealerCount: overrides.desiredHealerCount ?? defaults.desiredHealerCount,
-    desiredDpsCount: overrides.desiredDpsCount ?? defaults.desiredDpsCount,
-    plannedBossCount: overrides.plannedBossCount ?? defaults.plannedBossCount,
+    raidLeadId: (overrides.raidLeadId as string | undefined) ?? (base.raidLeadId as string | undefined),
+    notes: overrides.notes === undefined ? (base.notes as string | null | undefined) : (overrides.notes as string | null),
+    desiredTankCount:
+      (overrides.desiredTankCount as number | undefined) ?? (base.desiredTankCount as number),
+    desiredHealerCount:
+      (overrides.desiredHealerCount as number | undefined) ?? (base.desiredHealerCount as number),
+    desiredDpsCount: (overrides.desiredDpsCount as number | undefined) ?? (base.desiredDpsCount as number),
   };
 }
 
@@ -283,8 +343,9 @@ export const runService = {
       return {
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
-        season: run.season,
+        productLabel: run.contentDisplay.productLabel,
+        contentSummary: run.contentDisplay.summary,
+        titleCoverage: run.contentDisplay.titleCoverage,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
@@ -294,8 +355,8 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
-        plannedBossCount: run.plannedBossCount,
-        totalBossCount: run.totalBossCount,
+        contents: run.contents,
+        contentDisplay: run.contentDisplay,
         signupsOpen: run.signupsOpen,
         signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
         signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
@@ -346,7 +407,9 @@ export const runService = {
       runs: managed.map((run) => ({
         id: run.id,
         title: run.title,
-        raidName: run.raidName,
+        productLabel: run.contentDisplay.productLabel,
+        contentSummary: run.contentDisplay.summary,
+        titleCoverage: run.contentDisplay.titleCoverage,
         difficulty: run.difficulty,
         lootType: run.lootType,
         scheduledStartAt: run.scheduledStartAt,
@@ -362,8 +425,8 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
-        plannedBossCount: run.plannedBossCount,
-        totalBossCount: run.totalBossCount,
+        contents: run.contents,
+        contentDisplay: run.contentDisplay,
         archivedAt: run.archivedAt,
         actionLabel: rosterActionLabel(
           run.status,
@@ -379,7 +442,7 @@ export const runService = {
   async getCreateForm(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const raids = await raidRepository.listAvailableForRuns();
+    const contentPresets = listCreateRunContentPresets();
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
       : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
@@ -392,9 +455,12 @@ export const runService = {
       canAssignRaidLead: hasAdminAccess(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
       defaultRaidLeadName: user.name,
-      raids,
+      contentPresets,
+      venomousBossMax: 8,
       raidLeads,
       defaults: {
+        contentPreset: "VENOMOUS_ABYSS" as RunContentPresetKey,
+        venomousPlannedBossCount: 8,
         difficulty: "HEROIC" as RaidDifficulty,
         // Never SAVED or VIP — UNSAVED is the only loot type valid for every
         // difficulty (including MYTHIC), so it can never need a client-side
@@ -411,11 +477,18 @@ export const runService = {
   async createRun(user: AuthenticatedUser, input: CreateRunInput) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const raid = await requireRaidAvailableForNewSelection(input.raidId);
+    const effective: EffectiveRunInput = { ...input };
+    const contents = expandEffectiveContents(effective);
+    const raidById = await resolveRaidsForContents(contents);
     const raidLeadId = resolveRequestedRaidLeadId(user, input.raidLeadId);
     const raidLead = await requireEligibleRaidLead(raidLeadId);
 
-    const draft = prepareRunDraft(input, { raid, raidLeadId, raidLeadName: raidLead.name });
+    const draft = prepareRunDraft(effective, {
+      contents,
+      raidById,
+      raidLeadId,
+      raidLeadName: raidLead.name,
+    });
     const id = await runRepository.create(draft);
 
     await activityRepository.create({
@@ -430,7 +503,7 @@ export const runService = {
   async getCreateManyForm(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const raids = await raidRepository.listAvailableForRuns();
+    const contentPresets = listCreateRunContentPresets();
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
       : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
@@ -442,10 +515,11 @@ export const runService = {
     const templates = usableTemplates.map((template) => ({
       id: template.id,
       raidLeadId: template.raidLeadId,
-      raidId: template.raidId,
+      // Templates remain Venomous-shaped; Bundle is selected via contentPreset.
+      contentPreset: "VENOMOUS_ABYSS" as RunContentPresetKey,
+      venomousPlannedBossCount: Math.min(8, Math.max(1, template.plannedBossCount)),
       difficulty: template.difficulty,
       lootType: template.lootType,
-      plannedBossCount: template.plannedBossCount,
       desiredTankCount: template.desiredTankCount,
       desiredHealerCount: template.desiredHealerCount,
       desiredDpsCount: template.desiredDpsCount,
@@ -458,11 +532,14 @@ export const runService = {
       canAssignRaidLead: hasAdminAccess(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
       defaultRaidLeadName: user.name,
-      raids,
+      contentPresets,
+      venomousBossMax: 8,
       raidLeads,
       templates,
       maxRuns: 25,
       defaults: {
+        contentPreset: "VENOMOUS_ABYSS" as RunContentPresetKey,
+        venomousPlannedBossCount: 8,
         difficulty: "HEROIC" as RaidDifficulty,
         lootType: "UNSAVED" as RunLootType,
         scheduledStartAt,
@@ -477,8 +554,7 @@ export const runService = {
    * Mass Create Runs: shared defaults + per-row overrides -> N atomic DRAFT
    * Runs (all-or-nothing). Every row is fully prepared and validated — via
    * the exact same `prepareRunDraft`/`resolveRequestedRaidLeadId` single
-   * create uses — before any persistence is attempted, and raid/raid-lead
-   * lookups are batched once for the whole request rather than per row.
+   * create uses — before any persistence is attempted.
    *
    * When `input.templateId` is present, the template is resolved and
    * authorized fresh from the DB (never trusting the browser's copy) BEFORE
@@ -519,9 +595,10 @@ export const runService = {
       }
     }
 
-    const raidIds = [...new Set(effectiveRows.map((row) => row.raidId))];
+    const expandedByRow = effectiveRows.map((row) => expandEffectiveContents(row));
+    const allRaidIds = [...new Set(expandedByRow.flatMap((contents) => contents.map((c) => c.raidId)))];
     const raidById = new Map(
-      (await raidRepository.listByIds(raidIds)).map((raid) => [raid.id, raid]),
+      (await raidRepository.listByIds(allRaidIds)).map((raid) => [raid.id, raid]),
     );
 
     const eligibleLeads = await userRepository.listEligibleRaidLeads();
@@ -530,16 +607,19 @@ export const runService = {
     const prepared: PreparedRunDraft[] = [];
     for (let index = 0; index < effectiveRows.length; index += 1) {
       const effective = effectiveRows[index]!;
+      const contents = expandedByRow[index]!;
       try {
-        const raid = raidById.get(effective.raidId);
-        if (!raid) {
-          throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
-        }
-        if (!raid.availableForRuns) {
-          throw new DomainError(
-            "RAID_NOT_AVAILABLE_FOR_RUNS",
-            "This raid is no longer available for new runs.",
-          );
+        for (const content of contents) {
+          const raid = raidById.get(content.raidId);
+          if (!raid) {
+            throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+          }
+          if (!raid.availableForRuns && content.raidId !== TIDEBOUND_GROTTO_RAID_ID) {
+            throw new DomainError(
+              "RAID_NOT_AVAILABLE_FOR_RUNS",
+              "This raid is no longer available for new runs.",
+            );
+          }
         }
 
         const raidLeadId = resolveRequestedRaidLeadId(user, effective.raidLeadId);
@@ -548,7 +628,14 @@ export const runService = {
           throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
         }
 
-        prepared.push(prepareRunDraft(effective, { raid, raidLeadId, raidLeadName: raidLead.name }));
+        prepared.push(
+          prepareRunDraft(effective, {
+            contents,
+            raidById,
+            raidLeadId,
+            raidLeadName: raidLead.name,
+          }),
+        );
       } catch (error) {
         if (isDomainError(error)) {
           throw new DomainError(error.code, `Run ${index + 1}: ${error.message}`, error.status);
@@ -583,7 +670,48 @@ export const runService = {
     assertComposition(input.desiredHealerCount, "Desired healers");
     assertComposition(input.desiredDpsCount, "Desired DPS");
     const nextNotes = notesValue(input.notes);
-    const identityChanged = input.raidId !== run.raidId || input.difficulty !== run.difficulty;
+
+    const currentContents = await runRepository.listRaidContents(run.id);
+    if (currentContents.length === 0) {
+      throw new DomainError(
+        "VALIDATION_FAILED",
+        "This run is missing raid content rows and cannot be edited until repaired.",
+      );
+    }
+
+    let nextContents: ExpandedRunContent[];
+    let contentChanged: boolean;
+
+    if ("contentPreset" in input) {
+      nextContents = expandPresetOrThrow({
+        contentPreset: input.contentPreset,
+        venomousPlannedBossCount: input.venomousPlannedBossCount,
+      });
+      const orderedCurrent = [...currentContents].sort((a, b) => a.sortOrder - b.sortOrder);
+      contentChanged =
+        orderedCurrent.length !== nextContents.length ||
+        nextContents.some((next, index) => {
+          const cur = orderedCurrent[index];
+          return !cur || cur.raidId !== next.raidId || cur.plannedBossCount !== next.plannedBossCount;
+        });
+    } else {
+      // Historical / CUSTOM singular path — replace with one content row only when
+      // the content identity or planned count actually changes.
+      const orderedCurrent = [...currentContents].sort((a, b) => a.sortOrder - b.sortOrder);
+      contentChanged =
+        orderedCurrent.length !== 1 ||
+        orderedCurrent[0]!.raidId !== input.raidId ||
+        orderedCurrent[0]!.plannedBossCount !== input.plannedBossCount;
+      nextContents = contentChanged
+        ? [{ raidId: input.raidId, sortOrder: 1, plannedBossCount: input.plannedBossCount }]
+        : orderedCurrent.map((row) => ({
+            raidId: row.raidId,
+            sortOrder: row.sortOrder,
+            plannedBossCount: row.plannedBossCount,
+          }));
+    }
+
+    const identityChanged = contentChanged || input.difficulty !== run.difficulty;
     const leadChanged = Boolean(input.raidLeadId && input.raidLeadId !== run.raidLeadId);
 
     if (identityChanged && !capabilities.canEditIdentity) {
@@ -600,7 +728,6 @@ export const runService = {
         scheduledStartAt !== run.scheduledStartAt ||
         nextNotes !== run.notes ||
         input.lootType !== run.lootType ||
-        input.plannedBossCount !== run.plannedBossCount ||
         input.desiredTankCount !== run.desiredTankCount ||
         input.desiredHealerCount !== run.desiredHealerCount ||
         input.desiredDpsCount !== run.desiredDpsCount;
@@ -620,34 +747,48 @@ export const runService = {
       raidLeadName = lead.name;
     }
 
-    let raidId = run.raidId;
     let difficulty = run.difficulty;
-    let totalBossCount = run.totalBossCount;
     if (identityChanged) {
-      // Only actually selecting a different raid is gated by availability —
-      // a difficulty-only change that keeps the same (possibly historical)
-      // raid must not be blocked merely because that raid isn't a new-Run
-      // option anymore.
-      const raidChanged = input.raidId !== run.raidId;
-      const raid = await resolveRaidForUpdate({ raidId: input.raidId, raidChanged });
-      raidId = raid.id;
       difficulty = input.difficulty;
-      totalBossCount = raid.totalBossCount;
+      // Availability is only re-checked when content composition changes — a
+      // difficulty-only edit on a historical Run must keep its existing raids.
+      if (contentChanged) {
+        await resolveRaidsForContents(nextContents);
+      }
     }
 
+    const raidById = new Map(
+      (await raidRepository.listByIds([...new Set(nextContents.map((row) => row.raidId))])).map(
+        (raid) => [raid.id, raid],
+      ),
+    );
+    for (const content of nextContents) {
+      const raid = raidById.get(content.raidId);
+      if (!raid) {
+        throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
+      }
+      assertValidPlannedBossCount(content.plannedBossCount, raid.totalBossCount);
+    }
     assertValidRunLootType(difficulty, input.lootType);
-    assertValidPlannedBossCount(input.plannedBossCount, totalBossCount);
 
-    // Server is always the sole title authority — recomputed from the final
-    // normalized values on every update, including notes/composition-only
-    // changes (recomputation is deterministic and cheap; no need to detect
-    // whether the title's own source fields actually changed).
+    const display = projectRunContentDisplay(
+      nextContents.map((content) => {
+        const raid = raidById.get(content.raidId)!;
+        return {
+          raidId: content.raidId,
+          raidName: raid.name,
+          sortOrder: content.sortOrder,
+          plannedBossCount: content.plannedBossCount,
+          totalBossCount: raid.totalBossCount,
+        };
+      }),
+    );
+
     const title = buildRunTitle({
       scheduledStartAt,
       difficulty,
       lootType: input.lootType,
-      plannedBossCount: input.plannedBossCount,
-      totalBossCount,
+      titleCoverage: display.titleCoverage,
       raidLeadName,
     });
 
@@ -660,16 +801,16 @@ export const runService = {
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
-      plannedBossCount: input.plannedBossCount,
     };
 
     if (identityChanged) {
       await runRepository.updateIdentityIfNoSignupHistory(run.id, {
         ...fields,
-        raidId,
         difficulty,
+        contents: contentChanged ? nextContents : undefined,
       });
     } else {
+      // Non-content updates must not rewrite RunRaidContent / Bundle rows.
       await runRepository.updateFields(run.id, fields);
     }
 

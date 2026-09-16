@@ -135,6 +135,14 @@ describe("characterService empty user", () => {
     expect(page.activeCharacters).toBe(0);
     expect(page.characters).toEqual([]);
   });
+
+  it("exposes plural currentLockoutRaids only — no singular currentLockoutRaid", async () => {
+    const page = await characterService.getCharacterPage(asUser(ids.owner, "Character Owner"));
+    expect(page.currentLockoutRaids.map((raid) => raid.name).sort()).toEqual(
+      ["Nymrissa", "The Venomous Abyss"].sort(),
+    );
+    expect(page).not.toHaveProperty("currentLockoutRaid");
+  });
 });
 
 describe("characterService create", () => {
@@ -287,6 +295,12 @@ describe("characterService ownership and update", () => {
       itemLevel: 651,
     });
     createdCharacterIds.push(first.id, second.id);
+
+    const details = await characterService.getCharacterDetails(owner, first.id);
+    expect(details.currentLockoutRaids.map((raid) => raid.name).sort()).toEqual(
+      ["Nymrissa", "The Venomous Abyss"].sort(),
+    );
+    expect(details).not.toHaveProperty("currentLockoutRaid");
 
     const updated = await characterService.updateCharacter(owner, first.id, {
       name: "Editone",

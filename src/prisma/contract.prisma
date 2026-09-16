@@ -391,7 +391,7 @@ model Raid {
 
   bosses   RaidBoss[]
   lockouts CharacterRaidLockout[]
-  runs     Run[]
+  runContents RunRaidContent[]
   templates RunTemplate[]
 
   @@map("raid")
@@ -431,10 +431,9 @@ model CharacterRaidLockout {
 model Run {
   id                 String         @id @default(uuid())
   /// Server-derived (buildRunTitle) from scheduledStartAt/difficulty/lootType/
-  /// plannedBossCount/raidLead — never a free-form User-authored value.
+  /// raid contents/raidLead — never a free-form User-authored value.
   title              String
-  raidId             String
-  raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  /// Authoritative raid identity is ordered RunRaidContent[] only.
   difficulty         RaidDifficulty
   /// Independent of difficulty; MYTHIC+SAVED is rejected at the Service layer.
   lootType           RunLootType
@@ -446,8 +445,6 @@ model Run {
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
-  /// 1 <= plannedBossCount <= this Run's Raid's total boss count (RaidBoss row count).
-  plannedBossCount   Int
   signupsOpen        Boolean        @default(false)
   archivedAt         TimestamptzString?
   archivedById       String?
@@ -455,6 +452,7 @@ model Run {
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
 
+  contents      RunRaidContent[]
   signups       RunSignup[]
   roster        RunRoster?
   attendance    RunAttendance[]
@@ -467,6 +465,26 @@ model Run {
   @@index([status])
   @@index([archivedAt])
   @@map("run")
+}
+
+/// Ordered real raid instances that belong to one BoostingHub Run.
+/// A Bundle is one Run with multiple contents — never a fake aggregated raid.
+model RunRaidContent {
+  id               String @id @default(uuid())
+  runId            String
+  run              Run    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  raidId           String
+  raid             Raid   @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  /// 1-based deterministic order within the Run.
+  sortOrder        Int
+  /// 1 <= plannedBossCount <= this content Raid's RaidBoss count.
+  plannedBossCount Int
+  createdAt        TimestamptzString @default(now())
+
+  @@unique([runId, raidId])
+  @@unique([runId, sortOrder])
+  @@index([raidId])
+  @@map("run_raid_content")
 }
 
 /// Immutable operational audit record that a Run Start occurred (who/when).

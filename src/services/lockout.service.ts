@@ -112,6 +112,7 @@ export const lockoutService = {
   },
 
   summarize(lockouts: Array<{
+    raidId: string;
     raid: { name: string };
     difficulty: RaidDifficulty;
     resetIdentifier: string;
@@ -119,6 +120,7 @@ export const lockoutService = {
     bossesDefeated: number;
   }>) {
     return lockouts.map((lockout) => ({
+      raidId: lockout.raidId,
       raidName: lockout.raid.name,
       difficulty: lockout.difficulty,
       resetIdentifier: lockout.resetIdentifier,

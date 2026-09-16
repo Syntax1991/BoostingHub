@@ -12,7 +12,7 @@ import {
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
-import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
+import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
 import {
   CHARACTER_ROLES,
   LOOTBUDDY_MODES,
@@ -27,7 +27,7 @@ import type { signupService } from "@/services/signup.service";
 
 type SignupOptions = Awaited<ReturnType<typeof signupService.getSignupOptions>>;
 
-type RaidSaveInfo = SignupOptions["booster"]["eligible"][number]["raidSave"];
+type ContentSaves = SignupOptions["booster"]["eligible"][number]["contentSaves"];
 
 type BoosterGroup = {
   characterId: string;
@@ -39,8 +39,8 @@ type BoosterGroup = {
   roles: CharacterRole[];
   /** Specialization-derived default for a brand-new selection; null when specialization is missing/unrecognized. */
   defaultRole: CharacterRole | null;
-  /** Informational raid-save progress for this run's raid/difficulty/reset — never affects selectability. */
-  raidSave: RaidSaveInfo;
+  /** Per-content informational lockouts — never affects selectability. */
+  contentSaves: ContentSaves;
 };
 
 type LootbuddyEntry = {
@@ -56,19 +56,6 @@ function orderedRoles(roles: CharacterRole[]): CharacterRole[] {
   return CHARACTER_ROLES.filter((role) => roles.includes(role));
 }
 
-/** Informational lockout label — never a reason a Character can't be offered. */
-function formatBoosterLockout(
-  raidSave: RaidSaveInfo,
-  run: Pick<SignupOptions["run"], "difficulty" | "totalBossCount" | "lootType">,
-) {
-  return formatTargetRaidLockoutLabel({
-    difficulty: run.difficulty,
-    totalBossCount: run.totalBossCount,
-    raidSave,
-    lootType: run.lootType,
-  });
-}
-
 function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): BoosterGroup[] {
   return eligible.map((option) => ({
     characterId: option.characterId,
@@ -78,7 +65,7 @@ function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): Bo
     specialization: option.specialization,
     roles: option.roles,
     defaultRole: option.defaultRole,
-    raidSave: option.raidSave,
+    contentSaves: option.contentSaves,
   }));
 }
 
@@ -298,7 +285,9 @@ export function RunSignupButton({
           </h2>
           {options ? (
             <p className="mt-1 truncate text-sm text-muted">
-              {options.run.title} · {options.run.raidName} · {formatDateTime(options.run.scheduledStartAt)}
+              {options.run.title} · {options.run.productLabel}
+              {options.run.contentSummary ? ` · ${options.run.contentSummary}` : ""} ·{" "}
+              {formatDateTime(options.run.scheduledStartAt)}
             </p>
           ) : (
             <p className="mt-1 text-sm text-muted">Loading options…</p>
@@ -318,7 +307,6 @@ export function RunSignupButton({
               <BoosterCharacterChecklist
                 groups={boosterGroups}
                 ineligible={options.booster.ineligible}
-                run={options.run}
                 selected={selectedCharacterIds}
                 rolesByCharacterId={rolesByCharacterId}
                 onToggle={toggleBoosterCharacter}
@@ -393,7 +381,6 @@ export function RunSignupButton({
 function BoosterCharacterChecklist({
   groups,
   ineligible,
-  run,
   selected,
   rolesByCharacterId,
   onToggle,
@@ -402,7 +389,6 @@ function BoosterCharacterChecklist({
 }: {
   groups: BoosterGroup[];
   ineligible: SignupOptions["booster"]["ineligible"];
-  run: Pick<SignupOptions["run"], "difficulty" | "totalBossCount" | "lootType">;
   selected: Set<string>;
   rolesByCharacterId: Record<string, CharacterRole[]>;
   onToggle: (characterId: string) => void;
@@ -437,7 +423,8 @@ function BoosterCharacterChecklist({
           {groups.map((group) => {
             const isChecked = selected.has(group.characterId);
             const currentRoles = rolesByCharacterId[group.characterId] ?? [];
-            const lockout = formatBoosterLockout(group.raidSave, run);
+            const lockoutLines = formatContentLockoutLines(group.contentSaves);
+            const lockoutAttention = group.contentSaves.some((row) => row.label.attention);
             return (
               <li
                 key={group.characterId}
@@ -453,9 +440,11 @@ function BoosterCharacterChecklist({
                     <span className="truncate">
                       {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
                     </span>
-                    <span className={`text-xs ${lockout.attention ? "text-warning" : "text-muted"}`}>
-                      {lockout.text}
-                    </span>
+                    {lockoutLines.length > 0 ? (
+                      <span className={`text-xs ${lockoutAttention ? "text-warning" : "text-muted"}`}>
+                        {lockoutLines.join(" · ")}
+                      </span>
+                    ) : null}
                   </span>
                 </label>
                 <fieldset

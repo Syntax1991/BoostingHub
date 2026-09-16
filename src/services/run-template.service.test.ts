@@ -9,6 +9,8 @@ import { computeUsability, runTemplateService } from "@/services/run-template.se
 import type { RunTemplateRecord } from "@/repositories/run-template.repository";
 import type { CreateRunTemplateInput } from "@/validators/run-template";
 import { createRunTemplateSchema } from "@/validators/run-template";
+import { runService } from "@/services/run.service";
+import { expandRunContentPreset } from "@/lib/run-content-presets";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -197,6 +199,27 @@ describe("computeUsability — pure boolean logic", () => {
   it("an out-of-range composition value is unusable", () => {
     expect(computeUsability(fakeTemplate({ desiredTankCount: -1 })).usable).toBe(false);
     expect(computeUsability(fakeTemplate({ desiredDpsCount: 999 })).usable).toBe(false);
+  });
+});
+
+describe("template → VENOMOUS_ABYSS preset expansion", () => {
+  it("expands a Venomous-shaped template into content rows without a Run.raidId column", () => {
+    const contents = expandRunContentPreset({
+      preset: "VENOMOUS_ABYSS",
+      venomousPlannedBossCount: 6,
+    });
+    expect(contents).toEqual([
+      { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 6 },
+    ]);
+  });
+
+  it("getCreateManyForm maps templates to VENOMOUS_ABYSS contentPreset defaults", async () => {
+    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Preset Map", plannedBossCount: 5 }));
+    createdTemplateIds.push(created.id);
+    const form = await runService.getCreateManyForm(lead);
+    const row = form.templates.find((template) => template.id === created.id);
+    expect(row?.contentPreset).toBe("VENOMOUS_ABYSS");
+    expect(row?.venomousPlannedBossCount).toBe(5);
   });
 });
 

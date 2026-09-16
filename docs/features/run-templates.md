@@ -30,6 +30,8 @@ Every `RunTemplate` belongs to exactly one Raid Lead via `raidLeadId` — the bu
 
 A template stores only: `name`, `raidId`, `difficulty`, `lootType`, `plannedBossCount`, `desiredTankCount`/`desiredHealerCount`/`desiredDpsCount`, `notes`, `isActive`. It never stores a schedule, `status`, `signupsOpen`, a derived `title`, roster state, or any Discord identifier — those belong to a concrete Run, never a preset.
 
+**Product scope (intentional):** templates are Venomous-only. Tidebound standalone and Season 2 Bundle are not template products. At Create, a usable template is normalized to `contentPreset: VENOMOUS_ABYSS` + `venomousPlannedBossCount` — it never writes a singular `Run.raidId` mirror. Bundle Runs are created only via the Create/Mass Create content preset selector.
+
 ## Self-service (`/profile/templates`)
 
 RAID_LEAD and ADMIN accounts (`hasRaidLeadAccess`) may visit `/profile/templates` to see, create, edit, deactivate, and reactivate **only their own** templates. The Raid Lead selector is always hidden here — even an ADMIN acting on this page can only own the template as themselves, never assign it to someone else. A forged different `raidLeadId` in the request is rejected server-side (`RUN_RAID_LEAD_INVALID`), never silently corrected.

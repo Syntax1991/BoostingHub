@@ -8,13 +8,12 @@ const BASE = {
   scheduledStartAt: SATURDAY_2200_BERLIN,
   difficulty: "HEROIC" as const,
   lootType: "VIP" as const,
-  plannedBossCount: 7,
-  totalBossCount: 9,
+  coverage: "7of9",
   raidLeadName: "Titan",
 };
 
 describe("buildDiscordRunChannelName", () => {
-  it("builds the weekday-HHMM-difficulty-lootType-bossCoverage-raidLead form", () => {
+  it("builds the weekday-HHMM-difficulty-lootType-coverage-raidLead form", () => {
     expect(buildDiscordRunChannelName(BASE)).toBe("sat-2200-hc-vip-7of9-titan");
   });
 
@@ -36,9 +35,9 @@ describe("buildDiscordRunChannelName", () => {
     expect(name).not.toContain("my-saved");
   });
 
-  it("renders boss coverage as plannedOftotal", () => {
-    expect(buildDiscordRunChannelName({ ...BASE, plannedBossCount: 9, totalBossCount: 9 })).toContain("-9of9-");
-    expect(buildDiscordRunChannelName({ ...BASE, plannedBossCount: 1, totalBossCount: 9 })).toContain("-1of9-");
+  it("uses the provided coverage token verbatim (content-native)", () => {
+    expect(buildDiscordRunChannelName({ ...BASE, coverage: "8of8" })).toContain("-8of8-");
+    expect(buildDiscordRunChannelName({ ...BASE, coverage: "1of8" })).toContain("-1of8-");
   });
 
   it("normalizes the raid lead name: spaces, punctuation, and diacritics", () => {
@@ -58,7 +57,6 @@ describe("buildDiscordRunChannelName", () => {
   });
 
   it("formats midnight and single-digit minutes with zero-padding", () => {
-    // 2026-09-14 22:03 UTC = Tuesday 00:03 Europe/Berlin (CEST, next calendar day).
     expect(
       buildDiscordRunChannelName({
         ...BASE,
@@ -73,5 +71,26 @@ describe("buildDiscordRunChannelName", () => {
     const name = buildDiscordRunChannelName({ ...BASE, raidLeadName: "A".repeat(200) });
     expect(name.length).toBeLessThanOrEqual(100);
     expect(name.endsWith("-")).toBe(false);
+  });
+
+  it("encodes Season 2 Bundle coverage as s2b-Nof8, never 9of9", () => {
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        coverage: "s2b-8of8",
+      }),
+    ).toBe("sat-2200-hc-vip-s2b-8of8-titan");
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        coverage: "s2b-6of8",
+      }),
+    ).toContain("s2b-6of8");
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        coverage: "s2b-8of8",
+      }),
+    ).not.toContain("9of9");
   });
 });
