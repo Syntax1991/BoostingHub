@@ -85,16 +85,20 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
       return false;
     }
 
-    await lockoutRepository.replaceVerifiedCurrentResetLockouts(character.id, {
-      raidId: derived.currentRaidId,
-      resetIdentifier: derived.difficulties[0]!.resetIdentifier,
-      rows: derived.difficulties.map((row) => ({
-        difficulty: row.difficulty,
-        bossesDefeated: row.bossesDefeated,
-        isComplete: row.isComplete,
-      })),
-      verifiedAt: derived.verifiedAt,
-    });
+    // Sequential per-raid upserts (no transaction helper in this codebase).
+    // Each call preserves other current-raid rows via getCurrentLockoutRaids().
+    for (const raid of derived.raids) {
+      await lockoutRepository.replaceVerifiedCurrentResetLockouts(character.id, {
+        raidId: raid.raidId,
+        resetIdentifier: derived.resetIdentifier,
+        rows: raid.difficulties.map((row) => ({
+          difficulty: row.difficulty,
+          bossesDefeated: row.bossesDefeated,
+          isComplete: row.isComplete,
+        })),
+        verifiedAt: derived.verifiedAt,
+      });
+    }
     return true;
   } catch (error) {
     if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") {
