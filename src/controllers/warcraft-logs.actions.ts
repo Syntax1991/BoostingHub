@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
+import { formatBulkWarcraftLogsDiscoveryMessage } from "@/lib/warcraft-logs/bulk-discovery-message";
+import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
+import { characterRepository } from "@/repositories/character.repository";
 import { characterIdSchema } from "@/validators/character";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 
@@ -21,6 +24,7 @@ export async function linkWarcraftLogsCharacterAction(input: unknown): Promise<A
         revalidatePath(`/characters/${parsed.characterId}`);
         return { ok: true, message: "Warcraft Logs character linked." };
       case "ALREADY_LINKED":
+        revalidatePath("/characters");
         revalidatePath(`/characters/${parsed.characterId}`);
         return { ok: true, message: "Warcraft Logs is already linked." };
       case "NOT_FOUND":
@@ -56,6 +60,44 @@ export async function linkWarcraftLogsCharacterAction(input: unknown): Promise<A
       default:
         return { ok: false, code: "UNEXPECTED", message: "Something went wrong. Try again." };
     }
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/**
+ * Owner-scoped bulk discovery for ACTIVE Characters missing warcraftLogsId.
+ * Character IDs are never trusted from the client — ownership is resolved server-side.
+ */
+export async function linkMissingWarcraftLogsCharactersAction(): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const owned = await characterRepository.listByUserId(user.id);
+    const missingIds = owned
+      .filter((character) => character.isActive && !(character.warcraftLogsId?.trim()))
+      .map((character) => character.id);
+
+    if (missingIds.length === 0) {
+      return {
+        ok: true,
+        message: "No active characters are missing Warcraft Logs links.",
+      };
+    }
+
+    if (!warcraftLogsApiClient.isConfigured()) {
+      return {
+        ok: false,
+        code: "WCL_NOT_CONFIGURED",
+        message: "Warcraft Logs API is not configured on this server.",
+      };
+    }
+
+    const summary = await characterWarcraftLogsService.tryAutoLinkManyIfMissing(missingIds);
+    revalidatePath("/characters");
+    return {
+      ok: true,
+      message: formatBulkWarcraftLogsDiscoveryMessage(summary),
+    };
   } catch (error) {
     return mapActionError(error);
   }

@@ -20,6 +20,21 @@ vi.mock("@/components/characters/battle-net-panel", () => ({
   BattleNetPanel: () => null,
 }));
 
+vi.mock("@/components/characters/link-warcraft-logs-button", () => ({
+  LinkWarcraftLogsButton: ({
+    characterId,
+    label = "Find WCL",
+  }: {
+    characterId: string;
+    label?: string;
+  }) => createElement("button", { type: "button", "data-character-id": characterId }, label),
+}));
+
+vi.mock("@/components/characters/find-missing-warcraft-logs-button", () => ({
+  FindMissingWarcraftLogsButton: () =>
+    createElement("button", { type: "button" }, "Find missing Warcraft Logs"),
+}));
+
 import { CharactersView } from "@/components/characters/characters-view";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -68,13 +83,13 @@ const baseCharacter = {
   blizzardRealmId: null,
   warcraftLogsLinked: false,
   warcraftLogsId: null,
-  boosterAccess: { approvedCount: 0, revokedCount: 0, approvals: [] },
+  boosterAccess: { approvedCount: 0, pendingCount: 0, revokedCount: 0, approvals: [] },
   currentReset: "2026-W38",
   lockouts: [],
 } as CharacterRow;
 
-describe("CharactersView Warcraft Logs action", () => {
-  it("renders a safe new-tab WCL link when warcraftLogsId is present", () => {
+describe("CharactersView Warcraft Logs discovery", () => {
+  it("renders WCL link and omits Find WCL when warcraftLogsId is present", () => {
     const html = renderToStaticMarkup(
       createElement(CharactersView, {
         data: basePage([
@@ -90,11 +105,38 @@ describe("CharactersView Warcraft Logs action", () => {
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain(">WCL<");
+    expect(html).not.toContain("Find WCL");
+    expect(html).not.toContain("Find missing Warcraft Logs");
   });
 
-  it("omits the WCL action when warcraftLogsId is missing", () => {
+  it("renders Find WCL and omits WCL link when warcraftLogsId is missing", () => {
     const html = renderToStaticMarkup(createElement(CharactersView, { data: basePage([baseCharacter]) }));
     expect(html).not.toContain("warcraftlogs.com");
     expect(html).not.toContain(">WCL<");
+    expect(html).toContain("Find WCL");
+    expect(html).toContain('data-character-id="char-1"');
+    expect(html).toContain("Find missing Warcraft Logs");
+  });
+
+  it("hides the bulk Find missing action when every active Character already has a WCL id", () => {
+    const html = renderToStaticMarkup(
+      createElement(CharactersView, {
+        data: basePage([
+          {
+            ...baseCharacter,
+            id: "active-linked",
+            warcraftLogsId: "111",
+            warcraftLogsLinked: true,
+          },
+          {
+            ...baseCharacter,
+            id: "inactive-missing",
+            isActive: false,
+            warcraftLogsId: null,
+          },
+        ]),
+      }),
+    );
+    expect(html).not.toContain("Find missing Warcraft Logs");
   });
 });
