@@ -10,6 +10,7 @@ import { ClassBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { BattleNetPanel } from "@/components/characters/battle-net-panel";
+import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -120,6 +121,7 @@ export function CharactersView({ data }: { data: Page }) {
                         >
                           Details
                         </Link>
+                        <WarcraftLogsLink warcraftLogsId={character.warcraftLogsId} label="WCL" />
                         <CharacterFormDialog
                           mode="edit"
                           triggerLabel="Edit"

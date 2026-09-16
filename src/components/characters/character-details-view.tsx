@@ -11,6 +11,7 @@ import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/component
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
+import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
 import type { BoosterQualificationStatus } from "@/models/enums";
@@ -78,6 +79,11 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             <Link href="/characters" className="inline-flex h-8 items-center text-sm text-accent hover:underline">
               All characters
             </Link>
+            <WarcraftLogsLink
+              warcraftLogsId={data.warcraftLogsId}
+              label="Warcraft Logs"
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+            />
             <CharacterFormDialog
               mode="edit"
               triggerLabel="Edit"

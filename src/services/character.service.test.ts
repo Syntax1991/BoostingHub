@@ -143,6 +143,36 @@ describe("characterService empty user", () => {
     );
     expect(page).not.toHaveProperty("currentLockoutRaid");
   });
+
+  it("exposes warcraftLogsId on the character page when linked, otherwise null", async () => {
+    const owner = asUser(ids.owner, "Character Owner");
+    const linked = await characterService.createCharacter(owner, {
+      name: "Wclpage",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "MAGE",
+      specialization: "Frost",
+      itemLevel: 600,
+    });
+    const unlinked = await characterService.createCharacter(owner, {
+      name: "Nowcl",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "WARLOCK",
+      specialization: "Affliction",
+      itemLevel: 601,
+    });
+    createdCharacterIds.push(linked.id, unlinked.id);
+    await orm.Character.where({ id: linked.id }).update({ warcraftLogsId: "42424242" });
+
+    const page = await characterService.getCharacterPage(owner);
+    const linkedRow = page.characters.find((row) => row.id === linked.id);
+    const unlinkedRow = page.characters.find((row) => row.id === unlinked.id);
+    expect(linkedRow?.warcraftLogsId).toBe("42424242");
+    expect(linkedRow?.warcraftLogsLinked).toBe(true);
+    expect(unlinkedRow?.warcraftLogsId).toBeNull();
+    expect(unlinkedRow?.warcraftLogsLinked).toBe(false);
+  });
 });
 
 describe("characterService create", () => {
@@ -301,6 +331,13 @@ describe("characterService ownership and update", () => {
       ["Nymrissa", "The Venomous Abyss"].sort(),
     );
     expect(details).not.toHaveProperty("currentLockoutRaid");
+    expect(details.warcraftLogsId).toBeNull();
+    expect(details.warcraftLogsLinked).toBe(false);
+
+    await orm.Character.where({ id: first.id }).update({ warcraftLogsId: "99887766" });
+    const linkedDetails = await characterService.getCharacterDetails(owner, first.id);
+    expect(linkedDetails.warcraftLogsId).toBe("99887766");
+    expect(linkedDetails.warcraftLogsLinked).toBe(true);
 
     const updated = await characterService.updateCharacter(owner, first.id, {
       name: "Editone",

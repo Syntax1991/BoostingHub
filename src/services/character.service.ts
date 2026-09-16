@@ -147,6 +147,7 @@ export const characterService = {
           blizzardLinked: Boolean(character.blizzardCharacterId),
           blizzardRealmId: character.blizzardRealmId,
           warcraftLogsLinked: Boolean(character.warcraftLogsId),
+          warcraftLogsId: character.warcraftLogsId,
           boosterAccess: access,
           currentReset,
           lockouts,
@@ -196,6 +197,7 @@ export const characterService = {
       blizzardCharacterId: character.blizzardCharacterId,
       blizzardRealmId: character.blizzardRealmId,
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
+      warcraftLogsId: character.warcraftLogsId,
       boosterQualifications: character.boosterQualifications,
       accessPanel: boosterQualificationService.buildAccountAccessPanel(
         character.boosterQualifications,
