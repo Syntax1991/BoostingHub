@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  defaultRaidBossTotal,
   formatCompactLockoutProgress,
   formatCompactMultiRaidLockoutProgress,
   projectCurrentRaidLockoutSlots,
@@ -14,8 +15,18 @@ const CURRENT = [
   { id: TIDEBOUND_GROTTO_RAID_ID, name: "Nymrissa" },
 ] as const;
 
+const ZERO_BOTH =
+  "The Venomous Abyss: N 0/8 · HC 0/8 · M 0/8 · Nymrissa: N 0/1 · HC 0/1 · M 0/1";
+
+describe("catalog boss totals", () => {
+  it("uses catalog authority for Venomous and Nymrissa", () => {
+    expect(defaultRaidBossTotal(VENOMOUS_ABYSS_RAID_ID)).toBe(8);
+    expect(defaultRaidBossTotal(TIDEBOUND_GROTTO_RAID_ID)).toBe(1);
+  });
+});
+
 describe("formatCompactLockoutProgress", () => {
-  it("shows ? for missing difficulties once any row is verified", () => {
+  it("still shows ? for incomplete Blizzard derivation inputs", () => {
     const text = formatCompactLockoutProgress([
       {
         raidId: VENOMOUS_ABYSS_RAID_ID,
@@ -33,45 +44,39 @@ describe("formatCompactLockoutProgress", () => {
     expect(text).toBe("N 0/8 · HC 3/8 · M ?");
   });
 
-  it("does not invent 0/N for empty input", () => {
+  it("does not invent rows for empty input", () => {
     expect(formatCompactLockoutProgress([])).toBeNull();
   });
 });
 
 describe("formatCompactMultiRaidLockoutProgress", () => {
-  it("CASE 1: only Nymrissa rows → Venomous Unknown + Nymrissa progress", () => {
+  it("CASE 1: no rows → zero progress for every current raid/difficulty", () => {
+    expect(formatCompactMultiRaidLockoutProgress([], CURRENT)).toBe(ZERO_BOTH);
+    expect(formatCompactMultiRaidLockoutProgress([], CURRENT)).not.toContain("Unknown");
+    expect(formatCompactMultiRaidLockoutProgress([], CURRENT)).not.toContain("?");
+    expect(formatCompactMultiRaidLockoutProgress([], CURRENT)).not.toMatch(/9\/9/);
+  });
+
+  it("CASE 2: only Nymrissa HC 1/1 → Venomous zeros + Nymrissa partial zeros", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
           raidId: TIDEBOUND_GROTTO_RAID_ID,
-          raidName: "The Tidebound Grotto",
-          difficulty: "NORMAL",
-          bossesDefeated: 0,
-          bossTotal: 1,
-        },
-        {
-          raidId: TIDEBOUND_GROTTO_RAID_ID,
           difficulty: "HEROIC",
-          bossesDefeated: 0,
-          bossTotal: 1,
-        },
-        {
-          raidId: TIDEBOUND_GROTTO_RAID_ID,
-          difficulty: "MYTHIC",
-          bossesDefeated: 0,
+          bossesDefeated: 1,
           bossTotal: 1,
         },
       ],
       CURRENT,
     );
     expect(text).toBe(
-      "The Venomous Abyss: Unknown · Nymrissa: N 0/1 · HC 0/1 · M 0/1",
+      "The Venomous Abyss: N 0/8 · HC 0/8 · M 0/8 · Nymrissa: N 0/1 · HC 1/1 · M 0/1",
     );
-    expect(text).not.toMatch(/0\/8/);
-    expect(text).not.toMatch(/9\/9/);
+    expect(text).not.toContain("?");
+    expect(text).not.toContain("Unknown");
   });
 
-  it("CASE 2: only Venomous rows → Nymrissa Unknown", () => {
+  it("CASE 3: only Venomous HC 3/8 → Nymrissa zeros", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
@@ -83,10 +88,12 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       ],
       CURRENT,
     );
-    expect(text).toBe("The Venomous Abyss: N ? · HC 3/8 · M ? · Nymrissa: Unknown");
+    expect(text).toBe(
+      "The Venomous Abyss: N 0/8 · HC 3/8 · M 0/8 · Nymrissa: N 0/1 · HC 0/1 · M 0/1",
+    );
   });
 
-  it("CASE 3: both raids have verified rows", () => {
+  it("CASE 4: both raids have rows — missing difficulties filled with zero", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
@@ -104,49 +111,35 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       ],
       CURRENT,
     );
-    expect(text).toContain("The Venomous Abyss:");
-    expect(text).toContain("Nymrissa:");
-    expect(text).not.toContain("Unknown");
+    expect(text).toBe(
+      "The Venomous Abyss: N 8/8 · HC 0/8 · M 0/8 · Nymrissa: N 0/1 · HC 1/1 · M 0/1",
+    );
     expect(text).not.toMatch(/9\/9|4\/9/);
   });
 
-  it("CASE 4: no current rows → both Unknown, not a collapsed generic Unknown", () => {
-    const text = formatCompactMultiRaidLockoutProgress([], CURRENT);
-    expect(text).toBe("The Venomous Abyss: Unknown · Nymrissa: Unknown");
-    expect(text).not.toBe("Unknown");
-  });
-
-  it("CASE 5: partial difficulty on Venomous shows M ?", () => {
+  it("CASE 5: complete rows remain exact", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
           raidId: VENOMOUS_ABYSS_RAID_ID,
           difficulty: "NORMAL",
-          bossesDefeated: 0,
-          bossTotal: 8,
-        },
-        {
-          raidId: VENOMOUS_ABYSS_RAID_ID,
-          difficulty: "HEROIC",
-          bossesDefeated: 3,
+          bossesDefeated: 8,
           bossTotal: 8,
         },
         {
           raidId: TIDEBOUND_GROTTO_RAID_ID,
           difficulty: "HEROIC",
-          bossesDefeated: 0,
+          bossesDefeated: 1,
           bossTotal: 1,
         },
       ],
       CURRENT,
     );
-    expect(text).toContain("The Venomous Abyss: N 0/8 · HC 3/8 · M ?");
-    expect(text).not.toContain("M 0/8");
+    expect(text).toContain("The Venomous Abyss: N 8/8 · HC 0/8 · M 0/8");
+    expect(text).toContain("Nymrissa: N 0/1 · HC 1/1 · M 0/1");
   });
 
-  it("CASE 6: only old-reset rows are already filtered out — empty current rows stay Unknown", () => {
-    // Service filters by current reset before calling the helper; leftover rows
-    // without a matching currentRaid id must not invent progress.
+  it("CASE 6: non-current/old raid rows ignored → current display all zero", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
@@ -159,7 +152,7 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       ],
       CURRENT,
     );
-    expect(text).toBe("The Venomous Abyss: Unknown · Nymrissa: Unknown");
+    expect(text).toBe(ZERO_BOTH);
   });
 
   it("CASE 7: output order follows currentLockoutRaids, not input row order", () => {
@@ -185,36 +178,78 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
     expect(venomousAt).toBeGreaterThanOrEqual(0);
     expect(nymrissaAt).toBeGreaterThan(venomousAt);
   });
-});
 
-describe("projectCurrentRaidLockoutSlots", () => {
-  it("marks missing current raids UNKNOWN without inventing difficulty rows", () => {
-    const slots = projectCurrentRaidLockoutSlots(
+  it("CASE 8: never aggregates to 9/9", () => {
+    const text = formatCompactMultiRaidLockoutProgress(
       [
+        {
+          raidId: VENOMOUS_ABYSS_RAID_ID,
+          difficulty: "HEROIC",
+          bossesDefeated: 8,
+          bossTotal: 8,
+        },
         {
           raidId: TIDEBOUND_GROTTO_RAID_ID,
           difficulty: "HEROIC",
-          bossesDefeated: 0,
+          bossesDefeated: 1,
           bossTotal: 1,
         },
       ],
       CURRENT,
     );
-    expect(slots).toEqual([
-      { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", status: "UNKNOWN" },
+    expect(text).not.toMatch(/9\/9|4\/9/);
+  });
+});
+
+describe("projectCurrentRaidLockoutSlots", () => {
+  it("zero-fills missing difficulties without inventing persisted rows", () => {
+    const slots = projectCurrentRaidLockoutSlots(
+      [
+        {
+          raidId: TIDEBOUND_GROTTO_RAID_ID,
+          difficulty: "HEROIC",
+          bossesDefeated: 1,
+          bossTotal: 1,
+        },
+      ],
+      CURRENT,
+    );
+
+    expect(slots).toHaveLength(2);
+    expect(slots[0]?.raidName).toBe("The Venomous Abyss");
+    expect(slots[0]?.rows).toEqual([
       {
-        raidId: TIDEBOUND_GROTTO_RAID_ID,
-        raidName: "Nymrissa",
-        status: "VERIFIED",
-        rows: [
-          {
-            raidId: TIDEBOUND_GROTTO_RAID_ID,
-            difficulty: "HEROIC",
-            bossesDefeated: 0,
-            bossTotal: 1,
-          },
-        ],
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        difficulty: "NORMAL",
+        bossesDefeated: 0,
+        bossTotal: 8,
+        isComplete: false,
+        verified: false,
       },
+      {
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        difficulty: "HEROIC",
+        bossesDefeated: 0,
+        bossTotal: 8,
+        isComplete: false,
+        verified: false,
+      },
+      {
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        difficulty: "MYTHIC",
+        bossesDefeated: 0,
+        bossTotal: 8,
+        isComplete: false,
+        verified: false,
+      },
+    ]);
+    expect(slots[1]?.rows.map((row) => [row.difficulty, row.bossesDefeated, row.verified])).toEqual([
+      ["NORMAL", 0, false],
+      ["HEROIC", 1, true],
+      ["MYTHIC", 0, false],
     ]);
   });
 });

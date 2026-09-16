@@ -215,38 +215,31 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               data.currentLockoutRaids?.length
                 ? ` · ${data.currentLockoutRaids.map((raid) => raid.name).join(" · ")}`
                 : ""
-            }. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Missing difficulties show as unknown — never invented 0/N. Mythic is boss-kill progress only.`}
+            }. Derived from Blizzard Character Raid Encounters on Refresh (profile data may lag until logout). Missing current-reset difficulties display as 0/N until verified. Mythic is boss-kill progress only.`}
           />
           {lockoutSlots.length === 0 ? (
             <EmptyState
-              title="Unknown"
-              description="No verified current-reset lockout data. Missing or stale rows are not treated as clear."
+              title="No current raids"
+              description="No current lockout raids are configured."
             />
           ) : (
             <ul className="divide-y divide-border">
-              {lockoutSlots.map((slot) =>
-                slot.status === "UNKNOWN" ? (
-                  <li key={slot.raidId} className="px-4 py-3 text-sm">
-                    <span className="font-medium">{slot.raidName}</span>
-                    <p className="mt-1 text-xs text-muted">Unknown — no verified current-reset data.</p>
+              {lockoutSlots.flatMap((slot) =>
+                slot.rows.map((lockout) => (
+                  <li
+                    key={`${slot.raidId}-${lockout.difficulty}`}
+                    className="px-4 py-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{slot.raidName}</span>
+                      <DifficultyBadge difficulty={lockout.difficulty} />
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      {data.currentReset} · {lockout.bossesDefeated}/{lockout.bossTotal}
+                      {lockout.isComplete ? " complete" : ""}
+                    </p>
                   </li>
-                ) : (
-                  slot.rows.map((lockout) => (
-                    <li
-                      key={`${slot.raidId}-${lockout.difficulty}`}
-                      className="px-4 py-3 text-sm"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{slot.raidName}</span>
-                        <DifficultyBadge difficulty={lockout.difficulty} />
-                      </div>
-                      <p className="mt-1 text-xs text-muted">
-                        {data.currentReset} · {lockout.bossesDefeated}/{lockout.bossTotal}
-                        {lockout.isComplete ? " complete" : ""}
-                      </p>
-                    </li>
-                  ))
-                ),
+                )),
               )}
             </ul>
           )}
