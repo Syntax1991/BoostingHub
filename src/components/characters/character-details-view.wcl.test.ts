@@ -28,6 +28,11 @@ vi.mock("@/components/characters/character-availability-section", () => ({
   CharacterAvailabilitySection: () => null,
 }));
 
+vi.mock("@/components/characters/link-warcraft-logs-button", () => ({
+  LinkWarcraftLogsButton: ({ characterId }: { characterId: string }) =>
+    createElement("button", { type: "button", "data-character-id": characterId }, "Find Warcraft Logs"),
+}));
+
 import { CharacterDetailsView } from "@/components/characters/character-details-view";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
@@ -79,11 +84,12 @@ describe("CharacterDetailsView Warcraft Logs action", () => {
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain("Warcraft Logs");
+    expect(html).not.toContain("Find Warcraft Logs");
   });
 
-  it("omits the Warcraft Logs action when warcraftLogsId is missing", () => {
+  it("offers Find Warcraft Logs when warcraftLogsId is missing", () => {
     const html = renderToStaticMarkup(createElement(CharacterDetailsView, { data: baseDetails() }));
     expect(html).not.toContain("warcraftlogs.com");
-    expect(html).not.toContain("Warcraft Logs");
+    expect(html).toContain("Find Warcraft Logs");
   });
 });
