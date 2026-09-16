@@ -31,6 +31,8 @@ export type EligibilityCharacter = {
   wowClass: WowClass;
   specialization: string | null;
   isActive: boolean;
+  /** Existing WCL character id when known — informational only for signup UI. */
+  warcraftLogsId: string | null;
   boosterQualifications: BoosterQualificationMatch[];
   lockouts: EligibilityLockout[];
   /**
@@ -79,6 +81,8 @@ export type EligibleBoosterOption = {
   realm: string;
   wowClass: WowClass;
   specialization: string | null;
+  /** Existing WCL character id when known — never affects eligibility. */
+  warcraftLogsId: string | null;
   /** Every role this Character's class can actually perform — the signup role choice is bounded to this set. */
   roles: CharacterRole[];
   /** Specialization-derived default for a new selection, or null when specialization is missing/unrecognized — never a guess. */
@@ -91,6 +95,8 @@ export type IneligibleBoosterCharacter = {
   characterId: string;
   characterName: string;
   realm: string;
+  /** Existing WCL character id when known — never affects eligibility. */
+  warcraftLogsId: string | null;
   reason: BoosterIneligibilityReason;
   message: string;
   /** Present only when reason is ALREADY_SELECTED_OTHER_RUN. */
@@ -162,6 +168,7 @@ export function evaluateBoosterOptions(
         characterId: character.id,
         characterName: character.name,
         realm: character.realm,
+        warcraftLogsId: character.warcraftLogsId,
         reason,
         message:
           reason === "ALREADY_SELECTED_OTHER_RUN" && extra?.conflictingRunTitle
@@ -212,6 +219,7 @@ export function evaluateBoosterOptions(
       realm: character.realm,
       wowClass: character.wowClass,
       specialization: character.specialization,
+      warcraftLogsId: character.warcraftLogsId,
       roles: rolesForClass(character.wowClass),
       defaultRole,
       contentSaves,

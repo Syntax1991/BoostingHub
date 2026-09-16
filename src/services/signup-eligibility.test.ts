@@ -43,6 +43,7 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
     wowClass: "SHAMAN",
     specialization: "Restoration",
     isActive: true,
+    warcraftLogsId: null,
     boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
     lockouts: [],
     reservationConflict: null,
@@ -350,6 +351,39 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
     ).toBe("ALREADY_SELECTED_OTHER_RUN");
     // And with no other issue, the saved Character is simply eligible.
     expect(evaluateBoosterOptions([saved({})], heroicRun).eligible).toHaveLength(1);
+  });
+
+  it("projects warcraftLogsId for eligible and ineligible Booster Characters without affecting eligibility", () => {
+    const eligible = evaluateBoosterOptions([shaman({ warcraftLogsId: "11112222" })], heroicRun);
+    expect(eligible.eligible[0]?.warcraftLogsId).toBe("11112222");
+    expect(eligible.ineligible).toHaveLength(0);
+
+    const withoutId = evaluateBoosterOptions([shaman({ warcraftLogsId: null })], heroicRun);
+    expect(withoutId.eligible[0]?.warcraftLogsId).toBeNull();
+
+    const blocked = evaluateBoosterOptions(
+      [
+        shaman({
+          warcraftLogsId: "33334444",
+          reservationConflict: {
+            runId: "run-other",
+            runTitle: "Other Run",
+            scheduledStartAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+      ],
+      heroicRun,
+    );
+    expect(blocked.eligible).toHaveLength(0);
+    expect(blocked.ineligible[0]?.reason).toBe("ALREADY_SELECTED_OTHER_RUN");
+    expect(blocked.ineligible[0]?.warcraftLogsId).toBe("33334444");
+
+    const inactive = evaluateBoosterOptions(
+      [shaman({ isActive: false, warcraftLogsId: "55556666" })],
+      heroicRun,
+    );
+    expect(inactive.ineligible[0]?.reason).toBe("INACTIVE");
+    expect(inactive.ineligible[0]?.warcraftLogsId).toBe("55556666");
   });
 });
 

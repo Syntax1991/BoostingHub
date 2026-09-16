@@ -13,6 +13,7 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
+import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import {
   CHARACTER_ROLES,
   LOOTBUDDY_MODES,
@@ -35,6 +36,7 @@ type BoosterGroup = {
   realm: string;
   wowClass: WowClass;
   specialization: string | null;
+  warcraftLogsId: string | null;
   /** Every role this Character's class can perform — the role choice is bounded to this set, never just one. */
   roles: CharacterRole[];
   /** Specialization-derived default for a brand-new selection; null when specialization is missing/unrecognized. */
@@ -63,6 +65,7 @@ function groupBoosterOptions(eligible: SignupOptions["booster"]["eligible"]): Bo
     realm: option.realm,
     wowClass: option.wowClass,
     specialization: option.specialization,
+    warcraftLogsId: option.warcraftLogsId,
     roles: option.roles,
     defaultRole: option.defaultRole,
     contentSaves: option.contentSaves,
@@ -378,7 +381,7 @@ export function RunSignupButton({
   );
 }
 
-function BoosterCharacterChecklist({
+export function BoosterCharacterChecklist({
   groups,
   ineligible,
   selected,
@@ -466,6 +469,11 @@ function BoosterCharacterChecklist({
                     </label>
                   ))}
                 </fieldset>
+                <WarcraftLogsLink
+                  warcraftLogsId={group.warcraftLogsId}
+                  label="WCL"
+                  className="inline-flex h-7 shrink-0 items-center gap-1 text-xs text-accent hover:underline"
+                />
               </li>
             );
           })}
@@ -483,6 +491,11 @@ function BoosterCharacterChecklist({
                   {item.conflictingRunTitle ? `: ${item.conflictingRunTitle}` : ""}
                 </span>
               </div>
+              <WarcraftLogsLink
+                warcraftLogsId={item.warcraftLogsId}
+                label="WCL"
+                className="inline-flex h-7 shrink-0 items-center gap-1 text-xs text-accent hover:underline"
+              />
             </li>
           ))}
         </ul>
@@ -492,8 +505,15 @@ function BoosterCharacterChecklist({
           <summary>{otherIneligible.length} character{otherIneligible.length === 1 ? "" : "s"} unavailable</summary>
           <ul className="mt-2 space-y-1">
             {otherIneligible.map((item) => (
-              <li key={item.characterId}>
-                {item.characterName}-{item.realm}: {item.message}
+              <li key={item.characterId} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {item.characterName}-{item.realm}: {item.message}
+                </span>
+                <WarcraftLogsLink
+                  warcraftLogsId={item.warcraftLogsId}
+                  label="WCL"
+                  className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+                />
               </li>
             ))}
           </ul>
