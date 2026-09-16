@@ -717,6 +717,7 @@ export const rosterService = {
     const inspected = signups.map((signup) => ({
       ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
+      scheduleConflicts: [] as CharacterScheduleConflict[],
     }));
     const selected = inspected.filter((item) => item.draftSelected);
     const validation = validateRosterDraft({
