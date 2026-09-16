@@ -95,7 +95,8 @@ describe("run content lockout projection", () => {
 
 describe("multi-raid character lockout compact display", () => {
   it("groups per raid and never merges boss totals", () => {
-    const text = formatCompactMultiRaidLockoutProgress([
+    const text = formatCompactMultiRaidLockoutProgress(
+      [
       {
         raidId: TIDEBOUND_GROTTO_RAID_ID,
         raidName: "The Tidebound Grotto",
@@ -110,7 +111,12 @@ describe("multi-raid character lockout compact display", () => {
         bossesDefeated: 3,
         bossTotal: 8,
       },
-    ]);
+      ],
+      [
+        { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss" },
+        { id: TIDEBOUND_GROTTO_RAID_ID, name: "Nymrissa" },
+      ],
+    );
 
     expect(text).toContain("Nymrissa:");
     expect(text).toContain("The Venomous Abyss:");
