@@ -51,6 +51,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     accessPanel: {
       difficulties: [],
       discordTicketUrl: null,
+      selfRequestDisabled: true,
     },
     currentReset: "2026-W38",
     currentLockoutRaids: [

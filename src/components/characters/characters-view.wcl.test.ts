@@ -23,29 +23,43 @@ vi.mock("@/components/characters/battle-net-panel", () => ({
 import { CharactersView } from "@/components/characters/characters-view";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
+type CharacterRow = Page["characters"][number];
 
-function basePage(characters: Page["characters"]): Page {
+function basePage(characters: CharacterRow[]): Page {
   return {
     characters,
     totalCharacters: characters.length,
     activeCharacters: characters.filter((row) => row.isActive).length,
+    currentResetByRegion: { EU: "2026-W38", US: "2026-W38" },
     currentLockoutRaids: [
       { id: "venomous", name: "The Venomous Abyss" },
       { id: "tidebound", name: "Nymrissa" },
     ],
-    battleNet: { eu: null, us: null },
-    battleNetFlash: null,
-  };
+    battleNet: {
+      configured: false,
+      connections: [],
+      importSession: null,
+      liveSessions: [],
+      candidates: [],
+      candidatesByRegion: {},
+    },
+    battleNetFlash: {
+      status: null,
+      region: null,
+      code: null,
+      importSessionId: null,
+    },
+  } as unknown as Page;
 }
 
 const baseCharacter = {
   id: "char-1",
   name: "Stormhowl",
   realm: "Twisting Nether",
-  region: "EU" as const,
-  wowClass: "SHAMAN" as const,
+  region: "EU",
+  wowClass: "SHAMAN",
   specialization: "Restoration",
-  primaryRole: "HEALER" as const,
+  primaryRole: "HEALER",
   itemLevel: 640,
   isActive: true,
   lastSyncedAt: null,
@@ -53,17 +67,23 @@ const baseCharacter = {
   blizzardLinked: false,
   blizzardRealmId: null,
   warcraftLogsLinked: false,
-  warcraftLogsId: null as string | null,
-  boosterAccess: { approvals: [] as Array<{ difficulty: "HEROIC" | "MYTHIC" }> },
+  warcraftLogsId: null,
+  boosterAccess: { approvedCount: 0, revokedCount: 0, approvals: [] },
   currentReset: "2026-W38",
   lockouts: [],
-};
+} as CharacterRow;
 
 describe("CharactersView Warcraft Logs action", () => {
   it("renders a safe new-tab WCL link when warcraftLogsId is present", () => {
     const html = renderToStaticMarkup(
       createElement(CharactersView, {
-        data: basePage([{ ...baseCharacter, warcraftLogsId: "12345678", warcraftLogsLinked: true }]),
+        data: basePage([
+          {
+            ...baseCharacter,
+            warcraftLogsId: "12345678",
+            warcraftLogsLinked: true,
+          },
+        ]),
       }),
     );
     expect(html).toContain("https://www.warcraftlogs.com/character/id/12345678");

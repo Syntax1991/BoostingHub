@@ -5,6 +5,8 @@ import { BoosterCharacterChecklist } from "@/components/runs/signup-dialog";
 
 const noop = () => {};
 
+const emptySelected = new Set<string>();
+
 describe("BoosterCharacterChecklist Warcraft Logs links", () => {
   it("shows WCL for an eligible Booster Character with an id", () => {
     const html = renderToStaticMarkup(
@@ -23,7 +25,7 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
           },
         ],
         ineligible: [],
-        selected: new Set(),
+        selected: emptySelected,
         rolesByCharacterId: {},
         onToggle: noop,
         onRoleToggle: noop,
@@ -52,7 +54,7 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
           },
         ],
         ineligible: [],
-        selected: new Set(),
+        selected: emptySelected,
         rolesByCharacterId: {},
         onToggle: noop,
         onRoleToggle: noop,
@@ -77,7 +79,7 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
             conflictingRunTitle: "Other Run",
           },
         ],
-        selected: new Set(),
+        selected: emptySelected,
         rolesByCharacterId: {},
         onToggle: noop,
         onRoleToggle: noop,
@@ -102,7 +104,7 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
             message: "No approved booster access.",
           },
         ],
-        selected: new Set(),
+        selected: emptySelected,
         rolesByCharacterId: {},
         onToggle: noop,
         onRoleToggle: noop,
