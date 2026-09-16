@@ -192,6 +192,14 @@ function SignupTable({ items }: { items: SignupItem[] }) {
                           <OfferedRolesBadges roles={offer.offeredRoles} />
                         )}
                         <SignupStatusBadge status={offer.status} />
+                        {offer.scheduleConflicts.length > 0 ? (
+                          <span
+                            className="text-xs text-warning"
+                            title={offer.scheduleConflicts.map((row) => row.message).join("\n")}
+                          >
+                            Schedule conflict
+                          </span>
+                        ) : null}
                         {offer.canWithdraw ? <WithdrawButton signupId={offer.id} /> : null}
                       </li>
                     ))}

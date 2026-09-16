@@ -42,6 +42,8 @@ export type RosterCharacterSnapshot = {
   primaryRole: CharacterRole;
   itemLevel: number | null;
   isActive: boolean;
+  /** Informational WCL profile id — never a schedule or eligibility gate. */
+  warcraftLogsId: string | null;
   boosterQualifications: BoosterQualificationMatch[];
   lockouts: Array<{
     raidId: string;
@@ -105,6 +107,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     primaryRole: mapCharacterRole(row.primaryRole),
     itemLevel: asNumberOrNull(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
+    warcraftLogsId: asStringOrNull(row.warcraftLogsId),
     // Hydrated from account-level BoosterQualification after signup load.
     boosterQualifications: [],
     lockouts: lockouts.map((item) => {
@@ -411,6 +414,8 @@ export const rosterRepository = {
       await this.assertVersion(roster, input.expectedVersion);
       const now = new Date().toISOString();
 
+      // Race-safety net for NEW draft selection only. Already-selected Characters
+      // that later become conflicted stay on the roster until publish revalidates.
       if (input.selected) {
         const signupRow = await txOrm.RunSignup.where({ id: input.signupId }).first();
         if (!signupRow) {
@@ -419,23 +424,6 @@ export const rosterRepository = {
         const status = mapSignupStatus((signupRow as Record<string, unknown>).status);
         if (status === "WITHDRAWN") {
           throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
-        }
-
-        // Race-safety net: the caller already checked cross-Run reservation
-        // before opening this transaction, but another raid lead could have
-        // reserved the same Character elsewhere in between.
-        if (input.characterId) {
-          const conflicts = await queryReservationConflicts(txOrm, {
-            characterIds: [input.characterId],
-            targetRunId: input.targetRunId,
-            scheduledStartAt: input.scheduledStartAt,
-          });
-          if (conflicts.length > 0) {
-            throw new DomainError(
-              "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-              `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
-            );
-          }
         }
       }
 
@@ -446,6 +434,20 @@ export const rosterRepository = {
       }
 
       const existing = await txOrm.RunRosterEntry.where({ rosterId: input.rosterId, signupId: input.signupId }).first();
+      if (input.selected && input.characterId && !existing) {
+        const conflicts = await queryReservationConflicts(txOrm, {
+          characterIds: [input.characterId],
+          targetRunId: input.targetRunId,
+          scheduledStartAt: input.scheduledStartAt,
+        });
+        if (conflicts.length > 0) {
+          throw new DomainError(
+            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+            `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
+          );
+        }
+      }
+
       if (input.selected && !existing) {
         await txOrm.RunRosterEntry.create({
           id: crypto.randomUUID(),

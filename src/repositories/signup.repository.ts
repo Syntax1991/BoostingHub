@@ -201,6 +201,59 @@ export async function queryReservationConflicts(
   return [...conflicts.values()];
 }
 
+/**
+ * Like {@link queryReservationConflicts}, but returns every colliding Run for
+ * each Character (schedule-integrity diagnostics). Order is undefined —
+ * callers must sort deterministically.
+ */
+export async function queryAllReservationConflicts(
+  ormLike: TxOrm,
+  input: { characterIds: string[]; targetRunId: string; scheduledStartAt: string },
+): Promise<ReservationConflictRow[]> {
+  if (input.characterIds.length === 0) {
+    return [];
+  }
+  const targetTime = new Date(input.scheduledStartAt).getTime();
+
+  const rows = await ormLike.RunSignup
+    .where((f) => f.characterId.in(input.characterIds))
+    .include("run")
+    .include("rosterEntries")
+    .all();
+
+  const conflicts: ReservationConflictRow[] = [];
+  const seen = new Set<string>();
+  for (const raw of rows as Record<string, unknown>[]) {
+    const characterId = asStringOrNull(raw.characterId);
+    if (!characterId) continue;
+
+    const run = (raw.run ?? {}) as Record<string, unknown>;
+    const runId = asString(run.id);
+    if (runId === input.targetRunId) continue;
+    if (!scheduledStartsCollideForReservation(asString(run.scheduledStartAt), targetTime)) continue;
+    if (!UPCOMING_RUN_STATUSES.includes(mapRunStatus(run.status))) continue;
+
+    const status = mapSignupStatus(raw.status);
+    if (status === "WITHDRAWN") continue;
+
+    const rosterEntries = Array.isArray(raw.rosterEntries) ? (raw.rosterEntries as Record<string, unknown>[]) : [];
+    const draftSelected = rosterEntries.some((entry) => asBoolean(entry.selected, true));
+    if (status !== "SELECTED" && !draftSelected) continue;
+
+    const key = `${characterId}:${runId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    conflicts.push({
+      characterId,
+      runId,
+      runTitle: asString(run.title),
+      scheduledStartAt: asString(run.scheduledStartAt),
+    });
+  }
+
+  return conflicts;
+}
+
 export type SignupWriteInput = {
   runId: string;
   userId: string;
@@ -256,6 +309,14 @@ export const signupRepository = {
     scheduledStartAt: string;
   }): Promise<ReservationConflictRow[]> {
     return queryReservationConflicts(orm, input);
+  },
+
+  async findAllReservationConflicts(input: {
+    characterIds: string[];
+    targetRunId: string;
+    scheduledStartAt: string;
+  }): Promise<ReservationConflictRow[]> {
+    return queryAllReservationConflicts(orm, input);
   },
 
   async listByUserId(userId: string): Promise<SignupListRecord[]> {
