@@ -458,7 +458,7 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
     const viewB = await rosterService.getRosterManagementView(lead, runB);
     await expectDomainCode(
       rosterService.setDraftSelection(lead, { runId: runB, signupId: bypassSignupId, selected: true, version: viewB.roster.version }),
-      "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+      "CHARACTER_SCHEDULE_CONFLICT",
     );
 
     // runA's original selection is untouched.
@@ -505,7 +505,7 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
         version: viewB.roster.version,
         selections: [{ signupId: bypassSignupId, selectedRole: null }],
       }),
-      "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+      "CHARACTER_SCHEDULE_CONFLICT",
     );
     const after = await rosterService.getRosterManagementView(lead, runB);
     expect(after.roster.version).toBe(viewB.roster.version);
@@ -547,7 +547,7 @@ describe("cross-Run Character reservation — write-boundary enforcement", () =>
     const viewA = await rosterService.getRosterManagementView(lead, runA);
     await expectDomainCode(
       rosterService.publishRoster(lead, { runId: runA, version: viewA.roster.version, acknowledgeWarnings: true }),
-      "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+      "ROSTER_HAS_SCHEDULE_CONFLICTS",
     );
 
     const runARecord = (await runRepository.findById(runA))!;
