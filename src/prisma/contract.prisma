@@ -315,6 +315,7 @@ model Character {
   updatedAt            temporal.updatedAtString()
 
   lockouts      CharacterRaidLockout[]
+  availabilityBlocks CharacterAvailabilityBlock[]
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
   payoutEntries RunPayoutEntry[]
@@ -325,6 +326,26 @@ model Character {
   @@unique([region, blizzardRealmId, blizzardCharacterId])
   @@index([userId])
   @@map("character")
+}
+
+/// Owner-authored unavailability window for a single Character.
+/// Independent of BoostingHub cross-Run reservation (which uses a separate
+/// 2h start-distance rule). Interval is half-open: [startsAt, endsAt).
+/// Overlapping blocks are allowed; past blocks remain for history and are
+/// ignored once endsAt <= now for eligibility.
+model CharacterAvailabilityBlock {
+  id          String             @id @default(uuid())
+  characterId String
+  character   Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  startsAt    TimestamptzString
+  endsAt      TimestamptzString
+  /// Optional free-text (e.g. "External boost"). Never an enum for v1.
+  reason      String?
+  createdAt   TimestamptzString  @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@index([characterId])
+  @@map("character_availability_block")
 }
 
 /// LEGACY historical booster application/history.
