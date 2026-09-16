@@ -2,7 +2,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";

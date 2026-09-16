@@ -3,7 +3,7 @@ import type { WowClass, WowRegion } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
-import { getCurrentLockoutRaid, getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import {
   isValidCharacterName,
   isValidRealmName,
@@ -102,7 +102,6 @@ export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
     const characters = await characterRepository.listByUserId(user.id);
     const currentRaids = getCurrentLockoutRaids();
-    const currentRaid = getCurrentLockoutRaid();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
 
     return {
@@ -110,10 +109,6 @@ export const characterService = {
         EU: getRegionalWeeklyReset("EU").resetIdentifier,
         US: getRegionalWeeklyReset("US").resetIdentifier,
       },
-      /** @deprecated Prefer `currentLockoutRaids` — singular Venomous preference for transitional callers. */
-      currentLockoutRaid: currentRaid
-        ? { id: currentRaid.id, name: raidContentDisplayName(currentRaid.id, currentRaid.name) }
-        : null,
       currentLockoutRaids: currentRaids.map((raid) => ({
         id: raid.id,
         name: raidContentDisplayName(raid.id, raid.name),
@@ -169,7 +164,6 @@ export const characterService = {
 
     const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
     const currentRaids = getCurrentLockoutRaids();
-    const currentRaid = getCurrentLockoutRaid();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const currentLockouts = lockoutService
       .summarize(
@@ -207,10 +201,6 @@ export const characterService = {
         character.boosterQualifications,
       ),
       currentReset,
-      /** @deprecated Prefer `currentLockoutRaids`. */
-      currentLockoutRaid: currentRaid
-        ? { id: currentRaid.id, name: raidContentDisplayName(currentRaid.id, currentRaid.name) }
-        : null,
       currentLockoutRaids: currentRaids.map((raid) => ({
         id: raid.id,
         name: raidContentDisplayName(raid.id, raid.name),

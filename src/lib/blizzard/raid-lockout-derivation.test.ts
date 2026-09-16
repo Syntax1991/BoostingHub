@@ -7,13 +7,12 @@ import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   WOW_RAID_CATALOG,
-  getCurrentLockoutRaid,
   getCurrentLockoutRaids,
 } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { formatCompactLockoutProgress } from "@/lib/lockout-display";
+import { defaultRaidBossTotal, formatCompactLockoutProgress } from "@/lib/lockout-display";
 
-const current = getCurrentLockoutRaid()!;
+const current = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
 const historical = WOW_RAID_CATALOG.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)!;
 const now = new Date("2026-09-10T12:00:00.000Z");
 const reset = getRegionalWeeklyReset("EU", now);
@@ -75,8 +74,11 @@ describe("current raid catalog selection", () => {
     expect(historical.bosses).toHaveLength(8);
   });
 
-  it("keeps getCurrentLockoutRaid() on Venomous for transitional singular callers", () => {
-    expect(current.id).toBe(VENOMOUS_ABYSS_RAID_ID);
+  it("requires an explicit raid id for catalog boss totals", () => {
+    expect(defaultRaidBossTotal(VENOMOUS_ABYSS_RAID_ID)).toBe(8);
+    expect(defaultRaidBossTotal(TIDEBOUND_GROTTO_RAID_ID)).toBe(1);
+    expect(defaultRaidBossTotal(MANAFORGE_OMEGA_RAID_ID)).toBe(8);
+    expect(defaultRaidBossTotal("00000000-0000-4000-8000-000000000000")).toBe(0);
   });
 
   it("does not select Manaforge solely because it also has 8 bosses", () => {

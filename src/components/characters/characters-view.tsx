@@ -65,9 +65,7 @@ export function CharactersView({ data }: { data: Page }) {
                     Lockouts
                     {data.currentLockoutRaids?.length
                       ? ` (${data.currentLockoutRaids.map((raid) => raid.name).join(" · ")})`
-                      : data.currentLockoutRaid
-                        ? ` (${data.currentLockoutRaid.name})`
-                        : ""}
+                      : ""}
                   </th>
                   <th className="px-4 py-2 font-medium">Updated</th>
                   <th className="px-4 py-2 font-medium">Actions</th>

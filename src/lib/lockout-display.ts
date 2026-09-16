@@ -1,6 +1,6 @@
 import type { RaidDifficulty } from "@/models/enums";
 import { COMPACT_DIFFICULTY_LABELS } from "@/lib/blizzard/raid-difficulty";
-import { findRaidCatalogById, getCurrentLockoutRaid, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { findRaidCatalogById, raidContentDisplayName } from "@/lib/wow-raid-catalog";
 
 export type LockoutDisplayRow = {
   difficulty: RaidDifficulty;
@@ -64,9 +64,7 @@ export function formatCompactMultiRaidLockoutProgress(rows: LockoutDisplayRow[])
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-export function defaultRaidBossTotal(raidId?: string): number {
-  if (raidId) {
-    return findRaidCatalogById(raidId)?.bosses.length ?? 0;
-  }
-  return getCurrentLockoutRaid()?.bosses.length ?? 0;
+/** Catalog boss count for an explicit raid id — never an implicit "current" raid. */
+export function defaultRaidBossTotal(raidId: string): number {
+  return findRaidCatalogById(raidId)?.bosses.length ?? 0;
 }

@@ -198,16 +198,6 @@ export function raidContentDisplayName(raidId: string, raidName: string): string
   return raidName;
 }
 
-/**
- * Transitional singular helper for callers not yet migrated to multi-raid
- * lockout presentation. Prefer Venomous Abyss so Tidebound being
- * `currentForLockouts` does not silently become the UI primary raid.
- */
-export function getCurrentLockoutRaid(): WowRaidCatalogEntry | null {
-  const current = getCurrentLockoutRaids();
-  return current.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID) ?? current[0] ?? null;
-}
-
 export function findRaidCatalogById(id: string): WowRaidCatalogEntry | null {
   return WOW_RAID_CATALOG.find((raid) => raid.id === id) ?? null;
 }
