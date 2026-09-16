@@ -12,6 +12,13 @@ import {
   type RaidBuffCoverage,
   type RaidBuffParticipant,
 } from "@/services/roster-raid-buffs";
+import {
+  assertCharacterSelectableForSchedule,
+  assertRosterPublishableForSchedule,
+  getScheduleConflictsForCharacter,
+  getScheduleConflictsForCharacters,
+  type CharacterScheduleConflict,
+} from "@/services/character-schedule-conflict.service";
 import { rosterRepository, type RosterSelection, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -35,6 +42,8 @@ type InspectedSignup = RosterSignupRow & {
   /** Informational per-content lockouts — never roster blockers. */
   contentSaves: RunContentRaidSaveInfo[];
   issue: string | null;
+  /** Derived schedule integrity conflicts — never auto-withdraw or auto-deselect. */
+  scheduleConflicts: CharacterScheduleConflict[];
 };
 
 /**
@@ -135,7 +144,7 @@ function inspectSignup(
     lootType: RunLootType;
     contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
   },
-): Omit<InspectedSignup, "draftSelected"> {
+): Omit<InspectedSignup, "draftSelected" | "scheduleConflicts"> {
   if (run.contents.length === 0) {
     throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
   }
@@ -312,9 +321,21 @@ export const rosterService = {
 
     const roster = await rosterRepository.ensure(runId);
     const signups = await rosterRepository.listSignups(runId);
+    const boosterCharacterIds = signups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.character)
+      .map((signup) => signup.character!.id);
+    const scheduleConflictsByCharacter = await getScheduleConflictsForCharacters({
+      targetRunId: run.id,
+      scheduledStartAt: run.scheduledStartAt,
+      characterIds: boosterCharacterIds,
+    });
     const inspected = signups.map((signup) => ({
       ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
+      scheduleConflicts:
+        signup.participationType === "BOOSTER" && signup.character
+          ? (scheduleConflictsByCharacter.get(signup.character.id) ?? [])
+          : [],
     }));
 
     const selected = inspected.filter((item) => item.draftSelected);
@@ -441,21 +462,25 @@ export const rosterService = {
       throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
     }
 
-    // Cross-Run Character reservation, BOOSTER only (see the LOOTBUDDY audit
-    // note in signup.service.ts). Deselecting never needs this check — that
-    // is exactly how a reservation is released for another colliding Run.
-    if (input.selected && signup.participationType === "BOOSTER" && signup.character) {
-      const conflicts = await signupRepository.findReservationConflicts({
-        characterIds: [signup.character.id],
+    // Cross-Run Character reservation + manual availability for NEW draft
+    // selection only. Already-selected conflicted Characters stay selected;
+    // publish revalidates. Deselecting never needs this check.
+    const alreadyDraftSelected = roster.selectedSignupIds.includes(input.signupId);
+    if (
+      input.selected &&
+      !alreadyDraftSelected &&
+      signup.participationType === "BOOSTER" &&
+      signup.character
+    ) {
+      const scheduleConflicts = await getScheduleConflictsForCharacter({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
+        characterId: signup.character.id,
       });
-      if (conflicts.length > 0) {
-        throw new DomainError(
-          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-          `${signup.character.name} is already selected for ${conflicts[0].runTitle}.`,
-        );
-      }
+      assertCharacterSelectableForSchedule(
+        `${signup.character.name}-${signup.character.realm}`,
+        scheduleConflicts,
+      );
     }
 
     /**
@@ -589,23 +614,32 @@ export const rosterService = {
       boosterByUser.set(signup.userId, signup.id);
     }
 
-    const selectedCharacterIds = selectedRows
-      .filter((item) => item.participationType === "BOOSTER")
-      .map((item) => item.character?.id)
-      .filter((id): id is string => Boolean(id));
-    if (selectedCharacterIds.length > 0) {
-      const conflicts = await signupRepository.findReservationConflicts({
-        characterIds: selectedCharacterIds,
+    const previouslySelected = new Set(roster.selectedSignupIds);
+    const newlySelectedCharacterIds = selectedRows
+      .filter(
+        (item) =>
+          item.participationType === "BOOSTER" &&
+          item.character &&
+          !previouslySelected.has(item.id),
+      )
+      .map((item) => item.character!.id);
+    if (newlySelectedCharacterIds.length > 0) {
+      const conflictsByCharacter = await getScheduleConflictsForCharacters({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
+        characterIds: newlySelectedCharacterIds,
       });
-      if (conflicts.length > 0) {
-        const conflict = conflicts[0];
-        const conflictingName = selectedRows.find((item) => item.character?.id === conflict.characterId)?.character
-          ?.name;
-        throw new DomainError(
-          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-          `${conflictingName ?? "A selected character"} is already selected for ${conflict.runTitle}.`,
+      for (const signup of selectedRows) {
+        if (
+          signup.participationType !== "BOOSTER" ||
+          !signup.character ||
+          previouslySelected.has(signup.id)
+        ) {
+          continue;
+        }
+        assertCharacterSelectableForSchedule(
+          `${signup.character.name}-${signup.character.realm}`,
+          conflictsByCharacter.get(signup.character.id) ?? [],
         );
       }
     }
@@ -613,7 +647,8 @@ export const rosterService = {
     await rosterRepository.replaceSelectedSignupIds(roster.id, input.version, selections, {
       targetRunId: input.runId,
       scheduledStartAt: run.scheduledStartAt,
-      selectedCharacterIds,
+      // Repository race-check only newly added Characters (already-selected stay).
+      selectedCharacterIds: newlySelectedCharacterIds,
     });
 
     if (run.status === "OPEN" && selectedIds.length > 0) {
@@ -709,28 +744,28 @@ export const rosterService = {
 
     const selectedIds = selected.map((item) => item.id);
 
-    // Cross-Run Character reservation, BOOSTER only (see the LOOTBUDDY audit
-    // note in signup.service.ts). Booster access and lockouts are already
-    // re-checked above via inspectSignup for the same reason: eligibility
-    // can drift between signup time and publish time.
+    // Cross-Run Character reservation + manual availability for every selected
+    // BOOSTER at publish time. Existing draft selection is preserved even when
+    // conflicted — publish is the hard stop.
     const selectedCharacterIds = selected
       .filter((item) => item.participationType === "BOOSTER")
       .map((item) => item.character?.id)
       .filter((id): id is string => Boolean(id));
     if (selectedCharacterIds.length > 0) {
-      const conflicts = await signupRepository.findReservationConflicts({
-        characterIds: selectedCharacterIds,
+      const conflictsByCharacter = await getScheduleConflictsForCharacters({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
+        characterIds: selectedCharacterIds,
       });
-      if (conflicts.length > 0) {
-        const conflict = conflicts[0];
-        const conflictingName = selected.find((item) => item.character?.id === conflict.characterId)?.character?.name;
-        throw new DomainError(
-          "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-          `${conflictingName ?? "A selected character"} is already selected for ${conflict.runTitle}. Resolve the conflict before publishing.`,
-        );
-      }
+      const conflicted = selected
+        .filter((item) => item.participationType === "BOOSTER" && item.character)
+        .map((item) => ({
+          characterId: item.character!.id,
+          characterLabel: `${item.character!.name}-${item.character!.realm}`,
+          conflicts: conflictsByCharacter.get(item.character!.id) ?? [],
+        }))
+        .filter((row) => row.conflicts.length > 0);
+      assertRosterPublishableForSchedule(conflicted);
     }
 
     const publishedSelection = inspected.filter((item) => item.status === "SELECTED");

@@ -17,6 +17,7 @@ import {
   SignupStatusBadge,
   AccessBadge,
 } from "@/components/ui/badges";
+import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import {
@@ -197,6 +198,10 @@ function RosterBuilderEditor({
   function toggleRoleCopy(signup: SignupRow, checked: boolean) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (signup.status === "WITHDRAWN") return;
+    // Unselected schedule-conflicted Boosters cannot be newly staged.
+    if (checked && !stagedSelections.has(signup.id) && (signup.scheduleConflicts?.length ?? 0) > 0) {
+      return;
+    }
     setError(null);
     setErrorCode(null);
     setStagedSelections((previous) => {
@@ -631,7 +636,9 @@ function SignupRowCard({
   const displayClass = lootbuddyDisplayClass(signup);
   const lockoutLines = boosterLockoutLines(signup);
   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
-  const disabled = !editing || locked || signup.status === "WITHDRAWN";
+  const scheduleConflicts = signup.scheduleConflicts ?? [];
+  const scheduleBlocked = !selected && scheduleConflicts.length > 0;
+  const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
   return (
     <label
@@ -655,6 +662,11 @@ function SignupRowCard({
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
+          {character?.warcraftLogsId ? (
+            <span onClick={(event) => event.preventDefault()}>
+              <WarcraftLogsLink warcraftLogsId={character.warcraftLogsId} className="inline-flex items-center gap-1 text-xs text-accent hover:underline" />
+            </span>
+          ) : null}
         </span>
         <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
           {character ? (
@@ -698,6 +710,16 @@ function SignupRowCard({
                 </option>
               ))}
             </select>
+          </span>
+        ) : null}
+        {scheduleConflicts.length > 0 ? (
+          <span className="mt-1 block space-y-0.5 text-xs text-warning">
+            <span className="font-medium text-warning">Schedule conflict</span>
+            {scheduleConflicts.map((conflict) => (
+              <span key={`${conflict.source}-${conflict.message}`} className="block">
+                {conflict.message}
+              </span>
+            ))}
           </span>
         ) : null}
         {signup.issue ? (
