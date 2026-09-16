@@ -47,6 +47,7 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
     boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
     lockouts: [],
     reservationConflict: null,
+    manualUnavailability: null,
     ...overrides,
   };
 }
@@ -384,6 +385,84 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
     );
     expect(inactive.ineligible[0]?.reason).toBe("INACTIVE");
     expect(inactive.ineligible[0]?.warcraftLogsId).toBe("55556666");
+  });
+
+  it("marks Characters blocked by a manual availability block covering the Run start", () => {
+    const blocked = evaluateBoosterOptions(
+      [
+        shaman({
+          warcraftLogsId: "77778888",
+          manualUnavailability: {
+            startsAt: "2026-09-18T16:00:00.000Z",
+            endsAt: "2026-09-18T19:00:00.000Z",
+            reason: "External boost",
+          },
+        }),
+      ],
+      heroicRun,
+    );
+    expect(blocked.eligible).toHaveLength(0);
+    expect(blocked.ineligible[0]?.reason).toBe("MANUALLY_UNAVAILABLE");
+    expect(blocked.ineligible[0]?.message).toContain("External boost");
+    expect(blocked.ineligible[0]?.warcraftLogsId).toBe("77778888");
+  });
+
+  it("uses stable precedence: inactive > reservation > manual unavailability > access", () => {
+    const inactiveWins = evaluateBoosterOptions(
+      [
+        shaman({
+          isActive: false,
+          reservationConflict: {
+            runId: "run-other",
+            runTitle: "Other Run",
+            scheduledStartAt: "2026-01-01T00:00:00.000Z",
+          },
+          manualUnavailability: {
+            startsAt: "2026-09-14T00:00:00.000Z",
+            endsAt: "2026-09-14T04:00:00.000Z",
+            reason: "External boost",
+          },
+          boosterQualifications: [],
+        }),
+      ],
+      heroicRun,
+    );
+    expect(inactiveWins.ineligible[0]?.reason).toBe("INACTIVE");
+
+    const reservationWins = evaluateBoosterOptions(
+      [
+        shaman({
+          reservationConflict: {
+            runId: "run-other",
+            runTitle: "Other Run",
+            scheduledStartAt: "2026-01-01T00:00:00.000Z",
+          },
+          manualUnavailability: {
+            startsAt: "2026-09-14T00:00:00.000Z",
+            endsAt: "2026-09-14T04:00:00.000Z",
+            reason: "External boost",
+          },
+          boosterQualifications: [],
+        }),
+      ],
+      heroicRun,
+    );
+    expect(reservationWins.ineligible[0]?.reason).toBe("ALREADY_SELECTED_OTHER_RUN");
+
+    const manualWinsOverAccess = evaluateBoosterOptions(
+      [
+        shaman({
+          manualUnavailability: {
+            startsAt: "2026-09-14T00:00:00.000Z",
+            endsAt: "2026-09-14T04:00:00.000Z",
+            reason: "External boost",
+          },
+          boosterQualifications: [],
+        }),
+      ],
+      heroicRun,
+    );
+    expect(manualWinsOverAccess.ineligible[0]?.reason).toBe("MANUALLY_UNAVAILABLE");
   });
 });
 
