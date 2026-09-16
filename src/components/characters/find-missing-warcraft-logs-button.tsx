@@ -3,21 +3,13 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { linkWarcraftLogsCharacterAction } from "@/controllers/warcraft-logs.actions";
+import { linkMissingWarcraftLogsCharactersAction } from "@/controllers/warcraft-logs.actions";
 
 /**
- * Low-noise owner action when Character.warcraftLogsId is still null.
- * Reused on /characters (compact) and Character detail (default labels).
+ * Page-level owner action: discover WCL for all active owned Characters missing an ID.
+ * Does not accept Character IDs from the client — ownership is resolved server-side.
  */
-export function LinkWarcraftLogsButton({
-  characterId,
-  label = "Find Warcraft Logs",
-  pendingLabel = "Looking up…",
-}: {
-  characterId: string;
-  label?: string;
-  pendingLabel?: string;
-}) {
+export function FindMissingWarcraftLogsButton() {
   const router = useRouter();
   const messageId = useId();
   const [pending, startTransition] = useTransition();
@@ -28,7 +20,7 @@ export function LinkWarcraftLogsButton({
     setMessage(null);
     setIsError(false);
     startTransition(async () => {
-      const result = await linkWarcraftLogsCharacterAction({ characterId });
+      const result = await linkMissingWarcraftLogsCharactersAction();
       if (!result.ok) {
         setIsError(true);
         setMessage(result.message);
@@ -50,13 +42,13 @@ export function LinkWarcraftLogsButton({
         className="h-8 px-2 text-xs"
         aria-describedby={message ? messageId : undefined}
       >
-        {pending ? pendingLabel : label}
+        {pending ? "Finding Warcraft Logs…" : "Find missing Warcraft Logs"}
       </Button>
       {message ? (
         <span
           id={messageId}
           role={isError ? "alert" : "status"}
-          className={`max-w-56 text-xs ${isError ? "text-danger" : "text-muted"}`}
+          className={`max-w-72 text-xs ${isError ? "text-danger" : "text-muted"}`}
         >
           {message}
         </span>

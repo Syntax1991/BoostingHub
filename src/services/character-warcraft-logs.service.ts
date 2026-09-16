@@ -29,6 +29,15 @@ export type CharacterWarcraftLogsBatchSummary = {
   skippedAfterFailure: number;
 };
 
+/**
+ * Owner-scoped bulk discovery outcomes for the Characters page.
+ * Expected empty / not-configured paths are typed results, not exceptions.
+ */
+export type CharacterWarcraftLogsOwnerBulkResult =
+  | { status: "NO_MISSING" }
+  | { status: "NOT_CONFIGURED" }
+  | { status: "COMPLETED"; summary: CharacterWarcraftLogsBatchSummary };
+
 function emptyBatchSummary(total: number): CharacterWarcraftLogsBatchSummary {
   return {
     total,
@@ -133,6 +142,30 @@ export const characterWarcraftLogsService = {
     }
     assertCharacterOwned(user, character);
     return linkCharacterById(characterId);
+  },
+
+  /**
+   * Owner-scoped bulk discovery for ACTIVE Characters missing warcraftLogsId.
+   * Character IDs are derived from authenticatedUser.id — never from client input.
+   */
+  async linkMissingForOwner(
+    user: AuthenticatedUser,
+  ): Promise<CharacterWarcraftLogsOwnerBulkResult> {
+    const owned = await characterRepository.listByUserId(user.id);
+    const missingIds = owned
+      .filter((character) => character.isActive && !(character.warcraftLogsId?.trim()))
+      .map((character) => character.id);
+
+    if (missingIds.length === 0) {
+      return { status: "NO_MISSING" };
+    }
+
+    if (!warcraftLogsApiClient.isConfigured()) {
+      return { status: "NOT_CONFIGURED" };
+    }
+
+    const summary = await characterWarcraftLogsService.tryAutoLinkManyIfMissing(missingIds);
+    return { status: "COMPLETED", summary };
   },
 
   /**

@@ -11,6 +11,8 @@ import { CharacterFormDialog } from "@/components/characters/character-form-dial
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { BattleNetPanel } from "@/components/characters/battle-net-panel";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
+import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
+import { FindMissingWarcraftLogsButton } from "@/components/characters/find-missing-warcraft-logs-button";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -24,12 +26,21 @@ export function CharactersView({ data }: { data: Page }) {
     return data.characters.filter((character) => !character.isActive);
   }, [data.characters, filter]);
 
+  const hasMissingActiveWarcraftLogs = data.characters.some(
+    (character) => character.isActive && !(character.warcraftLogsId?.trim()),
+  );
+
   return (
     <div>
       <PageHeader
         title="Characters"
         description="World of Warcraft characters for this account. Add Character looks up Blizzard; optionally connect Battle.net to import and refresh."
-        actions={<CharacterFormDialog mode="create" triggerLabel="Add Character" />}
+        actions={
+          <div className="flex flex-wrap items-start gap-2">
+            {hasMissingActiveWarcraftLogs ? <FindMissingWarcraftLogsButton /> : null}
+            <CharacterFormDialog mode="create" triggerLabel="Add Character" />
+          </div>
+        }
       />
       <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
@@ -121,7 +132,15 @@ export function CharactersView({ data }: { data: Page }) {
                         >
                           Details
                         </Link>
-                        <WarcraftLogsLink warcraftLogsId={character.warcraftLogsId} label="WCL" />
+                        {character.warcraftLogsId?.trim() ? (
+                          <WarcraftLogsLink warcraftLogsId={character.warcraftLogsId} label="WCL" />
+                        ) : (
+                          <LinkWarcraftLogsButton
+                            characterId={character.id}
+                            label="Find WCL"
+                            pendingLabel="Looking up…"
+                          />
+                        )}
                         <CharacterFormDialog
                           mode="edit"
                           triggerLabel="Edit"
