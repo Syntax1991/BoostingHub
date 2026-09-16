@@ -15,6 +15,7 @@ import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { characterAvailabilityService } from "@/services/character-availability.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
 
@@ -208,6 +209,7 @@ export const characterService = {
         name: raidContentDisplayName(raid.id, raid.name),
       })),
       lockouts: currentLockouts,
+      availability: await characterAvailabilityService.listForCharacter(user, characterId),
     };
   },
 

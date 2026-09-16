@@ -133,15 +133,19 @@ type SignupOptionsPayload = {
   activeLootbuddies: ActiveLootbuddy[];
 };
 
-/** Rendered once, right after the character-select step — the User should see which of their characters is double-booked, and where, before choosing. */
+/** Rendered once, right after the character-select step — the User should see which of their characters is double-booked or manually unavailable before choosing. */
 function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): string[] {
-  const blocked = ineligible.filter((item) => item.reason === "ALREADY_SELECTED_OTHER_RUN");
+  const blocked = ineligible.filter(
+    (item) => item.reason === "ALREADY_SELECTED_OTHER_RUN" || item.reason === "MANUALLY_UNAVAILABLE",
+  );
   if (blocked.length === 0) return [];
   return [
     "",
     "Unavailable characters:",
-    ...blocked.map(
-      (item) => `• ${item.characterName}-${item.realm}: already selected for ${item.conflictingRunTitle ?? "another run"}.`,
+    ...blocked.map((item) =>
+      item.reason === "MANUALLY_UNAVAILABLE"
+        ? `• ${item.characterName}-${item.realm}: ${item.message}`
+        : `• ${item.characterName}-${item.realm}: already selected for ${item.conflictingRunTitle ?? "another run"}.`,
     ),
   ];
 }

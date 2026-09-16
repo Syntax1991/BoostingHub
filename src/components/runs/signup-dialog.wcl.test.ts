@@ -114,4 +114,29 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
     expect(html).toContain("https://www.warcraftlogs.com/character/id/11223344");
     expect(html).toContain("No approved booster access.");
   });
+
+  it("still shows WCL for a manually unavailable Booster Character with an id", () => {
+    const html = renderToStaticMarkup(
+      createElement(BoosterCharacterChecklist, {
+        groups: [],
+        ineligible: [
+          {
+            characterId: "char-4",
+            characterName: "Busy",
+            realm: "Silvermoon",
+            warcraftLogsId: "99887766",
+            reason: "MANUALLY_UNAVAILABLE",
+            message: "Unavailable Fri 18/09/2026 19:00–22:00 — External boost",
+          },
+        ],
+        selected: emptySelected,
+        rolesByCharacterId: {},
+        onToggle: noop,
+        onRoleToggle: noop,
+        onSelectAll: noop,
+      }),
+    );
+    expect(html).toContain("https://www.warcraftlogs.com/character/id/99887766");
+    expect(html).toContain("External boost");
+  });
 });

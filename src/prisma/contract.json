@@ -32,6 +32,10 @@
       "model": "Character",
       "namespace": "public"
     },
+    "character_availability_block": {
+      "model": "CharacterAvailabilityBlock",
+      "namespace": "public"
+    },
     "character_raid_lockout": {
       "model": "CharacterRaidLockout",
       "namespace": "public"
@@ -1519,6 +1523,21 @@
               }
             },
             "relations": {
+              "availabilityBlocks": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "characterId"
+                  ]
+                },
+                "to": {
+                  "model": "CharacterAvailabilityBlock",
+                  "namespace": "public"
+                }
+              },
               "boosterAccess": {
                 "cardinality": "1:N",
                 "on": {
@@ -1654,6 +1673,103 @@
               },
               "namespaceId": "public",
               "table": "character"
+            }
+          },
+          "CharacterAvailabilityBlock": {
+            "fields": {
+              "characterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "endsAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startsAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "character": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "characterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Character",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "characterId": {
+                  "column": "characterId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "endsAt": {
+                  "column": "endsAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "reason": {
+                  "column": "reason"
+                },
+                "startsAt": {
+                  "column": "startsAt"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "character_availability_block"
             }
           },
           "CharacterRaidLockout": {
@@ -6362,6 +6478,84 @@
                 }
               ]
             },
+            "character_availability_block": {
+              "columns": {
+                "characterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "endsAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "reason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "startsAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "characterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character_availability_block"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "characterId"
+                  ],
+                  "name": "character_availability_block_characterId_idx_2423fe9d",
+                  "prefix": "character_availability_block_characterId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "character_raid_lockout": {
               "checks": [
                 {
@@ -9335,10 +9529,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "edf19dd6b7c59253e41b335b4b7dde5177c934ab38ad96f8e51cebbf2ead1c7a"
+    "storageHash": "966a9105220945586e21dcce84f7286ebac50074def621915221c66e20600735"
   },
   "execution": {
-    "executionHash": "012c92a4e5cf7737647ddb9ed4a26b2fe983624de4f639cd49f4ae08886fa426",
+    "executionHash": "fc2fd6a055216a86d3e5b8acddb6e63cb97a34428c6765178aee485a426c5a5f",
     "mutations": {
       "defaults": [
         {
@@ -9491,6 +9685,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "character"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "character_availability_block"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "character_availability_block"
           }
         },
         {

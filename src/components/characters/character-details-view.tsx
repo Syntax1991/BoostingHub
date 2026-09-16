@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
+import { CharacterAvailabilitySection } from "@/components/characters/character-availability-section";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
@@ -231,6 +232,13 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             </ul>
           )}
         </Card>
+      </div>
+      <div className="mt-4">
+        <CharacterAvailabilitySection
+          characterId={data.id}
+          upcoming={data.availability.upcoming}
+          past={data.availability.past}
+        />
       </div>
     </div>
   );

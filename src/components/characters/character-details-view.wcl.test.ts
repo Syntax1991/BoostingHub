@@ -24,6 +24,10 @@ vi.mock("@/components/characters/discord-booster-application-cta", () => ({
   DiscordBoosterApplicationCta: () => null,
 }));
 
+vi.mock("@/components/characters/character-availability-section", () => ({
+  CharacterAvailabilitySection: () => null,
+}));
+
 import { CharacterDetailsView } from "@/components/characters/character-details-view";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
@@ -59,6 +63,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
       { id: "tidebound", name: "Nymrissa" },
     ],
     lockouts: [],
+    availability: { upcoming: [], past: [] },
     ...overrides,
   };
 }
