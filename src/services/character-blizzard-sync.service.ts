@@ -250,10 +250,8 @@ export async function refreshLinkedCharacterProfile(
     });
   }
 
-  // Best-effort: only when still missing — never re-query already linked IDs.
-  if (!character.warcraftLogsId?.trim()) {
-    await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
-  }
+  // Best-effort: tryAutoLinkIfMissing no-ops when an ID already exists.
+  await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
 
   return { lockoutSynced };
 }
