@@ -185,4 +185,57 @@ describe("manual availability × BoostingHub reservation", () => {
     );
     expect(options.booster.eligible.some((row) => row.characterId === free.id)).toBe(true);
   });
+
+  it("surfaces the deterministic winning overlapping block in signup options", async () => {
+    const character = await characterService.createCharacter(owner, {
+      name: "Avxovlp",
+      realm: "Kazzak",
+      region: "EU",
+      wowClass: "PRIEST",
+      specialization: "Holy",
+      itemLevel: 610,
+    });
+    createdCharacterIds.push(character.id);
+    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
+
+    // Persist in an order that is NOT the precedence order.
+    // Winner must be: earliest startsAt, then earliest endsAt → "Another" (16:00–20:00).
+    const broad = await characterAvailabilityService.createBlock(owner, character.id, {
+      startsAt: "2026-10-04T16:00:00.000Z",
+      endsAt: "2026-10-04T22:00:00.000Z",
+      reason: "Broad block",
+    });
+    const external = await characterAvailabilityService.createBlock(owner, character.id, {
+      startsAt: "2026-10-04T18:00:00.000Z",
+      endsAt: "2026-10-04T21:00:00.000Z",
+      reason: "External boost",
+    });
+    const another = await characterAvailabilityService.createBlock(owner, character.id, {
+      startsAt: "2026-10-04T16:00:00.000Z",
+      endsAt: "2026-10-04T20:00:00.000Z",
+      reason: "Another",
+    });
+    createdBlockIds.push(broad.id, external.id, another.id);
+
+    const { findBlockingAvailabilityBlock } = await import("@/lib/character-availability");
+    const runStart = "2026-10-04T18:30:00.000Z";
+    const candidates = [
+      { id: broad.id, startsAt: broad.startsAt, endsAt: broad.endsAt, reason: broad.reason },
+      { id: external.id, startsAt: external.startsAt, endsAt: external.endsAt, reason: external.reason },
+      { id: another.id, startsAt: another.startsAt, endsAt: another.endsAt, reason: another.reason },
+    ];
+    expect(findBlockingAvailabilityBlock(runStart, candidates)?.id).toBe(another.id);
+    expect(findBlockingAvailabilityBlock(runStart, [...candidates].reverse())?.id).toBe(another.id);
+
+    const run = await runService.createRun(lead, venomousCreateInput({ scheduledStartAt: runStart }));
+    createdRunIds.push(run.id);
+    await runService.openRun(lead, run.id);
+
+    const options = await signupService.getSignupOptions(owner, run.id);
+    const blocked = options.booster.ineligible.find((row) => row.characterId === character.id);
+    expect(blocked?.reason).toBe("MANUALLY_UNAVAILABLE");
+    expect(blocked?.message).toContain("Another");
+    expect(blocked?.message).not.toContain("Broad block");
+    expect(blocked?.message).not.toContain("External boost");
+  });
 });

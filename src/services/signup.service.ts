@@ -16,6 +16,7 @@ import { characterAvailabilityRepository } from "@/repositories/character-availa
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import { findBlockingAvailabilityBlock } from "@/lib/character-availability";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
 import {
@@ -75,16 +76,27 @@ async function withManualUnavailability<T extends { id: string }>(
     characterIds: characters.map((character) => character.id),
     runStartAt: scheduledStartAt,
   });
-  const byId = new Map(
-    blocks.map((block) => [
-      block.characterId,
-      { startsAt: block.startsAt, endsAt: block.endsAt, reason: block.reason },
-    ]),
-  );
-  return characters.map((character) => ({
-    ...character,
-    manualUnavailability: byId.get(character.id) ?? null,
-  }));
+  const byCharacter = new Map<string, typeof blocks>();
+  for (const block of blocks) {
+    const existing = byCharacter.get(block.characterId);
+    if (existing) {
+      existing.push(block);
+    } else {
+      byCharacter.set(block.characterId, [block]);
+    }
+  }
+  return characters.map((character) => {
+    const selected = findBlockingAvailabilityBlock(
+      scheduledStartAt,
+      byCharacter.get(character.id) ?? [],
+    );
+    return {
+      ...character,
+      manualUnavailability: selected
+        ? { startsAt: selected.startsAt, endsAt: selected.endsAt, reason: selected.reason }
+        : null,
+    };
+  });
 }
 
 async function withSignupEligibilityContext<T extends { id: string }>(

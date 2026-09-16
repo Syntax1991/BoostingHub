@@ -9,6 +9,11 @@ export type AvailabilityInterval = {
   endsAt: string;
 };
 
+/** Candidate used when choosing among overlapping covering blocks. */
+export type AvailabilityBlockCandidate = AvailabilityInterval & {
+  id?: string;
+};
+
 export function assertValidAvailabilityInterval(startsAt: string, endsAt: string): void {
   const startMs = Date.parse(startsAt);
   const endMs = Date.parse(endsAt);
@@ -32,16 +37,47 @@ export function runStartFallsInAvailabilityBlock(
   return startMs <= runMs && runMs < endMs;
 }
 
-export function findBlockingAvailabilityBlock<T extends AvailabilityInterval>(
+/**
+ * Stable precedence among covering blocks:
+ * 1. earliest startsAt
+ * 2. earliest endsAt
+ * 3. lexical id (missing id sorts as "")
+ *
+ * Independent of input / repository row order. Does not mutate `blocks`.
+ */
+export function compareAvailabilityBlockPrecedence(
+  a: AvailabilityBlockCandidate,
+  b: AvailabilityBlockCandidate,
+): number {
+  const startDiff = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+  if (startDiff !== 0) {
+    return startDiff;
+  }
+  const endDiff = new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime();
+  if (endDiff !== 0) {
+    return endDiff;
+  }
+  return (a.id ?? "").localeCompare(b.id ?? "");
+}
+
+/**
+ * Filters to blocks covering the Run start, then picks the deterministic winner.
+ * Overlaps remain allowed; only the surfaced block is chosen.
+ */
+export function findBlockingAvailabilityBlock<T extends AvailabilityBlockCandidate>(
   runStartAt: string | Date | number,
   blocks: readonly T[],
 ): T | null {
+  let winner: T | null = null;
   for (const block of blocks) {
-    if (runStartFallsInAvailabilityBlock(runStartAt, block)) {
-      return block;
+    if (!runStartFallsInAvailabilityBlock(runStartAt, block)) {
+      continue;
+    }
+    if (!winner || compareAvailabilityBlockPrecedence(block, winner) < 0) {
+      winner = block;
     }
   }
-  return null;
+  return winner;
 }
 
 /** Blocks that have not ended yet (endsAt > now). Past blocks stay stored but are ignored for signup. */
