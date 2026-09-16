@@ -4,6 +4,9 @@ import { DomainError } from "@/lib/errors";
 import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { characterRepository } from "@/repositories/character.repository";
 
+/** Bounded concurrency for bulk WCL enrichment — matches Blizzard Refresh All. */
+export const WARCRAFT_LOGS_AUTO_LINK_CONCURRENCY = 4;
+
 export type CharacterWarcraftLogsLinkResult =
   | { status: "LINKED"; warcraftLogsId: string }
   | { status: "ALREADY_LINKED"; warcraftLogsId: string }
@@ -12,6 +15,67 @@ export type CharacterWarcraftLogsLinkResult =
   | { status: "UNSUPPORTED_REGION" }
   | { status: "MISMATCH"; storedId: string; discoveredId: string }
   | { status: "TEMPORARY_FAILURE"; message: string };
+
+export type CharacterWarcraftLogsBatchSummary = {
+  total: number;
+  attempted: number;
+  linked: number;
+  alreadyLinked: number;
+  notFound: number;
+  mismatch: number;
+  unsupportedRegion: number;
+  temporaryFailure: number;
+  /** Characters never started after a request-local TEMPORARY_FAILURE circuit trip. */
+  skippedAfterFailure: number;
+};
+
+function emptyBatchSummary(total: number): CharacterWarcraftLogsBatchSummary {
+  return {
+    total,
+    attempted: 0,
+    linked: 0,
+    alreadyLinked: 0,
+    notFound: 0,
+    mismatch: 0,
+    unsupportedRegion: 0,
+    temporaryFailure: 0,
+    skippedAfterFailure: 0,
+  };
+}
+
+function recordResult(
+  summary: CharacterWarcraftLogsBatchSummary,
+  result: CharacterWarcraftLogsLinkResult | null,
+): void {
+  summary.attempted += 1;
+  if (!result) return;
+  switch (result.status) {
+    case "LINKED":
+      summary.linked += 1;
+      break;
+    case "ALREADY_LINKED":
+      summary.alreadyLinked += 1;
+      break;
+    case "NOT_FOUND":
+      summary.notFound += 1;
+      break;
+    case "MISMATCH":
+      summary.mismatch += 1;
+      break;
+    case "UNSUPPORTED_REGION":
+      summary.unsupportedRegion += 1;
+      break;
+    case "TEMPORARY_FAILURE":
+      summary.temporaryFailure += 1;
+      break;
+    case "NOT_CONFIGURED":
+      // Batch fast-path should prevent this; treat as temporary stop if it appears.
+      summary.temporaryFailure += 1;
+      break;
+    default:
+      break;
+  }
+}
 
 /**
  * Resolve and optionally persist Character.warcraftLogsId from the public WCL API.
@@ -88,5 +152,50 @@ export const characterWarcraftLogsService = {
       console.warn(`[warcraft-logs] auto-link skipped for ${characterId}: ${message}`);
       return { status: "TEMPORARY_FAILURE", message };
     }
+  },
+
+  /**
+   * Bounded best-effort enrichment for bulk flows.
+   * Request-local circuit: after the first TEMPORARY_FAILURE, in-flight workers
+   * finish but no new Character IDs are claimed. Never throws for WCL failures.
+   */
+  async tryAutoLinkManyIfMissing(
+    characterIds: readonly string[],
+  ): Promise<CharacterWarcraftLogsBatchSummary> {
+    const uniqueIds = [...new Set(characterIds.filter((id) => Boolean(id)))];
+    const summary = emptyBatchSummary(uniqueIds.length);
+    if (uniqueIds.length === 0) {
+      return summary;
+    }
+
+    if (!warcraftLogsApiClient.isConfigured()) {
+      return summary;
+    }
+
+    let nextIndex = 0;
+    let circuitOpen = false;
+
+    async function runWorker() {
+      while (true) {
+        // JS is single-threaded until await — circuit check + claim is atomic.
+        if (circuitOpen) return;
+        const index = nextIndex;
+        nextIndex += 1;
+        if (index >= uniqueIds.length) return;
+
+        const characterId = uniqueIds[index]!;
+        const result = await characterWarcraftLogsService.tryAutoLinkIfMissing(characterId);
+        recordResult(summary, result);
+        if (result?.status === "TEMPORARY_FAILURE" || result?.status === "NOT_CONFIGURED") {
+          circuitOpen = true;
+          return;
+        }
+      }
+    }
+
+    const pool = Math.min(WARCRAFT_LOGS_AUTO_LINK_CONCURRENCY, uniqueIds.length);
+    await Promise.all(Array.from({ length: pool }, () => runWorker()));
+    summary.skippedAfterFailure = Math.max(0, uniqueIds.length - summary.attempted);
+    return summary;
   },
 };

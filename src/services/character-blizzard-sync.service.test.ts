@@ -24,8 +24,10 @@ vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterBlizzardSyncService } from "@/services/character-blizzard-sync.service";
 import { characterService } from "@/services/character.service";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
+import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 import { VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
@@ -671,5 +673,198 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
     expect(Number((await orm.Character.where({ id: imported.importedCharacterIds[0] }).first())?.itemLevel)).toBe(
       660,
     );
+  });
+});
+
+describe("Blizzard refresh × Warcraft Logs enrichment", () => {
+  const owner = asUser(ids.owner);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function importLinkedShaman(blizzardId: string, name: string) {
+    const owned = ownedCharacter({ id: blizzardId, name });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 650,
+      specialization: "Restoration",
+    });
+    const result = await characterBlizzardImportService.importCharacters(owner, session.id, [
+      { blizzardCharacterId: owned.id, specialization: "Restoration" },
+    ]);
+    createdCharacterIds.push(...result.importedCharacterIds);
+    return { owned, characterId: result.importedCharacterIds[0]! };
+  }
+
+  it("single character refresh still attempts WCL when ID is missing", async () => {
+    const { owned, characterId } = await importLinkedShaman("300301", "BnwcLone");
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      warcraftLogsId: null,
+    });
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 690,
+      specialization: "Elemental",
+    });
+
+    const oneSpy = vi
+      .spyOn(characterWarcraftLogsService, "tryAutoLinkIfMissing")
+      .mockResolvedValue({ status: "NOT_FOUND" });
+    const manySpy = vi.spyOn(characterWarcraftLogsService, "tryAutoLinkManyIfMissing");
+
+    await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+
+    expect(oneSpy).toHaveBeenCalledTimes(1);
+    expect(oneSpy).toHaveBeenCalledWith(characterId);
+    expect(manySpy).not.toHaveBeenCalled();
+  });
+
+  it("single character refresh skips WCL network when ID already exists", async () => {
+    const { owned, characterId } = await importLinkedShaman("300302", "BnwcLhave");
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      warcraftLogsId: "999001",
+    });
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 691,
+      specialization: "Elemental",
+    });
+
+    const findSpy = vi.spyOn(warcraftLogsApiClient, "findCharacter");
+
+    await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it("Refresh All batches WCL after Blizzard outcomes; WCL failure does not increment failed", async () => {
+    const ownedA = ownedCharacter({ id: "300310", name: "Bnwclra" });
+    const ownedB = ownedCharacter({ id: "300311", name: "Bnwclrb" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [ownedA, ownedB]);
+
+    mockEnrichmentSuccess({
+      id: ownedA.id,
+      name: ownedA.name,
+      realmId: ownedA.realmId,
+      wowClass: ownedA.wowClass,
+      itemLevel: 650,
+      specialization: "Restoration",
+    });
+    const importA = await characterBlizzardImportService.importCharacters(owner, session.id, [
+      { blizzardCharacterId: ownedA.id, specialization: "Restoration" },
+    ]);
+    createdCharacterIds.push(...importA.importedCharacterIds);
+
+    mockEnrichmentSuccess({
+      id: ownedB.id,
+      name: ownedB.name,
+      realmId: ownedB.realmId,
+      wowClass: ownedB.wowClass,
+      itemLevel: 651,
+      specialization: "Enhancement",
+    });
+    const importB = await characterBlizzardImportService.importCharacters(owner, session.id, [
+      { blizzardCharacterId: ownedB.id, specialization: "Enhancement" },
+    ]);
+    createdCharacterIds.push(...importB.importedCharacterIds);
+
+    const idA = importA.importedCharacterIds[0]!;
+    const idB = importB.importedCharacterIds[0]!;
+    await orm.Character.where({ id: idA }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+    await orm.Character.where({ id: idB }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    apiMocks.getCharacterProfileStatus.mockImplementation(async (_region, _realm, name) => {
+      const map: Record<string, string> = {
+        bnwclra: ownedA.id,
+        bnwclrb: ownedB.id,
+      };
+      return { id: map[name.toLowerCase()] ?? "unknown", isValid: true };
+    });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => {
+      const lower = name.toLowerCase();
+      if (lower === "bnwclra") {
+        return {
+          id: ownedA.id,
+          name: ownedA.name,
+          realmId: ownedA.realmId,
+          realmSlug: "twisting-nether",
+          realmName: "Twisting Nether",
+          wowClass: ownedA.wowClass,
+          equippedItemLevel: 700,
+          activeSpecialization: "Restoration",
+        };
+      }
+      return {
+        id: ownedB.id,
+        name: ownedB.name,
+        realmId: ownedB.realmId,
+        realmSlug: "twisting-nether",
+        realmName: "Twisting Nether",
+        wowClass: ownedB.wowClass,
+        equippedItemLevel: 701,
+        activeSpecialization: "Enhancement",
+      };
+    });
+
+    const oneSpy = vi.spyOn(characterWarcraftLogsService, "tryAutoLinkIfMissing");
+    const manySpy = vi
+      .spyOn(characterWarcraftLogsService, "tryAutoLinkManyIfMissing")
+      .mockImplementation(async (characterIds) => {
+        // Blizzard outcomes + connection/activity bookkeeping must already be done.
+        expect(Number((await orm.Character.where({ id: idA }).first())?.itemLevel)).toBe(700);
+        expect(Number((await orm.Character.where({ id: idB }).first())?.itemLevel)).toBe(701);
+
+        const connection = await battleNetConnectionRepository.findByUserAndRegion(ids.owner, "EU");
+        expect(connection?.lastSuccessfulSyncAt).not.toBeNull();
+
+        const activities = await orm.ActivityEvent.where({ userId: ids.owner }).all();
+        expect(
+          activities.some(
+            (row) => String((row as { type?: string }).type) === "BATTLENET_CHARACTERS_REFRESHED",
+          ),
+        ).toBe(true);
+
+        expect(characterIds.sort()).toEqual([idA, idB].sort());
+        return {
+          total: 2,
+          attempted: 0,
+          linked: 0,
+          alreadyLinked: 0,
+          notFound: 0,
+          mismatch: 0,
+          unsupportedRegion: 0,
+          temporaryFailure: 1,
+          skippedAfterFailure: 1,
+        };
+      });
+
+    const result = await characterBlizzardSyncService.refreshLinkedCharactersForRegion(owner, "EU");
+
+    expect(result).toMatchObject({
+      total: 2,
+      refreshed: 2,
+      failed: 0,
+      skipped: 0,
+    });
+    expect(oneSpy).not.toHaveBeenCalled();
+    expect(manySpy).toHaveBeenCalledTimes(1);
   });
 });

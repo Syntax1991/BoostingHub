@@ -467,7 +467,6 @@ export const characterBlizzardImportService = {
           lastSyncedAt: item.lastSyncedAt,
         });
         importedCharacterIds.push(created.id);
-        await characterWarcraftLogsService.tryAutoLinkIfMissing(created.id);
       } catch (error) {
         if (isUniqueConstraintViolation(error)) {
           throw new DomainError(
@@ -522,8 +521,6 @@ export const characterBlizzardImportService = {
       }
 
       linkedCharacterIds.push(character.id);
-      // Best-effort: fill missing WCL ID after a successful Battle.net link.
-      await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
     }
 
     const connection = await battleNetConnectionRepository.findByUserAndRegion(
@@ -551,6 +548,12 @@ export const characterBlizzardImportService = {
         message: `Linked ${linkedCharacterIds.length} character(s) to Battle.net (${session.region}).`,
       });
     }
+
+    // Optional WCL enrichment AFTER authoritative import/link + audit bookkeeping.
+    await characterWarcraftLogsService.tryAutoLinkManyIfMissing([
+      ...importedCharacterIds,
+      ...linkedCharacterIds,
+    ]);
 
     return { importedCharacterIds, linkedCharacterIds };
   },

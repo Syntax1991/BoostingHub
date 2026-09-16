@@ -116,10 +116,16 @@ export async function refreshLinkedCharacterProfile(
   owner: CharacterSyncOwner,
   character: SyncableCharacter,
   connectionId: string,
-  options: { updateConnectionSync?: boolean; writeActivity?: boolean } = {},
+  options: {
+    updateConnectionSync?: boolean;
+    writeActivity?: boolean;
+    /** Default true for single refresh; bulk callers disable and batch afterward. */
+    autoLinkWarcraftLogs?: boolean;
+  } = {},
 ): Promise<{ lockoutSynced: boolean }> {
   const updateConnectionSync = options.updateConnectionSync !== false;
   const writeActivity = options.writeActivity !== false;
+  const autoLinkWarcraftLogs = options.autoLinkWarcraftLogs !== false;
 
   let summary;
   try {
@@ -251,7 +257,10 @@ export async function refreshLinkedCharacterProfile(
   }
 
   // Best-effort: tryAutoLinkIfMissing no-ops when an ID already exists.
-  await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
+  // Bulk Refresh All / scheduled sync disable this and run one bounded batch.
+  if (autoLinkWarcraftLogs) {
+    await characterWarcraftLogsService.tryAutoLinkIfMissing(character.id);
+  }
 
   return { lockoutSynced };
 }
@@ -347,11 +356,12 @@ export const characterBlizzardSyncService = {
     }
 
     const syncOwner = toSyncOwner(user);
+    const refreshedCharacterIds: string[] = [];
     const results = await mapWithConcurrency(eligible, REFRESH_ALL_CONCURRENCY, async (character) => {
       if (character.lastSyncedAt) {
         const elapsed = Date.now() - new Date(character.lastSyncedAt).getTime();
         if (elapsed < REFRESH_COOLDOWN_MS) {
-          return { status: "skipped" as const, lockoutSynced: false };
+          return { status: "skipped" as const, lockoutSynced: false, characterId: character.id };
         }
       }
 
@@ -359,19 +369,25 @@ export const characterBlizzardSyncService = {
         const result = await refreshLinkedCharacterProfile(syncOwner, character, connection.id, {
           updateConnectionSync: false,
           writeActivity: false,
+          autoLinkWarcraftLogs: false,
         });
-        return { status: "refreshed" as const, lockoutSynced: result.lockoutSynced };
+        return {
+          status: "refreshed" as const,
+          lockoutSynced: result.lockoutSynced,
+          characterId: character.id,
+        };
       } catch (error) {
         if (isDomainError(error) && error.code === "BLIZZARD_REFRESH_COOLDOWN") {
-          return { status: "skipped" as const, lockoutSynced: false };
+          return { status: "skipped" as const, lockoutSynced: false, characterId: character.id };
         }
-        return { status: "failed" as const, lockoutSynced: false };
+        return { status: "failed" as const, lockoutSynced: false, characterId: character.id };
       }
     });
 
     for (const result of results) {
       if (result.status === "refreshed") {
         outcome.refreshed += 1;
+        refreshedCharacterIds.push(result.characterId);
         if (result.lockoutSynced) outcome.lockoutsVerified += 1;
         else outcome.lockoutsUnavailable += 1;
       } else if (result.status === "skipped") outcome.skipped += 1;
@@ -389,6 +405,9 @@ export const characterBlizzardSyncService = {
         message: `Refresh all (${region}): ${outcome.refreshed} profiles, ${outcome.lockoutsVerified} lockouts verified, ${outcome.lockoutsUnavailable} lockouts unavailable, ${outcome.skipped} skipped, ${outcome.failed} failed of ${outcome.total}.`,
       });
     }
+
+    // Optional WCL enrichment after Blizzard outcomes + connection/activity bookkeeping.
+    await characterWarcraftLogsService.tryAutoLinkManyIfMissing(refreshedCharacterIds);
 
     return outcome;
   },

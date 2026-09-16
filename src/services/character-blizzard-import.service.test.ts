@@ -23,6 +23,8 @@ vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
 
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterService } from "@/services/character.service";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
+import { characterRepository } from "@/repositories/character.repository";
 
 const ids = {
   owner: "aaaaaaaa-aaaa-4aaa-8aaa-bn0000000011",
@@ -696,5 +698,135 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
 
     const stored = await orm.Character.where({ userId: ids.owner, name: "Previewonly" }).all();
     expect(stored).toHaveLength(0);
+  });
+});
+
+describe("Battle.net bulk import × Warcraft Logs batch enrichment", () => {
+  const owner = asUser(ids.owner);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("finishes core imports/links + activity before one WCL batch; WCL failure does not affect import", async () => {
+    const existing = await characterService.createCharacter(owner, {
+      name: "Wcllinkme",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "SHAMAN",
+      specialization: "Restoration",
+      itemLevel: 630,
+    });
+    createdCharacterIds.push(existing.id);
+
+    const ownedA = ownedCharacter({ id: "300201", name: "Wclimpone" });
+    const ownedB = ownedCharacter({ id: "300202", name: "Wclimptwo", wowClass: "MAGE" });
+    const ownedLink = ownedCharacter({ id: "300203", name: "Wcllinkme" });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [ownedA, ownedB, ownedLink]);
+
+    apiMocks.getCharacterProfileStatus.mockImplementation(async (_region, _realm, name) => {
+      const map: Record<string, string> = {
+        wclimpone: ownedA.id,
+        wclimptwo: ownedB.id,
+        wcllinkme: ownedLink.id,
+      };
+      return { id: map[name.toLowerCase()] ?? "unknown", isValid: true };
+    });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => {
+      const lower = name.toLowerCase();
+      if (lower === "wclimpone") {
+        return {
+          id: ownedA.id,
+          name: ownedA.name,
+          realmId: ownedA.realmId,
+          realmSlug: "twisting-nether",
+          realmName: "Twisting Nether",
+          wowClass: ownedA.wowClass,
+          equippedItemLevel: 650,
+          activeSpecialization: "Enhancement",
+        };
+      }
+      if (lower === "wclimptwo") {
+        return {
+          id: ownedB.id,
+          name: ownedB.name,
+          realmId: ownedB.realmId,
+          realmSlug: "twisting-nether",
+          realmName: "Twisting Nether",
+          wowClass: ownedB.wowClass,
+          equippedItemLevel: 651,
+          activeSpecialization: "Frost",
+        };
+      }
+      return {
+        id: ownedLink.id,
+        name: ownedLink.name,
+        realmId: ownedLink.realmId,
+        realmSlug: "twisting-nether",
+        realmName: "Twisting Nether",
+        wowClass: ownedLink.wowClass,
+        equippedItemLevel: 652,
+        activeSpecialization: "Restoration",
+      };
+    });
+
+    const oneSpy = vi.spyOn(characterWarcraftLogsService, "tryAutoLinkIfMissing");
+    const manySpy = vi
+      .spyOn(characterWarcraftLogsService, "tryAutoLinkManyIfMissing")
+      .mockImplementation(async (characterIds) => {
+        // Core writes + activity must already be durable when enrichment starts.
+        const chars = await characterRepository.listByUserId(ids.owner);
+        expect(chars.some((c) => c.name === "Wclimpone" && c.blizzardCharacterId === ownedA.id)).toBe(
+          true,
+        );
+        expect(chars.some((c) => c.name === "Wclimptwo" && c.blizzardCharacterId === ownedB.id)).toBe(
+          true,
+        );
+        const linked = await characterRepository.findById(existing.id);
+        expect(linked?.blizzardCharacterId).toBe(ownedLink.id);
+
+        const activities = await orm.ActivityEvent.where({ userId: ids.owner }).all();
+        expect(
+          activities.some(
+            (row) => String((row as { type?: string }).type) === "BATTLENET_CHARACTERS_IMPORTED",
+          ),
+        ).toBe(true);
+        expect(
+          activities.some(
+            (row) => String((row as { type?: string }).type) === "BATTLENET_CHARACTER_LINKED",
+          ),
+        ).toBe(true);
+
+        const connection = await battleNetConnectionRepository.findByUserAndRegion(ids.owner, "EU");
+        expect(connection?.lastSuccessfulSyncAt).not.toBeNull();
+
+        expect(characterIds).toHaveLength(3);
+        return {
+          total: 3,
+          attempted: 0,
+          linked: 0,
+          alreadyLinked: 0,
+          notFound: 0,
+          mismatch: 0,
+          unsupportedRegion: 0,
+          temporaryFailure: 1,
+          skippedAfterFailure: 2,
+        };
+      });
+
+    const result = await characterBlizzardImportService.applySelections(owner, session.id, [
+      { blizzardCharacterId: ownedA.id, specialization: "Enhancement" },
+      { blizzardCharacterId: ownedB.id, specialization: "Frost" },
+      { blizzardCharacterId: ownedLink.id, specialization: "Restoration" },
+    ]);
+    createdCharacterIds.push(...result.importedCharacterIds);
+
+    expect(result.importedCharacterIds).toHaveLength(2);
+    expect(result.linkedCharacterIds).toEqual([existing.id]);
+    expect(oneSpy).not.toHaveBeenCalled();
+    expect(manySpy).toHaveBeenCalledTimes(1);
+    expect(manySpy.mock.calls[0]?.[0]).toEqual(
+      expect.arrayContaining([...result.importedCharacterIds, ...result.linkedCharacterIds]),
+    );
   });
 });

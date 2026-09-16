@@ -219,4 +219,63 @@ describe("warcraftLogsApiClient", () => {
     });
     expect(result.status).toBe("TEMPORARY_FAILURE");
   });
+
+  it("single-flights concurrent first token acquisitions", async () => {
+    let resolveToken: ((value: Response) => void) | undefined;
+    const tokenDeferred = new Promise<Response>((resolve) => {
+      resolveToken = resolve;
+    });
+
+    fetchMock.mockImplementation(async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.includes("/oauth/token")) {
+        return tokenDeferred;
+      }
+      return jsonResponse({
+        data: {
+          characterData: {
+            character: {
+              id: 11,
+              canonicalID: 99,
+              name: "Synlight",
+              server: { slug: "twisting-nether", region: { slug: "EU" } },
+            },
+          },
+        },
+      });
+    });
+
+    const pending = Promise.all([
+      warcraftLogsApiClient.findCharacter({
+        name: "Alpha",
+        realm: "Twisting Nether",
+        region: "EU",
+      }),
+      warcraftLogsApiClient.findCharacter({
+        name: "Beta",
+        realm: "Twisting Nether",
+        region: "EU",
+      }),
+      warcraftLogsApiClient.findCharacter({
+        name: "Gamma",
+        realm: "Twisting Nether",
+        region: "EU",
+      }),
+    ]);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const tokenCallsBeforeRelease = fetchMock.mock.calls.filter((call) =>
+      String(call[0]).includes("/oauth/token"),
+    );
+    expect(tokenCallsBeforeRelease).toHaveLength(1);
+
+    resolveToken!(jsonResponse({ access_token: "shared", expires_in: 3600, token_type: "Bearer" }));
+    const results = await pending;
+    expect(results.every((r) => r.status === "SUCCESS")).toBe(true);
+
+    const tokenCalls = fetchMock.mock.calls.filter((call) => String(call[0]).includes("/oauth/token"));
+    expect(tokenCalls).toHaveLength(1);
+  });
 });
