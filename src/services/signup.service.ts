@@ -26,6 +26,10 @@ import {
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
 } from "@/services/signup-state";
+import {
+  getScheduleConflictsForCharacters,
+  type CharacterScheduleConflict,
+} from "@/services/character-schedule-conflict.service";
 
 /**
  * Attaches cross-Run reservation info to a batch of Characters in one query
@@ -125,6 +129,35 @@ export const signupService = {
   async getMyRuns(user: AuthenticatedUser) {
     const signups = await signupRepository.listByUserId(user.id);
 
+    const byRun = new Map<string, { scheduledStartAt: string; characterIds: string[] }>();
+    for (const signup of signups) {
+      if (signup.participationType !== "BOOSTER" || !signup.character) continue;
+      if (signup.status === "WITHDRAWN") continue;
+      const existing = byRun.get(signup.run.id);
+      if (existing) {
+        existing.characterIds.push(signup.character.id);
+      } else {
+        byRun.set(signup.run.id, {
+          scheduledStartAt: signup.run.scheduledStartAt,
+          characterIds: [signup.character.id],
+        });
+      }
+    }
+
+    const conflictsByRunCharacter = new Map<string, CharacterScheduleConflict[]>();
+    await Promise.all(
+      [...byRun.entries()].map(async ([runId, meta]) => {
+        const map = await getScheduleConflictsForCharacters({
+          targetRunId: runId,
+          scheduledStartAt: meta.scheduledStartAt,
+          characterIds: meta.characterIds,
+        });
+        for (const [characterId, conflicts] of map) {
+          conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
+        }
+      }),
+    );
+
     const items = signups.map((signup) => ({
       id: signup.id,
       runId: signup.run.id,
@@ -145,6 +178,10 @@ export const signupService = {
       lootbuddyMode: signup.lootbuddyMode,
       lootbuddyVerification: signup.lootbuddyVerification,
       canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
+      scheduleConflicts:
+        signup.participationType === "BOOSTER" && signup.character && signup.status !== "WITHDRAWN"
+          ? (conflictsByRunCharacter.get(`${signup.run.id}:${signup.character.id}`) ?? [])
+          : [],
     }));
 
     return {
