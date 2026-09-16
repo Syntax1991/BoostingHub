@@ -13,6 +13,7 @@ import { CharacterLifecycleButton } from "@/components/characters/character-life
 import { CharacterAvailabilitySection } from "@/components/characters/character-availability-section";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
+import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
 import type { BoosterQualificationStatus } from "@/models/enums";
@@ -85,6 +86,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               label="Warcraft Logs"
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
             />
+            {!data.warcraftLogsId ? <LinkWarcraftLogsButton characterId={data.id} /> : null}
             <CharacterFormDialog
               mode="edit"
               triggerLabel="Edit"

@@ -23,6 +23,7 @@ import {
   MIN_IMPORT_CHARACTER_LEVEL,
 } from "@/lib/blizzard/import-rules";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -547,6 +548,12 @@ export const characterBlizzardImportService = {
         message: `Linked ${linkedCharacterIds.length} character(s) to Battle.net (${session.region}).`,
       });
     }
+
+    // Optional WCL enrichment AFTER authoritative import/link + audit bookkeeping.
+    await characterWarcraftLogsService.tryAutoLinkManyIfMissing([
+      ...importedCharacterIds,
+      ...linkedCharacterIds,
+    ]);
 
     return { importedCharacterIds, linkedCharacterIds };
   },

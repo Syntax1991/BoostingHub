@@ -5,6 +5,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { refreshLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
+import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import type { ScheduledCharacterSyncCandidate } from "@/models/records";
 
 /**
@@ -78,7 +79,7 @@ export function resolveScheduledSyncStaleMs(): number {
 }
 
 type CandidateOutcome =
-  | { status: "refreshed"; lockoutSynced: boolean }
+  | { status: "refreshed"; lockoutSynced: boolean; characterId: string }
   | { status: "failed" }
   | { status: "rate_limited" };
 
@@ -101,9 +102,9 @@ async function refreshCandidate(
       candidate.owner,
       candidate.character,
       candidate.connection.id,
-      { updateConnectionSync: false, writeActivity: false },
+      { updateConnectionSync: false, writeActivity: false, autoLinkWarcraftLogs: false },
     );
-    return { status: "refreshed", lockoutSynced: result.lockoutSynced };
+    return { status: "refreshed", lockoutSynced: result.lockoutSynced, characterId: candidate.character.id };
   } catch (error) {
     if (isDomainError(error) && error.code === "BATTLENET_RATE_LIMITED") {
       rateLimitedRef.current = true;
@@ -209,6 +210,7 @@ export const scheduledCharacterSyncService = {
       );
 
       const refreshedConnectionIds = new Set<string>();
+      const refreshedCharacterIds: string[] = [];
       let refreshed = 0;
       let lockoutsVerified = 0;
       let lockoutsUnavailable = 0;
@@ -221,6 +223,7 @@ export const scheduledCharacterSyncService = {
           if (outcome.lockoutSynced) lockoutsVerified += 1;
           else lockoutsUnavailable += 1;
           refreshedConnectionIds.add(candidates[index]!.connection.id);
+          refreshedCharacterIds.push(outcome.characterId);
         } else if (outcome.status === "rate_limited") {
           rateLimited += 1;
         } else {
@@ -232,6 +235,9 @@ export const scheduledCharacterSyncService = {
       for (const connectionId of refreshedConnectionIds) {
         await battleNetConnectionRepository.markSuccessfulSync(connectionId, syncedAt);
       }
+
+      // Optional WCL enrichment after Blizzard work + connection markers.
+      await characterWarcraftLogsService.tryAutoLinkManyIfMissing(refreshedCharacterIds);
 
       const durationMs = Date.now() - start;
       console.info(
