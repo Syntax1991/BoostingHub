@@ -28,7 +28,11 @@ import { characterWarcraftLogsService } from "@/services/character-warcraft-logs
 import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { warcraftLogsApiClient } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import { VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import {
+  TIDEBOUND_GROTTO_RAID_ID,
+  VENOMOUS_ABYSS_RAID_ID,
+  WOW_RAID_CATALOG,
+} from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { BlizzardCharacterRaidEncounters } from "@/lib/blizzard/types";
 
@@ -431,15 +435,112 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const current = lockouts.filter(
       (row) => String(row.resetIdentifier) === reset.resetIdentifier,
     );
-    const normal = current.find((row) => String(row.difficulty) === "NORMAL");
-    const heroic = current.find((row) => String(row.difficulty) === "HEROIC");
-    expect(Number(normal?.bossesDefeated)).toBe(8);
-    expect(Boolean(normal?.isComplete)).toBe(true);
-    expect(Number(heroic?.bossesDefeated)).toBe(0);
-    expect(Boolean(heroic?.isComplete)).toBe(false);
+    const venomousNormal = current.find(
+      (row) =>
+        String(row.raidId) === VENOMOUS_ABYSS_RAID_ID && String(row.difficulty) === "NORMAL",
+    );
+    const venomousHeroic = current.find(
+      (row) =>
+        String(row.raidId) === VENOMOUS_ABYSS_RAID_ID && String(row.difficulty) === "HEROIC",
+    );
+    const venomousMythic = current.find(
+      (row) =>
+        String(row.raidId) === VENOMOUS_ABYSS_RAID_ID && String(row.difficulty) === "MYTHIC",
+    );
+    expect(Number(venomousNormal?.bossesDefeated)).toBe(8);
+    expect(Boolean(venomousNormal?.isComplete)).toBe(true);
+    expect(Number(venomousHeroic?.bossesDefeated)).toBe(0);
+    expect(Boolean(venomousHeroic?.isComplete)).toBe(false);
+    expect(Number(venomousMythic?.bossesDefeated)).toBe(0);
+
+    const tideboundRows = current.filter((row) => String(row.raidId) === TIDEBOUND_GROTTO_RAID_ID);
+    expect(tideboundRows).toHaveLength(3);
+    expect(tideboundRows.every((row) => Number(row.bossesDefeated) === 0)).toBe(true);
 
     const afterAccess = await orm.BoosterAccess.where({ characterId }).all();
     expect(afterAccess).toHaveLength(beforeAccess.length);
+  });
+
+  it("persists independent multi-raid lockouts from one encounters response", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const { owned, characterId } = await importLinkedShaman("300035", "Bnmultilock");
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    const reset = getRegionalWeeklyReset("EU");
+    const killMs = reset.start.getTime() + 3_600_000;
+    const venomous = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
+    const tidebound = WOW_RAID_CATALOG.find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
+    const encounters: BlizzardCharacterRaidEncounters = {
+      raids: [
+        {
+          instanceId: String(venomous.blizzardInstanceId),
+          instanceName: venomous.name,
+          difficulties: [
+            {
+              difficulty: "HEROIC",
+              progressCompleted: 6,
+              progressTotal: 8,
+              encounters: venomous.bosses.map((boss, bossIndex) => ({
+                encounterId: String(boss.blizzardEncounterIds[0]),
+                encounterName: boss.name,
+                completedCount: bossIndex < 6 ? 1 : 0,
+                lastKillTimestampMs: bossIndex < 6 ? killMs : null,
+              })),
+            },
+          ],
+        },
+        {
+          instanceId: String(tidebound.blizzardInstanceId),
+          instanceName: tidebound.name,
+          difficulties: [
+            {
+              difficulty: "HEROIC",
+              progressCompleted: 1,
+              progressTotal: 1,
+              encounters: tidebound.bosses.map((boss) => ({
+                encounterId: String(boss.blizzardEncounterIds[0]),
+                encounterName: boss.name,
+                completedCount: 1,
+                lastKillTimestampMs: killMs,
+              })),
+            },
+          ],
+        },
+      ],
+    };
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 705,
+      specialization: "Elemental",
+    });
+    apiMocks.getCharacterRaidEncounters.mockResolvedValue(encounters);
+
+    await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(apiMocks.getCharacterRaidEncounters).toHaveBeenCalledTimes(1);
+
+    const lockouts = await orm.CharacterRaidLockout.where({ characterId }).all();
+    const current = lockouts.filter(
+      (row) => String(row.resetIdentifier) === reset.resetIdentifier,
+    );
+    expect(current).toHaveLength(6);
+
+    const byKey = (raidId: string, difficulty: string) =>
+      current.find(
+        (row) => String(row.raidId) === raidId && String(row.difficulty) === difficulty,
+      );
+
+    expect(Number(byKey(VENOMOUS_ABYSS_RAID_ID, "NORMAL")?.bossesDefeated)).toBe(0);
+    expect(Number(byKey(VENOMOUS_ABYSS_RAID_ID, "HEROIC")?.bossesDefeated)).toBe(6);
+    expect(Number(byKey(VENOMOUS_ABYSS_RAID_ID, "MYTHIC")?.bossesDefeated)).toBe(0);
+    expect(Number(byKey(TIDEBOUND_GROTTO_RAID_ID, "NORMAL")?.bossesDefeated)).toBe(0);
+    expect(Number(byKey(TIDEBOUND_GROTTO_RAID_ID, "HEROIC")?.bossesDefeated)).toBe(1);
+    expect(Number(byKey(TIDEBOUND_GROTTO_RAID_ID, "MYTHIC")?.bossesDefeated)).toBe(0);
   });
 
   it("keeps prior lockouts when encounters fail but still updates item level", async () => {
@@ -451,10 +552,21 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
       id: crypto.randomUUID(),
       characterId,
       raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "NORMAL",
+      difficulty: "HEROIC",
       resetIdentifier: reset.resetIdentifier,
-      bossesDefeated: 5,
+      bossesDefeated: 6,
       isComplete: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId,
+      raidId: TIDEBOUND_GROTTO_RAID_ID,
+      difficulty: "HEROIC",
+      resetIdentifier: reset.resetIdentifier,
+      bossesDefeated: 1,
+      isComplete: true,
       createdAt: nowIso,
       updatedAt: nowIso,
     });
@@ -476,8 +588,12 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     expect(refreshed.itemLevel).toBe(710);
 
     const lockouts = await orm.CharacterRaidLockout.where({ characterId }).all();
-    expect(lockouts).toHaveLength(1);
-    expect(Number(lockouts[0]?.bossesDefeated)).toBe(5);
+    expect(lockouts).toHaveLength(2);
+    const venomous = lockouts.find((row) => String(row.raidId) === VENOMOUS_ABYSS_RAID_ID);
+    const tidebound = lockouts.find((row) => String(row.raidId) === TIDEBOUND_GROTTO_RAID_ID);
+    expect(Number(venomous?.bossesDefeated)).toBe(6);
+    expect(Number(tidebound?.bossesDefeated)).toBe(1);
+    expect(lockouts.some((row) => Number(row.bossesDefeated) === 0)).toBe(false);
   });
 });
 

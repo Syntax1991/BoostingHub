@@ -139,12 +139,20 @@ async function main() {
     const currentRaidPayloads = encounters.raids.filter((raid) =>
       currentInstanceIds.has(Number(raid.instanceId)),
     );
-    const byDiff = Object.fromEntries(
-      (derived.status === "derived" ? derived.difficulties : []).map((row) => [
-        row.difficulty,
-        `${row.bossesDefeated}/${row.bossTotal}`,
-      ]),
-    );
+    const raidSummaries =
+      derived.status === "derived"
+        ? derived.raids.map((raid) => ({
+            raidId: raid.raidId,
+            blizzardInstanceId: raid.blizzardInstanceId,
+            compact: formatCompactLockoutProgress(raid.difficulties),
+            byDifficulty: Object.fromEntries(
+              raid.difficulties.map((row) => [
+                row.difficulty,
+                `${row.bossesDefeated}/${row.bossTotal}`,
+              ]),
+            ),
+          }))
+        : [];
     console.log(
       JSON.stringify(
         {
@@ -154,8 +162,7 @@ async function main() {
             raid.difficulties.map((mode) => mode.difficulty),
           ),
           derivedStatus: derived.status,
-          compact: derived.status === "derived" ? formatCompactLockoutProgress(derived.difficulties) : null,
-          byDifficulty: byDiff,
+          raids: raidSummaries,
           reason: derived.status === "unknown" ? derived.reason : undefined,
         },
         null,

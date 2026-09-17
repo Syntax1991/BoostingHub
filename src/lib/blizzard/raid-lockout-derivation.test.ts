@@ -12,41 +12,72 @@ import {
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal, formatCompactLockoutProgress } from "@/lib/lockout-display";
 
-const current = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
+const venomous = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
+const tidebound = WOW_RAID_CATALOG.find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
 const historical = WOW_RAID_CATALOG.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID)!;
 const now = new Date("2026-09-10T12:00:00.000Z");
 const reset = getRegionalWeeklyReset("EU", now);
 const killInReset = reset.start.getTime() + 60 * 60 * 1000;
 const killBeforeReset = reset.start.getTime() - 60 * 60 * 1000;
 
-function venomousEncounters(
-  modes: Array<{
-    difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
-    kills: Array<{ bossIndex: number; lastKillTimestampMs: number | null }>;
-  }>,
-): BlizzardCharacterRaidEncounters {
+type ModeFixture = {
+  difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
+  kills: Array<{ bossIndex: number; lastKillTimestampMs: number | null }>;
+};
+
+function raidPayload(
+  catalog: typeof venomous,
+  modes: ModeFixture[],
+): BlizzardCharacterRaidEncounters["raids"][number] {
   return {
-    raids: [
-      {
-        instanceId: String(current.blizzardInstanceId),
-        instanceName: current.name,
-        difficulties: modes.map((mode) => ({
-          difficulty: mode.difficulty,
-          progressCompleted: mode.kills.filter((kill) => kill.lastKillTimestampMs != null).length,
-          progressTotal: current.bosses.length,
-          encounters: mode.kills.map((kill) => {
-            const boss = current.bosses[kill.bossIndex]!;
-            return {
-              encounterId: String(boss.blizzardEncounterIds[0]),
-              encounterName: boss.name,
-              completedCount: kill.lastKillTimestampMs != null ? 1 : 0,
-              lastKillTimestampMs: kill.lastKillTimestampMs,
-            };
-          }),
-        })),
-      },
-    ],
+    instanceId: String(catalog.blizzardInstanceId),
+    instanceName: catalog.name,
+    difficulties: modes.map((mode) => ({
+      difficulty: mode.difficulty,
+      progressCompleted: mode.kills.filter((kill) => kill.lastKillTimestampMs != null).length,
+      progressTotal: catalog.bosses.length,
+      encounters: mode.kills.map((kill) => {
+        const boss = catalog.bosses[kill.bossIndex]!;
+        return {
+          encounterId: String(boss.blizzardEncounterIds[0]),
+          encounterName: boss.name,
+          completedCount: kill.lastKillTimestampMs != null ? 1 : 0,
+          lastKillTimestampMs: kill.lastKillTimestampMs,
+        };
+      }),
+    })),
   };
+}
+
+function venomousEncounters(modes: ModeFixture[]): BlizzardCharacterRaidEncounters {
+  return { raids: [raidPayload(venomous, modes)] };
+}
+
+function bothRaidsEncounters(input: {
+  venomous: ModeFixture[];
+  tidebound: ModeFixture[];
+}): BlizzardCharacterRaidEncounters {
+  return {
+    raids: [raidPayload(venomous, input.venomous), raidPayload(tidebound, input.tidebound)],
+  };
+}
+
+function raidDifficulties(result: ReturnType<typeof deriveCurrentResetLockouts>, raidId: string) {
+  expect(result.status).toBe("derived");
+  if (result.status !== "derived") throw new Error("expected derived");
+  const raid = result.raids.find((entry) => entry.raidId === raidId);
+  expect(raid).toBeDefined();
+  return raid!.difficulties;
+}
+
+function progressOf(
+  result: ReturnType<typeof deriveCurrentResetLockouts>,
+  raidId: string,
+  difficulty: "NORMAL" | "HEROIC" | "MYTHIC",
+) {
+  const row = raidDifficulties(result, raidId).find((entry) => entry.difficulty === difficulty);
+  expect(row).toBeDefined();
+  return row!;
 }
 
 describe("current raid catalog selection", () => {
@@ -56,18 +87,17 @@ describe("current raid catalog selection", () => {
       [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
     );
 
-    const venomous = currentRaids.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
-    expect(venomous.blizzardInstanceId).toBe(1320);
-    expect(venomous.bosses).toHaveLength(8);
+    const venomousRaid = currentRaids.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
+    expect(venomousRaid.blizzardInstanceId).toBe(1320);
+    expect(venomousRaid.bosses).toHaveLength(8);
 
-    const tidebound = currentRaids.find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
-    expect(tidebound.name).toBe("The Tidebound Grotto");
-    // Verified live Battle.net journal-instance / encounter ids.
-    expect(tidebound.blizzardInstanceId).toBe(1317);
-    expect(tidebound.bosses).toHaveLength(1);
-    expect(tidebound.bosses[0]?.name).toBe("Nymrissa Wavecaller");
-    expect(tidebound.bosses[0]?.blizzardEncounterIds).toEqual([2849]);
-    expect(tidebound.availableForRuns).toBe(false);
+    const tideboundRaid = currentRaids.find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
+    expect(tideboundRaid.name).toBe("The Tidebound Grotto");
+    expect(tideboundRaid.blizzardInstanceId).toBe(1317);
+    expect(tideboundRaid.bosses).toHaveLength(1);
+    expect(tideboundRaid.bosses[0]?.name).toBe("Nymrissa Wavecaller");
+    expect(tideboundRaid.bosses[0]?.blizzardEncounterIds).toEqual([2849]);
+    expect(tideboundRaid.availableForRuns).toBe(false);
 
     expect(historical.currentForLockouts).toBe(false);
     expect(historical.blizzardInstanceId).toBe(1302);
@@ -81,7 +111,7 @@ describe("current raid catalog selection", () => {
     expect(defaultRaidBossTotal("00000000-0000-4000-8000-000000000000")).toBe(0);
   });
 
-  it("does not select Manaforge solely because it also has 8 bosses", () => {
+  it("does not treat Manaforge as a current lockout raid", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
       now,
@@ -108,7 +138,14 @@ describe("current raid catalog selection", () => {
         ],
       },
     });
-    expect(result.status).toBe("unknown");
+    expect(result.status).toBe("derived");
+    if (result.status !== "derived") return;
+    expect(result.raids.map((raid) => raid.raidId)).toEqual(
+      getCurrentLockoutRaids().map((raid) => raid.id),
+    );
+    expect(result.raids.some((raid) => raid.raidId === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
   });
 });
 
@@ -121,7 +158,7 @@ describe("deriveCurrentResetLockouts", () => {
       encounters: {
         raids: [
           {
-            instanceId: String(current.blizzardInstanceId),
+            instanceId: String(venomous.blizzardInstanceId),
             instanceName: "Der Giftige Abgrund",
             difficulties: [
               {
@@ -130,7 +167,7 @@ describe("deriveCurrentResetLockouts", () => {
                 progressTotal: 8,
                 encounters: [
                   {
-                    encounterId: String(current.bosses[0]!.blizzardEncounterIds[0]),
+                    encounterId: String(venomous.bosses[0]!.blizzardEncounterIds[0]),
                     encounterName: "Localized Boss Name That Does Not Match",
                     completedCount: 1,
                     lastKillTimestampMs: killInReset,
@@ -142,10 +179,9 @@ describe("deriveCurrentResetLockouts", () => {
         ],
       },
     });
-    expect(result.status).toBe("derived");
-    if (result.status !== "derived") return;
-    expect(result.difficulties[0]?.bossesDefeated).toBe(1);
-    expect(result.difficulties[0]?.bosses[0]?.killedThisReset).toBe(true);
+    const normal = progressOf(result, VENOMOUS_ABYSS_RAID_ID, "NORMAL");
+    expect(normal.bossesDefeated).toBe(1);
+    expect(normal.bosses[0]?.killedThisReset).toBe(true);
   });
 
   it("counts only timestamps inside the current reset window", () => {
@@ -164,18 +200,15 @@ describe("deriveCurrentResetLockouts", () => {
         },
       ]),
     });
-    expect(result.status).toBe("derived");
-    if (result.status !== "derived") return;
-    const normal = result.difficulties.find((row) => row.difficulty === "NORMAL")!;
-    expect(normal.bossesDefeated).toBe(1);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "NORMAL").bossesDefeated).toBe(1);
   });
 
-  it("keeps Normal / Heroic / Mythic independent and omits missing difficulties", () => {
-    const allCurrent = current.bosses.map((_, bossIndex) => ({
+  it("keeps Normal / Heroic / Mythic independent and zero-fills missing difficulties", () => {
+    const allCurrent = venomous.bosses.map((_, bossIndex) => ({
       bossIndex,
       lastKillTimestampMs: killInReset,
     }));
-    const none = current.bosses.map((_, bossIndex) => ({
+    const none = venomous.bosses.map((_, bossIndex) => ({
       bossIndex,
       lastKillTimestampMs: null,
     }));
@@ -188,17 +221,16 @@ describe("deriveCurrentResetLockouts", () => {
         { difficulty: "HEROIC", kills: none },
       ]),
     });
-    expect(result.status).toBe("derived");
-    if (result.status !== "derived") return;
-    expect(result.difficulties.map((row) => row.difficulty).sort()).toEqual(["HEROIC", "NORMAL"]);
-    expect(formatCompactLockoutProgress(result.difficulties)).toBe("N 8/8 · HC 0/8 · M ?");
+    const venomousRows = raidDifficulties(result, VENOMOUS_ABYSS_RAID_ID);
+    expect(venomousRows.map((row) => row.difficulty)).toEqual(["NORMAL", "HEROIC", "MYTHIC"]);
+    expect(formatCompactLockoutProgress(venomousRows)).toBe("N 8/8 · HC 0/8 · M 0/8");
   });
 
   it("ignores unsupported modes at the difficulty mapper boundary", () => {
     expect(mapBlizzardRaidDifficulty("LFR")).toBeNull();
   });
 
-  it("returns unknown when no current raid instance is present even if historical 8-boss raid exists", () => {
+  it("zero-fills both current raids when only a historical raid is present", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
       now,
@@ -225,10 +257,11 @@ describe("deriveCurrentResetLockouts", () => {
         ],
       },
     });
-    expect(result.status).toBe("unknown");
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC").bossesDefeated).toBe(0);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "HEROIC").bossesDefeated).toBe(0);
   });
 
-  it("derives from Tidebound alone when Venomous is absent (Tidebound is currentForLockouts)", () => {
+  it("derives Tidebound progress and still zero-fills Venomous when Venomous is absent", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
       now,
@@ -259,11 +292,15 @@ describe("deriveCurrentResetLockouts", () => {
     });
     expect(result.status).toBe("derived");
     if (result.status !== "derived") return;
-    expect(result.currentRaidId).toBe(TIDEBOUND_GROTTO_RAID_ID);
-    expect(result.currentBlizzardInstanceId).toBe(1317);
+    const tideboundRaid = result.raids.find((raid) => raid.raidId === TIDEBOUND_GROTTO_RAID_ID)!;
+    expect(tideboundRaid.blizzardInstanceId).toBe(1317);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "NORMAL").bossesDefeated).toBe(1);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC").bossesDefeated).toBe(0);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "MYTHIC").bossesDefeated).toBe(0);
   });
 
-  it("treats verified zero kills as 0/N clear for that difficulty only", () => {
+  it("treats verified zero kills and missing modes as 0/N for every tracked difficulty", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
       now,
@@ -271,22 +308,20 @@ describe("deriveCurrentResetLockouts", () => {
       encounters: venomousEncounters([
         {
           difficulty: "HEROIC",
-          kills: current.bosses.map((_, bossIndex) => ({
+          kills: venomous.bosses.map((_, bossIndex) => ({
             bossIndex,
             lastKillTimestampMs: null,
           })),
         },
       ]),
     });
-    expect(result.status).toBe("derived");
-    if (result.status !== "derived") return;
-    expect(result.difficulties).toHaveLength(1);
-    expect(result.difficulties[0]?.bossesDefeated).toBe(0);
-    expect(formatCompactLockoutProgress(result.difficulties)).toBe("N ? · HC 0/8 · M ?");
+    const venomousRows = raidDifficulties(result, VENOMOUS_ABYSS_RAID_ID);
+    expect(venomousRows).toHaveLength(3);
+    expect(formatCompactLockoutProgress(venomousRows)).toBe("N 0/8 · HC 0/8 · M 0/8");
   });
 
   it("matches realistic fixture A: N 8/8 HC 8/8 with Mythic verified 0/8", () => {
-    const allCurrent = current.bosses.map((_, bossIndex) => ({
+    const allCurrent = venomous.bosses.map((_, bossIndex) => ({
       bossIndex,
       lastKillTimestampMs: killInReset,
     }));
@@ -301,13 +336,13 @@ describe("deriveCurrentResetLockouts", () => {
         { difficulty: "MYTHIC", kills: mythicOld },
       ]),
     });
-    expect(result.status).toBe("derived");
-    if (result.status !== "derived") return;
-    expect(formatCompactLockoutProgress(result.difficulties)).toBe("N 8/8 · HC 8/8 · M 0/8");
+    expect(formatCompactLockoutProgress(raidDifficulties(result, VENOMOUS_ABYSS_RAID_ID))).toBe(
+      "N 8/8 · HC 8/8 · M 0/8",
+    );
   });
 
-  it("matches realistic fixture B: N 8/8 with HC/Mythic unknown when modes absent", () => {
-    const allCurrent = current.bosses.map((_, bossIndex) => ({
+  it("zero-fills HC/Mythic when only Normal mode is present", () => {
+    const allCurrent = venomous.bosses.map((_, bossIndex) => ({
       bossIndex,
       lastKillTimestampMs: killInReset,
     }));
@@ -317,8 +352,105 @@ describe("deriveCurrentResetLockouts", () => {
       resetWindow: reset,
       encounters: venomousEncounters([{ difficulty: "NORMAL", kills: allCurrent }]),
     });
-    expect(result.status).toBe("derived");
-    if (result.status !== "derived") return;
-    expect(formatCompactLockoutProgress(result.difficulties)).toBe("N 8/8 · HC ? · M ?");
+    expect(formatCompactLockoutProgress(raidDifficulties(result, VENOMOUS_ABYSS_RAID_ID))).toBe(
+      "N 8/8 · HC 0/8 · M 0/8",
+    );
+  });
+
+  it("derives both current raids from one payload without aggregating totals", () => {
+    const venomousHcKills = venomous.bosses.map((_, bossIndex) => ({
+      bossIndex,
+      lastKillTimestampMs: bossIndex < 6 ? killInReset : null,
+    }));
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      now,
+      resetWindow: reset,
+      encounters: bothRaidsEncounters({
+        venomous: [{ difficulty: "HEROIC", kills: venomousHcKills }],
+        tidebound: [
+          {
+            difficulty: "HEROIC",
+            kills: [{ bossIndex: 0, lastKillTimestampMs: killInReset }],
+          },
+        ],
+      }),
+    });
+
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC").bossesDefeated).toBe(6);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "MYTHIC").bossesDefeated).toBe(0);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "HEROIC").bossesDefeated).toBe(1);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "MYTHIC").bossesDefeated).toBe(0);
+
+    const compact = [
+      formatCompactLockoutProgress(raidDifficulties(result, VENOMOUS_ABYSS_RAID_ID)),
+      formatCompactLockoutProgress(raidDifficulties(result, TIDEBOUND_GROTTO_RAID_ID)),
+    ].join(" · ");
+    expect(compact).toBe("N 0/8 · HC 6/8 · M 0/8 · N 0/1 · HC 1/1 · M 0/1");
+    expect(compact).not.toContain("9/9");
+    expect(compact).not.toContain("7/9");
+  });
+
+  it("zero-fills Nymrissa when only Venomous is in the payload", () => {
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      now,
+      resetWindow: reset,
+      encounters: venomousEncounters([
+        {
+          difficulty: "HEROIC",
+          kills: venomous.bosses.map((_, bossIndex) => ({
+            bossIndex,
+            lastKillTimestampMs: bossIndex < 3 ? killInReset : null,
+          })),
+        },
+      ]),
+    });
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC").bossesDefeated).toBe(3);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "HEROIC").bossesDefeated).toBe(0);
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "MYTHIC").bossesDefeated).toBe(0);
+  });
+
+  it("treats old-reset Venomous kills as current-reset zero", () => {
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      now,
+      resetWindow: reset,
+      encounters: venomousEncounters([
+        {
+          difficulty: "HEROIC",
+          kills: venomous.bosses.map((_, bossIndex) => ({
+            bossIndex,
+            lastKillTimestampMs: killBeforeReset,
+          })),
+        },
+      ]),
+    });
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC").bossesDefeated).toBe(0);
+    expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC").bossTotal).toBe(8);
+  });
+
+  it("preserves exact current-reset 6/8 without inventing aggregate totals", () => {
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      now,
+      resetWindow: reset,
+      encounters: venomousEncounters([
+        {
+          difficulty: "HEROIC",
+          kills: venomous.bosses.map((_, bossIndex) => ({
+            bossIndex,
+            lastKillTimestampMs: bossIndex < 6 ? killInReset : null,
+          })),
+        },
+      ]),
+    });
+    const heroic = progressOf(result, VENOMOUS_ABYSS_RAID_ID, "HEROIC");
+    expect(heroic.bossesDefeated).toBe(6);
+    expect(heroic.bossTotal).toBe(8);
+    expect(heroic.isComplete).toBe(false);
   });
 });

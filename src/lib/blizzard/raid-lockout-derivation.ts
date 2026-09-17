@@ -12,6 +12,8 @@ import {
   type RegionalWeeklyReset,
 } from "@/lib/wow-weekly-reset";
 
+const TRACKED_DIFFICULTIES: RaidDifficulty[] = ["NORMAL", "HEROIC", "MYTHIC"];
+
 export type DerivedDifficultyLockout = {
   raidId: string;
   difficulty: RaidDifficulty;
@@ -27,13 +29,18 @@ export type DerivedDifficultyLockout = {
   }>;
 };
 
+export type DerivedRaidLockoutSnapshot = {
+  raidId: string;
+  blizzardInstanceId: number;
+  difficulties: DerivedDifficultyLockout[];
+};
+
 export type DerivedRaidLockoutResult =
   | {
       status: "derived";
-      difficulties: DerivedDifficultyLockout[];
+      resetIdentifier: string;
       verifiedAt: string;
-      currentRaidId: string;
-      currentBlizzardInstanceId: number;
+      raids: DerivedRaidLockoutSnapshot[];
     }
   | { status: "unknown"; reason: string };
 
@@ -92,10 +99,43 @@ function deriveDifficulty(input: {
   };
 }
 
+function encountersForDifficulty(
+  blizzardRaid: BlizzardRaidInstanceProgress | null,
+  difficulty: RaidDifficulty,
+): BlizzardRaidInstanceProgress["difficulties"][number]["encounters"] {
+  if (!blizzardRaid) return [];
+  const mode = blizzardRaid.difficulties.find(
+    (entry) => mapBlizzardRaidDifficulty(entry.difficulty) === difficulty,
+  );
+  return mode?.encounters ?? [];
+}
+
+function deriveRaidSnapshot(input: {
+  catalog: WowRaidCatalogEntry;
+  resetIdentifier: string;
+  window: RegionalWeeklyReset;
+  blizzardRaid: BlizzardRaidInstanceProgress | null;
+}): DerivedRaidLockoutSnapshot {
+  return {
+    raidId: input.catalog.id,
+    blizzardInstanceId: input.catalog.blizzardInstanceId,
+    difficulties: TRACKED_DIFFICULTIES.map((difficulty) =>
+      deriveDifficulty({
+        catalog: input.catalog,
+        difficulty,
+        resetIdentifier: input.resetIdentifier,
+        window: input.window,
+        encounters: encountersForDifficulty(input.blizzardRaid, difficulty),
+      }),
+    ),
+  };
+}
+
 /**
- * Derive current-reset lockouts for explicitly marked current catalog raids.
- * Only difficulties present in the Blizzard response are verified.
- * Missing current raid or missing difficulty → unknown for that scope (never invent 0/N).
+ * Derive a complete current-reset lockout snapshot for every catalog raid marked
+ * currentForLockouts. After a successful Blizzard encounters response, every
+ * tracked difficulty (NORMAL/HEROIC/MYTHIC) is verified — missing raids or modes
+ * become explicit 0/N. Callers must not invoke this on a failed request.
  */
 export function deriveCurrentResetLockouts(input: {
   region: WowRegion;
@@ -111,51 +151,19 @@ export function deriveCurrentResetLockouts(input: {
     return { status: "unknown", reason: "No catalog raid is marked currentForLockouts." };
   }
 
-  const difficulties: DerivedDifficultyLockout[] = [];
-  let matchedCurrent: WowRaidCatalogEntry | null = null;
-
-  for (const catalog of currentRaids) {
-    const blizzardRaid = findBlizzardRaidByInstanceId(input.encounters, catalog.blizzardInstanceId);
-    if (!blizzardRaid) continue;
-    matchedCurrent = catalog;
-
-    for (const mode of blizzardRaid.difficulties) {
-      const difficulty = mapBlizzardRaidDifficulty(mode.difficulty);
-      if (!difficulty) continue;
-
-      difficulties.push(
-        deriveDifficulty({
-          catalog,
-          difficulty,
-          resetIdentifier: window.resetIdentifier,
-          window,
-          encounters: mode.encounters,
-        }),
-      );
-    }
-  }
-
-  if (!matchedCurrent) {
-    return {
-      status: "unknown",
-      reason:
-        "Current BoostingHub lockout raid was not present in the Blizzard encounters response (stable journal instance id).",
-    };
-  }
-
-  if (difficulties.length === 0) {
-    return {
-      status: "unknown",
-      reason:
-        "Current raid was found but no supported Normal/Heroic/Mythic modes were present in the Blizzard response.",
-    };
-  }
+  const raids = currentRaids.map((catalog) =>
+    deriveRaidSnapshot({
+      catalog,
+      resetIdentifier: window.resetIdentifier,
+      window,
+      blizzardRaid: findBlizzardRaidByInstanceId(input.encounters, catalog.blizzardInstanceId),
+    }),
+  );
 
   return {
     status: "derived",
-    difficulties,
+    resetIdentifier: window.resetIdentifier,
     verifiedAt,
-    currentRaidId: matchedCurrent.id,
-    currentBlizzardInstanceId: matchedCurrent.blizzardInstanceId,
+    raids,
   };
 }
