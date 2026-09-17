@@ -42,6 +42,11 @@ export type EligibilityCharacter = {
    * before evaluation (a cross-Run scheduling rule, never derived from lockouts).
    */
   reservationConflict: CharacterRunReservationConflict | null;
+  /**
+   * True when the owner marked this Character Unavailable for the regional
+   * WoW reset containing the target Run's scheduledStartAt.
+   */
+  weeklyUnavailable: boolean;
 };
 
 export type EligibilityRun = {
@@ -66,13 +71,15 @@ export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
   | "DIFFICULTY_NOT_APPROVED"
-  | "ALREADY_SELECTED_OTHER_RUN";
+  | "ALREADY_SELECTED_OTHER_RUN"
+  | "CHARACTER_UNAVAILABLE";
 
 export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
+  CHARACTER_UNAVAILABLE: "Character is marked unavailable for this reset.",
 };
 
 export type EligibleBoosterOption = {
@@ -180,6 +187,11 @@ export function evaluateBoosterOptions(
 
     if (!character.isActive) {
       pushIneligible("INACTIVE");
+      continue;
+    }
+
+    if (character.weeklyUnavailable) {
+      pushIneligible("CHARACTER_UNAVAILABLE");
       continue;
     }
 

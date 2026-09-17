@@ -1,7 +1,7 @@
 /**
  * Derived Character schedule-integrity conflicts for a target Run start.
  * Scheduling only — never inactive, booster access, lockouts, or raid-save state.
- * Not persisted; recomputed from BoostingHub Run reservations only.
+ * Not persisted; recomputed from BoostingHub Run reservations and weekly unavailability.
  */
 
 import { formatDateTime } from "@/lib/datetime";
@@ -13,19 +13,38 @@ export type RunReservationConflictInput = {
   scheduledStartAt: string;
 };
 
-export type CharacterScheduleConflict = {
-  source: "RUN_RESERVATION";
-  conflictingRunId: string;
-  conflictingRunTitle: string;
-  conflictingScheduledStartAt: string;
-  message: string;
+export type WeeklyUnavailableConflictInput = {
+  characterId: string;
+  characterName: string;
+  resetIdentifier: string;
 };
+
+export type CharacterScheduleConflict =
+  | {
+      source: "RUN_RESERVATION";
+      conflictingRunId: string;
+      conflictingRunTitle: string;
+      conflictingScheduledStartAt: string;
+      message: string;
+    }
+  | {
+      source: "WEEKLY_UNAVAILABLE";
+      resetIdentifier: string;
+      message: string;
+    };
 
 export function formatRunReservationConflictMessage(input: {
   runTitle: string;
   scheduledStartAt: string;
 }): string {
   return `Another BoostingHub Run: ${input.runTitle} at ${formatDateTime(input.scheduledStartAt)}`;
+}
+
+export function formatWeeklyUnavailableConflictMessage(input: {
+  characterName: string;
+  resetIdentifier: string;
+}): string {
+  return `${input.characterName} is marked unavailable for this reset (${input.resetIdentifier}).`;
 }
 
 function compareReservationConflicts(
@@ -39,20 +58,33 @@ function compareReservationConflicts(
 
 /**
  * Builds a deterministic conflict list for one Character against a target Run start.
- * Order: RUN_RESERVATION by scheduledStartAt ASC, runId ASC.
- * Independent of input array order. Does not mutate inputs.
+ * Order: WEEKLY_UNAVAILABLE first (at most one), then RUN_RESERVATION by
+ * scheduledStartAt ASC, runId ASC.
  */
 export function projectCharacterScheduleConflicts(input: {
   reservations: readonly RunReservationConflictInput[];
+  weeklyUnavailable?: WeeklyUnavailableConflictInput | null;
 }): CharacterScheduleConflict[] {
+  const conflicts: CharacterScheduleConflict[] = [];
+  if (input.weeklyUnavailable) {
+    conflicts.push({
+      source: "WEEKLY_UNAVAILABLE",
+      resetIdentifier: input.weeklyUnavailable.resetIdentifier,
+      message: formatWeeklyUnavailableConflictMessage(input.weeklyUnavailable),
+    });
+  }
+
   const reservations = [...input.reservations].sort(compareReservationConflicts);
-  return reservations.map((row) => ({
-    source: "RUN_RESERVATION" as const,
-    conflictingRunId: row.runId,
-    conflictingRunTitle: row.runTitle,
-    conflictingScheduledStartAt: row.scheduledStartAt,
-    message: formatRunReservationConflictMessage(row),
-  }));
+  for (const row of reservations) {
+    conflicts.push({
+      source: "RUN_RESERVATION",
+      conflictingRunId: row.runId,
+      conflictingRunTitle: row.runTitle,
+      conflictingScheduledStartAt: row.scheduledStartAt,
+      message: formatRunReservationConflictMessage(row),
+    });
+  }
+  return conflicts;
 }
 
 /**
@@ -62,6 +94,7 @@ export function projectCharacterScheduleConflicts(input: {
 export function projectScheduleConflictsByCharacter(input: {
   characterIds: readonly string[];
   reservations: readonly RunReservationConflictInput[];
+  weeklyUnavailableByCharacterId?: ReadonlyMap<string, WeeklyUnavailableConflictInput>;
 }): Map<string, CharacterScheduleConflict[]> {
   const reservationsByCharacter = new Map<string, RunReservationConflictInput[]>();
   for (const row of input.reservations) {
@@ -76,6 +109,7 @@ export function projectScheduleConflictsByCharacter(input: {
       characterId,
       projectCharacterScheduleConflicts({
         reservations: reservationsByCharacter.get(characterId) ?? [],
+        weeklyUnavailable: input.weeklyUnavailableByCharacterId?.get(characterId) ?? null,
       }),
     );
   }

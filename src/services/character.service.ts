@@ -1,6 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import type { WowClass, WowRegion } from "@/models/enums";
-import { toDatetimeLocalValue } from "@/lib/datetime";
 import { DomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
@@ -16,8 +15,8 @@ import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { characterAvailabilityCheckService } from "@/services/character-availability-check.service";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -103,18 +102,12 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 }
 
 export const characterService = {
-  async getCharacterPage(
-    user: AuthenticatedUser,
-    options: { checkAt?: string | null } = {},
-  ) {
+  async getCharacterPage(user: AuthenticatedUser) {
     const characters = await characterRepository.listByUserId(user.id);
     const currentRaids = getCurrentLockoutRaids();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
-    const availabilityCheck = options.checkAt
-      ? await characterAvailabilityCheckService.projectForCharacters(characters, options.checkAt)
-      : null;
-    const availabilityById = new Map(
-      (availabilityCheck?.characters ?? []).map((row) => [row.characterId, row]),
+    const weeklyAvailabilityById = await characterWeeklyAvailabilityService.projectCurrentForCharacters(
+      characters,
     );
 
     return {
@@ -128,15 +121,6 @@ export const characterService = {
       })),
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
-      availabilityCheck: availabilityCheck
-        ? {
-            checkedAt: availabilityCheck.checkedAt,
-          }
-        : null,
-      /** Server-computed default for the availability check form (Europe/Berlin local). */
-      availabilityCheckDefaultLocal: toDatetimeLocalValue(
-        new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      ),
       characters: characters.map((character) => {
         const access = boosterQualificationService.summarize(character.boosterQualifications);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
@@ -173,7 +157,13 @@ export const characterService = {
           boosterAccess: access,
           currentReset,
           lockouts,
-          availability: availabilityById.get(character.id) ?? null,
+          weeklyAvailability: weeklyAvailabilityById.get(character.id) ?? {
+            characterId: character.id,
+            status: "AVAILABLE" as const,
+            resetIdentifier: currentReset,
+            region: character.region,
+            resetWindowLabel: `${character.region} · ${currentReset}`,
+          },
         };
       }),
     };
@@ -203,6 +193,11 @@ export const characterService = {
         verified: true,
       }));
 
+    const weeklyAvailability = await characterWeeklyAvailabilityService.getCurrentForOwner(
+      user,
+      characterId,
+    );
+
     return {
       id: character.id,
       name: character.name,
@@ -231,6 +226,7 @@ export const characterService = {
         name: raidContentDisplayName(raid.id, raid.name),
       })),
       lockouts: currentLockouts,
+      weeklyAvailability,
       scheduleCommitments: await characterScheduleCommitmentsService.listForOwner(user, characterId),
     };
   },

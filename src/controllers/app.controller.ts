@@ -3,7 +3,6 @@ import { canAccessManagement } from "@/auth/authorization";
 import { redirect } from "next/navigation";
 import { parseRunFilters } from "@/validators/run-filters";
 import { parseManageRunFilters } from "@/validators/manage-run-filters";
-import { parseAvailabilityCheckAt } from "@/validators/character-availability-check";
 import { characterService } from "@/services/character.service";
 import { battleNetService } from "@/services/battle-net.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
@@ -37,13 +36,9 @@ export const characterController = {
     battlenet?: string | string[];
     region?: string | string[];
     code?: string | string[];
-    checkAt?: string | string[];
   } = {}) {
     const user = await requireUserOrRedirect("/characters");
-    const checkParsed = parseAvailabilityCheckAt(searchParams.checkAt);
-    const page = await characterService.getCharacterPage(user, {
-      checkAt: checkParsed.ok ? checkParsed.checkAt : null,
-    });
+    const page = await characterService.getCharacterPage(user);
     const importSessionId = firstParam(searchParams.importSession);
     const battleNet = await battleNetService.getCharacterPagePanel(user, importSessionId);
 
@@ -71,7 +66,6 @@ export const characterController = {
 
     return {
       ...page,
-      availabilityCheckError: checkParsed.ok ? null : checkParsed.error,
       battleNet: {
         configured: battleNet.configured,
         connections: battleNet.connections,

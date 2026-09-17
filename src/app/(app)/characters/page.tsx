@@ -9,7 +9,6 @@ export default async function CharactersPage({
     battlenet?: string | string[];
     region?: string | string[];
     code?: string | string[];
-    checkAt?: string | string[];
   }>;
 }) {
   const params = await searchParams;

@@ -321,13 +321,17 @@ export const rosterService = {
 
     const roster = await rosterRepository.ensure(runId);
     const signups = await rosterRepository.listSignups(runId);
-    const boosterCharacterIds = signups
+    const boosterCharacters = signups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.character)
-      .map((signup) => signup.character!.id);
+      .map((signup) => ({
+        id: signup.character!.id,
+        name: signup.character!.name,
+        region: signup.character!.region,
+      }));
     const scheduleConflictsByCharacter = await getScheduleConflictsForCharacters({
       targetRunId: run.id,
       scheduledStartAt: run.scheduledStartAt,
-      characterIds: boosterCharacterIds,
+      characters: boosterCharacters,
     });
     const inspected = signups.map((signup) => ({
       ...inspectSignup(signup, run),
@@ -462,7 +466,7 @@ export const rosterService = {
       throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
     }
 
-    // Cross-Run Character reservation + manual availability for NEW draft
+    // Cross-Run Character reservation + weekly unavailability for NEW draft
     // selection only. Already-selected conflicted Characters stay selected;
     // publish revalidates. Deselecting never needs this check.
     const alreadyDraftSelected = roster.selectedSignupIds.includes(input.signupId);
@@ -475,7 +479,11 @@ export const rosterService = {
       const scheduleConflicts = await getScheduleConflictsForCharacter({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
-        characterId: signup.character.id,
+        character: {
+          id: signup.character.id,
+          name: signup.character.name,
+          region: signup.character.region,
+        },
       });
       assertCharacterSelectableForSchedule(
         `${signup.character.name}-${signup.character.realm}`,
@@ -615,19 +623,23 @@ export const rosterService = {
     }
 
     const previouslySelected = new Set(roster.selectedSignupIds);
-    const newlySelectedCharacterIds = selectedRows
+    const newlySelectedCharacters = selectedRows
       .filter(
         (item) =>
           item.participationType === "BOOSTER" &&
           item.character &&
           !previouslySelected.has(item.id),
       )
-      .map((item) => item.character!.id);
-    if (newlySelectedCharacterIds.length > 0) {
+      .map((item) => ({
+        id: item.character!.id,
+        name: item.character!.name,
+        region: item.character!.region,
+      }));
+    if (newlySelectedCharacters.length > 0) {
       const conflictsByCharacter = await getScheduleConflictsForCharacters({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
-        characterIds: newlySelectedCharacterIds,
+        characters: newlySelectedCharacters,
       });
       for (const signup of selectedRows) {
         if (
@@ -648,7 +660,7 @@ export const rosterService = {
       targetRunId: input.runId,
       scheduledStartAt: run.scheduledStartAt,
       // Repository race-check only newly added Characters (already-selected stay).
-      selectedCharacterIds: newlySelectedCharacterIds,
+      selectedCharacterIds: newlySelectedCharacters.map((row) => row.id),
     });
 
     if (run.status === "OPEN" && selectedIds.length > 0) {
@@ -745,18 +757,21 @@ export const rosterService = {
 
     const selectedIds = selected.map((item) => item.id);
 
-    // Cross-Run Character reservation + manual availability for every selected
+    // Cross-Run Character reservation + weekly unavailability for every selected
     // BOOSTER at publish time. Existing draft selection is preserved even when
     // conflicted — publish is the hard stop.
-    const selectedCharacterIds = selected
-      .filter((item) => item.participationType === "BOOSTER")
-      .map((item) => item.character?.id)
-      .filter((id): id is string => Boolean(id));
-    if (selectedCharacterIds.length > 0) {
+    const selectedCharacters = selected
+      .filter((item) => item.participationType === "BOOSTER" && item.character)
+      .map((item) => ({
+        id: item.character!.id,
+        name: item.character!.name,
+        region: item.character!.region,
+      }));
+    if (selectedCharacters.length > 0) {
       const conflictsByCharacter = await getScheduleConflictsForCharacters({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
-        characterIds: selectedCharacterIds,
+        characters: selectedCharacters,
       });
       const conflicted = selected
         .filter((item) => item.participationType === "BOOSTER" && item.character)
@@ -818,7 +833,7 @@ export const rosterService = {
       rosterId: roster.id,
       expectedVersion: input.version,
       selectedSelections,
-      selectedCharacterIds,
+      selectedCharacterIds: selectedCharacters.map((row) => row.id),
       scheduledStartAt: run.scheduledStartAt,
       notSelectedSignupIds: notSelectedIds,
       fromStatus: run.status,

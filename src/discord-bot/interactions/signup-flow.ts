@@ -135,14 +135,18 @@ type SignupOptionsPayload = {
 
 /** Rendered once, right after the character-select step — the User should see which of their characters is double-booked before choosing. */
 function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): string[] {
-  const blocked = ineligible.filter((item) => item.reason === "ALREADY_SELECTED_OTHER_RUN");
+  const blocked = ineligible.filter(
+    (item) =>
+      item.reason === "ALREADY_SELECTED_OTHER_RUN" || item.reason === "CHARACTER_UNAVAILABLE",
+  );
   if (blocked.length === 0) return [];
   return [
     "",
     "Unavailable characters:",
-    ...blocked.map(
-      (item) =>
-        `• ${item.characterName}-${item.realm}: already selected for ${item.conflictingRunTitle ?? "another run"}.`,
+    ...blocked.map((item) =>
+      item.reason === "CHARACTER_UNAVAILABLE"
+        ? `• ${item.characterName}-${item.realm}: marked unavailable for this reset.`
+        : `• ${item.characterName}-${item.realm}: already selected for ${item.conflictingRunTitle ?? "another run"}.`,
     ),
   ];
 }

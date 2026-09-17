@@ -51,7 +51,11 @@ export const characterScheduleCommitmentsService = {
         const scheduleConflicts = await getScheduleConflictsForCharacter({
           targetRunId: row.run.id,
           scheduledStartAt: row.run.scheduledStartAt,
-          characterId,
+          character: {
+            id: character.id,
+            name: character.name,
+            region: character.region,
+          },
         });
         return {
           signupId: row.signupId,

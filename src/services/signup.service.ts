@@ -28,6 +28,7 @@ import {
   getScheduleConflictsForCharacters,
   type CharacterScheduleConflict,
 } from "@/services/character-schedule-conflict.service";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 
 /**
  * Attaches cross-Run reservation info to a batch of Characters in one query
@@ -57,12 +58,17 @@ async function withReservationConflicts<T extends { id: string }>(
   return characters.map((character) => ({ ...character, reservationConflict: byId.get(character.id) ?? null }));
 }
 
-async function withSignupEligibilityContext<T extends { id: string }>(
-  characters: T[],
-  targetRunId: string,
-  scheduledStartAt: string,
-) {
-  return withReservationConflicts(characters, targetRunId, scheduledStartAt);
+async function withSignupEligibilityContext<
+  T extends { id: string; name: string; region: import("@/models/enums").WowRegion },
+>(characters: T[], targetRunId: string, scheduledStartAt: string) {
+  const [withReservations, unavailableIds] = await Promise.all([
+    withReservationConflicts(characters, targetRunId, scheduledStartAt),
+    characterWeeklyAvailabilityService.listUnavailableForRunStart(characters, scheduledStartAt),
+  ]);
+  return withReservations.map((character) => ({
+    ...character,
+    weeklyUnavailable: unavailableIds.has(character.id),
+  }));
 }
 
 function uniqueViolation(error: unknown): boolean {
@@ -82,17 +88,28 @@ export const signupService = {
   async getMyRuns(user: AuthenticatedUser) {
     const signups = await signupRepository.listByUserId(user.id);
 
-    const byRun = new Map<string, { scheduledStartAt: string; characterIds: string[] }>();
+    const byRun = new Map<
+      string,
+      {
+        scheduledStartAt: string;
+        characters: Array<{ id: string; name: string; region: import("@/models/enums").WowRegion }>;
+      }
+    >();
     for (const signup of signups) {
       if (signup.participationType !== "BOOSTER" || !signup.character) continue;
       if (signup.status === "WITHDRAWN") continue;
       const existing = byRun.get(signup.run.id);
+      const character = {
+        id: signup.character.id,
+        name: signup.character.name,
+        region: signup.character.region,
+      };
       if (existing) {
-        existing.characterIds.push(signup.character.id);
+        existing.characters.push(character);
       } else {
         byRun.set(signup.run.id, {
           scheduledStartAt: signup.run.scheduledStartAt,
-          characterIds: [signup.character.id],
+          characters: [character],
         });
       }
     }
@@ -103,7 +120,7 @@ export const signupService = {
         const map = await getScheduleConflictsForCharacters({
           targetRunId: runId,
           scheduledStartAt: meta.scheduledStartAt,
-          characterIds: meta.characterIds,
+          characters: meta.characters,
         });
         for (const [characterId, conflicts] of map) {
           conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
@@ -635,6 +652,12 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
       ineligible?.conflictingRunTitle
         ? `${ineligible.characterName} is already selected for ${ineligible.conflictingRunTitle}.`
         : "That character is already selected for another run at the same time.",
+    );
+  }
+  if (reason === "CHARACTER_UNAVAILABLE") {
+    return new DomainError(
+      "CHARACTER_UNAVAILABLE",
+      `${ineligible?.characterName ?? "That character"} is marked unavailable for this reset.`,
     );
   }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");

@@ -8,6 +8,7 @@ import type {
   RunStatus,
   SignupStatus,
   WowClass,
+  WowRegion,
 } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import { projectRunContentDisplay } from "@/lib/run-content-presets";
@@ -21,6 +22,7 @@ import {
   mapLootbuddyMode,
   mapLootbuddyVerification,
   mapParticipation,
+  mapRegion,
   mapRunStatus,
   mapSignupStatus,
   mapWowClass,
@@ -42,7 +44,13 @@ export type SignupListRecord = {
   lootbuddyClass: WowClass | null;
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
-  character: { id: string; name: string; realm: string; wowClass: WowClass } | null;
+  character: {
+    id: string;
+    name: string;
+    realm: string;
+    region: WowRegion;
+    wowClass: WowClass;
+  } | null;
   run: {
     id: string;
     title: string;
@@ -111,6 +119,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
           id: asString(character.id),
           name: asString(character.name),
           realm: asString(character.realm),
+          region: mapRegion(character.region),
           wowClass: mapWowClass(character.wowClass),
         }
       : null,
