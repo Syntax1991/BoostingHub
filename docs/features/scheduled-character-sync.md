@@ -8,7 +8,7 @@ It reuses the exact same lower-level refresh logic as manual "Refresh" / "Refres
 
 ## One-shot architecture — no internal timer
 
-**The app never owns the ~15-minute cadence.** There is no `setInterval`, no recursive `setTimeout`, no `while (true)` loop, and no cron library daemon anywhere in this feature. Instead:
+**The app never owns the external scheduler cadence.** There is no `setInterval`, no recursive `setTimeout`, no `while (true)` loop, and no cron library daemon anywhere in this feature. Instead:
 
 ```text
 External scheduler (cron / Windows Task Scheduler / CI schedule / ...)
@@ -20,6 +20,35 @@ External scheduler (cron / Windows Task Scheduler / CI schedule / ...)
 One invocation performs exactly one cycle, then the process exits with a status code. Scheduling the next tick is entirely an infrastructure concern, external to this codebase.
 
 This is a deliberate difference from the Discord bot (`src/discord-bot/`), which *is* a long-lived process — the scheduled sync script is not, and must not be run from inside the bot process or a Next.js API route with its own timer.
+
+## Scheduler cadence vs stale threshold
+
+These are **separate** concepts:
+
+| Concept | Recommended value | Who owns it |
+| --- | --- | --- |
+| External scheduler tick | ~every **15 minutes** | Infrastructure (cron / Task Scheduler) |
+| Character stale threshold | **120 minutes** (2 hours) | Application (`BLIZZARD_SYNC_STALE_MINUTES`) |
+
+Why both:
+
+- The scheduler runs often enough that a failed or rate-limited Character can retry on the next tick without waiting another two hours.
+- The stale filter skips Characters that were successfully synced within the last two hours, so most 15-minute ticks find **zero** candidates and make **no** Blizzard requests.
+- Successful Characters therefore synchronize about every two hours under normal conditions.
+
+Example timeline:
+
+```text
+12:00  Character successfully synced
+12:15  scheduler runs → Character fresh → skipped (no Blizzard call)
+12:30  …skipped…
+…
+14:00  Character is stale → sync candidate → Blizzard refresh
+14:00  (if that refresh fails) Character remains stale
+14:15  scheduler runs → still stale → eligible again
+```
+
+Do **not** configure the external scheduler to run only once every two hours — that would delay retries after transient Blizzard failures.
 
 ## Command
 
@@ -38,16 +67,32 @@ Exit code `0`: completed (including "no candidates" and "another cycle already r
 ## Stale threshold
 
 ```ts
-const DEFAULT_STALE_MINUTES = 15; // BLIZZARD_SYNC_STALE_MINUTES
+const DEFAULT_STALE_MINUTES = 120; // BLIZZARD_SYNC_STALE_MINUTES
 ```
 
 Configurable via `BLIZZARD_SYNC_STALE_MINUTES` (see `.env.example`):
 
-- Unset → defaults to 15 minutes.
-- Set to a positive integer → used as-is.
+- Unset → defaults to **120 minutes** (2 hours).
+- Set to a positive integer → used as-is (e.g. `15`, `30`, `120`).
 - Set to anything else (zero, negative, fractional, non-numeric) → the job fails loudly (`resolveScheduledSyncStaleMs()` throws) rather than silently falling back or permitting a 0-minute busy-loop threshold. A misconfigured production value should be visible, not quietly hammer Blizzard every cycle.
 
+Production recommendation:
+
+```env
+BLIZZARD_SYNC_STALE_MINUTES=120
+```
+
 A Character with `lastSyncedAt === null` is always stale and eligible.
+
+### Boundary comparison
+
+Eligibility uses a strict `<` against `staleBefore = now - threshold`:
+
+- `lastSyncedAt < staleBefore` → stale (candidate)
+- `lastSyncedAt === staleBefore` → fresh (skipped)
+- `lastSyncedAt > staleBefore` → fresh (skipped)
+
+So at an exact two-hour boundary the Character is treated as still fresh.
 
 ## Candidate selection
 
@@ -89,9 +134,11 @@ Scheduled sync **may** update, per successfully-refreshed Character:
 
 Scheduled sync **never** updates `Character.specialization` or `Character.primaryRole` — those are Character metadata a Blizzard sync must not overwrite (only the User editing the Character changes them). It also never calls `applyBlizzardLink()` (the initial-link path); it only ever calls `applyBlizzardSync()` on already-linked Characters, same as manual refresh.
 
+It also never changes Weekly Availability, Booster Access / Qualification, signup/roster/run commitments, payout, or attendance data.
+
 ### Partial failure policy
 
-One broken Character (profile unavailable, character deleted server-side, identity/class mismatch, realm transfer, transient Blizzard error) does not fail the job. It is counted in `failed` and the cycle continues with the remaining candidates. On any such failure, the Character's existing `itemLevel` and lockout rows are left untouched — never cleared to `0`/`null`/empty.
+One broken Character (profile unavailable, character deleted server-side, identity/class mismatch, realm transfer, transient Blizzard error) does not fail the job. It is counted in `failed` and the cycle continues with the remaining candidates. On any such failure, the Character's existing `itemLevel` and lockout rows are left untouched — never cleared to `0`/`null`/empty. A failed Character remains stale and is eligible again on the next external scheduler tick.
 
 ### Lockout sync failure
 
@@ -100,6 +147,8 @@ If the profile refresh succeeds but the lockout-encounters call fails or is unus
 ### Rate limiting
 
 If Blizzard returns `BATTLENET_RATE_LIMITED` for any candidate, the job stops dispatching *new* refreshes for the remainder of the cycle (already-in-flight requests are left to settle) rather than retrying into the rate limit. Every candidate that hit the limit or was skipped because of it is counted in `rateLimited`, and the cycle still exits cleanly and reports its result — no retry storm, no long in-process sleep (the current Blizzard API client does not expose a trustworthy `Retry-After` contract to sleep against, so the deliberate, documented choice is to stop the cycle conservatively instead).
+
+Because the external scheduler runs again approximately 15 minutes later, still-stale Characters naturally become candidates again without an in-process retry loop.
 
 ### Configuration failure
 
@@ -111,7 +160,14 @@ Successful refreshes are grouped by `BattleNetConnection`. A connection's `lastS
 
 ## Relationship to manual refresh
 
-Manual refresh (`characterBlizzardSyncService.refreshCharacter` / `refreshLinkedCharactersForRegion`) is unchanged: its 60-second `REFRESH_COOLDOWN_MS` still applies, and "Refresh All" is still available from the Web UI. The scheduled job's stale threshold is a completely separate concept — a Character manually refreshed 2 minutes ago is untouched by the manual cooldown check, but is also not yet "stale" under the (larger, default 15-minute) scheduled threshold, so the scheduled job naturally skips it too without sharing any state with the manual cooldown.
+Manual refresh (`characterBlizzardSyncService.refreshCharacter` / `refreshLinkedCharactersForRegion`) is unchanged: its **60-second** `REFRESH_COOLDOWN_MS` still applies, and "Refresh All" is still available from the Web UI.
+
+The scheduled job's **120-minute** stale threshold is a completely separate concept from the manual cooldown:
+
+- Background: last sync 45 minutes ago → considered fresh → scheduler skips.
+- User presses Refresh → existing manual path may refresh immediately (subject to the ~60-second manual cooldown only).
+
+Do not share configuration between these two paths.
 
 Both paths call the same reusable `refreshLinkedCharacterProfile(owner, character, connectionId, options)` function. It takes a minimal `CharacterSyncOwner = { id, name }` context rather than a full `AuthenticatedUser`, because the scheduled job has no logged-in User — it builds this context from the Character's real, persisted owner (via the eager-loaded `User` relation), never a fabricated `ADMIN` user or a bypassed ownership check.
 
@@ -129,12 +185,14 @@ No `ScheduledJob` / `CronJob` / job-lease table was added. A PostgreSQL advisory
 
 ## Scheduling examples (documentation only — nothing here creates a scheduled task)
 
+Recommend an external tick of **~15 minutes** even though Characters only become stale after **120 minutes**. Most ticks should exit quickly with zero candidates.
+
 ### Windows Task Scheduler
 
 - **Program/script**: `cmd.exe`
 - **Add arguments**: `/c npm run sync:characters`
 - **Start in**: `D:\Projects\BoostingHub` (your local checkout path)
-- **Trigger**: repeat every 15 minutes
+- **Trigger**: repeat every **15 minutes** (not every 2 hours)
 
 ### cron (generic Linux/macOS deployment)
 

@@ -5,9 +5,10 @@ import { scheduledCharacterSyncService } from "@/services/scheduled-character-sy
 
 /**
  * One-shot scheduled Blizzard character sync entrypoint. One invocation =
- * one sync cycle, then the process exits — the ~15-minute cadence is an
- * external scheduling concern (cron, Windows Task Scheduler, ...), never a
- * timer owned by this app. See docs/features/scheduled-character-sync.md.
+ * one sync cycle, then the process exits. External schedulers should tick
+ * about every ~15 minutes; Characters become sync candidates only after the
+ * ~120-minute stale threshold (BLIZZARD_SYNC_STALE_MINUTES). The app never
+ * owns a timer. See docs/features/scheduled-character-sync.md.
  *
  * Usage:
  *   npm run sync:characters
