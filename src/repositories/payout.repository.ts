@@ -140,6 +140,29 @@ export const payoutRepository = {
     return row ? mapEntry(row as Record<string, unknown>) : null;
   },
 
+  /**
+   * Batched settlement status for Manage Runs handoffs.
+   * One query for all run ids; empty input → empty Map. Missing run → absent key (NONE).
+   */
+  async listStatusByRunIds(runIds: string[]): Promise<Map<string, SettlementStatus>> {
+    const byRunId = new Map<string, SettlementStatus>();
+    if (runIds.length === 0) {
+      return byRunId;
+    }
+    const uniqueIds = [...new Set(runIds.filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      return byRunId;
+    }
+    const rows = await orm.RunSettlement.where((settlement) => settlement.runId.in(uniqueIds))
+      .select("runId", "status")
+      .all();
+    for (const row of rows) {
+      const record = row as Record<string, unknown>;
+      byRunId.set(asString(record.runId), mapSettlementStatus(record.status));
+    }
+    return byRunId;
+  },
+
   async createDraft(input: {
     runId: string;
     totalGold: number;

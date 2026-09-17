@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
-import { parseRunDetailTab, runDetailPath, runDetailTabForManageAction } from "@/lib/run-routes";
+import { parseRunDetailTab, runDetailPath } from "@/lib/run-routes";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { rosterService } from "@/services/roster.service";
 import { runDetailService } from "@/services/run-detail.service";
@@ -57,11 +57,10 @@ describe("canonical run routes", () => {
     expect(parseRunDetailTab("attendance")).toBe("attendance");
     expect(parseRunDetailTab("payout")).toBe("payout");
     expect(parseRunDetailTab("unknown")).toBe("overview");
-    expect(runDetailTabForManageAction("Continue Roster")).toBe("roster");
-    expect(runDetailTabForManageAction("Attendance")).toBe("attendance");
-    expect(runDetailTabForManageAction("Payout")).toBe("payout");
-    expect(runDetailTabForManageAction("View")).toBe("overview");
-    expect(runDetailTabForManageAction("Manage")).toBe("overview");
+    expect(runDetailPath("run-1")).toBe("/runs/run-1");
+    expect(runDetailPath("run-1", "attendance")).toBe("/runs/run-1?tab=attendance");
+    expect(runDetailPath("run-1", "payout")).toBe("/runs/run-1?tab=payout");
+    expect(runDetailPath("run-1", "overview")).toBe("/runs/run-1");
   });
 });
 

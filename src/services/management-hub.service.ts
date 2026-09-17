@@ -1,13 +1,23 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
+  canManageRun,
   canManageUsers,
   canReviewBoosterAccess,
   getManagementNavItems,
+  hasAdminAccess,
+  hasRaidLeadAccess,
 } from "@/auth/authorization";
 import { boosterAccessRepository } from "@/repositories/booster-access.repository";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
+import { attendanceRepository } from "@/repositories/attendance.repository";
+import { payoutRepository } from "@/repositories/payout.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
+import {
+  projectRunOperationalHandoff,
+  type RunSettlementStage,
+} from "@/services/run-operational-handoff";
+import { getRunLifecycleCapabilities } from "@/services/run-state";
 
 export type ManagementOverviewCard = {
   id: "runs" | "booster-access" | "users";
@@ -29,28 +39,59 @@ export const managementHubService = {
     const nav = getManagementNavItems(user.accountRole);
     const cards: ManagementOverviewCard[] = [];
 
-    const runCounts = await runRepository.countByStatuses();
-    const upcoming =
-      (runCounts.OPEN ?? 0) + (runCounts.ROSTERING ?? 0) + (runCounts.PUBLISHED ?? 0);
-    const rosterWork = (runCounts.OPEN ?? 0) + (runCounts.ROSTERING ?? 0);
-    const active =
-      (runCounts.OPEN ?? 0) +
-      (runCounts.ROSTERING ?? 0) +
-      (runCounts.PUBLISHED ?? 0) +
-      (runCounts.IN_PROGRESS ?? 0);
+    if (hasRaidLeadAccess(user.accountRole)) {
+      const runs = await runRepository.listManaged();
+      const managed = runs.filter(
+        (run) => canManageRun(user, run) && !run.archivedAt,
+      );
+      const runIds = managed.map((run) => run.id);
+      const [attendanceByRunId, settlementByRunId] = await Promise.all([
+        attendanceRepository.summarizeByRunIds(runIds),
+        payoutRepository.listStatusByRunIds(runIds),
+      ]);
+      const canMarkPaid = hasAdminAccess(user.accountRole);
+      let needsAttendance = 0;
+      let readyToComplete = 0;
+      let needsSettlement = 0;
 
-    cards.push({
-      id: "runs",
-      title: "Runs",
-      description: "Create drafts, open signups, and manage assigned operations.",
-      href: "/manage/runs",
-      cta: "Manage Runs",
-      metrics: [
-        { label: "Upcoming / open", value: upcoming },
-        { label: "Roster work", value: rosterWork },
-        { label: "Active", value: active },
-      ],
-    });
+      for (const run of managed) {
+        const capabilities = getRunLifecycleCapabilities({
+          status: run.status,
+          signupsOpen: run.signupsOpen,
+          hasSignupHistory: run.signups.length > 0,
+          actorIsAdmin: canMarkPaid,
+          archivedAt: run.archivedAt,
+        });
+        const attendance = attendanceByRunId.get(run.id) ?? { total: 0, unmarkedCount: 0 };
+        const settlementStage: RunSettlementStage = settlementByRunId.get(run.id) ?? "NONE";
+        const handoff = projectRunOperationalHandoff({
+          status: run.status,
+          hasRoster: Boolean(run.roster),
+          publishedAt: run.roster?.publishedAt ?? null,
+          draftSelectedCount: run.roster?.draftSelectedCount ?? 0,
+          capabilities,
+          attendance,
+          settlementStage,
+          canMarkPaid,
+        });
+        if (handoff.attention === "NEEDS_ATTENDANCE") needsAttendance += 1;
+        if (handoff.attention === "READY_TO_COMPLETE") readyToComplete += 1;
+        if (handoff.attention === "NEEDS_SETTLEMENT") needsSettlement += 1;
+      }
+
+      cards.push({
+        id: "runs",
+        title: "Runs",
+        description: "Create drafts, open signups, and manage assigned operations.",
+        href: "/manage/runs",
+        cta: "Manage Runs",
+        metrics: [
+          { label: "Needs attendance", value: needsAttendance },
+          { label: "Ready to complete", value: readyToComplete },
+          { label: "Needs settlement", value: needsSettlement },
+        ],
+      });
+    }
 
     if (canReviewBoosterAccess(user.accountRole)) {
       const [accessCounts, approvedQualificationCount] = await Promise.all([
