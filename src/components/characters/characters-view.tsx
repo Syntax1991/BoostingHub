@@ -14,6 +14,8 @@ import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
 import { FindMissingWarcraftLogsButton } from "@/components/characters/find-missing-warcraft-logs-button";
 import { WeeklyAvailabilityDialog } from "@/components/characters/weekly-availability-dialog";
+import { formatWeeklyAvailabilityButtonLabel } from "@/lib/weekly-availability-display";
+import { cn } from "@/lib/cn";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -184,12 +186,13 @@ function AvailabilityCell({ character }: { character: CharacterRow }) {
       characterId={character.id}
       characterName={character.name}
       weeklyAvailability={character.weeklyAvailability}
-      triggerLabel={unavailable ? "Unavailable" : "Available"}
-      triggerClassName={
-        unavailable
-          ? "inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide bg-[#4a2a2a] text-[#f0b4b4] hover:opacity-90"
-          : "inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide bg-[#243528] text-[#b7e0c0] hover:opacity-90"
-      }
+      triggerLabel={formatWeeklyAvailabilityButtonLabel(
+        character.weeklyAvailability.unavailableDifficulties,
+      )}
+      triggerClassName={cn(
+        "inline-flex h-8 items-center rounded-md border border-border bg-transparent px-2 text-xs font-medium transition-colors hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+        unavailable ? "text-[#f0b4b4]" : "text-[#b7e0c0]",
+      )}
     />
   );
 }

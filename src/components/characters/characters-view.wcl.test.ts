@@ -98,6 +98,7 @@ const baseCharacter = {
   weeklyAvailability: {
     characterId: "char-1",
     status: "AVAILABLE",
+    unavailableDifficulties: [],
     resetIdentifier: "2026-W38",
     region: "EU",
     resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",

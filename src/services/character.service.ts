@@ -160,6 +160,7 @@ export const characterService = {
           weeklyAvailability: weeklyAvailabilityById.get(character.id) ?? {
             characterId: character.id,
             status: "AVAILABLE" as const,
+            unavailableDifficulties: [],
             resetIdentifier: currentReset,
             region: character.region,
             resetWindowLabel: `${character.region} · ${currentReset}`,

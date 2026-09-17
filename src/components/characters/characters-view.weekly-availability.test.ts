@@ -65,6 +65,7 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
     weeklyAvailability: {
       characterId: "char-1",
       status: "AVAILABLE",
+      unavailableDifficulties: [],
       resetIdentifier: "2026-W38",
       region: "EU",
       resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",
@@ -99,7 +100,7 @@ function basePage(overrides: Partial<Page> = {}): Page {
 }
 
 describe("CharactersView weekly availability", () => {
-  it("shows Available / Unavailable and has no date/time Availability Check or External planning", () => {
+  it("renders Availability as interactive button labels with difficulty summaries", () => {
     const html = renderToStaticMarkup(
       createElement(CharactersView, {
         data: basePage({
@@ -111,6 +112,19 @@ describe("CharactersView weekly availability", () => {
               weeklyAvailability: {
                 characterId: "char-2",
                 status: "UNAVAILABLE",
+                unavailableDifficulties: ["HEROIC"],
+                resetIdentifier: "2026-W38",
+                region: "EU",
+                resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",
+              },
+            }),
+            baseCharacter({
+              id: "char-3",
+              name: "Synblast",
+              weeklyAvailability: {
+                characterId: "char-3",
+                status: "UNAVAILABLE",
+                unavailableDifficulties: ["NORMAL", "HEROIC", "MYTHIC"],
                 resetIdentifier: "2026-W38",
                 region: "EU",
                 resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",
@@ -123,7 +137,10 @@ describe("CharactersView weekly availability", () => {
 
     expect(html).toContain("Availability");
     expect(html).toContain(">Available<");
-    expect(html).toContain(">Unavailable<");
+    expect(html).toContain(">Unavailable · HC<");
+    expect(html).toContain(">Unavailable · All<");
+    expect(html).toContain("<button");
+    expect(html).toContain("border border-");
     expect(html).not.toContain("Availability check");
     expect(html).not.toContain("Check availability");
     expect(html).not.toContain("checkAt");

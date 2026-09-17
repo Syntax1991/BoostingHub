@@ -4,9 +4,13 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setCharacterCurrentResetAvailabilityAction } from "@/controllers/character-weekly-availability.actions";
 import { Button } from "@/components/ui/button";
+import { DIFFICULTY_LABELS } from "@/lib/labels";
+import { cn } from "@/lib/cn";
+import { RAID_DIFFICULTIES, type RaidDifficulty } from "@/models/enums";
 
 type WeeklyAvailabilityState = {
   status: "AVAILABLE" | "UNAVAILABLE";
+  unavailableDifficulties: RaidDifficulty[];
   resetWindowLabel: string;
 };
 
@@ -30,6 +34,9 @@ export function WeeklyAvailabilityDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [available, setAvailable] = useState(weeklyAvailability.status === "AVAILABLE");
+  const [selectedDifficulties, setSelectedDifficulties] = useState<RaidDifficulty[]>(
+    weeklyAvailability.unavailableDifficulties,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -43,6 +50,7 @@ export function WeeklyAvailabilityDialog({
 
   function openDialog() {
     setAvailable(weeklyAvailability.status === "AVAILABLE");
+    setSelectedDifficulties([...weeklyAvailability.unavailableDifficulties]);
     setError(null);
     setOpen(true);
   }
@@ -52,11 +60,24 @@ export function WeeklyAvailabilityDialog({
     setOpen(false);
   }
 
+  function toggleDifficulty(difficulty: RaidDifficulty) {
+    setSelectedDifficulties((current) =>
+      current.includes(difficulty)
+        ? current.filter((item) => item !== difficulty)
+        : RAID_DIFFICULTIES.filter((item) => item === difficulty || current.includes(item)),
+    );
+  }
+
   function save() {
+    if (!available && selectedDifficulties.length === 0) {
+      setError("Select at least one difficulty when marking unavailable.");
+      return;
+    }
     startTransition(async () => {
       const result = await setCharacterCurrentResetAvailabilityAction({
         characterId,
         available,
+        unavailableDifficulties: available ? undefined : selectedDifficulties,
       });
       if (!result.ok) {
         setError(result.message);
@@ -66,6 +87,8 @@ export function WeeklyAvailabilityDialog({
       router.refresh();
     });
   }
+
+  const saveDisabled = pending || (!available && selectedDifficulties.length === 0);
 
   return (
     <>
@@ -91,27 +114,76 @@ export function WeeklyAvailabilityDialog({
             <div className="mt-0.5 font-medium">{weeklyAvailability.resetWindowLabel}</div>
           </div>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Available this reset?</legend>
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm has-[:checked]:border-accent">
-              <input
-                type="radio"
-                name={`weekly-availability-${characterId}`}
-                checked={available}
-                onChange={() => setAvailable(true)}
-              />
-              Available
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm has-[:checked]:border-accent">
-              <input
-                type="radio"
-                name={`weekly-availability-${characterId}`}
-                checked={!available}
-                onChange={() => setAvailable(false)}
-              />
-              Unavailable
-            </label>
-          </fieldset>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Available this reset?</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                aria-pressed={available}
+                onClick={() => {
+                  setAvailable(true);
+                  setError(null);
+                }}
+                className={cn(
+                  "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium",
+                  available
+                    ? "bg-accent text-black"
+                    : "border border-border hover:bg-surface-raised",
+                )}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                aria-pressed={!available}
+                onClick={() => {
+                  setAvailable(false);
+                  setError(null);
+                }}
+                className={cn(
+                  "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium",
+                  !available
+                    ? "bg-accent text-black"
+                    : "border border-border hover:bg-surface-raised",
+                )}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          {!available ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Unavailable for</p>
+              <div className="flex flex-wrap gap-2">
+                {RAID_DIFFICULTIES.map((difficulty) => {
+                  const selected = selectedDifficulties.includes(difficulty);
+                  return (
+                    <button
+                      key={difficulty}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        toggleDifficulty(difficulty);
+                        setError(null);
+                      }}
+                      className={cn(
+                        "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium",
+                        selected
+                          ? "border border-[#8a4a4a] bg-[#4a2a2a] text-[#f0b4b4]"
+                          : "border border-border hover:bg-surface-raised",
+                      )}
+                    >
+                      {DIFFICULTY_LABELS[difficulty]}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedDifficulties.length === 0 ? (
+                <p className="text-xs text-warning">Select at least one difficulty.</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {error ? <p className="text-sm text-warning">{error}</p> : null}
 
@@ -119,7 +191,7 @@ export function WeeklyAvailabilityDialog({
             <Button type="button" variant="secondary" onClick={close} disabled={pending}>
               Cancel
             </Button>
-            <Button type="button" onClick={save} disabled={pending}>
+            <Button type="button" onClick={save} disabled={saveDisabled}>
               {pending ? "Saving…" : "Save"}
             </Button>
           </div>
