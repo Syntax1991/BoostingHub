@@ -39,8 +39,8 @@ vi.mock("@/components/characters/find-missing-warcraft-logs-button", () => ({
     createElement("button", { type: "button" }, "Find missing Warcraft Logs"),
 }));
 
-vi.mock("@/components/characters/availability-block-dialog", () => ({
-  AvailabilityBlockDialog: ({ triggerLabel }: { triggerLabel: string }) =>
+vi.mock("@/components/characters/weekly-availability-dialog", () => ({
+  WeeklyAvailabilityDialog: ({ triggerLabel }: { triggerLabel: string }) =>
     createElement("button", { type: "button" }, triggerLabel),
 }));
 
@@ -95,7 +95,14 @@ const baseCharacter = {
   boosterAccess: { approvedCount: 0, pendingCount: 0, revokedCount: 0, approvals: [] },
   currentReset: "2026-W38",
   lockouts: [],
-  externalCommitments: [],
+  weeklyAvailability: {
+    characterId: "char-1",
+    status: "AVAILABLE",
+    unavailableDifficulties: [],
+    resetIdentifier: "2026-W38",
+    region: "EU",
+    resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",
+  },
 } as CharacterRow;
 
 describe("CharactersView Warcraft Logs discovery", () => {

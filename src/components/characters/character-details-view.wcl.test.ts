@@ -32,6 +32,11 @@ vi.mock("@/components/characters/character-schedule-commitments-section", () => 
   CharacterScheduleCommitmentsSection: () => null,
 }));
 
+vi.mock("@/components/characters/weekly-availability-dialog", () => ({
+  WeeklyAvailabilityDialog: ({ triggerLabel }: { triggerLabel: string }) =>
+    createElement("button", { type: "button" }, triggerLabel),
+}));
+
 vi.mock("@/components/characters/link-warcraft-logs-button", () => ({
   LinkWarcraftLogsButton: ({ characterId }: { characterId: string }) =>
     createElement("button", { type: "button", "data-character-id": characterId }, "Find Warcraft Logs"),
@@ -72,8 +77,15 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
       { id: "tidebound", name: "Nymrissa" },
     ],
     lockouts: [],
+    weeklyAvailability: {
+      characterId: "char-1",
+      status: "AVAILABLE",
+      unavailableDifficulties: [],
+      resetIdentifier: "2026-W38",
+      region: "EU",
+      resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",
+    },
     scheduleCommitments: [],
-    availability: { upcoming: [], past: [] },
     ...overrides,
   };
 }

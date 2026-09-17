@@ -12,11 +12,9 @@ import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import { activityRepository } from "@/repositories/activity.repository";
 import type { CharacterPageRecord } from "@/repositories/character.repository";
 import { characterRepository } from "@/repositories/character.repository";
-import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
-import { findBlockingAvailabilityBlock } from "@/lib/character-availability";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
 import {
@@ -30,6 +28,7 @@ import {
   getScheduleConflictsForCharacters,
   type CharacterScheduleConflict,
 } from "@/services/character-schedule-conflict.service";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 
 /**
  * Attaches cross-Run reservation info to a batch of Characters in one query
@@ -47,7 +46,7 @@ async function withReservationConflicts<T extends { id: string }>(
   }
   const conflicts = await signupRepository.findReservationConflicts({
     characterIds: characters.map((character) => character.id),
-    targetRunId,
+    excludeRunId: targetRunId,
     scheduledStartAt,
   });
   const byId = new Map(
@@ -59,57 +58,26 @@ async function withReservationConflicts<T extends { id: string }>(
   return characters.map((character) => ({ ...character, reservationConflict: byId.get(character.id) ?? null }));
 }
 
-/**
- * Attaches manual CharacterAvailabilityBlock coverage for the Run start.
- * Independent of cross-Run reservation; never applies the 2h gap.
- */
-async function withManualUnavailability<T extends { id: string }>(
-  characters: T[],
-  scheduledStartAt: string,
-): Promise<
-  Array<
-    T & {
-      manualUnavailability: { startsAt: string; endsAt: string; reason: string | null } | null;
-    }
-  >
-> {
-  if (characters.length === 0) {
-    return [];
-  }
-  const blocks = await characterAvailabilityRepository.findBlockingForRun({
-    characterIds: characters.map((character) => character.id),
-    runStartAt: scheduledStartAt,
-  });
-  const byCharacter = new Map<string, typeof blocks>();
-  for (const block of blocks) {
-    const existing = byCharacter.get(block.characterId);
-    if (existing) {
-      existing.push(block);
-    } else {
-      byCharacter.set(block.characterId, [block]);
-    }
-  }
-  return characters.map((character) => {
-    const selected = findBlockingAvailabilityBlock(
-      scheduledStartAt,
-      byCharacter.get(character.id) ?? [],
-    );
-    return {
-      ...character,
-      manualUnavailability: selected
-        ? { startsAt: selected.startsAt, endsAt: selected.endsAt, reason: selected.reason }
-        : null,
-    };
-  });
-}
-
-async function withSignupEligibilityContext<T extends { id: string }>(
+async function withSignupEligibilityContext<
+  T extends { id: string; name: string; region: import("@/models/enums").WowRegion },
+>(
   characters: T[],
   targetRunId: string,
   scheduledStartAt: string,
+  difficulty: import("@/models/enums").RaidDifficulty,
 ) {
-  const withReservation = await withReservationConflicts(characters, targetRunId, scheduledStartAt);
-  return withManualUnavailability(withReservation, scheduledStartAt);
+  const [withReservations, unavailableIds] = await Promise.all([
+    withReservationConflicts(characters, targetRunId, scheduledStartAt),
+    characterWeeklyAvailabilityService.listUnavailableForRun(
+      characters,
+      scheduledStartAt,
+      difficulty,
+    ),
+  ]);
+  return withReservations.map((character) => ({
+    ...character,
+    weeklyUnavailable: unavailableIds.has(character.id),
+  }));
 }
 
 function uniqueViolation(error: unknown): boolean {
@@ -129,17 +97,30 @@ export const signupService = {
   async getMyRuns(user: AuthenticatedUser) {
     const signups = await signupRepository.listByUserId(user.id);
 
-    const byRun = new Map<string, { scheduledStartAt: string; characterIds: string[] }>();
+    const byRun = new Map<
+      string,
+      {
+        scheduledStartAt: string;
+        difficulty: import("@/models/enums").RaidDifficulty;
+        characters: Array<{ id: string; name: string; region: import("@/models/enums").WowRegion }>;
+      }
+    >();
     for (const signup of signups) {
       if (signup.participationType !== "BOOSTER" || !signup.character) continue;
       if (signup.status === "WITHDRAWN") continue;
       const existing = byRun.get(signup.run.id);
+      const character = {
+        id: signup.character.id,
+        name: signup.character.name,
+        region: signup.character.region,
+      };
       if (existing) {
-        existing.characterIds.push(signup.character.id);
+        existing.characters.push(character);
       } else {
         byRun.set(signup.run.id, {
           scheduledStartAt: signup.run.scheduledStartAt,
-          characterIds: [signup.character.id],
+          difficulty: signup.run.difficulty,
+          characters: [character],
         });
       }
     }
@@ -150,7 +131,8 @@ export const signupService = {
         const map = await getScheduleConflictsForCharacters({
           targetRunId: runId,
           scheduledStartAt: meta.scheduledStartAt,
-          characterIds: meta.characterIds,
+          difficulty: meta.difficulty,
+          characters: meta.characters,
         });
         for (const [characterId, conflicts] of map) {
           conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
@@ -226,7 +208,12 @@ export const signupService = {
     }
 
     const rawCharacters = await characterRepository.listByUserId(user.id);
-    const characters = await withSignupEligibilityContext(rawCharacters, run.id, run.scheduledStartAt);
+    const characters = await withSignupEligibilityContext(
+      rawCharacters,
+      run.id,
+      run.scheduledStartAt,
+      run.difficulty,
+    );
     const eligibilityRun = toEligibilityRun(run);
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun);
@@ -288,7 +275,12 @@ export const signupService = {
       throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
     }
 
-    const [enrichedCharacter] = await withSignupEligibilityContext([character], run.id, run.scheduledStartAt);
+    const [enrichedCharacter] = await withSignupEligibilityContext(
+      [character],
+      run.id,
+      run.scheduledStartAt,
+      run.difficulty,
+    );
     const { eligible, ineligible } = evaluateBoosterOptions(
       [enrichedCharacter],
       toEligibilityRun(run),
@@ -684,10 +676,10 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
         : "That character is already selected for another run at the same time.",
     );
   }
-  if (reason === "MANUALLY_UNAVAILABLE") {
+  if (reason === "CHARACTER_UNAVAILABLE") {
     return new DomainError(
-      "CHARACTER_MANUALLY_UNAVAILABLE",
-      ineligible?.message ?? "That character is marked unavailable for this run time.",
+      "CHARACTER_UNAVAILABLE",
+      `${ineligible?.characterName ?? "That character"} is marked unavailable for this difficulty this reset.`,
     );
   }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");
@@ -815,6 +807,7 @@ async function validateOfferedCharacters(
     offeredCharacters.map(({ character }) => character),
     run.id,
     run.scheduledStartAt,
+    run.difficulty,
   );
   const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun);
   for (const { offer, character } of offeredCharacters) {

@@ -115,7 +115,7 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
     expect(html).toContain("No approved booster access.");
   });
 
-  it("still shows WCL for a manually unavailable Booster Character with an id", () => {
+  it("still shows WCL for a reservation-blocked Booster Character with an id", () => {
     const html = renderToStaticMarkup(
       createElement(BoosterCharacterChecklist, {
         groups: [],
@@ -125,8 +125,9 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
             characterName: "Busy",
             realm: "Silvermoon",
             warcraftLogsId: "99887766",
-            reason: "MANUALLY_UNAVAILABLE",
-            message: "Unavailable Fri 18/09/2026 19:00–22:00 — External boost",
+            reason: "ALREADY_SELECTED_OTHER_RUN",
+            message: "Already selected for another run.",
+            conflictingRunTitle: "Friday Heroic",
           },
         ],
         selected: emptySelected,
@@ -137,6 +138,6 @@ describe("BoosterCharacterChecklist Warcraft Logs links", () => {
       }),
     );
     expect(html).toContain("https://www.warcraftlogs.com/character/id/99887766");
-    expect(html).toContain("External boost");
+    expect(html).toContain("Friday Heroic");
   });
 });

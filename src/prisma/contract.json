@@ -40,6 +40,10 @@
       "model": "CharacterRaidLockout",
       "namespace": "public"
     },
+    "character_weekly_unavailability": {
+      "model": "CharacterWeeklyUnavailability",
+      "namespace": "public"
+    },
     "raid": {
       "model": "Raid",
       "namespace": "public"
@@ -1612,6 +1616,21 @@
                   "model": "User",
                   "namespace": "public"
                 }
+              },
+              "weeklyUnavailability": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "characterId"
+                  ]
+                },
+                "to": {
+                  "model": "CharacterWeeklyUnavailability",
+                  "namespace": "public"
+                }
               }
             },
             "storage": {
@@ -1908,6 +1927,99 @@
               },
               "namespaceId": "public",
               "table": "character_raid_lockout"
+            }
+          },
+          "CharacterWeeklyUnavailability": {
+            "fields": {
+              "characterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "difficulty": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidDifficulty",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "resetIdentifier": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "character": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "characterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Character",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "characterId": {
+                  "column": "characterId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "resetIdentifier": {
+                  "column": "resetIdentifier"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "character_weekly_unavailability"
             }
           },
           "Raid": {
@@ -6699,6 +6811,108 @@
                 }
               ]
             },
+            "character_weekly_unavailability": {
+              "checks": [
+                {
+                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
+                  "name": "character_weekly_unavailability_difficulty_check_05ae26c2",
+                  "prefix": "character_weekly_unavailability_difficulty_check"
+                }
+              ],
+              "columns": {
+                "characterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidDifficulty",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "resetIdentifier": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "characterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character_weekly_unavailability"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "characterId"
+                  ],
+                  "name": "character_weekly_unavailability_characterId_idx_2423fe9d",
+                  "prefix": "character_weekly_unavailability_characterId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "resetIdentifier"
+                  ],
+                  "name": "character_weekly_unavailability_resetIdentifier_idx_bfbda43f",
+                  "prefix": "character_weekly_unavailability_resetIdentifier_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "characterId",
+                    "resetIdentifier",
+                    "difficulty"
+                  ]
+                }
+              ]
+            },
             "raid": {
               "columns": {
                 "createdAt": {
@@ -9529,10 +9743,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "966a9105220945586e21dcce84f7286ebac50074def621915221c66e20600735"
+    "storageHash": "d80ac736e580edd515c8b300c2b6e6342ad510b70becf65871e06c68c45a7325"
   },
   "execution": {
-    "executionHash": "fc2fd6a055216a86d3e5b8acddb6e63cb97a34428c6765178aee485a426c5a5f",
+    "executionHash": "b5c6546a0390593f96086a20925a8360dc178e073a03364e56e203b76bdc1cc0",
     "mutations": {
       "defaults": [
         {
@@ -9737,6 +9951,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "character_raid_lockout"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "character_weekly_unavailability"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "character_weekly_unavailability"
           }
         },
         {

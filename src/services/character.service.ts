@@ -15,8 +15,8 @@ import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { characterAvailabilityService } from "@/services/character-availability.service";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -106,10 +106,9 @@ export const characterService = {
     const characters = await characterRepository.listByUserId(user.id);
     const currentRaids = getCurrentLockoutRaids();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
-    const externalByCharacter =
-      await characterAvailabilityService.listCurrentOrUpcomingByCharacterIds(
-        characters.map((character) => character.id),
-      );
+    const weeklyAvailabilityById = await characterWeeklyAvailabilityService.projectCurrentForCharacters(
+      characters,
+    );
 
     return {
       currentResetByRegion: {
@@ -158,7 +157,14 @@ export const characterService = {
           boosterAccess: access,
           currentReset,
           lockouts,
-          externalCommitments: externalByCharacter.get(character.id) ?? [],
+          weeklyAvailability: weeklyAvailabilityById.get(character.id) ?? {
+            characterId: character.id,
+            status: "AVAILABLE" as const,
+            unavailableDifficulties: [],
+            resetIdentifier: currentReset,
+            region: character.region,
+            resetWindowLabel: `${character.region} · ${currentReset}`,
+          },
         };
       }),
     };
@@ -188,6 +194,11 @@ export const characterService = {
         verified: true,
       }));
 
+    const weeklyAvailability = await characterWeeklyAvailabilityService.getCurrentForOwner(
+      user,
+      characterId,
+    );
+
     return {
       id: character.id,
       name: character.name,
@@ -216,8 +227,8 @@ export const characterService = {
         name: raidContentDisplayName(raid.id, raid.name),
       })),
       lockouts: currentLockouts,
+      weeklyAvailability,
       scheduleCommitments: await characterScheduleCommitmentsService.listForOwner(user, characterId),
-      availability: await characterAvailabilityService.listForCharacter(user, characterId),
     };
   },
 

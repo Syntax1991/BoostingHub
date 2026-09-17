@@ -1,3 +1,7 @@
+/**
+ * DEPRECATED / INERT — CharacterAvailabilityBlock is no longer part of active
+ * BoostingHub scheduling. Table may remain; do not call from product paths.
+ */
 import { randomUUID } from "node:crypto";
 import { orm } from "@/lib/prisma";
 import { asString, asStringOrNull } from "@/lib/persistence";
@@ -126,3 +130,4 @@ export const characterAvailabilityRepository = {
     await orm.CharacterAvailabilityBlock.where({ id: blockId }).delete();
   },
 };
+

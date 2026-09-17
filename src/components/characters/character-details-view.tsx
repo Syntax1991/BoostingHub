@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
-import { CharacterAvailabilitySection } from "@/components/characters/character-availability-section";
 import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
+import { WeeklyAvailabilityDialog } from "@/components/characters/weekly-availability-dialog";
+import { formatWeeklyAvailabilityDetailSummary } from "@/lib/weekly-availability-display";
 import { projectCurrentRaidLockoutSlots } from "@/lib/lockout-display";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
@@ -254,12 +255,46 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         </Card>
       </div>
       <div className="mt-4 grid gap-4">
+        <Card>
+          <CardHeader
+            title="Availability"
+            description="Current regional WoW reset only. New resets default to Available."
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+            <div>
+              <p className="text-xs text-muted">{data.weeklyAvailability.resetWindowLabel}</p>
+              {(() => {
+                const summary = formatWeeklyAvailabilityDetailSummary(
+                  data.weeklyAvailability.unavailableDifficulties,
+                );
+                return (
+                  <>
+                    <p
+                      className={
+                        data.weeklyAvailability.status === "UNAVAILABLE"
+                          ? "mt-1 text-sm font-semibold text-[#f0b4b4]"
+                          : "mt-1 text-sm font-semibold text-[#b7e0c0]"
+                      }
+                    >
+                      {summary.headline}
+                    </p>
+                    {summary.detail ? (
+                      <p className="mt-0.5 text-xs text-muted">{summary.detail}</p>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </div>
+            <WeeklyAvailabilityDialog
+              characterId={data.id}
+              characterName={data.name}
+              weeklyAvailability={data.weeklyAvailability}
+              triggerLabel="Change"
+              triggerClassName="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium transition-colors hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            />
+          </div>
+        </Card>
         <CharacterScheduleCommitmentsSection commitments={data.scheduleCommitments} />
-        <CharacterAvailabilitySection
-          characterId={data.id}
-          upcoming={data.availability.upcoming}
-          past={data.availability.past}
-        />
       </div>
     </div>
   );

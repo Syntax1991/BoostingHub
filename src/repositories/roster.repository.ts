@@ -337,7 +337,7 @@ export const rosterRepository = {
       ) {
         const conflicts = await queryReservationConflicts(txOrm, {
           characterIds: options.selectedCharacterIds,
-          targetRunId: options.targetRunId,
+          excludeRunId: options.targetRunId,
           scheduledStartAt: options.scheduledStartAt,
         });
         if (conflicts.length > 0) {
@@ -437,7 +437,7 @@ export const rosterRepository = {
       if (input.selected && input.characterId && !existing) {
         const conflicts = await queryReservationConflicts(txOrm, {
           characterIds: [input.characterId],
-          targetRunId: input.targetRunId,
+          excludeRunId: input.targetRunId,
           scheduledStartAt: input.scheduledStartAt,
         });
         if (conflicts.length > 0) {
@@ -522,7 +522,7 @@ export const rosterRepository = {
       if (input.selectedCharacterIds.length > 0) {
         const conflicts = await queryReservationConflicts(txOrm, {
           characterIds: input.selectedCharacterIds,
-          targetRunId: input.runId,
+          excludeRunId: input.runId,
           scheduledStartAt: input.scheduledStartAt,
         });
         if (conflicts.length > 0) {

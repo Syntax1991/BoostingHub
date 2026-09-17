@@ -315,7 +315,9 @@ model Character {
   updatedAt            temporal.updatedAtString()
 
   lockouts      CharacterRaidLockout[]
+  /// DEPRECATED: legacy external-interval blocks. Inert — ignored by scheduling.
   availabilityBlocks CharacterAvailabilityBlock[]
+  weeklyUnavailability CharacterWeeklyUnavailability[]
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
   payoutEntries RunPayoutEntry[]
@@ -328,11 +330,9 @@ model Character {
   @@map("character")
 }
 
-/// Owner-authored unavailability window for a single Character.
-/// Independent of BoostingHub cross-Run reservation (which uses a separate
-/// 2h start-distance rule). Interval is half-open: [startsAt, endsAt).
-/// Overlapping blocks are allowed; past blocks remain for history and are
-/// ignored once endsAt <= now for eligibility.
+/// DEPRECATED / INERT — former External planning interval blocks.
+/// Kept in schema so historical rows are not destructively dropped.
+/// Active scheduling uses CharacterWeeklyUnavailability + Run reservations only.
 model CharacterAvailabilityBlock {
   id          String             @id @default(uuid())
   characterId String
@@ -346,6 +346,25 @@ model CharacterAvailabilityBlock {
 
   @@index([characterId])
   @@map("character_availability_block")
+}
+
+/// Owner-marked weekly unavailability for one Character + regional WoW reset + difficulty.
+/// Presence = Unavailable for that difficulty during that reset. Absence = Available (default).
+/// Does not store reasons or calendar intervals.
+model CharacterWeeklyUnavailability {
+  id               String            @id @default(uuid())
+  characterId      String
+  character        Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  /// Regional WoW reset identifier (same authority as lockouts).
+  resetIdentifier  String
+  difficulty       RaidDifficulty
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
+
+  @@unique([characterId, resetIdentifier, difficulty])
+  @@index([characterId])
+  @@index([resetIdentifier])
+  @@map("character_weekly_unavailability")
 }
 
 /// LEGACY historical booster application/history.

@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'d80ac736e580edd515c8b300c2b6e6342ad510b70becf65871e06c68c45a7325'>;
+  StorageHashBase<'740029d3e7be9cc73d969cdebeac876082ab92e038a773dff561334fb95b08bc'>;
 export type ExecutionHash =
   ExecutionHashBase<'b5c6546a0390593f96086a20925a8360dc178e073a03364e56e203b76bdc1cc0'>;
 export type ProfileHash =
@@ -383,7 +383,6 @@ export type FieldOutputTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly characterId: CodecTypes['pg/text@1']['output'];
       readonly resetIdentifier: CodecTypes['pg/text@1']['output'];
-      readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -774,7 +773,6 @@ export type FieldInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly characterId: CodecTypes['pg/text@1']['input'];
       readonly resetIdentifier: CodecTypes['pg/text@1']['input'];
-      readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1164,7 +1162,6 @@ export type StorageColumnTypes = {
     readonly character_weekly_unavailability: {
       readonly characterId: CodecTypes['pg/text@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly resetIdentifier: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1555,7 +1552,6 @@ export type StorageColumnInputTypes = {
     readonly character_weekly_unavailability: {
       readonly characterId: CodecTypes['pg/text@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly resetIdentifier: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -2746,11 +2742,6 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
-                readonly difficulty: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
                 readonly createdAt: {
                   readonly nativeType: 'timestamptz';
                   readonly codecId: 'pg/timestamptz-string@1';
@@ -2764,9 +2755,7 @@ type ContractBase = Omit<
                 };
               };
               primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [
-                { readonly columns: readonly ['characterId', 'resetIdentifier', 'difficulty'] },
-              ];
+              uniques: readonly [{ readonly columns: readonly ['characterId', 'resetIdentifier'] }];
               indexes: readonly [
                 {
                   readonly name: 'character_weekly_unavailability_characterId_idx_2423fe9d';
@@ -5779,10 +5768,6 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly difficulty: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -5818,7 +5803,6 @@ type ContractBase = Omit<
                 readonly id: { readonly column: 'id' };
                 readonly characterId: { readonly column: 'characterId' };
                 readonly resetIdentifier: { readonly column: 'resetIdentifier' };
-                readonly difficulty: { readonly column: 'difficulty' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };

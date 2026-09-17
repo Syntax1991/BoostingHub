@@ -1,57 +1,89 @@
-import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
+import type { RaidDifficulty, WowRegion } from "@/models/enums";
 import { signupRepository } from "@/repositories/signup.repository";
 import { DomainError } from "@/lib/errors";
 import {
   projectScheduleConflictsByCharacter,
   type CharacterScheduleConflict,
+  type WeeklyUnavailableConflictInput,
 } from "@/services/character-schedule-conflict";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
+import { lockoutService } from "@/services/lockout.service";
+
+export type ScheduleConflictCharacterInput = {
+  id: string;
+  name: string;
+  region: WowRegion;
+};
 
 /**
- * Batch current schedule-integrity conflicts for Characters against one Run start.
- * Two repository reads total (reservations + availability) — never N+1 per Character.
- * Empty characterIds → empty Map.
+ * Batch current schedule-integrity conflicts for Characters against one Run start + difficulty.
+ * One reservation read + one weekly-unavailability read — never N+1 per Character.
+ * Empty characters → empty Map.
+ *
+ * Manual CharacterAvailabilityBlock rows are deprecated and ignored.
  */
 export async function getScheduleConflictsForCharacters(input: {
   targetRunId: string;
   scheduledStartAt: string;
-  characterIds: readonly string[];
+  difficulty: RaidDifficulty;
+  characters: readonly ScheduleConflictCharacterInput[];
 }): Promise<Map<string, CharacterScheduleConflict[]>> {
-  const characterIds = [...new Set(input.characterIds.filter(Boolean))];
+  const characters = [...input.characters].filter((row) => row.id);
+  const characterIds = [...new Set(characters.map((row) => row.id))];
   if (characterIds.length === 0) {
     return new Map();
   }
 
-  const [reservations, blocks] = await Promise.all([
+  const byId = new Map(characters.map((row) => [row.id, row]));
+  const uniqueCharacters = characterIds.map((id) => byId.get(id)!);
+
+  const [reservations, unavailableIds] = await Promise.all([
     signupRepository.findAllReservationConflicts({
       characterIds,
-      targetRunId: input.targetRunId,
+      excludeRunId: input.targetRunId,
       scheduledStartAt: input.scheduledStartAt,
     }),
-    characterAvailabilityRepository.findBlockingForRun({
-      characterIds,
-      runStartAt: input.scheduledStartAt,
-    }),
+    characterWeeklyAvailabilityService.listUnavailableForRun(
+      uniqueCharacters,
+      input.scheduledStartAt,
+      input.difficulty,
+    ),
   ]);
+
+  const weeklyUnavailableByCharacterId = new Map<string, WeeklyUnavailableConflictInput>();
+  for (const character of uniqueCharacters) {
+    if (!unavailableIds.has(character.id)) continue;
+    weeklyUnavailableByCharacterId.set(character.id, {
+      characterId: character.id,
+      characterName: character.name,
+      resetIdentifier: lockoutService.getResetIdentifierForRun(
+        character.region,
+        input.scheduledStartAt,
+      ),
+      difficulty: input.difficulty,
+    });
+  }
 
   return projectScheduleConflictsByCharacter({
     characterIds,
-    runStartAt: input.scheduledStartAt,
     reservations,
-    availabilityBlocks: blocks,
+    weeklyUnavailableByCharacterId,
   });
 }
 
 export async function getScheduleConflictsForCharacter(input: {
   targetRunId: string;
   scheduledStartAt: string;
-  characterId: string;
+  difficulty: RaidDifficulty;
+  character: ScheduleConflictCharacterInput;
 }): Promise<CharacterScheduleConflict[]> {
   const byCharacter = await getScheduleConflictsForCharacters({
     targetRunId: input.targetRunId,
     scheduledStartAt: input.scheduledStartAt,
-    characterIds: [input.characterId],
+    difficulty: input.difficulty,
+    characters: [input.character],
   });
-  return byCharacter.get(input.characterId) ?? [];
+  return byCharacter.get(input.character.id) ?? [];
 }
 
 /** Human-readable multi-line summary for DomainError messages. */

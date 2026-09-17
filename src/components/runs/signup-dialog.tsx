@@ -398,16 +398,10 @@ export function BoosterCharacterChecklist({
   onRoleToggle: (characterId: string, role: CharacterRole) => void;
   onSelectAll: () => void;
 }) {
-  // Already-selected-elsewhere and manual unavailability are shown inline
-  // (visible but disabled) rather than tucked into the collapsed "unavailable"
-  // details below — the User should see which of their characters is blocked,
-  // and why, without hunting for it. Every other ineligibility reason stays
-  // collapsed.
+  // Already-selected-elsewhere Characters are shown inline (visible but disabled)
+  // rather than tucked into the collapsed "unavailable" details below.
   const reservationBlocked = ineligible.filter((item) => item.reason === "ALREADY_SELECTED_OTHER_RUN");
-  const manuallyUnavailable = ineligible.filter((item) => item.reason === "MANUALLY_UNAVAILABLE");
-  const otherIneligible = ineligible.filter(
-    (item) => item.reason !== "ALREADY_SELECTED_OTHER_RUN" && item.reason !== "MANUALLY_UNAVAILABLE",
-  );
+  const otherIneligible = ineligible.filter((item) => item.reason !== "ALREADY_SELECTED_OTHER_RUN");
 
   return (
     <div className="space-y-3">
@@ -419,7 +413,7 @@ export function BoosterCharacterChecklist({
           </button>
         ) : null}
       </div>
-      {groups.length === 0 && reservationBlocked.length === 0 && manuallyUnavailable.length === 0 ? (
+      {groups.length === 0 && reservationBlocked.length === 0 ? (
         <p className="rounded-md border border-border px-3 py-2 text-sm text-muted">
           {ineligible.length === 0
             ? "No characters on this account yet. Add one on the Characters page, then come back to sign up."
@@ -494,24 +488,6 @@ export function BoosterCharacterChecklist({
                   Unavailable — already selected for another run
                   {item.conflictingRunTitle ? `: ${item.conflictingRunTitle}` : ""}
                 </span>
-              </div>
-              <WarcraftLogsLink
-                warcraftLogsId={item.warcraftLogsId}
-                label="WCL"
-                className="inline-flex h-7 shrink-0 items-center gap-1 text-xs text-accent hover:underline"
-              />
-            </li>
-          ))}
-          {manuallyUnavailable.map((item) => (
-            <li
-              key={item.characterId}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-raised/50 px-3 py-2 opacity-75"
-            >
-              <div className="flex min-w-0 flex-1 flex-col text-sm">
-                <span className="truncate">
-                  {item.characterName}-{item.realm}
-                </span>
-                <span className="text-xs text-danger">{item.message}</span>
               </div>
               <WarcraftLogsLink
                 warcraftLogsId={item.warcraftLogsId}

@@ -4,9 +4,12 @@ import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
 import { runRepository } from "@/repositories/run.repository";
+import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { characterAvailabilityService } from "@/services/character-availability.service";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { lockoutService } from "@/services/lockout.service";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
@@ -124,7 +127,7 @@ describe("schedule conflict integrity", () => {
   const lead = asUser(ids.lead, "SCI Lead", "RAID_LEAD");
   const admin = asUser(ids.admin, "SCI Admin", "ADMIN");
 
-  it("keeps signup/roster after availability is added, surfaces conflict, and blocks publish until resolved", async () => {
+  it("ignores deprecated CharacterAvailabilityBlock rows for roster, My Runs, and weekly availability", async () => {
     const character = await characterService.createCharacter(owner, {
       name: "Scisyn",
       realm: "Twisting Nether",
@@ -134,7 +137,6 @@ describe("schedule conflict integrity", () => {
       itemLevel: 640,
     });
     createdCharacterIds.push(character.id);
-    await orm.Character.where({ id: character.id }).update({ warcraftLogsId: "11223344" });
     await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
 
     const run = await createOpenRun(lead, "2026-11-10T18:00:00.000Z", { healers: 1 });
@@ -146,23 +148,15 @@ describe("schedule conflict integrity", () => {
     });
 
     const before = await rosterService.getRosterManagementView(lead, run.id);
-    const candidate = before.boosters.find((row) => row.character?.id === character.id);
-    expect(candidate?.scheduleConflicts).toEqual([]);
-    expect(candidate?.character?.warcraftLogsId).toBe("11223344");
-
+    const candidate = before.boosters.find((row) => row.character?.id === character.id)!;
     await rosterService.saveDraftSelection(lead, {
       runId: run.id,
       version: before.roster.version,
-      selections: [{ signupId: candidate!.id, selectedRole: "HEALER" }],
+      selections: [{ signupId: candidate.id, selectedRole: "HEALER" }],
     });
 
-    const selectedView = await rosterService.getRosterManagementView(lead, run.id);
-    const selected = selectedView.boosters.find((row) => row.character?.id === character.id);
-    expect(selected?.draftSelected).toBe(true);
-    expect(selected?.selectedRole).toBe("HEALER");
-    expect(selected?.scheduleConflicts).toEqual([]);
-
-    const block = await characterAvailabilityService.createBlock(owner, character.id, {
+    const block = await characterAvailabilityRepository.create({
+      characterId: character.id,
       startsAt: "2026-11-10T17:00:00.000Z",
       endsAt: "2026-11-10T20:00:00.000Z",
       reason: "External boost",
@@ -172,169 +166,23 @@ describe("schedule conflict integrity", () => {
     const conflicted = await rosterService.getRosterManagementView(lead, run.id);
     const conflictedRow = conflicted.boosters.find((row) => row.character?.id === character.id);
     expect(conflictedRow?.draftSelected).toBe(true);
-    expect(conflictedRow?.selectedRole).toBe("HEALER");
-    expect(conflictedRow?.character?.warcraftLogsId).toBe("11223344");
-    expect(conflictedRow?.scheduleConflicts.map((row) => row.source)).toEqual(["MANUAL_AVAILABILITY"]);
-    expect(conflictedRow?.scheduleConflicts[0]?.message).toContain("External availability:");
-    expect(conflictedRow?.scheduleConflicts[0]?.message).toContain("External boost");
+    expect(conflictedRow?.scheduleConflicts).toEqual([]);
 
     const myRuns = await signupService.getMyRuns(owner);
     const mine = [...myRuns.pending, ...myRuns.selected].find((row) => row.runId === run.id);
-    expect(mine).toBeTruthy();
-    expect(mine?.scheduleConflicts?.length).toBeGreaterThan(0);
+    expect(mine?.scheduleConflicts).toEqual([]);
 
-    await expectDomainCode(
-      rosterService.publishRoster(lead, {
-        runId: run.id,
-        version: conflicted.roster.version,
-        acknowledgeWarnings: true,
-      }),
-      "ROSTER_HAS_SCHEDULE_CONFLICTS",
-    );
+    const weekly = await characterWeeklyAvailabilityService.getCurrentForOwner(owner, character.id);
+    expect(weekly.status).toBe("AVAILABLE");
 
-    await characterAvailabilityService.deleteBlock(owner, block.id);
-    const clearedBlockIds = createdBlockIds.filter((id) => id !== block.id);
-    createdBlockIds.length = 0;
-    createdBlockIds.push(...clearedBlockIds);
-
-    const cleared = await rosterService.getRosterManagementView(lead, run.id);
-    const clearedRow = cleared.boosters.find((row) => row.character?.id === character.id);
-    expect(clearedRow?.draftSelected).toBe(true);
-    expect(clearedRow?.selectedRole).toBe("HEALER");
-    expect(clearedRow?.scheduleConflicts).toEqual([]);
+    expect(getRegionalWeeklyReset("EU").resetIdentifier).toBeTruthy();
+    expect(lockoutService.getResetIdentifierForRun("EU", "2026-11-10T18:00:00.000Z")).toBeTruthy();
 
     await rosterService.publishRoster(lead, {
       runId: run.id,
-      version: cleared.roster.version,
+      version: conflicted.roster.version,
       acknowledgeWarnings: true,
     });
-  });
-
-  it("rejects new roster selection while conflicted and allows it after resolve", async () => {
-    const character = await characterService.createCharacter(owner, {
-      name: "Scipick",
-      realm: "Kazzak",
-      region: "EU",
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      itemLevel: 630,
-    });
-    createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
-
-    const block = await characterAvailabilityService.createBlock(owner, character.id, {
-      startsAt: "2026-11-11T17:00:00.000Z",
-      endsAt: "2026-11-11T21:00:00.000Z",
-      reason: "Busy",
-    });
-    createdBlockIds.push(block.id);
-
-    const run = await createOpenRun(lead, "2026-11-11T16:00:00.000Z", { healers: 1 });
-    await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-
-    const loaded = await runRepository.findById(run.id);
-    await runService.updateRun(
-      lead,
-      venomousUpdateInput(run.id, loaded!, { scheduledStartAt: "2026-11-11T18:00:00.000Z" }),
-    );
-
-    const view = await rosterService.getRosterManagementView(lead, run.id);
-    const row = view.boosters.find((item) => item.character?.id === character.id);
-    expect(row?.draftSelected).toBe(false);
-    expect(row?.scheduleConflicts.length).toBe(1);
-
-    await expectDomainCode(
-      rosterService.saveDraftSelection(lead, {
-        runId: run.id,
-        version: view.roster.version,
-        selections: [{ signupId: row!.id, selectedRole: "HEALER" }],
-      }),
-      "CHARACTER_SCHEDULE_CONFLICT",
-    );
-
-    await characterAvailabilityService.deleteBlock(owner, block.id);
-    const remaining = createdBlockIds.filter((id) => id !== block.id);
-    createdBlockIds.length = 0;
-    createdBlockIds.push(...remaining);
-
-    const again = await rosterService.getRosterManagementView(lead, run.id);
-    const againRow = again.boosters.find((item) => item.character?.id === character.id);
-    expect(againRow?.scheduleConflicts).toEqual([]);
-    await rosterService.saveDraftSelection(lead, {
-      runId: run.id,
-      version: again.roster.version,
-      selections: [{ signupId: againRow!.id, selectedRole: "HEALER" }],
-    });
-  });
-
-  it("re-evaluates conflicts when Run scheduledStartAt moves across an availability window", async () => {
-    const character = await characterService.createCharacter(owner, {
-      name: "Scitime",
-      realm: "Draenor",
-      region: "EU",
-      wowClass: "MAGE",
-      specialization: "Frost",
-      itemLevel: 620,
-    });
-    createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
-
-    const block = await characterAvailabilityService.createBlock(owner, character.id, {
-      startsAt: "2026-11-12T19:00:00.000Z",
-      endsAt: "2026-11-12T22:00:00.000Z",
-      reason: "External boost",
-    });
-    createdBlockIds.push(block.id);
-
-    const run = await createOpenRun(lead, "2026-11-12T17:00:00.000Z", { dps: 1 });
-    await signupService.createBoosterSignup(owner, {
-      runId: run.id,
-      characterId: character.id,
-      role: "DPS",
-      isBackup: false,
-    });
-    let view = await rosterService.getRosterManagementView(lead, run.id);
-    let row = view.boosters.find((item) => item.character?.id === character.id);
-    expect(row?.scheduleConflicts).toEqual([]);
-    await rosterService.saveDraftSelection(lead, {
-      runId: run.id,
-      version: view.roster.version,
-      selections: [{ signupId: row!.id, selectedRole: "DPS" }],
-    });
-
-    const loaded = await runRepository.findById(run.id);
-    await runService.updateRun(
-      lead,
-      venomousUpdateInput(run.id, loaded!, { scheduledStartAt: "2026-11-12T20:00:00.000Z" }),
-    );
-
-    view = await rosterService.getRosterManagementView(lead, run.id);
-    row = view.boosters.find((item) => item.character?.id === character.id);
-    expect(row?.draftSelected).toBe(true);
-    expect(row?.selectedRole).toBe("DPS");
-    expect(row?.scheduleConflicts.map((c) => c.source)).toEqual(["MANUAL_AVAILABILITY"]);
-    await expectDomainCode(
-      rosterService.publishRoster(lead, {
-        runId: run.id,
-        version: view.roster.version,
-        acknowledgeWarnings: true,
-      }),
-      "ROSTER_HAS_SCHEDULE_CONFLICTS",
-    );
-
-    const loadedAgain = await runRepository.findById(run.id);
-    await runService.updateRun(
-      lead,
-      venomousUpdateInput(run.id, loadedAgain!, { scheduledStartAt: "2026-11-12T22:00:00.000Z" }),
-    );
-    view = await rosterService.getRosterManagementView(lead, run.id);
-    row = view.boosters.find((item) => item.character?.id === character.id);
-    expect(row?.scheduleConflicts).toEqual([]);
   });
 
   it("surfaces reservation conflicts after a cross-run time edit and clears at exactly 2h", async () => {
@@ -412,66 +260,5 @@ describe("schedule conflict integrity", () => {
     viewB = await rosterService.getRosterManagementView(lead, runB.id);
     const clearedB = viewB.boosters.find((item) => item.character?.id === character.id)!;
     expect(clearedB.scheduleConflicts.filter((c) => c.source === "RUN_RESERVATION")).toEqual([]);
-  });
-
-  it("projects both reservation and manual conflicts without duplicating per raid content", async () => {
-    const character = await characterService.createCharacter(owner, {
-      name: "Sciboth",
-      realm: "Outland",
-      region: "EU",
-      wowClass: "DRUID",
-      specialization: "Restoration",
-      itemLevel: 635,
-    });
-    createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
-
-    const runA = await createOpenRun(lead, "2026-11-14T18:00:00.000Z", { healers: 1 });
-    await signupService.createBoosterSignup(owner, {
-      runId: runA.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    const viewA = await rosterService.getRosterManagementView(lead, runA.id);
-    const signupA = viewA.boosters.find((item) => item.character?.id === character.id)!;
-    await rosterService.saveDraftSelection(lead, {
-      runId: runA.id,
-      version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "HEALER" }],
-    });
-
-    const runC = await createOpenRun(lead, "2026-11-14T22:00:00.000Z", { healers: 1 });
-    await signupService.createBoosterSignup(owner, {
-      runId: runC.id,
-      characterId: character.id,
-      role: "HEALER",
-      isBackup: false,
-    });
-    const block = await characterAvailabilityService.createBlock(owner, character.id, {
-      startsAt: "2026-11-14T21:30:00.000Z",
-      endsAt: "2026-11-14T23:00:00.000Z",
-      reason: "External boost",
-    });
-    createdBlockIds.push(block.id);
-
-    const loadedC = await runRepository.findById(runC.id);
-    await runService.updateRun(
-      lead,
-      venomousUpdateInput(runC.id, loadedC!, { scheduledStartAt: "2026-11-14T19:30:00.000Z" }),
-    );
-    await characterAvailabilityService.updateBlock(owner, block.id, {
-      startsAt: "2026-11-14T19:00:00.000Z",
-      endsAt: "2026-11-14T21:00:00.000Z",
-      reason: "External boost",
-    });
-
-    const viewC = await rosterService.getRosterManagementView(lead, runC.id);
-    const row = viewC.boosters.find((item) => item.character?.id === character.id)!;
-    expect(row.scheduleConflicts.map((c) => c.source)).toEqual([
-      "RUN_RESERVATION",
-      "MANUAL_AVAILABILITY",
-    ]);
-    expect(row.scheduleConflicts).toHaveLength(2);
   });
 });
