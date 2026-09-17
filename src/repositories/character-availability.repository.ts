@@ -33,10 +33,32 @@ function mapBlock(row: Record<string, unknown>): CharacterAvailabilityBlockRecor
 
 export const characterAvailabilityRepository = {
   async listByCharacterId(characterId: string): Promise<CharacterAvailabilityBlockRecord[]> {
-    const rows = await orm.CharacterAvailabilityBlock.where({ characterId }).all();
+    return this.listByCharacterIds([characterId]);
+  },
+
+  /**
+   * Batched read for Character list / multi-character surfaces.
+   * One query for all ids; empty input → []. Sorted startsAt, endsAt, id.
+   */
+  async listByCharacterIds(characterIds: string[]): Promise<CharacterAvailabilityBlockRecord[]> {
+    if (characterIds.length === 0) {
+      return [];
+    }
+    const uniqueIds = [...new Set(characterIds.filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+    const rows = await orm.CharacterAvailabilityBlock
+      .where((f) => f.characterId.in(uniqueIds))
+      .all();
     return (rows as Record<string, unknown>[])
       .map(mapBlock)
-      .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id));
+      .sort(
+        (a, b) =>
+          a.startsAt.localeCompare(b.startsAt) ||
+          a.endsAt.localeCompare(b.endsAt) ||
+          a.id.localeCompare(b.id),
+      );
   },
 
   async findById(blockId: string): Promise<CharacterAvailabilityBlockRecord | null> {
@@ -55,17 +77,13 @@ export const characterAvailabilityRepository = {
     if (input.characterIds.length === 0) {
       return [];
     }
-    const rows = await orm.CharacterAvailabilityBlock
-      .where((f) => f.characterId.in(input.characterIds))
-      .all();
+    const rows = await this.listByCharacterIds(input.characterIds);
     const runMs = new Date(input.runStartAt).getTime();
-    return (rows as Record<string, unknown>[])
-      .map(mapBlock)
-      .filter((block) => {
-        const startMs = new Date(block.startsAt).getTime();
-        const endMs = new Date(block.endsAt).getTime();
-        return startMs <= runMs && runMs < endMs;
-      });
+    return rows.filter((block) => {
+      const startMs = new Date(block.startsAt).getTime();
+      const endMs = new Date(block.endsAt).getTime();
+      return startMs <= runMs && runMs < endMs;
+    });
   },
 
   async create(input: CharacterAvailabilityBlockWriteInput): Promise<CharacterAvailabilityBlockRecord> {

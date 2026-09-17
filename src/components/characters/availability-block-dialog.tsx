@@ -21,11 +21,13 @@ export function AvailabilityBlockDialog({
   mode,
   initial,
   triggerLabel,
+  triggerClassName,
 }: {
   characterId: string;
   mode: "create" | "edit";
   initial?: BlockInitial;
   triggerLabel: string;
+  triggerClassName?: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -98,7 +100,10 @@ export function AvailabilityBlockDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+        className={
+          triggerClassName ??
+          "inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+        }
       >
         {triggerLabel}
       </button>
@@ -110,11 +115,11 @@ export function AvailabilityBlockDialog({
         >
           <form onSubmit={submit} className="space-y-4 p-4">
             <h2 id={titleId} className="text-base font-semibold">
-              {mode === "create" ? "Add unavailable time" : "Edit unavailable time"}
+              {mode === "create" ? "Add external plan" : "Edit external plan"}
             </h2>
             <p className="text-xs text-muted">
-              Times use Europe/Berlin. The Character cannot sign up for BoostingHub Runs that start
-              inside this window.
+              Times use Europe/Berlin. BoostingHub Runs whose start falls inside this interval cannot
+              use this Character.
             </p>
             <label className="block text-sm">
               <span className="mb-1 block text-muted">Starts</span>
@@ -137,13 +142,13 @@ export function AvailabilityBlockDialog({
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-muted">Reason (optional)</span>
+              <span className="mb-1 block text-muted">Community / note</span>
               <input
                 type="text"
                 maxLength={120}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                placeholder="External boost"
+                placeholder="Phoenix"
                 className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
               />
             </label>

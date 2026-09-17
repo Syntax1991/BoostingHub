@@ -22,7 +22,7 @@ export async function createAvailabilityBlockAction(input: unknown): Promise<Act
     const parsed = createAvailabilityBlockSchema.parse(input);
     await characterAvailabilityService.createBlock(user, parsed.characterId, parsed);
     revalidateAvailability(parsed.characterId);
-    return { ok: true, message: "Unavailable time added." };
+    return { ok: true, message: "External plan added." };
   } catch (error) {
     return mapActionError(error);
   }
@@ -34,7 +34,7 @@ export async function updateAvailabilityBlockAction(input: unknown): Promise<Act
     const parsed = updateAvailabilityBlockSchema.parse(input);
     const updated = await characterAvailabilityService.updateBlock(user, parsed.blockId, parsed);
     revalidateAvailability(updated.characterId);
-    return { ok: true, message: "Unavailable time updated." };
+    return { ok: true, message: "External plan updated." };
   } catch (error) {
     return mapActionError(error);
   }
@@ -46,7 +46,7 @@ export async function deleteAvailabilityBlockAction(input: unknown): Promise<Act
     const parsed = availabilityBlockIdSchema.parse(input);
     const deleted = await characterAvailabilityService.deleteBlock(user, parsed.blockId);
     revalidateAvailability(deleted.characterId);
-    return { ok: true, message: "Unavailable time removed." };
+    return { ok: true, message: "External plan removed." };
   } catch (error) {
     return mapActionError(error);
   }

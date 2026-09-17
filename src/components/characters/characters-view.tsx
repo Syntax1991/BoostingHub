@@ -13,6 +13,7 @@ import { BattleNetPanel } from "@/components/characters/battle-net-panel";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
 import { FindMissingWarcraftLogsButton } from "@/components/characters/find-missing-warcraft-logs-button";
+import { ExternalPlanningCell } from "@/components/characters/external-planning-cell";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -64,7 +65,7 @@ export function CharactersView({ data }: { data: Page }) {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
+            <table className="w-full min-w-[1240px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Character</th>
@@ -79,6 +80,7 @@ export function CharactersView({ data }: { data: Page }) {
                       ? ` (${data.currentLockoutRaids.map((raid) => raid.name).join(" · ")})`
                       : ""}
                   </th>
+                  <th className="px-4 py-2 font-medium">External planning</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
                   <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>
@@ -119,6 +121,12 @@ export function CharactersView({ data }: { data: Page }) {
                         character.lockouts,
                         data.currentLockoutRaids ?? [],
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ExternalPlanningCell
+                        characterId={character.id}
+                        commitments={character.externalCommitments ?? []}
+                      />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
                       {character.lastSyncedAt

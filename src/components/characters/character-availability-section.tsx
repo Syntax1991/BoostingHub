@@ -30,14 +30,20 @@ export function CharacterAvailabilitySection({
   return (
     <Card>
       <CardHeader
-        title="Availability"
-        description="Mark times when this Character is committed elsewhere (for example an external boost). BoostingHub Runs that start inside a block cannot use this Character."
-        action={<AvailabilityBlockDialog characterId={characterId} mode="create" triggerLabel="Add unavailable time" />}
+        title="External commitments"
+        description="Commitments outside BoostingHub. Runs whose start falls inside a commitment cannot use this Character."
+        action={
+          <AvailabilityBlockDialog
+            characterId={characterId}
+            mode="create"
+            triggerLabel="Add external plan"
+          />
+        }
       />
       {upcoming.length === 0 ? (
         <EmptyState
-          title="No upcoming unavailability"
-          description="Manual blocks only. BoostingHub Run reservations for this Character are listed under BoostingHub commitments."
+          title="No upcoming external commitments"
+          description="Manual external plans only. BoostingHub Run reservations for this Character are listed under BoostingHub commitments."
         />
       ) : (
         <ul className="divide-y divide-border">
@@ -48,7 +54,9 @@ export function CharacterAvailabilitySection({
       )}
       {past.length > 0 ? (
         <details className="border-t border-border px-4 py-3 text-xs text-muted">
-          <summary>{past.length} past block{past.length === 1 ? "" : "s"}</summary>
+          <summary>
+            {past.length} past commitment{past.length === 1 ? "" : "s"}
+          </summary>
           <ul className="mt-2 space-y-2">
             {past.map((block) => (
               <li key={block.id}>
@@ -93,7 +101,7 @@ function AvailabilityRow({
         <div className="font-medium">
           {formatDateTime(block.startsAt)} → {formatDateTime(block.endsAt)}
         </div>
-        <p className="mt-1 text-xs text-muted">{block.reason ?? "No reason"}</p>
+        <p className="mt-1 text-xs text-muted">{block.reason ?? "No community / note"}</p>
         {error ? (
           <p id={errorId} role="alert" className="mt-1 text-xs text-danger">
             {error}
