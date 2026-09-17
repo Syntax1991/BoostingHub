@@ -106,6 +106,10 @@ export const characterService = {
     const characters = await characterRepository.listByUserId(user.id);
     const currentRaids = getCurrentLockoutRaids();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
+    const externalByCharacter =
+      await characterAvailabilityService.listCurrentOrUpcomingByCharacterIds(
+        characters.map((character) => character.id),
+      );
 
     return {
       currentResetByRegion: {
@@ -154,6 +158,7 @@ export const characterService = {
           boosterAccess: access,
           currentReset,
           lockouts,
+          externalCommitments: externalByCharacter.get(character.id) ?? [],
         };
       }),
     };

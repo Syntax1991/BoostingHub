@@ -2,8 +2,9 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   assertValidAvailabilityInterval,
   isAvailabilityBlockCurrentOrUpcoming,
+  runStartFallsInAvailabilityBlock,
 } from "@/lib/character-availability";
-import { formatDateTime, formatTime, toUtcIso } from "@/lib/datetime";
+import { formatDate, formatDateTime, formatTime, toUtcIso, zonedParts } from "@/lib/datetime";
 import { DomainError } from "@/lib/errors";
 import {
   characterAvailabilityRepository,
@@ -19,6 +20,19 @@ export type AvailabilityBlockWrite = {
   reason?: string | null;
 };
 
+/** Compact external-plan projection for /characters (current/upcoming only). */
+export type ExternalPlanningSummary = {
+  id: string;
+  characterId: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+  isCurrent: boolean;
+  communityLabel: string;
+  timeLabel: string;
+  label: string;
+};
+
 function assertOwned(user: AuthenticatedUser, character: { userId: string }) {
   if (character.userId !== user.id) {
     throw new DomainError("CHARACTER_NOT_OWNED", "You can only manage your own characters.", 403);
@@ -32,7 +46,7 @@ function normalizeReason(reason: string | null | undefined): string | null {
   if (trimmed.length > AVAILABILITY_REASON_MAX) {
     throw new DomainError(
       "VALIDATION_FAILED",
-      `Reason must be at most ${AVAILABILITY_REASON_MAX} characters.`,
+      `Community / note must be at most ${AVAILABILITY_REASON_MAX} characters.`,
     );
   }
   return trimmed;
@@ -66,6 +80,22 @@ export function formatAvailabilityBlockMessage(block: Pick<CharacterAvailability
   return block.reason ? `${base} — ${block.reason}` : base;
 }
 
+function communityLabel(reason: string | null): string {
+  return reason?.trim() ? reason.trim() : "External commitment";
+}
+
+/** Compact Europe/Berlin window for table cells, e.g. `Fri 22:00–23:30`. */
+export function formatExternalPlanTimeLabel(startsAt: string, endsAt: string): string {
+  const start = zonedParts(new Date(startsAt), "Europe/Berlin");
+  const startDay = `${start.weekday} ${String(start.day).padStart(2, "0")}/${String(start.month).padStart(2, "0")}/${start.year}`;
+  const endDay = formatDate(endsAt);
+  const window = `${formatTime(startsAt)}–${formatTime(endsAt)}`;
+  if (startDay === endDay) {
+    return `${start.weekday} ${window}`;
+  }
+  return `${startDay} ${formatTime(startsAt)} → ${endDay} ${formatTime(endsAt)}`;
+}
+
 function projectBlock(block: CharacterAvailabilityBlockRecord) {
   return {
     id: block.id,
@@ -77,6 +107,32 @@ function projectBlock(block: CharacterAvailabilityBlockRecord) {
     updatedAt: block.updatedAt,
     label: formatAvailabilityBlockMessage(block),
   };
+}
+
+function projectExternalSummary(
+  block: CharacterAvailabilityBlockRecord,
+  now: Date | string | number = Date.now(),
+): ExternalPlanningSummary {
+  return {
+    id: block.id,
+    characterId: block.characterId,
+    startsAt: block.startsAt,
+    endsAt: block.endsAt,
+    reason: block.reason,
+    isCurrent: runStartFallsInAvailabilityBlock(now, block),
+    communityLabel: communityLabel(block.reason),
+    timeLabel: formatExternalPlanTimeLabel(block.startsAt, block.endsAt),
+    label: formatAvailabilityBlockMessage(block),
+  };
+}
+
+function sortBlocks(blocks: CharacterAvailabilityBlockRecord[]): CharacterAvailabilityBlockRecord[] {
+  return [...blocks].sort(
+    (a, b) =>
+      a.startsAt.localeCompare(b.startsAt) ||
+      a.endsAt.localeCompare(b.endsAt) ||
+      a.id.localeCompare(b.id),
+  );
 }
 
 export const characterAvailabilityService = {
@@ -97,6 +153,32 @@ export const characterAvailabilityService = {
       .reverse();
 
     return { upcoming, past };
+  },
+
+  /**
+   * Batched current/upcoming external plans for /characters.
+   * One repository read for all Character ids; past blocks excluded.
+   */
+  async listCurrentOrUpcomingByCharacterIds(
+    characterIds: readonly string[],
+    now: Date | string | number = Date.now(),
+  ): Promise<Map<string, ExternalPlanningSummary[]>> {
+    const uniqueIds = [...new Set(characterIds.filter(Boolean))];
+    const result = new Map<string, ExternalPlanningSummary[]>(
+      uniqueIds.map((id) => [id, []]),
+    );
+    if (uniqueIds.length === 0) {
+      return result;
+    }
+
+    const blocks = await characterAvailabilityRepository.listByCharacterIds(uniqueIds);
+    for (const block of sortBlocks(blocks)) {
+      if (!isAvailabilityBlockCurrentOrUpcoming(block, now)) continue;
+      const bucket = result.get(block.characterId);
+      if (!bucket) continue;
+      bucket.push(projectExternalSummary(block, now));
+    }
+    return result;
   },
 
   async createBlock(user: AuthenticatedUser, characterId: string, input: AvailabilityBlockWrite) {
