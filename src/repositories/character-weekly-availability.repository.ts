@@ -1,10 +1,13 @@
 import { orm } from "@/lib/prisma";
 import { asString } from "@/lib/persistence";
+import type { RaidDifficulty } from "@/models/enums";
+import { RAID_DIFFICULTIES } from "@/models/enums";
 
 export type CharacterWeeklyUnavailabilityRecord = {
   id: string;
   characterId: string;
   resetIdentifier: string;
+  difficulty: RaidDifficulty;
   createdAt: string;
   updatedAt: string;
 };
@@ -14,44 +17,51 @@ function mapRow(row: Record<string, unknown>): CharacterWeeklyUnavailabilityReco
     id: asString(row.id),
     characterId: asString(row.characterId),
     resetIdentifier: asString(row.resetIdentifier),
+    difficulty: asString(row.difficulty) as RaidDifficulty,
     createdAt: asString(row.createdAt),
     updatedAt: asString(row.updatedAt),
   };
 }
 
-function keyOf(characterId: string, resetIdentifier: string): string {
+function resetKey(characterId: string, resetIdentifier: string): string {
   return `${characterId}:${resetIdentifier}`;
 }
 
+function normalizeDifficulties(difficulties: readonly RaidDifficulty[]): RaidDifficulty[] {
+  const wanted = new Set(difficulties);
+  return RAID_DIFFICULTIES.filter((difficulty) => wanted.has(difficulty));
+}
+
 /**
- * Reset-scoped Character unavailability (presence = Unavailable).
- * Available is the default when no row exists for a reset.
+ * Reset + difficulty scoped Character unavailability (presence = Unavailable).
+ * Available is the default when no row exists for that difficulty in a reset.
  */
 export const characterWeeklyAvailabilityRepository = {
-  async findByCharacterAndReset(
+  async listByCharacterAndReset(
     characterId: string,
     resetIdentifier: string,
-  ): Promise<CharacterWeeklyUnavailabilityRecord | null> {
-    const row = await orm.CharacterWeeklyUnavailability.where({
+  ): Promise<CharacterWeeklyUnavailabilityRecord[]> {
+    const rows = await orm.CharacterWeeklyUnavailability.where({
       characterId,
       resetIdentifier,
-    }).first();
-    return row ? mapRow(row as Record<string, unknown>) : null;
+    }).all();
+    return (rows as Record<string, unknown>[]).map(mapRow);
   },
 
   /**
    * Batch load unavailability rows for specific (characterId, resetIdentifier) pairs.
-   * One query — never N+1. Returns a Set of `${characterId}:${resetIdentifier}` keys that are Unavailable.
+   * One query — never N+1. Returns Map of `${characterId}:${resetIdentifier}` → sorted difficulties.
    */
-  async listUnavailableKeys(
+  async listUnavailableDifficultiesByKeys(
     keys: ReadonlyArray<{ characterId: string; resetIdentifier: string }>,
-  ): Promise<Set<string>> {
+  ): Promise<Map<string, RaidDifficulty[]>> {
     const unique = new Map<string, { characterId: string; resetIdentifier: string }>();
     for (const key of keys) {
       if (!key.characterId || !key.resetIdentifier) continue;
-      unique.set(keyOf(key.characterId, key.resetIdentifier), key);
+      unique.set(resetKey(key.characterId, key.resetIdentifier), key);
     }
-    if (unique.size === 0) return new Set();
+    const result = new Map<string, RaidDifficulty[]>();
+    if (unique.size === 0) return result;
 
     const characterIds = [...new Set([...unique.values()].map((row) => row.characterId))];
     const rows = await orm.CharacterWeeklyUnavailability.where((f) =>
@@ -59,41 +69,54 @@ export const characterWeeklyAvailabilityRepository = {
     ).all();
 
     const wanted = new Set(unique.keys());
-    const result = new Set<string>();
+    const buckets = new Map<string, Set<RaidDifficulty>>();
     for (const raw of rows as Record<string, unknown>[]) {
       const mapped = mapRow(raw);
-      const key = keyOf(mapped.characterId, mapped.resetIdentifier);
-      if (wanted.has(key)) result.add(key);
+      const key = resetKey(mapped.characterId, mapped.resetIdentifier);
+      if (!wanted.has(key)) continue;
+      const set = buckets.get(key) ?? new Set<RaidDifficulty>();
+      set.add(mapped.difficulty);
+      buckets.set(key, set);
+    }
+
+    for (const [key, set] of buckets) {
+      result.set(key, RAID_DIFFICULTIES.filter((difficulty) => set.has(difficulty)));
     }
     return result;
   },
 
-  async setUnavailable(
+  /**
+   * Atomically replace the Character+reset difficulty set.
+   * Empty difficulties → delete all rows for that reset (Available).
+   */
+  async replaceUnavailableDifficulties(
     characterId: string,
     resetIdentifier: string,
-  ): Promise<CharacterWeeklyUnavailabilityRecord> {
-    const existing = await this.findByCharacterAndReset(characterId, resetIdentifier);
-    if (existing) return existing;
+    difficulties: readonly RaidDifficulty[],
+  ): Promise<RaidDifficulty[]> {
+    const normalized = normalizeDifficulties(difficulties);
+    const existing = await this.listByCharacterAndReset(characterId, resetIdentifier);
+    for (const row of existing) {
+      await orm.CharacterWeeklyUnavailability.where({ id: row.id }).delete();
+    }
+
+    if (normalized.length === 0) return [];
 
     const now = new Date().toISOString();
-    const id = crypto.randomUUID();
-    await orm.CharacterWeeklyUnavailability.create({
-      id,
-      characterId,
-      resetIdentifier,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const created = await this.findByCharacterAndReset(characterId, resetIdentifier);
-    if (!created) {
-      throw new Error("CharacterWeeklyUnavailability create did not persist.");
+    for (const difficulty of normalized) {
+      await orm.CharacterWeeklyUnavailability.create({
+        id: crypto.randomUUID(),
+        characterId,
+        resetIdentifier,
+        difficulty,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
-    return created;
+    return normalized;
   },
 
   async clearUnavailable(characterId: string, resetIdentifier: string): Promise<void> {
-    const existing = await this.findByCharacterAndReset(characterId, resetIdentifier);
-    if (!existing) return;
-    await orm.CharacterWeeklyUnavailability.where({ id: existing.id }).delete();
+    await this.replaceUnavailableDifficulties(characterId, resetIdentifier, []);
   },
 };

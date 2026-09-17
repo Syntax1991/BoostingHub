@@ -1945,6 +1945,19 @@
                   "kind": "scalar"
                 }
               },
+              "difficulty": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidDifficulty",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -1991,6 +2004,9 @@
                 },
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "difficulty": {
+                  "column": "difficulty"
                 },
                 "id": {
                   "column": "id"
@@ -6796,6 +6812,13 @@
               ]
             },
             "character_weekly_unavailability": {
+              "checks": [
+                {
+                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
+                  "name": "character_weekly_unavailability_difficulty_check_05ae26c2",
+                  "prefix": "character_weekly_unavailability_difficulty_check"
+                }
+              ],
               "columns": {
                 "characterId": {
                   "codecId": "pg/text@1",
@@ -6810,6 +6833,17 @@
                   },
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidDifficulty",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "id": {
                   "codecId": "pg/text@1",
@@ -6873,7 +6907,8 @@
                 {
                   "columns": [
                     "characterId",
-                    "resetIdentifier"
+                    "resetIdentifier",
+                    "difficulty"
                   ]
                 }
               ]
@@ -9708,7 +9743,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "740029d3e7be9cc73d969cdebeac876082ab92e038a773dff561334fb95b08bc"
+    "storageHash": "d80ac736e580edd515c8b300c2b6e6342ad510b70becf65871e06c68c45a7325"
   },
   "execution": {
     "executionHash": "b5c6546a0390593f96086a20925a8360dc178e073a03364e56e203b76bdc1cc0",

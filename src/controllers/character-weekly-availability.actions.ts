@@ -1,15 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
-
-const setCurrentResetAvailabilitySchema = z.object({
-  characterId: z.string().uuid(),
-  available: z.boolean(),
-});
+import { setCharacterCurrentResetAvailabilitySchema } from "@/validators/character-weekly-availability";
 
 function revalidateCharacterAvailability(characterId: string) {
   revalidatePath("/characters");
@@ -24,10 +19,19 @@ export async function setCharacterCurrentResetAvailabilityAction(
 ): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const parsed = setCurrentResetAvailabilitySchema.parse(input);
-    await characterWeeklyAvailabilityService.setCurrentResetAvailability(user, parsed);
+    const parsed = setCharacterCurrentResetAvailabilitySchema.parse(input);
+    await characterWeeklyAvailabilityService.setCurrentResetAvailability(user, {
+      characterId: parsed.characterId,
+      available: parsed.available,
+      unavailableDifficulties: parsed.available
+        ? undefined
+        : (parsed.unavailableDifficulties ?? []),
+    });
     revalidateCharacterAvailability(parsed.characterId);
-    return { ok: true, message: parsed.available ? "Marked available." : "Marked unavailable." };
+    return {
+      ok: true,
+      message: parsed.available ? "Marked available." : "Marked unavailable.",
+    };
   } catch (error) {
     return mapActionError(error);
   }

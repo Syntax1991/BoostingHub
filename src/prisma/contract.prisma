@@ -348,19 +348,20 @@ model CharacterAvailabilityBlock {
   @@map("character_availability_block")
 }
 
-/// Owner-marked weekly unavailability for one Character + regional WoW reset.
-/// Presence = Unavailable for that reset. Absence = Available (default).
-/// Does not store reasons, difficulties, or calendar intervals.
+/// Owner-marked weekly unavailability for one Character + regional WoW reset + difficulty.
+/// Presence = Unavailable for that difficulty during that reset. Absence = Available (default).
+/// Does not store reasons or calendar intervals.
 model CharacterWeeklyUnavailability {
   id               String            @id @default(uuid())
   characterId      String
   character        Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
   /// Regional WoW reset identifier (same authority as lockouts).
   resetIdentifier  String
+  difficulty       RaidDifficulty
   createdAt        TimestamptzString @default(now())
   updatedAt        temporal.updatedAtString()
 
-  @@unique([characterId, resetIdentifier])
+  @@unique([characterId, resetIdentifier, difficulty])
   @@index([characterId])
   @@index([resetIdentifier])
   @@map("character_weekly_unavailability")

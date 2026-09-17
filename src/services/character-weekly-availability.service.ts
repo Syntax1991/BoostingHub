@@ -1,8 +1,9 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import type { WowRegion } from "@/models/enums";
+import type { RaidDifficulty, WowRegion } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { formatDate } from "@/lib/datetime";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { normalizeUnavailableDifficulties } from "@/lib/weekly-availability-display";
 import { characterRepository } from "@/repositories/character.repository";
 import { characterWeeklyAvailabilityRepository } from "@/repositories/character-weekly-availability.repository";
 import { lockoutService } from "@/services/lockout.service";
@@ -12,6 +13,8 @@ export type WeeklyAvailabilityStatus = "AVAILABLE" | "UNAVAILABLE";
 export type CharacterWeeklyAvailabilityProjection = {
   characterId: string;
   status: WeeklyAvailabilityStatus;
+  /** Sorted NORMAL → HEROIC → MYTHIC. Empty when Available. */
+  unavailableDifficulties: RaidDifficulty[];
   resetIdentifier: string;
   region: WowRegion;
   /** Compact current-reset window for UI (Europe/Berlin dates). */
@@ -22,14 +25,33 @@ function resetWindowLabel(region: WowRegion, reset = getRegionalWeeklyReset(regi
   return `${region} · ${formatDate(reset.start)} → ${formatDate(reset.end)}`;
 }
 
-function unavailableKey(characterId: string, resetIdentifier: string): string {
+function resetKey(characterId: string, resetIdentifier: string): string {
   return `${characterId}:${resetIdentifier}`;
+}
+
+function projectFromDifficulties(input: {
+  characterId: string;
+  region: WowRegion;
+  resetIdentifier: string;
+  resetWindowLabel: string;
+  unavailableDifficulties: readonly RaidDifficulty[];
+}): CharacterWeeklyAvailabilityProjection {
+  const unavailableDifficulties = normalizeUnavailableDifficulties(input.unavailableDifficulties);
+  return {
+    characterId: input.characterId,
+    status: unavailableDifficulties.length > 0 ? "UNAVAILABLE" : "AVAILABLE",
+    unavailableDifficulties,
+    resetIdentifier: input.resetIdentifier,
+    region: input.region,
+    resetWindowLabel: input.resetWindowLabel,
+  };
 }
 
 /**
  * Owner-controlled weekly Character availability for a regional WoW reset.
- * Presence of CharacterWeeklyUnavailability = Unavailable; absence = Available.
- * Independent of BoostingHub Run reservations and lockouts.
+ * Presence of CharacterWeeklyUnavailability for a difficulty = Unavailable for
+ * that difficulty. Absence = Available (default). Independent of BoostingHub
+ * Run reservations and lockouts.
  */
 export const characterWeeklyAvailabilityService = {
   /**
@@ -49,7 +71,7 @@ export const characterWeeklyAvailabilityService = {
       };
     });
 
-    const unavailable = await characterWeeklyAvailabilityRepository.listUnavailableKeys(
+    const byKey = await characterWeeklyAvailabilityRepository.listUnavailableDifficultiesByKeys(
       keys.map((row) => ({
         characterId: row.characterId,
         resetIdentifier: row.resetIdentifier,
@@ -58,15 +80,16 @@ export const characterWeeklyAvailabilityService = {
 
     const result = new Map<string, CharacterWeeklyAvailabilityProjection>();
     for (const row of keys) {
-      result.set(row.characterId, {
-        characterId: row.characterId,
-        status: unavailable.has(unavailableKey(row.characterId, row.resetIdentifier))
-          ? "UNAVAILABLE"
-          : "AVAILABLE",
-        resetIdentifier: row.resetIdentifier,
-        region: row.region,
-        resetWindowLabel: resetWindowLabel(row.region, row.reset),
-      });
+      result.set(
+        row.characterId,
+        projectFromDifficulties({
+          characterId: row.characterId,
+          region: row.region,
+          resetIdentifier: row.resetIdentifier,
+          resetWindowLabel: resetWindowLabel(row.region, row.reset),
+          unavailableDifficulties: byKey.get(resetKey(row.characterId, row.resetIdentifier)) ?? [],
+        }),
+      );
     }
     return result;
   },
@@ -88,12 +111,17 @@ export const characterWeeklyAvailabilityService = {
   },
 
   /**
-   * Set Available / Unavailable for the Character's CURRENT regional reset only.
-   * Does not accept a client-supplied resetIdentifier.
+   * Set Available / Unavailable difficulties for the Character's CURRENT regional reset.
+   * Does not accept a client-supplied resetIdentifier. Empty difficulties when
+   * available=false is rejected. Available clears every difficulty row for the reset.
    */
   async setCurrentResetAvailability(
     user: AuthenticatedUser,
-    input: { characterId: string; available: boolean },
+    input: {
+      characterId: string;
+      available: boolean;
+      unavailableDifficulties?: readonly RaidDifficulty[];
+    },
   ): Promise<CharacterWeeklyAvailabilityProjection> {
     const character = await characterRepository.findOwnedById(user.id, input.characterId);
     if (!character) {
@@ -101,34 +129,47 @@ export const characterWeeklyAvailabilityService = {
     }
 
     const reset = getRegionalWeeklyReset(character.region);
+    let unavailableDifficulties: RaidDifficulty[] = [];
+
     if (input.available) {
       await characterWeeklyAvailabilityRepository.clearUnavailable(
         character.id,
         reset.resetIdentifier,
       );
     } else {
-      await characterWeeklyAvailabilityRepository.setUnavailable(
+      unavailableDifficulties = normalizeUnavailableDifficulties(
+        input.unavailableDifficulties ?? [],
+      );
+      if (unavailableDifficulties.length === 0) {
+        throw new DomainError(
+          "VALIDATION_FAILED",
+          "Select at least one difficulty when marking a Character unavailable.",
+        );
+      }
+      await characterWeeklyAvailabilityRepository.replaceUnavailableDifficulties(
         character.id,
         reset.resetIdentifier,
+        unavailableDifficulties,
       );
     }
 
-    return {
+    return projectFromDifficulties({
       characterId: character.id,
-      status: input.available ? "AVAILABLE" : "UNAVAILABLE",
-      resetIdentifier: reset.resetIdentifier,
       region: character.region,
+      resetIdentifier: reset.resetIdentifier,
       resetWindowLabel: resetWindowLabel(character.region, reset),
-    };
+      unavailableDifficulties,
+    });
   },
 
   /**
-   * Batch: which Characters are Unavailable for the regional reset containing
-   * `scheduledStartAt` (per Character region). Used by schedule conflict projection.
+   * Batch: Characters unavailable for the regional reset containing
+   * `scheduledStartAt` at the given Run difficulty.
    */
-  async listUnavailableForRunStart(
+  async listUnavailableForRun(
     characters: ReadonlyArray<{ id: string; region: WowRegion }>,
     scheduledStartAt: string,
+    difficulty: RaidDifficulty,
   ): Promise<Set<string>> {
     if (characters.length === 0) return new Set();
     const keys = characters.map((character) => ({
@@ -138,21 +179,27 @@ export const characterWeeklyAvailabilityService = {
         scheduledStartAt,
       ),
     }));
-    const unavailable = await characterWeeklyAvailabilityRepository.listUnavailableKeys(keys);
+    const byKey = await characterWeeklyAvailabilityRepository.listUnavailableDifficultiesByKeys(
+      keys,
+    );
     const characterIds = new Set<string>();
     for (const key of keys) {
-      if (unavailable.has(unavailableKey(key.characterId, key.resetIdentifier))) {
+      const difficulties = byKey.get(resetKey(key.characterId, key.resetIdentifier)) ?? [];
+      if (difficulties.includes(difficulty)) {
         characterIds.add(key.characterId);
       }
     }
     return characterIds;
   },
 
-  isUnavailableForReset(
-    unavailableKeys: Set<string>,
+  isUnavailableForResetDifficulty(
+    unavailableByKey: Map<string, RaidDifficulty[]>,
     characterId: string,
     resetIdentifier: string,
+    difficulty: RaidDifficulty,
   ): boolean {
-    return unavailableKeys.has(unavailableKey(characterId, resetIdentifier));
+    return (unavailableByKey.get(resetKey(characterId, resetIdentifier)) ?? []).includes(
+      difficulty,
+    );
   },
 };

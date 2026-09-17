@@ -1,0 +1,247 @@
+[
+  {
+    "id": "dropConstraint.character_weekly_unavailability.character_weekly_unavailability_characterId_resetIdentifier_key",
+    "label": "Drop constraint \"character_weekly_unavailability_characterId_resetIdentifier_key\" on \"character_weekly_unavailability\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_weekly_unavailability_characterId_resetIdentifier_key",
+        "table": "character_weekly_unavailability"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_weekly_unavailability_characterId_resetIdentifier_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_weekly_unavailability_characterId_resetIdentifier_key",
+          "public",
+          "\"public\".\"character_weekly_unavailability\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop constraint \"character_weekly_unavailability_characterId_resetIdentifier_key\"",
+        "sql": "ALTER TABLE \"public\".\"character_weekly_unavailability\" DROP CONSTRAINT \"character_weekly_unavailability_characterId_resetIdentifier_key\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_weekly_unavailability_characterId_resetIdentifier_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_weekly_unavailability_characterId_resetIdentifier_key",
+          "public",
+          "\"public\".\"character_weekly_unavailability\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.character_weekly_unavailability.difficulty",
+    "label": "Add column \"difficulty\" to \"character_weekly_unavailability\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "difficulty",
+        "table": "character_weekly_unavailability"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"difficulty\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character_weekly_unavailability",
+          "difficulty"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"difficulty\"",
+        "sql": "ALTER TABLE \"public\".\"character_weekly_unavailability\" ADD COLUMN \"difficulty\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"difficulty\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character_weekly_unavailability",
+          "difficulty"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.expand-character-weekly-unavailability-difficulties",
+    "label": "Data transform: expand legacy weekly unavailability rows to NORMAL+HEROIC+MYTHIC",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow expand when null-difficulty rows remain (or already expanded)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Promote null-difficulty rows to NORMAL and insert missing HEROIC/MYTHIC siblings",
+        "sql": "WITH to_expand AS (\n  SELECT \"id\", \"characterId\", \"resetIdentifier\", \"createdAt\", \"updatedAt\"\n  FROM \"character_weekly_unavailability\"\n  WHERE \"difficulty\" IS NULL\n),\nupdated AS (\n  UPDATE \"character_weekly_unavailability\" AS c\n  SET \"difficulty\" = 'NORMAL'\n  FROM to_expand AS t\n  WHERE c.\"id\" = t.\"id\"\n  RETURNING c.\"characterId\", c.\"resetIdentifier\", c.\"createdAt\", c.\"updatedAt\"\n)\nINSERT INTO \"character_weekly_unavailability\" (\n  \"id\", \"characterId\", \"resetIdentifier\", \"difficulty\", \"createdAt\", \"updatedAt\"\n)\nSELECT gen_random_uuid()::text,\n       u.\"characterId\",\n       u.\"resetIdentifier\",\n       d.\"difficulty\",\n       u.\"createdAt\",\n       u.\"updatedAt\"\nFROM updated AS u\nCROSS JOIN (VALUES ('HEROIC'), ('MYTHIC')) AS d(\"difficulty\")\nWHERE NOT EXISTS (\n  SELECT 1\n  FROM \"character_weekly_unavailability\" AS x\n  WHERE x.\"characterId\" = u.\"characterId\"\n    AND x.\"resetIdentifier\" = u.\"resetIdentifier\"\n    AND x.\"difficulty\" = d.\"difficulty\"\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "No null-difficulty weekly unavailability rows remain",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1 FROM \"character_weekly_unavailability\" WHERE \"difficulty\" IS NULL\n) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.setNotNull.character_weekly_unavailability.difficulty",
+    "label": "Set NOT NULL on \"character_weekly_unavailability\".\"difficulty\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "difficulty",
+        "table": "character_weekly_unavailability"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"difficulty\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character_weekly_unavailability",
+          "difficulty"
+        ]
+      },
+      {
+        "description": "ensure no NULL values in \"difficulty\"",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"public\".\"character_weekly_unavailability\" WHERE \"difficulty\" IS NULL) AS \"result\"",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "set NOT NULL on \"difficulty\"",
+        "sql": "ALTER TABLE \"public\".\"character_weekly_unavailability\" ALTER COLUMN \"difficulty\" SET NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"difficulty\" is NOT NULL",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "character_weekly_unavailability",
+          "difficulty",
+          "NO"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.character_weekly_unavailability.character_weekly_unavailability_difficulty_check_05ae26c2",
+    "label": "Add check constraint \"character_weekly_unavailability_difficulty_check_05ae26c2\" on \"character_weekly_unavailability\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "character_weekly_unavailability_difficulty_check_05ae26c2",
+        "table": "character_weekly_unavailability"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_weekly_unavailability_difficulty_check_05ae26c2\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_weekly_unavailability_difficulty_check_05ae26c2",
+          "public",
+          "\"public\".\"character_weekly_unavailability\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"character_weekly_unavailability_difficulty_check_05ae26c2\"",
+        "sql": "ALTER TABLE \"public\".\"character_weekly_unavailability\" ADD CONSTRAINT \"character_weekly_unavailability_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_weekly_unavailability_difficulty_check_05ae26c2\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_weekly_unavailability_difficulty_check_05ae26c2",
+          "public",
+          "\"public\".\"character_weekly_unavailability\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character_weekly_unavailability.character_weekly_unavailability_characterId_resetIdentifier_difficulty_key",
+    "label": "Add unique constraint on \"character_weekly_unavailability\" (characterId, resetIdentifier, difficulty)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_weekly_unavailability_characterId_resetIdentifier_difficulty_key",
+        "table": "character_weekly_unavailability"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_weekly_unavailability_characterId_resetIdentifier_difficulty_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_weekly_unavailability_characterId_resetIdentifier_difficulty_key",
+          "public",
+          "\"public\".\"character_weekly_unavailability\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_weekly_unavailability_characterId_resetIdentifier_difficulty_key\"",
+        "sql": "ALTER TABLE \"public\".\"character_weekly_unavailability\" ADD CONSTRAINT \"character_weekly_unavailability_characterId_resetIdentifier_difficulty_key\" UNIQUE (\"characterId\", \"resetIdentifier\", \"difficulty\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_weekly_unavailability_characterId_resetIdentifier_difficulty_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_weekly_unavailability_characterId_resetIdentifier_difficulty_key",
+          "public",
+          "\"public\".\"character_weekly_unavailability\""
+        ]
+      }
+    ]
+  }
+]
