@@ -89,8 +89,59 @@ describe("session view sanitization", () => {
     expect(view).not.toHaveProperty("token");
   });
 
-  it("summarizes missing and long user agents", () => {
+  it("formats human-readable browser/platform labels without raw UA", () => {
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+      ),
+    ).toBe("Chrome on Windows");
+
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0",
+      ),
+    ).toBe("Edge on Windows");
+
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0",
+      ),
+    ).toBe("Firefox on Windows");
+
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      ),
+    ).toBe("Safari on macOS");
+
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      ),
+    ).toBe("Safari on iPhone");
+
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      ),
+    ).toBe("Safari on iPad");
+
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36",
+      ),
+    ).toBe("Chrome on Android");
+
+    // Chrome on iOS must not be reported as Safari.
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/128.0.6613.98 Mobile/15E148 Safari/604.1",
+      ),
+    ).toBe("Chrome on iPhone");
+
     expect(summarizeUserAgent(null)).toBe("Unknown device");
-    expect(summarizeUserAgent("a".repeat(130)).endsWith("…")).toBe(true);
+    expect(summarizeUserAgent("")).toBe("Unknown device");
+    expect(summarizeUserAgent("   ")).toBe("Unknown device");
+    expect(summarizeUserAgent("curl/8.0")).toBe("Unknown device");
   });
 });
