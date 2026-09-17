@@ -167,9 +167,12 @@ export const signupService = {
       difficulty: signup.run.difficulty,
       scheduledStartAt: signup.run.scheduledStartAt,
       runStatus: signup.run.status,
+      characterId: signup.character?.id ?? null,
       characterName: signup.character?.name ?? null,
       characterRealm: signup.character?.realm ?? null,
       offeredRoles: signup.offeredRoles,
+      /** Authoritative published BOOSTER role when SELECTED; null otherwise / for LOOTBUDDY. */
+      publishedRole: signup.publishedRole,
       participationType: signup.participationType,
       isBackup: signup.isBackup,
       status: signup.status,

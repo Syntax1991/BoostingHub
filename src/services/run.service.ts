@@ -41,12 +41,7 @@ import type { ManageRunFilterInput } from "@/validators/manage-run-filters";
 import type { CreateManyRunsInput, MassCreateDefaults, MassCreateRunRow } from "@/validators/mass-create-runs";
 import type { RaidRecord } from "@/repositories/raid.repository";
 import { isDomainError } from "@/lib/errors";
-import { attendanceRepository } from "@/repositories/attendance.repository";
-import { payoutRepository } from "@/repositories/payout.repository";
-import {
-  projectRunOperationalHandoff,
-  type RunSettlementStage,
-} from "@/services/run-operational-handoff";
+import { projectManagedRunHandoffs } from "@/services/managed-run-operational.service";
 
 const DISCOVERY_HIDDEN_STATUSES: readonly RunStatus[] = ["DRAFT", "CANCELLED"];
 
@@ -402,12 +397,7 @@ export const runService = {
       return true;
     });
 
-    const runIds = managed.map((run) => run.id);
-    const [attendanceByRunId, settlementByRunId] = await Promise.all([
-      attendanceRepository.summarizeByRunIds(runIds),
-      payoutRepository.listStatusByRunIds(runIds),
-    ]);
-    const canMarkPaid = hasAdminAccess(user.accountRole);
+    const projected = await projectManagedRunHandoffs(user, managed);
 
     const raidLeads =
       hasAdminAccess(user.accountRole) ? await userRepository.listEligibleRaidLeads() : [];
@@ -416,52 +406,37 @@ export const runService = {
       canCreate: true,
       filters: { ...filters, archived: archiveFilter },
       raidLeads,
-      runs: managed.map((run) => {
-        const capabilities = capabilitiesFor(user, run, run.signups.length > 0);
-        const attendance = attendanceByRunId.get(run.id) ?? { total: 0, unmarkedCount: 0 };
-        const settlementStage: RunSettlementStage = settlementByRunId.get(run.id) ?? "NONE";
-        const handoff = projectRunOperationalHandoff({
-          status: run.status,
-          hasRoster: Boolean(run.roster),
-          publishedAt: run.roster?.publishedAt ?? null,
-          draftSelectedCount: run.roster?.draftSelectedCount ?? 0,
-          capabilities,
-          attendance,
-          settlementStage,
-          canMarkPaid,
-        });
-        return {
-          id: run.id,
-          title: run.title,
-          productLabel: run.contentDisplay.productLabel,
-          contentSummary: run.contentDisplay.summary,
-          titleCoverage: run.contentDisplay.titleCoverage,
-          difficulty: run.difficulty,
-          lootType: run.lootType,
-          scheduledStartAt: run.scheduledStartAt,
-          status: run.status,
-          raidLeadId: run.raidLeadId,
-          raidLeadName: run.raidLeadName,
-          signupsOpen: run.signupsOpen,
-          signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
-          signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
-          selectedCount: run.signups.filter((signup) => signup.status === "SELECTED").length,
-          draftSelectedCount: run.roster?.draftSelectedCount ?? 0,
-          publishedAt: run.roster?.publishedAt ?? null,
-          desiredTankCount: run.desiredTankCount,
-          desiredHealerCount: run.desiredHealerCount,
-          desiredDpsCount: run.desiredDpsCount,
-          contents: run.contents,
-          contentDisplay: run.contentDisplay,
-          archivedAt: run.archivedAt,
-          actionLabel: handoff.nextAction.label,
-          attendance: handoff.attendance,
-          settlementStage: handoff.settlement.stage,
-          attention: handoff.attention,
-          nextAction: handoff.nextAction,
-          capabilities,
-        };
-      }),
+      runs: projected.map(({ run, handoff, capabilities }) => ({
+        id: run.id,
+        title: run.title,
+        productLabel: run.contentDisplay.productLabel,
+        contentSummary: run.contentDisplay.summary,
+        titleCoverage: run.contentDisplay.titleCoverage,
+        difficulty: run.difficulty,
+        lootType: run.lootType,
+        scheduledStartAt: run.scheduledStartAt,
+        status: run.status,
+        raidLeadId: run.raidLeadId,
+        raidLeadName: run.raidLeadName,
+        signupsOpen: run.signupsOpen,
+        signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
+        signupCount: run.signups.filter((signup) => signup.status !== "WITHDRAWN").length,
+        selectedCount: run.signups.filter((signup) => signup.status === "SELECTED").length,
+        draftSelectedCount: run.roster?.draftSelectedCount ?? 0,
+        publishedAt: run.roster?.publishedAt ?? null,
+        desiredTankCount: run.desiredTankCount,
+        desiredHealerCount: run.desiredHealerCount,
+        desiredDpsCount: run.desiredDpsCount,
+        contents: run.contents,
+        contentDisplay: run.contentDisplay,
+        archivedAt: run.archivedAt,
+        actionLabel: handoff.nextAction.label,
+        attendance: handoff.attendance,
+        settlementStage: handoff.settlement.stage,
+        attention: handoff.attention,
+        nextAction: handoff.nextAction,
+        capabilities,
+      })),
     };
   },
 
