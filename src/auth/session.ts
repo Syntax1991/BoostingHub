@@ -8,6 +8,7 @@ import {
   hasRaidLeadAccess,
   type AuthenticatedUser,
 } from "@/auth/authorization";
+import { resolveSafeCallbackPath } from "@/auth/safe-callback-path";
 import { DomainError } from "@/lib/errors";
 import { userRepository } from "@/repositories/user.repository";
 
@@ -64,7 +65,8 @@ export async function requireUserOrRedirect(callbackPath = "/dashboard"): Promis
     return await requireUser();
   } catch (error) {
     if (error instanceof DomainError && error.code === "NOT_AUTHENTICATED") {
-      redirect(`/?next=${encodeURIComponent(callbackPath)}`);
+      const safePath = resolveSafeCallbackPath(callbackPath);
+      redirect(`/?next=${encodeURIComponent(safePath)}`);
     }
     throw error;
   }

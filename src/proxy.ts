@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import { resolveSafeCallbackPath } from "@/auth/safe-callback-path";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/runs", "/my-runs", "/characters", "/profile", "/manage"];
 
@@ -19,7 +20,8 @@ export function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
   if (!sessionCookie) {
     const login = new URL("/", request.url);
-    login.searchParams.set("next", pathname);
+    const safeNext = resolveSafeCallbackPath(pathname);
+    login.searchParams.set("next", safeNext);
     return NextResponse.redirect(login);
   }
 
