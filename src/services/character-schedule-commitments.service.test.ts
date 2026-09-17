@@ -186,7 +186,7 @@ describe("characterScheduleCommitmentsService", () => {
     );
   });
 
-  it("includes draft-selected reservations and surfaces MANUAL_AVAILABILITY conflicts", async () => {
+  it("includes draft-selected reservations and ignores deprecated manual blocks", async () => {
     await boosterQualificationService.grant(admin, {
       userId: ids.owner,
       difficulty: "HEROIC",
@@ -223,10 +223,11 @@ describe("characterScheduleCommitmentsService", () => {
     expect(beforeBlock[0]?.signupStatus).toBe("PENDING");
     expect(beforeBlock[0]?.scheduleConflicts).toEqual([]);
 
-    const { characterAvailabilityService } = await import(
-      "@/services/character-availability.service"
+    const { characterAvailabilityRepository } = await import(
+      "@/repositories/character-availability.repository"
     );
-    const block = await characterAvailabilityService.createBlock(owner, character.id, {
+    const block = await characterAvailabilityRepository.create({
+      characterId: character.id,
       startsAt: new Date(start.getTime() - 60 * 60 * 1000).toISOString(),
       endsAt: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
       reason: "External boost",
@@ -234,9 +235,7 @@ describe("characterScheduleCommitmentsService", () => {
 
     const afterBlock = await characterScheduleCommitmentsService.listForOwner(owner, character.id);
     expect(afterBlock).toHaveLength(1);
-    expect(afterBlock[0]?.scheduleConflicts.some((c) => c.source === "MANUAL_AVAILABILITY")).toBe(
-      true,
-    );
+    expect(afterBlock[0]?.scheduleConflicts).toEqual([]);
 
     await orm.CharacterAvailabilityBlock.where({ id: block.id }).delete().catch(() => {});
   });

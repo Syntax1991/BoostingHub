@@ -15,7 +15,7 @@ import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { characterAvailabilityService } from "@/services/character-availability.service";
+import { characterAvailabilityCheckService } from "@/services/character-availability-check.service";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
@@ -102,14 +102,19 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 }
 
 export const characterService = {
-  async getCharacterPage(user: AuthenticatedUser) {
+  async getCharacterPage(
+    user: AuthenticatedUser,
+    options: { checkAt?: string | null } = {},
+  ) {
     const characters = await characterRepository.listByUserId(user.id);
     const currentRaids = getCurrentLockoutRaids();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
-    const externalByCharacter =
-      await characterAvailabilityService.listCurrentOrUpcomingByCharacterIds(
-        characters.map((character) => character.id),
-      );
+    const availabilityCheck = options.checkAt
+      ? await characterAvailabilityCheckService.projectForCharacters(characters, options.checkAt)
+      : null;
+    const availabilityById = new Map(
+      (availabilityCheck?.characters ?? []).map((row) => [row.characterId, row]),
+    );
 
     return {
       currentResetByRegion: {
@@ -122,6 +127,11 @@ export const characterService = {
       })),
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
+      availabilityCheck: availabilityCheck
+        ? {
+            checkedAt: availabilityCheck.checkedAt,
+          }
+        : null,
       characters: characters.map((character) => {
         const access = boosterQualificationService.summarize(character.boosterQualifications);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
@@ -158,7 +168,7 @@ export const characterService = {
           boosterAccess: access,
           currentReset,
           lockouts,
-          externalCommitments: externalByCharacter.get(character.id) ?? [],
+          availability: availabilityById.get(character.id) ?? null,
         };
       }),
     };
@@ -217,7 +227,6 @@ export const characterService = {
       })),
       lockouts: currentLockouts,
       scheduleCommitments: await characterScheduleCommitmentsService.listForOwner(user, characterId),
-      availability: await characterAvailabilityService.listForCharacter(user, characterId),
     };
   },
 

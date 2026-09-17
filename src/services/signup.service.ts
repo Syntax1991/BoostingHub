@@ -12,11 +12,9 @@ import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import { activityRepository } from "@/repositories/activity.repository";
 import type { CharacterPageRecord } from "@/repositories/character.repository";
 import { characterRepository } from "@/repositories/character.repository";
-import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
-import { findBlockingAvailabilityBlock } from "@/lib/character-availability";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
 import {
@@ -47,7 +45,7 @@ async function withReservationConflicts<T extends { id: string }>(
   }
   const conflicts = await signupRepository.findReservationConflicts({
     characterIds: characters.map((character) => character.id),
-    targetRunId,
+    excludeRunId: targetRunId,
     scheduledStartAt,
   });
   const byId = new Map(
@@ -59,57 +57,12 @@ async function withReservationConflicts<T extends { id: string }>(
   return characters.map((character) => ({ ...character, reservationConflict: byId.get(character.id) ?? null }));
 }
 
-/**
- * Attaches manual CharacterAvailabilityBlock coverage for the Run start.
- * Independent of cross-Run reservation; never applies the 2h gap.
- */
-async function withManualUnavailability<T extends { id: string }>(
-  characters: T[],
-  scheduledStartAt: string,
-): Promise<
-  Array<
-    T & {
-      manualUnavailability: { startsAt: string; endsAt: string; reason: string | null } | null;
-    }
-  >
-> {
-  if (characters.length === 0) {
-    return [];
-  }
-  const blocks = await characterAvailabilityRepository.findBlockingForRun({
-    characterIds: characters.map((character) => character.id),
-    runStartAt: scheduledStartAt,
-  });
-  const byCharacter = new Map<string, typeof blocks>();
-  for (const block of blocks) {
-    const existing = byCharacter.get(block.characterId);
-    if (existing) {
-      existing.push(block);
-    } else {
-      byCharacter.set(block.characterId, [block]);
-    }
-  }
-  return characters.map((character) => {
-    const selected = findBlockingAvailabilityBlock(
-      scheduledStartAt,
-      byCharacter.get(character.id) ?? [],
-    );
-    return {
-      ...character,
-      manualUnavailability: selected
-        ? { startsAt: selected.startsAt, endsAt: selected.endsAt, reason: selected.reason }
-        : null,
-    };
-  });
-}
-
 async function withSignupEligibilityContext<T extends { id: string }>(
   characters: T[],
   targetRunId: string,
   scheduledStartAt: string,
 ) {
-  const withReservation = await withReservationConflicts(characters, targetRunId, scheduledStartAt);
-  return withManualUnavailability(withReservation, scheduledStartAt);
+  return withReservationConflicts(characters, targetRunId, scheduledStartAt);
 }
 
 function uniqueViolation(error: unknown): boolean {
@@ -682,12 +635,6 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
       ineligible?.conflictingRunTitle
         ? `${ineligible.characterName} is already selected for ${ineligible.conflictingRunTitle}.`
         : "That character is already selected for another run at the same time.",
-    );
-  }
-  if (reason === "MANUALLY_UNAVAILABLE") {
-    return new DomainError(
-      "CHARACTER_MANUALLY_UNAVAILABLE",
-      ineligible?.message ?? "That character is marked unavailable for this run time.",
     );
   }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");

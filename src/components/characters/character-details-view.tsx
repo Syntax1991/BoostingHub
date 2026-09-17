@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
-import { CharacterAvailabilitySection } from "@/components/characters/character-availability-section";
 import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
 import { projectCurrentRaidLockoutSlots } from "@/lib/lockout-display";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
@@ -255,11 +254,6 @@ export function CharacterDetailsView({ data }: { data: Details }) {
       </div>
       <div className="mt-4 grid gap-4">
         <CharacterScheduleCommitmentsSection commitments={data.scheduleCommitments} />
-        <CharacterAvailabilitySection
-          characterId={data.id}
-          upcoming={data.availability.upcoming}
-          past={data.availability.past}
-        />
       </div>
     </div>
   );

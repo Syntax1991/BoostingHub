@@ -293,7 +293,7 @@ describe("cross-Run Character reservation — signup eligibility", () => {
 
     const conflicts = await signupRepository.findReservationConflicts({
       characterIds: [hybrid],
-      targetRunId: runB,
+      excludeRunId: runB,
       scheduledStartAt: (await runRepository.findById(runB))!.scheduledStartAt,
     });
     expect(conflicts).toHaveLength(1);

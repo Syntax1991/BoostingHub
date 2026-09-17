@@ -54,7 +54,7 @@ describe("DashboardView", () => {
                 scheduledStartAt: "2026-10-10T20:00:00.000Z",
                 characterName: "Synlight",
                 publishedRole: "HEALER",
-                messages: ["Phoenix commitment overlaps"],
+                messages: ["Another BoostingHub Run: Other Run at Fri 10/10/2026 21:00"],
               },
             ],
             nextSelectedRun: {
@@ -78,12 +78,11 @@ describe("DashboardView", () => {
                   lootbuddyMode: null,
                   scheduleConflicts: [
                     {
-                      source: "MANUAL_AVAILABILITY",
-                      blockId: "b1",
-                      startsAt: "2026-10-10T19:00:00.000Z",
-                      endsAt: "2026-10-10T23:00:00.000Z",
-                      reason: "Phoenix",
-                      message: "Phoenix commitment overlaps",
+                      source: "RUN_RESERVATION",
+                      conflictingRunId: "run-other",
+                      conflictingRunTitle: "Other Run",
+                      conflictingScheduledStartAt: "2026-10-10T19:00:00.000Z",
+                      message: "Another BoostingHub Run: Other Run at Fri 10/10/2026 21:00",
                     },
                   ],
                 },

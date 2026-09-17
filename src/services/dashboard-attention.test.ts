@@ -68,19 +68,18 @@ describe("projectPersonalDashboardAttention", () => {
         baseItem({
           scheduleConflicts: [
             {
-              source: "MANUAL_AVAILABILITY",
-              blockId: "block-1",
-              startsAt: "2026-10-10T19:00:00.000Z",
-              endsAt: "2026-10-10T23:00:00.000Z",
-              reason: "Phoenix",
-              message: "Phoenix commitment overlaps",
+              source: "RUN_RESERVATION",
+              conflictingRunId: "run-other",
+              conflictingRunTitle: "Other Run",
+              conflictingScheduledStartAt: "2026-10-10T19:00:00.000Z",
+              message: "Another BoostingHub Run: Other Run at Fri 10/10/2026 21:00",
             },
           ],
         }),
       ],
     });
     expect(personal.conflicts).toHaveLength(1);
-    expect(personal.conflicts[0]?.messages[0]).toContain("Phoenix");
+    expect(personal.conflicts[0]?.messages[0]).toContain("Other Run");
     expect(personal.nextSelectedRun?.hasScheduleConflict).toBe(true);
   });
 

@@ -10,7 +10,6 @@ import type {
 } from "@/models/enums";
 import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
 import { projectRunContentLockouts, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
-import { formatAvailabilityBlockMessage } from "@/services/character-availability.service";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -39,19 +38,10 @@ export type EligibilityCharacter = {
   /**
    * Non-null when this Character is already reserved — draft-selected into
    * another Run's roster, or SELECTED there — on a different Run scheduled
-   * at the exact same time. Populated by the caller before evaluation (a
-   * cross-Run scheduling rule, never derived from lockouts).
+   * within the BoostingHub <2h reservation window. Populated by the caller
+   * before evaluation (a cross-Run scheduling rule, never derived from lockouts).
    */
   reservationConflict: CharacterRunReservationConflict | null;
-  /**
-   * Non-null when a manual CharacterAvailabilityBlock covers the target Run
-   * start (`startsAt <= runStart < endsAt`). Independent of reservation.
-   */
-  manualUnavailability: {
-    startsAt: string;
-    endsAt: string;
-    reason: string | null;
-  } | null;
 };
 
 export type EligibilityRun = {
@@ -76,15 +66,13 @@ export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
   | "DIFFICULTY_NOT_APPROVED"
-  | "ALREADY_SELECTED_OTHER_RUN"
-  | "MANUALLY_UNAVAILABLE";
+  | "ALREADY_SELECTED_OTHER_RUN";
 
 export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
-  MANUALLY_UNAVAILABLE: "Character is marked unavailable.",
 };
 
 export type EligibleBoosterOption = {
@@ -203,20 +191,6 @@ export function evaluateBoosterOptions(
         conflictingRunId: character.reservationConflict.runId,
         conflictingRunTitle: character.reservationConflict.runTitle,
         conflictingScheduledStartAt: character.reservationConflict.scheduledStartAt,
-      });
-      continue;
-    }
-
-    // Manual availability block covering this Run start — independent of the
-    // 2h BoostingHub reservation gap; the block's own interval is authoritative.
-    if (character.manualUnavailability) {
-      ineligible.push({
-        characterId: character.id,
-        characterName: character.name,
-        realm: character.realm,
-        warcraftLogsId: character.warcraftLogsId,
-        reason: "MANUALLY_UNAVAILABLE",
-        message: formatAvailabilityBlockMessage(character.manualUnavailability),
       });
       continue;
     }

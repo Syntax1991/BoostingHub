@@ -73,7 +73,6 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     ],
     lockouts: [],
     scheduleCommitments: [],
-    availability: { upcoming: [], past: [] },
     ...overrides,
   };
 }

@@ -1,4 +1,3 @@
-import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { DomainError } from "@/lib/errors";
 import {
@@ -8,8 +7,10 @@ import {
 
 /**
  * Batch current schedule-integrity conflicts for Characters against one Run start.
- * Two repository reads total (reservations + availability) — never N+1 per Character.
+ * One reservation repository read — never N+1 per Character.
  * Empty characterIds → empty Map.
+ *
+ * Manual CharacterAvailabilityBlock rows are deprecated and ignored.
  */
 export async function getScheduleConflictsForCharacters(input: {
   targetRunId: string;
@@ -21,23 +22,15 @@ export async function getScheduleConflictsForCharacters(input: {
     return new Map();
   }
 
-  const [reservations, blocks] = await Promise.all([
-    signupRepository.findAllReservationConflicts({
-      characterIds,
-      targetRunId: input.targetRunId,
-      scheduledStartAt: input.scheduledStartAt,
-    }),
-    characterAvailabilityRepository.findBlockingForRun({
-      characterIds,
-      runStartAt: input.scheduledStartAt,
-    }),
-  ]);
+  const reservations = await signupRepository.findAllReservationConflicts({
+    characterIds,
+    excludeRunId: input.targetRunId,
+    scheduledStartAt: input.scheduledStartAt,
+  });
 
   return projectScheduleConflictsByCharacter({
     characterIds,
-    runStartAt: input.scheduledStartAt,
     reservations,
-    availabilityBlocks: blocks,
   });
 }
 

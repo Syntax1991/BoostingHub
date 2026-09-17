@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, toDatetimeLocalValue } from "@/lib/datetime";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
 import { DIFFICULTY_LABELS, REGION_LABELS } from "@/lib/labels";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -13,11 +13,11 @@ import { BattleNetPanel } from "@/components/characters/battle-net-panel";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
 import { FindMissingWarcraftLogsButton } from "@/components/characters/find-missing-warcraft-logs-button";
-import { ExternalPlanningCell } from "@/components/characters/external-planning-cell";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
 type Filter = "active" | "inactive" | "all";
+type CharacterRow = Page["characters"][number];
 
 export function CharactersView({ data }: { data: Page }) {
   const [filter, setFilter] = useState<Filter>("active");
@@ -30,6 +30,10 @@ export function CharactersView({ data }: { data: Page }) {
   const hasMissingActiveWarcraftLogs = data.characters.some(
     (character) => character.isActive && !(character.warcraftLogsId?.trim()),
   );
+
+  const defaultCheckLocal = data.availabilityCheck?.checkedAt
+    ? toDatetimeLocalValue(data.availabilityCheck.checkedAt)
+    : toDatetimeLocalValue(new Date(Date.now() + 60 * 60 * 1000));
 
   return (
     <div>
@@ -44,6 +48,44 @@ export function CharactersView({ data }: { data: Page }) {
         }
       />
       <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
+
+      <Card className="mb-4">
+        <div className="space-y-3 px-4 py-4">
+          <div>
+            <h2 className="text-sm font-semibold">Availability check</h2>
+            <p className="mt-1 text-xs text-muted">
+              Checks BoostingHub commitments only. Personal and external schedules are not tracked.
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              Availability only checks existing BoostingHub scheduling conflicts.
+            </p>
+          </div>
+          <form method="get" action="/characters" className="flex flex-wrap items-end gap-3">
+            <label className="grid gap-1 text-xs">
+              <span className="text-muted">Proposed Run start (Europe/Berlin)</span>
+              <input
+                type="datetime-local"
+                name="checkAt"
+                defaultValue={defaultCheckLocal}
+                className="h-9 rounded-md border border-border bg-surface px-3 text-sm"
+                required
+              />
+            </label>
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:opacity-90"
+            >
+              Check availability
+            </button>
+          </form>
+          {data.availabilityCheckError ? (
+            <p className="text-sm text-warning" role="alert">
+              {data.availabilityCheckError}
+            </p>
+          ) : null}
+        </div>
+      </Card>
+
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <FilterButton label="Active" value="active" current={filter} onSelect={setFilter} />
         <FilterButton label="Inactive" value="inactive" current={filter} onSelect={setFilter} />
@@ -65,7 +107,7 @@ export function CharactersView({ data }: { data: Page }) {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1240px] text-left text-sm">
+            <table className="w-full min-w-[1180px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Character</th>
@@ -80,7 +122,7 @@ export function CharactersView({ data }: { data: Page }) {
                       ? ` (${data.currentLockoutRaids.map((raid) => raid.name).join(" · ")})`
                       : ""}
                   </th>
-                  <th className="px-4 py-2 font-medium">External planning</th>
+                  <th className="px-4 py-2 font-medium">Availability</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
                   <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>
@@ -123,10 +165,7 @@ export function CharactersView({ data }: { data: Page }) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <ExternalPlanningCell
-                        characterId={character.id}
-                        commitments={character.externalCommitments ?? []}
-                      />
+                      <AvailabilityCell character={character} checked={Boolean(data.availabilityCheck)} />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
                       {character.lastSyncedAt
@@ -174,6 +213,43 @@ export function CharactersView({ data }: { data: Page }) {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AvailabilityCell({
+  character,
+  checked,
+}: {
+  character: CharacterRow;
+  checked: boolean;
+}) {
+  if (!checked || !character.availability) {
+    return <span className="text-xs text-muted">Not checked</span>;
+  }
+
+  if (character.availability.status === "INACTIVE") {
+    return <span className="text-xs text-muted">Inactive</span>;
+  }
+
+  if (character.availability.status === "AVAILABLE_IN_BOOSTINGHUB") {
+    return <span className="text-xs font-medium">No BoostingHub conflict</span>;
+  }
+
+  const first = character.availability.conflicts[0];
+  const extra = Math.max(0, character.availability.conflicts.length - 1);
+  return (
+    <div className="min-w-[10rem] max-w-[14rem] space-y-1 text-xs">
+      <div className="font-medium text-warning">Already committed</div>
+      {first ? (
+        <div className="text-muted">
+          <div className="truncate" title={first.runTitle}>
+            {first.runTitle}
+          </div>
+          <div>{formatDateTime(first.scheduledStartAt)}</div>
+        </div>
+      ) : null}
+      {extra > 0 ? <div className="text-muted">+{extra} more</div> : null}
     </div>
   );
 }

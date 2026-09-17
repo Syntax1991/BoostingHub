@@ -168,9 +168,16 @@ export function scheduledStartsCollideForReservation(
  * re-verification immediately before a write, exactly like the existing
  * WITHDRAWN-race checks in this file's `applyOfferPlan`.
  */
+export type ReservationConflictQueryInput = {
+  characterIds: string[];
+  scheduledStartAt: string;
+  /** When set, that Run is never treated as a conflict (roster/signup editing self). */
+  excludeRunId?: string;
+};
+
 export async function queryReservationConflicts(
   ormLike: TxOrm,
-  input: { characterIds: string[]; targetRunId: string; scheduledStartAt: string },
+  input: ReservationConflictQueryInput,
 ): Promise<ReservationConflictRow[]> {
   if (input.characterIds.length === 0) {
     return [];
@@ -190,7 +197,7 @@ export async function queryReservationConflicts(
 
     const run = (raw.run ?? {}) as Record<string, unknown>;
     const runId = asString(run.id);
-    if (runId === input.targetRunId) continue;
+    if (input.excludeRunId && runId === input.excludeRunId) continue;
     if (!scheduledStartsCollideForReservation(asString(run.scheduledStartAt), targetTime)) continue;
     if (!UPCOMING_RUN_STATUSES.includes(mapRunStatus(run.status))) continue;
 
@@ -219,7 +226,7 @@ export async function queryReservationConflicts(
  */
 export async function queryAllReservationConflicts(
   ormLike: TxOrm,
-  input: { characterIds: string[]; targetRunId: string; scheduledStartAt: string },
+  input: ReservationConflictQueryInput,
 ): Promise<ReservationConflictRow[]> {
   if (input.characterIds.length === 0) {
     return [];
@@ -240,7 +247,7 @@ export async function queryAllReservationConflicts(
 
     const run = (raw.run ?? {}) as Record<string, unknown>;
     const runId = asString(run.id);
-    if (runId === input.targetRunId) continue;
+    if (input.excludeRunId && runId === input.excludeRunId) continue;
     if (!scheduledStartsCollideForReservation(asString(run.scheduledStartAt), targetTime)) continue;
     if (!UPCOMING_RUN_STATUSES.includes(mapRunStatus(run.status))) continue;
 
@@ -314,19 +321,13 @@ async function syncOfferedRoles(
 }
 
 export const signupRepository = {
-  async findReservationConflicts(input: {
-    characterIds: string[];
-    targetRunId: string;
-    scheduledStartAt: string;
-  }): Promise<ReservationConflictRow[]> {
+  async findReservationConflicts(input: ReservationConflictQueryInput): Promise<ReservationConflictRow[]> {
     return queryReservationConflicts(orm, input);
   },
 
-  async findAllReservationConflicts(input: {
-    characterIds: string[];
-    targetRunId: string;
-    scheduledStartAt: string;
-  }): Promise<ReservationConflictRow[]> {
+  async findAllReservationConflicts(
+    input: ReservationConflictQueryInput,
+  ): Promise<ReservationConflictRow[]> {
     return queryAllReservationConflicts(orm, input);
   },
 
@@ -566,7 +567,7 @@ export const signupRepository = {
       if (activatingCharacterIds.length > 0) {
         const conflicts = await queryReservationConflicts(txOrm, {
           characterIds: activatingCharacterIds,
-          targetRunId: input.runId,
+          excludeRunId: input.runId,
           scheduledStartAt: input.scheduledStartAt,
         });
         if (conflicts.length > 0) {
