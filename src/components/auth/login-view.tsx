@@ -16,10 +16,12 @@ export function LoginView({
   discordEnabled,
   devAuthEnabled,
   identities,
+  callbackURL,
 }: {
   discordEnabled: boolean;
   devAuthEnabled: boolean;
   identities: Identity[];
+  callbackURL: string;
 }) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-4 py-10">
@@ -41,7 +43,7 @@ export function LoginView({
           <div className="space-y-3 px-4 py-4">
             <h2 className="text-sm font-semibold">Discord</h2>
             {discordEnabled ? (
-              <DiscordSignInButton />
+              <DiscordSignInButton callbackURL={callbackURL} />
             ) : (
               <p className="text-sm text-muted">
                 Discord OAuth is not configured. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET to enable it.
@@ -60,6 +62,7 @@ export function LoginView({
                 {identities.map((identity) => (
                   <form key={identity.id} action={signInWithDevIdentity}>
                     <input type="hidden" name="userId" value={identity.id} />
+                    <input type="hidden" name="next" value={callbackURL} />
                     <button
                       type="submit"
                       className="flex w-full items-center justify-between rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-left text-sm hover:bg-warning/15"

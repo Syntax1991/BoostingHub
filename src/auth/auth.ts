@@ -2,7 +2,14 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { pgPool } from "@/lib/pg-pool";
 import { isDevAuthEnabled, isDiscordOAuthConfigured } from "@/auth/dev-auth";
+import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
+import {
+  SESSION_EXPIRES_IN_SECONDS,
+  SESSION_UPDATE_AGE_SECONDS,
+} from "@/auth/session-policy";
 import { bootstrapDevelopmentAccount } from "@/services/dev-account-bootstrap.service";
+
+export { SESSION_EXPIRES_IN_SECONDS, SESSION_UPDATE_AGE_SECONDS };
 
 /**
  * Better Auth owns session/account rows via its built-in Kysely PostgreSQL adapter.
@@ -11,6 +18,15 @@ import { bootstrapDevelopmentAccount } from "@/services/dev-account-bootstrap.se
  *
  * Better Auth's Prisma adapter still targets Prisma 7's client API, so it is not
  * used with Prisma 8.
+ *
+ * Session policy (Better Auth 1.7.3):
+ * - expiresIn: 30 days (sliding lifetime)
+ * - updateAge: 1 day (refresh threshold while active)
+ * - cookieCache: left disabled (default) so revocation is immediately authoritative
+ *
+ * OAuth provider tokens (Discord Account rows) are encrypted at rest when
+ * account.encryptOAuthTokens is true. Better Auth still reads legacy plaintext
+ * tokens via isLikelyEncrypted() — no manual rewrite required.
  */
 const discord = isDiscordOAuthConfigured()
   ? {
@@ -34,13 +50,20 @@ const discord = isDiscordOAuthConfigured()
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: resolveBetterAuthBaseURL(),
   database: pgPool,
   emailAndPassword: {
     enabled: isDevAuthEnabled(),
     minPasswordLength: 8,
   },
   socialProviders: discord,
+  session: {
+    expiresIn: SESSION_EXPIRES_IN_SECONDS,
+    updateAge: SESSION_UPDATE_AGE_SECONDS,
+  },
+  account: {
+    encryptOAuthTokens: true,
+  },
   user: {
     additionalFields: {
       discordUserId: {

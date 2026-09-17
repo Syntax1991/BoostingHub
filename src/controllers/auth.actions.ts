@@ -7,6 +7,7 @@ import { isDevAuthEnabled } from "@/auth/dev-auth";
 import { DomainError } from "@/lib/errors";
 import { userRepository } from "@/repositories/user.repository";
 import { getDevAuthPassword } from "@/auth/dev-auth";
+import { resolveSafeCallbackPath } from "@/auth/safe-callback-path";
 import { devLoginSchema } from "@/validators/run-filters";
 
 /**
@@ -24,6 +25,7 @@ export async function signInWithDevIdentity(formData: FormData) {
   const parsed = devLoginSchema.parse({
     userId: String(formData.get("userId") ?? ""),
   });
+  const callbackURL = resolveSafeCallbackPath(String(formData.get("next") ?? ""));
 
   const identities = await userRepository.listDevIdentities();
   const identity = identities.find((item) => item.id === parsed.userId);
@@ -44,7 +46,7 @@ export async function signInWithDevIdentity(formData: FormData) {
     throw new DomainError("NOT_AUTHENTICATED", "Development sign-in failed.");
   }
 
-  redirect("/dashboard");
+  redirect(callbackURL);
 }
 
 export async function signOutAction() {
