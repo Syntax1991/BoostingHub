@@ -5,6 +5,7 @@ import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { runDetailPath } from "@/lib/run-routes";
 import { ManageRunsFilters } from "@/components/manage/manage-runs-filters";
 import { RunQuickActions } from "@/components/manage/run-quick-actions";
+import { formatOperationalAttentionHint } from "@/services/run-operational-handoff";
 import type { ManagedRunsPage } from "@/services/run.service";
 
 export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPage; massCreatedCount?: number }) {
@@ -54,54 +55,68 @@ export function ManageRunsView({ data, massCreatedCount }: { data: ManagedRunsPa
                 </tr>
               </thead>
               <tbody>
-                {data.runs.map((run) => (
-                  <tr key={run.id} className="border-t border-border align-top">
-                    <td className="px-4 py-3">
-                      <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">
-                        {run.title}
-                      </Link>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                        <span>
-                          {run.productLabel}
-                          {run.contentSummary ? ` · ${run.contentSummary}` : ""}
-                        </span>
-                        <DifficultyBadge difficulty={run.difficulty} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted">{formatDateTime(run.scheduledStartAt)}</td>
-                    <td className="px-4 py-3">{run.raidLeadName}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <RunStatusBadge status={run.status} />
-                        {run.archivedAt ? (
-                          <span className="inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
-                            Archived
+                {data.runs.map((run) => {
+                  const attentionHint = formatOperationalAttentionHint({
+                    attendance: run.attendance,
+                    settlement: { stage: run.settlementStage },
+                    attention: run.attention,
+                    nextAction: run.nextAction,
+                  });
+                  return (
+                    <tr key={run.id} className="border-t border-border align-top">
+                      <td className="px-4 py-3">
+                        <Link href={runDetailPath(run.id)} className="max-w-[240px] truncate font-medium text-accent hover:underline">
+                          {run.title}
+                        </Link>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                          <span>
+                            {run.productLabel}
+                            {run.contentSummary ? ` · ${run.contentSummary}` : ""}
                           </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted">
-                      {run.signupCount} active · {run.selectedCount} selected
-                      <div>{run.signupWindowOpen ? "Open" : "Closed"}</div>
-                      <div className="mt-1">
-                        Draft {run.draftSelectedCount}
-                        {run.publishedAt ? " · published" : ""}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <RunQuickActions
-                        run={{
-                          id: run.id,
-                          title: run.title,
-                          status: run.status,
-                          archivedAt: run.archivedAt,
-                          actionLabel: run.actionLabel,
-                          capabilities: run.capabilities,
-                        }}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                          <DifficultyBadge difficulty={run.difficulty} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted">{formatDateTime(run.scheduledStartAt)}</td>
+                      <td className="px-4 py-3">{run.raidLeadName}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <RunStatusBadge status={run.status} />
+                          {run.archivedAt ? (
+                            <span className="inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+                              Archived
+                            </span>
+                          ) : null}
+                          {attentionHint ? (
+                            <span className="inline-flex items-center rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-muted">
+                              {attentionHint}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted">
+                        {run.signupCount} active · {run.selectedCount} selected
+                        <div>{run.signupWindowOpen ? "Open" : "Closed"}</div>
+                        <div className="mt-1">
+                          Draft {run.draftSelectedCount}
+                          {run.publishedAt ? " · published" : ""}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <RunQuickActions
+                          run={{
+                            id: run.id,
+                            title: run.title,
+                            status: run.status,
+                            archivedAt: run.archivedAt,
+                            nextAction: run.nextAction,
+                            unmarkedCount: run.attendance.unmarkedCount,
+                            capabilities: run.capabilities,
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

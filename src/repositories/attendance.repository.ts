@@ -118,6 +118,37 @@ export const attendanceRepository = {
     return rows.length;
   },
 
+  /**
+   * Batched attendance totals / unmarked counts for Manage Runs handoffs.
+   * One query for all run ids; empty input → empty Map.
+   */
+  async summarizeByRunIds(
+    runIds: string[],
+  ): Promise<Map<string, { total: number; unmarkedCount: number }>> {
+    const summary = new Map<string, { total: number; unmarkedCount: number }>();
+    if (runIds.length === 0) {
+      return summary;
+    }
+    const uniqueIds = [...new Set(runIds.filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      return summary;
+    }
+    const rows = await orm.RunAttendance.where((attendance) => attendance.runId.in(uniqueIds))
+      .select("runId", "status")
+      .all();
+    for (const row of rows) {
+      const record = row as Record<string, unknown>;
+      const runId = asString(record.runId);
+      const current = summary.get(runId) ?? { total: 0, unmarkedCount: 0 };
+      current.total += 1;
+      if (mapAttendanceStatus(record.status) === "UNMARKED") {
+        current.unmarkedCount += 1;
+      }
+      summary.set(runId, current);
+    }
+    return summary;
+  },
+
   async updateStatus(
     id: string,
     fields: {

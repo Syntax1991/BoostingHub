@@ -11,8 +11,9 @@ import { RunCancelDialog } from "@/components/runs/run-cancel-dialog";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunDeleteDialog } from "@/components/runs/run-delete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
-import { runDetailPath, runDetailTabForManageAction } from "@/lib/run-routes";
+import { runDetailPath } from "@/lib/run-routes";
 import type { RunLifecycleCapabilities } from "@/services/run-state";
+import type { RunOperationalAction } from "@/services/run-operational-handoff";
 import type { RunStatus } from "@/models/enums";
 
 type QuickActionRun = {
@@ -20,7 +21,8 @@ type QuickActionRun = {
   title: string;
   status: RunStatus;
   archivedAt: string | null;
-  actionLabel: string;
+  nextAction: RunOperationalAction;
+  unmarkedCount: number;
   capabilities: RunLifecycleCapabilities;
 };
 
@@ -45,11 +47,12 @@ export function RunQuickActions({ run }: { run: QuickActionRun }) {
 
   const isArchived = Boolean(run.archivedAt);
   const cap = run.capabilities;
+  const action = run.nextAction;
 
-  function runAction(action: () => Promise<ActionResult>) {
+  function runAction(actionFn: () => Promise<ActionResult>) {
     setError(null);
     startTransition(async () => {
-      const result = await action();
+      const result = await actionFn();
       if (!result.ok) {
         setError(result.message);
         return;
@@ -71,29 +74,23 @@ export function RunQuickActions({ run }: { run: QuickActionRun }) {
         {pending ? "Opening…" : "Open Run"}
       </Button>
     );
-  } else if (run.status === "OPEN" || run.status === "ROSTERING") {
-    primary = (
-      <Link href={runDetailPath(run.id, runDetailTabForManageAction(run.actionLabel))} className={LINK_BUTTON_CLASS}>
-        {run.actionLabel}
-      </Link>
-    );
-  } else if (cap.canStart) {
+  } else if (action.mode === "dialog-start") {
     primary = (
       <Button type="button" onClick={() => setDialog("start")}>
-        Start Run
+        {action.label}
       </Button>
     );
-  } else if (cap.canComplete) {
+  } else if (action.mode === "dialog-complete") {
     primary = (
       <Button type="button" onClick={() => setDialog("complete")}>
-        Complete Run
+        {action.label}
       </Button>
     );
-  } else if (cap.canArchive) {
+  } else if (action.mode === "link") {
     primary = (
-      <Button type="button" onClick={() => setDialog("archive")}>
-        Archive
-      </Button>
+      <Link href={runDetailPath(run.id, action.tab)} className={LINK_BUTTON_CLASS}>
+        {action.label}
+      </Link>
     );
   } else {
     primary = (
@@ -110,6 +107,7 @@ export function RunQuickActions({ run }: { run: QuickActionRun }) {
   // Cancel makes sense, and only while the domain still allows it.
   const showCancel = !isArchived && run.status !== "DRAFT" && cap.canCancel;
   const showDelete = !isArchived && run.status === "DRAFT" && cap.canDelete;
+  const showArchive = !isArchived && cap.canArchive;
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -135,6 +133,18 @@ export function RunQuickActions({ run }: { run: QuickActionRun }) {
             >
               View Run
             </Link>
+            {showArchive ? (
+              <button
+                type="button"
+                className="block w-full px-3 py-1.5 text-left hover:bg-surface-raised"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setDialog("archive");
+                }}
+              >
+                Archive
+              </button>
+            ) : null}
             {showCancel ? (
               <button
                 type="button"
@@ -169,7 +179,11 @@ export function RunQuickActions({ run }: { run: QuickActionRun }) {
       ) : null}
       {dialog === "start" ? <RunStartDialog runId={run.id} onClose={() => setDialog(null)} /> : null}
       {dialog === "complete" ? (
-        <RunCompleteDialog runId={run.id} unmarkedCount={0} onClose={() => setDialog(null)} />
+        <RunCompleteDialog
+          runId={run.id}
+          unmarkedCount={run.unmarkedCount}
+          onClose={() => setDialog(null)}
+        />
       ) : null}
       {dialog === "cancel" ? <RunCancelDialog runId={run.id} onClose={() => setDialog(null)} /> : null}
       {dialog === "archive" ? (

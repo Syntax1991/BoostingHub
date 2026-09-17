@@ -47,20 +47,6 @@ export function runDetailPath(runId: string, tab?: RunDetailTab): string {
   return `${base}?tab=${tab}`;
 }
 
-/** Roster-oriented manage-index actions open the Roster tab; View/Manage stay on Overview. */
-export function runDetailTabForManageAction(actionLabel: string): RunDetailTab {
-  if (actionLabel === "View" || actionLabel === "Manage") {
-    return "overview";
-  }
-  if (actionLabel === "Attendance") {
-    return "attendance";
-  }
-  if (actionLabel === "Payout") {
-    return "payout";
-  }
-  return "roster";
-}
-
 export function rosterActionLabel(
   status: RunStatus,
   hasRoster: boolean,
