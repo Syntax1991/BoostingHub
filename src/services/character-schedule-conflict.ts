@@ -5,6 +5,8 @@
  */
 
 import { formatDateTime } from "@/lib/datetime";
+import { DIFFICULTY_LABELS } from "@/lib/labels";
+import type { RaidDifficulty } from "@/models/enums";
 
 export type RunReservationConflictInput = {
   characterId: string;
@@ -17,6 +19,7 @@ export type WeeklyUnavailableConflictInput = {
   characterId: string;
   characterName: string;
   resetIdentifier: string;
+  difficulty: RaidDifficulty;
 };
 
 export type CharacterScheduleConflict =
@@ -30,6 +33,7 @@ export type CharacterScheduleConflict =
   | {
       source: "WEEKLY_UNAVAILABLE";
       resetIdentifier: string;
+      difficulty: RaidDifficulty;
       message: string;
     };
 
@@ -43,8 +47,9 @@ export function formatRunReservationConflictMessage(input: {
 export function formatWeeklyUnavailableConflictMessage(input: {
   characterName: string;
   resetIdentifier: string;
+  difficulty: RaidDifficulty;
 }): string {
-  return `${input.characterName} is marked unavailable for this reset (${input.resetIdentifier}).`;
+  return `${input.characterName} is marked unavailable for ${DIFFICULTY_LABELS[input.difficulty]} during this reset (${input.resetIdentifier}).`;
 }
 
 function compareReservationConflicts(
@@ -70,6 +75,7 @@ export function projectCharacterScheduleConflicts(input: {
     conflicts.push({
       source: "WEEKLY_UNAVAILABLE",
       resetIdentifier: input.weeklyUnavailable.resetIdentifier,
+      difficulty: input.weeklyUnavailable.difficulty,
       message: formatWeeklyUnavailableConflictMessage(input.weeklyUnavailable),
     });
   }

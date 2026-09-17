@@ -1,4 +1,4 @@
-import type { WowRegion } from "@/models/enums";
+import type { RaidDifficulty, WowRegion } from "@/models/enums";
 import { signupRepository } from "@/repositories/signup.repository";
 import { DomainError } from "@/lib/errors";
 import {
@@ -16,7 +16,7 @@ export type ScheduleConflictCharacterInput = {
 };
 
 /**
- * Batch current schedule-integrity conflicts for Characters against one Run start.
+ * Batch current schedule-integrity conflicts for Characters against one Run start + difficulty.
  * One reservation read + one weekly-unavailability read — never N+1 per Character.
  * Empty characters → empty Map.
  *
@@ -25,6 +25,7 @@ export type ScheduleConflictCharacterInput = {
 export async function getScheduleConflictsForCharacters(input: {
   targetRunId: string;
   scheduledStartAt: string;
+  difficulty: RaidDifficulty;
   characters: readonly ScheduleConflictCharacterInput[];
 }): Promise<Map<string, CharacterScheduleConflict[]>> {
   const characters = [...input.characters].filter((row) => row.id);
@@ -42,9 +43,10 @@ export async function getScheduleConflictsForCharacters(input: {
       excludeRunId: input.targetRunId,
       scheduledStartAt: input.scheduledStartAt,
     }),
-    characterWeeklyAvailabilityService.listUnavailableForRunStart(
+    characterWeeklyAvailabilityService.listUnavailableForRun(
       uniqueCharacters,
       input.scheduledStartAt,
+      input.difficulty,
     ),
   ]);
 
@@ -58,6 +60,7 @@ export async function getScheduleConflictsForCharacters(input: {
         character.region,
         input.scheduledStartAt,
       ),
+      difficulty: input.difficulty,
     });
   }
 
@@ -71,11 +74,13 @@ export async function getScheduleConflictsForCharacters(input: {
 export async function getScheduleConflictsForCharacter(input: {
   targetRunId: string;
   scheduledStartAt: string;
+  difficulty: RaidDifficulty;
   character: ScheduleConflictCharacterInput;
 }): Promise<CharacterScheduleConflict[]> {
   const byCharacter = await getScheduleConflictsForCharacters({
     targetRunId: input.targetRunId,
     scheduledStartAt: input.scheduledStartAt,
+    difficulty: input.difficulty,
     characters: [input.character],
   });
   return byCharacter.get(input.character.id) ?? [];

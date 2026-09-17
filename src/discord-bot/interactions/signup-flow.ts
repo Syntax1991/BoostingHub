@@ -145,7 +145,7 @@ function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): st
     "Unavailable characters:",
     ...blocked.map((item) =>
       item.reason === "CHARACTER_UNAVAILABLE"
-        ? `• ${item.characterName}-${item.realm}: marked unavailable for this reset.`
+        ? `• ${item.characterName}-${item.realm}: marked unavailable for this difficulty this reset.`
         : `• ${item.characterName}-${item.realm}: already selected for ${item.conflictingRunTitle ?? "another run"}.`,
     ),
   ];

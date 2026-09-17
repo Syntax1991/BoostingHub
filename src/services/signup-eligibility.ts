@@ -79,7 +79,7 @@ export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, 
   NO_BOOSTER_ACCESS: "No approved booster access.",
   DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
-  CHARACTER_UNAVAILABLE: "Character is marked unavailable for this reset.",
+  CHARACTER_UNAVAILABLE: "Character is marked unavailable for this difficulty this reset.",
 };
 
 export type EligibleBoosterOption = {

@@ -51,6 +51,7 @@ export const characterScheduleCommitmentsService = {
         const scheduleConflicts = await getScheduleConflictsForCharacter({
           targetRunId: row.run.id,
           scheduledStartAt: row.run.scheduledStartAt,
+          difficulty: row.run.difficulty,
           character: {
             id: character.id,
             name: character.name,

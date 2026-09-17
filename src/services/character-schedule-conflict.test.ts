@@ -60,12 +60,15 @@ describe("character schedule conflict domain", () => {
             characterId: "char-2",
             characterName: "Synmist",
             resetIdentifier: "2026-W38",
+            difficulty: "HEROIC",
           },
         ],
       ]),
     });
     expect(byCharacter.get("char-1")?.map((row) => row.source)).toEqual(["RUN_RESERVATION"]);
     expect(byCharacter.get("char-2")?.map((row) => row.source)).toEqual(["WEEKLY_UNAVAILABLE"]);
-    expect(byCharacter.get("char-2")?.[0]?.message).toContain("Synmist is marked unavailable");
+    expect(byCharacter.get("char-2")?.[0]?.message).toContain(
+      "Synmist is marked unavailable for Heroic",
+    );
   });
 });

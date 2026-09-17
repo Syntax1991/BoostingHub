@@ -331,6 +331,7 @@ export const rosterService = {
     const scheduleConflictsByCharacter = await getScheduleConflictsForCharacters({
       targetRunId: run.id,
       scheduledStartAt: run.scheduledStartAt,
+      difficulty: run.difficulty,
       characters: boosterCharacters,
     });
     const inspected = signups.map((signup) => ({
@@ -479,6 +480,7 @@ export const rosterService = {
       const scheduleConflicts = await getScheduleConflictsForCharacter({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
+        difficulty: run.difficulty,
         character: {
           id: signup.character.id,
           name: signup.character.name,
@@ -639,6 +641,7 @@ export const rosterService = {
       const conflictsByCharacter = await getScheduleConflictsForCharacters({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
+        difficulty: run.difficulty,
         characters: newlySelectedCharacters,
       });
       for (const signup of selectedRows) {
@@ -771,6 +774,7 @@ export const rosterService = {
       const conflictsByCharacter = await getScheduleConflictsForCharacters({
         targetRunId: input.runId,
         scheduledStartAt: run.scheduledStartAt,
+        difficulty: run.difficulty,
         characters: selectedCharacters,
       });
       const conflicted = selected

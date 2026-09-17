@@ -60,10 +60,19 @@ async function withReservationConflicts<T extends { id: string }>(
 
 async function withSignupEligibilityContext<
   T extends { id: string; name: string; region: import("@/models/enums").WowRegion },
->(characters: T[], targetRunId: string, scheduledStartAt: string) {
+>(
+  characters: T[],
+  targetRunId: string,
+  scheduledStartAt: string,
+  difficulty: import("@/models/enums").RaidDifficulty,
+) {
   const [withReservations, unavailableIds] = await Promise.all([
     withReservationConflicts(characters, targetRunId, scheduledStartAt),
-    characterWeeklyAvailabilityService.listUnavailableForRunStart(characters, scheduledStartAt),
+    characterWeeklyAvailabilityService.listUnavailableForRun(
+      characters,
+      scheduledStartAt,
+      difficulty,
+    ),
   ]);
   return withReservations.map((character) => ({
     ...character,
@@ -92,6 +101,7 @@ export const signupService = {
       string,
       {
         scheduledStartAt: string;
+        difficulty: import("@/models/enums").RaidDifficulty;
         characters: Array<{ id: string; name: string; region: import("@/models/enums").WowRegion }>;
       }
     >();
@@ -109,6 +119,7 @@ export const signupService = {
       } else {
         byRun.set(signup.run.id, {
           scheduledStartAt: signup.run.scheduledStartAt,
+          difficulty: signup.run.difficulty,
           characters: [character],
         });
       }
@@ -120,6 +131,7 @@ export const signupService = {
         const map = await getScheduleConflictsForCharacters({
           targetRunId: runId,
           scheduledStartAt: meta.scheduledStartAt,
+          difficulty: meta.difficulty,
           characters: meta.characters,
         });
         for (const [characterId, conflicts] of map) {
@@ -196,7 +208,12 @@ export const signupService = {
     }
 
     const rawCharacters = await characterRepository.listByUserId(user.id);
-    const characters = await withSignupEligibilityContext(rawCharacters, run.id, run.scheduledStartAt);
+    const characters = await withSignupEligibilityContext(
+      rawCharacters,
+      run.id,
+      run.scheduledStartAt,
+      run.difficulty,
+    );
     const eligibilityRun = toEligibilityRun(run);
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun);
@@ -258,7 +275,12 @@ export const signupService = {
       throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
     }
 
-    const [enrichedCharacter] = await withSignupEligibilityContext([character], run.id, run.scheduledStartAt);
+    const [enrichedCharacter] = await withSignupEligibilityContext(
+      [character],
+      run.id,
+      run.scheduledStartAt,
+      run.difficulty,
+    );
     const { eligible, ineligible } = evaluateBoosterOptions(
       [enrichedCharacter],
       toEligibilityRun(run),
@@ -657,7 +679,7 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
   if (reason === "CHARACTER_UNAVAILABLE") {
     return new DomainError(
       "CHARACTER_UNAVAILABLE",
-      `${ineligible?.characterName ?? "That character"} is marked unavailable for this reset.`,
+      `${ineligible?.characterName ?? "That character"} is marked unavailable for this difficulty this reset.`,
     );
   }
   return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");
@@ -785,6 +807,7 @@ async function validateOfferedCharacters(
     offeredCharacters.map(({ character }) => character),
     run.id,
     run.scheduledStartAt,
+    run.difficulty,
   );
   const { eligible, ineligible } = evaluateBoosterOptions(enrichedCharacters, eligibilityRun);
   for (const { offer, character } of offeredCharacters) {
