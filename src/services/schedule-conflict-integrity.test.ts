@@ -7,14 +7,13 @@ import { runRepository } from "@/repositories/run.repository";
 import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { lockoutService } from "@/services/lockout.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
-import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { lockoutService } from "@/services/lockout.service";
-import { characterWeeklyAvailabilityRepository } from "@/repositories/character-weekly-availability.repository";
 
 const ids = {
   owner: "bbbbbbbb-bbbb-4bbb-8bbb-sci000000001",

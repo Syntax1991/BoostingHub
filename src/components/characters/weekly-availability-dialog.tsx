@@ -33,15 +33,19 @@ export function WeeklyAvailabilityDialog({
 
   useEffect(() => {
     if (!open) return;
-    setAvailable(weeklyAvailability.status === "AVAILABLE");
-    setError(null);
     dialogRef.current?.showModal();
     const dialog = dialogRef.current;
     if (!dialog) return;
     const onClose = () => setOpen(false);
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
-  }, [open, weeklyAvailability.status]);
+  }, [open]);
+
+  function openDialog() {
+    setAvailable(weeklyAvailability.status === "AVAILABLE");
+    setError(null);
+    setOpen(true);
+  }
 
   function close() {
     dialogRef.current?.close();
@@ -65,7 +69,7 @@ export function WeeklyAvailabilityDialog({
 
   return (
     <>
-      <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
+      <button type="button" className={triggerClassName} onClick={openDialog}>
         {triggerLabel}
       </button>
       <dialog
