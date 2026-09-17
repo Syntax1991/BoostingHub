@@ -54,6 +54,17 @@ export type SignupListRecord = {
   };
 };
 
+/** Character-scoped BoostingHub reservation (draft-selected or published SELECTED). */
+export type CharacterReservationCommitmentRow = {
+  signupId: string;
+  characterId: string;
+  status: SignupStatus;
+  draftSelected: boolean;
+  selectedRole: CharacterRole | null;
+  publishedRole: CharacterRole | null;
+  run: SignupListRecord["run"];
+};
+
 /** Reads a `RunSignupRole[]` relation payload into a deterministically ordered role list. */
 export function mapOfferedRoles(value: unknown): CharacterRole[] {
   if (!Array.isArray(value)) return [];
@@ -333,6 +344,56 @@ export const signupRepository = {
       .all();
 
     return signups.map((row) => mapSignup(row as Record<string, unknown>));
+  },
+
+  /**
+   * Upcoming BoostingHub reservations for one Character.
+   * Reserving = published SELECTED or draft-selected roster entry.
+   * PENDING-only offers are excluded (they do not reserve).
+   */
+  async listReservingCommitmentsByCharacterId(
+    characterId: string,
+  ): Promise<CharacterReservationCommitmentRow[]> {
+    const signups = await orm.RunSignup
+      .where({ characterId, participationType: "BOOSTER" })
+      .include("run", (run) =>
+        run.include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
+      )
+      .include("rosterEntries")
+      .all();
+
+    const commitments: CharacterReservationCommitmentRow[] = [];
+    for (const raw of signups as Record<string, unknown>[]) {
+      const mapped = mapSignup(raw);
+      if (!UPCOMING_RUN_STATUSES.includes(mapped.run.status)) continue;
+      if (mapped.status === "WITHDRAWN") continue;
+
+      const rosterEntries = Array.isArray(raw.rosterEntries)
+        ? (raw.rosterEntries as Record<string, unknown>[])
+        : [];
+      const selectedEntry = rosterEntries.find((entry) => asBoolean(entry.selected, true));
+      const draftSelected = Boolean(selectedEntry);
+      if (mapped.status !== "SELECTED" && !draftSelected) continue;
+
+      commitments.push({
+        signupId: mapped.id,
+        characterId,
+        status: mapped.status,
+        draftSelected,
+        selectedRole:
+          selectedEntry?.selectedRole == null
+            ? null
+            : mapCharacterRole(selectedEntry.selectedRole),
+        publishedRole: mapped.publishedRole,
+        run: mapped.run,
+      });
+    }
+
+    return commitments.sort(
+      (a, b) =>
+        new Date(a.run.scheduledStartAt).getTime() - new Date(b.run.scheduledStartAt).getTime() ||
+        a.run.id.localeCompare(b.run.id),
+    );
   },
 
   async findById(id: string): Promise<SignupListRecord | null> {

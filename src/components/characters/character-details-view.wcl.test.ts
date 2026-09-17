@@ -28,6 +28,10 @@ vi.mock("@/components/characters/character-availability-section", () => ({
   CharacterAvailabilitySection: () => null,
 }));
 
+vi.mock("@/components/characters/character-schedule-commitments-section", () => ({
+  CharacterScheduleCommitmentsSection: () => null,
+}));
+
 vi.mock("@/components/characters/link-warcraft-logs-button", () => ({
   LinkWarcraftLogsButton: ({ characterId }: { characterId: string }) =>
     createElement("button", { type: "button", "data-character-id": characterId }, "Find Warcraft Logs"),
@@ -68,6 +72,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
       { id: "tidebound", name: "Nymrissa" },
     ],
     lockouts: [],
+    scheduleCommitments: [],
     availability: { upcoming: [], past: [] },
     ...overrides,
   };
