@@ -173,4 +173,94 @@ describe("characterAvailabilityService", () => {
     expect(listed.upcoming).toHaveLength(0);
     expect(listed.past.some((row) => row.id === past.id)).toBe(true);
   });
+
+  it("batches current/upcoming external plans for /characters without mixing Characters", async () => {
+    const characterA = await characterService.createCharacter(owner, {
+      name: "Availbatcha",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "HUNTER",
+      specialization: "Beast Mastery",
+      itemLevel: 603,
+    });
+    const characterB = await characterService.createCharacter(owner, {
+      name: "Availbatchb",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "ROGUE",
+      specialization: "Assassination",
+      itemLevel: 604,
+    });
+    createdCharacterIds.push(characterA.id, characterB.id);
+
+    const friday = await characterAvailabilityService.createBlock(owner, characterA.id, {
+      startsAt: "2026-09-18T20:00:00.000Z",
+      endsAt: "2026-09-18T21:30:00.000Z",
+      reason: "Phoenix",
+    });
+    const saturday = await characterAvailabilityService.createBlock(owner, characterA.id, {
+      startsAt: "2026-09-19T14:00:00.000Z",
+      endsAt: "2026-09-19T15:30:00.000Z",
+      reason: "Apex",
+    });
+    const past = await characterAvailabilityService.createBlock(owner, characterA.id, {
+      startsAt: "2020-02-01T10:00:00.000Z",
+      endsAt: "2020-02-01T12:00:00.000Z",
+      reason: "Expired",
+    });
+    createdBlockIds.push(friday.id, saturday.id, past.id);
+
+    const now = "2026-09-17T12:00:00.000Z";
+    const byCharacter = await characterAvailabilityService.listCurrentOrUpcomingByCharacterIds(
+      [characterA.id, characterB.id],
+      now,
+    );
+
+    expect(byCharacter.get(characterA.id)?.map((row) => row.reason)).toEqual(["Phoenix", "Apex"]);
+    expect(byCharacter.get(characterB.id)).toEqual([]);
+    expect(byCharacter.get(characterA.id)?.some((row) => row.reason === "Expired")).toBe(false);
+
+    const page = await characterService.getCharacterPage(owner);
+    const rowA = page.characters.find((row) => row.id === characterA.id);
+    const rowB = page.characters.find((row) => row.id === characterB.id);
+    expect(rowA?.externalCommitments.map((row) => row.reason)).toEqual(["Phoenix", "Apex"]);
+    expect(rowB?.externalCommitments).toEqual([]);
+  });
+
+  it("rejects foreign update and delete of another user's external plan", async () => {
+    const character = await characterService.createCharacter(owner, {
+      name: "Availown",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "DRUID",
+      specialization: "Balance",
+      itemLevel: 605,
+    });
+    createdCharacterIds.push(character.id);
+
+    const block = await characterAvailabilityService.createBlock(owner, character.id, {
+      startsAt: "2026-09-20T16:00:00.000Z",
+      endsAt: "2026-09-20T17:30:00.000Z",
+      reason: "Phoenix",
+    });
+    createdBlockIds.push(block.id);
+
+    await expectDomainCode(
+      characterAvailabilityService.updateBlock(other, block.id, {
+        startsAt: "2026-09-20T17:00:00.000Z",
+        endsAt: "2026-09-20T18:00:00.000Z",
+        reason: "Hacked",
+      }),
+      "CHARACTER_NOT_OWNED",
+    );
+    await expectDomainCode(
+      characterAvailabilityService.deleteBlock(other, block.id),
+      "CHARACTER_NOT_OWNED",
+    );
+
+    const listed = await characterAvailabilityService.listForCharacter(owner, character.id);
+    expect(listed.upcoming.some((row) => row.id === block.id && row.reason === "Phoenix")).toBe(
+      true,
+    );
+  });
 });

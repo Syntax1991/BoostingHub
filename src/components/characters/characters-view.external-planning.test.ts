@@ -25,18 +25,11 @@ vi.mock("@/components/characters/battle-net-panel", () => ({
 }));
 
 vi.mock("@/components/characters/link-warcraft-logs-button", () => ({
-  LinkWarcraftLogsButton: ({
-    characterId,
-    label = "Find WCL",
-  }: {
-    characterId: string;
-    label?: string;
-  }) => createElement("button", { type: "button", "data-character-id": characterId }, label),
+  LinkWarcraftLogsButton: () => null,
 }));
 
 vi.mock("@/components/characters/find-missing-warcraft-logs-button", () => ({
-  FindMissingWarcraftLogsButton: () =>
-    createElement("button", { type: "button" }, "Find missing Warcraft Logs"),
+  FindMissingWarcraftLogsButton: () => null,
 }));
 
 vi.mock("@/components/characters/availability-block-dialog", () => ({
@@ -78,11 +71,11 @@ function basePage(characters: CharacterRow[]): Page {
 
 const baseCharacter = {
   id: "char-1",
-  name: "Stormhowl",
-  realm: "Twisting Nether",
+  name: "Synlight",
+  realm: "Antonidas",
   region: "EU",
-  wowClass: "SHAMAN",
-  specialization: "Restoration",
+  wowClass: "PRIEST",
+  specialization: "Holy",
   primaryRole: "HEALER",
   itemLevel: 640,
   isActive: true,
@@ -92,61 +85,88 @@ const baseCharacter = {
   blizzardRealmId: null,
   warcraftLogsLinked: false,
   warcraftLogsId: null,
-  boosterAccess: { approvedCount: 0, pendingCount: 0, revokedCount: 0, approvals: [] },
+  boosterAccess: { approvedCount: 0, pendingCount: 0, rejectedCount: 0, revokedCount: 0, approvals: [] },
   currentReset: "2026-W38",
   lockouts: [],
   externalCommitments: [],
-} as CharacterRow;
+} as unknown as CharacterRow;
 
-describe("CharactersView Warcraft Logs discovery", () => {
-  it("renders WCL link and omits Find WCL when warcraftLogsId is present", () => {
+describe("CharactersView external planning", () => {
+  it("shows None and Add external plan when there are no commitments", () => {
+    const html = renderToStaticMarkup(
+      createElement(CharactersView, { data: basePage([baseCharacter]) }),
+    );
+    expect(html).toContain("External planning");
+    expect(html).toContain(">None<");
+    expect(html).toContain("Add external plan");
+    expect(html).not.toContain(">Manage<");
+  });
+
+  it("shows community, time, +N more, and Manage for multiple commitments", () => {
     const html = renderToStaticMarkup(
       createElement(CharactersView, {
         data: basePage([
           {
             ...baseCharacter,
-            warcraftLogsId: "12345678",
-            warcraftLogsLinked: true,
+            externalCommitments: [
+              {
+                id: "block-1",
+                characterId: baseCharacter.id,
+                startsAt: "2026-09-18T20:00:00.000Z",
+                endsAt: "2026-09-18T21:30:00.000Z",
+                reason: "Phoenix",
+                isCurrent: false,
+                communityLabel: "Phoenix",
+                timeLabel: "Fri 22:00–23:30",
+                label: "Unavailable Fri 18/09/2026 22:00–23:30 — Phoenix",
+              },
+              {
+                id: "block-2",
+                characterId: baseCharacter.id,
+                startsAt: "2026-09-19T14:00:00.000Z",
+                endsAt: "2026-09-19T15:30:00.000Z",
+                reason: "Apex",
+                isCurrent: false,
+                communityLabel: "Apex",
+                timeLabel: "Sat 16:00–17:30",
+                label: "Unavailable Sat 19/09/2026 16:00–17:30 — Apex",
+              },
+            ],
           },
         ]),
       }),
     );
-    expect(html).toContain("https://www.warcraftlogs.com/character/id/12345678");
-    expect(html).toContain('target="_blank"');
-    expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain(">WCL<");
-    expect(html).not.toContain("Find WCL");
-    expect(html).not.toContain("Find missing Warcraft Logs");
+    expect(html).toContain("Phoenix");
+    expect(html).toContain("Fri 22:00–23:30");
+    expect(html).toContain("+1 more");
+    expect(html).toContain(">Manage<");
+    expect(html).toContain(">Add<");
   });
 
-  it("renders Find WCL and omits WCL link when warcraftLogsId is missing", () => {
-    const html = renderToStaticMarkup(createElement(CharactersView, { data: basePage([baseCharacter]) }));
-    expect(html).not.toContain("warcraftlogs.com");
-    expect(html).not.toContain(">WCL<");
-    expect(html).toContain("Find WCL");
-    expect(html).toContain('data-character-id="char-1"');
-    expect(html).toContain("Find missing Warcraft Logs");
-  });
-
-  it("hides the bulk Find missing action when every active Character already has a WCL id", () => {
+  it("distinguishes a currently active external commitment", () => {
     const html = renderToStaticMarkup(
       createElement(CharactersView, {
         data: basePage([
           {
             ...baseCharacter,
-            id: "active-linked",
-            warcraftLogsId: "111",
-            warcraftLogsLinked: true,
-          },
-          {
-            ...baseCharacter,
-            id: "inactive-missing",
-            isActive: false,
-            warcraftLogsId: null,
+            externalCommitments: [
+              {
+                id: "block-now",
+                characterId: baseCharacter.id,
+                startsAt: "2026-09-17T18:00:00.000Z",
+                endsAt: "2026-09-17T21:00:00.000Z",
+                reason: "Apex",
+                isCurrent: true,
+                communityLabel: "Apex",
+                timeLabel: "Thu 20:00–23:00",
+                label: "Unavailable Thu 17/09/2026 20:00–23:00 — Apex",
+              },
+            ],
           },
         ]),
       }),
     );
-    expect(html).not.toContain("Find missing Warcraft Logs");
+    expect(html).toContain("External now");
+    expect(html).toContain("Apex");
   });
 });
