@@ -7,11 +7,14 @@ import { runRepository } from "@/repositories/run.repository";
 import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { characterAvailabilityCheckService } from "@/services/character-availability-check.service";
+import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { lockoutService } from "@/services/lockout.service";
+import { characterWeeklyAvailabilityRepository } from "@/repositories/character-weekly-availability.repository";
 
 const ids = {
   owner: "bbbbbbbb-bbbb-4bbb-8bbb-sci000000001",
@@ -125,7 +128,7 @@ describe("schedule conflict integrity", () => {
   const lead = asUser(ids.lead, "SCI Lead", "RAID_LEAD");
   const admin = asUser(ids.admin, "SCI Admin", "ADMIN");
 
-  it("ignores deprecated CharacterAvailabilityBlock rows for roster, My Runs, and availability check", async () => {
+  it("ignores deprecated CharacterAvailabilityBlock rows for roster, My Runs, and weekly availability", async () => {
     const character = await characterService.createCharacter(owner, {
       name: "Scisyn",
       realm: "Twisting Nether",
@@ -170,15 +173,11 @@ describe("schedule conflict integrity", () => {
     const mine = [...myRuns.pending, ...myRuns.selected].find((row) => row.runId === run.id);
     expect(mine?.scheduleConflicts).toEqual([]);
 
-    // Character is draft-selected on this Run, so Availability Check at that start is COMMITTED
-    // from the BoostingHub reservation — never from the deprecated manual block.
-    const check = await characterAvailabilityCheckService.checkOwnerCharacters(
-      owner,
-      "2026-11-10T18:00:00.000Z",
-    );
-    const row = check.characters.find((item) => item.characterId === character.id);
-    expect(row?.status).toBe("COMMITTED");
-    expect(row?.conflicts.every((conflict) => conflict.runId === run.id)).toBe(true);
+    const weekly = await characterWeeklyAvailabilityService.getCurrentForOwner(owner, character.id);
+    expect(weekly.status).toBe("AVAILABLE");
+
+    expect(getRegionalWeeklyReset("EU").resetIdentifier).toBeTruthy();
+    expect(lockoutService.getResetIdentifierForRun("EU", "2026-11-10T18:00:00.000Z")).toBeTruthy();
 
     await rosterService.publishRoster(lead, {
       runId: run.id,

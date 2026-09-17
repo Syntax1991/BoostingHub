@@ -39,6 +39,11 @@ vi.mock("@/components/characters/find-missing-warcraft-logs-button", () => ({
     createElement("button", { type: "button" }, "Find missing Warcraft Logs"),
 }));
 
+vi.mock("@/components/characters/weekly-availability-dialog", () => ({
+  WeeklyAvailabilityDialog: ({ triggerLabel }: { triggerLabel: string }) =>
+    createElement("button", { type: "button" }, triggerLabel),
+}));
+
 import { CharactersView } from "@/components/characters/characters-view";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -54,9 +59,6 @@ function basePage(characters: CharacterRow[]): Page {
       { id: "venomous", name: "The Venomous Abyss" },
       { id: "tidebound", name: "Nymrissa" },
     ],
-    availabilityCheck: null,
-    availabilityCheckError: null,
-    availabilityCheckDefaultLocal: "2030-01-15T21:00",
     battleNet: {
       configured: false,
       connections: [],
@@ -93,7 +95,13 @@ const baseCharacter = {
   boosterAccess: { approvedCount: 0, pendingCount: 0, revokedCount: 0, approvals: [] },
   currentReset: "2026-W38",
   lockouts: [],
-  availability: null,
+  weeklyAvailability: {
+    characterId: "char-1",
+    status: "AVAILABLE",
+    resetIdentifier: "2026-W38",
+    region: "EU",
+    resetWindowLabel: "EU · Wed 16/09/2026 → Wed 23/09/2026",
+  },
 } as CharacterRow;
 
 describe("CharactersView Warcraft Logs discovery", () => {

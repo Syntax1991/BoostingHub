@@ -47,6 +47,7 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
     boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
     lockouts: [],
     reservationConflict: null,
+    weeklyUnavailable: false,
     ...overrides,
   };
 }

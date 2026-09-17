@@ -53,8 +53,19 @@ describe("character schedule conflict domain", () => {
           scheduledStartAt: "2026-09-18T15:30:00.000Z",
         },
       ],
+      weeklyUnavailableByCharacterId: new Map([
+        [
+          "char-2",
+          {
+            characterId: "char-2",
+            characterName: "Synmist",
+            resetIdentifier: "2026-W38",
+          },
+        ],
+      ]),
     });
     expect(byCharacter.get("char-1")?.map((row) => row.source)).toEqual(["RUN_RESERVATION"]);
-    expect(byCharacter.get("char-2")).toEqual([]);
+    expect(byCharacter.get("char-2")?.map((row) => row.source)).toEqual(["WEEKLY_UNAVAILABLE"]);
+    expect(byCharacter.get("char-2")?.[0]?.message).toContain("Synmist is marked unavailable");
   });
 });
