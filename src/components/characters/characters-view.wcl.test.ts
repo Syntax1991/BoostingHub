@@ -56,6 +56,7 @@ function basePage(characters: CharacterRow[]): Page {
     ],
     availabilityCheck: null,
     availabilityCheckError: null,
+    availabilityCheckDefaultLocal: "2030-01-15T21:00",
     battleNet: {
       configured: false,
       connections: [],

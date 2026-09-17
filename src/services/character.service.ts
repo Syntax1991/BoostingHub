@@ -1,5 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import type { WowClass, WowRegion } from "@/models/enums";
+import { toDatetimeLocalValue } from "@/lib/datetime";
 import { DomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
@@ -132,6 +133,10 @@ export const characterService = {
             checkedAt: availabilityCheck.checkedAt,
           }
         : null,
+      /** Server-computed default for the availability check form (Europe/Berlin local). */
+      availabilityCheckDefaultLocal: toDatetimeLocalValue(
+        new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      ),
       characters: characters.map((character) => {
         const access = boosterQualificationService.summarize(character.boosterQualifications);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;

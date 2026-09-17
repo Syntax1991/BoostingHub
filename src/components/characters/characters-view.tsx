@@ -33,7 +33,7 @@ export function CharactersView({ data }: { data: Page }) {
 
   const defaultCheckLocal = data.availabilityCheck?.checkedAt
     ? toDatetimeLocalValue(data.availabilityCheck.checkedAt)
-    : toDatetimeLocalValue(new Date(Date.now() + 60 * 60 * 1000));
+    : data.availabilityCheckDefaultLocal;
 
   return (
     <div>
