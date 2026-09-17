@@ -31,10 +31,11 @@ export const lockoutRepository = {
   },
 
   /**
-   * Replace verified current-reset lockout rows for the current lockout raid.
-   * - Upserts verified difficulties only
-   * - Deletes unverified difficulties for that raid+reset (so missing modes stay Unknown)
+   * Replace verified current-reset lockout rows for one raid.
+   * - Upserts the provided difficulties for that raid+reset
+   * - Deletes difficulties for that raid+reset that were not in `rows`
    * - Clears same-reset rows for non-current catalog raids (stale mapping cleanup)
+   * - Never deletes other current-raid rows (Venomous vs Tidebound coexist)
    */
   async replaceVerifiedCurrentResetLockouts(
     characterId: string,
