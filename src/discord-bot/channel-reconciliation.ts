@@ -74,7 +74,7 @@ export async function reconcileExistingRunChannel(
 
   if (!channel) {
     console.warn(
-      `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} could not be resolved (deleted or inaccessible) — skipping reconciliation`,
+      `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is gone in Discord (Unknown Channel) — skipping reconciliation`,
     );
     return { status: "missing" };
   }
