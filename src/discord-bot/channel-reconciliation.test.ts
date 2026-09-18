@@ -145,7 +145,7 @@ describe("reconcileExistingRunChannel — channel resolution failures", () => {
     const result = await reconcileExistingRunChannel(fetcherFor(null), envConfigured, item());
 
     expect(result).toEqual({ status: "missing" });
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("could not be resolved"));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown Channel"));
     warnSpy.mockRestore();
   });
 

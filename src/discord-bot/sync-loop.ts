@@ -1,6 +1,7 @@
 import { ChannelType, type CategoryChannel, type Client, type MessageEditOptions } from "discord.js";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
+import { isDiscordUnknownChannelError } from "@/discord-bot/discord-api-errors";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import {
@@ -55,32 +56,39 @@ export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): N
 
 /**
  * Resolves a channel id to the narrow shape channel-reconciliation.ts needs,
- * or null if it doesn't resolve to a compatible (settable name/parent)
- * Discord channel. Cache-first (`client.channels.cache`) to avoid an
- * unnecessary REST call on every poll; falls back to `fetch` on a cache miss.
+ * or null if Discord confirmed it is gone (Unknown Channel). Cache-first
+ * (`client.channels.cache`) to avoid an unnecessary REST call on every poll;
+ * falls back to `fetch` on a cache miss. Permission / rate-limit / network
+ * failures are rethrown so callers do not treat a live but inaccessible
+ * channel as deleted.
  */
 function makeChannelFetcher(client: Client): ChannelFetcher {
   return async (channelId) => {
-    const cached = client.channels.cache.get(channelId);
-    const channel = cached ?? (await client.channels.fetch(channelId).catch(() => null));
-    if (!channel || !("setName" in channel) || !("setParent" in channel) || !("parentId" in channel)) {
-      return null;
+    try {
+      const cached = client.channels.cache.get(channelId);
+      const channel = cached ?? (await client.channels.fetch(channelId));
+      if (!channel || !("setName" in channel) || !("setParent" in channel) || !("parentId" in channel)) {
+        return null;
+      }
+      const typed = channel as unknown as {
+        id: string;
+        name: string;
+        parentId: string | null;
+        setName: (name: string) => Promise<unknown>;
+        setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown>;
+      };
+      const reconcilable: ReconcilableChannel = {
+        id: typed.id,
+        name: typed.name,
+        parentId: typed.parentId,
+        setName: (name) => typed.setName(name),
+        setParent: (id, options) => typed.setParent(id, options),
+      };
+      return reconcilable;
+    } catch (error) {
+      if (isDiscordUnknownChannelError(error)) return null;
+      throw error;
     }
-    const typed = channel as unknown as {
-      id: string;
-      name: string;
-      parentId: string | null;
-      setName: (name: string) => Promise<unknown>;
-      setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown>;
-    };
-    const reconcilable: ReconcilableChannel = {
-      id: typed.id,
-      name: typed.name,
-      parentId: typed.parentId,
-      setName: (name) => typed.setName(name),
-      setParent: (id, options) => typed.setParent(id, options),
-    };
-    return reconcilable;
   };
 }
 
@@ -300,9 +308,10 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
  * `channel-reconciliation.ts`/`reconcileChannels`, before this function ever
  * runs (see `syncOnce`). This function only needs to know the resolved
  * channel id — reusing it from `resolvedChannels` when available — and,
- * failing that, whether the stored id still resolves at all (if the channel
- * was deleted out-of-band in Discord, a fresh one is created only when
- * `allowCreate` is true — self-healing, not the bot deleting anything).
+ * failing that, whether the stored id is confirmed gone in Discord. A fresh
+ * channel is created only when `allowCreate` is true AND Discord returned
+ * Unknown Channel (10003) — never on Missing Access / rate limits / transient
+ * errors, which would orphan a still-live channel on every bot restart.
  *
  * `allowCreate` (true for the signup path, false for the roster path) is
  * the fix for a real bug found in live QA: the roster sync path is gated
@@ -342,9 +351,26 @@ async function resolveRunChannel(
     // and category reconciliation are reconcileChannels' job, never
     // repeated here, so the same channel is never renamed/moved twice in
     // one pass.
-    const existing = await client.channels.fetch(item.existingRunChannelId).catch(() => null);
-    if (existing) return { channelId: item.existingRunChannelId, created: false };
-    // Stored channel id no longer resolves (deleted in Discord) — fall through.
+    try {
+      const existing = await client.channels.fetch(item.existingRunChannelId);
+      if (existing) return { channelId: item.existingRunChannelId, created: false };
+      console.warn(
+        `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} resolved to an incompatible type — keeping stored id, not recreating`,
+      );
+      return { channelId: item.existingRunChannelId, created: false };
+    } catch (error) {
+      if (!isDiscordUnknownChannelError(error)) {
+        console.warn(
+          `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is temporarily inaccessible — keeping stored id, not recreating`,
+          error,
+        );
+        return { channelId: item.existingRunChannelId, created: false };
+      }
+      console.warn(
+        `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is gone in Discord (Unknown Channel) — provisioning a replacement`,
+      );
+      // Confirmed deleted — fall through to create when allowCreate.
+    }
   }
 
   if (!allowCreate) {
