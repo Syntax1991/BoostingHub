@@ -20,7 +20,10 @@
     "bot:dev": "tsx watch src/discord-bot/index.ts",
     "bot:start": "tsx src/discord-bot/index.ts",
     "bot:register-commands": "tsx src/discord-bot/register-commands.ts",
-    "sync:characters": "tsx scripts/sync-blizzard-characters.ts"
+    "sync:characters": "tsx scripts/sync-blizzard-characters.ts",
+    "sync:characters:task:install": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/windows/install-character-sync-task.ps1",
+    "sync:characters:task:status": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/windows/status-character-sync-task.ps1",
+    "sync:characters:task:remove": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/windows/remove-character-sync-task.ps1"
   },
   "dependencies": {
     "@prisma/orm-postgres": "^8.0.0-rc.8",
