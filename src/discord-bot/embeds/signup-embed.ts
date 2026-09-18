@@ -5,6 +5,7 @@ import type {
   SignupEmbedRoleMembers,
 } from "@/services/discord-sync.service";
 import { buildCustomId } from "@/discord-bot/custom-ids";
+import type { GuildRoleIndicators, RoleDiscordEmojiKey } from "@/discord-bot/class-emoji-lookup";
 import { discordTimestamp } from "@/discord-bot/format";
 import { chunkEmbedFieldLines } from "@/lib/discord-embed-field-chunking";
 import { classIndicator } from "@/lib/run-start-message";
@@ -25,6 +26,14 @@ const EMPTY_FIELD_VALUE = "—";
 /** Zero-width space — Discord requires a non-empty field value. */
 const SECTION_HEADING_VALUE = "\u200b";
 
+const ROLE_EMOJI_FALLBACK: Record<RoleDiscordEmojiKey, string> = {
+  tank: "🛡",
+  healer: "✚",
+  dps: "⚔",
+  lootbuddy: "📦",
+  raidlead: "★",
+};
+
 /**
  * Discord limit on combined embed text (title + description + field names/values
  * + footer + author) for a single Embed / message.
@@ -34,14 +43,20 @@ export const DISCORD_EMBED_TOTAL_CHAR_LIMIT = 6000;
 export type SignupEmbedRenderOptions = {
   /** Pre-resolved Guild custom emoji markup keyed by WowClass. */
   classIndicators?: Partial<Record<WowClass, string>>;
+  /** Pre-resolved Guild custom emoji markup for tank/healer/dps/lootbuddy/raidlead. */
+  roleIndicators?: GuildRoleIndicators;
 };
 
 type RoleColumnSpec = {
-  emoji: string;
+  emojiKey: RoleDiscordEmojiKey;
   label: string;
   countLabel: string;
   members: SignupEmbedMember[];
 };
+
+function roleEmoji(key: RoleDiscordEmojiKey, roleIndicators?: GuildRoleIndicators): string {
+  return roleIndicators?.[key] ?? ROLE_EMOJI_FALLBACK[key];
+}
 
 /** Discord mention + class indicator — Character-Realm lives in Final Setup / Web.
  * Mentions show the server nickname when set (`syntax_1991`); that is a real
@@ -61,14 +76,24 @@ export function formatSignupParticipantLine(
   return parts.join(" ");
 }
 
+export function formatRaidLeadFieldValue(data: SignupEmbedData): string {
+  if (data.raidLeadDiscordUserId) {
+    return `<@${data.raidLeadDiscordUserId}>`;
+  }
+  const name = data.raidLeadName.trim();
+  return name.length > 0 ? name : EMPTY_FIELD_VALUE;
+}
+
 function buildRoleColumnFields(
   role: RoleColumnSpec,
   classIndicators?: Partial<Record<WowClass, string>>,
+  roleIndicators?: GuildRoleIndicators,
 ): Array<{ name: string; value: string; inline: boolean }> {
+  const emoji = roleEmoji(role.emojiKey, roleIndicators);
   const lines = role.members.map((member) => formatSignupParticipantLine(member, classIndicators));
   const chunks = chunkEmbedFieldLines(lines);
-  const primaryName = `${role.emoji} ${role.label} — ${role.countLabel}`;
-  const continuationName = `${role.emoji} ${role.label} (cont.)`;
+  const primaryName = `${emoji} ${role.label} — ${role.countLabel}`;
+  const continuationName = `${emoji} ${role.label} (cont.)`;
 
   return chunks.map((chunk, index) => ({
     name: index === 0 ? primaryName : continuationName,
@@ -87,8 +112,9 @@ function buildRoleColumnFields(
 function buildRoleSectionFields(
   roles: RoleColumnSpec[],
   classIndicators?: Partial<Record<WowClass, string>>,
+  roleIndicators?: GuildRoleIndicators,
 ): Array<{ name: string; value: string; inline: boolean }> {
-  const built = roles.map((role) => buildRoleColumnFields(role, classIndicators));
+  const built = roles.map((role) => buildRoleColumnFields(role, classIndicators, roleIndicators));
   const primary = built.map((fields) => fields[0]!);
   const continuations = built.flatMap((fields) => fields.slice(1));
   return [...primary, ...continuations];
@@ -98,25 +124,25 @@ function signedRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
   const { roleStatus, members } = data;
   return [
     {
-      emoji: "🛡",
+      emojiKey: "tank",
       label: "Tanks",
       countLabel: String(roleStatus.tank.signed),
       members: members.signed.tanks,
     },
     {
-      emoji: "✚",
+      emojiKey: "healer",
       label: "Healers",
       countLabel: String(roleStatus.healer.signed),
       members: members.signed.healers,
     },
     {
-      emoji: "⚔",
+      emojiKey: "dps",
       label: "DPS",
       countLabel: String(roleStatus.dps.signed),
       members: members.signed.dps,
     },
     {
-      emoji: "📦",
+      emojiKey: "lootbuddy",
       label: "Lootbuddies",
       countLabel: String(roleStatus.lootbuddy.signed),
       members: members.signed.lootbuddies,
@@ -128,25 +154,25 @@ function pickedRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
   const { roleStatus, members } = data;
   return [
     {
-      emoji: "🛡",
+      emojiKey: "tank",
       label: "Tanks",
       countLabel: `${roleStatus.tank.picked}/${roleStatus.tank.target}`,
       members: members.picked.tanks,
     },
     {
-      emoji: "✚",
+      emojiKey: "healer",
       label: "Healers",
       countLabel: `${roleStatus.healer.picked}/${roleStatus.healer.target}`,
       members: members.picked.healers,
     },
     {
-      emoji: "⚔",
+      emojiKey: "dps",
       label: "DPS",
       countLabel: `${roleStatus.dps.picked}/${roleStatus.dps.target}`,
       members: members.picked.dps,
     },
     {
-      emoji: "📦",
+      emojiKey: "lootbuddy",
       label: "Lootbuddies",
       countLabel: String(roleStatus.lootbuddy.picked),
       members: members.picked.lootbuddies,
@@ -184,8 +210,10 @@ export function buildSignupEmbed(
   options?: SignupEmbedRenderOptions,
 ): EmbedBuilder {
   const classIndicators = options?.classIndicators;
+  const roleIndicators = options?.roleIndicators;
   const color = data.signupWindowOpen ? 0xd4af37 : 0x555555;
   const description = `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
+  const raidLeadEmoji = roleEmoji("raidlead", roleIndicators);
 
   return new EmbedBuilder()
     .setTitle(data.runTitle)
@@ -195,11 +223,11 @@ export function buildSignupEmbed(
       { name: "Signed users", value: String(data.uniqueSignupCount), inline: true },
       { name: "Status", value: RUN_STATUS_LABEL[data.runStatus], inline: true },
       { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
-      { name: "Content", value: data.contentSummary, inline: true },
+      { name: `${raidLeadEmoji} Raid Lead`, value: formatRaidLeadFieldValue(data), inline: true },
       { name: "Signups by role", value: SECTION_HEADING_VALUE, inline: false },
-      ...buildRoleSectionFields(signedRoleColumns(data), classIndicators),
+      ...buildRoleSectionFields(signedRoleColumns(data), classIndicators, roleIndicators),
       { name: "Picked", value: SECTION_HEADING_VALUE, inline: false },
-      ...buildRoleSectionFields(pickedRoleColumns(data), classIndicators),
+      ...buildRoleSectionFields(pickedRoleColumns(data), classIndicators, roleIndicators),
     )
     .setColor(color)
     .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });

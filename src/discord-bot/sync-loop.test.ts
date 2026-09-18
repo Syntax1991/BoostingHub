@@ -42,6 +42,8 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
     productLabel: "The Venomous Abyss",
     contentSummary: "The Venomous Abyss 8/8",
     titleCoverage: "8/8",
+    raidLeadName: "Titan",
+    raidLeadDiscordUserId: null,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     scheduledStartAt,

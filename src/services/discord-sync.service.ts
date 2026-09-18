@@ -82,10 +82,14 @@ export type SignupEmbedData = {
   raidName: string;
   /** Commercial / classified product label (e.g. Season 2 Bundle). */
   productLabel: string;
-  /** Ordered content summary — never an aggregated 9/9. */
+  /** Ordered content summary — never an aggregated 9/9. Kept for sync/signature; not shown on the signup embed. */
   contentSummary: string;
   /** Compact title coverage from persisted contents (e.g. `8/8`, `S2B 8/8`). */
   titleCoverage: string;
+  /** Raid Lead display name (always set). */
+  raidLeadName: string;
+  /** Discord snowflake for the Raid Lead, when their account is linked. */
+  raidLeadDiscordUserId: string | null;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
@@ -283,6 +287,8 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     productLabel,
     contentSummary: run.contentDisplay.summary,
     titleCoverage: run.contentDisplay.titleCoverage,
+    raidLeadName: run.raidLeadName,
+    raidLeadDiscordUserId: run.raidLeadDiscordUserId,
     difficulty: run.difficulty,
     lootType: run.lootType,
     scheduledStartAt: run.scheduledStartAt,
@@ -458,6 +464,8 @@ function buildSignupEmbedSignature(
     productLabel: data.productLabel,
     contentSummary: data.contentSummary,
     titleCoverage: data.titleCoverage,
+    raidLeadName: data.raidLeadName,
+    raidLeadDiscordUserId: data.raidLeadDiscordUserId,
     difficulty: data.difficulty,
     lootType: data.lootType,
     scheduledStartAt: data.scheduledStartAt,
@@ -469,9 +477,9 @@ function buildSignupEmbedSignature(
     channelName: extra.channelName,
     targetBucket: extra.targetBucket,
     classEmojiFingerprint: extra.classEmojiFingerprint ?? "",
-    // Bump when participant line rendering changes without member-data changes
-    // (e.g. mention vs plain @username) so existing posts refresh.
-    participantLineFormat: "mention-v1",
+    // Bump when participant line / summary-field rendering changes without
+    // member-data changes so existing posts refresh (Content→Raid Lead, role emojis).
+    participantLineFormat: "mention-v2-raidlead",
   });
 }
 

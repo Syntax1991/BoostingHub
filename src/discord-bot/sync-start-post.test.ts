@@ -120,6 +120,8 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
       productLabel: "The Venomous Abyss",
       contentSummary: "The Venomous Abyss 8/8",
       titleCoverage: "8/8",
+      raidLeadName: "Titan",
+      raidLeadDiscordUserId: null,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: "2026-09-18T17:00:00.000Z",

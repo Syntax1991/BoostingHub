@@ -3,7 +3,13 @@ import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
-import { resolveGuildClassIndicators, fingerprintClassIndicators } from "@/discord-bot/class-emoji-lookup";
+import {
+  resolveGuildClassIndicators,
+  resolveGuildRoleIndicators,
+  fingerprintClassIndicators,
+  fingerprintRoleIndicators,
+  type GuildRoleIndicators,
+} from "@/discord-bot/class-emoji-lookup";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -162,7 +168,11 @@ function makePositionSetter(client: Client, guildId: string): PositionSetter {
  */
 export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
   const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
-  const classEmojiFingerprint = fingerprintClassIndicators(classIndicators);
+  const roleIndicators = await resolveGuildRoleIndicators(client, env.discordGuildId);
+  const classEmojiFingerprint = [
+    fingerprintClassIndicators(classIndicators),
+    fingerprintRoleIndicators(roleIndicators),
+  ].join("||");
   const work: SyncWork = await api.listSyncWork(classEmojiFingerprint);
 
   // Channel reconciliation (name + parent category) runs first and
@@ -196,6 +206,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
           item.embed as SignupEmbedData,
           resolvedChannels,
           classIndicators,
+          roleIndicators,
           classEmojiFingerprint,
         );
         if (createdSection) newlyProvisionedSections.push(createdSection);
@@ -370,6 +381,7 @@ async function syncSignupPost(
   data: SignupEmbedData,
   resolvedChannels: Map<string, string>,
   classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  roleIndicators: GuildRoleIndicators,
   classEmojiFingerprint: string,
 ): Promise<WeekSectionItem | null> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
@@ -381,7 +393,7 @@ async function syncSignupPost(
   const section = createdSectionItem(item, channelId, created);
 
   try {
-    const embed = buildSignupEmbed(data, { classIndicators });
+    const embed = buildSignupEmbed(data, { classIndicators, roleIndicators });
     const row = buildSignupButtons(data);
     const payload: MessageEditOptions = { embeds: [embed], components: [row] };
 
