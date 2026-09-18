@@ -148,19 +148,33 @@ afterEach(async () => {
 });
 
 describe("resolveScheduledSyncStaleMs", () => {
-  it("defaults to 15 minutes when unset", () => {
+  it("defaults to 120 minutes when unset", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
+    expect(resolveScheduledSyncStaleMs()).toBe(120 * 60_000);
+  });
+
+  it("honors an intentional 15-minute override", () => {
+    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "15");
     expect(resolveScheduledSyncStaleMs()).toBe(15 * 60_000);
+    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("honors a positive integer override", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "30");
     expect(resolveScheduledSyncStaleMs()).toBe(30 * 60_000);
+    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "120");
+    expect(resolveScheduledSyncStaleMs()).toBe(120 * 60_000);
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
 
   it("fails loudly on a zero threshold rather than permitting a busy loop", () => {
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "0");
+    expect(() => resolveScheduledSyncStaleMs()).toThrow(/positive integer/);
+    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
+  });
+
+  it("fails loudly on a negative threshold", () => {
+    vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "-5");
     expect(() => resolveScheduledSyncStaleMs()).toThrow(/positive integer/);
     vi.stubEnv("BLIZZARD_SYNC_STALE_MINUTES", "");
   });
@@ -178,10 +192,36 @@ describe("resolveScheduledSyncStaleMs", () => {
   });
 });
 
+describe("characterRepository.listScheduledSyncCandidates — 2h boundary", () => {
+  it("treats lastSyncedAt exactly at staleBefore as fresh (strict <)", async () => {
+    const userId = await createUser("Owner Boundary");
+    await createConnection(userId, "EU");
+    const now = Date.now();
+    const thresholdMs = 120 * 60_000;
+    const staleBefore = new Date(now - thresholdMs).toISOString();
+    const exactlyAtBoundary = staleBefore;
+    const justStale = new Date(now - thresholdMs - 60_000).toISOString();
+    const justFresh = new Date(now - thresholdMs + 60_000).toISOString();
+
+    const atBoundary = await createCharacter({
+      userId,
+      name: "Scboundary",
+      lastSyncedAt: exactlyAtBoundary,
+    });
+    const stale = await createCharacter({ userId, name: "Scjuststale", lastSyncedAt: justStale });
+    const fresh = await createCharacter({ userId, name: "Scjustfresh", lastSyncedAt: justFresh });
+
+    const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
+    expect(candidates.some((c) => c.character.id === atBoundary.id)).toBe(false);
+    expect(candidates.some((c) => c.character.id === stale.id)).toBe(true);
+    expect(candidates.some((c) => c.character.id === fresh.id)).toBe(false);
+  });
+});
+
 describe("characterRepository.listScheduledSyncCandidates", () => {
   const staleBefore = new Date(Date.now() - 15 * 60_000).toISOString();
   const fresh = new Date().toISOString();
-  const old = new Date(Date.now() - 60 * 60_000).toISOString();
+  const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
 
   it("A: selects a stale, active, linked character with a matching regional connection", async () => {
     const userId = await createUser("Owner A");
@@ -262,7 +302,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     const character = await createCharacter({
       userId,
       name: "Screfresh",
-      lastSyncedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+      lastSyncedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
       itemLevel: 600,
     });
 
@@ -289,7 +329,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     const character = await createCharacter({
       userId,
       name: "Scretain",
-      lastSyncedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+      lastSyncedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
       itemLevel: 650,
     });
 
@@ -308,7 +348,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     const character = await createCharacter({
       userId,
       name: "Sclockoutfail",
-      lastSyncedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+      lastSyncedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
       itemLevel: 600,
     });
 
@@ -344,7 +384,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
   it("counts a profile failure without failing the job or the other candidate", async () => {
     const userId = await createUser("Owner Mixed");
     await createConnection(userId, "EU");
-    const old = new Date(Date.now() - 60 * 60_000).toISOString();
+    const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
     const broken = await createCharacter({ userId, name: "Scbroken", lastSyncedAt: old });
     const healthy = await createCharacter({ userId, name: "Scfine", lastSyncedAt: old });
 
@@ -364,7 +404,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
   it("marks a BattleNetConnection successful only once, and only when at least one refresh succeeded", async () => {
     const userId = await createUser("Owner Grouping");
     await createConnection(userId, "EU");
-    const old = new Date(Date.now() - 60 * 60_000).toISOString();
+    const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
     const a = await createCharacter({ userId, name: "Scgroupa", lastSyncedAt: old });
     const b = await createCharacter({ userId, name: "Scgroupb", lastSyncedAt: old });
     void a;
@@ -382,7 +422,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
   it("does not mark the connection when every candidate for it fails", async () => {
     const userId = await createUser("Owner AllFail");
     await createConnection(userId, "EU");
-    const old = new Date(Date.now() - 60 * 60_000).toISOString();
+    const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
     await createCharacter({ userId, name: "Scallfaila", lastSyncedAt: old });
     await createCharacter({ userId, name: "Scallfailb", lastSyncedAt: old });
 
@@ -402,7 +442,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
 
 describe("scheduledCharacterSyncService.runOnce — global concurrency", () => {
   it("never runs more than 4 refreshes concurrently across multiple users/regions/connections", async () => {
-    const old = new Date(Date.now() - 60 * 60_000).toISOString();
+    const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
     const suffixes = ["a", "b", "c", "d", "e", "f"];
     const names: string[] = [];
     for (let i = 0; i < 6; i += 1) {
@@ -444,7 +484,7 @@ describe("scheduledCharacterSyncService.runOnce — global concurrency", () => {
 
 describe("scheduledCharacterSyncService.runOnce — rate limiting", () => {
   it("stops dispatching new refreshes once Blizzard rate-limits, without a retry storm", async () => {
-    const old = new Date(Date.now() - 60 * 60_000).toISOString();
+    const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
     const suffixes = ["a", "b", "c", "d", "e", "f"];
     for (let i = 0; i < 6; i += 1) {
       const userId = await createUser(`Owner RL ${i}`);
@@ -473,7 +513,7 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
   it("returns SKIPPED_ALREADY_RUNNING with zero Blizzard calls when another cycle holds the lock", async () => {
     const userId = await createUser("Owner Overlap");
     await createConnection(userId, "EU");
-    await createCharacter({ userId, name: "Scoverlap", lastSyncedAt: new Date(Date.now() - 60 * 60_000).toISOString() });
+    await createCharacter({ userId, name: "Scoverlap", lastSyncedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString() });
 
     const handle = await scheduledJobLockRepository.tryAcquireLock(
       SCHEDULED_CHARACTER_SYNC_LOCK_KEY.classId,
@@ -506,7 +546,7 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
   it("releases the lock even when the job throws (e.g. Battle.net not configured)", async () => {
     const userId = await createUser("Owner Unconfigured");
     await createConnection(userId, "EU");
-    await createCharacter({ userId, name: "Scunconf", lastSyncedAt: new Date(Date.now() - 60 * 60_000).toISOString() });
+    await createCharacter({ userId, name: "Scunconf", lastSyncedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString() });
 
     vi.stubEnv("BLIZZARD_CLIENT_ID", "");
     try {
