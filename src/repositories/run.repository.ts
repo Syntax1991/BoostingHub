@@ -73,6 +73,8 @@ export type RunListRecord = {
   status: RunStatus;
   raidLeadId: string;
   raidLeadName: string;
+  /** Discord snowflake for the Raid Lead User, when linked. */
+  raidLeadDiscordUserId: string | null;
   notes: string | null;
   desiredTankCount: number;
   desiredHealerCount: number;
@@ -209,6 +211,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
+    raidLeadDiscordUserId: asStringOrNull(raidLead.discordUserId),
     notes: asStringOrNull(run.notes),
     desiredTankCount: asNumber(run.desiredTankCount),
     desiredHealerCount: asNumber(run.desiredHealerCount),

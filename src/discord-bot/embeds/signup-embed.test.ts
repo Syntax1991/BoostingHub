@@ -36,6 +36,8 @@ function emptyData(overrides: Partial<SignupEmbedData> = {}): SignupEmbedData {
     productLabel: "The Venomous Abyss",
     contentSummary: "The Venomous Abyss 8/8",
     titleCoverage: "8/8",
+    raidLeadName: "Titan",
+    raidLeadDiscordUserId: "999000111222333444",
     difficulty: "HEROIC",
     lootType: "VIP",
     scheduledStartAt: "2026-09-24T20:00:00.000Z",
@@ -415,10 +417,26 @@ describe("buildSignupEmbed", () => {
     expect(json.footer?.text).toMatch(/closed/i);
   });
 
-  it("shows the loot type and content summary", () => {
+  it("shows the loot type and Raid Lead (not Content)", () => {
     const fields = buildSignupEmbed(emptyData()).toJSON().fields ?? [];
     expect(fields.find((field) => field.name === "Loot")?.value).toBe("VIP");
-    expect(fields.find((field) => field.name === "Content")?.value).toBe("The Venomous Abyss 8/8");
+    expect(fields.find((field) => field.name === "Content")).toBeUndefined();
+    expect(fields.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@999000111222333444>");
+  });
+
+  it("uses guild role emojis for role columns and Raid Lead when provided", () => {
+    const fields = buildSignupEmbed(emptyData(), {
+      roleIndicators: {
+        tank: "<:tank:1>",
+        healer: "<:healer:2>",
+        dps: "<:dps:3>",
+        raidlead: "<:raidlead:4>",
+      },
+    }).toJSON().fields ?? [];
+    expect(fields.find((field) => field.name === "<:raidlead:4> Raid Lead")).toBeTruthy();
+    expect(fields.some((field) => field.name.startsWith("<:tank:1> Tanks"))).toBe(true);
+    expect(fields.some((field) => field.name.startsWith("<:healer:2> Healers"))).toBe(true);
+    expect(fields.some((field) => field.name.startsWith("<:dps:3> DPS"))).toBe(true);
   });
 });
 

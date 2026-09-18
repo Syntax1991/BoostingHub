@@ -3,6 +3,25 @@ import { CLASS_DISCORD_EMOJI_NAMES } from "@/lib/run-start-message";
 import type { WowClass } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
 
+/** Guild custom-emoji names for signup-embed role / raid-lead columns. */
+export const ROLE_DISCORD_EMOJI_KEYS = ["tank", "healer", "dps", "lootbuddy", "raidlead"] as const;
+export type RoleDiscordEmojiKey = (typeof ROLE_DISCORD_EMOJI_KEYS)[number];
+
+export type GuildRoleIndicators = Partial<Record<RoleDiscordEmojiKey, string>>;
+
+async function fetchGuildEmojisByName(client: Client, guildId: string): Promise<Map<string, GuildEmoji>> {
+  const guild = await client.guilds.fetch(guildId);
+  await guild.emojis.fetch();
+
+  const byName = new Map<string, GuildEmoji>();
+  for (const emoji of guild.emojis.cache.values()) {
+    if (emoji.name) {
+      byName.set(emoji.name, emoji);
+    }
+  }
+  return byName;
+}
+
 /**
  * Resolve Guild custom class emojis once per Discord sync render that needs them
  * (Final Setup and Signup Embed).
@@ -13,15 +32,7 @@ export async function resolveGuildClassIndicators(
   client: Client,
   guildId: string,
 ): Promise<Partial<Record<WowClass, string>>> {
-  const guild = await client.guilds.fetch(guildId);
-  await guild.emojis.fetch();
-
-  const byName = new Map<string, GuildEmoji>();
-  for (const emoji of guild.emojis.cache.values()) {
-    if (emoji.name) {
-      byName.set(emoji.name, emoji);
-    }
-  }
+  const byName = await fetchGuildEmojisByName(client, guildId);
 
   const indicators: Partial<Record<WowClass, string>> = {};
   for (const wowClass of WOW_CLASSES) {
@@ -29,6 +40,25 @@ export async function resolveGuildClassIndicators(
     const emoji = byName.get(name);
     if (emoji) {
       indicators[wowClass] = emoji.toString();
+    }
+  }
+  return indicators;
+}
+
+/**
+ * Resolve Guild custom role emojis (`tank`, `healer`, `dps`, `lootbuddy`, `raidlead`)
+ * for signup-embed field labels. Missing names fall back to unicode in the embed.
+ */
+export async function resolveGuildRoleIndicators(
+  client: Client,
+  guildId: string,
+): Promise<GuildRoleIndicators> {
+  const byName = await fetchGuildEmojisByName(client, guildId);
+  const indicators: GuildRoleIndicators = {};
+  for (const key of ROLE_DISCORD_EMOJI_KEYS) {
+    const emoji = byName.get(key);
+    if (emoji) {
+      indicators[key] = emoji.toString();
     }
   }
   return indicators;
@@ -43,5 +73,14 @@ export function fingerprintClassIndicators(
     const markup = indicators[wowClass] ?? "";
     const idMatch = /:(\d+)>/.exec(markup);
     return `${wowClass}:${idMatch?.[1] ?? ""}`;
+  }).join("|");
+}
+
+/** Stable fingerprint so signup posts refresh when Guild role emojis change. */
+export function fingerprintRoleIndicators(indicators: GuildRoleIndicators): string {
+  return ROLE_DISCORD_EMOJI_KEYS.map((key) => {
+    const markup = indicators[key] ?? "";
+    const idMatch = /:(\d+)>/.exec(markup);
+    return `${key}:${idMatch?.[1] ?? ""}`;
   }).join("|");
 }

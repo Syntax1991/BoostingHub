@@ -129,7 +129,7 @@ describe("multi-raid character lockout compact display", () => {
 describe("Discord Bundle content labels", () => {
   const display = projectRunContentDisplay([tidebound, venomous]);
 
-  it("signup embed shows Season 2 Bundle + ordered content, one message", () => {
+  it("signup embed shows Season 2 Bundle + Raid Lead (no Content field), one message", () => {
     const embed = buildSignupEmbed({
       runId: "r1",
       runTitle: "Bundle Run",
@@ -137,6 +137,8 @@ describe("Discord Bundle content labels", () => {
       productLabel: display.productLabel,
       contentSummary: display.summary,
       titleCoverage: display.titleCoverage,
+      raidLeadName: "Titan",
+      raidLeadDiscordUserId: "111",
       difficulty: "HEROIC",
       lootType: "VIP",
       scheduledStartAt: "2026-09-18T17:00:00.000Z",
@@ -156,9 +158,8 @@ describe("Discord Bundle content labels", () => {
     }).toJSON();
 
     expect(embed.description).toContain("Season 2 Bundle");
-    expect(embed.fields?.find((field) => field.name === "Content")?.value).toBe(
-      "Nymrissa 1/1 · The Venomous Abyss 8/8",
-    );
+    expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
+    expect(embed.fields?.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@111>");
     expect(JSON.stringify(embed)).not.toContain("9/9");
   });
 
