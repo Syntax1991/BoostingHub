@@ -183,15 +183,50 @@ Raid lockouts are informational only, never a signup blocker (see [run-signups.m
 
 No `ScheduledJob` / `CronJob` / job-lease table was added. A PostgreSQL advisory lock is sufficient for overlap protection and requires no persistent state or migration.
 
-## Scheduling examples (documentation only — nothing here creates a scheduled task)
+## Scheduling examples
 
 Recommend an external tick of **~15 minutes** even though Characters only become stale after **120 minutes**. Most ticks should exit quickly with zero candidates.
 
-### Windows Task Scheduler
+The application still owns **no** timer. Installing an external scheduler (below) does not add `setInterval`, cron-inside-Next.js, or a Discord-bot loop — it only registers infrastructure that invokes the existing one-shot command.
 
-- **Program/script**: `cmd.exe`
-- **Add arguments**: `/c npm run sync:characters`
-- **Start in**: `D:\Projects\BoostingHub` (your local checkout path)
+### Windows installation (Task Scheduler tooling)
+
+For Windows-hosted or local developer machines, this repository includes idempotent PowerShell helpers under `scripts/windows/`. They register a single task named **BoostingHub Character Sync** that runs every **15 minutes** and invokes `npm run sync:characters` with the repository root as the working directory.
+
+```powershell
+# From the repository root (path is derived by the scripts — not hardcoded)
+.\scripts\windows\install-character-sync-task.ps1
+.\scripts\windows\status-character-sync-task.ps1
+.\scripts\windows\run-character-sync-task.ps1            # manual one-shot (same as the task)
+.\scripts\windows\run-character-sync-task.ps1 -DryRun    # npm run sync:characters -- --dry-run
+.\scripts\windows\remove-character-sync-task.ps1
+```
+
+Optional npm aliases (Windows shells):
+
+```text
+npm run sync:characters:task:install
+npm run sync:characters:task:status
+npm run sync:characters:task:remove
+```
+
+Installer behavior:
+
+- Resolves `npm.cmd` via `Get-Command` (fails loudly if missing).
+- Runs a **dry-run** first; on failure it does **not** create/update the task.
+- Creates or updates the same named task (idempotent; no duplicates).
+- Stores **no** secrets, Windows passwords, or env vars in the task definition — the app loads `.env` as usual because the working directory is the repo root.
+- Appends a bounded local log at `.local/logs/character-sync.log` (gitignored).
+
+This Windows tooling is **not** the only production scheduling method. Prefer whatever your host already supports.
+
+### Manual Windows Task Scheduler (without the scripts)
+
+If you prefer the GUI:
+
+- **Program/script**: `powershell.exe`
+- **Add arguments**: `-NoProfile -ExecutionPolicy Bypass -File "C:\path\to\checkout\scripts\windows\run-character-sync-task.ps1"`
+- **Start in**: your local checkout root (must contain `package.json` and `.env`)
 - **Trigger**: repeat every **15 minutes** (not every 2 hours)
 
 ### cron (generic Linux/macOS deployment)
@@ -200,4 +235,4 @@ Recommend an external tick of **~15 minutes** even though Characters only become
 */15 * * * * cd /path/to/boostinghub && npm run sync:characters >> /var/log/boostinghub-sync.log 2>&1
 ```
 
-Replace the path with wherever the app is deployed; nothing here should reference a specific machine's real path or credentials.
+Replace the path with wherever the app is deployed; nothing here should reference a specific machine's real path or credentials. Hosting-provider scheduled jobs / CI schedules are also valid externals — same one-shot command.
