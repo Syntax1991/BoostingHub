@@ -29,11 +29,16 @@ allowed = {
     "HOSTNAME",
 }
 
-updates = {k: v for k, v in os.environ.items() if k in allowed and v != ""}
+updates = {
+    k: v.replace("\r", "").replace("\n", "").strip()
+    for k, v in os.environ.items()
+    if k in allowed and v.replace("\r", "").replace("\n", "").strip() != ""
+}
 if not updates:
     raise SystemExit("no allowed keys provided")
 
-lines = env_path.read_text().splitlines()
+raw = env_path.read_bytes().decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+lines = raw.splitlines()
 seen = set()
 out = []
 for line in lines:
@@ -42,14 +47,16 @@ for line in lines:
         continue
     key, _, _ = line.partition("=")
     if key in updates:
-        out.append(f'{key}="{updates[key]}"')
+        val = updates[key].replace("\\", "\\\\").replace('"', '\\"')
+        out.append(f'{key}="{val}"')
         seen.add(key)
     else:
         out.append(line)
 for key, value in updates.items():
     if key not in seen:
-        out.append(f'{key}="{value}"')
-env_path.write_text("\n".join(out) + "\n")
+        val = value.replace("\\", "\\\\").replace('"', '\\"')
+        out.append(f'{key}="{val}"')
+env_path.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
 print("updated_keys=" + ",".join(sorted(updates)))
 PY
 
