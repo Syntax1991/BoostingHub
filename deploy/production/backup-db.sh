@@ -35,7 +35,8 @@ OUT="${BACKUP_DIR}/boostinghub-${STAMP}.dump"
 
 echo "Writing backup to ${OUT}"
 # Custom format for pg_restore inspection without restoring over production.
-PGPASSWORD="" pg_dump --dbname="${DATABASE_URL}" --format=custom --file="${OUT}"
+# Credentials come from DATABASE_URL only — never set PGPASSWORD here.
+pg_dump --dbname="${DATABASE_URL}" --format=custom --file="${OUT}"
 chmod 600 "${OUT}"
 
 SIZE="$(stat -c '%s' "${OUT}")"
