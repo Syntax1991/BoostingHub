@@ -49,7 +49,18 @@ import {
 import type { RosterEmbedData, RunStartEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 
 type SyncWork = Awaited<ReturnType<BotApiClient["listSyncWork"]>>;
-type ChannelWorkItem = SyncWork["channels"][number];
+type ChannelLaneItem = SyncWork["channels"][number];
+type SignupLaneItem = SyncWork["signups"][number];
+type RosterLaneItem = SyncWork["roster"][number];
+type StartLaneItem = NonNullable<SyncWork["start"]>[number];
+
+/** Minimal fields shared by every lane that may resolve a Run channel. */
+type RunChannelResolveItem = {
+  runId: string;
+  existingRunChannelId: string | null;
+  desiredChannelName: string;
+  targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+};
 
 type ResolvedRunChannel = {
   channelId: string;
@@ -359,7 +370,7 @@ async function resolveRunChannel(
   client: Client,
   env: BotEnv,
   api: BotApiClient,
-  item: ChannelWorkItem,
+  item: RunChannelResolveItem,
   legacyFallbackChannelId: string | null,
   allowCreate: boolean,
   resolvedChannels: Map<string, string>,
@@ -430,7 +441,7 @@ async function syncSignupPost(
   client: Client,
   env: BotEnv,
   api: BotApiClient,
-  item: ChannelWorkItem & { existingMessageId: string | null; scheduledStartAt: string },
+  item: SignupLaneItem,
   data: SignupEmbedData,
   resolvedChannels: Map<string, string>,
   classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
@@ -506,7 +517,7 @@ async function syncSignupPost(
 }
 
 function createdSectionItem(
-  item: ChannelWorkItem & { scheduledStartAt: string },
+  item: Pick<SignupLaneItem, "runId" | "targetBucket" | "scheduledStartAt">,
   channelId: string,
   created: boolean,
 ): WeekSectionItem | null {
@@ -634,7 +645,7 @@ async function syncRosterPost(
   client: Client,
   env: BotEnv,
   api: BotApiClient,
-  item: ChannelWorkItem & { existingMessageId: string | null },
+  item: RosterLaneItem,
   data: RosterEmbedData,
   resolvedChannels: Map<string, string>,
 ): Promise<void> {
@@ -662,7 +673,7 @@ async function syncStartPost(
   client: Client,
   env: BotEnv,
   api: BotApiClient,
-  item: ChannelWorkItem & { existingMessageId: string | null },
+  item: StartLaneItem,
   data: RunStartEmbedData,
   resolvedChannels: Map<string, string>,
   classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
@@ -782,8 +793,8 @@ async function syncArchiveArtifacts(
   client: Client,
   env: BotEnv,
   api: BotApiClient,
-  item: ChannelWorkItem,
-  resolvedChannels: Map<string, ResolvedRunChannel>,
+  item: ChannelLaneItem,
+  resolvedChannels: Map<string, string>,
 ): Promise<void> {
   if (!item.archiveArtifactsNeeded || !item.appArchived) return;
 
@@ -795,7 +806,7 @@ async function syncArchiveArtifacts(
     return;
   }
 
-  const runChannelId = resolvedChannels.get(item.runId)?.channelId ?? item.existingRunChannelId;
+  const runChannelId = resolvedChannels.get(item.runId) ?? item.existingRunChannelId;
   if (!runChannelId) return;
 
   let runChannel;

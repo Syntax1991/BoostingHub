@@ -108,7 +108,7 @@ describe("syncOnce — raidboost announce on first channel create", () => {
     const announce = createdChannel.send.mock.calls[0][0] as {
       content: string;
       embeds: Array<{ data?: { title?: string; description?: string }; toJSON?: () => { title?: string; description?: string } }>;
-      allowedMentions: { roles: string[] };
+      allowedMentions: { roles: string[]; parse?: string[]; users?: string[]; repliedUser?: boolean };
     };
     expect(announce.content).toBe("<@&role-tank> <@&role-healer> <@&role-dps>");
     expect(announce.allowedMentions.roles).toEqual(["role-tank", "role-healer", "role-dps"]);
@@ -825,7 +825,7 @@ function makeDiscordClient(
       const history = new Collection<string, {
         id: string;
         createdTimestamp: number;
-        author: { id: string; username: string; displayName: string };
+        author: { id: string; username: string; displayName: string; discriminator?: string };
         content: string;
         embeds: Array<{ title?: string | null; description?: string | null }>;
       }>();
@@ -990,7 +990,8 @@ function makeDiscordClient(
     [...source.values()].sort((a, b) => a.position - b.position).map((c) => c.id);
 
   return {
-    client: client as never,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Discord.js Client mock for syncOnce + channel spy assertions
+    client: client as any,
     createdIds,
     setPositions,
     cacheOrder: () => ordered(cacheChildren),
