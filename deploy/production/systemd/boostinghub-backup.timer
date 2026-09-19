@@ -1,0 +1,11 @@
+[Unit]
+Description=BoostingHub daily database backup timer
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=10min
+Unit=boostinghub-backup.service
+
+[Install]
+WantedBy=timers.target

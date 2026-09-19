@@ -1,0 +1,26 @@
+# systemd unit for the BoostingHub Discord bot (production VPS).
+#
+# Install (as root):
+#   cp deploy/production/systemd/boostinghub-discord-bot.service /etc/systemd/system/boostinghub-discord-bot.service
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-discord-bot
+#
+# Logs: journalctl -u boostinghub-discord-bot -f
+
+[Unit]
+Description=BoostingHub Discord bot
+After=network-online.target boostinghub-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=boostinghub
+WorkingDirectory=/var/www/boostinghub
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/boostinghub/.env
+ExecStart=/usr/bin/npm run bot:start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+# One-shot Blizzard Character sync. Invoked by boostinghub-character-sync.timer.
+# Application owns no timer — external systemd cadence only.
+#
+# Install (as root):
+#   cp deploy/production/systemd/boostinghub-character-sync.* /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-character-sync.timer
+
+[Unit]
+Description=BoostingHub one-shot Blizzard character sync
+After=network-online.target postgresql.service boostinghub-web.service
+
+[Service]
+Type=oneshot
+User=boostinghub
+WorkingDirectory=/var/www/boostinghub
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/boostinghub/.env
+ExecStart=/usr/bin/npm run sync:characters
+Nice=10
+# Overlap protection remains the app PostgreSQL advisory lock.
+# systemd will not start a second instance of this unit while one is active.
