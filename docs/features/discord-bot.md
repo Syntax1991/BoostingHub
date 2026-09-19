@@ -200,9 +200,27 @@ Public signup embed Roles field:
 
 Posted into the **same Run channel** as the signup embed (or the legacy global roster channel) when a roster is first published, and **edited in place** (never reposted) whenever `RunRoster.version` advances on republish. Selected Characters only — never the full offer set. One Run, one channel, both signup and roster information — no separate roster channel per Run in this MVP.
 
-Groups: Tanks, Healers, Melee DPS, Ranged DPS, and Lootbuddies (omitted when empty). Melee/ranged classification comes from `attackTypeForSpecialization` (`src/lib/wow-specializations.ts`) — the one authoritative (class, specialization) → attack-type table, so the bot never re-derives WoW class rules itself. Tank/Healer show a real target from the Run's desired counts; **melee/ranged DPS show a bare count with no denominator**, because `Run.desiredDpsCount` is one combined number with no melee/ranged split in the current schema — introducing a fake denominator was deliberately avoided rather than inventing new Run fields for cosmetics.
+Groups: Tanks, Healers, Melee DPS, Ranged DPS, and Lootbuddies (omitted when empty). Melee/ranged classification comes from `attackTypeForSpecialization` (`src/lib/wow-specializations.ts`) — the one authoritative (class, specialization) → attack-type table, so the bot never re-derives WoW class rules itself. Tank/Healer show a real target from the Run's desired composition counts; **melee/ranged DPS show a bare count with no denominator**, because `Run.desiredDpsCount` is one combined number with no melee/ranged split in the current schema — introducing a fake denominator was deliberately avoided rather than inventing new Run fields for cosmetics.
 
 Each member renders as `<@discordUserId> — Character-Realm` when the User has a linked Discord account, or `Character-Realm` alone otherwise.
+
+## Raid Invite DMs (Apex-style)
+
+When a roster is **published**, each **SELECTED** BOOSTER and LOOTBUDDY with a linked Discord account receives one private DM from the bot (same shape as Apex):
+
+```text
+📢 **Raid Invite**
+**{productLabel}** - {DD/MM/YYYY HH:mm Europe/Berlin} - {DIFFICULTY} - {loot}
+Assignment: **{Role} - {Character} ({Class}) {lootTag}**
+Channel: {guildName} · <#runChannelId>
+Please be online 10 minutes before start.
+```
+
+- Requires a dedicated `runChannelId` (so the Channel line can link the Run channel).
+- **Republish**: only newly SELECTED signup ids are DMed; already-invited signup ids are stored on `RunDiscordPost.raidInviteSentSignupIds` (JSON array) and skipped.
+- Closed DMs (Discord 50007) are logged and still marked sent so the bot does not retry forever.
+- Users must share the guild with the bot and allow DMs from server members.
+- App-archived Runs do not send invites.
 
 ## `/mysignups`
 
@@ -244,4 +262,4 @@ Every one of these moves is reconciled by the independent `channels` lane (see "
 
 ## Deferred
 
-Selection/roster-published notifications, `/runs` browse command, Discord-side Raid Lead/Admin actions (roster selection and Strike management stay Web-only), Discord role synchronization, preferred/ranked Character offers, Run type/progress channel-name segments (no domain field to source them from yet), Dawn Boosting integration of any kind.
+`/runs` browse command, Discord-side Raid Lead/Admin actions (roster selection and Strike management stay Web-only), Discord role synchronization, preferred/ranked Character offers, Run type/progress channel-name segments (no domain field to source them from yet), Dawn Boosting integration of any kind.

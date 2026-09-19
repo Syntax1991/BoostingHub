@@ -12,7 +12,7 @@ import {
 } from "discord.js";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
-import { isDiscordUnknownChannelError } from "@/discord-bot/discord-api-errors";
+import { isDiscordUnknownChannelError, isDiscordCannotDmError } from "@/discord-bot/discord-api-errors";
 import {
   ARCHIVE_TRANSCRIPT_MESSAGE_CAP,
   buildArchiveServerInfoContent,
@@ -35,6 +35,7 @@ import {
   fingerprintRoleIndicators,
   type GuildRoleIndicators,
 } from "@/discord-bot/class-emoji-lookup";
+import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -53,6 +54,7 @@ type ChannelLaneItem = SyncWork["channels"][number];
 type SignupLaneItem = SyncWork["signups"][number];
 type RosterLaneItem = SyncWork["roster"][number];
 type StartLaneItem = NonNullable<SyncWork["start"]>[number];
+type RaidInviteLaneItem = NonNullable<SyncWork["raidInvites"]>[number];
 
 /** Minimal fields shared by every lane that may resolve a Run channel. */
 type RunChannelResolveItem = {
@@ -281,6 +283,27 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
       } catch (error) {
         console.error(`[discord-bot] start sync failed for run ${item.runId}`, error);
         messagePhaseError ??= error;
+      }
+    }
+
+    if ((work.raidInvites ?? []).length > 0) {
+      let guildName = "Discord";
+      try {
+        const guild = await client.guilds.fetch(env.discordGuildId);
+        guildName = guild.name;
+      } catch (error) {
+        console.warn(`[discord-bot] failed to fetch guild name for raid invites`, error);
+      }
+      for (const item of work.raidInvites ?? []) {
+        try {
+          await syncRaidInvite(client, api, item, guildName);
+        } catch (error) {
+          console.error(
+            `[discord-bot] raid invite DM failed for signup ${item.signupId} on run ${item.runId}`,
+            error,
+          );
+          messagePhaseError ??= error;
+        }
       }
     }
   } finally {
@@ -697,6 +720,46 @@ async function syncStartPost(
   if (!channel?.isTextBased() || !("send" in channel)) return;
   const message = await channel.send({ content });
   await api.recordDiscordState(item.runId, { kind: "start", channelId: message.channelId, messageId: message.id });
+}
+
+/**
+ * Apex-style Raid Invite DM. Always records the signup id after an attempt
+ * (including closed-DM failures) so the bot does not retry forever.
+ */
+async function syncRaidInvite(
+  client: Client,
+  api: BotApiClient,
+  item: RaidInviteLaneItem,
+  guildName: string,
+): Promise<void> {
+  const content = buildRaidInviteMessage({
+    productLabel: item.productLabel,
+    scheduledStartAt: item.scheduledStartAt,
+    difficulty: item.difficulty,
+    lootType: item.lootType,
+    participationType: item.participationType,
+    selectedRole: item.selectedRole,
+    characterName: item.characterName,
+    wowClass: item.wowClass,
+    guildName,
+    runChannelId: item.runChannelId,
+  });
+
+  try {
+    const user = await client.users.fetch(item.discordUserId);
+    await user.send({ content });
+  } catch (error) {
+    if (isDiscordCannotDmError(error) || isDiscordPermissionError(error)) {
+      console.warn(
+        `[discord-bot] cannot DM raid invite to ${item.discordUserId} for signup ${item.signupId} — marking sent to avoid retry loop`,
+        error,
+      );
+    } else {
+      throw error;
+    }
+  }
+
+  await api.recordDiscordState(item.runId, { kind: "raid-invite", signupId: item.signupId });
 }
 
 async function tryEditMessage(

@@ -27,7 +27,13 @@ export async function GET(request: NextRequest) {
         embed: await discordSyncService.getSignupEmbedData(item.runId),
       })),
     );
-    return botApiOk({ channels: work.channels, signups, roster: work.roster, start: work.start });
+    return botApiOk({
+      channels: work.channels,
+      signups,
+      roster: work.roster,
+      start: work.start,
+      raidInvites: work.raidInvites,
+    });
   } catch (error) {
     return botApiError(error);
   }

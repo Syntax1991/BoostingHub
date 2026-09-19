@@ -22,6 +22,7 @@ const discordStateSchema = z.discriminatedUnion("kind", [
     transcriptHtml: z.string().min(1).max(5_000_000),
     transcriptFilename: z.string().min(1).max(200),
   }),
+  z.object({ kind: z.literal("raid-invite"), signupId: z.string().uuid() }),
 ]);
 
 /**
@@ -34,6 +35,7 @@ const discordStateSchema = z.discriminatedUnion("kind", [
  * creating a duplicate. Purely bookkeeping — never authoritative
  * Run/Signup state. `clear-channel` drops `runChannelId` after the bot
  * deletes an app-archived Run's Discord channel (transcript remains).
+ * `raid-invite` appends a signup id to the Apex Raid Invite sent list.
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -56,6 +58,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await discordSyncService.recordRosterPost({ runId, channelId: body.channelId, messageId: body.messageId });
     } else if (body.kind === "start") {
       await discordSyncService.recordStartPost({ runId, channelId: body.channelId, messageId: body.messageId });
+    } else if (body.kind === "raid-invite") {
+      await discordSyncService.recordRaidInviteSent({ runId, signupId: body.signupId });
     } else {
       await discordSyncService.recordArchiveArtifacts({
         runId,

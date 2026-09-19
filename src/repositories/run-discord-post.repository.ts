@@ -19,7 +19,20 @@ export type RunDiscordPostRecord = {
   archiveTranscriptMessageId: string | null;
   archiveTranscriptHtml: string | null;
   archiveTranscriptFilename: string | null;
+  /** JSON array of signup ids that already received a Raid Invite DM. */
+  raidInviteSentSignupIds: string | null;
 };
+
+export function parseRaidInviteSentSignupIds(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return [];
+  }
+}
 
 function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
   return {
@@ -40,6 +53,7 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     archiveTranscriptMessageId: asStringOrNull(row.archiveTranscriptMessageId),
     archiveTranscriptHtml: asStringOrNull(row.archiveTranscriptHtml),
     archiveTranscriptFilename: asStringOrNull(row.archiveTranscriptFilename),
+    raidInviteSentSignupIds: asStringOrNull(row.raidInviteSentSignupIds),
   };
 }
 
@@ -153,6 +167,26 @@ export const runDiscordPostRepository = {
       updatedAt: new Date().toISOString(),
     });
   },
+
+  /**
+   * Appends a signup id to the Raid Invite sent list (idempotent).
+   * Closed-DM failures still record so the bot does not retry forever.
+   */
+  async recordRaidInviteSent(input: { runId: string; signupId: string }): Promise<void> {
+    const existing = await orm.RunDiscordPost.where({ runId: input.runId }).first();
+    const current = parseRaidInviteSentSignupIds(
+      existing ? asStringOrNull((existing as Record<string, unknown>).raidInviteSentSignupIds) : null,
+    );
+    if (current.includes(input.signupId)) {
+      if (!existing) {
+        await upsert(input.runId, { raidInviteSentSignupIds: JSON.stringify([input.signupId]) });
+      }
+      return;
+    }
+    await upsert(input.runId, {
+      raidInviteSentSignupIds: JSON.stringify([...current, input.signupId]),
+    });
+  },
 };
 
 async function upsert(runId: string, patch: Record<string, unknown>): Promise<void> {
@@ -181,6 +215,7 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
     archiveTranscriptMessageId: null,
     archiveTranscriptHtml: null,
     archiveTranscriptFilename: null,
+    raidInviteSentSignupIds: null,
     ...patch,
     createdAt: now,
     updatedAt: now,

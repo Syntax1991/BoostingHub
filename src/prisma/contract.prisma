@@ -866,6 +866,8 @@ model RunDiscordPost {
   archiveTranscriptHtml      String?
   /// Download filename, e.g. transcript-closed-….html
   archiveTranscriptFilename  String?
+  /// JSON array of RunSignup ids that already received an Apex-style Raid Invite DM.
+  raidInviteSentSignupIds    String?
   createdAt           TimestamptzString @default(now())
   updatedAt           temporal.updatedAtString()
 

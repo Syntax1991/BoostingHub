@@ -110,6 +110,34 @@ export class BotApiClient {
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
       }>;
+      raidInvites: Array<{
+        runId: string;
+        signupId: string;
+        discordUserId: string;
+        runChannelId: string;
+        productLabel: string;
+        scheduledStartAt: string;
+        difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
+        lootType: "SAVED" | "UNSAVED" | "VIP";
+        participationType: "BOOSTER" | "LOOTBUDDY";
+        selectedRole: "TANK" | "HEALER" | "DPS" | null;
+        characterName: string | null;
+        wowClass:
+          | "DEATH_KNIGHT"
+          | "DEMON_HUNTER"
+          | "DRUID"
+          | "EVOKER"
+          | "HUNTER"
+          | "MAGE"
+          | "MONK"
+          | "PALADIN"
+          | "PRIEST"
+          | "ROGUE"
+          | "SHAMAN"
+          | "WARLOCK"
+          | "WARRIOR"
+          | null;
+      }>;
     }>("/api/bot/discord/sync", {
       headers: classEmojiFingerprint
         ? { "x-class-emoji-fingerprint": classEmojiFingerprint }
@@ -143,7 +171,8 @@ export class BotApiClient {
           transcriptMessageId: string;
           transcriptHtml: string;
           transcriptFilename: string;
-        },
+        }
+      | { kind: "raid-invite"; signupId: string },
   ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
       method: "PUT",

@@ -8,7 +8,10 @@ import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
-import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import {
+  parseRaidInviteSentSignupIds,
+  runDiscordPostRepository,
+} from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
@@ -228,6 +231,22 @@ export type RunStartSyncWorkItem = {
   existingRunChannelId: string | null;
   desiredChannelName: string;
   targetBucket: DiscordRunChannelTarget;
+};
+
+/** Apex-style Raid Invite DM — one pending SELECTED signup with a linked Discord account. */
+export type RaidInviteWorkItem = {
+  runId: string;
+  signupId: string;
+  discordUserId: string;
+  runChannelId: string;
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  participationType: "BOOSTER" | "LOOTBUDDY";
+  selectedRole: CharacterRole | null;
+  characterName: string | null;
+  wowClass: WowClass | null;
 };
 
 export type RunStartEmbedMember = {
@@ -640,12 +659,14 @@ export const discordSyncService = {
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
     start: RunStartSyncWorkItem[];
+    raidInvites: RaidInviteWorkItem[];
   }> {
     const runs = await runRepository.listManaged();
     const channels: ChannelSyncWorkItem[] = [];
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
     const start: RunStartSyncWorkItem[] = [];
+    const raidInvites: RaidInviteWorkItem[] = [];
     const classEmojiFingerprint = options.classEmojiFingerprint ?? "";
 
     for (const run of runs) {
@@ -743,6 +764,37 @@ export const discordSyncService = {
         }
       }
 
+      // Apex-style Raid Invite DMs: once a roster is published and the Run
+      // has a dedicated channel, each SELECTED participant with a linked
+      // Discord account gets one DM (new SELECTED only on republish).
+      if (run.roster?.publishedAt && post?.runChannelId && !run.archivedAt) {
+        const alreadySent = new Set(parseRaidInviteSentSignupIds(post.raidInviteSentSignupIds));
+        const signupRows = await rosterRepository.listSignups(run.id);
+        for (const row of signupRows) {
+          if (row.status !== "SELECTED") continue;
+          if (!row.discordUserId) continue;
+          if (alreadySent.has(row.id)) continue;
+          const wowClass =
+            row.participationType === "BOOSTER"
+              ? (row.character?.wowClass ?? null)
+              : (row.lootbuddyClass ?? row.character?.wowClass ?? null);
+          raidInvites.push({
+            runId: run.id,
+            signupId: row.id,
+            discordUserId: row.discordUserId,
+            runChannelId: post.runChannelId,
+            productLabel: run.contentDisplay.productLabel,
+            scheduledStartAt: run.scheduledStartAt,
+            difficulty: run.difficulty,
+            lootType: run.lootType,
+            participationType: row.participationType,
+            selectedRole: row.publishedRole,
+            characterName: row.character?.name ?? null,
+            wowClass,
+          });
+        }
+      }
+
       // Operational Run Start post: only after IN_PROGRESS+ with an immutable
       // start snapshot, and only into an already-provisioned dedicated channel.
       // Never creates a first channel. Immutable content → post once (message
@@ -764,7 +816,7 @@ export const discordSyncService = {
       }
     }
 
-    return { channels, signups, roster, start };
+    return { channels, signups, roster, start, raidInvites };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
@@ -935,5 +987,9 @@ export const discordSyncService = {
 
   async clearRunChannel(runId: string): Promise<void> {
     await runDiscordPostRepository.clearRunChannel(runId);
+  },
+
+  async recordRaidInviteSent(input: { runId: string; signupId: string }): Promise<void> {
+    await runDiscordPostRepository.recordRaidInviteSent(input);
   },
 };

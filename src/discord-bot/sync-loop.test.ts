@@ -543,6 +543,60 @@ describe("syncOnce — same-pass first-channel positioning", () => {
   });
 });
 
+describe("syncOnce — Apex-style Raid Invite DMs", () => {
+  it("DMs each pending invite once and records raid-invite state", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["run-chan", { id: "run-chan", name: "tue-1800-hc-vip-lead", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-1" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-1", send: sendDm }),
+    };
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+    });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [
+        {
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+          discordUserId: "discord-user-1",
+          runChannelId: "run-chan",
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+          characterName: "Synmist",
+          wowClass: "MONK",
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    const content = sendDm.mock.calls[0][0].content as string;
+    expect(content).toContain("📢 **Raid Invite**");
+    expect(content).toContain("Healer - Synmist (Monk) VIP");
+    expect(content).toContain("<#run-chan>");
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", {
+      kind: "raid-invite",
+      signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+    });
+  });
+});
+
 describe("syncOnce — app-archive transcript artifacts", () => {
   it("posts Server-Info+HTML and details embed to the archive log channel once", async () => {
     const children = new Map<string, Child>([
@@ -732,6 +786,7 @@ function makeApi(input: {
       signups: input.signups,
       roster: input.roster,
       start: input.start ?? [],
+      raidInvites: [],
     }),
     recordDiscordState: vi.fn().mockResolvedValue(undefined),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
