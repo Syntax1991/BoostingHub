@@ -932,4 +932,8 @@ export const discordSyncService = {
   async clearArchiveArtifacts(runId: string): Promise<void> {
     await runDiscordPostRepository.clearArchiveArtifacts(runId);
   },
+
+  async clearRunChannel(runId: string): Promise<void> {
+    await runDiscordPostRepository.clearRunChannel(runId);
+  },
 };

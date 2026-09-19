@@ -225,7 +225,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
   );
 
   for (const item of work.channels) {
-    if (!item.archiveArtifactsNeeded) continue;
+    if (!item.appArchived) continue;
     try {
       await syncArchiveArtifacts(client, env, api, item, resolvedChannels);
     } catch (error) {
@@ -781,13 +781,17 @@ async function fetchMessagesForTranscript(
 }
 
 /**
- * App-archive only: after the Run channel is moved/renamed, build the HTML
- * transcript for website download and (when not already posted) send Ticket-
- * Tool-style artifacts into `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`:
+ * App-archive only: never moves the Run channel into an archive category.
+ * Builds the HTML transcript for website download and (when not already
+ * posted) sends Ticket-Tool-style artifacts into
+ * `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`:
  * (1) Server-Info text + `transcript-{name}.html` attachment,
  * (2) green details embed + Direct Link button.
  * When Discord message ids already exist, skips re-send and only persists HTML.
- * Never deletes the Run channel.
+ * After the transcript is safely recorded, deletes the Run's Discord channel
+ * and clears `runChannelId` — the lasting record is the transcript alone.
+ * Schedule-based PAST/FUTURE ARCHIVE holding is unchanged (silent move, no
+ * delete) and never enters this path (`appArchived` is false).
  */
 async function syncArchiveArtifacts(
   client: Client,
@@ -796,9 +800,19 @@ async function syncArchiveArtifacts(
   item: ChannelLaneItem,
   resolvedChannels: Map<string, string>,
 ): Promise<void> {
-  if (!item.archiveArtifactsNeeded || !item.appArchived) return;
+  if (!item.appArchived) return;
+
+  const runChannelId = resolvedChannels.get(item.runId) ?? item.existingRunChannelId;
+  if (!runChannelId) return;
 
   const alreadyPosted = Boolean(item.archiveCloseMessageId && item.archiveTranscriptMessageId);
+
+  // Artifacts already complete: only delete any leftover Run channel.
+  if (!item.archiveArtifactsNeeded) {
+    await deleteArchivedRunChannel(client, api, item.runId, runChannelId);
+    return;
+  }
+
   if (!alreadyPosted && !env.discordRunArchiveLogChannelId) {
     console.warn(
       `[discord-bot] DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID unset — skipping archive log for run ${item.runId}`,
@@ -806,25 +820,24 @@ async function syncArchiveArtifacts(
     return;
   }
 
-  const runChannelId = resolvedChannels.get(item.runId) ?? item.existingRunChannelId;
-  if (!runChannelId) return;
-
   let runChannel;
   try {
     runChannel = await client.channels.fetch(runChannelId);
   } catch (error) {
     if (isDiscordPermissionError(error) || isDiscordUnknownChannelError(error)) {
       console.warn(
-        `[discord-bot] cannot fetch run channel ${runChannelId} for archive transcript on run ${item.runId} — skipping`,
+        `[discord-bot] cannot fetch run channel ${runChannelId} for archive transcript on run ${item.runId} — clearing stored id`,
         error,
       );
+      await api.recordDiscordState(item.runId, { kind: "clear-channel" });
       return;
     }
     throw error;
   }
 
   if (!runChannel || !runChannel.isTextBased() || !("messages" in runChannel)) {
-    console.warn(`[discord-bot] run ${item.runId} channel ${runChannelId} is not a text channel — skipping transcript`);
+    console.warn(`[discord-bot] run ${item.runId} channel ${runChannelId} is not a text channel — clearing stored id`);
+    await api.recordDiscordState(item.runId, { kind: "clear-channel" });
     return;
   }
 
@@ -862,6 +875,7 @@ async function syncArchiveArtifacts(
       transcriptHtml: html,
       transcriptFilename: filename,
     });
+    await deleteArchivedRunChannel(client, api, item.runId, runChannelId);
     return;
   }
 
@@ -964,6 +978,7 @@ async function syncArchiveArtifacts(
         transcriptHtml: html,
         transcriptFilename: filename,
       });
+      await deleteArchivedRunChannel(client, api, item.runId, runChannelId);
       return;
     }
     throw error;
@@ -976,4 +991,39 @@ async function syncArchiveArtifacts(
     transcriptHtml: html,
     transcriptFilename: filename,
   });
+  await deleteArchivedRunChannel(client, api, item.runId, runChannelId);
+}
+
+/** Deletes an app-archived Run channel after the transcript is recorded. */
+async function deleteArchivedRunChannel(
+  client: Client,
+  api: BotApiClient,
+  runId: string,
+  channelId: string,
+): Promise<void> {
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (channel && "delete" in channel && typeof channel.delete === "function") {
+      await channel.delete(`BoostingHub app-archive — transcript retained for run ${runId}`);
+    }
+  } catch (error) {
+    if (isDiscordUnknownChannelError(error)) {
+      // Already gone — still clear the stored id below.
+    } else if (isDiscordPermissionError(error)) {
+      console.warn(
+        `[discord-bot] missing permission to delete archived run channel ${channelId} for run ${runId} — clearing stored id anyway`,
+        error,
+      );
+    } else {
+      console.error(`[discord-bot] failed to delete archived run channel ${channelId} for run ${runId}`, error);
+      // Do not clear the id — retry delete next poll.
+      return;
+    }
+  }
+
+  try {
+    await api.recordDiscordState(runId, { kind: "clear-channel" });
+  } catch (error) {
+    console.error(`[discord-bot] failed to clear runChannelId after deleting channel for run ${runId}`, error);
+  }
 }

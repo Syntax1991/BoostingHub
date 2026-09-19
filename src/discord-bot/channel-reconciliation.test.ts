@@ -72,6 +72,23 @@ describe("reconcileExistingRunChannel — category movement", () => {
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
   });
 
+  it("app-archived ARCHIVE never moves — rename only; transcript path deletes later", async () => {
+    const channel = fakeChannel({ parentId: ACTIVE_CATEGORY, name: "old-name" });
+    const result = await reconcileExistingRunChannel(
+      fetcherFor(channel),
+      envConfigured,
+      item({
+        targetBucket: "ARCHIVE",
+        desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+        appArchived: true,
+      }),
+    );
+
+    expect(channel.setName).toHaveBeenCalledWith("closed-sat-2200-hc-vip-7of9-titan");
+    expect(channel.setParent).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+  });
+
   it("restore move: moves the same channel back to the active category (from either CURRENT or NEXT target)", async () => {
     const channel = fakeChannel({ parentId: ARCHIVE_CATEGORY });
     await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ targetBucket: "NEXT" }));

@@ -100,18 +100,19 @@ Two independent mechanisms act on `channels`, both in `src/discord-bot/channel-r
 Steps 3–4 of the first mechanism, and the whole of the second, are each independently idempotent. `sync-loop.ts` runs channel reconciliation (name + parent) first, then any signup/roster message work (which may provision a first channel), then **one** CURRENT/NEXT position reconciliation that includes both pre-existing `channels` items and any channels created in this same pass — so a brand-new CURRENT/NEXT Run channel finishes its first successful sync already in the correct marker section. Position reconciliation runs in a `finally` after provisioning is known, so a later signup/roster embed send/edit failure cannot leave a newly created channel below `#next-id` until the next poll. After each `setPositions` write the bot **fresh-fetches** the category from Discord (REST `guild.channels.fetch()`, not cache alone) and verifies relative order; if Discord's create→position consistency briefly leaves the new channel below `#next-id` despite a successful write, the same sync pass retries reconcile+verify up to two more times with a short bounded delay (not the 60s poll). Later polls still self-heal manual drift and weekly NEXT → CURRENT rollover via the same reconciler. A `runId -> channelId` map from the name/parent pass lets the message paths reuse the same resolved channel instead of re-resolving (and potentially re-renaming/re-moving) it a second time in the same poll.
 
 **Archive**: `runService.archiveRun` sets `Run.archivedAt`. The next sync pass:
-1. Renames the dedicated channel to `closed-{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}` via `buildClosedDiscordRunChannelName`.
-2. Moves it to `DISCORD_RUN_ARCHIVE_CATEGORY_ID` (same channel, same history — never deleted).
-3. Posts Ticket-Tool-style archive artifacts **once** into `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID` (e.g. `#raid-open-channel-logs`):
-   - Message 1: `<Server-Info>` text + `transcript-{channelName}.html` attachment
+1. Renames the dedicated channel to `closed-{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}` via `buildClosedDiscordRunChannelName` (in place — **never** moved into `DISCORD_RUN_ARCHIVE_CATEGORY_ID`).
+2. Posts Ticket-Tool-style archive artifacts **once** into `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID` (e.g. `#raid-open-channel-logs`):
+   - Message 1: `<Server-Info>` xml code block + `transcript-{channelName}.html` attachment
    - Message 2: green details embed (Ticket Owner / Ticket Name / Panel Name / Users in transcript) + **Direct Link** button to the attachment
    - Persists the same HTML on `RunDiscordPost` for manager download at `/runs/[runId]/archive-transcript`
-   Idempotency: `archiveArtifactsNeeded` until Discord message ids **and** `archiveTranscriptHtml` are recorded. When ids already exist but HTML is missing (legacy rows), the bot rebuilds HTML from the Run channel and records it without re-posting to Discord. When the log channel env is unset, rename/move still happen and Discord posts are skipped with a warning (HTML backfill still runs when ids already exist).
+   Idempotency: `archiveArtifactsNeeded` until Discord message ids **and** `archiveTranscriptHtml` are recorded. When ids already exist but HTML is missing (legacy rows), the bot rebuilds HTML from the Run channel and records it without re-posting to Discord. When the log channel env is unset, Discord posts are skipped with a warning and the Run channel is left alone until artifacts can be written.
+3. **Deletes** the Run's Discord channel and clears `runChannelId` — after app-archive, only the transcript (log channel + website download) remains. Leftover channels from older deploys are deleted on a later poll once artifacts are already complete.
 
-PAST/FUTURE schedule holding also uses the ARCHIVE category, but is a **silent move only** — live schedule-based name, no `closed-` rename, no log posts (`appArchived: false`).
+PAST/FUTURE schedule holding still uses the ARCHIVE category as a **silent move only** — live schedule-based name, no `closed-` rename, no log posts, no delete (`appArchived: false`).
 
-**Restore**: `runService.restoreRun` clears `archivedAt` and clears archive-artifact message ids so a later re-archive can post again. The next sync pass re-derives placement and the live (non-`closed-`) name from the schedule — CURRENT/NEXT-scheduled goes back to the one active category (positioned into the correct section on the following position-reconciliation pass), and a PAST/FUTURE schedule stays in ARCHIVE holding. Restore is deliberately never "back to the one active category" as a single undifferentiated destination — which section it lands in is always re-derived from the schedule.
-Neither ever creates signup/roster message work by itself — an Archive/Restore with no other Run change produces zero signup/roster reposts, only the channel move (and, on app-archive, the one-time close/transcript post).
+**Restore**: `runService.restoreRun` clears `archivedAt` and clears archive-artifact message ids so a later re-archive can post again. Because app-archive deletes the Discord channel, restore does not resurrect it — a later CURRENT/NEXT signup window may provision a fresh channel via the normal signup path. Restore never invents Discord infrastructure on its own.
+
+Neither Archive nor Restore creates signup/roster message work by itself — an Archive with no other Run change produces the one-time transcript post + channel delete only.
 
 ## Weekly raid-ID sections
 

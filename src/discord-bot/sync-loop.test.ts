@@ -589,6 +589,10 @@ describe("syncOnce — app-archive transcript artifacts", () => {
       transcriptHtml: expect.stringContaining("<Server-Info>"),
       transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
     });
+    const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn>; setParent: ReturnType<typeof vi.fn> };
+    expect(archivedChannel.setParent).not.toHaveBeenCalled();
+    expect(archivedChannel.delete).toHaveBeenCalledTimes(1);
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-archived", { kind: "clear-channel" });
   });
 
   it("persists HTML without re-posting when Discord archive message ids already exist", async () => {
@@ -631,6 +635,9 @@ describe("syncOnce — app-archive transcript artifacts", () => {
       transcriptHtml: expect.stringContaining("<Server-Info>"),
       transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
     });
+    const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn> };
+    expect(archivedChannel.delete).toHaveBeenCalledTimes(1);
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-html-backfill", { kind: "clear-channel" });
   });
 
   it("does not post archive artifacts for schedule-based ARCHIVE holding", async () => {
@@ -753,6 +760,7 @@ function makeDiscordClient(
   const sendSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const setNameSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const setParentSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const deleteSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const messagesFetchSpies = new Map<string, ReturnType<typeof vi.fn>>();
 
   // Deep-cloneable state: cache vs server.
@@ -821,6 +829,9 @@ function makeDiscordClient(
     if (!setParentSpies.has(child.id)) {
       setParentSpies.set(child.id, vi.fn().mockResolvedValue(undefined));
     }
+    if (!deleteSpies.has(child.id)) {
+      deleteSpies.set(child.id, vi.fn().mockResolvedValue(undefined));
+    }
     if (!messagesFetchSpies.has(child.id)) {
       const history = new Collection<string, {
         id: string;
@@ -856,6 +867,7 @@ function makeDiscordClient(
       send: sendSpies.get(child.id)!,
       setName: setNameSpies.get(child.id)!,
       setParent: setParentSpies.get(child.id)!,
+      delete: deleteSpies.get(child.id)!,
       messages: {
         fetch: messagesFetchSpies.get(child.id)!,
       },

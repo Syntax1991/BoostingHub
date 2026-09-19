@@ -6,6 +6,7 @@ import { discordSyncService } from "@/services/discord-sync.service";
 
 const discordStateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("channel"), channelId: z.string().min(1).max(64) }),
+  z.object({ kind: z.literal("clear-channel") }),
   z.object({
     kind: z.literal("signup"),
     channelId: z.string().min(1).max(64),
@@ -31,7 +32,8 @@ const discordStateSchema = z.discriminatedUnion("kind", [
  * operational start roster message, or app-archive close/transcript message
  * ids — so the next sync pass reuses/edits that same identity instead of
  * creating a duplicate. Purely bookkeeping — never authoritative
- * Run/Signup state.
+ * Run/Signup state. `clear-channel` drops `runChannelId` after the bot
+ * deletes an app-archived Run's Discord channel (transcript remains).
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -41,6 +43,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     if (body.kind === "channel") {
       await discordSyncService.recordRunChannel({ runId, channelId: body.channelId });
+    } else if (body.kind === "clear-channel") {
+      await discordSyncService.clearRunChannel(runId);
     } else if (body.kind === "signup") {
       await discordSyncService.recordSignupPost({
         runId,

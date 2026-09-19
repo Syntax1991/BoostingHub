@@ -27,19 +27,17 @@ export type BotEnv = {
   /** Same role as `discordRunCurrentMarkerChannelId`, for the NEXT section (`#next-id`). */
   discordRunNextMarkerChannelId: string | null;
   /**
-   * Where an ARCHIVE-targeted Run's channel moves to (app-archived Runs, and
-   * PAST/FUTURE Runs held outside the active CURRENT/NEXT rotation) — a real,
-   * separate Discord category, unlike CURRENT/NEXT. Optional — when unset,
-   * such a channel simply stays wherever it already is (a move is skipped
-   * with a warning, never an error, and nothing else about sync fails
-   * because of it).
+   * Where PAST/FUTURE holding channels move (schedule ARCHIVE, not app-archive).
+   * App-archived Runs are never moved here — they get a transcript then the
+   * Discord channel is deleted. Optional — when unset, holding moves are
+   * skipped with a warning.
    */
   discordRunArchiveCategoryId: string | null;
   /**
    * Central Ticket-Tool-style archive log channel (e.g. `#raid-open-channel-logs`).
-   * App-archive posts Server-Info + HTML transcript + details embed here once.
-   * Optional — when unset, archive artifacts are skipped with a warning (the
-   * Run channel is still renamed/moved; nothing is deleted).
+   * App-archive posts Server-Info + HTML transcript + details embed here once,
+   * then deletes the Run channel. Optional — when unset, archive artifacts are
+   * skipped with a warning and the channel is left until a later successful post.
    */
   discordRunArchiveLogChannelId: string | null;
   /**

@@ -139,6 +139,20 @@ export const runDiscordPostRepository = {
       updatedAt: new Date().toISOString(),
     });
   },
+
+  /**
+   * Cleared after an app-archived Run's Discord channel is deleted — the
+   * lasting record is the archive-log transcript + persisted HTML, not a
+   * moved `closed-*` channel.
+   */
+  async clearRunChannel(runId: string): Promise<void> {
+    const existing = await orm.RunDiscordPost.where({ runId }).first();
+    if (!existing) return;
+    await orm.RunDiscordPost.where({ runId }).update({
+      runChannelId: null,
+      updatedAt: new Date().toISOString(),
+    });
+  },
 };
 
 async function upsert(runId: string, patch: Record<string, unknown>): Promise<void> {
