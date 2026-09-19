@@ -76,6 +76,20 @@ export function RunDetailView({
           </div>
         </Card>
       ) : null}
+      {data.archiveTranscript ? (
+        <Card className="mb-4">
+          <CardHeader title="Archive transcript" description="Discord channel history from app archive." />
+          <div className="px-4 py-3 text-sm">
+            <a
+              href={data.archiveTranscript.downloadHref}
+              className="text-accent hover:underline"
+              download={data.archiveTranscript.filename}
+            >
+              Download {data.archiveTranscript.filename}
+            </a>
+          </div>
+        </Card>
+      ) : null}
       <RunDetailTabs data={data} initialTab={initialTab} />
     </div>
   );

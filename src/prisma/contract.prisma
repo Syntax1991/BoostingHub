@@ -858,6 +858,14 @@ model RunDiscordPost {
   startChannelId      String?
   startMessageId      String?
   startPostedAt       TimestamptzString?
+  /// Ticket-Tool-style close banner posted once when the Run is app-archived.
+  archiveCloseMessageId      String?
+  /// HTML transcript attachment message posted once on app-archive (may equal close message id when posted together).
+  archiveTranscriptMessageId String?
+  /// Full HTML transcript body for website download (same content attached on Discord).
+  archiveTranscriptHtml      String?
+  /// Download filename, e.g. transcript-closed-….html
+  archiveTranscriptFilename  String?
   createdAt           TimestamptzString @default(now())
   updatedAt           temporal.updatedAtString()
 

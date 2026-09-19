@@ -1262,6 +1262,72 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
     const work = await discordSyncService.listSyncWork(classificationNow);
     const channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem?.targetBucket).toBe("ARCHIVE");
+    expect(channelItem?.appArchived).toBe(true);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(true);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+  });
+
+  it("schedule PAST holding uses ARCHIVE without closed- name or archive artifacts", async () => {
+    const id = await createRunAt(followingStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "past-hold-1" });
+
+    // Classify against a `now` after this Run's raid-ID week → PAST → ARCHIVE holding.
+    const work = await discordSyncService.listSyncWork(new Date(Date.parse(followingStart) + 21 * 24 * 60 * 60 * 1000));
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.targetBucket).toBe("ARCHIVE");
+    expect(channelItem?.appArchived).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(false);
+  });
+
+  it("clears archive artifact need after recordArchiveArtifacts and again after restore", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "art-chan-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.archiveArtifactsNeeded).toBe(true);
+
+    await discordSyncService.recordArchiveArtifacts({
+      runId: id,
+      closeMessageId: "close-1",
+      transcriptMessageId: "close-1",
+      transcriptHtml: "<html>transcript</html>",
+      transcriptFilename: "transcript-test.html",
+    });
+    work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.archiveArtifactsNeeded).toBe(false);
+
+    await runService.restoreRun(lead, id);
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+    work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.archiveArtifactsNeeded).toBe(true);
+  });
+
+  it("keeps archiveArtifactsNeeded when Discord ids exist but website HTML is missing", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "html-miss-1" });
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    await runService.archiveRun(lead, id);
+
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      archiveCloseMessageId: "close-only",
+      archiveTranscriptMessageId: "transcript-only",
+      archiveTranscriptHtml: null,
+      archiveTranscriptFilename: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(true);
+    expect(channelItem?.archiveCloseMessageId).toBe("close-only");
+    expect(channelItem?.archiveTranscriptMessageId).toBe("transcript-only");
   });
 });
 

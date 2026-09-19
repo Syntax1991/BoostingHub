@@ -35,6 +35,20 @@ export type BotEnv = {
    * because of it).
    */
   discordRunArchiveCategoryId: string | null;
+  /**
+   * Central Ticket-Tool-style archive log channel (e.g. `#raid-open-channel-logs`).
+   * App-archive posts Server-Info + HTML transcript + details embed here once.
+   * Optional — when unset, archive artifacts are skipped with a warning (the
+   * Run channel is still renamed/moved; nothing is deleted).
+   */
+  discordRunArchiveLogChannelId: string | null;
+  /**
+   * Optional snowflake overrides for Raidboost Announce pings. When unset, the
+   * bot resolves Guild roles named `tank` / `healer` / `dps` (case-insensitive).
+   */
+  discordPingRoleTankId: string | null;
+  discordPingRoleHealerId: string | null;
+  discordPingRoleDpsId: string | null;
   /** Legacy/test fallback, used only when discordRunCategoryId is unset. */
   discordSignupChannelId: string | null;
   discordRosterChannelId: string | null;
@@ -61,6 +75,10 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
   const currentMarkerChannelId = env.DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID?.trim() || null;
   const nextMarkerChannelId = env.DISCORD_RUN_NEXT_MARKER_CHANNEL_ID?.trim() || null;
   const runArchiveCategoryId = env.DISCORD_RUN_ARCHIVE_CATEGORY_ID?.trim() || null;
+  const runArchiveLogChannelId = env.DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID?.trim() || null;
+  const pingRoleTankId = env.DISCORD_PING_ROLE_TANK_ID?.trim() || null;
+  const pingRoleHealerId = env.DISCORD_PING_ROLE_HEALER_ID?.trim() || null;
+  const pingRoleDpsId = env.DISCORD_PING_ROLE_DPS_ID?.trim() || null;
   const signupChannelId = env.DISCORD_SIGNUP_CHANNEL_ID?.trim() || null;
   const rosterChannelId = env.DISCORD_ROSTER_CHANNEL_ID?.trim() || null;
 
@@ -78,6 +96,10 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     discordRunCurrentMarkerChannelId: currentMarkerChannelId,
     discordRunNextMarkerChannelId: nextMarkerChannelId,
     discordRunArchiveCategoryId: runArchiveCategoryId,
+    discordRunArchiveLogChannelId: runArchiveLogChannelId,
+    discordPingRoleTankId: pingRoleTankId,
+    discordPingRoleHealerId: pingRoleHealerId,
+    discordPingRoleDpsId: pingRoleDpsId,
     discordSignupChannelId: signupChannelId,
     discordRosterChannelId: rosterChannelId,
     apiBaseUrl: env.BOOSTINGHUB_API_BASE_URL!.replace(/\/$/, ""),

@@ -22,6 +22,7 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository, type RunCreateWithContentsInput } from "@/repositories/run.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
+import { discordSyncService } from "@/services/discord-sync.service";
 import { runTemplateService } from "@/services/run-template.service";
 import {
   assertComposition,
@@ -965,6 +966,7 @@ export const runService = {
     }
 
     await runRepository.restoreRun(run.id);
+    await discordSyncService.clearArchiveArtifacts(run.id);
     await activityRepository.create({
       userId: user.id,
       type: "RUN_RESTORED",

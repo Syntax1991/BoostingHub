@@ -65,6 +65,33 @@ describe("loadBotEnv — one active category plus marker channels", () => {
     expect(withoutArchive.discordRunArchiveCategoryId).toBeNull();
   });
 
+  it("resolves DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID independently and leaves it null when unset", () => {
+    const withLog = loadBotEnv(
+      baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID: "log-chan-1" }),
+    );
+    expect(withLog.discordRunArchiveLogChannelId).toBe("log-chan-1");
+
+    const withoutLog = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" }));
+    expect(withoutLog.discordRunArchiveLogChannelId).toBeNull();
+  });
+
+  it("resolves optional raidboost ping role ids", () => {
+    const withRoles = loadBotEnv(
+      baseEnv({
+        DISCORD_RUN_CATEGORY_ID: "category-1",
+        DISCORD_PING_ROLE_TANK_ID: "tank-1",
+        DISCORD_PING_ROLE_HEALER_ID: "heal-1",
+        DISCORD_PING_ROLE_DPS_ID: "dps-1",
+      }),
+    );
+    expect(withRoles.discordPingRoleTankId).toBe("tank-1");
+    expect(withRoles.discordPingRoleHealerId).toBe("heal-1");
+    expect(withRoles.discordPingRoleDpsId).toBe("dps-1");
+
+    const without = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" }));
+    expect(without.discordPingRoleTankId).toBeNull();
+  });
+
   it("the legacy global signup channel alone satisfies startup, with the category and markers null", () => {
     const env = loadBotEnv(baseEnv({ DISCORD_SIGNUP_CHANNEL_ID: "signup-chan-1" }));
     expect(env.discordRunCategoryId).toBeNull();

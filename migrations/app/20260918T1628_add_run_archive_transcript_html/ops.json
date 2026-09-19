@@ -1,0 +1,86 @@
+[
+  {
+    "id": "column.public.run_discord_post.archiveTranscriptFilename",
+    "label": "Add column \"archiveTranscriptFilename\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "archiveTranscriptFilename",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"archiveTranscriptFilename\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "archiveTranscriptFilename"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"archiveTranscriptFilename\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"archiveTranscriptFilename\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"archiveTranscriptFilename\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "archiveTranscriptFilename"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_post.archiveTranscriptHtml",
+    "label": "Add column \"archiveTranscriptHtml\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "archiveTranscriptHtml",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"archiveTranscriptHtml\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "archiveTranscriptHtml"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"archiveTranscriptHtml\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"archiveTranscriptHtml\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"archiveTranscriptHtml\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "archiveTranscriptHtml"
+        ]
+      }
+    ]
+  }
+]

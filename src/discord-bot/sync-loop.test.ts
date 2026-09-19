@@ -26,6 +26,10 @@ function botEnv(): BotEnv {
     discordRunCurrentMarkerChannelId: CURRENT_MARKER,
     discordRunNextMarkerChannelId: NEXT_MARKER,
     discordRunArchiveCategoryId: null,
+    discordRunArchiveLogChannelId: "archive-log-chan",
+    discordPingRoleTankId: null,
+    discordPingRoleHealerId: null,
+    discordPingRoleDpsId: null,
     discordSignupChannelId: null,
     discordRosterChannelId: null,
     apiBaseUrl: "http://localhost",
@@ -62,6 +66,108 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
     },
   };
 }
+
+describe("syncOnce — raidboost announce on first channel create", () => {
+  it("posts Phoenix announce + role pings once when the Run channel is created", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const { client, createdIds } = makeDiscordClient(children);
+
+    await syncOnce(
+      client,
+      botEnv(),
+      makeApi({
+        channels: [],
+        signups: [
+          {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            existingChannelId: null,
+            existingMessageId: null,
+            existingRunChannelId: null,
+            desiredChannelName: "tue-1800-hc-saved-lead",
+            targetBucket: "CURRENT",
+            scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            embed: {
+              ...signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
+              difficulty: "HEROIC",
+              lootType: "SAVED",
+            },
+          },
+        ],
+        roster: [],
+        start: [],
+      }),
+    );
+
+    expect(createdIds).toHaveLength(1);
+    const createdChannel = client.channels.cache.get(createdIds[0]!) as { send: ReturnType<typeof vi.fn> };
+    // Announce first, then signup embed.
+    expect(createdChannel.send).toHaveBeenCalledTimes(2);
+    const announce = createdChannel.send.mock.calls[0][0] as {
+      content: string;
+      embeds: Array<{ data?: { title?: string; description?: string }; toJSON?: () => { title?: string; description?: string } }>;
+      allowedMentions: { roles: string[] };
+    };
+    expect(announce.content).toBe("<@&role-tank> <@&role-healer> <@&role-dps>");
+    expect(announce.allowedMentions.roles).toEqual(["role-tank", "role-healer", "role-dps"]);
+    expect(announce.allowedMentions.parse).toEqual([]);
+    const embedJson =
+      typeof announce.embeds[0]?.toJSON === "function"
+        ? announce.embeds[0].toJSON()
+        : (announce.embeds[0] as { data?: { title?: string; description?: string } }).data;
+    expect(embedJson?.title).toContain("PhoenixStarDiscord");
+    expect(embedJson?.title).toContain("Raidboost Announce");
+    expect(embedJson?.description).toContain("**HC** 💰❌ Heroic Saved");
+  });
+
+  it("does not re-announce when the Run channel already exists", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["existing-chan", { id: "existing-chan", name: "tue-1800-hc-saved-lead", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+
+    await syncOnce(
+      client,
+      botEnv(),
+      makeApi({
+        channels: [
+          {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            existingRunChannelId: "existing-chan",
+            desiredChannelName: "tue-1800-hc-saved-lead",
+            targetBucket: "CURRENT",
+            scheduledStartAt: "2026-09-15T16:00:00.000Z",
+          },
+        ],
+        signups: [
+          {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            existingChannelId: "existing-chan",
+            existingMessageId: null,
+            existingRunChannelId: "existing-chan",
+            desiredChannelName: "tue-1800-hc-saved-lead",
+            targetBucket: "CURRENT",
+            scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
+          },
+        ],
+        roster: [],
+        start: [],
+      }),
+    );
+
+    const existing = client.channels.cache.get("existing-chan") as { send: ReturnType<typeof vi.fn> };
+    // Only the signup embed — no role-ping announce.
+    expect(existing.send).toHaveBeenCalledTimes(1);
+    const only = existing.send.mock.calls[0][0] as { content?: string; embeds: unknown[]; components?: unknown[] };
+    expect(only.components).toBeDefined();
+    expect(only.content).toBeUndefined();
+  });
+});
 
 describe("syncOnce — same-pass first-channel positioning", () => {
   it("A: first CURRENT channel lands between markers in the SAME pass", async () => {
@@ -437,6 +543,131 @@ describe("syncOnce — same-pass first-channel positioning", () => {
   });
 });
 
+describe("syncOnce — app-archive transcript artifacts", () => {
+  it("posts Server-Info+HTML and details embed to the archive log channel once", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["archive-chan", { id: "archive-chan", name: "old-name", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-archived",
+          existingRunChannelId: "archive-chan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          appArchived: true,
+          archiveArtifactsNeeded: true,
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: "lead-1",
+          panelName: "The Venomous Abyss",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    const logChannel = client.channels.cache.get("archive-log-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(logChannel.send).toHaveBeenCalledTimes(2);
+    const first = logChannel.send.mock.calls[0][0] as { content: string; files: Array<{ name: string }> };
+    expect(first.content).toContain("<Server-Info>");
+    expect(first.content).toContain("closed-sat-2200-hc-vip-7of9-titan");
+    expect(first.files[0]?.name).toBe("transcript-closed-sat-2200-hc-vip-7of9-titan.html");
+    const second = logChannel.send.mock.calls[1][0] as { embeds: unknown[]; components: unknown[] };
+    expect(second.embeds).toHaveLength(1);
+    expect(second.components).toHaveLength(1);
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-archived", {
+      kind: "archive-artifacts",
+      closeMessageId: "msg-archive-log-chan-2",
+      transcriptMessageId: "msg-archive-log-chan-1",
+      transcriptHtml: expect.stringContaining("<Server-Info>"),
+      transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
+    });
+  });
+
+  it("persists HTML without re-posting when Discord archive message ids already exist", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-html-backfill",
+          existingRunChannelId: "archive-chan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          appArchived: true,
+          archiveArtifactsNeeded: true,
+          archiveCloseMessageId: "existing-close",
+          archiveTranscriptMessageId: "existing-transcript",
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: "lead-1",
+          panelName: "The Venomous Abyss",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    const logChannel = client.channels.cache.get("archive-log-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(logChannel.send).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-html-backfill", {
+      kind: "archive-artifacts",
+      closeMessageId: "existing-close",
+      transcriptMessageId: "existing-transcript",
+      transcriptHtml: expect.stringContaining("<Server-Info>"),
+      transcriptFilename: "transcript-closed-sat-2200-hc-vip-7of9-titan.html",
+    });
+  });
+
+  it("does not post archive artifacts for schedule-based ARCHIVE holding", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["hold-chan", { id: "hold-chan", name: "sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-holding",
+          existingRunChannelId: "hold-chan",
+          desiredChannelName: "sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-08-01T20:00:00.000Z",
+          appArchived: false,
+          archiveArtifactsNeeded: false,
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: null,
+          panelName: "Raid",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    const logChannel = client.channels.cache.get("archive-log-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(logChannel.send).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalled();
+  });
+});
+
 function makeApi(input: {
   channels: Array<{
     runId: string;
@@ -444,6 +675,13 @@ function makeApi(input: {
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
     scheduledStartAt: string;
+    appArchived?: boolean;
+    archiveArtifactsNeeded?: boolean;
+    archiveCloseMessageId?: string | null;
+    archiveTranscriptMessageId?: string | null;
+    raidLeadName?: string;
+    raidLeadDiscordUserId?: string | null;
+    panelName?: string;
   }>;
   signups: Array<{
     runId: string;
@@ -474,7 +712,16 @@ function makeApi(input: {
 }): BotApiClient {
   return {
     listSyncWork: vi.fn().mockResolvedValue({
-      channels: input.channels,
+      channels: input.channels.map((channel) => ({
+        appArchived: false,
+        archiveArtifactsNeeded: false,
+        archiveCloseMessageId: null,
+        archiveTranscriptMessageId: null,
+        raidLeadName: "Lead",
+        raidLeadDiscordUserId: null,
+        panelName: "Raid",
+        ...channel,
+      })),
       signups: input.signups,
       roster: input.roster,
       start: input.start ?? [],
@@ -502,6 +749,11 @@ function makeDiscordClient(
   let createSeq = 0;
   let setPositionsCalls = 0;
   const freshAfter = options.freshAppliesAfterSetPositionsCalls ?? 1;
+  /** Stable per-channel spies so refreshCache does not erase call history under assertion. */
+  const sendSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const setNameSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const setParentSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const messagesFetchSpies = new Map<string, ReturnType<typeof vi.fn>>();
 
   // Deep-cloneable state: cache vs server.
   const cacheChildren = children;
@@ -537,7 +789,63 @@ function makeDiscordClient(
   }
 
   function toDiscordChannel(child: Child, sendFails: boolean) {
-    let sendSeq = 0;
+    if (!sendSpies.has(child.id)) {
+      if (sendFails) {
+        sendSpies.set(child.id, vi.fn().mockRejectedValue(new Error("send failed")));
+      } else {
+        let seq = 0;
+        sendSpies.set(
+          child.id,
+          vi.fn().mockImplementation(async (payload?: { files?: Array<{ name?: string }> }) => {
+            seq += 1;
+            const attachments = new Collection<string, { url: string; name: string }>();
+            const fileName = payload?.files?.[0]?.name ?? "file.bin";
+            if (payload?.files?.length) {
+              attachments.set("att-1", {
+                url: `https://cdn.example/${fileName}`,
+                name: fileName,
+              });
+            }
+            return {
+              id: `msg-${child.id}-${seq}`,
+              channelId: child.id,
+              attachments,
+            };
+          }),
+        );
+      }
+    }
+    if (!setNameSpies.has(child.id)) {
+      setNameSpies.set(child.id, vi.fn().mockResolvedValue(undefined));
+    }
+    if (!setParentSpies.has(child.id)) {
+      setParentSpies.set(child.id, vi.fn().mockResolvedValue(undefined));
+    }
+    if (!messagesFetchSpies.has(child.id)) {
+      const history = new Collection<string, {
+        id: string;
+        createdTimestamp: number;
+        author: { id: string; username: string; displayName: string };
+        content: string;
+        embeds: Array<{ title?: string | null; description?: string | null }>;
+      }>();
+      history.set("hist-1", {
+        id: "hist-1",
+        createdTimestamp: Date.parse("2026-09-12T18:00:00.000Z"),
+        author: { id: "u1", username: "titan", displayName: "Titan", discriminator: "0" },
+        content: "hello archive",
+        embeds: [],
+      });
+      messagesFetchSpies.set(
+        child.id,
+        vi.fn().mockImplementation(async (arg?: string | { limit?: number; before?: string }) => {
+          if (typeof arg === "string") {
+            throw new Error("missing");
+          }
+          return history;
+        }),
+      );
+    }
     return {
       id: child.id,
       name: child.name,
@@ -545,16 +853,11 @@ function makeDiscordClient(
       position: child.position,
       type: child.type,
       isTextBased: () => true,
-      send: sendFails
-        ? vi.fn().mockRejectedValue(new Error("send failed"))
-        : vi.fn().mockImplementation(async () => {
-            sendSeq += 1;
-            return { id: `msg-${child.id}-${sendSeq}`, channelId: child.id };
-          }),
-      setName: vi.fn().mockResolvedValue(undefined),
-      setParent: vi.fn().mockResolvedValue(undefined),
+      send: sendSpies.get(child.id)!,
+      setName: setNameSpies.get(child.id)!,
+      setParent: setParentSpies.get(child.id)!,
       messages: {
-        fetch: vi.fn().mockRejectedValue(new Error("missing")),
+        fetch: messagesFetchSpies.get(child.id)!,
       },
     };
   }
@@ -629,9 +932,34 @@ function makeDiscordClient(
     },
     guilds: {
       fetch: vi.fn(async () => ({
+        id: GUILD_ID,
+        name: "Phoenix Star",
         emojis: {
           fetch: vi.fn(async () => undefined),
-          cache: new Collection(),
+          cache: new Collection([
+            [
+              "emoji-phoenix",
+              {
+                id: "emoji-phoenix",
+                name: "PhoenixStarDiscord",
+                toString: () => "<:PhoenixStarDiscord:emoji-phoenix>",
+              },
+            ],
+          ]),
+        },
+        roles: {
+          fetch: vi.fn(async () => {
+            return new Collection([
+              ["role-tank", { id: "role-tank", name: "tank", mentionable: true }],
+              ["role-healer", { id: "role-healer", name: "healer", mentionable: true }],
+              ["role-dps", { id: "role-dps", name: "dps", mentionable: true }],
+            ]);
+          }),
+          cache: new Collection([
+            ["role-tank", { id: "role-tank", name: "tank", mentionable: true }],
+            ["role-healer", { id: "role-healer", name: "healer", mentionable: true }],
+            ["role-dps", { id: "role-dps", name: "dps", mentionable: true }],
+          ]),
         },
         channels: {
           cache: guildChannelCache,

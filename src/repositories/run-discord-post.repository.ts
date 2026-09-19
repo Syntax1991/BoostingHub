@@ -15,6 +15,10 @@ export type RunDiscordPostRecord = {
   startChannelId: string | null;
   startMessageId: string | null;
   startPostedAt: string | null;
+  archiveCloseMessageId: string | null;
+  archiveTranscriptMessageId: string | null;
+  archiveTranscriptHtml: string | null;
+  archiveTranscriptFilename: string | null;
 };
 
 function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
@@ -32,6 +36,10 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     startChannelId: asStringOrNull(row.startChannelId),
     startMessageId: asStringOrNull(row.startMessageId),
     startPostedAt: asStringOrNull(row.startPostedAt),
+    archiveCloseMessageId: asStringOrNull(row.archiveCloseMessageId),
+    archiveTranscriptMessageId: asStringOrNull(row.archiveTranscriptMessageId),
+    archiveTranscriptHtml: asStringOrNull(row.archiveTranscriptHtml),
+    archiveTranscriptFilename: asStringOrNull(row.archiveTranscriptFilename),
   };
 }
 
@@ -99,6 +107,38 @@ export const runDiscordPostRepository = {
   async recordRunChannel(input: { runId: string; channelId: string }): Promise<void> {
     await upsert(input.runId, { runChannelId: input.channelId });
   },
+
+  /**
+   * Close/transcript Discord message ids plus the HTML body for website download.
+   * HTML is required so already-posted Discord artifacts can backfill without re-sending.
+   */
+  async recordArchiveArtifacts(input: {
+    runId: string;
+    archiveCloseMessageId: string;
+    archiveTranscriptMessageId: string;
+    archiveTranscriptHtml: string;
+    archiveTranscriptFilename: string;
+  }): Promise<void> {
+    await upsert(input.runId, {
+      archiveCloseMessageId: input.archiveCloseMessageId,
+      archiveTranscriptMessageId: input.archiveTranscriptMessageId,
+      archiveTranscriptHtml: input.archiveTranscriptHtml,
+      archiveTranscriptFilename: input.archiveTranscriptFilename,
+    });
+  },
+
+  /** Cleared on restore so a later re-archive can post artifacts again. */
+  async clearArchiveArtifacts(runId: string): Promise<void> {
+    const existing = await orm.RunDiscordPost.where({ runId }).first();
+    if (!existing) return;
+    await orm.RunDiscordPost.where({ runId }).update({
+      archiveCloseMessageId: null,
+      archiveTranscriptMessageId: null,
+      archiveTranscriptHtml: null,
+      archiveTranscriptFilename: null,
+      updatedAt: new Date().toISOString(),
+    });
+  },
 };
 
 async function upsert(runId: string, patch: Record<string, unknown>): Promise<void> {
@@ -123,6 +163,10 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
     startChannelId: null,
     startMessageId: null,
     startPostedAt: null,
+    archiveCloseMessageId: null,
+    archiveTranscriptMessageId: null,
+    archiveTranscriptHtml: null,
+    archiveTranscriptFilename: null,
     ...patch,
     createdAt: now,
     updatedAt: now,

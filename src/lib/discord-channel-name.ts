@@ -7,13 +7,13 @@ import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
  * `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`
  *
  * `coverage` comes from `projectRunContentDisplay(...).channelCoverage`
- * (e.g. `8of8` or `s2b-8of8`) — never from singular Run.plannedBossCount.
+ * (e.g. `8of8` or Bundle `9of9`) — never from singular Run.plannedBossCount.
  */
 export type RunChannelNameInput = {
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  /** Content-native coverage token (`8of8`, `s2b-6of8`, …). */
+  /** Content-native coverage token (`8of8`, `9of9`, …). */
   coverage: string;
   raidLeadName: string;
   timeZone?: string;
@@ -51,4 +51,16 @@ export function buildDiscordRunChannelName(input: RunChannelNameInput): string {
     (segment) => segment.length > 0,
   );
   return trimHyphens(segments.join("-")).slice(0, MAX_CHANNEL_NAME_LENGTH);
+}
+
+/**
+ * App-archive channel name: `closed-` + the live run-channel slug, still within
+ * Discord's 100-character limit (prefix reserved so the live slug is truncated).
+ */
+export function buildClosedDiscordRunChannelName(input: RunChannelNameInput): string {
+  const prefix = "closed-";
+  const live = buildDiscordRunChannelName(input);
+  const budget = MAX_CHANNEL_NAME_LENGTH - prefix.length;
+  const body = live.slice(0, budget).replace(/-+$/g, "");
+  return `${prefix}${body}`;
 }

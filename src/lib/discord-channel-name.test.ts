@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
+import { buildClosedDiscordRunChannelName, buildDiscordRunChannelName } from "@/lib/discord-channel-name";
 
 // 2026-09-12 20:00 UTC = Saturday 22:00 Europe/Berlin (CEST, UTC+2) during DST.
 const SATURDAY_2200_BERLIN = "2026-09-12T20:00:00.000Z";
@@ -73,24 +73,37 @@ describe("buildDiscordRunChannelName", () => {
     expect(name.endsWith("-")).toBe(false);
   });
 
-  it("encodes Season 2 Bundle coverage as s2b-Nof8, never 9of9", () => {
+  it("encodes Season 2 Bundle coverage as Nof9 without s2b prefix", () => {
     expect(
       buildDiscordRunChannelName({
         ...BASE,
-        coverage: "s2b-8of8",
+        coverage: "9of9",
       }),
-    ).toBe("sat-2200-hc-vip-s2b-8of8-titan");
+    ).toBe("sat-2200-hc-vip-9of9-titan");
     expect(
       buildDiscordRunChannelName({
         ...BASE,
-        coverage: "s2b-6of8",
+        coverage: "7of9",
       }),
-    ).toContain("s2b-6of8");
+    ).toContain("7of9");
     expect(
       buildDiscordRunChannelName({
         ...BASE,
-        coverage: "s2b-8of8",
+        coverage: "9of9",
       }),
-    ).not.toContain("9of9");
+    ).not.toContain("s2b");
+  });
+});
+
+describe("buildClosedDiscordRunChannelName", () => {
+  it("prefixes the live slug with closed-", () => {
+    expect(buildClosedDiscordRunChannelName(BASE)).toBe("closed-sat-2200-hc-vip-7of9-titan");
+  });
+
+  it("stays within Discord's 100-character limit", () => {
+    const name = buildClosedDiscordRunChannelName({ ...BASE, raidLeadName: "A".repeat(200) });
+    expect(name.startsWith("closed-")).toBe(true);
+    expect(name.length).toBeLessThanOrEqual(100);
+    expect(name.endsWith("-")).toBe(false);
   });
 });

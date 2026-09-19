@@ -31,26 +31,26 @@ describe("buildRunTitle", () => {
     ).toBe("Fri 18:45 NM Unsaved 6/8 Titan");
   });
 
-  it("formats Bundle titles with S2B coverage, never 9/9", () => {
+  it("formats Bundle titles with summed coverage (9/9), not S2B", () => {
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-12T21:00:00.000Z",
         difficulty: "MYTHIC",
         lootType: "VIP",
-        titleCoverage: "S2B 8/8",
+        titleCoverage: "9/9",
         raidLeadName: "Thorne",
       }),
-    ).toBe("Sat 23:00 MY VIP S2B 8/8 Thorne");
+    ).toBe("Sat 23:00 MY VIP 9/9 Thorne");
 
     expect(
       buildRunTitle({
         scheduledStartAt: "2026-09-13T18:00:00.000Z",
         difficulty: "HEROIC",
         lootType: "SAVED",
-        titleCoverage: "S2B 6/8",
+        titleCoverage: "7/9",
         raidLeadName: "Aelira",
       }),
-    ).toBe("Sun 20:00 HC Saved S2B 6/8 Aelira");
+    ).toBe("Sun 20:00 HC Saved 7/9 Aelira");
   });
 
   it("never renders MY Saved — MYTHIC always pairs with UNSAVED or VIP", () => {
@@ -77,7 +77,7 @@ describe("buildRunTitle", () => {
 });
 
 describe("projectRunContentDisplay coverage tokens", () => {
-  it("projects Venomous and Bundle coverage without summing bosses", () => {
+  it("projects Venomous as-is and Bundle as summed Nymrissa+VA coverage", () => {
     const venomous = projectRunContentDisplay([
       {
         raidId: VENOMOUS_ABYSS_RAID_ID,
@@ -106,10 +106,10 @@ describe("projectRunContentDisplay coverage tokens", () => {
         totalBossCount: 8,
       },
     ]);
-    expect(bundle.titleCoverage).toBe("S2B 6/8");
-    expect(bundle.channelCoverage).toBe("s2b-6of8");
+    expect(bundle.titleCoverage).toBe("7/9");
+    expect(bundle.channelCoverage).toBe("7of9");
     expect(bundle.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 6/8");
-    expect(bundle.titleCoverage).not.toMatch(/7\/9|9\/9/);
-    expect(bundle.channelCoverage).not.toMatch(/7of9|9of9/);
+    expect(bundle.titleCoverage).not.toMatch(/S2B|s2b/);
+    expect(bundle.channelCoverage).not.toMatch(/s2b/);
   });
 });

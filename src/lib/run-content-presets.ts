@@ -24,9 +24,9 @@ export type RunContentDisplay = {
   productLabel: string;
   summary: string;
   shortSummary: string;
-  /** Compact title coverage — e.g. `8/8` or `S2B 8/8`. Never a summed 9/9. */
+  /** Compact title coverage — e.g. `8/8` or Bundle `9/9` (summed planned/total). */
   titleCoverage: string;
-  /** Discord channel coverage token — e.g. `8of8` or `s2b-8of8`. Never `9of9` for Bundle. */
+  /** Discord channel coverage token — e.g. `8of8` or Bundle `9of9`. */
   channelCoverage: string;
 };
 
@@ -95,7 +95,8 @@ export function expandRunContentPreset(input: {
 
 /**
  * Coverage tokens for title / Discord channel naming from authoritative contents.
- * Bundle uses Venomous planned count only — Tidebound is implicit in the S2B token.
+ * Bundle sums Nymrissa + Venomous (e.g. full Bundle → `9/9` / `9of9`); the
+ * ordered content summary still lists each raid separately.
  */
 export function projectRunContentCoverage(
   contents: ReadonlyArray<{
@@ -109,13 +110,12 @@ export function projectRunContentCoverage(
   const productKey = classifyRunContents(ordered);
 
   if (productKey === "MIDNIGHT_S2_BUNDLE") {
-    const venomous = ordered.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID)!;
-    const planned = venomous.plannedBossCount;
-    const total = venomous.totalBossCount || 8;
+    const planned = ordered.reduce((sum, row) => sum + row.plannedBossCount, 0);
+    const total = ordered.reduce((sum, row) => sum + row.totalBossCount, 0);
     return {
       productKey,
-      titleCoverage: `S2B ${planned}/${total}`,
-      channelCoverage: `s2b-${planned}of${total}`,
+      titleCoverage: `${planned}/${total}`,
+      channelCoverage: `${planned}of${total}`,
     };
   }
 

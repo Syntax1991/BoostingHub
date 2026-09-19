@@ -189,43 +189,10 @@ Recommend an external tick of **~15 minutes** even though Characters only become
 
 The application still owns **no** timer. Installing an external scheduler (below) does not add `setInterval`, cron-inside-Next.js, or a Discord-bot loop — it only registers infrastructure that invokes the existing one-shot command.
 
-### Windows installation (Task Scheduler tooling)
-
-For Windows-hosted or local developer machines, this repository includes idempotent PowerShell helpers under `scripts/windows/`. They register a single task named **BoostingHub Character Sync** that runs every **15 minutes** and invokes `npm run sync:characters` with the repository root as the working directory.
-
-```powershell
-# From the repository root (path is derived by the scripts — not hardcoded)
-.\scripts\windows\install-character-sync-task.ps1
-.\scripts\windows\status-character-sync-task.ps1
-.\scripts\windows\run-character-sync-task.ps1            # manual one-shot (same as the task)
-.\scripts\windows\run-character-sync-task.ps1 -DryRun    # npm run sync:characters -- --dry-run
-.\scripts\windows\remove-character-sync-task.ps1
-```
-
-Optional npm aliases (Windows shells):
-
-```text
-npm run sync:characters:task:install
-npm run sync:characters:task:status
-npm run sync:characters:task:remove
-```
-
-Installer behavior:
-
-- Resolves `npm.cmd` via `Get-Command` (fails loudly if missing).
-- Runs a **dry-run** first; on failure it does **not** create/update the task.
-- Creates or updates the same named task (idempotent; no duplicates).
-- Stores **no** secrets, Windows passwords, or env vars in the task definition — the app loads `.env` as usual because the working directory is the repo root.
-- Appends a bounded local log at `.local/logs/character-sync.log` (gitignored).
-
-This Windows tooling is **not** the only production scheduling method. Prefer whatever your host already supports.
-
-### Manual Windows Task Scheduler (without the scripts)
-
-If you prefer the GUI:
+### Manual Windows Task Scheduler
 
 - **Program/script**: `powershell.exe`
-- **Add arguments**: `-NoProfile -ExecutionPolicy Bypass -File "C:\path\to\checkout\scripts\windows\run-character-sync-task.ps1"`
+- **Add arguments**: `-NoProfile -ExecutionPolicy Bypass -Command "cd 'C:\path\to\checkout'; npm run sync:characters"`
 - **Start in**: your local checkout root (must contain `package.json` and `.env`)
 - **Trigger**: repeat every **15 minutes** (not every 2 hours)
 

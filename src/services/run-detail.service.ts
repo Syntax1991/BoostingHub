@@ -24,6 +24,7 @@ import { rosterRepository } from "@/repositories/roster.repository";
 import { rosterService, type RosterManagementView } from "@/services/roster.service";
 import { signupService } from "@/services/signup.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 
 function toFinalSetupParticipant(signup: {
   userName: string;
@@ -160,6 +161,16 @@ export const runDetailService = {
     const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
     const payout = await payoutService.getPayoutView(user, runId);
     const startSnapshot = manage ? await runStartSnapshotRepository.findByRunId(runId) : null;
+    let archiveTranscript: { filename: string; downloadHref: string } | null = null;
+    if (manage) {
+      const discordPost = await runDiscordPostRepository.findByRunId(runId);
+      if (discordPost?.archiveTranscriptHtml) {
+        archiveTranscript = {
+          filename: discordPost.archiveTranscriptFilename ?? "transcript.html",
+          downloadHref: `/runs/${runId}/archive-transcript`,
+        };
+      }
+    }
 
     let finalSetupPreview: FinalSetupInput | null = null;
     if (manage && publishedRoster && run.status === "PUBLISHED") {
@@ -268,6 +279,7 @@ export const runDetailService = {
       publishedRoster,
       manager,
       startSnapshot,
+      archiveTranscript,
       finalSetupPreview,
       attendance: {
         own: ownAttendance,

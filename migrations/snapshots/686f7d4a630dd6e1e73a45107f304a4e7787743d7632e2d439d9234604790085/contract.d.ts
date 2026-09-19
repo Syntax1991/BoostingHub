@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'6226ed1c5c811c3b10b25e618f47db27972dc35fdba6a0a5b47992da49679406'>;
+  StorageHashBase<'686f7d4a630dd6e1e73a45107f304a4e7787743d7632e2d439d9234604790085'>;
 export type ExecutionHash =
   ExecutionHashBase<'b5c6546a0390593f96086a20925a8360dc178e073a03364e56e203b76bdc1cc0'>;
 export type ProfileHash =
@@ -449,8 +449,6 @@ export type FieldOutputTypes = {
       readonly startPostedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly archiveCloseMessageId: CodecTypes['pg/text@1']['output'] | null;
       readonly archiveTranscriptMessageId: CodecTypes['pg/text@1']['output'] | null;
-      readonly archiveTranscriptHtml: CodecTypes['pg/text@1']['output'] | null;
-      readonly archiveTranscriptFilename: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -844,8 +842,6 @@ export type FieldInputTypes = {
       readonly startPostedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly archiveCloseMessageId: CodecTypes['pg/text@1']['input'] | null;
       readonly archiveTranscriptMessageId: CodecTypes['pg/text@1']['input'] | null;
-      readonly archiveTranscriptHtml: CodecTypes['pg/text@1']['input'] | null;
-      readonly archiveTranscriptFilename: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1224,8 +1220,6 @@ export type StorageColumnTypes = {
     };
     readonly run_discord_post: {
       readonly archiveCloseMessageId: CodecTypes['pg/text@1']['output'] | null;
-      readonly archiveTranscriptFilename: CodecTypes['pg/text@1']['output'] | null;
-      readonly archiveTranscriptHtml: CodecTypes['pg/text@1']['output'] | null;
       readonly archiveTranscriptMessageId: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -1619,8 +1613,6 @@ export type StorageColumnInputTypes = {
     };
     readonly run_discord_post: {
       readonly archiveCloseMessageId: CodecTypes['pg/text@1']['input'] | null;
-      readonly archiveTranscriptFilename: CodecTypes['pg/text@1']['input'] | null;
-      readonly archiveTranscriptHtml: CodecTypes['pg/text@1']['input'] | null;
       readonly archiveTranscriptMessageId: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -3244,16 +3236,6 @@ type ContractBase = Omit<
                   readonly nullable: true;
                 };
                 readonly archiveTranscriptMessageId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly archiveTranscriptHtml: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly archiveTranscriptFilename: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
@@ -6379,14 +6361,6 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly archiveTranscriptHtml: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly archiveTranscriptFilename: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -6433,10 +6407,6 @@ type ContractBase = Omit<
                 readonly archiveCloseMessageId: { readonly column: 'archiveCloseMessageId' };
                 readonly archiveTranscriptMessageId: {
                   readonly column: 'archiveTranscriptMessageId';
-                };
-                readonly archiveTranscriptHtml: { readonly column: 'archiveTranscriptHtml' };
-                readonly archiveTranscriptFilename: {
-                  readonly column: 'archiveTranscriptFilename';
                 };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };

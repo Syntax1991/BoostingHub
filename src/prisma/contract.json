@@ -2731,6 +2731,34 @@
           },
           "RunDiscordPost": {
             "fields": {
+              "archiveCloseMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "archiveTranscriptFilename": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "archiveTranscriptHtml": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "archiveTranscriptMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -2863,6 +2891,18 @@
             },
             "storage": {
               "fields": {
+                "archiveCloseMessageId": {
+                  "column": "archiveCloseMessageId"
+                },
+                "archiveTranscriptFilename": {
+                  "column": "archiveTranscriptFilename"
+                },
+                "archiveTranscriptHtml": {
+                  "column": "archiveTranscriptHtml"
+                },
+                "archiveTranscriptMessageId": {
+                  "column": "archiveTranscriptMessageId"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -7396,6 +7436,26 @@
             },
             "run_discord_post": {
               "columns": {
+                "archiveCloseMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "archiveTranscriptFilename": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "archiveTranscriptHtml": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "archiveTranscriptMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -9743,7 +9803,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d80ac736e580edd515c8b300c2b6e6342ad510b70becf65871e06c68c45a7325"
+    "storageHash": "6226ed1c5c811c3b10b25e618f47db27972dc35fdba6a0a5b47992da49679406"
   },
   "execution": {
     "executionHash": "b5c6546a0390593f96086a20925a8360dc178e073a03364e56e203b76bdc1cc0",

@@ -160,7 +160,10 @@ describe("Discord Bundle content labels", () => {
     expect(embed.description).toContain("Season 2 Bundle");
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@111>");
-    expect(JSON.stringify(embed)).not.toContain("9/9");
+    expect(display.titleCoverage).toBe("9/9");
+    expect(display.channelCoverage).toBe("9of9");
+    // Embed keeps product label + per-raid summary elsewhere; compact 9/9 is title/channel only.
+    expect(embed.description).not.toMatch(/S2B|s2b/);
   });
 
   it("roster embed identifies Bundle once with content summary", () => {

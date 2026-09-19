@@ -1,5 +1,8 @@
 import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
-import { buildDiscordRunChannelName } from "@/lib/discord-channel-name";
+import {
+  buildClosedDiscordRunChannelName,
+  buildDiscordRunChannelName,
+} from "@/lib/discord-channel-name";
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
@@ -82,9 +85,9 @@ export type SignupEmbedData = {
   raidName: string;
   /** Commercial / classified product label (e.g. Season 2 Bundle). */
   productLabel: string;
-  /** Ordered content summary — never an aggregated 9/9. Kept for sync/signature; not shown on the signup embed. */
+  /** Ordered content summary — per-raid segments (e.g. Nymrissa 1/1 · VA 8/8). Kept for sync/signature; not shown on the signup embed. */
   contentSummary: string;
-  /** Compact title coverage from persisted contents (e.g. `8/8`, `S2B 8/8`). */
+  /** Compact title coverage from persisted contents (e.g. `8/8`, Bundle `9/9`). */
   titleCoverage: string;
   /** Raid Lead display name (always set). */
   raidLeadName: string;
@@ -179,6 +182,23 @@ export type ChannelSyncWorkItem = {
   targetBucket: DiscordRunChannelTarget;
   /** Needed by the bot's CURRENT/NEXT section position reconciliation to order channels chronologically — never used for week classification itself, which already happened above. */
   scheduledStartAt: string;
+  /** True only when `Run.archivedAt` is set — PAST/FUTURE ARCHIVE holding is false. */
+  appArchived: boolean;
+  /**
+   * App-archive only: bot should post Discord log artifacts and/or persist HTML
+   * for website download. False for schedule-based ARCHIVE holding and after
+   * message ids + HTML are recorded.
+   */
+  archiveArtifactsNeeded: boolean;
+  /** Already-posted Discord log message ids — when both set, bot skips re-send and only persists HTML. */
+  archiveCloseMessageId: string | null;
+  archiveTranscriptMessageId: string | null;
+  /** Raid Lead display name — Ticket Owner on the archive log embed. */
+  raidLeadName: string;
+  /** Raid Lead Discord snowflake when linked — used for <@id> mention. */
+  raidLeadDiscordUserId: string | null;
+  /** Product / panel label for the archive log embed (e.g. raid product name). */
+  panelName: string;
 };
 
 export type SignupSyncWorkItem = {
@@ -257,14 +277,17 @@ function desiredChannelNameFor(run: {
   lootType: RunLootType;
   raidLeadName: string;
   contentDisplay: { channelCoverage: string };
+  archivedAt?: string | null;
 }): string {
-  return buildDiscordRunChannelName({
+  const input = {
     scheduledStartAt: run.scheduledStartAt,
     difficulty: run.difficulty,
     lootType: run.lootType,
     coverage: run.contentDisplay.channelCoverage,
     raidLeadName: run.raidLeadName,
-  });
+  };
+  if (run.archivedAt) return buildClosedDiscordRunChannelName(input);
+  return buildDiscordRunChannelName(input);
 }
 
 /**
@@ -638,12 +661,25 @@ export const discordSyncService = {
       // (existingRunChannelId is only ever set once the signup path below
       // has already created one).
       if (post?.runChannelId) {
+        const appArchived = Boolean(run.archivedAt);
+        const archiveDiscordPosted = Boolean(
+          post.archiveCloseMessageId && post.archiveTranscriptMessageId,
+        );
+        const archiveArtifactsNeeded =
+          appArchived && (!archiveDiscordPosted || !post.archiveTranscriptHtml);
         channels.push({
           runId: run.id,
           existingRunChannelId: post.runChannelId,
           desiredChannelName: desiredChannelNameFor(run),
           targetBucket,
           scheduledStartAt: run.scheduledStartAt,
+          appArchived,
+          archiveArtifactsNeeded,
+          archiveCloseMessageId: post.archiveCloseMessageId,
+          archiveTranscriptMessageId: post.archiveTranscriptMessageId,
+          raidLeadName: run.raidLeadName,
+          raidLeadDiscordUserId: run.raidLeadDiscordUserId,
+          panelName: run.contentDisplay.productLabel,
         });
       }
 
@@ -862,5 +898,38 @@ export const discordSyncService = {
       startChannelId: input.channelId,
       startMessageId: input.messageId,
     });
+  },
+
+  async recordArchiveArtifacts(input: {
+    runId: string;
+    closeMessageId: string;
+    transcriptMessageId: string;
+    transcriptHtml: string;
+    transcriptFilename: string;
+  }): Promise<void> {
+    await runDiscordPostRepository.recordArchiveArtifacts({
+      runId: input.runId,
+      archiveCloseMessageId: input.closeMessageId,
+      archiveTranscriptMessageId: input.transcriptMessageId,
+      archiveTranscriptHtml: input.transcriptHtml,
+      archiveTranscriptFilename: input.transcriptFilename,
+    });
+  },
+
+  /** Website download payload — managers only; never returned on bot sync. */
+  async getArchiveTranscriptForDownload(runId: string): Promise<{
+    html: string;
+    filename: string;
+  } | null> {
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    if (!post?.archiveTranscriptHtml) return null;
+    return {
+      html: post.archiveTranscriptHtml,
+      filename: post.archiveTranscriptFilename ?? "transcript.html",
+    };
+  },
+
+  async clearArchiveArtifacts(runId: string): Promise<void> {
+    await runDiscordPostRepository.clearArchiveArtifacts(runId);
   },
 };

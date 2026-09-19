@@ -76,6 +76,13 @@ export class BotApiClient {
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
         scheduledStartAt: string;
+        appArchived: boolean;
+        archiveArtifactsNeeded: boolean;
+        archiveCloseMessageId: string | null;
+        archiveTranscriptMessageId: string | null;
+        raidLeadName: string;
+        raidLeadDiscordUserId: string | null;
+        panelName: string;
       }>;
       signups: Array<{
         runId: string;
@@ -128,7 +135,14 @@ export class BotApiClient {
           messageId: string;
           classEmojiFingerprint?: string;
         }
-      | { kind: "roster" | "start"; channelId: string; messageId: string },
+      | { kind: "roster" | "start"; channelId: string; messageId: string }
+      | {
+          kind: "archive-artifacts";
+          closeMessageId: string;
+          transcriptMessageId: string;
+          transcriptHtml: string;
+          transcriptFilename: string;
+        },
   ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
       method: "PUT",

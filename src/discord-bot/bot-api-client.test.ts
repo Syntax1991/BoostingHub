@@ -51,6 +51,13 @@ describe("BotApiClient", () => {
         desiredChannelName: "sat-2200-hc-lead",
         targetBucket: "CURRENT",
         scheduledStartAt: "2026-01-17T22:00:00.000Z",
+        appArchived: false,
+        archiveArtifactsNeeded: false,
+        archiveCloseMessageId: null,
+        archiveTranscriptMessageId: null,
+        raidLeadName: "Lead",
+        raidLeadDiscordUserId: null,
+        panelName: "Raid",
       },
     ];
     mockFetchOnce(200, { ok: true, data: { channels, signups: [], roster: [], start: [] } });

@@ -53,6 +53,7 @@ May manage any Run on the same `/runs/[runId]` route.
 ## Sections
 
 - **Header** — raid, difficulty, schedule, status, raid lead, signup window, compact composition, server-gated manager actions (edit / open / signup window / cancel / start / complete)
+- **Archive transcript** — managers only, when HTML was persisted on app-archive: download link to `/runs/[runId]/archive-transcript`
 - **Overview** — prepared summary DTO
 - **Signups** — own participation for USER; operational signup list for authorized managers
 - **Roster** — published roster for USER; existing `RosterBuilderView` for managers

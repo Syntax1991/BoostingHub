@@ -108,7 +108,7 @@ describe("run content classification + display", () => {
     ).toBe("CUSTOM");
   });
 
-  it("renders display summaries without 9/9 or 7/9", () => {
+  it("renders per-raid summaries and summed Bundle title/channel coverage", () => {
     const venomous = projectRunContentDisplay([
       {
         raidId: VENOMOUS_ABYSS_RAID_ID,
@@ -120,6 +120,8 @@ describe("run content classification + display", () => {
     ]);
     expect(venomous.productLabel).toBe("The Venomous Abyss");
     expect(venomous.summary).toBe("The Venomous Abyss 8/8");
+    expect(venomous.titleCoverage).toBe("8/8");
+    expect(venomous.channelCoverage).toBe("8of8");
 
     const bundle8 = projectRunContentDisplay([
       {
@@ -139,6 +141,8 @@ describe("run content classification + display", () => {
     ]);
     expect(bundle8.productLabel).toBe("Season 2 Bundle");
     expect(bundle8.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 8/8");
+    expect(bundle8.titleCoverage).toBe("9/9");
+    expect(bundle8.channelCoverage).toBe("9of9");
 
     const bundle6 = projectRunContentDisplay([
       {
@@ -157,6 +161,8 @@ describe("run content classification + display", () => {
       },
     ]);
     expect(bundle6.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 6/8");
+    expect(bundle6.titleCoverage).toBe("7/9");
+    expect(bundle6.channelCoverage).toBe("7of9");
 
     for (const display of [venomous, bundle8, bundle6]) {
       expect(display.summary).not.toContain("9/9");
