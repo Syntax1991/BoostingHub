@@ -84,8 +84,9 @@ export function summarizeTranscriptUsers(messages: TranscriptMessage[]): Transcr
 }
 
 /**
- * Plain-text Server-Info block posted (with the HTML attachment) to the archive log channel —
- * same shape Ticket Tool posts above the file.
+ * Ticket Tool–style Server-Info block posted (with the HTML attachment) to the
+ * archive log channel. Discord `xml` fence gives the dark code box and purple
+ * `<Server-Info>` highlight; body lines use two-space indent.
  */
 export function buildArchiveServerInfoContent(input: {
   serverName: string;
@@ -98,14 +99,15 @@ export function buildArchiveServerInfoContent(input: {
 }): string {
   const saved = input.attachmentsSaved ?? 0;
   const skipped = input.attachmentsSkipped ?? 0;
-  return [
+  const body = [
     "<Server-Info>",
-    `    Server: ${input.serverName} (${input.serverId})`,
-    `    Channel: ${input.channelName} (${input.channelId})`,
-    `    Messages: ${input.messageCount}`,
-    `    Attachments Saved: ${saved}`,
-    `    Attachments Skipped: ${skipped} (due maximum file size limits.)`,
+    `  Server: ${input.serverName} (${input.serverId})`,
+    `  Channel: ${input.channelName} (${input.channelId})`,
+    `  Messages: ${input.messageCount}`,
+    `  Attachments Saved: ${saved}`,
+    `  Attachments Skipped: ${skipped} (due maximum file size limits.)`,
   ].join("\n");
+  return ["```xml", body, "```"].join("\n");
 }
 
 function renderEmbeds(embeds: TranscriptEmbed[] | undefined): string {

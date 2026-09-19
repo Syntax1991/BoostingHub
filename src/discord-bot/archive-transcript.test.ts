@@ -38,12 +38,14 @@ describe("buildArchiveServerInfoContent", () => {
     });
     expect(text).toBe(
       [
+        "```xml",
         "<Server-Info>",
-        "    Server: Phoenix Star (1156899738508079134)",
-        "    Channel: closed-0337 (1549448946466951189)",
-        "    Messages: 21",
-        "    Attachments Saved: 0",
-        "    Attachments Skipped: 0 (due maximum file size limits.)",
+        "  Server: Phoenix Star (1156899738508079134)",
+        "  Channel: closed-0337 (1549448946466951189)",
+        "  Messages: 21",
+        "  Attachments Saved: 0",
+        "  Attachments Skipped: 0 (due maximum file size limits.)",
+        "```",
       ].join("\n"),
     );
   });
