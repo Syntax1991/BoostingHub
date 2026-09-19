@@ -287,16 +287,9 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     }
 
     if ((work.raidInvites ?? []).length > 0) {
-      let guildName = "Discord";
-      try {
-        const guild = await client.guilds.fetch(env.discordGuildId);
-        guildName = guild.name;
-      } catch (error) {
-        console.warn(`[discord-bot] failed to fetch guild name for raid invites`, error);
-      }
       for (const item of work.raidInvites ?? []) {
         try {
-          await syncRaidInvite(client, api, item, guildName);
+          await syncRaidInvite(client, api, item);
         } catch (error) {
           console.error(
             `[discord-bot] raid invite DM failed for signup ${item.signupId} on run ${item.runId}`,
@@ -730,7 +723,6 @@ async function syncRaidInvite(
   client: Client,
   api: BotApiClient,
   item: RaidInviteLaneItem,
-  guildName: string,
 ): Promise<void> {
   const content = buildRaidInviteMessage({
     productLabel: item.productLabel,
@@ -741,7 +733,6 @@ async function syncRaidInvite(
     selectedRole: item.selectedRole,
     characterName: item.characterName,
     wowClass: item.wowClass,
-    guildName,
     runChannelId: item.runChannelId,
   });
 

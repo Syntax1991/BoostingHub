@@ -238,7 +238,8 @@ export type RaidInviteWorkItem = {
   runId: string;
   signupId: string;
   discordUserId: string;
-  runChannelId: string;
+  /** Persisted RunDiscordPost.runChannelId — null when the Run has no dedicated channel yet. */
+  runChannelId: string | null;
   productLabel: string;
   scheduledStartAt: string;
   difficulty: RaidDifficulty;
@@ -764,11 +765,12 @@ export const discordSyncService = {
         }
       }
 
-      // Apex-style Raid Invite DMs: once a roster is published and the Run
-      // has a dedicated channel, each SELECTED participant with a linked
-      // Discord account gets one DM (new SELECTED only on republish).
-      if (run.roster?.publishedAt && post?.runChannelId && !run.archivedAt) {
-        const alreadySent = new Set(parseRaidInviteSentSignupIds(post.raidInviteSentSignupIds));
+      // Apex-style Raid Invite DMs: once a roster is published, each SELECTED
+      // participant with a linked Discord account gets one DM (new SELECTED
+      // only on republish). Channel id is optional — the DM omits the Channel
+      // line when RunDiscordPost.runChannelId is not yet set.
+      if (run.roster?.publishedAt && !run.archivedAt) {
+        const alreadySent = new Set(parseRaidInviteSentSignupIds(post?.raidInviteSentSignupIds ?? null));
         const signupRows = await rosterRepository.listSignups(run.id);
         for (const row of signupRows) {
           if (row.status !== "SELECTED") continue;
@@ -782,7 +784,7 @@ export const discordSyncService = {
             runId: run.id,
             signupId: row.id,
             discordUserId: row.discordUserId,
-            runChannelId: post.runChannelId,
+            runChannelId: post?.runChannelId ?? null,
             productLabel: run.contentDisplay.productLabel,
             scheduledStartAt: run.scheduledStartAt,
             difficulty: run.difficulty,

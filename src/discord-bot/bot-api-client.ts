@@ -114,7 +114,7 @@ export class BotApiClient {
         runId: string;
         signupId: string;
         discordUserId: string;
-        runChannelId: string;
+        runChannelId: string | null;
         productLabel: string;
         scheduledStartAt: string;
         difficulty: "NORMAL" | "HEROIC" | "MYTHIC";

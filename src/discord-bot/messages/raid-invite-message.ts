@@ -3,7 +3,6 @@ import {
   CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
   DIFFICULTY_LABELS,
-  RUN_LOOT_TYPE_LABELS,
 } from "@/lib/labels";
 import type { CharacterRole, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
 
@@ -16,11 +15,11 @@ export type RaidInviteMessageInput = {
   selectedRole: CharacterRole | null;
   characterName: string | null;
   wowClass: WowClass | null;
-  guildName: string;
-  runChannelId: string;
+  /** Persisted `RunDiscordPost.runChannelId` — omit Channel line when null/empty. */
+  runChannelId: string | null;
 };
 
-/** Apex-style `16/09/2026 15:30` in Europe/Berlin. */
+/** `16/09/2026 15:30` in Europe/Berlin. */
 export function formatRaidInviteSchedule(scheduledStartAt: string): string {
   const parts = zonedParts(new Date(scheduledStartAt), "Europe/Berlin");
   const dd = String(parts.day).padStart(2, "0");
@@ -31,9 +30,10 @@ export function formatRaidInviteSchedule(scheduledStartAt: string): string {
 }
 
 /**
- * Assignment line body (without the `Assignment:` prefix / outer bold).
- * BOOSTER: `Healer - Synmist (Monk) VIP`
- * LOOTBUDDY: `Lootbuddy - (Monk) VIP` or `Lootbuddy - VIP` when class unknown.
+ * Assignment line body (without the `Assignment:` prefix).
+ * BOOSTER VIP: `Healer · Synmist (Monk) · VIP`
+ * BOOSTER non-VIP: `Healer · Synmist (Monk)` (no VIP marker)
+ * LOOTBUDDY VIP: `Lootbuddy · (Monk) · VIP`
  */
 export function formatRaidInviteAssignment(input: {
   participationType: "BOOSTER" | "LOOTBUDDY";
@@ -42,34 +42,43 @@ export function formatRaidInviteAssignment(input: {
   wowClass: WowClass | null;
   lootType: RunLootType;
 }): string {
-  const lootTag = RUN_LOOT_TYPE_LABELS[input.lootType];
   const classLabel = input.wowClass ? CLASS_LABELS[input.wowClass] : null;
+  const vipSuffix = input.lootType === "VIP" ? " · VIP" : "";
 
   if (input.participationType === "LOOTBUDDY") {
-    if (classLabel) return `Lootbuddy - (${classLabel}) ${lootTag}`;
-    return `Lootbuddy - ${lootTag}`;
+    if (classLabel) return `Lootbuddy · (${classLabel})${vipSuffix}`;
+    return `Lootbuddy${vipSuffix}`;
   }
 
   const roleLabel = input.selectedRole ? CHARACTER_ROLE_LABELS[input.selectedRole] : "Booster";
   const name = input.characterName?.trim() || "Unknown";
-  if (classLabel) return `${roleLabel} - ${name} (${classLabel}) ${lootTag}`;
-  return `${roleLabel} - ${name} ${lootTag}`;
+  if (classLabel) return `${roleLabel} · ${name} (${classLabel})${vipSuffix}`;
+  return `${roleLabel} · ${name}${vipSuffix}`;
 }
 
 /**
- * Plain-text Apex-style Raid Invite DM content.
+ * Raid Invite DM body. Channel line uses a real `<#id>` mention only when
+ * `runChannelId` is set — never invents `#unknown` / guild prefixes.
  */
 export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
   const when = formatRaidInviteSchedule(input.scheduledStartAt);
   const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
-  const lootHeader = input.lootType.toLowerCase();
   const assignment = formatRaidInviteAssignment(input);
+  const channelId = input.runChannelId?.trim() || null;
 
-  return [
-    "📢 **Raid Invite**",
-    `**${input.productLabel}** - ${when} - ${difficulty} - ${lootHeader}`,
-    `Assignment: **${assignment}**`,
-    `Channel: ${input.guildName} · <#${input.runChannelId}>`,
-    "Please be online 10 minutes before start.",
-  ].join("\n");
+  const lines = [
+    "📣 **Raid Invite**",
+    "",
+    input.productLabel,
+    `${when} · ${difficulty}`,
+    "",
+    `Assignment: ${assignment}`,
+  ];
+
+  if (channelId) {
+    lines.push(`Channel: <#${channelId}>`);
+  }
+
+  lines.push("", "Please be online 10 minutes before start.");
+  return lines.join("\n");
 }

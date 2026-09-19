@@ -6,14 +6,14 @@ import {
 } from "@/discord-bot/messages/raid-invite-message";
 
 describe("formatRaidInviteSchedule", () => {
-  it("formats Europe/Berlin as DD/MM/YYYY HH:mm like Apex", () => {
+  it("formats Europe/Berlin as DD/MM/YYYY HH:mm", () => {
     // 2026-09-16 13:30 UTC = 15:30 CEST
     expect(formatRaidInviteSchedule("2026-09-16T13:30:00.000Z")).toBe("16/09/2026 15:30");
   });
 });
 
 describe("formatRaidInviteAssignment", () => {
-  it("matches Apex booster layout", () => {
+  it("shows VIP once on VIP booster assignment", () => {
     expect(
       formatRaidInviteAssignment({
         participationType: "BOOSTER",
@@ -22,10 +22,31 @@ describe("formatRaidInviteAssignment", () => {
         wowClass: "MONK",
         lootType: "VIP",
       }),
-    ).toBe("Healer - Synmist (Monk) VIP");
+    ).toBe("Healer · Synmist (Monk) · VIP");
   });
 
-  it("formats lootbuddy with class", () => {
+  it("omits VIP marker for non-VIP booster assignment", () => {
+    expect(
+      formatRaidInviteAssignment({
+        participationType: "BOOSTER",
+        selectedRole: "TANK",
+        characterName: "Synblast",
+        wowClass: "WARRIOR",
+        lootType: "SAVED",
+      }),
+    ).toBe("Tank · Synblast (Warrior)");
+    expect(
+      formatRaidInviteAssignment({
+        participationType: "BOOSTER",
+        selectedRole: "DPS",
+        characterName: "Synvoid",
+        wowClass: "MAGE",
+        lootType: "UNSAVED",
+      }),
+    ).not.toMatch(/VIP/i);
+  });
+
+  it("formats lootbuddy VIP with class", () => {
     expect(
       formatRaidInviteAssignment({
         participationType: "LOOTBUDDY",
@@ -34,12 +55,12 @@ describe("formatRaidInviteAssignment", () => {
         wowClass: "MONK",
         lootType: "VIP",
       }),
-    ).toBe("Lootbuddy - (Monk) VIP");
+    ).toBe("Lootbuddy · (Monk) · VIP");
   });
 });
 
 describe("buildRaidInviteMessage", () => {
-  it("builds the full Apex-style DM body", () => {
+  it("renders a real Discord channel mention when runChannelId exists", () => {
     const text = buildRaidInviteMessage({
       productLabel: "Venom & Tide",
       scheduledStartAt: "2026-09-16T13:30:00.000Z",
@@ -49,18 +70,61 @@ describe("buildRaidInviteMessage", () => {
       selectedRole: "HEALER",
       characterName: "Synmist",
       wowClass: "MONK",
-      guildName: "Phoenix Star",
       runChannelId: "1550000000000000001",
     });
 
     expect(text).toBe(
       [
-        "📢 **Raid Invite**",
-        "**Venom & Tide** - 16/09/2026 15:30 - HEROIC - vip",
-        "Assignment: **Healer - Synmist (Monk) VIP**",
-        "Channel: Phoenix Star · <#1550000000000000001>",
+        "📣 **Raid Invite**",
+        "",
+        "Venom & Tide",
+        "16/09/2026 15:30 · HEROIC",
+        "",
+        "Assignment: Healer · Synmist (Monk) · VIP",
+        "Channel: <#1550000000000000001>",
+        "",
         "Please be online 10 minutes before start.",
       ].join("\n"),
     );
+    expect(text).toContain("<#1550000000000000001>");
+    expect(text).not.toMatch(/unknown/i);
+    expect(text).not.toMatch(/ - vip/i);
+    expect((text.match(/VIP/g) ?? []).length).toBe(1);
+  });
+
+  it("omits the Channel line when runChannelId is missing", () => {
+    const text = buildRaidInviteMessage({
+      productLabel: "Venom & Tide",
+      scheduledStartAt: "2026-09-16T13:30:00.000Z",
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      participationType: "BOOSTER",
+      selectedRole: "HEALER",
+      characterName: "Synmist",
+      wowClass: "MONK",
+      runChannelId: null,
+    });
+
+    expect(text).not.toContain("Channel:");
+    expect(text).not.toMatch(/unknown/i);
+    expect(text).not.toContain("<#");
+    expect(text).toContain("Please be online 10 minutes before start.");
+  });
+
+  it("omits Channel line for blank runChannelId and never invents #name", () => {
+    const text = buildRaidInviteMessage({
+      productLabel: "Raid",
+      scheduledStartAt: "2026-09-16T13:30:00.000Z",
+      difficulty: "NORMAL",
+      lootType: "UNSAVED",
+      participationType: "BOOSTER",
+      selectedRole: "DPS",
+      characterName: "Bob",
+      wowClass: "HUNTER",
+      runChannelId: "   ",
+    });
+    expect(text).not.toContain("Channel:");
+    expect(text).not.toMatch(/#\s*unknown/i);
+    expect(text).not.toMatch(/VIP/i);
   });
 });

@@ -544,7 +544,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
 });
 
 describe("syncOnce — Apex-style Raid Invite DMs", () => {
-  it("DMs each pending invite once and records raid-invite state", async () => {
+  it("DMs each pending invite once with a real channel mention and records raid-invite state", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
@@ -587,12 +587,58 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
 
     expect(sendDm).toHaveBeenCalledTimes(1);
     const content = sendDm.mock.calls[0][0].content as string;
-    expect(content).toContain("📢 **Raid Invite**");
-    expect(content).toContain("Healer - Synmist (Monk) VIP");
-    expect(content).toContain("<#run-chan>");
+    expect(content).toContain("📣 **Raid Invite**");
+    expect(content).toContain("Healer · Synmist (Monk) · VIP");
+    expect(content).toContain("Channel: <#run-chan>");
+    expect(content).not.toMatch(/unknown/i);
+    expect((content.match(/VIP/g) ?? []).length).toBe(1);
+    expect(content).toContain("Please be online 10 minutes before start.");
     expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", {
       kind: "raid-invite",
       signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+    });
+  });
+
+  it("still records raid-invite when Discord rejects the DM (closed DMs)", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockRejectedValue({ code: 50007, message: "Cannot send messages to this user" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-2", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [
+        {
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+          discordUserId: "discord-user-2",
+          runChannelId: null,
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+          characterName: "Synmist",
+          wowClass: "MONK",
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", {
+      kind: "raid-invite",
+      signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
     });
   });
 });
