@@ -4,7 +4,7 @@
 
 Blizzard profile data and current-raid lockouts on an already-linked Character drift out of date between manual refreshes. This feature adds an automatic background refresh for stale, active, Blizzard-linked Characters — without the app owning a recurring timer.
 
-It reuses the exact same lower-level refresh logic as manual "Refresh" / "Refresh All" (`character-blizzard-sync.service.ts`): profile fetch/validate/apply, optional Raider.IO equipped-ilvl raise when higher than Blizzard, current-raid lockout sync, identity/realm-transfer safety checks, and the "missing item level never clears the existing one" guarantee. This feature only adds the *orchestration* around calling that logic for many Characters, globally, on a schedule it does not itself keep.
+It reuses the exact same lower-level refresh logic as manual "Refresh" / "Refresh All" (`character-blizzard-sync.service.ts`): profile fetch/validate/apply, optional Raider.IO equipped-ilvl raise when higher than Blizzard, monotonic item-level (never decreases below the stored peak), current-raid lockout sync, identity/realm-transfer safety checks, and the "missing item level never clears the existing one" guarantee. This feature only adds the *orchestration* around calling that logic for many Characters, globally, on a schedule it does not itself keep.
 
 ## One-shot architecture — no internal timer
 

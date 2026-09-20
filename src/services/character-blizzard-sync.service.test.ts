@@ -360,6 +360,30 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     expect(failed.itemLevel).toBe(320);
   });
 
+  it("keeps a higher stored itemLevel when Blizzard/RIO report a lower equipped value", async () => {
+    const { owned, characterId } = await importLinkedShaman("300034", "Bnratchet");
+
+    await orm.Character.where({ id: characterId }).update({
+      itemLevel: 312,
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 272,
+    });
+    raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({
+      status: "SUCCESS",
+      equippedItemLevel: 272,
+    });
+
+    const refreshed = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(refreshed.itemLevel).toBe(312);
+  });
+
   it("retains the last known itemLevel when Blizzard omits it on an otherwise valid refresh", async () => {
     const { owned, characterId } = await importLinkedShaman("300033", "Bnretain");
 

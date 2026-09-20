@@ -19,6 +19,7 @@ import { lockoutRepository } from "@/repositories/lockout.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { resolveMonotonicItemLevel } from "@/lib/character-item-level";
 import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-io-ilvl";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 
@@ -63,6 +64,7 @@ export type SyncableCharacter = {
   normalizedName: string;
   normalizedRealm: string;
   wowClass: string;
+  itemLevel: number | null;
   blizzardCharacterId: string | null;
   blizzardRealmId: string | null;
 };
@@ -223,16 +225,26 @@ export async function refreshLinkedCharacterProfile(
   }
 
   // Missing item level does not fail the refresh: identity/name/lockout sync
-  // still proceed, and the character's last known item level is retained
-  // rather than cleared to null or a 0 sentinel.
+  // still proceed. Observed equipped may be lower than a prior peak (e.g.
+  // weapons temporarily unequipped) — never write a lower itemLevel than
+  // already stored. Soft Raider.IO enrichment may raise the incoming value.
   const syncedAt = new Date().toISOString();
   const blizzardEquippedItemLevel =
     typeof summary.equippedItemLevel === "number" ? summary.equippedItemLevel : null;
+  const raiderIoItemLevel = await resolveRaiderIoItemLevelEnrichment({
+    name: nextName,
+    realm: character.realm,
+    region: character.region,
+    blizzardEquippedItemLevel,
+  });
+  const incomingItemLevel = raiderIoItemLevel ?? blizzardEquippedItemLevel;
+  const itemLevel = resolveMonotonicItemLevel(character.itemLevel, incomingItemLevel);
+
   try {
     await characterRepository.applyBlizzardSync(character.id, {
       name: nextName,
       normalizedName: nextNormalizedName,
-      ...(blizzardEquippedItemLevel != null ? { itemLevel: blizzardEquippedItemLevel } : {}),
+      ...(itemLevel != null ? { itemLevel } : {}),
       lastSyncedAt: syncedAt,
     });
   } catch (error) {
@@ -243,23 +255,6 @@ export async function refreshLinkedCharacterProfile(
       );
     }
     throw error;
-  }
-
-  // Soft enrichment: Raider.IO may report a fresher equipped ilvl than Blizzard.
-  // Never fails the refresh; never touches specialization/primaryRole.
-  const raiderIoItemLevel = await resolveRaiderIoItemLevelEnrichment({
-    name: nextName,
-    realm: character.realm,
-    region: character.region,
-    blizzardEquippedItemLevel,
-  });
-  if (raiderIoItemLevel != null) {
-    await characterRepository.applyBlizzardSync(character.id, {
-      name: nextName,
-      normalizedName: nextNormalizedName,
-      itemLevel: raiderIoItemLevel,
-      lastSyncedAt: syncedAt,
-    });
   }
 
   const lockoutSynced = await syncCurrentRaidLockoutsFromBlizzard({

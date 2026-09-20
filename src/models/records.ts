@@ -93,6 +93,7 @@ export type ScheduledCharacterSyncCandidate = {
     normalizedName: string;
     normalizedRealm: string;
     wowClass: WowClass;
+    itemLevel: number | null;
     blizzardCharacterId: string;
     blizzardRealmId: string;
     lastSyncedAt: string | null;

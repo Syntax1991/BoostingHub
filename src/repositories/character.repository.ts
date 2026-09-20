@@ -418,6 +418,7 @@ export const characterRepository = {
           normalizedName: asString(record.normalizedName),
           normalizedRealm: asString(record.normalizedRealm),
           wowClass: mapWowClass(record.wowClass),
+          itemLevel: asNumberOrNull(record.itemLevel),
           blizzardCharacterId: asString(record.blizzardCharacterId),
           blizzardRealmId: asString(record.blizzardRealmId),
           lastSyncedAt: asStringOrNull(record.lastSyncedAt),
