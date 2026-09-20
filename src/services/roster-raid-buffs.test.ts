@@ -230,7 +230,9 @@ describe("evaluateRaidBuffCoverage", () => {
       { wowClass: "EVOKER", buffIds: ["BLESSING_OF_THE_BRONZE"] },
       { wowClass: "DEMON_HUNTER", buffIds: ["CHAOS_BRAND"] },
       { wowClass: "MONK", buffIds: ["MYSTIC_TOUCH"] },
+      { wowClass: "HUNTER", buffIds: ["HUNTERS_MARK"] },
       { wowClass: "WARLOCK", buffIds: ["HEALTHSTONE", "SOULSTONE", "DEMONIC_GATEWAY"] },
+      { wowClass: "DEATH_KNIGHT", buffIds: ["RAISE_ALLY", "DEATH_GRIP"] },
     ];
 
     for (const { wowClass, buffIds } of matrix) {
@@ -263,11 +265,27 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(warlock?.covered).toBe(true);
     expect(warlock?.buffIds).toEqual(["HEALTHSTONE", "SOULSTONE", "DEMONIC_GATEWAY"]);
     expect(summary.coveredCount).toBe(1);
-    expect(summary.totalCount).toBe(10);
+    expect(summary.totalCount).toBe(12);
+  });
+
+  it("class summary includes Hunter and Death Knight", () => {
+    const summary = summarizeRaidBuffCoverageByClass(
+      evaluateRaidBuffCoverage([
+        participant({ signupId: "hunt", wowClass: "HUNTER" }),
+        participant({ signupId: "dk", wowClass: "DEATH_KNIGHT" }),
+      ]),
+    );
+    expect(summary.classes.find((row) => row.wowClass === "HUNTER")?.covered).toBe(true);
+    expect(summary.classes.find((row) => row.wowClass === "DEATH_KNIGHT")?.covered).toBe(true);
+    expect(summary.classes.find((row) => row.wowClass === "DEATH_KNIGHT")?.buffIds).toEqual([
+      "RAISE_ALLY",
+      "DEATH_GRIP",
+    ]);
+    expect(summary.coveredCount).toBe(2);
   });
 
   it("classes without a tracked buff cover nothing", () => {
-    for (const wowClass of ["HUNTER", "ROGUE", "DEATH_KNIGHT"] as WowClass[]) {
+    for (const wowClass of ["ROGUE"] as WowClass[]) {
       expect(evaluateRaidBuffCoverage([participant({ signupId: wowClass, wowClass })]).coveredCount).toBe(0);
     }
   });

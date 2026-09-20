@@ -95,7 +95,7 @@ Derived composition helper on the Roster Builder (informational — never a publ
 - **Meaning:** class *availability* in the selected composition — not live aura cast / talent verification.
 - **No persistence:** coverage is computed by `evaluateRaidBuffCoverage` in `roster-raid-buffs.ts`. No coverage tables or stored counts.
 
-Tracked set (Midnight Season 2): Arcane Intellect, Power Word: Fortitude, Battle Shout, Mark of the Wild, Skyfury, Devotion Aura, Blessing of the Bronze, Chaos Brand, Mystic Touch, plus Warlock utilities Healthstone, Soulstone, and Demonic Gateway. The roster UI lists **provider classes** (Mage, Priest, Warlock, …), not buff spell names — one Warlock covers all three Warlock utilities as a single tile.
+Tracked set (Midnight Season 2): Arcane Intellect, Power Word: Fortitude, Battle Shout, Mark of the Wild, Skyfury, Devotion Aura, Blessing of the Bronze, Chaos Brand, Mystic Touch, Hunter's Mark, plus Warlock utilities Healthstone / Soulstone / Demonic Gateway, plus Death Knight utilities Raise Ally / Death Grip. The roster UI lists **provider classes** (Mage, Priest, Hunter, Warlock, Death Knight, …), not buff spell names — one Warlock or Death Knight covers all of that class's tracked utilities as a single tile. Rogue remains untracked (no composition buff/utility in this set).
 
 ## Validation
 

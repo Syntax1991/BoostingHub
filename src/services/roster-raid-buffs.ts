@@ -22,9 +22,12 @@ export const RAID_BUFF_IDS = [
   "BLESSING_OF_THE_BRONZE",
   "CHAOS_BRAND",
   "MYSTIC_TOUCH",
+  "HUNTERS_MARK",
   "HEALTHSTONE",
   "SOULSTONE",
   "DEMONIC_GATEWAY",
+  "RAISE_ALLY",
+  "DEATH_GRIP",
 ] as const;
 export type RaidBuffId = (typeof RAID_BUFF_IDS)[number];
 
@@ -50,10 +53,14 @@ export const RAID_BUFF_DEFINITIONS: readonly RaidBuffDefinition[] = [
   { id: "BLESSING_OF_THE_BRONZE", name: "Blessing of the Bronze", kind: "BUFF", providerClasses: ["EVOKER"] },
   { id: "CHAOS_BRAND", name: "Chaos Brand", kind: "DEBUFF", providerClasses: ["DEMON_HUNTER"] },
   { id: "MYSTIC_TOUCH", name: "Mystic Touch", kind: "DEBUFF", providerClasses: ["MONK"] },
+  { id: "HUNTERS_MARK", name: "Hunter's Mark", kind: "DEBUFF", providerClasses: ["HUNTER"] },
   /** Warlock has no throughput raid buff — track the three composition utilities. */
   { id: "HEALTHSTONE", name: "Healthstone", kind: "BUFF", providerClasses: ["WARLOCK"] },
   { id: "SOULSTONE", name: "Soulstone", kind: "BUFF", providerClasses: ["WARLOCK"] },
   { id: "DEMONIC_GATEWAY", name: "Demonic Gateway", kind: "BUFF", providerClasses: ["WARLOCK"] },
+  /** Death Knight has no throughput raid buff — track battle rez + grip utility. */
+  { id: "RAISE_ALLY", name: "Raise Ally", kind: "BUFF", providerClasses: ["DEATH_KNIGHT"] },
+  { id: "DEATH_GRIP", name: "Death Grip", kind: "BUFF", providerClasses: ["DEATH_KNIGHT"] },
 ] as const;
 
 export type RaidBuffParticipant = {
