@@ -279,3 +279,68 @@ describe("warcraftLogsApiClient", () => {
     expect(tokenCalls).toHaveLength(1);
   });
 });
+
+describe("warcraftLogsApiClient.fetchZoneRankings", () => {
+  it("returns best and median averages for a character zone query", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: "tok", expires_in: 3600, token_type: "Bearer" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            characterData: {
+              character: {
+                zoneRankings: {
+                  bestPerformanceAverage: 92.4,
+                  medianPerformanceAverage: 71.1,
+                },
+              },
+            },
+          },
+        }),
+      );
+
+    const result = await warcraftLogsApiClient.fetchZoneRankings({
+      warcraftLogsId: "424242",
+      zoneId: 53,
+      difficulty: 4,
+      metric: "dps",
+    });
+
+    expect(result).toEqual({
+      status: "SUCCESS",
+      rankings: {
+        bestPerformanceAverage: 92.4,
+        medianPerformanceAverage: 71.1,
+      },
+    });
+  });
+
+  it("returns NOT_FOUND when both averages are null", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: "tok", expires_in: 3600, token_type: "Bearer" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            characterData: {
+              character: {
+                zoneRankings: {
+                  bestPerformanceAverage: null,
+                  medianPerformanceAverage: null,
+                },
+              },
+            },
+          },
+        }),
+      );
+
+    const result = await warcraftLogsApiClient.fetchZoneRankings({
+      warcraftLogsId: "1",
+      zoneId: 53,
+      difficulty: 4,
+      metric: "hps",
+      role: "Healer",
+      encounterId: 3379,
+    });
+    expect(result.status).toBe("NOT_FOUND");
+  });
+});

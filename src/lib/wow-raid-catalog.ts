@@ -22,6 +22,14 @@ export type WowRaidCatalogEntry = {
   season: string;
   /** Blizzard journal instance id (`instance.id` on Character Raid Encounters). */
   blizzardInstanceId: number;
+  /**
+   * Warcraft Logs zone id for roster Best/Avg percentiles.
+   * Midnight S2: Venomous Abyss and Nymrissa share WCL zone 53; Nymrissa is
+   * encounter-scoped via `warcraftLogsEncounterId`.
+   */
+  warcraftLogsZoneId?: number;
+  /** When set, rankings are scoped to this WCL encounter within `warcraftLogsZoneId`. */
+  warcraftLogsEncounterId?: number;
   /** Explicit: Blizzard lockout refresh derives this raid. */
   currentForLockouts: boolean;
   /** When true, `ensureReferenceRaids` marks the Raid active for Run creation. */
@@ -43,6 +51,11 @@ export const VENOMOUS_ABYSS_RAID_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 export const TIDEBOUND_GROTTO_RAID_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 export const NYMRISSA_WAVECALLER_BOSS_ID = "cc000001-cccc-4ccc-8ccc-cccccccccccc";
+
+/** WCL zone id for Midnight Season 2 Venomous Abyss rankings (includes bundled Nymrissa). */
+export const VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID = 53;
+/** WCL encounter id for Nymrissa Wavecaller within zone 53. */
+export const NYMRISSA_WARCRAFT_LOGS_ENCOUNTER_ID = 3379;
 
 export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   {
@@ -114,6 +127,7 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     season: "Midnight Season 2",
     // Live EU Character Raid Encounters instance.id (de_DE: Der Giftige Abgrund).
     blizzardInstanceId: 1320,
+    warcraftLogsZoneId: VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID,
     currentForLockouts: true,
     availableForRuns: true,
     bosses: [
@@ -173,6 +187,9 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     season: "Midnight Season 2",
     // Verified Battle.net journal-instance id (en_US: The Tidebound Grotto).
     blizzardInstanceId: 1317,
+    // Nymrissa is bundled under Venomous Abyss on WCL — encounter-scoped rankings.
+    warcraftLogsZoneId: VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID,
+    warcraftLogsEncounterId: NYMRISSA_WARCRAFT_LOGS_ENCOUNTER_ID,
     currentForLockouts: true,
     // Real raid identity for Bundle RunRaidContent — not a standalone Create product.
     availableForRuns: false,

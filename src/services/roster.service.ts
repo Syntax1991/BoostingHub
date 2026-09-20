@@ -32,6 +32,10 @@ import {
   type RunContentRaidSaveInfo,
 } from "@/lib/run-content-lockouts";
 import type { RunRaidContentRecord } from "@/repositories/run.repository";
+import {
+  resolveRosterWclPerformance,
+  type WclPerformanceRaidSegment,
+} from "@/services/character-wcl-performance.service";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 
@@ -44,6 +48,8 @@ type InspectedSignup = RosterSignupRow & {
   issue: string | null;
   /** Derived schedule integrity conflicts — never auto-withdraw or auto-deselect. */
   scheduleConflicts: CharacterScheduleConflict[];
+  /** Informational WCL Best/Avg per Run content × offered role. */
+  wclPerformance: WclPerformanceRaidSegment[];
 };
 
 /**
@@ -144,7 +150,7 @@ function inspectSignup(
     lootType: RunLootType;
     contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
   },
-): Omit<InspectedSignup, "draftSelected" | "scheduleConflicts"> {
+): Omit<InspectedSignup, "draftSelected" | "scheduleConflicts" | "wclPerformance"> {
   if (run.contents.length === 0) {
     throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
   }
@@ -334,6 +340,24 @@ export const rosterService = {
       difficulty: run.difficulty,
       characters: boosterCharacters,
     });
+
+    const wclBySignup = await resolveRosterWclPerformance({
+      difficulty: run.difficulty,
+      contents: run.contents,
+      boosters: signups
+        .filter((signup) => signup.participationType === "BOOSTER" && signup.character)
+        .map((signup) => ({
+          signupId: signup.id,
+          offeredRoles: signup.offeredRoles,
+          character: {
+            id: signup.character!.id,
+            wowClass: signup.character!.wowClass,
+            specialization: signup.character!.specialization,
+            warcraftLogsId: signup.character!.warcraftLogsId,
+          },
+        })),
+    });
+
     const inspected = signups.map((signup) => ({
       ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
@@ -341,6 +365,7 @@ export const rosterService = {
         signup.participationType === "BOOSTER" && signup.character
           ? (scheduleConflictsByCharacter.get(signup.character.id) ?? [])
           : [],
+      wclPerformance: wclBySignup.get(signup.id) ?? [],
     }));
 
     const selected = inspected.filter((item) => item.draftSelected);
@@ -733,6 +758,7 @@ export const rosterService = {
       ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
       scheduleConflicts: [] as CharacterScheduleConflict[],
+      wclPerformance: [],
     }));
     const selected = inspected.filter((item) => item.draftSelected);
     const validation = validateRosterDraft({

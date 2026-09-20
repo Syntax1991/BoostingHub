@@ -321,6 +321,7 @@ model Character {
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
   payoutEntries RunPayoutEntry[]
+  wclPerformance CharacterWclPerformance[]
 
   @@unique([userId, region, normalizedRealm, normalizedName])
   /// One scoped Blizzard character may link to at most one BoostingHub row.
@@ -328,6 +329,30 @@ model Character {
   @@unique([region, blizzardRealmId, blizzardCharacterId])
   @@index([userId])
   @@map("character")
+}
+
+/// Cached Warcraft Logs Best/Avg zone (or encounter) percentiles for roster UI.
+/// Informational only — never eligibility. `encounterId` 0 = full zone rankings.
+model CharacterWclPerformance {
+  id            String   @id @default(uuid())
+  characterId   String
+  character     Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  zoneId        Int
+  /// 0 = zone-wide; otherwise WCL encounter id (e.g. Nymrissa).
+  encounterId   Int      @default(0)
+  /// WCL difficulty filter: 3 Normal, 4 Heroic, 5 Mythic.
+  difficulty    Int
+  /// Cache key e.g. `dps`, `hps`, `tank-dps`, optionally `dps:Frost`.
+  metricKey     String
+  bestPct       Float?
+  avgPct        Float?
+  fetchedAt     TimestamptzString
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@unique([characterId, zoneId, encounterId, difficulty, metricKey], map: "character_wcl_perf_uq")
+  @@index([characterId], map: "character_wcl_perf_character_idx")
+  @@map("character_wcl_performance")
 }
 
 /// DEPRECATED / INERT — former External planning interval blocks.

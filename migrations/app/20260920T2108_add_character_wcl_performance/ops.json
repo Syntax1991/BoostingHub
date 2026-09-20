@@ -1,0 +1,164 @@
+[
+  {
+    "id": "table.character_wcl_performance",
+    "label": "Create table \"character_wcl_performance\"",
+    "summary": "Creates table \"character_wcl_performance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "character_wcl_performance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"character_wcl_performance\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_wcl_performance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"character_wcl_performance\"",
+        "sql": "CREATE TABLE \"public\".\"character_wcl_performance\" (\n  \"avgPct\" float8,\n  \"bestPct\" float8,\n  \"characterId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"difficulty\" int4 NOT NULL,\n  \"encounterId\" int4 DEFAULT 0 NOT NULL,\n  \"fetchedAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"metricKey\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"zoneId\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"character_wcl_performance\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_wcl_performance\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character_wcl_performance.character_wcl_perf_uq",
+    "label": "Add unique constraint on \"character_wcl_performance\" (characterId, zoneId, encounterId, difficulty, metricKey)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_wcl_perf_uq",
+        "table": "character_wcl_performance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_wcl_perf_uq\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_wcl_perf_uq",
+          "public",
+          "\"public\".\"character_wcl_performance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_wcl_perf_uq\"",
+        "sql": "ALTER TABLE \"public\".\"character_wcl_performance\" ADD CONSTRAINT \"character_wcl_perf_uq\" UNIQUE (\"characterId\", \"zoneId\", \"encounterId\", \"difficulty\", \"metricKey\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_wcl_perf_uq\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_wcl_perf_uq",
+          "public",
+          "\"public\".\"character_wcl_performance\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.character_wcl_performance.character_wcl_perf_character_idx",
+    "label": "Create index \"character_wcl_perf_character_idx\" on \"character_wcl_performance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "character_wcl_perf_character_idx",
+        "table": "character_wcl_performance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"character_wcl_perf_character_idx\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_wcl_perf_character_idx\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"character_wcl_perf_character_idx\"",
+        "sql": "CREATE INDEX \"character_wcl_perf_character_idx\" ON \"public\".\"character_wcl_performance\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"character_wcl_perf_character_idx\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_wcl_perf_character_idx\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.character_wcl_performance.character_wcl_performance_characterId_fkey",
+    "label": "Add foreign key \"character_wcl_performance_characterId_fkey\" on \"character_wcl_performance\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "character_wcl_performance_characterId_fkey",
+        "table": "character_wcl_performance"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"character_wcl_performance_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_wcl_performance_characterId_fkey",
+          "public",
+          "\"public\".\"character_wcl_performance\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"character_wcl_performance_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"character_wcl_performance\"\nADD CONSTRAINT \"character_wcl_performance_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"character_wcl_performance_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_wcl_performance_characterId_fkey",
+          "public",
+          "\"public\".\"character_wcl_performance\""
+        ]
+      }
+    ]
+  }
+]

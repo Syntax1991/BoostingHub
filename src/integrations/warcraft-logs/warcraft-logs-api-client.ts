@@ -42,6 +42,20 @@ export type WarcraftLogsFindCharacterResult =
   | { status: "UNSUPPORTED_REGION" }
   | { status: "TEMPORARY_FAILURE"; message: string };
 
+export type WarcraftLogsRankingMetric = "dps" | "hps";
+export type WarcraftLogsRankingRole = "Tank" | "Healer" | "DPS";
+
+export type WarcraftLogsZoneRankings = {
+  bestPerformanceAverage: number | null;
+  medianPerformanceAverage: number | null;
+};
+
+export type WarcraftLogsZoneRankingsResult =
+  | { status: "SUCCESS"; rankings: WarcraftLogsZoneRankings }
+  | { status: "NOT_FOUND" }
+  | { status: "NOT_CONFIGURED" }
+  | { status: "TEMPORARY_FAILURE"; message: string };
+
 type GraphqlResponse = {
   data?: {
     characterData?: {
@@ -64,6 +78,31 @@ query FindCharacter($name: String!, $serverSlug: String!, $serverRegion: String!
           slug
         }
       }
+    }
+  }
+}
+`.trim();
+
+const ZONE_RANKINGS_QUERY = `
+query ZoneRankings(
+  $id: Int!
+  $zoneID: Int!
+  $difficulty: Int
+  $metric: CharacterRankingMetricType!
+  $specName: String
+  $role: RoleType
+  $encounterID: Int
+) {
+  characterData {
+    character(id: $id) {
+      zoneRankings(
+        zoneID: $zoneID
+        difficulty: $difficulty
+        metric: $metric
+        specName: $specName
+        role: $role
+        encounterID: $encounterID
+      )
     }
   }
 }
@@ -187,6 +226,46 @@ function mapCharacter(raw: Record<string, unknown>): WarcraftLogsCharacterIdenti
   };
 }
 
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+/** Map GraphQL zoneRankings payload — null averages mean no usable logs. */
+export function mapZoneRankings(raw: unknown): WarcraftLogsZoneRankings | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  return {
+    bestPerformanceAverage: asFiniteNumber(record.bestPerformanceAverage),
+    medianPerformanceAverage: asFiniteNumber(record.medianPerformanceAverage),
+  };
+}
+
+async function postGraphql(
+  accessToken: string,
+  query: string,
+  variables: Record<string, unknown>,
+  context: string,
+): Promise<GraphqlResponse> {
+  const payload = await fetchJson(
+    warcraftLogsGraphqlUrl(),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables }),
+    },
+    context,
+  );
+  return payload as GraphqlResponse;
+}
+
 export const warcraftLogsApiClient = {
   isConfigured(): boolean {
     return isWarcraftLogsConfigured();
@@ -218,27 +297,13 @@ export const warcraftLogsApiClient = {
 
     try {
       const accessToken = await getAccessToken();
-      const payload = await fetchJson(
-        warcraftLogsGraphqlUrl(),
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: FIND_CHARACTER_QUERY,
-            variables: {
-              name,
-              serverSlug,
-              serverRegion,
-            },
-          }),
-        },
+      const root = await postGraphql(
+        accessToken,
+        FIND_CHARACTER_QUERY,
+        { name, serverSlug, serverRegion },
         "graphql-character",
       );
 
-      const root = payload as GraphqlResponse;
       if (Array.isArray(root.errors) && root.errors.length > 0) {
         const message = root.errors.map((row) => row.message).filter(Boolean).join("; ") || "GraphQL error";
         return { status: "TEMPORARY_FAILURE", message };
@@ -254,6 +319,72 @@ export const warcraftLogsApiClient = {
         return { status: "TEMPORARY_FAILURE", message: "Warcraft Logs character payload was malformed." };
       }
       return { status: "SUCCESS", character: mapped };
+    } catch (error) {
+      return {
+        status: "TEMPORARY_FAILURE",
+        message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
+      };
+    }
+  },
+
+  /**
+   * Zone (or encounter-scoped) Best/Median performance averages for a Character.
+   * Informational only — never throws for missing logs.
+   */
+  async fetchZoneRankings(input: {
+    warcraftLogsId: string;
+    zoneId: number;
+    difficulty: number;
+    metric: WarcraftLogsRankingMetric;
+    role?: WarcraftLogsRankingRole;
+    specName?: string;
+    /** When set, scopes rankings to this encounter within the zone (e.g. Nymrissa). */
+    encounterId?: number;
+  }): Promise<WarcraftLogsZoneRankingsResult> {
+    if (!isWarcraftLogsConfigured()) {
+      return { status: "NOT_CONFIGURED" };
+    }
+
+    const characterId = Number.parseInt(input.warcraftLogsId.trim(), 10);
+    if (!Number.isFinite(characterId) || characterId <= 0) {
+      return { status: "NOT_FOUND" };
+    }
+
+    try {
+      const accessToken = await getAccessToken();
+      const root = await postGraphql(
+        accessToken,
+        ZONE_RANKINGS_QUERY,
+        {
+          id: characterId,
+          zoneID: input.zoneId,
+          difficulty: input.difficulty,
+          metric: input.metric,
+          specName: input.specName?.trim() || null,
+          role: input.role ?? null,
+          encounterID: input.encounterId && input.encounterId > 0 ? input.encounterId : null,
+        },
+        "graphql-zone-rankings",
+      );
+
+      if (Array.isArray(root.errors) && root.errors.length > 0) {
+        const message = root.errors.map((row) => row.message).filter(Boolean).join("; ") || "GraphQL error";
+        return { status: "TEMPORARY_FAILURE", message };
+      }
+
+      const characterRaw = root.data?.characterData?.character ?? null;
+      if (!characterRaw) {
+        return { status: "NOT_FOUND" };
+      }
+
+      const rankings = mapZoneRankings(characterRaw.zoneRankings);
+      if (!rankings) {
+        return { status: "NOT_FOUND" };
+      }
+      if (rankings.bestPerformanceAverage == null && rankings.medianPerformanceAverage == null) {
+        return { status: "NOT_FOUND" };
+      }
+      return { status: "SUCCESS", rankings };
     } catch (error) {
       return {
         status: "TEMPORARY_FAILURE",
