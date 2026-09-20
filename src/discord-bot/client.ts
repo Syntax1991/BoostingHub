@@ -11,6 +11,7 @@ import {
   handleLootbuddyClassSelect,
   handleRoleSelect,
   handleSignupButton,
+  handleSignupNextButton,
   handleStaleLootbuddyWizardButton,
   handleStaleLootbuddyWizardSelect,
 } from "@/discord-bot/interactions/signup-flow";
@@ -42,6 +43,9 @@ export function createBotClient(env: BotEnv): Client {
             break;
           case "signup":
             await handleSignupButton(interaction, api, parsed.runId);
+            break;
+          case "signup-next":
+            await handleSignupNextButton(interaction, api, parsed.runId);
             break;
           case "signup-confirm":
             await handleConfirmSignupButton(interaction, api, parsed.runId);

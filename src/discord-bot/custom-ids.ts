@@ -10,6 +10,7 @@ const ACTIONS = [
   "signup",
   "lootbuddy",
   "cancel",
+  "signup-next",
   "signup-confirm",
   "signup-discard",
   "lootbuddy-add",

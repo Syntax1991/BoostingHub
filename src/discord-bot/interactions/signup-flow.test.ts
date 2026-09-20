@@ -10,6 +10,7 @@ import {
   handleLootbuddyClassSelect,
   handleRoleSelect,
   handleSignupButton,
+  handleSignupNextButton,
   type IneligibleCharacterOption,
 } from "@/discord-bot/interactions/signup-flow";
 import { clearAllSessionsForTests, getSession } from "@/discord-bot/interactions/signup-staging";
@@ -155,6 +156,11 @@ const characterSelect = handleCharacterSelect as unknown as (
   api: BotApiClient,
   runId: string,
 ) => Promise<void>;
+const signupNext = handleSignupNextButton as unknown as (
+  interaction: FakeInteraction,
+  api: BotApiClient,
+  runId: string,
+) => Promise<void>;
 const roleSelect = handleRoleSelect as unknown as (
   interaction: FakeInteraction,
   api: BotApiClient,
@@ -171,12 +177,12 @@ const discardSignup = handleDiscardSignupButton as unknown as (
   runId: string,
 ) => Promise<void>;
 
-describe("BOOSTER staging flow (character select -> role select -> confirm/cancel)", () => {
+describe("BOOSTER staging flow (character select -> next -> role select -> confirm/cancel)", () => {
   beforeEach(() => {
     clearAllSessionsForTests();
   });
 
-  it("selecting characters stages a session and does NOT call setCharacterOffers", async () => {
+  it("selecting characters stages a session, shows Next, and does NOT call setCharacterOffers", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
     const interaction = fakeInteraction("user-a", [SYNMIST, FROSTBOLT]);
@@ -185,7 +191,27 @@ describe("BOOSTER staging flow (character select -> role select -> confirm/cance
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
     expect(interaction.deferUpdate).toHaveBeenCalled();
-    expect(interaction.editReply).toHaveBeenCalled();
+    const call = interaction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toContain("Selected for");
+    expect(call.content).toContain("Next");
+    expect(call.components[0].components.map((c: { data: { label?: string } }) => c.data.label)).toEqual([
+      "Next",
+      "Cancel",
+    ]);
+  });
+
+  it("Next opens the role editor for the staged session", async () => {
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()) });
+    await characterSelect(fakeInteraction("user-a", [SYNMIST, FROSTBOLT]), api, RUN_ID);
+
+    const nextInteraction = fakeInteraction("user-a");
+    await signupNext(nextInteraction, api, RUN_ID);
+
+    const call = nextInteraction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toMatch(/Choose every role|Confirm/i);
+    expect(call.components.some((row: { components: Array<{ data: { custom_id?: string } }> }) =>
+      row.components.some((c) => c.data.custom_id?.includes("signup-confirm")),
+    )).toBe(true);
   });
 
   it("new Character selection seeds the specialization-derived default, never the first class role", async () => {

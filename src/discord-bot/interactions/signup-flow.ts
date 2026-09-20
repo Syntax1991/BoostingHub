@@ -318,6 +318,70 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
     }),
   });
 
+  await renderCharacterSelectionStep(interaction, api, runId, session);
+}
+
+/**
+ * Intermediate step after the Character multi-select: lists the staged
+ * Characters and waits for an explicit Next before opening the role editor.
+ */
+async function renderCharacterSelectionStep(
+  interaction: ReplyableInteraction,
+  api: BotApiClient,
+  runId: string,
+  session: StagedBoosterSession,
+): Promise<void> {
+  let options: SignupOptionsPayload;
+  try {
+    options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
+  } catch (error) {
+    await interaction.editReply({ content: describeBotApiError(error), components: [] });
+    return;
+  }
+
+  const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
+  const staged = [...session.offers.keys()];
+  const lines =
+    staged.length === 0
+      ? ["No characters selected. Continue to clear your booster signup on this run, or cancel."]
+      : [
+          `Selected for **${options.run.title}**:`,
+          ...staged.map((characterId) => {
+            const option = byId.get(characterId);
+            return `• ${option ? `${option.characterName}-${option.realm}` : characterId}`;
+          }),
+          "",
+          "Click **Next** to choose roles.",
+        ];
+
+  await interaction.editReply({
+    content: lines.join("\n"),
+    components: [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(buildCustomId("signup-next", runId))
+          .setLabel("Next")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(buildCustomId("signup-discard", runId))
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  });
+}
+
+/** Next: opens the role editor for the staged Character set. */
+export async function handleSignupNextButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
+  await interaction.deferUpdate();
+  const session = getSession(interaction.user.id, runId);
+  if (!session) {
+    await interaction.editReply({
+      content: "This signup editor has expired. Click Signup again to continue.",
+      components: [],
+    });
+    return;
+  }
   await renderStagingEditor(interaction, api, runId, session);
 }
 
