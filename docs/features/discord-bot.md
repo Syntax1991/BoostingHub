@@ -172,7 +172,7 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 1. `interaction.deferReply({ ephemeral: true })`.
 2. `GET .../signup-options` for the acting Discord User.
 3. If the window is closed or there are no eligible Booster Characters, say so and stop.
-4. Start a BOOSTER staging session (seeded from `activeBoosterOffers`) and show Character multi-select with **Next** / **Cancel**. Closing the select menu only updates the staged selection — it does not advance.
+4. Start a BOOSTER staging session (seeded from `activeBoosterOffers`) and show Character multi-select with **Next** / **Cancel**. Closing the select dropdown only updates the staged picks in memory and refreshes the same menu — it does not change the step or list selections in the message. **Next** is the only advance into roles.
 5. **Next** opens the role editor: per-Character **offered-role** multi-selects (`minValues=1`; single-role classes show a fixed label), Confirm / Cancel. Confirm calls `setCharacterOffers` once with `{ characterId, offeredRoles[] }`; Cancel discards staging only.
 6. Staging is in-memory (`signup-staging.ts`), TTL ~15 minutes, wiped on bot restart without touching DB.
 

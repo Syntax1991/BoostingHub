@@ -182,7 +182,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
     clearAllSessionsForTests();
   });
 
-  it("selecting characters stages a session, keeps the select + Next, and does NOT call setCharacterOffers", async () => {
+  it("selecting characters stages silently — same pick UI, no Currently selected dump", async () => {
     const setCharacterOffers = vi.fn();
     const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()), setCharacterOffers });
     const interaction = fakeInteraction("user-a", [SYNMIST, FROSTBOLT]);
@@ -190,10 +190,10 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
     await characterSelect(interaction, api, RUN_ID);
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
-    expect(interaction.deferUpdate).toHaveBeenCalled();
+    expect(getSession("user-a", RUN_ID)?.offers.has(SYNMIST)).toBe(true);
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).toContain("press **Next**");
-    expect(call.content).toContain("Currently selected");
+    expect(call.content).not.toContain("Currently selected");
     expect(call.components).toHaveLength(2);
     expect(call.components[1].components.map((c: { data: { label?: string } }) => c.data.label)).toEqual([
       "Next",

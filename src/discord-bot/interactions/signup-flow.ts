@@ -328,9 +328,10 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
 }
 
 /**
- * Character pick step: multi-select stays on screen with Next / Cancel.
- * Closing the Discord select dropdown only refreshes the staged selection —
- * pressing Next is the only way into the role editor.
+ * Character pick step: multi-select + Next / Cancel with a fixed prompt.
+ * Closing the Discord select dropdown only updates the staged session in
+ * memory and refreshes the same menu — it never changes the copy or advances.
+ * Pressing Next is the only way into the role editor.
  */
 async function renderCharacterSelectionStep(
   interaction: ReplyableInteraction,
@@ -347,7 +348,6 @@ async function renderCharacterSelectionStep(
     return;
   }
 
-  const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
   const staged = [...session.offers.keys()];
   const stagedOffer: ActiveBoosterOffers = {
     characterIds: staged,
@@ -369,26 +369,13 @@ async function renderCharacterSelectionStep(
     .setMaxValues(selectOptions.length)
     .addOptions(selectOptions);
 
-  const lines: string[] = [
-    `Select characters for **${options.run.title}**. Closing the menu only saves the selection — press **Next** to continue.`,
-    ...describeSavedCharacters(options.booster.eligible, options.run),
-    ...extraLines,
-  ];
-  if (staged.length === 0) {
-    lines.push("", "Nothing selected yet. Next with an empty selection clears your booster signup.");
-  } else {
-    lines.push(
-      "",
-      "Currently selected:",
-      ...staged.map((characterId) => {
-        const option = byId.get(characterId);
-        return `• ${option ? `${option.characterName}-${option.realm}` : characterId}`;
-      }),
-    );
-  }
-
   await interaction.editReply({
-    content: lines.join("\n"),
+    content: [
+      `Select characters for **${options.run.title}**.`,
+      "Closing the dropdown only keeps your picks — press **Next** when you are ready.",
+      ...describeSavedCharacters(options.booster.eligible, options.run),
+      ...extraLines,
+    ].join("\n"),
     components: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
