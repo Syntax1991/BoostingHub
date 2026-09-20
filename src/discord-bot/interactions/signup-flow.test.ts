@@ -516,7 +516,7 @@ describe("LOOTBUDDY two-step flow (class select → done)", () => {
     runId: string,
   ) => Promise<void>;
 
-  it("opens with a class select and does not persist yet", async () => {
+  it("opens with a class multiselect and does not persist yet", async () => {
     const setLootbuddies = vi.fn();
     const api = fakeApi({
       getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()),
@@ -529,23 +529,27 @@ describe("LOOTBUDDY two-step flow (class select → done)", () => {
     expect(setLootbuddies).not.toHaveBeenCalled();
     expect(interaction.deferReply).toHaveBeenCalled();
     const call = interaction.editReply.mock.calls[0]?.[0];
-    expect(call.content).toContain("Choose a class");
+    expect(call.content).toContain("one or more classes");
     expect(call.components).toHaveLength(1);
+    expect(call.components[0].components[0].toJSON().max_values).toBeGreaterThan(1);
   });
 
-  it("persists LOOT_ONLY immediately on class select", async () => {
-    const setLootbuddies = vi.fn().mockResolvedValue({ created: 1, updated: 0, withdrawn: 0 });
+  it("persists one LOOT_ONLY entry per selected class", async () => {
+    const setLootbuddies = vi.fn().mockResolvedValue({ created: 2, updated: 0, withdrawn: 0 });
     const api = fakeApi({ setLootbuddies });
-    const interaction = fakeInteraction("user-a", ["MAGE"]);
+    const interaction = fakeInteraction("user-a", ["MAGE", "PRIEST"]);
 
     await lootbuddyClassSelect(interaction, api, RUN_ID);
 
     expect(setLootbuddies).toHaveBeenCalledWith(RUN_ID, "user-a", {
-      lootbuddies: [{ wowClass: "MAGE", mode: "LOOT_ONLY" }],
+      lootbuddies: [
+        { wowClass: "MAGE", mode: "LOOT_ONLY" },
+        { wowClass: "PRIEST", mode: "LOOT_ONLY" },
+      ],
     });
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining("Mage"),
+        content: expect.stringMatching(/Mage.*Priest|Priest.*Mage/),
         components: [],
       }),
     );

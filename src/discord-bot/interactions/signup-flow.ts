@@ -512,18 +512,18 @@ function classSelectMenu(customId: string, placeholder: string): ActionRowBuilde
     .setCustomId(customId)
     .setPlaceholder(placeholder)
     .setMinValues(1)
-    .setMaxValues(1)
+    .setMaxValues(CLASS_ORDER.length)
     .addOptions(CLASS_ORDER.map((wowClass) => new StringSelectMenuOptionBuilder().setLabel(CLASS_LABELS[wowClass]).setValue(wowClass)));
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
 
 const STALE_LOOTBUDDY_WIZARD_MESSAGE =
-  "Lootbuddy signup is now just: pick a class. Click **Sign as Lootbuddy** again. To leave, use **Cancel Signup**.";
+  "Lootbuddy signup is now just: pick class(es). Click **Sign as Lootbuddy** again. To leave, use **Cancel Signup**.";
 
 /**
- * Sign as Lootbuddy: shows a class select immediately. Choosing a class
- * persists one LOOT_ONLY entry (replacing any previous Discord lootbuddy set).
- * Withdrawal is via Cancel Signup — not this button.
+ * Sign as Lootbuddy: shows a multi class select immediately. Choosing
+ * class(es) persists one LOOT_ONLY entry per class (replacing any previous
+ * Discord lootbuddy set). Withdrawal is via Cancel Signup — not this button.
  */
 export async function handleLootbuddyButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -545,7 +545,7 @@ export async function handleLootbuddyButton(interaction: ButtonInteraction, api:
     await interaction.editReply({
       content: [
         `You are already signed as lootbuddy for **${options.run.title}**.`,
-        "Signups are closed, so the class cannot be changed. Use **Cancel Signup** to leave.",
+        "Signups are closed, so classes cannot be changed. Use **Cancel Signup** to leave.",
       ].join("\n"),
     });
     return;
@@ -560,20 +560,19 @@ export async function handleLootbuddyButton(interaction: ButtonInteraction, api:
 
   await interaction.editReply({
     content: [
-      `Choose a class to sign as lootbuddy for **${options.run.title}**.`,
-      current ? `Currently signed: ${current}. Picking a class replaces it.` : null,
+      `Choose one or more classes to sign as lootbuddy for **${options.run.title}**.`,
+      current ? `Currently signed: ${current}. Your selection replaces it.` : null,
       "To leave later, use **Cancel Signup**.",
     ]
       .filter(Boolean)
       .join("\n"),
-    components: [classSelectMenu(buildCustomId("lootbuddy-class-select", runId), "Choose a class")],
+    components: [classSelectMenu(buildCustomId("lootbuddy-class-select", runId), "Choose class(es)")],
   });
 }
 
 /**
- * Class select: persists immediately as a single LOOT_ONLY lootbuddy entry.
- * Replaces the User's previous lootbuddy set for this Run (Web can still hold
- * multiple entries; Discord keeps the fast one-class path).
+ * Class multi-select: persists immediately as one LOOT_ONLY entry per class.
+ * Replaces the User's previous lootbuddy set for this Run.
  */
 export async function handleLootbuddyClassSelect(
   interaction: StringSelectMenuInteraction,
@@ -581,14 +580,15 @@ export async function handleLootbuddyClassSelect(
   runId: string,
 ): Promise<void> {
   await interaction.deferUpdate();
-  const wowClass = interaction.values[0] as WowClass;
+  const wowClasses = interaction.values as WowClass[];
+  const labels = wowClasses.map((wowClass) => CLASS_LABELS[wowClass]).join(", ");
 
   try {
     await api.setLootbuddies(runId, interaction.user.id, {
-      lootbuddies: [{ wowClass, mode: DISCORD_LOOTBUDDY_MODE }],
+      lootbuddies: wowClasses.map((wowClass) => ({ wowClass, mode: DISCORD_LOOTBUDDY_MODE })),
     });
     await interaction.editReply({
-      content: `Signed up as lootbuddy (**${CLASS_LABELS[wowClass]}**). Use **Cancel Signup** to leave.`,
+      content: `Signed up as lootbuddy (**${labels}**). Use **Cancel Signup** to leave.`,
       components: [],
     });
     requestImmediateSync();

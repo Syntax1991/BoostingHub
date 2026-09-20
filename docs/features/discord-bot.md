@@ -186,8 +186,8 @@ Public signup embed Roles field:
 
 **Sign as Lootbuddy** — two steps (no Character selector, no Mode picker on Discord):
 
-1. Click **Sign as Lootbuddy** → ephemeral class select.
-2. Pick a `WowClass` → immediately `PUT .../lootbuddies` with one `LOOT_ONLY` entry (replaces any previous Discord lootbuddy set for that User on the Run).
+1. Click **Sign as Lootbuddy** → ephemeral **multi** class select (1–13 classes).
+2. Confirm the selection → immediately `PUT .../lootbuddies` with one `LOOT_ONLY` entry per chosen class (replaces any previous Discord lootbuddy set for that User on the Run).
 
 Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain available on the Web. Stale multi-step wizard buttons from older bot messages redirect the User to click **Sign as Lootbuddy** again.
 
