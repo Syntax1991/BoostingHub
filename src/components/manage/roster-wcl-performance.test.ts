@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
+import {
+  filterWclPerformanceForGroupRole,
+  formatWclPerformanceRaidLine,
+} from "@/lib/wcl-performance-display";
 import { VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
 
 describe("roster WCL performance display copy", () => {
@@ -26,5 +29,32 @@ describe("roster WCL performance display copy", () => {
     expect(nymrissa).toContain("HPS");
     expect(venomous).toContain("The Venomous Abyss");
     expect(venomous).not.toMatch(/9\/9|4\/9/);
+  });
+
+  it("filters to the roster column role and drops empty raids", () => {
+    const segments = [
+      {
+        raidId: TIDEBOUND_GROTTO_RAID_ID,
+        raidName: "Nymrissa",
+        roles: [
+          { role: "TANK" as const, specLabel: null, bestPct: 40, avgPct: 30 },
+          { role: "HEALER" as const, specLabel: "Restoration", bestPct: 80, avgPct: 55 },
+        ],
+      },
+      {
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        raidName: "The Venomous Abyss",
+        roles: [{ role: "HEALER" as const, specLabel: "Restoration", bestPct: 70, avgPct: 50 }],
+      },
+    ];
+
+    const tankOnly = filterWclPerformanceForGroupRole(segments, "TANK");
+    expect(tankOnly).toHaveLength(1);
+    expect(tankOnly[0]?.roles.map((r) => r.role)).toEqual(["TANK"]);
+    expect(tankOnly[0]?.roles.some((r) => r.role === "HEALER")).toBe(false);
+
+    const healerOnly = filterWclPerformanceForGroupRole(segments, "HEALER");
+    expect(healerOnly).toHaveLength(2);
+    expect(healerOnly.every((s) => s.roles.every((r) => r.role === "HEALER"))).toBe(true);
   });
 });
