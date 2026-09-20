@@ -302,7 +302,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
       try {
         const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
         if (!data) continue;
-        await syncRosterPost(client, env, api, item, data, resolvedChannels);
+        await syncRosterPost(client, env, api, item, data, resolvedChannels, classIndicators, roleIndicators);
       } catch (error) {
         console.error(`[discord-bot] roster sync failed for run ${item.runId}`, error);
         messagePhaseError ??= error;
@@ -707,12 +707,14 @@ async function syncRosterPost(
   item: RosterLaneItem,
   data: RosterEmbedData,
   resolvedChannels: Map<string, string>,
+  classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  roleIndicators: GuildRoleIndicators,
 ): Promise<void> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
   if (!resolved) return;
   const { channelId } = resolved;
 
-  const embed = buildRosterEmbed(data);
+  const embed = buildRosterEmbed(data, { classIndicators, roleIndicators });
 
   if (item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });

@@ -136,6 +136,8 @@ export type RosterEmbedMember = {
   discordUserId: string | null;
   characterName: string;
   characterRealm: string;
+  /** WoW class for Discord class emoji — null when unknown. */
+  wowClass: WowClass | null;
 };
 
 export type RosterEmbedData = {
@@ -555,12 +557,17 @@ function buildSignupEmbedSignature(
 /** A characterless Lootbuddy has no Character to name — its own Class snapshot stands in for display; legacy Character-backed Lootbuddy rows still show their Character. */
 function toMember(row: RosterSignupRow): RosterEmbedMember {
   const lootbuddyClassLabel = row.lootbuddyClass ? CLASS_LABELS[row.lootbuddyClass] : null;
+  const wowClass =
+    row.participationType === "BOOSTER"
+      ? (row.character?.wowClass ?? null)
+      : (row.lootbuddyClass ?? row.character?.wowClass ?? null);
   return {
     userId: row.userId,
     userName: row.userName,
     discordUserId: row.discordUserId,
     characterName: row.character?.name ?? lootbuddyClassLabel ?? "Unknown character",
     characterRealm: row.character?.realm ?? "",
+    wowClass,
   };
 }
 

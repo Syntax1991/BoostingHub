@@ -200,7 +200,7 @@ Posted into the **same Run channel** as the signup embed (or the legacy global r
 
 Groups: Tanks, Healers, Melee DPS, Ranged DPS, and Lootbuddies (omitted when empty). Melee/ranged classification comes from `attackTypeForSpecialization` (`src/lib/wow-specializations.ts`) — the one authoritative (class, specialization) → attack-type table, so the bot never re-derives WoW class rules itself. Tank/Healer show a real target from the Run's desired composition counts; **melee/ranged DPS show a bare count with no denominator**, because `Run.desiredDpsCount` is one combined number with no melee/ranged split in the current schema — introducing a fake denominator was deliberately avoided rather than inventing new Run fields for cosmetics.
 
-Each member renders as `<@discordUserId> — Character-Realm` when the User has a linked Discord account, or `Character-Realm` alone otherwise.
+Each member renders as `<@discordUserId> <:class:> — Character-Realm` when the User has a linked Discord account (class emoji from Guild custom emojis, else the class label), or `<:class:> — Character-Realm` when unlinked. Role column headers use the same Guild role emojis as the signup embed (`tank` / `healer` / `dps` / `lootbuddy`), with the same unicode fallbacks (🛡 ✚ ⚔ 📦).
 
 ## Raid Invite DMs (Apex-style)
 
