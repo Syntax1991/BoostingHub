@@ -313,6 +313,97 @@ describe("warcraftLogsApiClient.fetchZoneRankings", () => {
         medianPerformanceAverage: 71.1,
       },
     });
+
+    const graphqlBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body ?? "{}")) as {
+      query?: string;
+      variables?: Record<string, unknown>;
+    };
+    expect(graphqlBody.query).toContain("zoneRankings");
+    expect(graphqlBody.query).toContain("CharacterPageRankingMetricType");
+    expect(graphqlBody.query).not.toContain("encounterID");
+    expect(graphqlBody.variables).toMatchObject({
+      id: 424242,
+      zoneID: 53,
+      difficulty: 4,
+      metric: "dps",
+    });
+  });
+
+  it("uses encounterRankings when encounterId is set", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: "tok", expires_in: 3600, token_type: "Bearer" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            characterData: {
+              character: {
+                encounterRankings: {
+                  medianPerformance: 68.5,
+                  averagePerformance: 71.9,
+                  ranks: [
+                    { rankPercent: 80.1 },
+                    { rankPercent: 55.0 },
+                  ],
+                },
+              },
+            },
+          },
+        }),
+      );
+
+    const result = await warcraftLogsApiClient.fetchZoneRankings({
+      warcraftLogsId: "91868604",
+      zoneId: 53,
+      difficulty: 4,
+      metric: "hps",
+      encounterId: 3379,
+    });
+
+    expect(result).toEqual({
+      status: "SUCCESS",
+      rankings: {
+        bestPerformanceAverage: 80.1,
+        medianPerformanceAverage: 68.5,
+      },
+    });
+
+    const graphqlBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body ?? "{}")) as {
+      query?: string;
+      variables?: Record<string, unknown>;
+    };
+    expect(graphqlBody.query).toContain("encounterRankings");
+    expect(graphqlBody.query).toContain("CharacterRankingMetricType");
+    expect(graphqlBody.variables).toMatchObject({
+      id: 91868604,
+      encounterID: 3379,
+      metric: "hps",
+    });
+  });
+
+  it("returns NOT_FOUND when rankings are permission-blocked", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: "tok", expires_in: 3600, token_type: "Bearer" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            characterData: {
+              character: {
+                zoneRankings: {
+                  error: "You do not have permission to see this character's rankings.",
+                },
+              },
+            },
+          },
+        }),
+      );
+
+    const result = await warcraftLogsApiClient.fetchZoneRankings({
+      warcraftLogsId: "1",
+      zoneId: 53,
+      difficulty: 4,
+      metric: "dps",
+    });
+    expect(result.status).toBe("NOT_FOUND");
   });
 
   it("returns NOT_FOUND when both averages are null", async () => {
@@ -323,9 +414,10 @@ describe("warcraftLogsApiClient.fetchZoneRankings", () => {
           data: {
             characterData: {
               character: {
-                zoneRankings: {
-                  bestPerformanceAverage: null,
-                  medianPerformanceAverage: null,
+                encounterRankings: {
+                  medianPerformance: null,
+                  averagePerformance: null,
+                  ranks: [],
                 },
               },
             },

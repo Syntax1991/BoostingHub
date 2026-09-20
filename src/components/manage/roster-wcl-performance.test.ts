@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWclPerformanceRaidLine } from "@/services/character-wcl-performance.service";
+import { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
 import { VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
 
 describe("roster WCL performance display copy", () => {

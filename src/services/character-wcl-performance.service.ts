@@ -3,7 +3,6 @@ import {
   type WarcraftLogsRankingMetric,
   type WarcraftLogsRankingRole,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { findRaidCatalogById, raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { findSpecialization } from "@/lib/wow-specializations";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
@@ -11,6 +10,10 @@ import {
   characterWclPerformanceRepository,
   type CharacterWclPerformanceRecord,
 } from "@/repositories/character-wcl-performance.repository";
+import type { WclPerformanceRaidSegment, WclPerformanceRoleSegment } from "@/lib/wcl-performance-display";
+
+export type { WclPerformanceRaidSegment, WclPerformanceRoleSegment } from "@/lib/wcl-performance-display";
+export { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
 
 export const WCL_PERFORMANCE_TTL_MS = 12 * 60 * 60 * 1000;
 export const WCL_PERFORMANCE_FETCH_CONCURRENCY = 4;
@@ -20,20 +23,6 @@ export const WCL_DIFFICULTY: Record<RaidDifficulty, number> = {
   NORMAL: 3,
   HEROIC: 4,
   MYTHIC: 5,
-};
-
-export type WclPerformanceRoleSegment = {
-  role: CharacterRole;
-  /** Spec label when specialization matches this role; otherwise null. */
-  specLabel: string | null;
-  bestPct: number | null;
-  avgPct: number | null;
-};
-
-export type WclPerformanceRaidSegment = {
-  raidId: string;
-  raidName: string;
-  roles: WclPerformanceRoleSegment[];
 };
 
 type ContentSlice = {
@@ -334,18 +323,4 @@ export async function resolveRosterWclPerformance(input: {
   }
 
   return result;
-}
-
-/** Compact display line for one raid segment (multi-role joins with ·). */
-export function formatWclPerformanceRaidLine(segment: WclPerformanceRaidSegment): string {
-  const roleParts = segment.roles.map((role) => {
-    const roleLabel = role.specLabel
-      ? `${CHARACTER_ROLE_LABELS[role.role]} (${role.specLabel})`
-      : CHARACTER_ROLE_LABELS[role.role];
-    const best = role.bestPct != null ? `best ${role.bestPct}%` : null;
-    const avg = role.avgPct != null ? `avg ${role.avgPct}%` : null;
-    const stats = [best, avg].filter(Boolean).join(" · ");
-    return `${roleLabel} ${stats}`;
-  });
-  return `${segment.raidName} · ${roleParts.join(" · ")}`;
 }

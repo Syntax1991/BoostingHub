@@ -27,7 +27,7 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
-import { formatWclPerformanceRaidLine } from "@/services/character-wcl-performance.service";
+import { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";

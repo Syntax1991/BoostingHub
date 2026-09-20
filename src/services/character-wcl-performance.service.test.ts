@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapZoneRankings } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
+import { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
@@ -9,10 +9,10 @@ import {
 } from "@/lib/wow-raid-catalog";
 import {
   buildMetricKey,
-  formatWclPerformanceRaidLine,
   specNameForOfferedRole,
   WCL_DIFFICULTY,
 } from "@/services/character-wcl-performance.service";
+import { mapZoneRankings } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
 
 describe("mapZoneRankings", () => {
   it("maps best and median averages", () => {

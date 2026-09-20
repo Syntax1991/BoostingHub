@@ -86,12 +86,11 @@ query FindCharacter($name: String!, $serverSlug: String!, $serverRegion: String!
 const ZONE_RANKINGS_QUERY = `
 query ZoneRankings(
   $id: Int!
-  $zoneID: Int!
+  $zoneID: Int
   $difficulty: Int
-  $metric: CharacterRankingMetricType!
+  $metric: CharacterPageRankingMetricType
   $specName: String
   $role: RoleType
-  $encounterID: Int
 ) {
   characterData {
     character(id: $id) {
@@ -101,7 +100,30 @@ query ZoneRankings(
         metric: $metric
         specName: $specName
         role: $role
+      )
+    }
+  }
+}
+`.trim();
+
+/** Single-boss rankings (e.g. Nymrissa). Returns JSON — no sub-selection. */
+const ENCOUNTER_RANKINGS_QUERY = `
+query EncounterRankings(
+  $id: Int!
+  $encounterID: Int!
+  $difficulty: Int
+  $metric: CharacterRankingMetricType
+  $specName: String
+  $role: RoleType
+) {
+  characterData {
+    character(id: $id) {
+      encounterRankings(
         encounterID: $encounterID
+        difficulty: $difficulty
+        metric: $metric
+        specName: $specName
+        role: $role
       )
     }
   }
@@ -235,13 +257,40 @@ function asFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-/** Map GraphQL zoneRankings payload — null averages mean no usable logs. */
+/** Map GraphQL zoneRankings JSON payload — null averages mean no usable logs. */
 export function mapZoneRankings(raw: unknown): WarcraftLogsZoneRankings | null {
   const record = asRecord(raw);
   if (!record) return null;
+  if (typeof record.error === "string" && record.error.trim()) return null;
   return {
     bestPerformanceAverage: asFiniteNumber(record.bestPerformanceAverage),
     medianPerformanceAverage: asFiniteNumber(record.medianPerformanceAverage),
+  };
+}
+
+/**
+ * Map encounterRankings JSON into the same Best/Avg shape used for zone rankings.
+ * Best = highest parse rankPercent; Avg = WCL medianPerformance.
+ */
+export function mapEncounterRankings(raw: unknown): WarcraftLogsZoneRankings | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  if (typeof record.error === "string" && record.error.trim()) return null;
+
+  const ranks = Array.isArray(record.ranks) ? record.ranks : [];
+  let bestFromRanks: number | null = null;
+  for (const row of ranks) {
+    const rank = asRecord(row);
+    const pct = asFiniteNumber(rank?.rankPercent);
+    if (pct == null) continue;
+    if (bestFromRanks == null || pct > bestFromRanks) bestFromRanks = pct;
+  }
+
+  const median = asFiniteNumber(record.medianPerformance);
+  const average = asFiniteNumber(record.averagePerformance);
+  return {
+    bestPerformanceAverage: bestFromRanks ?? average,
+    medianPerformanceAverage: median ?? average,
   };
 }
 
@@ -330,6 +379,10 @@ export const warcraftLogsApiClient = {
   /**
    * Zone (or encounter-scoped) Best/Median performance averages for a Character.
    * Informational only — never throws for missing logs.
+   *
+   * WCL quirks:
+   * - `zoneRankings` is a JSON scalar (`CharacterPageRankingMetricType`), no sub-selection.
+   * - Single-boss lairs use `encounterRankings` (`CharacterRankingMetricType` + encounterID).
    */
   async fetchZoneRankings(input: {
     warcraftLogsId: string;
@@ -338,7 +391,7 @@ export const warcraftLogsApiClient = {
     metric: WarcraftLogsRankingMetric;
     role?: WarcraftLogsRankingRole;
     specName?: string;
-    /** When set, scopes rankings to this encounter within the zone (e.g. Nymrissa). */
+    /** When set, uses encounterRankings for this boss (e.g. Nymrissa). */
     encounterId?: number;
   }): Promise<WarcraftLogsZoneRankingsResult> {
     if (!isWarcraftLogsConfigured()) {
@@ -350,21 +403,31 @@ export const warcraftLogsApiClient = {
       return { status: "NOT_FOUND" };
     }
 
+    const useEncounter = input.encounterId != null && input.encounterId > 0;
+
     try {
       const accessToken = await getAccessToken();
       const root = await postGraphql(
         accessToken,
-        ZONE_RANKINGS_QUERY,
-        {
-          id: characterId,
-          zoneID: input.zoneId,
-          difficulty: input.difficulty,
-          metric: input.metric,
-          specName: input.specName?.trim() || null,
-          role: input.role ?? null,
-          encounterID: input.encounterId && input.encounterId > 0 ? input.encounterId : null,
-        },
-        "graphql-zone-rankings",
+        useEncounter ? ENCOUNTER_RANKINGS_QUERY : ZONE_RANKINGS_QUERY,
+        useEncounter
+          ? {
+              id: characterId,
+              encounterID: input.encounterId,
+              difficulty: input.difficulty,
+              metric: input.metric,
+              specName: input.specName?.trim() || null,
+              role: input.role ?? null,
+            }
+          : {
+              id: characterId,
+              zoneID: input.zoneId,
+              difficulty: input.difficulty,
+              metric: input.metric,
+              specName: input.specName?.trim() || null,
+              role: input.role ?? null,
+            },
+        useEncounter ? "graphql-encounter-rankings" : "graphql-zone-rankings",
       );
 
       if (Array.isArray(root.errors) && root.errors.length > 0) {
@@ -377,7 +440,9 @@ export const warcraftLogsApiClient = {
         return { status: "NOT_FOUND" };
       }
 
-      const rankings = mapZoneRankings(characterRaw.zoneRankings);
+      const rankings = useEncounter
+        ? mapEncounterRankings(characterRaw.encounterRankings)
+        : mapZoneRankings(characterRaw.zoneRankings);
       if (!rankings) {
         return { status: "NOT_FOUND" };
       }
