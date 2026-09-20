@@ -218,28 +218,40 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(result.buffs).toHaveLength(RAID_BUFF_DEFINITIONS.length);
   });
 
-  it("full class matrix: each provider class covers exactly its mapped buff", () => {
-    const matrix: Array<{ wowClass: WowClass; buffId: string }> = [
-      { wowClass: "MAGE", buffId: "ARCANE_INTELLECT" },
-      { wowClass: "PRIEST", buffId: "POWER_WORD_FORTITUDE" },
-      { wowClass: "WARRIOR", buffId: "BATTLE_SHOUT" },
-      { wowClass: "DRUID", buffId: "MARK_OF_THE_WILD" },
-      { wowClass: "SHAMAN", buffId: "SKYFURY" },
-      { wowClass: "PALADIN", buffId: "DEVOTION_AURA" },
-      { wowClass: "EVOKER", buffId: "BLESSING_OF_THE_BRONZE" },
-      { wowClass: "DEMON_HUNTER", buffId: "CHAOS_BRAND" },
-      { wowClass: "MONK", buffId: "MYSTIC_TOUCH" },
-      { wowClass: "WARLOCK", buffId: "HEALTHSTONE" },
+  it("full class matrix: each provider class covers exactly its mapped buff(s)", () => {
+    const matrix: Array<{ wowClass: WowClass; buffIds: string[] }> = [
+      { wowClass: "MAGE", buffIds: ["ARCANE_INTELLECT"] },
+      { wowClass: "PRIEST", buffIds: ["POWER_WORD_FORTITUDE"] },
+      { wowClass: "WARRIOR", buffIds: ["BATTLE_SHOUT"] },
+      { wowClass: "DRUID", buffIds: ["MARK_OF_THE_WILD"] },
+      { wowClass: "SHAMAN", buffIds: ["SKYFURY"] },
+      { wowClass: "PALADIN", buffIds: ["DEVOTION_AURA"] },
+      { wowClass: "EVOKER", buffIds: ["BLESSING_OF_THE_BRONZE"] },
+      { wowClass: "DEMON_HUNTER", buffIds: ["CHAOS_BRAND"] },
+      { wowClass: "MONK", buffIds: ["MYSTIC_TOUCH"] },
+      { wowClass: "WARLOCK", buffIds: ["HEALTHSTONE", "SOULSTONE", "DEMONIC_GATEWAY"] },
     ];
 
-    for (const { wowClass, buffId } of matrix) {
+    for (const { wowClass, buffIds } of matrix) {
       const byId = coverageById([participant({ signupId: `s-${wowClass}`, wowClass })]);
-      expect(byId[buffId]?.covered, `${wowClass} → ${buffId}`).toBe(true);
+      for (const buffId of buffIds) {
+        expect(byId[buffId]?.covered, `${wowClass} → ${buffId}`).toBe(true);
+      }
       for (const other of matrix) {
-        if (other.buffId === buffId) continue;
-        expect(byId[other.buffId]?.covered, `${wowClass} must not cover ${other.buffId}`).toBe(false);
+        if (other.wowClass === wowClass) continue;
+        for (const otherBuffId of other.buffIds) {
+          expect(byId[otherBuffId]?.covered, `${wowClass} must not cover ${otherBuffId}`).toBe(false);
+        }
       }
     }
+  });
+
+  it("one Warlock covers Healthstone, Soulstone, and Demonic Gateway together", () => {
+    const byId = coverageById([participant({ signupId: "lock", wowClass: "WARLOCK" })]);
+    expect(byId.HEALTHSTONE?.covered).toBe(true);
+    expect(byId.SOULSTONE?.covered).toBe(true);
+    expect(byId.DEMONIC_GATEWAY?.covered).toBe(true);
+    expect(evaluateRaidBuffCoverage([participant({ signupId: "lock", wowClass: "WARLOCK" })]).coveredCount).toBe(3);
   });
 
   it("classes without a tracked buff cover nothing", () => {

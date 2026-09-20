@@ -95,7 +95,7 @@ Derived composition helper on the Roster Builder (informational — never a publ
 - **Meaning:** class *availability* in the selected composition — not live aura cast / talent verification.
 - **No persistence:** coverage is computed by `evaluateRaidBuffCoverage` in `roster-raid-buffs.ts`. No coverage tables or stored counts.
 
-Tracked set (Midnight Season 2): Arcane Intellect, Power Word: Fortitude, Battle Shout, Mark of the Wild, Skyfury, Devotion Aura, Blessing of the Bronze, Chaos Brand, Mystic Touch, Healthstone (Warlock).
+Tracked set (Midnight Season 2): Arcane Intellect, Power Word: Fortitude, Battle Shout, Mark of the Wild, Skyfury, Devotion Aura, Blessing of the Bronze, Chaos Brand, Mystic Touch, plus Warlock utilities Healthstone, Soulstone, and Demonic Gateway.
 
 ## Validation
 

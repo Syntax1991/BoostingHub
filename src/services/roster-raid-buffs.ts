@@ -23,6 +23,8 @@ export const RAID_BUFF_IDS = [
   "CHAOS_BRAND",
   "MYSTIC_TOUCH",
   "HEALTHSTONE",
+  "SOULSTONE",
+  "DEMONIC_GATEWAY",
 ] as const;
 export type RaidBuffId = (typeof RAID_BUFF_IDS)[number];
 
@@ -48,8 +50,10 @@ export const RAID_BUFF_DEFINITIONS: readonly RaidBuffDefinition[] = [
   { id: "BLESSING_OF_THE_BRONZE", name: "Blessing of the Bronze", kind: "BUFF", providerClasses: ["EVOKER"] },
   { id: "CHAOS_BRAND", name: "Chaos Brand", kind: "DEBUFF", providerClasses: ["DEMON_HUNTER"] },
   { id: "MYSTIC_TOUCH", name: "Mystic Touch", kind: "DEBUFF", providerClasses: ["MONK"] },
-  /** Warlock has no throughput raid buff; Healthstone is the composition utility we track. */
+  /** Warlock has no throughput raid buff — track the three composition utilities. */
   { id: "HEALTHSTONE", name: "Healthstone", kind: "BUFF", providerClasses: ["WARLOCK"] },
+  { id: "SOULSTONE", name: "Soulstone", kind: "BUFF", providerClasses: ["WARLOCK"] },
+  { id: "DEMONIC_GATEWAY", name: "Demonic Gateway", kind: "BUFF", providerClasses: ["WARLOCK"] },
 ] as const;
 
 export type RaidBuffParticipant = {
