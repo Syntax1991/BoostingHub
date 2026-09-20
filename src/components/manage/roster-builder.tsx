@@ -31,8 +31,12 @@ import {
 import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
 import {
   filterWclPerformanceForGroupRole,
+  compareByWclPerf,
+  matchesWclPerfFilter,
   wclPerformanceRaidLineParts,
   wclPercentileColor,
+  type WclPerfFilter,
+  type WclPerfSort,
 } from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
@@ -125,6 +129,8 @@ function RosterBuilderEditor({
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [backupFilter, setBackupFilter] = useState("ALL");
   const [selectedFilter, setSelectedFilter] = useState("ALL");
+  const [perfFilter, setPerfFilter] = useState<WclPerfFilter>("ALL");
+  const [perfSort, setPerfSort] = useState<WclPerfSort>("DEFAULT");
   const [acknowledge, setAcknowledge] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -175,6 +181,15 @@ function RosterBuilderEditor({
       if (!isRoleCopyChecked(signup)) return false;
     }
     if (selectedFilter === "UNSELECTED" && staged) return false;
+    if (
+      !matchesWclPerfFilter(
+        signup.wclPerformance,
+        signup.groupRole,
+        perfFilter,
+      )
+    ) {
+      return false;
+    }
     return true;
   }
 
@@ -190,12 +205,30 @@ function RosterBuilderEditor({
     const staged = isStagedSelected(signup.id);
     if (selectedFilter === "SELECTED" && !staged) return false;
     if (selectedFilter === "UNSELECTED" && staged) return false;
+    const scopeRole =
+      roleFilter !== "ALL" && signup.offeredRoles.includes(roleFilter as CharacterRole)
+        ? (roleFilter as CharacterRole)
+        : null;
+    if (!matchesWclPerfFilter(signup.wclPerformance, scopeRole, perfFilter)) return false;
     return true;
   }
 
-  const filteredTanks = data.groups.tanks.filter(matchesProjection);
-  const filteredHealers = data.groups.healers.filter(matchesProjection);
-  const filteredDps = data.groups.dps.filter(matchesProjection);
+  function sortByPerf(signups: SignupRow[]): SignupRow[] {
+    if (perfSort === "DEFAULT") return signups;
+    return [...signups].sort((left, right) =>
+      compareByWclPerf(
+        left.wclPerformance,
+        right.wclPerformance,
+        left.groupRole,
+        right.groupRole,
+        perfSort,
+      ),
+    );
+  }
+
+  const filteredTanks = sortByPerf(data.groups.tanks.filter(matchesProjection));
+  const filteredHealers = sortByPerf(data.groups.healers.filter(matchesProjection));
+  const filteredDps = sortByPerf(data.groups.dps.filter(matchesProjection));
   const filteredLootbuddies = data.groups.lootbuddies.filter(matchesProjection);
   const uniqueFilteredBoosters = data.boosters.filter(matchesCanonicalBooster).length;
 
@@ -372,7 +405,7 @@ function RosterBuilderEditor({
 
       <Card>
         <CardHeader title="Filters" />
-        <div className="grid gap-2 px-4 py-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-2 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <label className="text-sm">
             <span className="mb-1 block text-xs text-muted">Search</span>
             <input
@@ -386,6 +419,32 @@ function RosterBuilderEditor({
           <FilterSelect label="Role" value={roleFilter} onChange={setRoleFilter} options={["ALL", "TANK", "HEALER", "DPS"]} />
           <FilterSelect label="Offer" value={backupFilter} onChange={setBackupFilter} options={["ALL", "PRIMARY", "BACKUP"]} />
           <FilterSelect label="Draft" value={selectedFilter} onChange={setSelectedFilter} options={["ALL", "SELECTED", "UNSELECTED"]} />
+          <FilterSelect
+            label="Perf %"
+            value={perfFilter}
+            onChange={(value) => setPerfFilter(value as WclPerfFilter)}
+            options={[
+              { value: "ALL", label: "All" },
+              { value: "HAS", label: "Has logs" },
+              { value: "NONE", label: "No logs" },
+              { value: "GE_25", label: "Best ≥ 25%" },
+              { value: "GE_50", label: "Best ≥ 50%" },
+              { value: "GE_75", label: "Best ≥ 75%" },
+              { value: "GE_95", label: "Best ≥ 95%" },
+            ]}
+          />
+          <FilterSelect
+            label="Sort"
+            value={perfSort}
+            onChange={(value) => setPerfSort(value as WclPerfSort)}
+            options={[
+              { value: "DEFAULT", label: "Default" },
+              { value: "BEST_DESC", label: "Best % ↓" },
+              { value: "BEST_ASC", label: "Best % ↑" },
+              { value: "AVG_DESC", label: "Avg % ↓" },
+              { value: "AVG_ASC", label: "Avg % ↑" },
+            ]}
+          />
         </div>
       </Card>
 
@@ -884,8 +943,13 @@ function FilterSelect({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<string | { value: string; label: string }>;
 }) {
+  const normalized = options.map((option) =>
+    typeof option === "string"
+      ? { value: option, label: option === "ALL" ? "All" : option.replaceAll("_", " ") }
+      : option,
+  );
   return (
     <label className="text-sm">
       <span className="mb-1 block text-xs text-muted">{label}</span>
@@ -894,9 +958,9 @@ function FilterSelect({
         onChange={(event) => onChange(event.target.value)}
         className="h-9 w-full rounded-md border border-border bg-surface px-2"
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option === "ALL" ? "All" : option.replaceAll("_", " ")}
+        {normalized.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>

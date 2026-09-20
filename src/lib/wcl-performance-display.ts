@@ -81,3 +81,66 @@ export function filterWclPerformanceForGroupRole(
     }))
     .filter((segment) => segment.roles.length > 0);
 }
+
+/** Best/avg percentile for sort/filter — max across raids for the column role (or all roles). */
+export function wclPerformanceMetricValue(
+  segments: WclPerformanceRaidSegment[],
+  groupRole: CharacterRole | null,
+  metric: "best" | "avg",
+): number | null {
+  const scoped = filterWclPerformanceForGroupRole(segments, groupRole);
+  let peak: number | null = null;
+  for (const segment of scoped) {
+    for (const role of segment.roles) {
+      const value = metric === "best" ? role.bestPct : role.avgPct;
+      if (value == null || !Number.isFinite(value)) continue;
+      if (peak == null || value > peak) peak = value;
+    }
+  }
+  return peak;
+}
+
+export type WclPerfFilter =
+  | "ALL"
+  | "HAS"
+  | "NONE"
+  | "GE_25"
+  | "GE_50"
+  | "GE_75"
+  | "GE_95";
+
+export type WclPerfSort = "DEFAULT" | "BEST_DESC" | "BEST_ASC" | "AVG_DESC" | "AVG_ASC";
+
+export function matchesWclPerfFilter(
+  segments: WclPerformanceRaidSegment[],
+  groupRole: CharacterRole | null,
+  filter: WclPerfFilter,
+): boolean {
+  if (filter === "ALL") return true;
+  const best = wclPerformanceMetricValue(segments, groupRole, "best");
+  if (filter === "HAS") return best != null;
+  if (filter === "NONE") return best == null;
+  if (best == null) return false;
+  if (filter === "GE_25") return best >= 25;
+  if (filter === "GE_50") return best >= 50;
+  if (filter === "GE_75") return best >= 75;
+  return best >= 95;
+}
+
+export function compareByWclPerf(
+  left: WclPerformanceRaidSegment[],
+  right: WclPerformanceRaidSegment[],
+  leftRole: CharacterRole | null,
+  rightRole: CharacterRole | null,
+  sort: WclPerfSort,
+): number {
+  if (sort === "DEFAULT") return 0;
+  const metric = sort.startsWith("AVG") ? "avg" : "best";
+  const descending = sort.endsWith("DESC");
+  const a = wclPerformanceMetricValue(left, leftRole, metric);
+  const b = wclPerformanceMetricValue(right, rightRole, metric);
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return descending ? b - a : a - b;
+}
