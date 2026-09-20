@@ -221,6 +221,12 @@ export type SignupSyncWorkItem = {
   targetBucket: DiscordRunChannelTarget;
   /** Carried so a same-pass first-channel create can join CURRENT/NEXT position reconciliation without re-classifying the week. */
   scheduledStartAt: string;
+  /**
+   * True only while the signup window is open on CURRENT/NEXT. Continuity
+   * edits for CANCELLED/COMPLETED (or ARCHIVE-held) Runs must never create a
+   * replacement channel — that re-fires Raidboost Announce role pings.
+   */
+  allowChannelCreate: boolean;
 };
 export type RosterSyncWorkItem = {
   runId: string;
@@ -543,7 +549,6 @@ function buildSignupEmbedSignature(
     // member-data changes so existing posts refresh (Content→Raid Lead, role emojis,
     // multi-char mention grouping).
     participantLineFormat: "mention-v3-group-icons",
-    discordRolePing: data.discordRolePing,
   });
 }
 
@@ -745,10 +750,14 @@ export const discordSyncService = {
             runId: run.id,
             existingChannelId: post?.signupChannelId ?? null,
             existingMessageId: post?.signupMessageId ?? null,
-            existingRunChannelId: post?.runChannelId ?? null,
+            // Prefer dedicated run channel; fall back to signup channel so a
+            // cleared runChannelId after archive (or older rows) does not look
+            // like "never provisioned" while a live channel still exists.
+            existingRunChannelId: post?.runChannelId ?? post?.signupChannelId ?? null,
             desiredChannelName: desiredChannelNameFor(run),
             targetBucket,
             scheduledStartAt: run.scheduledStartAt,
+            allowChannelCreate: eligibleForFirstProvisioning,
           });
         }
       }
@@ -904,6 +913,10 @@ export const discordSyncService = {
       signupChannelId: input.channelId,
       signupMessageId: input.messageId,
       lastSignupSignature: signature,
+      // Keep dedicated-channel identity aligned with the channel we just
+      // posted into — otherwise a later signature bump with a cleared
+      // runChannelId looks like first provision and re-creates + re-pings.
+      runChannelId: input.channelId,
     });
   },
 

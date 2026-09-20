@@ -90,6 +90,7 @@ describe("syncOnce — raidboost announce on first channel create", () => {
             desiredChannelName: "tue-1800-hc-saved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: {
               ...signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
               difficulty: "HEROIC",
@@ -144,6 +145,7 @@ describe("syncOnce — raidboost announce on first channel create", () => {
             desiredChannelName: "tue-1800-hc-saved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: {
               ...signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
               difficulty: "HEROIC",
@@ -166,6 +168,44 @@ describe("syncOnce — raidboost announce on first channel create", () => {
     };
     expect(announce.content).toBeUndefined();
     expect(announce.allowedMentions.roles).toEqual([]);
+  });
+
+  it("does not create a replacement channel or re-ping when allowChannelCreate is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const { client, createdIds } = makeDiscordClient(children);
+
+    await syncOnce(
+      client,
+      botEnv(),
+      makeApi({
+        channels: [],
+        signups: [
+          {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            existingChannelId: "deleted-chan",
+            existingMessageId: "old-msg",
+            // Cleared after archive delete — continuity edit must not recreate.
+            existingRunChannelId: null,
+            desiredChannelName: "tue-1800-hc-saved-lead",
+            targetBucket: "ARCHIVE",
+            scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: false,
+            embed: {
+              ...signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
+              runStatus: "CANCELLED",
+              signupWindowOpen: false,
+            },
+          },
+        ],
+        roster: [],
+        start: [],
+      }),
+    );
+
+    expect(createdIds).toHaveLength(0);
   });
 
   it("does not re-announce when the Run channel already exists", async () => {
@@ -198,6 +238,7 @@ describe("syncOnce — raidboost announce on first channel create", () => {
             desiredChannelName: "tue-1800-hc-saved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -238,6 +279,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             targetBucket: "CURRENT",
             // Tuesday 15 Sep 2026 18:00 Europe/Berlin
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -275,6 +317,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1800-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -314,6 +357,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1800-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -348,6 +392,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "sat-1800-hc-unsaved-lead",
             targetBucket: "NEXT",
             scheduledStartAt: "2026-09-19T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "2026-09-19T16:00:00.000Z"),
           },
         ],
@@ -391,6 +436,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1800-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -425,6 +471,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1800-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", "2026-09-15T16:00:00.000Z"),
           },
           {
@@ -435,6 +482,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1500-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T13:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T13:00:00.000Z"),
           },
         ],
@@ -470,6 +518,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1800-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -535,6 +584,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "old-run",
             targetBucket: "ARCHIVE",
             scheduledStartAt: "2026-08-01T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9", "2026-08-01T16:00:00.000Z"),
           },
         ],
@@ -573,6 +623,7 @@ describe("syncOnce — same-pass first-channel positioning", () => {
             desiredChannelName: "tue-1800-hc-unsaved-lead",
             targetBucket: "CURRENT",
             scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: true,
             embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
           },
         ],
@@ -844,6 +895,7 @@ function makeApi(input: {
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
     scheduledStartAt: string;
+    allowChannelCreate?: boolean;
     embed: unknown;
   }>;
   roster: Array<{

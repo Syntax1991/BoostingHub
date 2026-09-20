@@ -1013,7 +1013,8 @@ title: "Historical raid edit fixture",
 
   it("never recreates the channel or message across the raid edit — same ids throughout", async () => {
     const persisted = await runDiscordPostRepository.findByRunId(raidEditRunId);
-    expect(persisted?.runChannelId).toBeNull(); // this fixture never called recordRunChannel
+    // recordSignupPost stamps runChannelId to the same dedicated channel id.
+    expect(persisted?.runChannelId).toBe("raid-chan-1");
     expect(persisted?.signupChannelId).toBe("raid-chan-1");
     expect(persisted?.signupMessageId).toBe("raid-msg-1");
   });

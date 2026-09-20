@@ -78,12 +78,15 @@ export const runDiscordPostRepository = {
     signupChannelId: string;
     signupMessageId: string;
     lastSignupSignature: string;
+    /** When set, also stamps dedicated runChannelId (same channel while live). */
+    runChannelId?: string;
   }): Promise<void> {
     await upsert(input.runId, {
       signupChannelId: input.signupChannelId,
       signupMessageId: input.signupMessageId,
       signupPostedAt: new Date().toISOString(),
       lastSignupSignature: input.lastSignupSignature,
+      ...(input.runChannelId ? { runChannelId: input.runChannelId } : {}),
     });
   },
 

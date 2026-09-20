@@ -462,13 +462,12 @@ async function resolveRunChannel(
   }
 
   if (!allowCreate) {
-    // Only the signup path may provision a Run's first channel (it alone is
-    // gated by isSignupWindowOpen + week bucket). A roster-only sync pass for
-    // a Run that never went through a bot-observed signup phase — e.g.
-    // historical data predating the bot, or the bot being offline through
-    // the entire signup window — must not retroactively create Discord
-    // infrastructure for it.
-    console.warn(`[discord-bot] run ${item.runId} has no channel and none may be created from the roster path — skipping`);
+    // Only first provisioning for an open CURRENT/NEXT signup window may
+    // create a channel. Continuity edits (CANCELLED/COMPLETED after archive
+    // cleared runChannelId) must not recreate — that re-fires role pings.
+    console.warn(
+      `[discord-bot] run ${item.runId} has no usable channel and channel create is not allowed — skipping (no re-ping)`,
+    );
     return null;
   }
 
@@ -498,7 +497,15 @@ async function syncSignupPost(
   roleIndicators: GuildRoleIndicators,
   classEmojiFingerprint: string,
 ): Promise<WeekSectionItem | null> {
-  const resolved = await resolveRunChannel(client, env, api, item, env.discordSignupChannelId, true, resolvedChannels);
+  const resolved = await resolveRunChannel(
+    client,
+    env,
+    api,
+    item,
+    env.discordSignupChannelId,
+    item.allowChannelCreate === true,
+    resolvedChannels,
+  );
   if (!resolved) return null;
   const { channelId, created } = resolved;
   // Capture same-pass ordering metadata before message work — send/edit/
