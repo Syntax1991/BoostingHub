@@ -4,10 +4,11 @@ import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
 import { requestImmediateSync } from "@/discord-bot/sync-loop";
 
 /**
- * The Cancel Signup button: withdraws the User's entire active offer-set for
- * this Run atomically. A protected offer (roster-selected, or published and
- * locked) rejects the whole cancellation — the server's own message already
- * explains why, so it is shown directly rather than rewritten here.
+ * The Cancel Signup button: withdraws the User's entire active BOOSTER and
+ * LOOTBUDDY participation for this Run atomically. A protected offer
+ * (roster-selected, or published and locked) rejects the whole cancellation —
+ * the server's own message already explains why, so it is shown directly
+ * rather than rewritten here.
  */
 export async function handleCancelButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferReply({ ephemeral: true });

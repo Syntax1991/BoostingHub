@@ -59,7 +59,7 @@ On one Run, a User may simultaneously have:
 - one Booster participation (the selected/offered Booster Character workflow), and
 - zero to N Lootbuddy participations
 
-Updating one side never clears the other. Removing one Lootbuddy does not affect Booster or other Lootbuddies. Cancelling Booster does not remove Lootbuddies. Clearing all Lootbuddies does not remove Booster.
+Updating one side never clears the other. Removing one Lootbuddy does not affect Booster or other Lootbuddies. Web **Cancel Booster** (`cancelBoosterSignup`) does not remove Lootbuddies. Discord **Cancel Signup** (`cancelActiveSignups`) withdraws both Booster and Lootbuddy. Clearing all Lootbuddies does not remove Booster.
 
 ## User flow (Web)
 

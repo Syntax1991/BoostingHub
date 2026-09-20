@@ -6,6 +6,8 @@ import {
   handleCharacterSelect,
   handleConfirmSignupButton,
   handleDiscardSignupButton,
+  handleLootbuddyButton,
+  handleLootbuddyClassSelect,
   handleRoleSelect,
   handleSignupButton,
   type IneligibleCharacterOption,
@@ -115,10 +117,15 @@ function signupOptionsPayload(overrides: {
   };
 }
 
-function fakeApi(input: { getSignupOptions?: unknown; setCharacterOffers?: unknown }): BotApiClient {
+function fakeApi(input: {
+  getSignupOptions?: unknown;
+  setCharacterOffers?: unknown;
+  setLootbuddies?: unknown;
+}): BotApiClient {
   return {
     getSignupOptions: input.getSignupOptions ?? vi.fn(),
     setCharacterOffers: input.setCharacterOffers ?? vi.fn(),
+    setLootbuddies: input.setLootbuddies ?? vi.fn(),
   } as unknown as BotApiClient;
 }
 
@@ -494,5 +501,53 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
 
     expect(setCharacterOffers).not.toHaveBeenCalled();
     expect(getSession("user-a", RUN_ID)?.offers.get(SYNMIST)).toEqual(["HEALER"]);
+  });
+});
+
+describe("LOOTBUDDY two-step flow (class select → done)", () => {
+  const lootbuddyButton = handleLootbuddyButton as unknown as (
+    interaction: FakeInteraction,
+    api: BotApiClient,
+    runId: string,
+  ) => Promise<void>;
+  const lootbuddyClassSelect = handleLootbuddyClassSelect as unknown as (
+    interaction: FakeInteraction,
+    api: BotApiClient,
+    runId: string,
+  ) => Promise<void>;
+
+  it("opens with a class select and does not persist yet", async () => {
+    const setLootbuddies = vi.fn();
+    const api = fakeApi({
+      getSignupOptions: vi.fn().mockResolvedValue(signupOptionsPayload()),
+      setLootbuddies,
+    });
+    const interaction = fakeInteraction("user-a");
+
+    await lootbuddyButton(interaction, api, RUN_ID);
+
+    expect(setLootbuddies).not.toHaveBeenCalled();
+    expect(interaction.deferReply).toHaveBeenCalled();
+    const call = interaction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toContain("Choose a class");
+    expect(call.components).toHaveLength(1);
+  });
+
+  it("persists LOOT_ONLY immediately on class select", async () => {
+    const setLootbuddies = vi.fn().mockResolvedValue({ created: 1, updated: 0, withdrawn: 0 });
+    const api = fakeApi({ setLootbuddies });
+    const interaction = fakeInteraction("user-a", ["MAGE"]);
+
+    await lootbuddyClassSelect(interaction, api, RUN_ID);
+
+    expect(setLootbuddies).toHaveBeenCalledWith(RUN_ID, "user-a", {
+      lootbuddies: [{ wowClass: "MAGE", mode: "LOOT_ONLY" }],
+    });
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("Mage"),
+        components: [],
+      }),
+    );
   });
 });

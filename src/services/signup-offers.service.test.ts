@@ -679,6 +679,55 @@ describe("signupService.cancelBoosterSignup", () => {
     });
     await signupService.cancelBoosterSignup(target, { runId: mainRunId });
   });
+
+  it("does not withdraw lootbuddy entries", async () => {
+    await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
+    });
+    await signupService.setLootbuddies(target, {
+      runId: mainRunId,
+      lootbuddies: [{ wowClass: "MAGE", mode: "LOOT_ONLY" }],
+    });
+
+    await signupService.cancelBoosterSignup(target, { runId: mainRunId });
+    const active = await activeRowsFor(mainRunId, ids.target);
+    expect(active).toHaveLength(1);
+    expect(active[0]?.participationType).toBe("LOOTBUDDY");
+    await signupService.setLootbuddies(target, { runId: mainRunId, lootbuddies: [] });
+  });
+});
+
+describe("signupService.cancelActiveSignups", () => {
+  it("withdraws booster and lootbuddy rows together", async () => {
+    await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
+    });
+    await signupService.setLootbuddies(target, {
+      runId: mainRunId,
+      lootbuddies: [{ wowClass: "MAGE", mode: "LOOT_ONLY" }, { wowClass: "PRIEST", mode: "PLAYING" }],
+    });
+
+    const result = await signupService.cancelActiveSignups(target, { runId: mainRunId });
+    expect(result.withdrawn).toBe(3);
+    expect(await activeRowsFor(mainRunId, ids.target)).toEqual([]);
+  });
+
+  it("withdraws lootbuddy-only signups", async () => {
+    await signupService.setLootbuddies(target, {
+      runId: mainRunId,
+      lootbuddies: [{ wowClass: "WARLOCK", mode: "LOOT_ONLY" }],
+    });
+
+    const result = await signupService.cancelActiveSignups(target, { runId: mainRunId });
+    expect(result.withdrawn).toBe(1);
+    expect(await activeRowsFor(mainRunId, ids.target)).toEqual([]);
+  });
+
+  it("reports NOT_FOUND when nothing is active", async () => {
+    await expectDomainCode(signupService.cancelActiveSignups(target, { runId: mainRunId }), "NOT_FOUND");
+  });
 });
 
 describe("concurrency regression coverage", () => {

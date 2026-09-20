@@ -7,18 +7,12 @@ import {
   handleCharacterSelect,
   handleConfirmSignupButton,
   handleDiscardSignupButton,
-  handleLootbuddyAddButton,
   handleLootbuddyButton,
   handleLootbuddyClassSelect,
-  handleLootbuddyConfirmButton,
-  handleLootbuddyDiscardButton,
-  handleLootbuddyEditButton,
-  handleLootbuddyEditPickSelect,
-  handleLootbuddyModeSelect,
-  handleLootbuddyRemoveButton,
-  handleLootbuddyRemovePickSelect,
   handleRoleSelect,
   handleSignupButton,
+  handleStaleLootbuddyWizardButton,
+  handleStaleLootbuddyWizardSelect,
 } from "@/discord-bot/interactions/signup-flow";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
@@ -59,19 +53,11 @@ export function createBotClient(env: BotEnv): Client {
             await handleLootbuddyButton(interaction, api, parsed.runId);
             break;
           case "lootbuddy-add":
-            await handleLootbuddyAddButton(interaction, parsed.runId);
-            break;
           case "lootbuddy-edit":
-            await handleLootbuddyEditButton(interaction, parsed.runId);
-            break;
           case "lootbuddy-remove":
-            await handleLootbuddyRemoveButton(interaction, parsed.runId);
-            break;
           case "lootbuddy-confirm":
-            await handleLootbuddyConfirmButton(interaction, api, parsed.runId);
-            break;
           case "lootbuddy-discard":
-            await handleLootbuddyDiscardButton(interaction, parsed.runId);
+            await handleStaleLootbuddyWizardButton(interaction);
             break;
           default:
             break;
@@ -86,17 +72,13 @@ export function createBotClient(env: BotEnv): Client {
             case "signup":
               await handleCharacterSelect(interaction, api, parsed.runId);
               return;
-            case "lootbuddy-edit-pick":
-              await handleLootbuddyEditPickSelect(interaction, parsed.runId);
-              return;
-            case "lootbuddy-remove-pick":
-              await handleLootbuddyRemovePickSelect(interaction, api, parsed.runId);
-              return;
             case "lootbuddy-class-select":
-              await handleLootbuddyClassSelect(interaction, parsed.runId);
+              await handleLootbuddyClassSelect(interaction, api, parsed.runId);
               return;
+            case "lootbuddy-edit-pick":
+            case "lootbuddy-remove-pick":
             case "lootbuddy-mode-select":
-              await handleLootbuddyModeSelect(interaction, api, parsed.runId);
+              await handleStaleLootbuddyWizardSelect(interaction);
               return;
             default:
               break;

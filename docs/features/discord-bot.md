@@ -184,17 +184,16 @@ Public signup embed Roles field:
 - Lootbuddies: `N signed · M picked` (no target denominator)
 - Participant lines: Discord `<@id>` mention + class emoji (no Character-Realm). Mentions show the server nickname when set; Character identity is in Final Setup and the Web app.
 
-**Sign as Lootbuddy** — staged Class + Mode collection (no Character selector):
+**Sign as Lootbuddy** — two steps (no Character selector, no Mode picker on Discord):
 
-1. Preload existing `activeLootbuddies` into a dedicated Lootbuddy staging session.
-2. Summary of staged entries (Class — Mode). Buttons: Add / Edit / Remove / Confirm / Cancel.
-3. Add/Edit: pick `WowClass`, then pick Mode (`Loot only` / `Play along`).
-4. Confirm calls `PUT .../lootbuddies` (`setLootbuddies`) once with the full desired set; Cancel discards staging and leaves DB untouched.
-5. Zero-character Users can complete this flow. Identical Class+Mode entries are allowed as distinct rows.
+1. Click **Sign as Lootbuddy** → ephemeral class select.
+2. Pick a `WowClass` → immediately `PUT .../lootbuddies` with one `LOOT_ONLY` entry (replaces any previous Discord lootbuddy set for that User on the Run).
+
+Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain available on the Web. Stale multi-step wizard buttons from older bot messages redirect the User to click **Sign as Lootbuddy** again.
 
 ### Cancel Signup button
 
-`POST .../signup/cancel` — withdraws the User's active **BOOSTER** offer-set only (`cancelBoosterSignup`). Lootbuddies are unchanged. A protected Booster offer rejects the whole cancellation.
+`POST .../signup/cancel` — withdraws the User's active **BOOSTER and LOOTBUDDY** participation (`cancelActiveSignups`). A protected row rejects the whole cancellation. Lootbuddy-only Users can leave via this same button.
 
 ## Final roster embed
 

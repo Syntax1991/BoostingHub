@@ -573,10 +573,11 @@ export const signupService = {
    * Withdraws the User's entire active BOOSTER offer-set for a Run in one
    * atomic, all-or-nothing operation — "Cancel Booster Signup." Never touches
    * the User's Lootbuddy entries on this Run (removing a Lootbuddy is its own
-   * action via `setLootbuddies`) — the two participation types cancel
-   * independently, matching that they coexist. A no-op signup has nothing to
-   * cancel; a protected offer (roster-selected or published-locked) blocks
-   * the whole cancellation instead of partially clearing the set.
+   * action via `setLootbuddies` or Discord `cancelActiveSignups`) — the two
+   * participation types cancel independently on the Web, matching that they
+   * coexist. A no-op signup has nothing to cancel; a protected offer
+   * (roster-selected or published-locked) blocks the whole cancellation
+   * instead of partially clearing the set.
    */
   async cancelBoosterSignup(actor: AuthenticatedUser, input: { runId: string }) {
     const run = await runRepository.findById(input.runId);
@@ -611,6 +612,99 @@ export const signupService = {
     });
 
     return { withdrawn: result.withdrawn.length };
+  },
+
+  /**
+   * Discord "Cancel Signup": withdraws every active BOOSTER and LOOTBUDDY
+   * participation for this Run. Protection is checked for both sides before
+   * any write — roster-selected or published-locked rows reject the whole
+   * cancellation. Returns NOT_FOUND when nothing active remains.
+   */
+  async cancelActiveSignups(actor: AuthenticatedUser, input: { runId: string }) {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+
+    const existingSignups = await signupRepository.listByRunAndUser(input.runId, actor.id);
+    const activeBoosters = existingSignups.filter(
+      (signup) => signup.status !== "WITHDRAWN" && signup.participationType === "BOOSTER",
+    );
+    const activeLootbuddies = existingSignups.filter(
+      (signup) => signup.status !== "WITHDRAWN" && signup.participationType === "LOOTBUDDY",
+    );
+
+    if (activeBoosters.length === 0 && activeLootbuddies.length === 0) {
+      throw new DomainError("NOT_FOUND", "You have no active signup on this run.", 404);
+    }
+
+    let boosterPlan: Awaited<ReturnType<typeof buildReconciliationPlan>>["plan"] | null = null;
+    if (activeBoosters.length > 0) {
+      const built = await buildReconciliationPlan(actor.id, run, { desiredCharacterIds: [] });
+      boosterPlan = built.plan;
+    }
+
+    const roster = await rosterRepository.findByRunId(input.runId);
+    const rosterSelectedSignupIds = roster?.selectedSignupIds ?? [];
+    let lootbuddyPlan: ReturnType<typeof planLootbuddyReconciliation>["plan"] = null;
+    if (activeLootbuddies.length > 0) {
+      const { plan, blocked } = planLootbuddyReconciliation({
+        desiredEntries: [],
+        currentSignups: activeLootbuddies.map((signup) => ({ id: signup.id, status: signup.status })),
+        rosterSelectedSignupIds,
+        runStatus: run.status,
+      });
+      if (blocked.length > 0) {
+        if (blocked.some((item) => item.reason === "ROSTER_SELECTED")) {
+          throw new DomainError(
+            "SIGNUP_OFFER_ROSTER_SELECTED",
+            "A currently selected signup cannot be cancelled. Ask the raid lead to change the roster selection first.",
+          );
+        }
+        throw new DomainError(
+          "INVALID_STATE_TRANSITION",
+          "Selected signups cannot be withdrawn after the roster is published.",
+        );
+      }
+      if (!plan) {
+        throw new DomainError("VALIDATION_FAILED", "Could not compute a lootbuddy cancel plan.");
+      }
+      lootbuddyPlan = plan;
+    }
+
+    let withdrawn = 0;
+
+    if (boosterPlan) {
+      const result = await signupRepository.applyOfferPlan({
+        runId: input.runId,
+        userId: actor.id,
+        scheduledStartAt: run.scheduledStartAt,
+        toWithdraw: boosterPlan.toWithdraw,
+        toReactivate: [],
+        toCreate: [],
+        toUpdateRoles: [],
+      });
+      withdrawn += result.withdrawn.length;
+    }
+
+    if (lootbuddyPlan) {
+      const result = await signupRepository.applyLootbuddyPlan({
+        runId: input.runId,
+        userId: actor.id,
+        toWithdraw: lootbuddyPlan.toWithdraw,
+        toUpdate: [],
+        toCreate: [],
+      });
+      withdrawn += result.withdrawn.length;
+    }
+
+    await activityRepository.create({
+      userId: actor.id,
+      type: "SIGNUP_WITHDRAWN",
+      message: `${actor.name} cancelled their signup for ${run.title}.`,
+    });
+
+    return { withdrawn };
   },
 
   async withdrawSignup(user: AuthenticatedUser, signupId: string) {

@@ -12,22 +12,12 @@ import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { buildCharacterScopedCustomId, buildCustomId } from "@/discord-bot/custom-ids";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
 import {
-  beginAddLootbuddy,
-  beginEditLootbuddy,
-  completePendingLootbuddy,
   discardSession,
   getSession,
-  getLootbuddySession,
-  removeLootbuddyEntry,
-  setPendingLootbuddyClass,
   setStagedRoles,
   startSession,
-  startLootbuddySession,
-  discardLootbuddySession,
   type CharacterRole,
-  type LootbuddyMode,
   type StagedBoosterSession,
-  type StagedLootbuddySession,
   type WowClass,
 } from "@/discord-bot/interactions/signup-staging";
 import { requestImmediateSync } from "@/discord-bot/sync-loop";
@@ -71,8 +61,9 @@ const CLASS_LABELS: Record<WowClass, string> = {
   WARLOCK: "Warlock",
   WARRIOR: "Warrior",
 };
-const MODE_ORDER: readonly LootbuddyMode[] = ["LOOT_ONLY", "PLAYING"];
-const MODE_LABELS: Record<LootbuddyMode, string> = { LOOT_ONLY: "Loot only", PLAYING: "Play along" };
+
+/** Discord Lootbuddy signup always persists as Loot only — Mode is a Web-only detail. */
+const DISCORD_LOOTBUDDY_MODE = "LOOT_ONLY" as const;
 
 function orderedRoles(roles: CharacterRole[]): CharacterRole[] {
   return ROLE_ORDER.filter((role) => roles.includes(role));
@@ -119,7 +110,7 @@ type ActiveBoosterOffers = {
 type ActiveLootbuddy = {
   signupId: string;
   wowClass: WowClass | null;
-  mode: LootbuddyMode;
+  mode: "LOOT_ONLY" | "PLAYING";
 };
 type SignupOptionsPayload = {
   run: {
@@ -514,50 +505,7 @@ export function describeOfferResult(result: OfferResult, offerCount: number): st
   return `Signed up with ${active} character${active === 1 ? "" : "s"} offered.`;
 }
 
-//#region Lootbuddy — characterless, N entries, its own staged wizard
-
-function describeLootbuddyEntries(entries: StagedLootbuddySession["entries"]): string[] {
-  if (entries.length === 0) return ["No lootbuddy entries staged yet."];
-  return entries.map((entry, index) => `${index + 1}. ${CLASS_LABELS[entry.wowClass]} — ${MODE_LABELS[entry.mode]}`);
-}
-
-/**
- * Renders the staged summary — the home view of the Lootbuddy wizard.
- * Add/Edit/Remove/Confirm/Cancel fit in exactly one action row (Discord's
- * 5-button cap); Edit and Remove are omitted entirely when there is nothing
- * to edit or remove rather than shown disabled.
- */
-async function renderLootbuddySummary(
-  interaction: ReplyableInteraction,
-  runId: string,
-  session: StagedLootbuddySession,
-  runTitle: string,
-  errorMessage?: string,
-): Promise<void> {
-  const confirmLabel = session.entries.some((entry) => entry.signupId) ? "Confirm Changes" : "Confirm Signup";
-  const buttons = [
-    new ButtonBuilder().setCustomId(buildCustomId("lootbuddy-add", runId)).setLabel("Add Lootbuddy").setStyle(ButtonStyle.Primary),
-  ];
-  if (session.entries.length > 0) {
-    buttons.push(
-      new ButtonBuilder().setCustomId(buildCustomId("lootbuddy-edit", runId)).setLabel("Edit").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(buildCustomId("lootbuddy-remove", runId)).setLabel("Remove").setStyle(ButtonStyle.Secondary),
-    );
-  }
-  buttons.push(
-    new ButtonBuilder().setCustomId(buildCustomId("lootbuddy-confirm", runId)).setLabel(confirmLabel).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(buildCustomId("lootbuddy-discard", runId)).setLabel("Cancel").setStyle(ButtonStyle.Secondary),
-  );
-
-  const lines: string[] = [];
-  if (errorMessage) lines.push(`⚠️ ${errorMessage}`);
-  lines.push(`Lootbuddies for **${runTitle}**:`, "", ...describeLootbuddyEntries(session.entries));
-
-  await interaction.editReply({
-    content: lines.join("\n"),
-    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)],
-  });
-}
+//#region Lootbuddy — two-step Discord signup (class → done)
 
 function classSelectMenu(customId: string, placeholder: string): ActionRowBuilder<StringSelectMenuBuilder> {
   const menu = new StringSelectMenuBuilder()
@@ -569,22 +517,13 @@ function classSelectMenu(customId: string, placeholder: string): ActionRowBuilde
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
 
-function modeSelectMenu(customId: string): ActionRowBuilder<StringSelectMenuBuilder> {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(customId)
-    .setPlaceholder("Choose a mode")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions(MODE_ORDER.map((mode) => new StringSelectMenuOptionBuilder().setLabel(MODE_LABELS[mode]).setValue(mode)));
-  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
-}
-
-const EXPIRED_LOOTBUDDY_MESSAGE = "This lootbuddy editor has expired. Click Sign as Lootbuddy again to continue.";
+const STALE_LOOTBUDDY_WIZARD_MESSAGE =
+  "Lootbuddy signup is now just: pick a class. Click **Sign as Lootbuddy** again. To leave, use **Cancel Signup**.";
 
 /**
- * The Sign as Lootbuddy button: starts (or resets) the staged session from
- * the User's current active entries and shows the summary view. Nothing is
- * persisted by opening this — only Confirm writes anything.
+ * Sign as Lootbuddy: shows a class select immediately. Choosing a class
+ * persists one LOOT_ONLY entry (replacing any previous Discord lootbuddy set).
+ * Withdrawal is via Cancel Signup — not this button.
  */
 export async function handleLootbuddyButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -602,192 +541,72 @@ export async function handleLootbuddyButton(interaction: ButtonInteraction, api:
     return;
   }
 
-  const session = startLootbuddySession({
-    discordUserId: interaction.user.id,
-    runId,
-    entries: options.activeLootbuddies.map((entry) => ({
-      signupId: entry.signupId,
-      wowClass: entry.wowClass ?? "WARRIOR",
-      mode: entry.mode,
-    })),
-  });
-
-  await renderLootbuddySummary(interaction, runId, session, options.run.title);
-}
-
-/** Add: begins the wizard for a brand-new entry and shows the Class step. */
-export async function handleLootbuddyAddButton(interaction: ButtonInteraction, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const session = beginAddLootbuddy(interaction.user.id, runId);
-  if (!session) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
+  if (!options.run.signupWindowOpen) {
+    await interaction.editReply({
+      content: [
+        `You are already signed as lootbuddy for **${options.run.title}**.`,
+        "Signups are closed, so the class cannot be changed. Use **Cancel Signup** to leave.",
+      ].join("\n"),
+    });
     return;
   }
+
+  const current =
+    options.activeLootbuddies.length > 0
+      ? options.activeLootbuddies
+          .map((entry) => CLASS_LABELS[(entry.wowClass ?? "WARRIOR") as WowClass] ?? entry.wowClass)
+          .join(", ")
+      : null;
+
   await interaction.editReply({
-    content: "Choose a class for the new lootbuddy entry.",
+    content: [
+      `Choose a class to sign as lootbuddy for **${options.run.title}**.`,
+      current ? `Currently signed: ${current}. Picking a class replaces it.` : null,
+      "To leave later, use **Cancel Signup**.",
+    ]
+      .filter(Boolean)
+      .join("\n"),
     components: [classSelectMenu(buildCustomId("lootbuddy-class-select", runId), "Choose a class")],
   });
-}
-
-/** Edit: shows a picker of existing staged entries; choosing one begins the wizard for that slot. */
-export async function handleLootbuddyEditButton(interaction: ButtonInteraction, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const session = getLootbuddySession(interaction.user.id, runId);
-  if (!session || session.entries.length === 0) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(buildCustomId("lootbuddy-edit-pick", runId))
-    .setPlaceholder("Choose an entry to edit")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions(
-      session.entries.map((entry, index) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(`${index + 1}. ${CLASS_LABELS[entry.wowClass]} — ${MODE_LABELS[entry.mode]}`)
-          .setValue(String(index)),
-      ),
-    );
-  await interaction.editReply({
-    content: "Choose which lootbuddy entry to edit.",
-    components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
-  });
-}
-
-/** The Edit picker's submission: begins the Class→Mode wizard for the chosen slot. */
-export async function handleLootbuddyEditPickSelect(interaction: StringSelectMenuInteraction, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const index = Number(interaction.values[0]);
-  const session = beginEditLootbuddy(interaction.user.id, runId, index);
-  if (!session) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-  await interaction.editReply({
-    content: `Choose a new class for entry ${index + 1}.`,
-    components: [classSelectMenu(buildCustomId("lootbuddy-class-select", runId), "Choose a class")],
-  });
-}
-
-/** Remove: shows a picker of existing staged entries; choosing one removes it immediately and returns to the summary. */
-export async function handleLootbuddyRemoveButton(interaction: ButtonInteraction, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const session = getLootbuddySession(interaction.user.id, runId);
-  if (!session || session.entries.length === 0) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(buildCustomId("lootbuddy-remove-pick", runId))
-    .setPlaceholder("Choose an entry to remove")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions(
-      session.entries.map((entry, index) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(`${index + 1}. ${CLASS_LABELS[entry.wowClass]} — ${MODE_LABELS[entry.mode]}`)
-          .setValue(String(index)),
-      ),
-    );
-  await interaction.editReply({
-    content: "Choose which lootbuddy entry to remove.",
-    components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
-  });
-}
-
-/** The Remove picker's submission: removes that entry from the staged session (never persisted state) and returns to the summary. */
-export async function handleLootbuddyRemovePickSelect(interaction: StringSelectMenuInteraction, api: BotApiClient, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const index = Number(interaction.values[0]);
-  const session = removeLootbuddyEntry(interaction.user.id, runId, index);
-  if (!session) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-  let options: SignupOptionsPayload;
-  try {
-    options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
-  } catch (error) {
-    await interaction.editReply({ content: describeBotApiError(error), components: [] });
-    return;
-  }
-  await renderLootbuddySummary(interaction, runId, session, options.run.title);
-}
-
-/** The wizard's Class step submission — advances to the Mode step. */
-export async function handleLootbuddyClassSelect(interaction: StringSelectMenuInteraction, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const wowClass = interaction.values[0] as WowClass;
-  const session = setPendingLootbuddyClass(interaction.user.id, runId, wowClass);
-  if (!session) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-  await interaction.editReply({
-    content: `${CLASS_LABELS[wowClass]} — now choose a mode.`,
-    components: [modeSelectMenu(buildCustomId("lootbuddy-mode-select", runId))],
-  });
-}
-
-/** The wizard's Mode step submission — completes the pending Add/Edit and returns to the summary. Nothing is persisted yet. */
-export async function handleLootbuddyModeSelect(interaction: StringSelectMenuInteraction, api: BotApiClient, runId: string): Promise<void> {
-  await interaction.deferUpdate();
-  const mode = interaction.values[0] as LootbuddyMode;
-  const session = completePendingLootbuddy(interaction.user.id, runId, mode);
-  if (!session) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-  let options: SignupOptionsPayload;
-  try {
-    options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
-  } catch (error) {
-    await interaction.editReply({ content: describeBotApiError(error), components: [] });
-    return;
-  }
-  await renderLootbuddySummary(interaction, runId, session, options.run.title);
 }
 
 /**
- * Confirm: the one and only point where the staged Lootbuddy entry set is
- * persisted, via a single `setLootbuddies` call carrying the complete
- * desired set. A failed call keeps the session so the User can fix and
- * retry rather than losing their configuration. Never touches the User's
- * Booster offers on this Run.
+ * Class select: persists immediately as a single LOOT_ONLY lootbuddy entry.
+ * Replaces the User's previous lootbuddy set for this Run (Web can still hold
+ * multiple entries; Discord keeps the fast one-class path).
  */
-export async function handleLootbuddyConfirmButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
+export async function handleLootbuddyClassSelect(
+  interaction: StringSelectMenuInteraction,
+  api: BotApiClient,
+  runId: string,
+): Promise<void> {
   await interaction.deferUpdate();
-  const session = getLootbuddySession(interaction.user.id, runId);
-  if (!session) {
-    await interaction.editReply({ content: EXPIRED_LOOTBUDDY_MESSAGE, components: [] });
-    return;
-  }
-
-  const lootbuddies = session.entries.map((entry) => ({ signupId: entry.signupId, wowClass: entry.wowClass, mode: entry.mode }));
+  const wowClass = interaction.values[0] as WowClass;
 
   try {
-    await api.setLootbuddies(runId, interaction.user.id, { lootbuddies });
-    discardLootbuddySession(interaction.user.id, runId);
-    await interaction.editReply({ content: describeLootbuddyResult(lootbuddies.length), components: [] });
+    await api.setLootbuddies(runId, interaction.user.id, {
+      lootbuddies: [{ wowClass, mode: DISCORD_LOOTBUDDY_MODE }],
+    });
+    await interaction.editReply({
+      content: `Signed up as lootbuddy (**${CLASS_LABELS[wowClass]}**). Use **Cancel Signup** to leave.`,
+      components: [],
+    });
     requestImmediateSync();
   } catch (error) {
-    let options: SignupOptionsPayload;
-    try {
-      options = (await api.getSignupOptions(runId, interaction.user.id)) as SignupOptionsPayload;
-    } catch {
-      await interaction.editReply({ content: describeBotApiError(error), components: [] });
-      return;
-    }
-    await renderLootbuddySummary(interaction, runId, session, options.run.title, describeBotApiError(error));
+    await interaction.editReply({ content: describeBotApiError(error), components: [] });
   }
 }
 
-/** Cancel: discards the staged editor only. Never touches persisted signup state. */
-export async function handleLootbuddyDiscardButton(interaction: ButtonInteraction, runId: string): Promise<void> {
+/** Legacy multi-step wizard buttons — redirect to the two-step flow. */
+export async function handleStaleLootbuddyWizardButton(interaction: ButtonInteraction): Promise<void> {
   await interaction.deferUpdate();
-  discardLootbuddySession(interaction.user.id, runId);
-  await interaction.editReply({ content: "Lootbuddy changes cancelled.", components: [] });
+  await interaction.editReply({ content: STALE_LOOTBUDDY_WIZARD_MESSAGE, components: [] });
+}
+
+/** Legacy multi-step wizard selects — redirect to the two-step flow. */
+export async function handleStaleLootbuddyWizardSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+  await interaction.deferUpdate();
+  await interaction.editReply({ content: STALE_LOOTBUDDY_WIZARD_MESSAGE, components: [] });
 }
 
 export function describeLootbuddyResult(entryCount: number): string {
