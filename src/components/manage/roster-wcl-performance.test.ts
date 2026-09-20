@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterWclPerformanceForGroupRole,
   formatWclPerformanceRaidLine,
+  wclPercentileColor,
 } from "@/lib/wcl-performance-display";
 import { VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
 
@@ -56,5 +57,17 @@ describe("roster WCL performance display copy", () => {
     const healerOnly = filterWclPerformanceForGroupRole(segments, "HEALER");
     expect(healerOnly).toHaveLength(2);
     expect(healerOnly.every((s) => s.roles.every((r) => r.role === "HEALER"))).toBe(true);
+  });
+});
+
+describe("wclPercentileColor", () => {
+  it("maps WCL quality thresholds", () => {
+    expect(wclPercentileColor(10)).toBe("#9d9d9d");
+    expect(wclPercentileColor(25)).toBe("#1eff00");
+    expect(wclPercentileColor(50)).toBe("#0070dd");
+    expect(wclPercentileColor(75)).toBe("#a335ee");
+    expect(wclPercentileColor(95)).toBe("#ff8000");
+    expect(wclPercentileColor(99)).toBe("#e268a8");
+    expect(wclPercentileColor(100)).toBe("#e5cc80");
   });
 });
