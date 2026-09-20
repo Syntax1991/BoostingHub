@@ -180,7 +180,7 @@ describe("buildSignupEmbed", () => {
     expect(embed.toJSON().title).toBe("Weekend Heroic Catch-up");
   });
 
-  it("renders Tank|Healer|DPS as the primary inline grid with Lootbuddy after, Signups then Picked", () => {
+  it("renders Tank|Healer|DPS as the primary inline grid with Lootbuddy after, Signups then Roster", () => {
     const tanks = [
       member({
         signupId: "t1",
@@ -255,11 +255,11 @@ describe("buildSignupEmbed", () => {
     expect(fields.find((f) => f.name === "Signed users")?.value).toBe("4");
 
     const signupsHeading = fields.findIndex((f) => f.name === "Signups by role");
-    const pickedHeading = fields.findIndex((f) => f.name === "Picked");
+    const rosterHeading = fields.findIndex((f) => f.name === "Roster");
     expect(signupsHeading).toBeGreaterThanOrEqual(0);
-    expect(pickedHeading).toBeGreaterThan(signupsHeading);
+    expect(rosterHeading).toBeGreaterThan(signupsHeading);
     expect(fields[signupsHeading]?.inline).toBe(false);
-    expect(fields[pickedHeading]?.inline).toBe(false);
+    expect(fields[rosterHeading]?.inline).toBe(false);
     expect(fields[signupsHeading]?.value).toBe("\u200b");
 
     const signupPrimaries = fields.slice(signupsHeading + 1, signupsHeading + 5);
@@ -274,8 +274,8 @@ describe("buildSignupEmbed", () => {
     expect(signupPrimaries[0]?.value).not.toContain("Tankone");
     expect(signupPrimaries[3]?.value).toBe("<@444444444444444444> <:mage:3>");
 
-    const pickedPrimaries = fields.slice(pickedHeading + 1, pickedHeading + 5);
-    expect(pickedPrimaries.map((f) => f.name)).toEqual([
+    const rosterPrimaries = fields.slice(rosterHeading + 1, rosterHeading + 5);
+    expect(rosterPrimaries.map((f) => f.name)).toEqual([
       "🛡 Tanks — 1/2",
       "✚ Healers — 1/4",
       "⚔ DPS — 1/14",

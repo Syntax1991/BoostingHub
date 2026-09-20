@@ -179,9 +179,9 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 
 Public signup embed Roles field:
 
-- **Signed** = PENDING/SELECTED offers containing that role (hybrids count once per offered role)
-- **Picked** = authoritative roster by `selectedRole` (saved draft while OPEN/ROSTERING; published SELECTED after publish)
-- Lootbuddies: `N signed · M picked` (no target denominator)
+- **Signups** = active offers not yet on the roster (hybrids count once per offered role). Users already draft-selected or SELECTED are omitted here.
+- **Roster** = authoritative roster by `selectedRole` (saved draft while OPEN/ROSTERING; published SELECTED after publish)
+- Lootbuddies: signup count / roster count (no target denominator)
 - Participant lines: Discord `<@id>` mention + class emoji (no Character-Realm). Mentions show the server nickname when set; Character identity is in Final Setup and the Web app.
 
 **Sign as Lootbuddy** — two steps (no Character selector, no Mode picker on Discord):

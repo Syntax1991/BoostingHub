@@ -117,9 +117,10 @@ export type SignupEmbedData = {
     lootbuddy: SignupEmbedLootbuddyStatus;
   };
   /**
-   * Participants behind those counts. Signed is offered-role projection
-   * (multi-role boosters appear in every offered role). Picked is one
-   * authoritative role (draft selectedRole or publishedRole).
+   * Participants behind those counts. Signups is offered-role projection for
+   * Users not yet on the roster (multi-role boosters appear in every offered
+   * role). Roster (`picked`) is one authoritative role (draft selectedRole or
+   * publishedRole); rostered Users are omitted from Signups.
    */
   members: {
     signed: SignupEmbedRoleMembers;
@@ -344,33 +345,15 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
 }
 
 /**
- * OPEN / ROSTERING (and pre-publish): picked = saved draft selections.
- * PUBLISHED+: picked = live SELECTED signups + publishedRole (replacement drafts stay private).
+ * OPEN / ROSTERING (and pre-publish): roster = saved draft selections.
+ * PUBLISHED+: roster = live SELECTED signups + publishedRole (replacement drafts stay private).
+ * Users already on the roster are omitted from the Signups lists so they appear once.
  * Counts are length-derived from the same member lists rendered in the embed.
  */
 function buildSignupRoleProjection(
   run: RunListRecord,
   activeSignups: RunListRecord["signups"],
 ): Pick<SignupEmbedData, "roleStatus" | "members"> {
-  const signedTanks = sortSignupEmbedMembers(
-    activeSignups
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"))
-      .map(toSignupEmbedMember),
-  );
-  const signedHealers = sortSignupEmbedMembers(
-    activeSignups
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"))
-      .map(toSignupEmbedMember),
-  );
-  const signedDps = sortSignupEmbedMembers(
-    activeSignups
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"))
-      .map(toSignupEmbedMember),
-  );
-  const signedLoot = sortSignupEmbedMembers(
-    activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
-  );
-
   const usePublishedPicks =
     run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED";
   const byId = new Map(run.signups.map((signup) => [signup.id, signup]));
@@ -393,6 +376,28 @@ function buildSignupRoleProjection(
       });
     }
   }
+
+  const rosteredUserIds = new Set(pickedRows.map((signup) => signup.userId));
+  const waitingSignups = activeSignups.filter((signup) => !rosteredUserIds.has(signup.userId));
+
+  const signedTanks = sortSignupEmbedMembers(
+    waitingSignups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"))
+      .map(toSignupEmbedMember),
+  );
+  const signedHealers = sortSignupEmbedMembers(
+    waitingSignups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"))
+      .map(toSignupEmbedMember),
+  );
+  const signedDps = sortSignupEmbedMembers(
+    waitingSignups
+      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"))
+      .map(toSignupEmbedMember),
+  );
+  const signedLoot = sortSignupEmbedMembers(
+    waitingSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
+  );
 
   const pickedTanks = sortSignupEmbedMembers(
     pickedRows

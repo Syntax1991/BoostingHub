@@ -481,6 +481,12 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.dps.picked).toBe(0);
     expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
     expect(embed?.members.picked.healers.filter((m) => m.signupId === hybridSignupId)).toHaveLength(1);
+    // Rostered users leave the Signups section entirely.
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.signed.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.roleStatus.tank.signed).toBe(0);
+    expect(embed?.roleStatus.healer.signed).toBe(1);
+    expect(embed?.roleStatus.dps.signed).toBe(1);
 
     view = await rosterService.getRosterManagementView(lead, hybridRunId);
     await rosterService.saveDraftSelection(lead, {
@@ -493,6 +499,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.healer.picked).toBe(0);
     expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
     expect(embed?.members.picked.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
   });
 });
 

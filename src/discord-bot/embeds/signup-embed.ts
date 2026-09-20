@@ -150,7 +150,7 @@ function signedRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
   ];
 }
 
-function pickedRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
+function rosterRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
   const { roleStatus, members } = data;
   return [
     {
@@ -201,7 +201,7 @@ export function measureEmbedJsonSize(embed: ReturnType<EmbedBuilder["toJSON"]>):
 }
 
 /**
- * One Signup Discord message → one Embed: summary + Signups by role + Picked.
+ * One Signup Discord message → one Embed: summary + Signups by role + Roster.
  * Continuations (if a role exceeds 1024 chars) stay inside this same Embed.
  * Designed for realistic Run capacity (~20–25 unique signup users).
  */
@@ -226,8 +226,8 @@ export function buildSignupEmbed(
       { name: `${raidLeadEmoji} Raid Lead`, value: formatRaidLeadFieldValue(data), inline: true },
       { name: "Signups by role", value: SECTION_HEADING_VALUE, inline: false },
       ...buildRoleSectionFields(signedRoleColumns(data), classIndicators, roleIndicators),
-      { name: "Picked", value: SECTION_HEADING_VALUE, inline: false },
-      ...buildRoleSectionFields(pickedRoleColumns(data), classIndicators, roleIndicators),
+      { name: "Roster", value: SECTION_HEADING_VALUE, inline: false },
+      ...buildRoleSectionFields(rosterRoleColumns(data), classIndicators, roleIndicators),
     )
     .setColor(color)
     .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });
