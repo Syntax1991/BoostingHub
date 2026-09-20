@@ -485,6 +485,8 @@ model Run {
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
+  /// When true, first Discord channel provision pings Tank/Healer/DPS roles.
+  discordRolePing    Boolean        @default(true)
   signupsOpen        Boolean        @default(false)
   archivedAt         TimestamptzString?
   archivedById       String?

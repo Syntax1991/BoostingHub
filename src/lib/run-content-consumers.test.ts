@@ -155,6 +155,7 @@ describe("Discord Bundle content labels", () => {
         signed: emptySignupEmbedMembers(),
         picked: emptySignupEmbedMembers(),
       },
+      discordRolePing: true,
     }).toJSON();
 
     expect(embed.description).toContain("Season 2 Bundle");

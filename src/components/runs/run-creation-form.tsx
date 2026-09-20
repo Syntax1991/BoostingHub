@@ -69,6 +69,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const [desiredTankCount, setDesiredTankCount] = useState(form.defaults.desiredTankCount);
   const [desiredHealerCount, setDesiredHealerCount] = useState(form.defaults.desiredHealerCount);
   const [desiredDpsCount, setDesiredDpsCount] = useState(form.defaults.desiredDpsCount);
+  const [discordRolePing, setDiscordRolePing] = useState(form.defaults.discordRolePing ?? true);
 
   const [rows, setRows] = useState<Row[]>([
     {
@@ -245,6 +246,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           desiredTankCount,
           desiredHealerCount,
           desiredDpsCount,
+          discordRolePing,
         },
         runs: rows.map((row, index) => ({
           scheduledStartAt: scheduledByRow[index],
@@ -448,6 +450,22 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
               />
             </label>
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={discordRolePing}
+              onChange={(event) => setDiscordRolePing(event.target.checked)}
+              className="mt-1"
+              aria-label="Ping Tank, Healer, and DPS Discord roles"
+            />
+            <span>
+              <span className="block">Ping Discord roles (@Tank @Healer @DPS)</span>
+              <span className="mt-0.5 block text-xs text-muted">
+                When the Run channel is created, notify those roles with the Raidboost Announce. Turn off for quiet
+                channels.
+              </span>
+            </span>
+          </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Notes (optional)</span>
             <textarea

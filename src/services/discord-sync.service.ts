@@ -126,6 +126,8 @@ export type SignupEmbedData = {
     signed: SignupEmbedRoleMembers;
     picked: SignupEmbedRoleMembers;
   };
+  /** When true, first channel provision pings Tank/Healer/DPS Discord roles. */
+  discordRolePing: boolean;
 };
 
 export type RosterEmbedMember = {
@@ -352,6 +354,7 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     uniqueSignupCount: new Set(active.map((signup) => signup.userId)).size,
     roleStatus: projection.roleStatus,
     members: projection.members,
+    discordRolePing: run.discordRolePing,
   };
 }
 
@@ -540,6 +543,7 @@ function buildSignupEmbedSignature(
     // member-data changes so existing posts refresh (Content→Raid Lead, role emojis,
     // multi-char mention grouping).
     participantLineFormat: "mention-v3-group-icons",
+    discordRolePing: data.discordRolePing,
   });
 }
 

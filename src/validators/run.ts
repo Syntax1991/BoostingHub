@@ -49,6 +49,8 @@ const createRunCommonSchema = z.object({
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
+  /** Ping Tank/Healer/DPS Discord roles when the Run channel is first created. Default true. */
+  discordRolePing: z.boolean().optional(),
 });
 
 /**
@@ -77,6 +79,7 @@ export const updateRunSchema = z
     desiredTankCount: compositionSchema,
     desiredHealerCount: compositionSchema,
     desiredDpsCount: compositionSchema,
+    discordRolePing: z.boolean().optional(),
   })
   .and(
     z.union([

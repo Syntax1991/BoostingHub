@@ -56,6 +56,7 @@ function emptyData(overrides: Partial<SignupEmbedData> = {}): SignupEmbedData {
       signed: emptySignupEmbedMembers(),
       picked: emptySignupEmbedMembers(),
     },
+    discordRolePing: true,
     ...overrides,
   };
 }

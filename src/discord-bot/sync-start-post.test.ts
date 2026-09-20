@@ -142,6 +142,7 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
         signed: { tanks: [], healers: [], dps: [], lootbuddies: [] },
         picked: { tanks: [], healers: [], dps: [], lootbuddies: [] },
       },
+      discordRolePing: true,
     });
     const roster = buildRosterEmbed({
       runId: "r1",

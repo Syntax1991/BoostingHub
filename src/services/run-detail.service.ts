@@ -148,6 +148,7 @@ export const runDetailService = {
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,
+      discordRolePing: run.discordRolePing,
       activeSignupCount: activeSignups.length,
       selectedCount,
     };

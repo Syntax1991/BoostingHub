@@ -2278,6 +2278,13 @@
                   "plane": "domain"
                 }
               },
+              "discordRolePing": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -2528,6 +2535,9 @@
                 },
                 "difficulty": {
                   "column": "difficulty"
+                },
+                "discordRolePing": {
+                  "column": "discordRolePing"
                 },
                 "id": {
                   "column": "id"
@@ -7136,6 +7146,15 @@
                     "plane": "storage"
                   }
                 },
+                "discordRolePing": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -9818,7 +9837,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "94cadc98f7f681a5a924f8038077e2a475f215299a5fe2cc44e7b02a2c6a306a"
+    "storageHash": "d0baceb8d12d7ee342eee5e908f4cc64cb38514a74bf2efef58af6458a5aabf1"
   },
   "execution": {
     "executionHash": "b5c6546a0390593f96086a20925a8360dc178e073a03364e56e203b76bdc1cc0",

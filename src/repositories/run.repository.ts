@@ -79,6 +79,8 @@ export type RunListRecord = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** When true, first Discord channel provision pings Tank/Healer/DPS roles. */
+  discordRolePing: boolean;
   /** Authoritative ordered raid contents for this Run. */
   contents: RunRaidContentRecord[];
   /** Pure display projection from persisted contents (never regenerated from presets). */
@@ -142,6 +144,8 @@ export type RunCreateWithContentsInput = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Defaults to true when omitted (legacy callers / tests). */
+  discordRolePing?: boolean;
   contents: RunContentWriteSpec[];
 };
 
@@ -216,6 +220,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     desiredTankCount: asNumber(run.desiredTankCount),
     desiredHealerCount: asNumber(run.desiredHealerCount),
     desiredDpsCount: asNumber(run.desiredDpsCount),
+    discordRolePing: asBoolean(run.discordRolePing, true),
     contents,
     contentDisplay,
     signupsOpen: asBoolean(run.signupsOpen),
@@ -356,6 +361,7 @@ export const runRepository = {
         desiredTankCount: input.desiredTankCount,
         desiredHealerCount: input.desiredHealerCount,
         desiredDpsCount: input.desiredDpsCount,
+        discordRolePing: input.discordRolePing ?? true,
         signupsOpen: false,
         createdAt: now,
         updatedAt: now,
@@ -400,6 +406,7 @@ export const runRepository = {
           desiredTankCount: input.desiredTankCount,
           desiredHealerCount: input.desiredHealerCount,
           desiredDpsCount: input.desiredDpsCount,
+          discordRolePing: input.discordRolePing ?? true,
           signupsOpen: false,
           createdAt: now,
           updatedAt: now,
@@ -436,6 +443,7 @@ export const runRepository = {
       desiredTankCount?: number;
       desiredHealerCount?: number;
       desiredDpsCount?: number;
+      discordRolePing?: boolean;
       status?: RunStatus;
       signupsOpen?: boolean;
     },
@@ -464,6 +472,7 @@ export const runRepository = {
       desiredTankCount?: number;
       desiredHealerCount?: number;
       desiredDpsCount?: number;
+      discordRolePing?: boolean;
       contents?: RunContentWriteSpec[];
     },
   ) {

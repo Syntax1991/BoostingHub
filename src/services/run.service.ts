@@ -158,6 +158,8 @@ type EffectiveRunInput = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** When true, first Discord channel provision pings Tank/Healer/DPS roles. Default true. */
+  discordRolePing?: boolean;
 };
 
 type PreparedRunDraft = RunCreateWithContentsInput;
@@ -245,6 +247,7 @@ function prepareRunDraft(
     desiredTankCount: input.desiredTankCount,
     desiredHealerCount: input.desiredHealerCount,
     desiredDpsCount: input.desiredDpsCount,
+    discordRolePing: input.discordRolePing ?? true,
     contents: context.contents,
   };
 }
@@ -282,6 +285,10 @@ function mergeMassCreateRow(defaults: MassCreateDefaults, row: MassCreateRunRow)
     desiredHealerCount:
       (overrides.desiredHealerCount as number | undefined) ?? (base.desiredHealerCount as number),
     desiredDpsCount: (overrides.desiredDpsCount as number | undefined) ?? (base.desiredDpsCount as number),
+    discordRolePing:
+      (overrides.discordRolePing as boolean | undefined) ??
+      (base.discordRolePing as boolean | undefined) ??
+      true,
   };
 }
 
@@ -472,6 +479,7 @@ export const runService = {
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
+        discordRolePing: true,
       },
     };
   },
@@ -548,6 +556,7 @@ export const runService = {
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
+        discordRolePing: true,
       },
     };
   },
@@ -732,7 +741,8 @@ export const runService = {
         input.lootType !== run.lootType ||
         input.desiredTankCount !== run.desiredTankCount ||
         input.desiredHealerCount !== run.desiredHealerCount ||
-        input.desiredDpsCount !== run.desiredDpsCount;
+        input.desiredDpsCount !== run.desiredDpsCount ||
+        (input.discordRolePing ?? run.discordRolePing) !== run.discordRolePing;
       if (planningChanged) {
         throw new DomainError("RUN_EDIT_LOCKED", "Planning fields cannot be edited in this run state.");
       }
@@ -803,6 +813,7 @@ export const runService = {
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
+      discordRolePing: input.discordRolePing ?? run.discordRolePing,
     };
 
     if (identityChanged) {

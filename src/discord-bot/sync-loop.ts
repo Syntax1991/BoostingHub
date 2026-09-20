@@ -593,7 +593,7 @@ async function postRaidboostAnnounce(
   client: Client,
   env: BotEnv,
   channelId: string,
-  data: Pick<SignupEmbedData, "difficulty" | "lootType" | "runId">,
+  data: Pick<SignupEmbedData, "difficulty" | "lootType" | "runId" | "discordRolePing">,
 ): Promise<void> {
   let channel;
   try {
@@ -630,37 +630,39 @@ async function postRaidboostAnnounce(
       );
     }
 
-    const envRoleIds: Record<(typeof RAIDBOOST_PING_ROLE_NAMES)[number], string | null> = {
-      tank: env.discordPingRoleTankId,
-      healer: env.discordPingRoleHealerId,
-      dps: env.discordPingRoleDpsId,
-    };
+    if (data.discordRolePing) {
+      const envRoleIds: Record<(typeof RAIDBOOST_PING_ROLE_NAMES)[number], string | null> = {
+        tank: env.discordPingRoleTankId,
+        healer: env.discordPingRoleHealerId,
+        dps: env.discordPingRoleDpsId,
+      };
 
-    for (const name of RAIDBOOST_PING_ROLE_NAMES) {
-      const fromEnv = envRoleIds[name];
-      const role = fromEnv
-        ? (roles.get(fromEnv) ?? null)
-        : (roles.find((entry) => entry.name.toLowerCase() === name) ?? null);
-      if (role) {
-        roleMentions.push(`<@&${role.id}>`);
-        roleIds.push(role.id);
-        if (!role.mentionable) {
-          // Bots can still notify via allowedMentions; surface for operators.
+      for (const name of RAIDBOOST_PING_ROLE_NAMES) {
+        const fromEnv = envRoleIds[name];
+        const role = fromEnv
+          ? (roles.get(fromEnv) ?? null)
+          : (roles.find((entry) => entry.name.toLowerCase() === name) ?? null);
+        if (role) {
+          roleMentions.push(`<@&${role.id}>`);
+          roleIds.push(role.id);
+          if (!role.mentionable) {
+            // Bots can still notify via allowedMentions; surface for operators.
+            console.warn(
+              `[discord-bot] role "${role.name}" is not mentionable — pinging via allowedMentions anyway`,
+            );
+          }
+        } else {
           console.warn(
-            `[discord-bot] role "${role.name}" is not mentionable — pinging via allowedMentions anyway`,
+            `[discord-bot] guild role "${name}" missing on ${guild.name}${fromEnv ? ` (env id ${fromEnv})` : ""} — omitting from raidboost announce ping`,
           );
         }
-      } else {
-        console.warn(
-          `[discord-bot] guild role "${name}" missing on ${guild.name}${fromEnv ? ` (env id ${fromEnv})` : ""} — omitting from raidboost announce ping`,
-        );
       }
     }
   } catch (error) {
     console.warn(`[discord-bot] failed resolving raidboost announce emoji/roles for run ${data.runId}`, error);
   }
 
-  if (roleMentions.length === 0) {
+  if (data.discordRolePing && roleMentions.length === 0) {
     console.warn(
       `[discord-bot] raidboost announce for run ${data.runId} has no role pings — posting embed only`,
     );

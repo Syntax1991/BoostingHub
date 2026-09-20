@@ -48,10 +48,10 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
     titleCoverage: "8/8",
     raidLeadName: "Titan",
     raidLeadDiscordUserId: null,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
+    difficulty: "HEROIC" as const,
+    lootType: "UNSAVED" as const,
     scheduledStartAt,
-    runStatus: "OPEN",
+    runStatus: "OPEN" as const,
     signupWindowOpen: true,
     uniqueSignupCount: 0,
     roleStatus: {
@@ -64,6 +64,7 @@ function signupEmbed(runId: string, scheduledStartAt: string) {
       signed: { tanks: [], healers: [], dps: [], lootbuddies: [] },
       picked: { tanks: [], healers: [], dps: [], lootbuddies: [] },
     },
+    discordRolePing: true,
   };
 }
 
@@ -120,6 +121,51 @@ describe("syncOnce — raidboost announce on first channel create", () => {
     expect(embedJson?.title).toContain("PhoenixStarDiscord");
     expect(embedJson?.title).toContain("Raidboost Announce");
     expect(embedJson?.description).toContain("**HC** 💰❌ Heroic Saved");
+  });
+
+  it("posts announce without role pings when discordRolePing is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const { client, createdIds } = makeDiscordClient(children);
+
+    await syncOnce(
+      client,
+      botEnv(),
+      makeApi({
+        channels: [],
+        signups: [
+          {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            existingChannelId: null,
+            existingMessageId: null,
+            existingRunChannelId: null,
+            desiredChannelName: "tue-1800-hc-saved-lead",
+            targetBucket: "CURRENT",
+            scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            embed: {
+              ...signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
+              difficulty: "HEROIC",
+              lootType: "SAVED",
+              discordRolePing: false,
+            },
+          },
+        ],
+        roster: [],
+        start: [],
+      }),
+    );
+
+    expect(createdIds).toHaveLength(1);
+    const createdChannel = client.channels.cache.get(createdIds[0]!) as { send: ReturnType<typeof vi.fn> };
+    expect(createdChannel.send).toHaveBeenCalledTimes(2);
+    const announce = createdChannel.send.mock.calls[0][0] as {
+      content?: string;
+      allowedMentions: { roles: string[] };
+    };
+    expect(announce.content).toBeUndefined();
+    expect(announce.allowedMentions.roles).toEqual([]);
   });
 
   it("does not re-announce when the Run channel already exists", async () => {

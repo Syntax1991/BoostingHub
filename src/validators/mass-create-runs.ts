@@ -24,6 +24,7 @@ const massCreateDefaultsCommercialSchema = z.object({
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
+  discordRolePing: z.boolean().optional(),
 });
 
 const massCreateDefaultsLegacySchema = z.object({
@@ -36,6 +37,7 @@ const massCreateDefaultsLegacySchema = z.object({
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
   plannedBossCount: plannedBossCountSchema,
+  discordRolePing: z.boolean().optional(),
 });
 
 const massCreateDefaultsSchema = z.union([
@@ -53,6 +55,7 @@ const massCreateRowOverridesCommercialSchema = z.object({
   desiredTankCount: compositionSchema.optional(),
   desiredHealerCount: compositionSchema.optional(),
   desiredDpsCount: compositionSchema.optional(),
+  discordRolePing: z.boolean().optional(),
 });
 
 const massCreateRowOverridesLegacySchema = z.object({
@@ -65,6 +68,7 @@ const massCreateRowOverridesLegacySchema = z.object({
   desiredHealerCount: compositionSchema.optional(),
   desiredDpsCount: compositionSchema.optional(),
   plannedBossCount: plannedBossCountSchema.optional(),
+  discordRolePing: z.boolean().optional(),
 });
 
 const massCreateRowOverridesSchema = z.union([
