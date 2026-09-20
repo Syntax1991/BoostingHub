@@ -640,11 +640,12 @@ function SignupRowCard({
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
+  const rowPointer = disabled ? "cursor-not-allowed" : "cursor-pointer";
   return (
-    <label
-      className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 ${
+    <div
+      className={`flex items-start gap-3 rounded-md border px-3 py-2 ${
         selected ? "border-accent bg-accent/10" : "border-border bg-transparent"
-      } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
+      } ${disabled ? "opacity-70" : ""}`}
     >
       <input
         id={checkboxId}
@@ -654,21 +655,27 @@ function SignupRowCard({
         disabled={disabled}
         onChange={(event) => onToggle(signup, event.target.checked)}
       />
-      <span className="min-w-0 flex-1 text-sm">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{signupDisplayName(signup)}</span>
+      <div className="min-w-0 flex-1 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor={checkboxId} className={`font-medium ${rowPointer}`}>
+            {signupDisplayName(signup)}
+          </label>
           {displayClass ? <ClassBadge wowClass={displayClass} /> : null}
           <OfferedRolesBadges roles={signup.offeredRoles} />
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
           {character?.warcraftLogsId ? (
-            <span onClick={(event) => event.preventDefault()}>
-              <WarcraftLogsLink warcraftLogsId={character.warcraftLogsId} className="inline-flex items-center gap-1 text-xs text-accent hover:underline" />
-            </span>
+            <WarcraftLogsLink
+              warcraftLogsId={character.warcraftLogsId}
+              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+            />
           ) : null}
-        </span>
-        <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+        </div>
+        <label
+          htmlFor={checkboxId}
+          className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted ${rowPointer}`}
+        >
           {character ? (
             <span>
               {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"} ilvl ·{" "}
@@ -691,16 +698,15 @@ function SignupRowCard({
               {lockoutLines.join(" · ")}
             </span>
           ) : null}
-        </span>
+        </label>
         {selected && needsRoleChoice ? (
-          <span className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted">Assigned role:</span>
             <select
               aria-label={`Assigned role for ${signupDisplayName(signup)}`}
               value={assignedRole ?? ""}
               disabled={!editing || locked}
               onChange={(event) => onAssignRole(signup, event.target.value as CharacterRole)}
-              onClick={(event) => event.stopPropagation()}
               className="h-8 rounded-md border border-border bg-surface px-2 text-xs"
             >
               <option value="">Choose assigned role…</option>
@@ -710,23 +716,25 @@ function SignupRowCard({
                 </option>
               ))}
             </select>
-          </span>
+          </div>
         ) : null}
         {scheduleConflicts.length > 0 ? (
-          <span className="mt-1 block space-y-0.5 text-xs text-warning">
+          <label htmlFor={checkboxId} className={`mt-1 block space-y-0.5 text-xs text-warning ${rowPointer}`}>
             <span className="font-medium text-warning">Schedule conflict</span>
             {scheduleConflicts.map((conflict) => (
               <span key={`${conflict.source}-${conflict.message}`} className="block">
                 {conflict.message}
               </span>
             ))}
-          </span>
+          </label>
         ) : null}
         {signup.issue ? (
-          <span className="mt-1 block text-xs text-danger">{signup.issue}</span>
+          <label htmlFor={checkboxId} className={`mt-1 block text-xs text-danger ${rowPointer}`}>
+            {signup.issue}
+          </label>
         ) : null}
-      </span>
-    </label>
+      </div>
+    </div>
   );
 }
 
