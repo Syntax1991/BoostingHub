@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { wowClassIconUrl } from "@/lib/wow-class-icons";
 import {
   ACCESS_STATUS_LABELS,
   ATTENDANCE_STATUS_LABELS,
@@ -120,12 +121,34 @@ export function OfferedRolesBadges({ roles }: { roles: readonly CharacterRole[] 
 export function ClassBadge({ wowClass }: { wowClass: WowClass }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm font-medium">
-      <span
-        className="h-2 w-2 rounded-full"
-        style={{ backgroundColor: CLASS_COLORS[wowClass] }}
-      />
+      <ClassIcon wowClass={wowClass} size={16} />
       <span style={{ color: CLASS_COLORS[wowClass] }}>{CLASS_LABELS[wowClass]}</span>
     </span>
+  );
+}
+
+/** Square WoW class icon from the public icon CDN. */
+export function ClassIcon({
+  wowClass,
+  size = 20,
+  className,
+}: {
+  wowClass: WowClass;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- small external CDN asset; next/image not worth the remotePatterns churn
+    <img
+      src={wowClassIconUrl(wowClass)}
+      alt=""
+      width={size}
+      height={size}
+      className={cn("inline-block shrink-0 rounded-sm", className)}
+      style={{ width: size, height: size }}
+      loading="lazy"
+      decoding="async"
+    />
   );
 }
 

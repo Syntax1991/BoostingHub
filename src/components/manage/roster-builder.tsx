@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   ClassBadge,
+  ClassIcon,
   DifficultyBadge,
   ParticipationBadge,
   OfferedRolesBadges,
@@ -22,6 +23,7 @@ import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
 import {
   CHARACTER_ROLE_LABELS,
+  CLASS_COLORS,
   CLASS_LABELS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
@@ -827,9 +829,19 @@ function ClassBuffChecker({ coverage, dirty }: { coverage: RaidBuffCoverage; dir
               <span className="mt-0.5 font-medium" aria-hidden="true">
                 {item.covered ? "✓" : "✕"}
               </span>
+              <ClassIcon
+                wowClass={item.wowClass}
+                size={20}
+                className={item.covered ? undefined : "opacity-50 grayscale"}
+              />
               <span className="min-w-0">
                 <span className="sr-only">{item.covered ? "Covered: " : "Missing: "}</span>
-                <span className={item.covered ? "font-medium" : "font-medium text-danger"}>{classLabel}</span>
+                <span
+                  className={item.covered ? "font-medium" : "font-medium text-danger"}
+                  style={item.covered ? { color: CLASS_COLORS[item.wowClass] } : undefined}
+                >
+                  {classLabel}
+                </span>
                 {item.covered && providerName ? (
                   <span className="mt-0.5 block truncate text-xs text-muted">— {providerName}</span>
                 ) : (
