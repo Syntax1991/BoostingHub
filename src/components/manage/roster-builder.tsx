@@ -36,6 +36,7 @@ import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
+import { summarizeRaidBuffCoverageByClass } from "@/services/roster-raid-buffs";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];

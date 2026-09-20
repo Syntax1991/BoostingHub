@@ -4,6 +4,7 @@ import {
   evaluateRaidBuffCoverage,
   RAID_BUFF_DEFINITIONS,
   resolveBuffContributorClass,
+  summarizeRaidBuffCoverageByClass,
   type RaidBuffParticipant,
 } from "@/services/roster-raid-buffs";
 
@@ -252,6 +253,17 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(byId.SOULSTONE?.covered).toBe(true);
     expect(byId.DEMONIC_GATEWAY?.covered).toBe(true);
     expect(evaluateRaidBuffCoverage([participant({ signupId: "lock", wowClass: "WARLOCK" })]).coveredCount).toBe(3);
+  });
+
+  it("class summary collapses Warlock utilities into one class tile", () => {
+    const summary = summarizeRaidBuffCoverageByClass(
+      evaluateRaidBuffCoverage([participant({ signupId: "lock", wowClass: "WARLOCK" })]),
+    );
+    const warlock = summary.classes.find((row) => row.wowClass === "WARLOCK");
+    expect(warlock?.covered).toBe(true);
+    expect(warlock?.buffIds).toEqual(["HEALTHSTONE", "SOULSTONE", "DEMONIC_GATEWAY"]);
+    expect(summary.coveredCount).toBe(1);
+    expect(summary.totalCount).toBe(10);
   });
 
   it("classes without a tracked buff cover nothing", () => {

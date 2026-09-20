@@ -94,6 +94,66 @@ export type RaidBuffCoverage = {
   buffs: RaidBuffCoverageItem[];
 };
 
+export type RaidBuffClassCoverageItem = {
+  wowClass: WowClass;
+  covered: boolean;
+  /** Buff ids this class is tracked for (Warlock has three utilities). */
+  buffIds: RaidBuffId[];
+  providers: RaidBuffProvider[];
+};
+
+export type RaidBuffClassCoverage = {
+  coveredCount: number;
+  totalCount: number;
+  missingCount: number;
+  classes: RaidBuffClassCoverageItem[];
+};
+
+/** Provider classes in definition order (unique) — UI lists classes, not buff spell names. */
+export function raidBuffProviderClassesInOrder(): WowClass[] {
+  const seen = new Set<WowClass>();
+  const order: WowClass[] = [];
+  for (const definition of RAID_BUFF_DEFINITIONS) {
+    for (const wowClass of definition.providerClasses) {
+      if (seen.has(wowClass)) continue;
+      seen.add(wowClass);
+      order.push(wowClass);
+    }
+  }
+  return order;
+}
+
+/**
+ * Collapse buff-level coverage into one row per provider class.
+ * A Warlock covers Healthstone + Soulstone + Gateway as a single class entry.
+ */
+export function summarizeRaidBuffCoverageByClass(coverage: RaidBuffCoverage): RaidBuffClassCoverage {
+  const classes: RaidBuffClassCoverageItem[] = raidBuffProviderClassesInOrder().map((wowClass) => {
+    const related = coverage.buffs.filter((buff) => buff.providerClasses.includes(wowClass));
+    const covered = related.some((buff) => buff.covered);
+    const providersBySignup = new Map<string, RaidBuffProvider>();
+    for (const buff of related) {
+      for (const provider of buff.providers) {
+        providersBySignup.set(provider.signupId, provider);
+      }
+    }
+    return {
+      wowClass,
+      covered,
+      buffIds: related.map((buff) => buff.id),
+      providers: [...providersBySignup.values()],
+    };
+  });
+
+  const coveredCount = classes.filter((item) => item.covered).length;
+  return {
+    coveredCount,
+    totalCount: classes.length,
+    missingCount: classes.length - coveredCount,
+    classes,
+  };
+}
+
 /**
  * Resolves the class a draft-selected participation contributes to buff coverage.
  * Returns null when the row must not count (LOOT_ONLY, unknown class, etc.).
