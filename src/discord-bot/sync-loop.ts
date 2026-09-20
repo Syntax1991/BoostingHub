@@ -261,7 +261,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
   );
 
   for (const item of work.channels) {
-    if (!item.appArchived) continue;
+    if (!item.retireChannel) continue;
     try {
       await syncArchiveArtifacts(client, env, api, item, resolvedChannels);
     } catch (error) {
@@ -869,9 +869,9 @@ async function fetchMessagesForTranscript(
 }
 
 /**
- * App-archive only: never moves the Run channel into an archive category.
- * Builds the HTML transcript for website download and (when not already
- * posted) sends Ticket-Tool-style artifacts into
+ * Channel retirement (app-archive, COMPLETED, or CANCELLED): never moves the
+ * Run channel into an archive category. Builds the HTML transcript for website
+ * download and (when not already posted) sends Ticket-Tool-style artifacts into
  * `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`:
  * (1) Server-Info text + `transcript-{name}.html` attachment,
  * (2) green details embed + Direct Link button.
@@ -879,7 +879,7 @@ async function fetchMessagesForTranscript(
  * After the transcript is safely recorded, deletes the Run's Discord channel
  * and clears `runChannelId` — the lasting record is the transcript alone.
  * Schedule-based PAST/FUTURE ARCHIVE holding is unchanged (silent move, no
- * delete) and never enters this path (`appArchived` is false).
+ * delete) and never enters this path (`retireChannel` is false).
  */
 async function syncArchiveArtifacts(
   client: Client,
@@ -888,7 +888,7 @@ async function syncArchiveArtifacts(
   item: ChannelLaneItem,
   resolvedChannels: Map<string, string>,
 ): Promise<void> {
-  if (!item.appArchived) return;
+  if (!item.retireChannel) return;
 
   const runChannelId = resolvedChannels.get(item.runId) ?? item.existingRunChannelId;
   if (!runChannelId) return;

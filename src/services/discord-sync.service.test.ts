@@ -1269,7 +1269,7 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
     const work = await discordSyncService.listSyncWork(classificationNow);
     const channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem?.targetBucket).toBe("ARCHIVE");
-    expect(channelItem?.appArchived).toBe(true);
+    expect(channelItem?.retireChannel).toBe(true);
     expect(channelItem?.archiveArtifactsNeeded).toBe(true);
     expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
   });
@@ -1283,9 +1283,22 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
     const work = await discordSyncService.listSyncWork(new Date(Date.parse(followingStart) + 21 * 24 * 60 * 60 * 1000));
     const channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem?.targetBucket).toBe("ARCHIVE");
-    expect(channelItem?.appArchived).toBe(false);
+    expect(channelItem?.retireChannel).toBe(false);
     expect(channelItem?.archiveArtifactsNeeded).toBe(false);
     expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(false);
+  });
+
+  it("COMPLETED runs retire their Discord channel without requiring app archive", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "completed-chan-1" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(true);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(true);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
   });
 
   it("clears archive artifact need after recordArchiveArtifacts and again after restore", async () => {

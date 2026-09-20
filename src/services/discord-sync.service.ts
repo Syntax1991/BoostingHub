@@ -186,10 +186,14 @@ export type ChannelSyncWorkItem = {
   targetBucket: DiscordRunChannelTarget;
   /** Needed by the bot's CURRENT/NEXT section position reconciliation to order channels chronologically — never used for week classification itself, which already happened above. */
   scheduledStartAt: string;
-  /** True only when `Run.archivedAt` is set — PAST/FUTURE ARCHIVE holding is false. */
-  appArchived: boolean;
   /**
-   * App-archive only: bot should post Discord log artifacts and/or persist HTML
+   * True when the Run channel should be retired (transcript + delete):
+   * app-archived (`Run.archivedAt`), COMPLETED, or CANCELLED.
+   * Schedule-based PAST/FUTURE ARCHIVE holding stays false.
+   */
+  retireChannel: boolean;
+  /**
+   * Retirement path: bot should post Discord log artifacts and/or persist HTML
    * for website download. False for schedule-based ARCHIVE holding and after
    * message ids + HTML are recorded.
    */
@@ -298,6 +302,7 @@ function desiredChannelNameFor(run: {
   lootType: RunLootType;
   raidLeadName: string;
   contentDisplay: { channelCoverage: string };
+  status?: RunStatus;
   archivedAt?: string | null;
 }): string {
   const input = {
@@ -307,8 +312,14 @@ function desiredChannelNameFor(run: {
     coverage: run.contentDisplay.channelCoverage,
     raidLeadName: run.raidLeadName,
   };
-  if (run.archivedAt) return buildClosedDiscordRunChannelName(input);
+  if (shouldRetireDiscordChannel(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);
+}
+
+/** App archive, completed, or cancelled — Discord channel is transcribed then deleted. */
+function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: string | null }): boolean {
+  if (run.archivedAt) return true;
+  return run.status === "COMPLETED" || run.status === "CANCELLED";
 }
 
 /**
@@ -688,19 +699,19 @@ export const discordSyncService = {
       // (existingRunChannelId is only ever set once the signup path below
       // has already created one).
       if (post?.runChannelId) {
-        const appArchived = Boolean(run.archivedAt);
+        const retireChannel = shouldRetireDiscordChannel(run);
         const archiveDiscordPosted = Boolean(
           post.archiveCloseMessageId && post.archiveTranscriptMessageId,
         );
         const archiveArtifactsNeeded =
-          appArchived && (!archiveDiscordPosted || !post.archiveTranscriptHtml);
+          retireChannel && (!archiveDiscordPosted || !post.archiveTranscriptHtml);
         channels.push({
           runId: run.id,
           existingRunChannelId: post.runChannelId,
           desiredChannelName: desiredChannelNameFor(run),
           targetBucket,
           scheduledStartAt: run.scheduledStartAt,
-          appArchived,
+          retireChannel,
           archiveArtifactsNeeded,
           archiveCloseMessageId: post.archiveCloseMessageId,
           archiveTranscriptMessageId: post.archiveTranscriptMessageId,

@@ -80,7 +80,7 @@ describe("reconcileExistingRunChannel — category movement", () => {
       item({
         targetBucket: "ARCHIVE",
         desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
-        appArchived: true,
+        retireChannel: true,
       }),
     );
 

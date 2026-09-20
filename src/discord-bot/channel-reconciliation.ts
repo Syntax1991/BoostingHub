@@ -43,11 +43,11 @@ export type ChannelReconciliationItem = {
   desiredChannelName: string;
   targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
   /**
-   * App-archived Runs keep rename-to-`closed-*` but must never be moved into
-   * the ARCHIVE category — after the transcript is posted the channel is
-   * deleted, so a parent move would be wasted noise (and wrong product intent).
+   * When true, rename to `closed-*` but never move into the ARCHIVE category —
+   * after the transcript is posted the channel is deleted (COMPLETED,
+   * CANCELLED, or app-archived Runs).
    */
-  appArchived?: boolean;
+  retireChannel?: boolean;
 };
 
 export type ChannelReconciliationResult =
@@ -59,14 +59,14 @@ export type ChannelReconciliationResult =
  * Reconciles one already-existing Run channel: renames it in place if its
  * name has drifted, then independently moves it to the correct parent —
  * CURRENT and NEXT both resolve to the single `discordRunCategoryId`; only
- * non-app-archived ARCHIVE (PAST/FUTURE holding) resolves to a different,
- * real category. App-archived Runs skip the parent move entirely — the
- * transcript in the archive log is the lasting record, and the Run channel
- * is deleted after artifacts are posted. Both rename and move are
- * idempotent no-ops when the channel is already correct, and neither ever
- * recreates or clones the channel. Ordering WITHIN the active category
- * (which section a CURRENT/NEXT channel visually sits in) is a separate
- * concern — see `reconcileWeekSectionPositions` below.
+ * non-retiring ARCHIVE (PAST/FUTURE holding) resolves to a different, real
+ * category. Retiring Runs (COMPLETED / CANCELLED / app-archived) skip the
+ * parent move entirely — the transcript in the archive log is the lasting
+ * record, and the Run channel is deleted after artifacts are posted. Both
+ * rename and move are idempotent no-ops when the channel is already correct,
+ * and neither ever recreates or clones the channel. Ordering WITHIN the
+ * active category (which section a CURRENT/NEXT channel visually sits in) is
+ * a separate concern — see `reconcileWeekSectionPositions` below.
  */
 export async function reconcileExistingRunChannel(
   fetchChannel: ChannelFetcher,
@@ -95,9 +95,9 @@ export async function reconcileExistingRunChannel(
     }
   }
 
-  // App archive: rename only. Never move into DISCORD_RUN_ARCHIVE_CATEGORY_ID —
+  // Channel retirement: rename only. Never move into DISCORD_RUN_ARCHIVE_CATEGORY_ID —
   // syncArchiveArtifacts deletes the channel once the transcript exists.
-  if (item.appArchived) {
+  if (item.retireChannel) {
     return { status: "ok", channelId: channel.id };
   }
 

@@ -660,7 +660,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
           desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
-          appArchived: true,
+          retireChannel: true,
           archiveArtifactsNeeded: true,
           raidLeadName: "Titan",
           raidLeadDiscordUserId: "lead-1",
@@ -711,7 +711,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
           desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-09-12T20:00:00.000Z",
-          appArchived: true,
+          retireChannel: true,
           archiveArtifactsNeeded: true,
           archiveCloseMessageId: "existing-close",
           archiveTranscriptMessageId: "existing-transcript",
@@ -756,7 +756,7 @@ describe("syncOnce — app-archive transcript artifacts", () => {
           desiredChannelName: "sat-2200-hc-vip-7of9-titan",
           targetBucket: "ARCHIVE",
           scheduledStartAt: "2026-08-01T20:00:00.000Z",
-          appArchived: false,
+          retireChannel: false,
           archiveArtifactsNeeded: false,
           raidLeadName: "Titan",
           raidLeadDiscordUserId: null,
@@ -782,7 +782,7 @@ function makeApi(input: {
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
     scheduledStartAt: string;
-    appArchived?: boolean;
+    retireChannel?: boolean;
     archiveArtifactsNeeded?: boolean;
     archiveCloseMessageId?: string | null;
     archiveTranscriptMessageId?: string | null;
@@ -820,7 +820,7 @@ function makeApi(input: {
   return {
     listSyncWork: vi.fn().mockResolvedValue({
       channels: input.channels.map((channel) => ({
-        appArchived: false,
+        retireChannel: false,
         archiveArtifactsNeeded: false,
         archiveCloseMessageId: null,
         archiveTranscriptMessageId: null,

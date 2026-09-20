@@ -76,7 +76,7 @@ export class BotApiClient {
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
         scheduledStartAt: string;
-        appArchived: boolean;
+        retireChannel: boolean;
         archiveArtifactsNeeded: boolean;
         archiveCloseMessageId: string | null;
         archiveTranscriptMessageId: string | null;

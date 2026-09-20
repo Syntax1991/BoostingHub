@@ -51,7 +51,7 @@ describe("BotApiClient", () => {
         desiredChannelName: "sat-2200-hc-lead",
         targetBucket: "CURRENT",
         scheduledStartAt: "2026-01-17T22:00:00.000Z",
-        appArchived: false,
+        retireChannel: false,
         archiveArtifactsNeeded: false,
         archiveCloseMessageId: null,
         archiveTranscriptMessageId: null,
