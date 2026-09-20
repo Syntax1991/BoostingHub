@@ -498,6 +498,60 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     expect(synmistOption.description).toContain("Fully saved");
   });
 
+  it("lists every Bundle content lockout (Grotto + Venomous), never only HC 0/1", async () => {
+    const payload = signupOptionsPayload();
+    payload.booster.eligible = payload.booster.eligible.map((option) =>
+      option.characterId === SYNMIST
+        ? {
+            ...option,
+            contentSaves: [
+              {
+                raidName: "Nymrissa",
+                totalBossCount: 1,
+                raidSave: {
+                  raidId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                  difficulty: "HEROIC",
+                  resetIdentifier: "2026-W37",
+                  bossesDefeated: 0,
+                  totalBossCount: 1,
+                  isComplete: false,
+                },
+                label: { text: "HC 0/1 · Unsaved" },
+              },
+              {
+                raidName: "The Venomous Abyss",
+                totalBossCount: 8,
+                raidSave: {
+                  raidId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                  difficulty: "HEROIC",
+                  resetIdentifier: "2026-W37",
+                  bossesDefeated: 3,
+                  totalBossCount: 8,
+                  isComplete: false,
+                },
+                label: { text: "HC 3/8 · Saved" },
+              },
+            ],
+          }
+        : option,
+    );
+    const api = fakeApi({ getSignupOptions: vi.fn().mockResolvedValue(payload) });
+
+    const interaction = fakeInteraction("user-a");
+    await signupButton(interaction, api, RUN_ID);
+
+    const call = interaction.editReply.mock.calls[0]?.[0];
+    expect(call.content).toContain("Nymrissa: HC 0/1 · Unsaved");
+    expect(call.content).toContain("The Venomous Abyss: HC 3/8 · Saved");
+    const menu = call.components[0].components[0].toJSON();
+    const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
+    expect(synmistOption.description).toContain("Nymrissa");
+    expect(synmistOption.description).toContain("0/1");
+    expect(synmistOption.description).toContain("Venomous Abyss");
+    expect(synmistOption.description).toContain("3/8");
+    expect(synmistOption.description).not.toMatch(/^HC 0\/1/);
+  });
+
   it("selecting a saved character still stages only — no DB call until Confirm", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>

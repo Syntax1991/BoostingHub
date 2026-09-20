@@ -159,12 +159,15 @@ describe("Discord Bundle content labels", () => {
     }).toJSON();
 
     expect(embed.description).toContain("Season 2 Bundle");
+    expect(embed.description).toContain("Nymrissa 1/1");
+    expect(embed.description).toContain("The Venomous Abyss 8/8");
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@111>");
     expect(display.titleCoverage).toBe("9/9");
     expect(display.channelCoverage).toBe("9of9");
-    // Embed keeps product label + per-raid summary elsewhere; compact 9/9 is title/channel only.
+    // Compact 9/9 stays in title/channel; description lists each raid separately.
     expect(embed.description).not.toMatch(/S2B|s2b/);
+    expect(embed.description).not.toMatch(/9\/9/);
   });
 
   it("roster embed identifies Bundle once with content summary", () => {

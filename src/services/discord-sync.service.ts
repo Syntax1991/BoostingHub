@@ -549,8 +549,8 @@ function buildSignupEmbedSignature(
     classEmojiFingerprint: extra.classEmojiFingerprint ?? "",
     // Bump when participant line / summary-field rendering changes without
     // member-data changes so existing posts refresh (Content→Raid Lead, role emojis,
-    // multi-char mention grouping).
-    participantLineFormat: "mention-v3-group-icons",
+    // multi-char mention grouping, description content summary).
+    participantLineFormat: "mention-v4-content-summary",
   });
 }
 

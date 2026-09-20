@@ -21,7 +21,6 @@ import {
   type WowClass,
 } from "@/discord-bot/interactions/signup-staging";
 import { requestImmediateSync } from "@/discord-bot/sync-loop";
-import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import type { RunLootType } from "@/models/enums";
 
 const MAX_SELECT_OPTIONS = 25;
@@ -75,6 +74,8 @@ type RaidSaveInfo = {
   isComplete: boolean;
 };
 type EligibleContentSave = {
+  /** Display name for this Run content (e.g. Nymrissa / The Venomous Abyss). */
+  raidName?: string;
   totalBossCount: number;
   raidSave: RaidSaveInfo | null;
   label: { text: string };
@@ -91,8 +92,32 @@ type EligibleCharacterOption = {
   contentSaves?: EligibleContentSave[];
 };
 
-function primaryContentLockout(option: EligibleCharacterOption): EligibleContentSave | null {
-  return option.contentSaves?.find((row) => row.raidSave) ?? option.contentSaves?.[0] ?? null;
+/** Discord select option description limit. */
+const SELECT_DESCRIPTION_MAX = 100;
+
+/**
+ * One segment per RunRaidContent — never only the first raid (Bundle must show
+ * Grotto 1/1 and Venomous 8/8, not a lone `HC 0/1`).
+ */
+function formatContentSaveSegments(saves: readonly EligibleContentSave[]): string[] {
+  return saves.map((row) => (row.raidName ? `${row.raidName}: ${row.label.text}` : row.label.text));
+}
+
+function characterHasVerifiedLockout(option: EligibleCharacterOption): boolean {
+  return Boolean(option.contentSaves?.some((row) => row.raidSave));
+}
+
+/** Compact multi-raid lockout line for Discord select descriptions (≤100 chars). */
+export function formatDiscordCharacterLockoutDescription(
+  option: EligibleCharacterOption,
+): string | null {
+  const saves = option.contentSaves;
+  if (!saves?.length) return null;
+  if (!saves.some((row) => row.raidSave || row.label.text.includes("Unknown"))) {
+    return null;
+  }
+  const text = formatContentSaveSegments(saves).join(" · ");
+  return text.length <= SELECT_DESCRIPTION_MAX ? text : `${text.slice(0, SELECT_DESCRIPTION_MAX - 1)}…`;
 }
 export type IneligibleCharacterOption = {
   characterId: string;
@@ -144,33 +169,15 @@ function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): st
 }
 
 /** Informational only — verified lockouts remain fully selectable. */
-function describeSavedCharacters(
-  eligible: EligibleCharacterOption[],
-  run: Pick<SignupOptionsPayload["run"], "difficulty" | "totalBossCount" | "lootType">,
-): string[] {
-  const withLockout = eligible.filter((option) => primaryContentLockout(option)?.raidSave);
+function describeSavedCharacters(eligible: EligibleCharacterOption[]): string[] {
+  const withLockout = eligible.filter(characterHasVerifiedLockout);
   if (withLockout.length === 0) return [];
   return [
     "",
     "Lockouts this reset:",
     ...withLockout.map((option) => {
-      const row = primaryContentLockout(option)!;
-      const label = formatTargetRaidLockoutLabel({
-        difficulty: run.difficulty,
-        totalBossCount: row.totalBossCount,
-        raidSave: row.raidSave
-          ? {
-              raidId: "",
-              difficulty: run.difficulty,
-              resetIdentifier: "",
-              bossesDefeated: row.raidSave.bossesDefeated,
-              totalBossCount: row.raidSave.totalBossCount,
-              isComplete: row.raidSave.isComplete,
-            }
-          : null,
-        lootType: run.lootType,
-      });
-      return `• ${option.characterName} — ${label.text}`;
+      const segments = formatContentSaveSegments(option.contentSaves ?? []);
+      return `• ${option.characterName} — ${segments.join(" · ")}`;
     }),
   ];
 }
@@ -190,7 +197,6 @@ type ReplyableInteraction = {
 export function buildCharacterSelectOptions(
   eligible: EligibleCharacterOption[],
   activeOffer: ActiveBoosterOffers,
-  run?: Pick<SignupOptionsPayload["run"], "difficulty" | "totalBossCount" | "lootType">,
 ): StringSelectMenuOptionBuilder[] {
   const activeIds = new Set(activeOffer.characterIds);
   return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) => {
@@ -205,24 +211,10 @@ export function buildCharacterSelectOptions(
       .setValue(option.characterId)
       .setDefault(activeIds.has(option.characterId));
     // Informational only — a saved Character is still fully selectable.
-    const lockoutRow = primaryContentLockout(option);
-    if (lockoutRow?.raidSave && run) {
-      const label = formatTargetRaidLockoutLabel({
-        difficulty: run.difficulty,
-        totalBossCount: lockoutRow.totalBossCount,
-        raidSave: {
-          raidId: "",
-          difficulty: run.difficulty,
-          resetIdentifier: "",
-          bossesDefeated: lockoutRow.raidSave.bossesDefeated,
-          totalBossCount: lockoutRow.raidSave.totalBossCount,
-          isComplete: lockoutRow.raidSave.isComplete,
-        },
-        lootType: run.lootType,
-      });
-      builder.setDescription(label.text.slice(0, 100));
-    } else if (lockoutRow?.raidSave) {
-      builder.setDescription(`${lockoutRow.raidSave.bossesDefeated}/${lockoutRow.raidSave.totalBossCount}`);
+    // Bundle Runs list every content segment (never only Grotto's 0/1).
+    const lockoutDescription = formatDiscordCharacterLockoutDescription(option);
+    if (lockoutDescription) {
+      builder.setDescription(lockoutDescription);
     }
     return builder;
   });
@@ -356,7 +348,7 @@ async function renderCharacterSelectionStep(
     ),
   };
 
-  const selectOptions = buildCharacterSelectOptions(options.booster.eligible, stagedOffer, options.run);
+  const selectOptions = buildCharacterSelectOptions(options.booster.eligible, stagedOffer);
   if (selectOptions.length === 0) {
     await interaction.editReply({ content: "You have no eligible booster characters for this run.", components: [] });
     return;
@@ -373,7 +365,7 @@ async function renderCharacterSelectionStep(
     content: [
       `Select characters for **${options.run.title}**.`,
       "Closing the dropdown only keeps your picks — press **Next** when you are ready.",
-      ...describeSavedCharacters(options.booster.eligible, options.run),
+      ...describeSavedCharacters(options.booster.eligible),
       ...extraLines,
     ].join("\n"),
     components: [

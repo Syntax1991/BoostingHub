@@ -260,7 +260,9 @@ export function buildSignupEmbed(
   const classIndicators = options?.classIndicators;
   const roleIndicators = options?.roleIndicators;
   const color = data.signupWindowOpen ? 0xd4af37 : 0x555555;
-  const description = `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
+  const description = data.contentSummary
+    ? `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`
+    : `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
   const raidLeadEmoji = roleEmoji("raidlead", roleIndicators);
 
   return new EmbedBuilder()
