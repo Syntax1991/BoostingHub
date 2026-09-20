@@ -234,9 +234,10 @@ function singleRoleFallback(option: EligibleCharacterOption): CharacterRole | nu
 }
 
 /**
- * The Signup button: shows an ephemeral multi-select of eligible Characters.
- * Nothing is persisted by opening this menu — submitting it only stages a
- * configuration session (see `handleCharacterSelect`).
+ * The Signup button: starts a staging session (seeded from any existing
+ * booster offers) and shows the Character multi-select with **Next** /
+ * **Cancel**. Closing the select menu only updates the staged selection —
+ * roles open only when the User presses Next.
  */
 export async function handleSignupButton(interaction: ButtonInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -264,30 +265,30 @@ export async function handleSignupButton(interaction: ButtonInteraction, api: Bo
     return;
   }
 
-  const selectOptions = buildCharacterSelectOptions(eligible, options.activeBoosterOffers, options.run);
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(buildCustomId("signup", runId))
-    .setPlaceholder("Select characters to offer, then configure roles")
-    .setMinValues(0)
-    .setMaxValues(selectOptions.length)
-    .addOptions(selectOptions);
-
-  await interaction.editReply({
-    content: [
-      `Select the characters to offer for **${options.run.title}**. You'll confirm roles before anything is saved.`,
-      ...describeSavedCharacters(eligible, options.run),
-      ...reservationLines,
-    ].join("\n"),
-    components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
+  const byId = new Map(eligible.map((option) => [option.characterId, option]));
+  const isExistingSignup = options.activeBoosterOffers.characterIds.length > 0;
+  const session = startSession({
+    discordUserId: interaction.user.id,
+    runId,
+    isExistingSignup,
+    offers: options.activeBoosterOffers.characterIds.map((characterId) => {
+      const existing = options.activeBoosterOffers.offeredRolesByCharacterId[characterId];
+      if (existing?.length) {
+        return { characterId, offeredRoles: orderedRoles(existing) };
+      }
+      const option = byId.get(characterId);
+      const fallback = option?.defaultRole ?? (option ? singleRoleFallback(option) : null);
+      return { characterId, offeredRoles: fallback ? [fallback] : [] };
+    }),
   });
+
+  await renderCharacterSelectionStep(interaction, api, runId, session, reservationLines);
 }
 
 /**
- * The Character select's submission. Stages a configuration session instead
- * of persisting anything — each selected Character's role set resolves to
- * its existing offer's roles, else its specialization default, else (for a
- * single-role class) the only role it can perform, else stays unresolved
- * until the User picks at least one in the role editor.
+ * The Character select's submission. Updates the staged session only and
+ * re-renders the same pick step (select + Next). Does not open roles —
+ * that waits for Next.
  */
 export async function handleCharacterSelect(interaction: StringSelectMenuInteraction, api: BotApiClient, runId: string): Promise<void> {
   await interaction.deferUpdate();
@@ -301,7 +302,8 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
   }
 
   const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
-  const isExistingSignup = options.activeBoosterOffers.characterIds.length > 0;
+  const existingSession = getSession(interaction.user.id, runId);
+  const isExistingSignup = existingSession?.isExistingSignup ?? options.activeBoosterOffers.characterIds.length > 0;
 
   const session = startSession({
     discordUserId: interaction.user.id,
@@ -313,6 +315,10 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
       if (existing?.length) {
         return { characterId, offeredRoles: orderedRoles(existing) };
       }
+      const stagedRoles = existingSession?.offers.get(characterId);
+      if (stagedRoles?.length) {
+        return { characterId, offeredRoles: orderedRoles(stagedRoles) };
+      }
       const fallback = option?.defaultRole ?? (option ? singleRoleFallback(option) : null);
       return { characterId, offeredRoles: fallback ? [fallback] : [] };
     }),
@@ -322,14 +328,16 @@ export async function handleCharacterSelect(interaction: StringSelectMenuInterac
 }
 
 /**
- * Intermediate step after the Character multi-select: lists the staged
- * Characters and waits for an explicit Next before opening the role editor.
+ * Character pick step: multi-select stays on screen with Next / Cancel.
+ * Closing the Discord select dropdown only refreshes the staged selection —
+ * pressing Next is the only way into the role editor.
  */
 async function renderCharacterSelectionStep(
   interaction: ReplyableInteraction,
   api: BotApiClient,
   runId: string,
   session: StagedBoosterSession,
+  extraLines: string[] = [],
 ): Promise<void> {
   let options: SignupOptionsPayload;
   try {
@@ -341,22 +349,48 @@ async function renderCharacterSelectionStep(
 
   const byId = new Map(options.booster.eligible.map((option) => [option.characterId, option]));
   const staged = [...session.offers.keys()];
-  const lines =
-    staged.length === 0
-      ? ["No characters selected. Continue to clear your booster signup on this run, or cancel."]
-      : [
-          `Selected for **${options.run.title}**:`,
-          ...staged.map((characterId) => {
-            const option = byId.get(characterId);
-            return `• ${option ? `${option.characterName}-${option.realm}` : characterId}`;
-          }),
-          "",
-          "Click **Next** to choose roles.",
-        ];
+  const stagedOffer: ActiveBoosterOffers = {
+    characterIds: staged,
+    offeredRolesByCharacterId: Object.fromEntries(
+      [...session.offers.entries()].map(([characterId, roles]) => [characterId, roles]),
+    ),
+  };
+
+  const selectOptions = buildCharacterSelectOptions(options.booster.eligible, stagedOffer, options.run);
+  if (selectOptions.length === 0) {
+    await interaction.editReply({ content: "You have no eligible booster characters for this run.", components: [] });
+    return;
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(buildCustomId("signup", runId))
+    .setPlaceholder("Select characters, then press Next")
+    .setMinValues(0)
+    .setMaxValues(selectOptions.length)
+    .addOptions(selectOptions);
+
+  const lines: string[] = [
+    `Select characters for **${options.run.title}**. Closing the menu only saves the selection — press **Next** to continue.`,
+    ...describeSavedCharacters(options.booster.eligible, options.run),
+    ...extraLines,
+  ];
+  if (staged.length === 0) {
+    lines.push("", "Nothing selected yet. Next with an empty selection clears your booster signup.");
+  } else {
+    lines.push(
+      "",
+      "Currently selected:",
+      ...staged.map((characterId) => {
+        const option = byId.get(characterId);
+        return `• ${option ? `${option.characterName}-${option.realm}` : characterId}`;
+      }),
+    );
+  }
 
   await interaction.editReply({
     content: lines.join("\n"),
     components: [
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(buildCustomId("signup-next", runId))
