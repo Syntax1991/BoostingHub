@@ -9,6 +9,7 @@ import {
 } from "@/lib/wow-raid-catalog";
 import {
   buildMetricKey,
+  rolesRelevantForWclPerformance,
   specNameForOfferedRole,
   WCL_DIFFICULTY,
 } from "@/services/character-wcl-performance.service";
@@ -64,8 +65,54 @@ describe("specNameForOfferedRole / metric keys", () => {
   });
 });
 
+describe("rolesRelevantForWclPerformance", () => {
+  it("uses healer spec even when DPS was also offered", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["HEALER", "DPS"],
+        wowClass: "PRIEST",
+        specialization: "Holy",
+        primaryRole: "HEALER",
+      }),
+    ).toEqual(["HEALER"]);
+  });
+
+  it("uses DPS spec even when HEALER was also offered", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["HEALER", "DPS"],
+        wowClass: "PRIEST",
+        specialization: "Shadow",
+        primaryRole: "DPS",
+      }),
+    ).toEqual(["DPS"]);
+  });
+
+  it("uses tank spec when Protection also offered healer", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["TANK", "HEALER"],
+        wowClass: "PALADIN",
+        specialization: "Protection",
+        primaryRole: "TANK",
+      }),
+    ).toEqual(["TANK"]);
+  });
+
+  it("falls back to primaryRole when specialization is missing", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["HEALER", "DPS"],
+        wowClass: "PRIEST",
+        specialization: null,
+        primaryRole: "HEALER",
+      }),
+    ).toEqual(["HEALER"]);
+  });
+});
+
 describe("formatWclPerformanceRaidLine", () => {
-  it("formats multi-role segments with optional spec labels", () => {
+  it("formats with metric labels and optional spec", () => {
     const line = formatWclPerformanceRaidLine({
       raidId: VENOMOUS_ABYSS_RAID_ID,
       raidName: "The Venomous Abyss",
@@ -76,6 +123,6 @@ describe("formatWclPerformanceRaidLine", () => {
     });
     expect(line).toContain("The Venomous Abyss");
     expect(line).toContain("Tank (Protection) best 88% · avg 62%");
-    expect(line).toContain("Healer best 75% · avg 58%");
+    expect(line).toContain("HPS best 75% · avg 58%");
   });
 });

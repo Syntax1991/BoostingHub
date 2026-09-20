@@ -642,6 +642,8 @@ function SignupRowCard({
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
   const rowPointer = disabled ? "cursor-not-allowed" : "cursor-pointer";
+  const showWcl =
+    Boolean(character?.warcraftLogsId) || signup.wclPerformance.length > 0;
   return (
     <div
       className={`flex items-start gap-3 rounded-md border px-3 py-2 ${
@@ -666,20 +668,7 @@ function SignupRowCard({
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
-          {character?.warcraftLogsId ? (
-            <WarcraftLogsLink
-              warcraftLogsId={character.warcraftLogsId}
-              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-            />
-          ) : null}
         </div>
-        {signup.wclPerformance.length > 0 ? (
-          <div className="mt-1 space-y-0.5 text-xs text-muted" aria-label="Warcraft Logs performance">
-            {signup.wclPerformance.map((segment) => (
-              <div key={segment.raidId}>{formatWclPerformanceRaidLine(segment)}</div>
-            ))}
-          </div>
-        ) : null}
         <label
           htmlFor={checkboxId}
           className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted ${rowPointer}`}
@@ -742,6 +731,26 @@ function SignupRowCard({
           </label>
         ) : null}
       </div>
+      {showWcl ? (
+        <div
+          className="ml-auto shrink-0 self-start text-right text-xs"
+          aria-label="Warcraft Logs performance"
+        >
+          {character?.warcraftLogsId ? (
+            <WarcraftLogsLink
+              warcraftLogsId={character.warcraftLogsId}
+              className="inline-flex items-center gap-1 text-accent hover:underline"
+            />
+          ) : null}
+          {signup.wclPerformance.length > 0 ? (
+            <div className={`space-y-0.5 text-muted ${character?.warcraftLogsId ? "mt-1" : ""}`}>
+              {signup.wclPerformance.map((segment) => (
+                <div key={segment.raidId}>{formatWclPerformanceRaidLine(segment)}</div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -353,6 +353,7 @@ export const rosterService = {
             id: signup.character!.id,
             wowClass: signup.character!.wowClass,
             specialization: signup.character!.specialization,
+            primaryRole: signup.character!.primaryRole,
             warcraftLogsId: signup.character!.warcraftLogsId,
           },
         })),

@@ -15,16 +15,20 @@ export type WclPerformanceRaidSegment = {
   roles: WclPerformanceRoleSegment[];
 };
 
-/** Compact display line for one raid segment (multi-role joins with ·). */
+/** Metric-oriented label: Healer → HPS, DPS → DPS, Tank → Tank. */
+export function wclMetricLabel(role: CharacterRole, specLabel: string | null): string {
+  const base = role === "HEALER" ? "HPS" : role === "DPS" ? "DPS" : CHARACTER_ROLE_LABELS.TANK;
+  return specLabel ? `${base} (${specLabel})` : base;
+}
+
+/** Compact display line for one raid segment. */
 export function formatWclPerformanceRaidLine(segment: WclPerformanceRaidSegment): string {
   const roleParts = segment.roles.map((role) => {
-    const roleLabel = role.specLabel
-      ? `${CHARACTER_ROLE_LABELS[role.role]} (${role.specLabel})`
-      : CHARACTER_ROLE_LABELS[role.role];
+    const label = wclMetricLabel(role.role, role.specLabel);
     const best = role.bestPct != null ? `best ${role.bestPct}%` : null;
     const avg = role.avgPct != null ? `avg ${role.avgPct}%` : null;
     const stats = [best, avg].filter(Boolean).join(" · ");
-    return `${roleLabel} ${stats}`;
+    return `${label} ${stats}`;
   });
   return `${segment.raidName} · ${roleParts.join(" · ")}`;
 }

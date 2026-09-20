@@ -58,30 +58,15 @@ describe("resolveRosterWclPerformance", () => {
     expect(fetchZoneRankings).not.toHaveBeenCalled();
   });
 
-  it("fetches per-raid × per-offered-role and keeps multi-role segments", async () => {
+  it("fetches only the specialization role when multi-role (no heal+dps mix)", async () => {
     fetchZoneRankings.mockImplementation(async (input: { encounterId?: number; metric: string; role?: string }) => {
-      if (input.encounterId === 3379 && input.metric === "dps" && input.role === "Tank") {
+      if (input.metric === "dps" && input.role === "Tank") {
         return {
           status: "SUCCESS",
-          rankings: { bestPerformanceAverage: 80, medianPerformanceAverage: 55 },
-        };
-      }
-      if (input.encounterId === 3379 && input.metric === "hps") {
-        return {
-          status: "SUCCESS",
-          rankings: { bestPerformanceAverage: 70, medianPerformanceAverage: 50 },
-        };
-      }
-      if (!input.encounterId && input.metric === "dps" && input.role === "Tank") {
-        return {
-          status: "SUCCESS",
-          rankings: { bestPerformanceAverage: 88, medianPerformanceAverage: 62 },
-        };
-      }
-      if (!input.encounterId && input.metric === "hps") {
-        return {
-          status: "SUCCESS",
-          rankings: { bestPerformanceAverage: 75, medianPerformanceAverage: 58 },
+          rankings: {
+            bestPerformanceAverage: input.encounterId === 3379 ? 80 : 88,
+            medianPerformanceAverage: input.encounterId === 3379 ? 55 : 62,
+          },
         };
       }
       return { status: "NOT_FOUND" };
@@ -110,6 +95,7 @@ describe("resolveRosterWclPerformance", () => {
             id: "char-1",
             wowClass: "PALADIN",
             specialization: "Protection",
+            primaryRole: "TANK",
             warcraftLogsId: "999",
           },
         },
@@ -120,12 +106,49 @@ describe("resolveRosterWclPerformance", () => {
     const segments = map.get("signup-1");
     expect(segments).toHaveLength(2);
     expect(segments?.[0]?.raidName).toBe("Nymrissa");
-    expect(segments?.[0]?.roles.map((r) => r.role)).toEqual(["TANK", "HEALER"]);
+    expect(segments?.[0]?.roles.map((r) => r.role)).toEqual(["TANK"]);
     expect(segments?.[0]?.roles[0]?.specLabel).toBe("Protection");
-    expect(segments?.[0]?.roles[1]?.specLabel).toBeNull();
     expect(segments?.[1]?.raidName).toBe("The Venomous Abyss");
+    expect(segments?.[1]?.roles).toHaveLength(1);
     expect(segments?.[1]?.roles[0]?.bestPct).toBe(88);
+    expect(fetchZoneRankings.mock.calls.every((call) => call[0]?.metric !== "hps")).toBe(true);
     expect(upsert).toHaveBeenCalled();
+  });
+
+  it("uses HPS only for a healer who also offered DPS", async () => {
+    fetchZoneRankings.mockResolvedValue({
+      status: "SUCCESS",
+      rankings: { bestPerformanceAverage: 72, medianPerformanceAverage: 61 },
+    });
+
+    const { resolveRosterWclPerformance } = await import("@/services/character-wcl-performance.service");
+    await resolveRosterWclPerformance({
+      difficulty: "HEROIC",
+      contents: [
+        {
+          raidId: VENOMOUS_ABYSS_RAID_ID,
+          raidName: "The Venomous Abyss",
+          sortOrder: 1,
+        },
+      ],
+      boosters: [
+        {
+          signupId: "signup-h",
+          offeredRoles: ["HEALER", "DPS"],
+          character: {
+            id: "char-h",
+            wowClass: "PRIEST",
+            specialization: "Holy",
+            primaryRole: "HEALER",
+            warcraftLogsId: "222",
+          },
+        },
+      ],
+      now: new Date("2026-09-20T12:00:00.000Z"),
+    });
+
+    expect(fetchZoneRankings).toHaveBeenCalledTimes(1);
+    expect(fetchZoneRankings.mock.calls[0]?.[0]).toMatchObject({ metric: "hps" });
   });
 
   it("hits fresh cache for role-only dps key", async () => {
@@ -161,6 +184,7 @@ describe("resolveRosterWclPerformance", () => {
             id: "char-1",
             wowClass: "MAGE",
             specialization: null,
+            primaryRole: "DPS",
             warcraftLogsId: "111",
           },
         },

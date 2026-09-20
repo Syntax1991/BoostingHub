@@ -23,7 +23,7 @@ describe("roster WCL performance display copy", () => {
 
     expect(nymrissa).toContain("Nymrissa");
     expect(nymrissa).toContain("Tank (Protection)");
-    expect(nymrissa).toContain("Healer");
+    expect(nymrissa).toContain("HPS");
     expect(venomous).toContain("The Venomous Abyss");
     expect(venomous).not.toMatch(/9\/9|4\/9/);
   });

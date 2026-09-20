@@ -38,6 +38,7 @@ type BoosterPerfInput = {
     id: string;
     wowClass: WowClass;
     specialization: string | null;
+    primaryRole: CharacterRole;
     warcraftLogsId: string | null;
   };
 };
@@ -77,6 +78,24 @@ export function specNameForOfferedRole(
   const match = findSpecialization(wowClass, specialization);
   if (!match || match.role !== offeredRole) return null;
   return match.name;
+}
+
+/**
+ * Only query the metric for the character's actual spec (or primaryRole).
+ * Offered roles are ignored here — a Holy healer who also offered DPS must
+ * never pull damage percentiles (and vice versa).
+ */
+export function rolesRelevantForWclPerformance(input: {
+  offeredRoles: CharacterRole[];
+  wowClass: WowClass;
+  specialization: string | null;
+  primaryRole: CharacterRole;
+}): CharacterRole[] {
+  const specMatch = input.specialization?.trim()
+    ? findSpecialization(input.wowClass, input.specialization)
+    : null;
+  if (specMatch) return [specMatch.role];
+  return [input.primaryRole];
 }
 
 export function buildMetricKey(metricKeyBase: string, specName: string | null): string {
@@ -180,12 +199,20 @@ export async function resolveRosterWclPerformance(input: {
 
   for (const booster of input.boosters) {
     const wclId = booster.character.warcraftLogsId?.trim() || null;
-    if (!wclId || booster.offeredRoles.length === 0) continue;
+    if (!wclId) continue;
+
+    const rolesToQuery = rolesRelevantForWclPerformance({
+      offeredRoles: booster.offeredRoles,
+      wowClass: booster.character.wowClass,
+      specialization: booster.character.specialization,
+      primaryRole: booster.character.primaryRole,
+    });
+    if (rolesToQuery.length === 0) continue;
 
     const raids: (typeof signupPlans)[number]["raids"] = [];
     for (const content of contentsWithWcl) {
       const roles: (typeof raids)[number]["roles"] = [];
-      for (const offeredRole of booster.offeredRoles) {
+      for (const offeredRole of rolesToQuery) {
         const { metric, role, metricKeyBase } = metricForRole(offeredRole);
         const specName = specNameForOfferedRole(
           booster.character.wowClass,
