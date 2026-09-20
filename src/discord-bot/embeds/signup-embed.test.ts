@@ -4,7 +4,9 @@ import {
   buildSignupButtons,
   buildSignupEmbed,
   emptySignupEmbedMembers,
+  formatSignupParticipantGroupLine,
   formatSignupParticipantLine,
+  groupSignupMembersByUser,
   measureEmbedJsonSize,
   DISCORD_EMBED_TOTAL_CHAR_LIMIT,
 } from "@/discord-bot/embeds/signup-embed";
@@ -154,6 +156,39 @@ describe("formatSignupParticipantLine", () => {
       }),
     );
     expect(noClass).toBe("<@123456789012345678>");
+  });
+
+  it("groups multi-character signups under one mention with class icons", () => {
+    const grouped = groupSignupMembersByUser([
+      member({
+        signupId: "s1",
+        userId: "u1",
+        userName: "Synblast",
+        discordUserId: "123456789012345678",
+        wowClass: "PALADIN",
+      }),
+      member({
+        signupId: "s2",
+        userId: "u1",
+        userName: "Synblast",
+        discordUserId: "123456789012345678",
+        wowClass: "MAGE",
+      }),
+      member({
+        signupId: "s3",
+        userId: "u1",
+        userName: "Synblast",
+        discordUserId: "123456789012345678",
+        wowClass: "PALADIN",
+      }),
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(
+      formatSignupParticipantGroupLine(grouped[0]!, {
+        PALADIN: "<:paladin:222222222222222222>",
+        MAGE: "<:mage:111111111111111111>",
+      }),
+    ).toBe("<@123456789012345678> <:paladin:222222222222222222> <:mage:111111111111111111>");
   });
 });
 

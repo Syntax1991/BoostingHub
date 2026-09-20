@@ -181,7 +181,7 @@ Public signup embed Roles field:
 - **Signups** = active offers not yet on the roster (hybrids count once per offered role). Users already draft-selected or SELECTED are omitted here.
 - **Roster** = authoritative roster by `selectedRole` (saved draft while OPEN/ROSTERING; published SELECTED after publish)
 - Lootbuddies: signup count / roster count (no target denominator)
-- Participant lines: Discord `<@id>` mention + class emoji (no Character-Realm). Mentions show the server nickname when set; Character identity is in Final Setup and the Web app.
+- Participant lines: Discord `<@id>` mention once per User, then distinct class emoji(s) for that User's offers in the column (no Character-Realm, no repeated mentions). Mentions show the server nickname when set; Character identity is in Final Setup and the Web app.
 
 **Sign as Lootbuddy** — two steps (no Character selector, no Mode picker on Discord):
 

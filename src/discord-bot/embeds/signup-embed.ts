@@ -66,14 +66,60 @@ export function formatSignupParticipantLine(
   member: SignupEmbedMember,
   classIndicators?: Partial<Record<WowClass, string>>,
 ): string {
-  const mention = member.discordUserId
-    ? `<@${member.discordUserId}>`
-    : `@${(member.discordUsername?.trim() || member.userName).replace(/^@/, "")}`;
-  const indicator = classIndicator(member.wowClass, null, classIndicators);
+  return formatSignupParticipantGroupLine([member], classIndicators);
+}
 
-  const parts = [mention];
-  if (indicator) parts.push(indicator);
-  return parts.join(" ");
+/**
+ * One line per User: mention once, then every distinct class icon for that
+ * User's offers in this role column (e.g. `<@id> <:paladin:> <:mage:>`).
+ */
+export function formatSignupParticipantGroupLine(
+  members: readonly SignupEmbedMember[],
+  classIndicators?: Partial<Record<WowClass, string>>,
+): string {
+  const primary = members[0];
+  if (!primary) return "";
+
+  const mention = primary.discordUserId
+    ? `<@${primary.discordUserId}>`
+    : `@${(primary.discordUsername?.trim() || primary.userName).replace(/^@/, "")}`;
+
+  const seenClasses = new Set<string>();
+  const indicators: string[] = [];
+  for (const member of members) {
+    const wowClass = member.wowClass;
+    if (!wowClass || seenClasses.has(wowClass)) continue;
+    seenClasses.add(wowClass);
+    const indicator = classIndicator(wowClass, null, classIndicators);
+    if (indicator) indicators.push(indicator);
+  }
+
+  return [mention, ...indicators].join(" ");
+}
+
+/** Stable User key for grouping — prefer Discord snowflake, else app userId. */
+function signupMemberUserKey(member: SignupEmbedMember): string {
+  return member.discordUserId ?? `user:${member.userId}`;
+}
+
+/**
+ * Collapses multiple offers from the same User into one display group,
+ * preserving first-seen User order and within-group member order.
+ */
+export function groupSignupMembersByUser(members: readonly SignupEmbedMember[]): SignupEmbedMember[][] {
+  const order: string[] = [];
+  const groups = new Map<string, SignupEmbedMember[]>();
+  for (const member of members) {
+    const key = signupMemberUserKey(member);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(member);
+      continue;
+    }
+    order.push(key);
+    groups.set(key, [member]);
+  }
+  return order.map((key) => groups.get(key)!);
 }
 
 export function formatRaidLeadFieldValue(data: SignupEmbedData): string {
@@ -90,7 +136,9 @@ function buildRoleColumnFields(
   roleIndicators?: GuildRoleIndicators,
 ): Array<{ name: string; value: string; inline: boolean }> {
   const emoji = roleEmoji(role.emojiKey, roleIndicators);
-  const lines = role.members.map((member) => formatSignupParticipantLine(member, classIndicators));
+  const lines = groupSignupMembersByUser(role.members).map((group) =>
+    formatSignupParticipantGroupLine(group, classIndicators),
+  );
   const chunks = chunkEmbedFieldLines(lines);
   const primaryName = `${emoji} ${role.label} — ${role.countLabel}`;
   const continuationName = `${emoji} ${role.label} (cont.)`;
