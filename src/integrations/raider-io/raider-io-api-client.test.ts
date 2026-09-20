@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   raiderIoApiClient,
   raiderIoRealmSlugFromRealm,
+  resolveRaiderIoEquippedItemLevel,
 } from "@/integrations/raider-io/raider-io-api-client";
 
 const fetchMock = vi.fn();
@@ -31,6 +32,37 @@ describe("raiderIoRealmSlugFromRealm", () => {
   });
 });
 
+describe("resolveRaiderIoEquippedItemLevel", () => {
+  it("prefers the higher of reported equipped and average item slots", () => {
+    expect(
+      resolveRaiderIoEquippedItemLevel({
+        item_level_equipped: 272,
+        items: {
+          head: { item_level: 308 },
+          chest: { item_level: 308 },
+          legs: { item_level: 308 },
+          mainhand: { item_level: 331 },
+        },
+      }),
+    ).toBe(314);
+
+    expect(
+      resolveRaiderIoEquippedItemLevel({
+        item_level_equipped: 320,
+        items: { head: { item_level: 300 }, chest: { item_level: 300 } },
+      }),
+    ).toBe(320);
+  });
+
+  it("uses item average when reported equipped is missing", () => {
+    expect(
+      resolveRaiderIoEquippedItemLevel({
+        items: { head: { item_level: 310 }, chest: { item_level: 312 } },
+      }),
+    ).toBe(311);
+  });
+});
+
 describe("raiderIoApiClient.getCharacterEquippedItemLevel", () => {
   it("returns SUCCESS with equipped item level from gear", async () => {
     fetchMock.mockResolvedValueOnce(
@@ -53,6 +85,41 @@ describe("raiderIoApiClient.getCharacterEquippedItemLevel", () => {
     expect(calledUrl).toContain("name=Tikaanie");
     expect(calledUrl).toContain("fields=gear");
     expect(calledUrl).not.toContain("access_key=");
+  });
+
+  it("raises stale item_level_equipped using gear.items average", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        name: "Tikaanie",
+        gear: {
+          item_level_equipped: 272,
+          items: {
+            head: { item_level: 308 },
+            neck: { item_level: 298 },
+            shoulder: { item_level: 321 },
+            back: { item_level: 321 },
+            chest: { item_level: 308 },
+            waist: { item_level: 324 },
+            wrist: { item_level: 331 },
+            hands: { item_level: 308 },
+            legs: { item_level: 308 },
+            feet: { item_level: 308 },
+            finger1: { item_level: 298 },
+            finger2: { item_level: 318 },
+            trinket1: { item_level: 318 },
+            trinket2: { item_level: 298 },
+          },
+        },
+      }),
+    );
+
+    const result = await raiderIoApiClient.getCharacterEquippedItemLevel({
+      name: "Tikaanie",
+      realm: "Blackmoore",
+      region: "EU",
+    });
+
+    expect(result).toEqual({ status: "SUCCESS", equippedItemLevel: 312 });
   });
 
   it("appends access_key when RAIDER_IO_ACCESS_KEY is set", async () => {
@@ -86,7 +153,7 @@ describe("raiderIoApiClient.getCharacterEquippedItemLevel", () => {
     expect(result).toEqual({ status: "NOT_FOUND" });
   });
 
-  it("returns NOT_FOUND when gear.item_level_equipped is missing", async () => {
+  it("returns NOT_FOUND when gear has no usable item levels", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ name: "Tikaanie", gear: {} }));
 
     const result = await raiderIoApiClient.getCharacterEquippedItemLevel({

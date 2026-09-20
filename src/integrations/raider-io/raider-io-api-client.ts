@@ -32,6 +32,36 @@ function asFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * RIO sometimes returns a stale `item_level_equipped` while `gear.items`
+ * already contain the current loadout. Prefer the higher of the reported
+ * equipped value and the rounded average of item slot levels.
+ */
+export function resolveRaiderIoEquippedItemLevel(gear: {
+  item_level_equipped?: unknown;
+  items?: unknown;
+}): number | null {
+  const reported = asFiniteNumber(gear.item_level_equipped);
+  const fromItems = averageItemLevelFromGearItems(gear.items);
+  if (reported == null && fromItems == null) return null;
+  if (reported == null) return fromItems;
+  if (fromItems == null) return reported;
+  return Math.max(reported, fromItems);
+}
+
+function averageItemLevelFromGearItems(items: unknown): number | null {
+  if (!items || typeof items !== "object") return null;
+  const levels: number[] = [];
+  for (const slot of Object.values(items as Record<string, unknown>)) {
+    if (!slot || typeof slot !== "object") continue;
+    const level = asFiniteNumber((slot as { item_level?: unknown }).item_level);
+    if (level != null && level > 0) levels.push(level);
+  }
+  if (levels.length === 0) return null;
+  const sum = levels.reduce((acc, value) => acc + value, 0);
+  return Math.round(sum / levels.length);
+}
+
+/**
  * Raider.IO character profile for equipped-ilvl enrichment after Blizzard
  * refresh. Soft-fail on errors. Works without a key; set RAIDER_IO_ACCESS_KEY
  * for higher rate limits at scale.
@@ -96,7 +126,10 @@ export const raiderIoApiClient = {
       return { status: "NOT_FOUND" };
     }
 
-    const equipped = asFiniteNumber((gear as { item_level_equipped?: unknown }).item_level_equipped);
+    const equipped = resolveRaiderIoEquippedItemLevel(gear as {
+      item_level_equipped?: unknown;
+      items?: unknown;
+    });
     if (equipped == null) {
       return { status: "NOT_FOUND" };
     }
