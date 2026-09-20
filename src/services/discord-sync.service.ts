@@ -537,8 +537,9 @@ function buildSignupEmbedSignature(
     targetBucket: extra.targetBucket,
     classEmojiFingerprint: extra.classEmojiFingerprint ?? "",
     // Bump when participant line / summary-field rendering changes without
-    // member-data changes so existing posts refresh (Content→Raid Lead, role emojis).
-    participantLineFormat: "mention-v2-raidlead",
+    // member-data changes so existing posts refresh (Content→Raid Lead, role emojis,
+    // multi-char mention grouping).
+    participantLineFormat: "mention-v3-group-icons",
   });
 }
 
