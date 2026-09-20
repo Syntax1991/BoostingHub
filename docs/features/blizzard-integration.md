@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Optionally connect a BoostingHub account to Battle.net so the owner can import or link World of Warcraft characters and refresh item level from Blizzard profile data.
+Optionally connect a BoostingHub account to Battle.net so the owner can import or link World of Warcraft characters and refresh item level from Blizzard profile data. After a successful Blizzard profile refresh, BoostingHub may raise stored equipped item level from Raider.IO when that source reports a higher value (soft-fail; never blocks refresh).
 
 Discord remains login. Battle.net is a secondary game-account connection, not a second identity provider for the app session.
 
@@ -101,7 +101,7 @@ Specialization from Blizzard is an **import-time prefill**. The import modal alw
 
 Battle.net import/link requires character **level ≥ 90** (`MIN_IMPORT_CHARACTER_LEVEL`). Lower-level owned characters remain visible in the import modal as `level_too_low` / “Requires level 90”, but are not selectable. This minimum is specific to Battle.net import/link; the public-lookup Add Character flow does not gate on level.
 
-Class and item level are Blizzard-authoritative everywhere a Character is created or linked, for both flows — the client cannot submit either value; the server always re-resolves them from Blizzard. Item level uses `equipped_item_level` when the public profile returns one. When it does not, item level is stored as `null` ("Unknown") rather than a manual entry or a `0` sentinel, and this alone never blocks import, link, or Add Character. Refresh updates **item level** when Blizzard supplies one (and may apply a safe rename — see below); when a refresh's profile read succeeds but omits item level, the character's last known item level is retained rather than cleared, and name/lockout sync still proceed. It does not auto-change class, realm, or specialization.
+Class and item level are Blizzard-authoritative everywhere a Character is created or linked, for both flows — the client cannot submit either value; the server always re-resolves them from Blizzard. Item level uses `equipped_item_level` when the public profile returns one. When it does not, item level is stored as `null` ("Unknown") rather than a manual entry or a `0` sentinel, and this alone never blocks import, link, or Add Character. Refresh updates **item level** when Blizzard supplies one (and may apply a safe rename — see below); when a refresh's profile read succeeds but omits item level, the character's last known item level is retained rather than cleared, and name/lockout sync still proceed. After that Blizzard apply, Refresh may **raise** item level from Raider.IO `gear.item_level_equipped` when the public profile returns a finite value strictly greater than the Blizzard equipped item level just applied (or when Blizzard omitted item level). Raider.IO failures, 404s, or lower values leave the Blizzard-applied value unchanged. It does not auto-change class, realm, or specialization.
 
 ## Privacy / profile unavailable
 
@@ -203,6 +203,7 @@ Required for Add Character (Class/Item Level lookup has no manual fallback) and 
 | `BLIZZARD_CLIENT_ID` | Battle.net API client id |
 | `BLIZZARD_CLIENT_SECRET` | Battle.net API client secret |
 | `BLIZZARD_REDIRECT_URI` | e.g. `http://localhost:3000/api/integrations/battlenet/callback` |
+| `RAIDER_IO_ACCESS_KEY` | Optional. Raider.IO app key (`access_key` query param) for higher rate limits on post-refresh ilvl enrichment |
 
 ## MVCS map
 

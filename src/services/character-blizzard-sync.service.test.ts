@@ -17,8 +17,16 @@ const apiMocks = vi.hoisted(() => ({
   getCharacterRaidEncounters: vi.fn(),
 }));
 
+const raiderIoMocks = vi.hoisted(() => ({
+  getCharacterEquippedItemLevel: vi.fn(),
+}));
+
 vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
   blizzardApiClient: apiMocks,
+}));
+
+vi.mock("@/integrations/raider-io/raider-io-api-client", () => ({
+  raiderIoApiClient: raiderIoMocks,
 }));
 
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
@@ -219,6 +227,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getClientCredentialsToken.mockResolvedValue("client-token");
   apiMocks.getCharacterRaidEncounters.mockRejectedValue(new Error("encounters unavailable"));
+  raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({ status: "NOT_FOUND" });
 });
 
 afterEach(async () => {
@@ -286,6 +295,69 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     expect(refreshed.specialization).toBe("Restoration");
     expect(refreshed.primaryRole).toBe("HEALER");
     expect(refreshed.lastSyncedAt).toBeTruthy();
+  });
+
+  it("raises itemLevel when Raider.IO reports a higher equipped ilvl than Blizzard", async () => {
+    const { owned, characterId } = await importLinkedShaman("300031", "Bnriohigh");
+
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 272,
+      specialization: "Elemental",
+    });
+    raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({
+      status: "SUCCESS",
+      equippedItemLevel: 312,
+    });
+
+    const refreshed = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(refreshed.itemLevel).toBe(312);
+    expect(refreshed.specialization).toBe("Restoration");
+    expect(raiderIoMocks.getCharacterEquippedItemLevel).toHaveBeenCalledWith({
+      name: owned.name,
+      realm: owned.realmName,
+      region: "EU",
+    });
+  });
+
+  it("keeps Blizzard itemLevel when Raider.IO is lower, missing, or fails", async () => {
+    const { owned, characterId } = await importLinkedShaman("300032", "Bnriokeep");
+
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 320,
+    });
+    raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({
+      status: "SUCCESS",
+      equippedItemLevel: 300,
+    });
+
+    const lower = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(lower.itemLevel).toBe(320);
+
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+    raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({
+      status: "TEMPORARY_FAILURE",
+      message: "timeout",
+    });
+    const failed = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(failed.itemLevel).toBe(320);
   });
 
   it("retains the last known itemLevel when Blizzard omits it on an otherwise valid refresh", async () => {

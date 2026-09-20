@@ -16,8 +16,16 @@ const apiMocks = vi.hoisted(() => ({
   getCharacterRaidEncounters: vi.fn(),
 }));
 
+const raiderIoMocks = vi.hoisted(() => ({
+  getCharacterEquippedItemLevel: vi.fn(),
+}));
+
 vi.mock("@/integrations/blizzard/blizzard-api-client", () => ({
   blizzardApiClient: apiMocks,
+}));
+
+vi.mock("@/integrations/raider-io/raider-io-api-client", () => ({
+  raiderIoApiClient: raiderIoMocks,
 }));
 
 import {
@@ -141,6 +149,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getClientCredentialsToken.mockResolvedValue("client-token");
   apiMocks.getCharacterRaidEncounters.mockRejectedValue(new Error("encounters unavailable"));
+  raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({ status: "NOT_FOUND" });
 });
 
 afterEach(async () => {

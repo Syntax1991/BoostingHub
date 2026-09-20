@@ -19,6 +19,7 @@ import { lockoutRepository } from "@/repositories/lockout.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
+import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-io-ilvl";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 
 /**
@@ -28,6 +29,10 @@ import { characterWarcraftLogsService } from "@/services/character-warcraft-logs
  * new candidates lives in character-blizzard-import.service.ts. The
  * scheduled background sync (scheduled-character-sync.service.ts) reuses
  * refreshLinkedCharacterProfile directly rather than duplicating this logic.
+ *
+ * After Blizzard profile apply, equipped item level may be raised from
+ * Raider.IO when that source reports a higher value (soft-fail). Spec and
+ * primaryRole remain BoostingHub-owned and are never overwritten here.
  */
 
 const REFRESH_COOLDOWN_MS = 60_000;
@@ -221,13 +226,13 @@ export async function refreshLinkedCharacterProfile(
   // still proceed, and the character's last known item level is retained
   // rather than cleared to null or a 0 sentinel.
   const syncedAt = new Date().toISOString();
+  const blizzardEquippedItemLevel =
+    typeof summary.equippedItemLevel === "number" ? summary.equippedItemLevel : null;
   try {
     await characterRepository.applyBlizzardSync(character.id, {
       name: nextName,
       normalizedName: nextNormalizedName,
-      ...(typeof summary.equippedItemLevel === "number"
-        ? { itemLevel: summary.equippedItemLevel }
-        : {}),
+      ...(blizzardEquippedItemLevel != null ? { itemLevel: blizzardEquippedItemLevel } : {}),
       lastSyncedAt: syncedAt,
     });
   } catch (error) {
@@ -238,6 +243,23 @@ export async function refreshLinkedCharacterProfile(
       );
     }
     throw error;
+  }
+
+  // Soft enrichment: Raider.IO may report a fresher equipped ilvl than Blizzard.
+  // Never fails the refresh; never touches specialization/primaryRole.
+  const raiderIoItemLevel = await resolveRaiderIoItemLevelEnrichment({
+    name: nextName,
+    realm: character.realm,
+    region: character.region,
+    blizzardEquippedItemLevel,
+  });
+  if (raiderIoItemLevel != null) {
+    await characterRepository.applyBlizzardSync(character.id, {
+      name: nextName,
+      normalizedName: nextNormalizedName,
+      itemLevel: raiderIoItemLevel,
+      lastSyncedAt: syncedAt,
+    });
   }
 
   const lockoutSynced = await syncCurrentRaidLockoutsFromBlizzard({

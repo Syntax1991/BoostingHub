@@ -4,7 +4,7 @@
 
 Blizzard profile data and current-raid lockouts on an already-linked Character drift out of date between manual refreshes. This feature adds an automatic background refresh for stale, active, Blizzard-linked Characters — without the app owning a recurring timer.
 
-It reuses the exact same lower-level refresh logic as manual "Refresh" / "Refresh All" (`character-blizzard-sync.service.ts`): profile fetch/validate/apply, current-raid lockout sync, identity/realm-transfer safety checks, and the "missing item level never clears the existing one" guarantee. This feature only adds the *orchestration* around calling that logic for many Characters, globally, on a schedule it does not itself keep.
+It reuses the exact same lower-level refresh logic as manual "Refresh" / "Refresh All" (`character-blizzard-sync.service.ts`): profile fetch/validate/apply, optional Raider.IO equipped-ilvl raise when higher than Blizzard, current-raid lockout sync, identity/realm-transfer safety checks, and the "missing item level never clears the existing one" guarantee. This feature only adds the *orchestration* around calling that logic for many Characters, globally, on a schedule it does not itself keep.
 
 ## One-shot architecture — no internal timer
 
@@ -132,7 +132,7 @@ Scheduled sync **may** update, per successfully-refreshed Character:
 - current-raid `CharacterRaidLockout` rows
 - `BattleNetConnection.lastSuccessfulSyncAt` (grouped — see below)
 
-Scheduled sync **never** updates `Character.specialization` or `Character.primaryRole` — those are Character metadata a Blizzard sync must not overwrite (only the User editing the Character changes them). It also never calls `applyBlizzardLink()` (the initial-link path); it only ever calls `applyBlizzardSync()` on already-linked Characters, same as manual refresh.
+Scheduled sync **never** updates `Character.specialization` or `Character.primaryRole` — those are Character metadata a Blizzard sync must not overwrite (only the User editing the Character changes them). Item level may still be raised from Raider.IO after the Blizzard apply when that source reports a higher equipped value (same soft enrichment as manual Refresh). It also never calls `applyBlizzardLink()` (the initial-link path); it only ever calls `applyBlizzardSync()` on already-linked Characters, same as manual refresh.
 
 It also never changes Weekly Availability, Booster Access / Qualification, signup/roster/run commitments, payout, or attendance data.
 
