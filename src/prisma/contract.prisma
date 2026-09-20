@@ -868,7 +868,8 @@ model RunDiscordPost {
   archiveTranscriptHtml      String?
   /// Download filename, e.g. transcript-closed-….html
   archiveTranscriptFilename  String?
-  /// JSON array of RunSignup ids that already received an Apex-style Raid Invite DM.
+  /// JSON array of RunSignup ids that already received an Apex-style Raid Invite DM
+  /// (sent after Start Run, not on roster publish).
   raidInviteSentSignupIds    String?
   createdAt           TimestamptzString @default(now())
   updatedAt           temporal.updatedAtString()

@@ -795,11 +795,14 @@ export const discordSyncService = {
         }
       }
 
-      // Apex-style Raid Invite DMs: once a roster is published, each SELECTED
-      // participant with a linked Discord account gets one DM (new SELECTED
-      // only on republish). Channel id is optional — the DM omits the Channel
-      // line when RunDiscordPost.runChannelId is not yet set.
-      if (run.roster?.publishedAt && !run.archivedAt) {
+      // Apex-style Raid Invite DMs: only after Start Run (IN_PROGRESS+), each
+      // SELECTED participant with a linked Discord account gets one DM (new
+      // SELECTED only while the Run stays started). Publishing the roster days
+      // early must not DM anyone yet. Channel id is optional — the DM omits
+      // the Channel line when RunDiscordPost.runChannelId is not yet set.
+      const raidInviteEligible =
+        (run.status === "IN_PROGRESS" || run.status === "COMPLETED") && !run.archivedAt;
+      if (raidInviteEligible) {
         const alreadySent = new Set(parseRaidInviteSentSignupIds(post?.raidInviteSentSignupIds ?? null));
         const signupRows = await rosterRepository.listSignups(run.id);
         for (const row of signupRows) {

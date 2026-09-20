@@ -1397,6 +1397,7 @@ describe("discordSyncService — run start operational post", () => {
 
     let work = await discordSyncService.listSyncWork();
     expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.raidInvites.some((entry) => entry.runId === id)).toBe(false);
 
     await runService.startRun(lead, {
       runId: id,

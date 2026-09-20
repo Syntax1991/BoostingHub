@@ -204,7 +204,7 @@ Each member renders as `<@discordUserId> — Character-Realm` when the User has 
 
 ## Raid Invite DMs (Apex-style)
 
-When a roster is **published**, each **SELECTED** BOOSTER and LOOTBUDDY with a linked Discord account receives one private DM from the bot:
+When a Run is **started** (`Start Run` → `IN_PROGRESS`), each **SELECTED** BOOSTER and LOOTBUDDY with a linked Discord account receives one private DM from the bot. Publishing the roster earlier does **not** send invites.
 
 ```text
 📣 **Raid Invite**
@@ -220,7 +220,7 @@ Please be online 10 minutes before start.
 
 - VIP appears only on the Assignment line (never duplicated on the schedule line).
 - `Channel:` uses the persisted `RunDiscordPost.runChannelId` as a real `<#id>` mention. When that id is missing, the Channel line is omitted — never `#unknown`.
-- **Republish**: only newly SELECTED signup ids are DMed; already-invited signup ids are stored on `RunDiscordPost.raidInviteSentSignupIds` (JSON array) and skipped.
+- **After start / late SELECTED**: only signup ids not yet in `RunDiscordPost.raidInviteSentSignupIds` are DMed (JSON array); already-invited ids are skipped.
 - Closed DMs (Discord 50007) are logged and still marked sent so the bot does not retry forever.
 - Users must share the guild with the bot and allow DMs from server members.
 - App-archived Runs do not send invites.
