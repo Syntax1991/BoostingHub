@@ -33,7 +33,8 @@ describe("raiderIoRealmSlugFromRealm", () => {
 });
 
 describe("resolveRaiderIoEquippedItemLevel", () => {
-  it("prefers the higher of reported equipped and average item slots", () => {
+  it("averages present slots with 2H mainhand and no empty-offhand penalty", () => {
+    // (308+308+308+331)/4 floored
     expect(
       resolveRaiderIoEquippedItemLevel({
         item_level_equipped: 272,
@@ -44,8 +45,36 @@ describe("resolveRaiderIoEquippedItemLevel", () => {
           mainhand: { item_level: 331 },
         },
       }),
-    ).toBe(314);
+    ).toBe(313);
+  });
 
+  it("counts missing mainhand+offhand as 0 so unequipped weapons match Blizzard", () => {
+    const armor = {
+      head: { item_level: 308 },
+      neck: { item_level: 298 },
+      shoulder: { item_level: 321 },
+      back: { item_level: 321 },
+      chest: { item_level: 308 },
+      waist: { item_level: 324 },
+      wrist: { item_level: 331 },
+      hands: { item_level: 308 },
+      legs: { item_level: 308 },
+      feet: { item_level: 308 },
+      finger1: { item_level: 298 },
+      finger2: { item_level: 318 },
+      trinket1: { item_level: 318 },
+      trinket2: { item_level: 298 },
+    };
+    // 4367 armor + 0 + 0 over 16 slots → floor 272
+    expect(
+      resolveRaiderIoEquippedItemLevel({
+        item_level_equipped: 272,
+        items: armor,
+      }),
+    ).toBe(272);
+  });
+
+  it("keeps a higher reported equipped when item average is lower", () => {
     expect(
       resolveRaiderIoEquippedItemLevel({
         item_level_equipped: 320,
@@ -55,11 +84,12 @@ describe("resolveRaiderIoEquippedItemLevel", () => {
   });
 
   it("uses item average when reported equipped is missing", () => {
+    // both weapons missing → (310+312+0+0)/4
     expect(
       resolveRaiderIoEquippedItemLevel({
         items: { head: { item_level: 310 }, chest: { item_level: 312 } },
       }),
-    ).toBe(311);
+    ).toBe(155);
   });
 });
 
@@ -87,7 +117,7 @@ describe("raiderIoApiClient.getCharacterEquippedItemLevel", () => {
     expect(calledUrl).not.toContain("access_key=");
   });
 
-  it("raises stale item_level_equipped using gear.items average", async () => {
+  it("does not inflate ilvl when weapons are unequipped", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
         name: "Tikaanie",
@@ -119,7 +149,44 @@ describe("raiderIoApiClient.getCharacterEquippedItemLevel", () => {
       region: "EU",
     });
 
-    expect(result).toEqual({ status: "SUCCESS", equippedItemLevel: 312 });
+    expect(result).toEqual({ status: "SUCCESS", equippedItemLevel: 272 });
+  });
+
+  it("raises stale equipped ilvl when a 2H weapon is present in gear.items", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        name: "Tikaanie",
+        gear: {
+          item_level_equipped: 272,
+          items: {
+            head: { item_level: 308 },
+            neck: { item_level: 298 },
+            shoulder: { item_level: 321 },
+            back: { item_level: 321 },
+            chest: { item_level: 308 },
+            waist: { item_level: 324 },
+            wrist: { item_level: 331 },
+            hands: { item_level: 308 },
+            legs: { item_level: 308 },
+            feet: { item_level: 308 },
+            finger1: { item_level: 298 },
+            finger2: { item_level: 318 },
+            trinket1: { item_level: 318 },
+            trinket2: { item_level: 298 },
+            mainhand: { item_level: 331 },
+          },
+        },
+      }),
+    );
+
+    const result = await raiderIoApiClient.getCharacterEquippedItemLevel({
+      name: "Tikaanie",
+      realm: "Blackmoore",
+      region: "EU",
+    });
+
+    // (4367 + 331) / 15 floored
+    expect(result).toEqual({ status: "SUCCESS", equippedItemLevel: 313 });
   });
 
   it("appends access_key when RAIDER_IO_ACCESS_KEY is set", async () => {
