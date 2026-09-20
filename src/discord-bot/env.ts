@@ -102,6 +102,6 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     discordRosterChannelId: rosterChannelId,
     apiBaseUrl: env.BOOSTINGHUB_API_BASE_URL!.replace(/\/$/, ""),
     botApiToken: env.BOOSTINGHUB_BOT_API_TOKEN!,
-    syncIntervalMs: Number(env.DISCORD_SYNC_INTERVAL_MS ?? 60_000),
+    syncIntervalMs: Number(env.DISCORD_SYNC_INTERVAL_MS ?? 5_000),
   };
 }

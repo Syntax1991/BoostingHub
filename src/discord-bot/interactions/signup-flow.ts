@@ -30,6 +30,7 @@ import {
   type StagedLootbuddySession,
   type WowClass,
 } from "@/discord-bot/interactions/signup-staging";
+import { requestImmediateSync } from "@/discord-bot/sync-loop";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import type { RunLootType } from "@/models/enums";
 
@@ -492,6 +493,7 @@ export async function handleConfirmSignupButton(interaction: ButtonInteraction, 
     const result = await api.setCharacterOffers(runId, interaction.user.id, { offers });
     discardSession(interaction.user.id, runId);
     await interaction.editReply({ content: describeOfferResult(result, offers.length), components: [] });
+    requestImmediateSync();
   } catch (error) {
     await renderStagingEditor(interaction, api, runId, session, describeBotApiError(error));
   }
@@ -768,6 +770,7 @@ export async function handleLootbuddyConfirmButton(interaction: ButtonInteractio
     await api.setLootbuddies(runId, interaction.user.id, { lootbuddies });
     discardLootbuddySession(interaction.user.id, runId);
     await interaction.editReply({ content: describeLootbuddyResult(lootbuddies.length), components: [] });
+    requestImmediateSync();
   } catch (error) {
     let options: SignupOptionsPayload;
     try {

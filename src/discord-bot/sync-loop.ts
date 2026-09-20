@@ -74,15 +74,49 @@ type ResolvedRunChannel = {
  * Starts polling GET /api/bot/discord/sync. Discord availability never
  * blocks a Run state transition in BoostingHub — a failed pass is logged and
  * retried on the next tick rather than thrown out of the bot process.
+ *
+ * Concurrent kicks coalesce: at most one pass runs at a time, and any
+ * `requestImmediateSync()` during a pass schedules exactly one follow-up.
  */
-export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): NodeJS.Timeout {
-  const runOnce = () => {
-    void syncOnce(client, env, api).catch((error) => {
+let syncContext: { client: Client; env: BotEnv; api: BotApiClient } | null = null;
+let syncInFlight: Promise<void> | null = null;
+let syncPending = false;
+
+async function triggerSync(): Promise<void> {
+  if (!syncContext) return;
+  if (syncInFlight) {
+    syncPending = true;
+    return;
+  }
+  const { client, env, api } = syncContext;
+  syncInFlight = syncOnce(client, env, api)
+    .catch((error) => {
       console.error("[discord-bot] sync pass failed", error);
+    })
+    .finally(() => {
+      syncInFlight = null;
+      if (syncPending) {
+        syncPending = false;
+        void triggerSync();
+      }
     });
-  };
-  runOnce();
-  return setInterval(runOnce, env.syncIntervalMs);
+  await syncInFlight;
+}
+
+/**
+ * Run a sync pass as soon as possible (coalesced). Used after Discord
+ * mutations so signup/roster embeds update without waiting for the poll tick.
+ */
+export function requestImmediateSync(): void {
+  void triggerSync();
+}
+
+export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): NodeJS.Timeout {
+  syncContext = { client, env, api };
+  void triggerSync();
+  return setInterval(() => {
+    void triggerSync();
+  }, env.syncIntervalMs);
 }
 
 /**

@@ -198,7 +198,7 @@ export type WeekSectionResult =
 /**
  * Same-pass create→position can resolve successfully while Discord's live
  * category order briefly stays wrong. Cap retries tightly; never wait for the
- * normal 60s poll. Delay is injectable so tests stay fast.
+ * normal poll tick. Delay is injectable so tests stay fast.
  */
 export const WEEK_SECTION_POSITION_MAX_ATTEMPTS = 3; // initial attempt + up to 2 retries
 export const WEEK_SECTION_POSITION_RETRY_DELAY_MS = 250;
@@ -451,7 +451,7 @@ export async function reconcileWeekSectionPositions(
  * Canonical CURRENT/NEXT reconcile with fresh post-write verification and a
  * bounded same-pass retry. Handles Discord create→position consistency where
  * `setPositions` resolves successfully but the live category order briefly
- * remains wrong. Does not wait for the normal 60s scheduler poll.
+ * remains wrong. Does not wait for the normal scheduler poll.
  *
  * `listForPlan` may include same-pass create overlays (cache-friendly).
  * `listFresh` must reflect Discord server state after a write (REST/force

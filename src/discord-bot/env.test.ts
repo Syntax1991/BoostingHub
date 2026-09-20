@@ -100,3 +100,17 @@ describe("loadBotEnv — one active category plus marker channels", () => {
     expect(env.discordSignupChannelId).toBe("signup-chan-1");
   });
 });
+
+describe("loadBotEnv — sync interval", () => {
+  it("defaults to 5s so embeds refresh quickly without an explicit env override", () => {
+    const env = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" }));
+    expect(env.syncIntervalMs).toBe(5_000);
+  });
+
+  it("honors DISCORD_SYNC_INTERVAL_MS when set", () => {
+    const env = loadBotEnv(
+      baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_SYNC_INTERVAL_MS: "15000" }),
+    );
+    expect(env.syncIntervalMs).toBe(15_000);
+  });
+});
