@@ -32,3 +32,20 @@ export function formatWclPerformanceRaidLine(segment: WclPerformanceRaidSegment)
   });
   return `${segment.raidName} · ${roleParts.join(" · ")}`;
 }
+
+/**
+ * Roster columns repeat multi-role signups — keep only the column's role.
+ * Empty when that role has no parses (do not fall back to another metric).
+ */
+export function filterWclPerformanceForGroupRole(
+  segments: WclPerformanceRaidSegment[],
+  groupRole: CharacterRole | null,
+): WclPerformanceRaidSegment[] {
+  if (!groupRole) return segments;
+  return segments
+    .map((segment) => ({
+      ...segment,
+      roles: segment.roles.filter((role) => role.role === groupRole),
+    }))
+    .filter((segment) => segment.roles.length > 0);
+}

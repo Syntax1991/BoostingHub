@@ -58,9 +58,9 @@ describe("resolveRosterWclPerformance", () => {
     expect(fetchZoneRankings).not.toHaveBeenCalled();
   });
 
-  it("fetches only the specialization role when multi-role (no heal+dps mix)", async () => {
+  it("fetches per offered role; tank column can omit HPS when no tank parses", async () => {
     fetchZoneRankings.mockImplementation(async (input: { encounterId?: number; metric: string; role?: string }) => {
-      if (input.metric === "dps" && input.role === "Tank") {
+      if (input.metric === "hps") {
         return {
           status: "SUCCESS",
           rankings: {
@@ -69,6 +69,7 @@ describe("resolveRosterWclPerformance", () => {
           },
         };
       }
+      // No tank parses for this resto/mw character.
       return { status: "NOT_FOUND" };
     });
 
@@ -93,9 +94,9 @@ describe("resolveRosterWclPerformance", () => {
           offeredRoles: ["TANK", "HEALER"],
           character: {
             id: "char-1",
-            wowClass: "PALADIN",
-            specialization: "Protection",
-            primaryRole: "TANK",
+            wowClass: "DRUID",
+            specialization: "Restoration",
+            primaryRole: "HEALER",
             warcraftLogsId: "999",
           },
         },
@@ -105,24 +106,22 @@ describe("resolveRosterWclPerformance", () => {
 
     const segments = map.get("signup-1");
     expect(segments).toHaveLength(2);
-    expect(segments?.[0]?.raidName).toBe("Nymrissa");
-    expect(segments?.[0]?.roles.map((r) => r.role)).toEqual(["TANK"]);
-    expect(segments?.[0]?.roles[0]?.specLabel).toBe("Protection");
-    expect(segments?.[1]?.raidName).toBe("The Venomous Abyss");
-    expect(segments?.[1]?.roles).toHaveLength(1);
-    expect(segments?.[1]?.roles[0]?.bestPct).toBe(88);
-    expect(fetchZoneRankings.mock.calls.every((call) => call[0]?.metric !== "hps")).toBe(true);
-    expect(upsert).toHaveBeenCalled();
+    expect(segments?.every((s) => s.roles.every((r) => r.role === "HEALER"))).toBe(true);
+    expect(fetchZoneRankings.mock.calls.some((call) => call[0]?.role === "Tank")).toBe(true);
+    expect(fetchZoneRankings.mock.calls.some((call) => call[0]?.metric === "hps")).toBe(true);
   });
 
-  it("uses HPS only for a healer who also offered DPS", async () => {
-    fetchZoneRankings.mockResolvedValue({
+  it("uses HPS for healer role and DPS for dps role when both offered", async () => {
+    fetchZoneRankings.mockImplementation(async (input: { metric: string }) => ({
       status: "SUCCESS",
-      rankings: { bestPerformanceAverage: 72, medianPerformanceAverage: 61 },
-    });
+      rankings: {
+        bestPerformanceAverage: input.metric === "hps" ? 72 : 40,
+        medianPerformanceAverage: input.metric === "hps" ? 61 : 35,
+      },
+    }));
 
     const { resolveRosterWclPerformance } = await import("@/services/character-wcl-performance.service");
-    await resolveRosterWclPerformance({
+    const map = await resolveRosterWclPerformance({
       difficulty: "HEROIC",
       contents: [
         {
@@ -147,8 +146,9 @@ describe("resolveRosterWclPerformance", () => {
       now: new Date("2026-09-20T12:00:00.000Z"),
     });
 
-    expect(fetchZoneRankings).toHaveBeenCalledTimes(1);
-    expect(fetchZoneRankings.mock.calls[0]?.[0]).toMatchObject({ metric: "hps" });
+    const roles = map.get("signup-h")?.[0]?.roles.map((r) => r.role) ?? [];
+    expect(roles).toEqual(["HEALER", "DPS"]);
+    expect(fetchZoneRankings).toHaveBeenCalledTimes(2);
   });
 
   it("hits fresh cache for role-only dps key", async () => {

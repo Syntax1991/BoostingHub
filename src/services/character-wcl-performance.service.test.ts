@@ -66,7 +66,7 @@ describe("specNameForOfferedRole / metric keys", () => {
 });
 
 describe("rolesRelevantForWclPerformance", () => {
-  it("uses healer spec even when DPS was also offered", () => {
+  it("returns every offered role so each roster column can filter", () => {
     expect(
       rolesRelevantForWclPerformance({
         offeredRoles: ["HEALER", "DPS"],
@@ -74,35 +74,13 @@ describe("rolesRelevantForWclPerformance", () => {
         specialization: "Holy",
         primaryRole: "HEALER",
       }),
-    ).toEqual(["HEALER"]);
+    ).toEqual(["HEALER", "DPS"]);
   });
 
-  it("uses DPS spec even when HEALER was also offered", () => {
+  it("falls back to primaryRole when nothing was offered", () => {
     expect(
       rolesRelevantForWclPerformance({
-        offeredRoles: ["HEALER", "DPS"],
-        wowClass: "PRIEST",
-        specialization: "Shadow",
-        primaryRole: "DPS",
-      }),
-    ).toEqual(["DPS"]);
-  });
-
-  it("uses tank spec when Protection also offered healer", () => {
-    expect(
-      rolesRelevantForWclPerformance({
-        offeredRoles: ["TANK", "HEALER"],
-        wowClass: "PALADIN",
-        specialization: "Protection",
-        primaryRole: "TANK",
-      }),
-    ).toEqual(["TANK"]);
-  });
-
-  it("falls back to primaryRole when specialization is missing", () => {
-    expect(
-      rolesRelevantForWclPerformance({
-        offeredRoles: ["HEALER", "DPS"],
+        offeredRoles: [],
         wowClass: "PRIEST",
         specialization: null,
         primaryRole: "HEALER",

@@ -27,7 +27,10 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
-import { formatWclPerformanceRaidLine } from "@/lib/wcl-performance-display";
+import {
+  filterWclPerformanceForGroupRole,
+  formatWclPerformanceRaidLine,
+} from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
@@ -642,8 +645,8 @@ function SignupRowCard({
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
   const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
   const rowPointer = disabled ? "cursor-not-allowed" : "cursor-pointer";
-  const showWcl =
-    Boolean(character?.warcraftLogsId) || signup.wclPerformance.length > 0;
+  const wclForColumn = filterWclPerformanceForGroupRole(signup.wclPerformance, signup.groupRole);
+  const showWcl = Boolean(character?.warcraftLogsId) || wclForColumn.length > 0;
   return (
     <div
       className={`flex items-start gap-3 rounded-md border px-3 py-2 ${
@@ -742,9 +745,9 @@ function SignupRowCard({
               className="inline-flex items-center gap-1 text-accent hover:underline"
             />
           ) : null}
-          {signup.wclPerformance.length > 0 ? (
+          {wclForColumn.length > 0 ? (
             <div className={`space-y-0.5 text-muted ${character?.warcraftLogsId ? "mt-1" : ""}`}>
-              {signup.wclPerformance.map((segment) => (
+              {wclForColumn.map((segment) => (
                 <div key={segment.raidId}>{formatWclPerformanceRaidLine(segment)}</div>
               ))}
             </div>

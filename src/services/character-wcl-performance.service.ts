@@ -81,9 +81,9 @@ export function specNameForOfferedRole(
 }
 
 /**
- * Only query the metric for the character's actual spec (or primaryRole).
- * Offered roles are ignored here — a Holy healer who also offered DPS must
- * never pull damage percentiles (and vice versa).
+ * Roles to query for WCL: every offered role so each roster column can show
+ * its own metric (Tank column must not fall back to HPS for a Resto/MW alt).
+ * Falls back to primaryRole when nothing was offered.
  */
 export function rolesRelevantForWclPerformance(input: {
   offeredRoles: CharacterRole[];
@@ -91,10 +91,8 @@ export function rolesRelevantForWclPerformance(input: {
   specialization: string | null;
   primaryRole: CharacterRole;
 }): CharacterRole[] {
-  const specMatch = input.specialization?.trim()
-    ? findSpecialization(input.wowClass, input.specialization)
-    : null;
-  if (specMatch) return [specMatch.role];
+  const offered = [...new Set(input.offeredRoles)];
+  if (offered.length > 0) return offered;
   return [input.primaryRole];
 }
 
