@@ -103,11 +103,7 @@ function formatContentSaveSegments(saves: readonly EligibleContentSave[]): strin
   return saves.map((row) => (row.raidName ? `${row.raidName}: ${row.label.text}` : row.label.text));
 }
 
-function characterHasVerifiedLockout(option: EligibleCharacterOption): boolean {
-  return Boolean(option.contentSaves?.some((row) => row.raidSave));
-}
-
-/** Compact multi-raid lockout line for Discord select descriptions (≤100 chars). */
+/** Compact multi-raid lockout line for Discord select option descriptions (≤100 chars). */
 export function formatDiscordCharacterLockoutDescription(
   option: EligibleCharacterOption,
 ): string | null {
@@ -168,19 +164,6 @@ function describeReservationBlocked(ineligible: IneligibleCharacterOption[]): st
   ];
 }
 
-/** Informational only — verified lockouts remain fully selectable. */
-function describeSavedCharacters(eligible: EligibleCharacterOption[]): string[] {
-  const withLockout = eligible.filter(characterHasVerifiedLockout);
-  if (withLockout.length === 0) return [];
-  return [
-    "",
-    "Lockouts this reset:",
-    ...withLockout.map((option) => {
-      const segments = formatContentSaveSegments(option.contentSaves ?? []);
-      return `• ${option.characterName} — ${segments.join(" · ")}`;
-    }),
-  ];
-}
 type OfferResult = { created: number; reactivated: number; withdrawn: number; kept: number };
 /** The subset of a Discord reply-capable interaction every handler here needs — real button and select interactions both satisfy it. */
 type ReplyableInteraction = {
@@ -365,7 +348,6 @@ async function renderCharacterSelectionStep(
     content: [
       `Select characters for **${options.run.title}**.`,
       "Closing the dropdown only keeps your picks — press **Next** when you are ready.",
-      ...describeSavedCharacters(options.booster.eligible),
       ...extraLines,
     ].join("\n"),
     components: [

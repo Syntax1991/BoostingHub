@@ -459,7 +459,7 @@ describe("cross-Run reservation conflicts in the Discord signup flow", () => {
 });
 
 describe("raid save (lockout) is informational in the Discord signup flow", () => {
-  it("a saved character stays selectable, carries a save description on its option, and is summarized up front", async () => {
+  it("a saved character stays selectable and carries lockout text on its dropdown option", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
       option.characterId === SYNMIST
@@ -488,8 +488,7 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     await signupButton(interaction, api, RUN_ID);
 
     const call = interaction.editReply.mock.calls[0]?.[0];
-    expect(call.content).toContain("Lockouts this reset");
-    expect(call.content).toContain("Synmist");
+    expect(call.content).not.toContain("Lockouts this reset");
     const menu = call.components[0].components[0].toJSON();
     // Still selectable — present in the menu, same as any other eligible character.
     expect(menu.options.map((option: { value: string }) => option.value)).toEqual(expect.arrayContaining([SYNMIST, FROSTBOLT]));
@@ -498,7 +497,7 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     expect(synmistOption.description).toContain("Fully saved");
   });
 
-  it("lists every Bundle content lockout (Grotto + Venomous), never only HC 0/1", async () => {
+  it("puts every Bundle content lockout on the dropdown option, never only HC 0/1", async () => {
     const payload = signupOptionsPayload();
     payload.booster.eligible = payload.booster.eligible.map((option) =>
       option.characterId === SYNMIST
@@ -541,8 +540,8 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
     await signupButton(interaction, api, RUN_ID);
 
     const call = interaction.editReply.mock.calls[0]?.[0];
-    expect(call.content).toContain("Nymrissa: HC 0/1 · Unsaved");
-    expect(call.content).toContain("The Venomous Abyss: HC 3/8 · Saved");
+    expect(call.content).not.toContain("Lockouts this reset");
+    expect(call.content).not.toContain("Nymrissa: HC 0/1");
     const menu = call.components[0].components[0].toJSON();
     const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
     expect(synmistOption.description).toContain("Nymrissa");
