@@ -67,7 +67,6 @@ function metricForRole(role: CharacterRole): {
 
 /**
  * Spec name for WCL when the character's specialization matches the offered role.
- * Multi-role signups still get a role-only query for non-matching offered roles.
  */
 export function specNameForOfferedRole(
   wowClass: WowClass,
@@ -80,10 +79,24 @@ export function specNameForOfferedRole(
   return match.name;
 }
 
+/** True DPS bracket only — never healer/tank damage parses under metric:dps. */
+export function characterIsRealDpsSpec(input: {
+  wowClass: WowClass;
+  specialization: string | null;
+  primaryRole: CharacterRole;
+}): boolean {
+  if (input.specialization?.trim()) {
+    const match = findSpecialization(input.wowClass, input.specialization);
+    return match?.role === "DPS";
+  }
+  return input.primaryRole === "DPS";
+}
+
 /**
- * Roles to query for WCL: every offered role so each roster column can show
- * its own metric (Tank column must not fall back to HPS for a Resto/MW alt).
- * Falls back to primaryRole when nothing was offered.
+ * Roles to query for WCL per offered role / roster column.
+ * DPS is included only for real DPS specs — WCL otherwise returns healer damage
+ * percentiles that look like "DPS" but are not.
+ * Tank/Healer stay queryable; missing parses simply stay empty in that column.
  */
 export function rolesRelevantForWclPerformance(input: {
   offeredRoles: CharacterRole[];
@@ -92,8 +105,9 @@ export function rolesRelevantForWclPerformance(input: {
   primaryRole: CharacterRole;
 }): CharacterRole[] {
   const offered = [...new Set(input.offeredRoles)];
-  if (offered.length > 0) return offered;
-  return [input.primaryRole];
+  const base = offered.length > 0 ? offered : [input.primaryRole];
+  const allowDps = characterIsRealDpsSpec(input);
+  return base.filter((role) => (role === "DPS" ? allowDps : true));
 }
 
 export function buildMetricKey(metricKeyBase: string, specName: string | null): string {

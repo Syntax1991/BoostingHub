@@ -111,7 +111,7 @@ describe("resolveRosterWclPerformance", () => {
     expect(fetchZoneRankings.mock.calls.some((call) => call[0]?.metric === "hps")).toBe(true);
   });
 
-  it("uses HPS for healer role and DPS for dps role when both offered", async () => {
+  it("skips DPS fetch for Holy who also offered DPS (no healer DPS logs)", async () => {
     fetchZoneRankings.mockImplementation(async (input: { metric: string }) => ({
       status: "SUCCESS",
       rankings: {
@@ -147,6 +147,47 @@ describe("resolveRosterWclPerformance", () => {
     });
 
     const roles = map.get("signup-h")?.[0]?.roles.map((r) => r.role) ?? [];
+    expect(roles).toEqual(["HEALER"]);
+    expect(fetchZoneRankings).toHaveBeenCalledTimes(1);
+    expect(fetchZoneRankings.mock.calls[0]?.[0]).toMatchObject({ metric: "hps" });
+  });
+
+  it("fetches DPS for a real DPS spec who also offered healer", async () => {
+    fetchZoneRankings.mockImplementation(async (input: { metric: string }) => ({
+      status: "SUCCESS",
+      rankings: {
+        bestPerformanceAverage: input.metric === "hps" ? 20 : 90,
+        medianPerformanceAverage: input.metric === "hps" ? 15 : 80,
+      },
+    }));
+
+    const { resolveRosterWclPerformance } = await import("@/services/character-wcl-performance.service");
+    const map = await resolveRosterWclPerformance({
+      difficulty: "HEROIC",
+      contents: [
+        {
+          raidId: VENOMOUS_ABYSS_RAID_ID,
+          raidName: "The Venomous Abyss",
+          sortOrder: 1,
+        },
+      ],
+      boosters: [
+        {
+          signupId: "signup-s",
+          offeredRoles: ["HEALER", "DPS"],
+          character: {
+            id: "char-s",
+            wowClass: "PRIEST",
+            specialization: "Shadow",
+            primaryRole: "DPS",
+            warcraftLogsId: "333",
+          },
+        },
+      ],
+      now: new Date("2026-09-20T12:00:00.000Z"),
+    });
+
+    const roles = map.get("signup-s")?.[0]?.roles.map((r) => r.role) ?? [];
     expect(roles).toEqual(["HEALER", "DPS"]);
     expect(fetchZoneRankings).toHaveBeenCalledTimes(2);
   });

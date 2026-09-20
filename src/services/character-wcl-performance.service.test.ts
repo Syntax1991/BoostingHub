@@ -66,7 +66,7 @@ describe("specNameForOfferedRole / metric keys", () => {
 });
 
 describe("rolesRelevantForWclPerformance", () => {
-  it("returns every offered role so each roster column can filter", () => {
+  it("drops DPS for healer specs (no healer-damage percentiles)", () => {
     expect(
       rolesRelevantForWclPerformance({
         offeredRoles: ["HEALER", "DPS"],
@@ -74,18 +74,40 @@ describe("rolesRelevantForWclPerformance", () => {
         specialization: "Holy",
         primaryRole: "HEALER",
       }),
+    ).toEqual(["HEALER"]);
+  });
+
+  it("keeps DPS only for real DPS specs", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["HEALER", "DPS"],
+        wowClass: "PRIEST",
+        specialization: "Shadow",
+        primaryRole: "DPS",
+      }),
     ).toEqual(["HEALER", "DPS"]);
+  });
+
+  it("keeps tank+healer for resto (tank column stays empty if no tank parses)", () => {
+    expect(
+      rolesRelevantForWclPerformance({
+        offeredRoles: ["TANK", "HEALER"],
+        wowClass: "DRUID",
+        specialization: "Restoration",
+        primaryRole: "HEALER",
+      }),
+    ).toEqual(["TANK", "HEALER"]);
   });
 
   it("falls back to primaryRole when nothing was offered", () => {
     expect(
       rolesRelevantForWclPerformance({
         offeredRoles: [],
-        wowClass: "PRIEST",
+        wowClass: "MAGE",
         specialization: null,
-        primaryRole: "HEALER",
+        primaryRole: "DPS",
       }),
-    ).toEqual(["HEALER"]);
+    ).toEqual(["DPS"]);
   });
 });
 
