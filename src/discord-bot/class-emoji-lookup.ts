@@ -3,9 +3,18 @@ import { CLASS_DISCORD_EMOJI_NAMES } from "@/lib/run-start-message";
 import type { WowClass } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
 
-/** Guild custom-emoji names for signup-embed role / raid-lead columns. */
+/** Logical role keys used in signup/roster embeds (API + fingerprints). */
 export const ROLE_DISCORD_EMOJI_KEYS = ["tank", "healer", "dps", "lootbuddy", "raidlead"] as const;
 export type RoleDiscordEmojiKey = (typeof ROLE_DISCORD_EMOJI_KEYS)[number];
+
+/** Discord Guild custom-emoji names for each logical role key. */
+export const ROLE_DISCORD_EMOJI_NAMES: Record<RoleDiscordEmojiKey, string> = {
+  tank: "tank",
+  healer: "healer",
+  dps: "dps",
+  lootbuddy: "loot",
+  raidlead: "raidlead",
+};
 
 export type GuildRoleIndicators = Partial<Record<RoleDiscordEmojiKey, string>>;
 
@@ -46,8 +55,9 @@ export async function resolveGuildClassIndicators(
 }
 
 /**
- * Resolve Guild custom role emojis (`tank`, `healer`, `dps`, `lootbuddy`, `raidlead`)
- * for signup-embed field labels. Missing names fall back to unicode in the embed.
+ * Resolve Guild custom role emojis (`tank`, `healer`, `dps`, `loot`, `raidlead`)
+ * for signup/roster field labels. Logical key `lootbuddy` maps to Guild emoji `loot`.
+ * Missing names fall back to unicode in the embed.
  */
 export async function resolveGuildRoleIndicators(
   client: Client,
@@ -56,7 +66,7 @@ export async function resolveGuildRoleIndicators(
   const byName = await fetchGuildEmojisByName(client, guildId);
   const indicators: GuildRoleIndicators = {};
   for (const key of ROLE_DISCORD_EMOJI_KEYS) {
-    const emoji = byName.get(key);
+    const emoji = byName.get(ROLE_DISCORD_EMOJI_NAMES[key]);
     if (emoji) {
       indicators[key] = emoji.toString();
     }

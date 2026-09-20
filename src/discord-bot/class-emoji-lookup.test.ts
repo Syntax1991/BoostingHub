@@ -47,18 +47,21 @@ describe("resolveGuildClassIndicators", () => {
 });
 
 describe("resolveGuildRoleIndicators", () => {
-  it("resolves tank/healer/dps/raidlead guild emoji names", async () => {
+  it("resolves tank/healer/dps/loot/raidlead guild emoji names", async () => {
     const cache = new Map([
       ["1", fakeEmoji("tank", "11")],
       ["2", fakeEmoji("healer", "22")],
       ["3", fakeEmoji("dps", "33")],
-      ["4", fakeEmoji("raidlead", "44")],
+      ["4", fakeEmoji("loot", "55")],
+      ["5", fakeEmoji("raidlead", "44")],
+      ["6", fakeEmoji("lootbuddy", "99")],
     ]);
     const indicators = await resolveGuildRoleIndicators(clientWithEmojis(cache), "guild-1");
     expect(indicators).toEqual({
       tank: "<:tank:11>",
       healer: "<:healer:22>",
       dps: "<:dps:33>",
+      lootbuddy: "<:loot:55>",
       raidlead: "<:raidlead:44>",
     });
   });
