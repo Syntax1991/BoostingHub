@@ -229,6 +229,7 @@ describe("evaluateRaidBuffCoverage", () => {
       { wowClass: "EVOKER", buffId: "BLESSING_OF_THE_BRONZE" },
       { wowClass: "DEMON_HUNTER", buffId: "CHAOS_BRAND" },
       { wowClass: "MONK", buffId: "MYSTIC_TOUCH" },
+      { wowClass: "WARLOCK", buffId: "HEALTHSTONE" },
     ];
 
     for (const { wowClass, buffId } of matrix) {
@@ -242,7 +243,7 @@ describe("evaluateRaidBuffCoverage", () => {
   });
 
   it("classes without a tracked buff cover nothing", () => {
-    for (const wowClass of ["HUNTER", "ROGUE", "WARLOCK", "DEATH_KNIGHT"] as WowClass[]) {
+    for (const wowClass of ["HUNTER", "ROGUE", "DEATH_KNIGHT"] as WowClass[]) {
       expect(evaluateRaidBuffCoverage([participant({ signupId: wowClass, wowClass })]).coveredCount).toBe(0);
     }
   });

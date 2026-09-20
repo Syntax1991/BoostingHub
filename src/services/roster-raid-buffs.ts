@@ -22,6 +22,7 @@ export const RAID_BUFF_IDS = [
   "BLESSING_OF_THE_BRONZE",
   "CHAOS_BRAND",
   "MYSTIC_TOUCH",
+  "HEALTHSTONE",
 ] as const;
 export type RaidBuffId = (typeof RAID_BUFF_IDS)[number];
 
@@ -47,6 +48,8 @@ export const RAID_BUFF_DEFINITIONS: readonly RaidBuffDefinition[] = [
   { id: "BLESSING_OF_THE_BRONZE", name: "Blessing of the Bronze", kind: "BUFF", providerClasses: ["EVOKER"] },
   { id: "CHAOS_BRAND", name: "Chaos Brand", kind: "DEBUFF", providerClasses: ["DEMON_HUNTER"] },
   { id: "MYSTIC_TOUCH", name: "Mystic Touch", kind: "DEBUFF", providerClasses: ["MONK"] },
+  /** Warlock has no throughput raid buff; Healthstone is the composition utility we track. */
+  { id: "HEALTHSTONE", name: "Healthstone", kind: "BUFF", providerClasses: ["WARLOCK"] },
 ] as const;
 
 export type RaidBuffParticipant = {
