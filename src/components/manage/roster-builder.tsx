@@ -29,7 +29,8 @@ import {
 import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
 import {
   filterWclPerformanceForGroupRole,
-  formatWclPerformanceRaidLine,
+  wclPerformanceRaidLineParts,
+  wclPercentileColor,
 } from "@/lib/wcl-performance-display";
 import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
@@ -748,7 +749,21 @@ function SignupRowCard({
           {wclForColumn.length > 0 ? (
             <div className={`space-y-0.5 text-muted ${character?.warcraftLogsId ? "mt-1" : ""}`}>
               {wclForColumn.map((segment) => (
-                <div key={segment.raidId}>{formatWclPerformanceRaidLine(segment)}</div>
+                <div key={segment.raidId}>
+                  {wclPerformanceRaidLineParts(segment).map((part, index) =>
+                    part.kind === "text" ? (
+                      <span key={index}>{part.text}</span>
+                    ) : (
+                      <span
+                        key={index}
+                        className="font-medium tabular-nums"
+                        style={{ color: wclPercentileColor(part.value) }}
+                      >
+                        {part.value}%
+                      </span>
+                    ),
+                  )}
+                </div>
               ))}
             </div>
           ) : null}
