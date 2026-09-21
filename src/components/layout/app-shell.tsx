@@ -115,7 +115,7 @@ export function AppShell({
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
+        <header className="flex min-h-[70px] items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
           <div className="flex items-center gap-3 md:hidden">
             <p className="text-sm font-semibold">{APP_BRAND_NAME}</p>
             {showManage ? (
