@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'b6965eeecc4b50ec21177d6973308846f7983e8541be35e450884652b309828c'>;
+  StorageHashBase<'9f233a3df0bcf9379117e697a7ab3f9b74f210fff96d0272a595c95f79a4f8e0'>;
 export type ExecutionHash =
-  ExecutionHashBase<'69f5f642ed3c9ea221dc0f168db405dfb83b45c1d9b2ef787ce08d0b9baa1934'>;
+  ExecutionHashBase<'1134409d7663950233388dd6e9834317a99058130e40ba4ac320f3867a969d88'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -636,24 +636,6 @@ export type FieldOutputTypes = {
       readonly discordUsername: CodecTypes['pg/text@1']['output'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN';
-      readonly dmRosterSelectedEnabled: CodecTypes['pg/bool@1']['output'];
-      readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['output'];
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
-    readonly UserNotification: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
-      readonly type: 'ROSTER_SELECTED' | 'RAID_INVITE';
-      readonly runId: CodecTypes['pg/text@1']['output'] | null;
-      readonly signupId: CodecTypes['pg/text@1']['output'] | null;
-      readonly sourceKey: CodecTypes['pg/text@1']['output'];
-      readonly title: CodecTypes['pg/text@1']['output'];
-      readonly message: CodecTypes['pg/text@1']['output'];
-      readonly href: CodecTypes['pg/text@1']['output'];
-      readonly readAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly discordDeliveryStatus: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -1064,24 +1046,6 @@ export type FieldInputTypes = {
       readonly discordUsername: CodecTypes['pg/text@1']['input'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN';
-      readonly dmRosterSelectedEnabled: CodecTypes['pg/bool@1']['input'];
-      readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
-    readonly UserNotification: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-      readonly type: 'ROSTER_SELECTED' | 'RAID_INVITE';
-      readonly runId: CodecTypes['pg/text@1']['input'] | null;
-      readonly signupId: CodecTypes['pg/text@1']['input'] | null;
-      readonly sourceKey: CodecTypes['pg/text@1']['input'];
-      readonly title: CodecTypes['pg/text@1']['input'];
-      readonly message: CodecTypes['pg/text@1']['input'];
-      readonly href: CodecTypes['pg/text@1']['input'];
-      readonly readAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly discordDeliveryStatus: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1488,30 +1452,12 @@ export type StorageColumnTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['output'] | null;
-      readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['output'];
-      readonly dmRosterSelectedEnabled: CodecTypes['pg/bool@1']['output'];
       readonly email: CodecTypes['pg/text@1']['output'] | null;
       readonly emailVerified: CodecTypes['pg/bool@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly image: CodecTypes['pg/text@1']['output'] | null;
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
-    readonly user_notification: {
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly discordDeliveryStatus: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
-      readonly href: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly message: CodecTypes['pg/text@1']['output'];
-      readonly readAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly runId: CodecTypes['pg/text@1']['output'] | null;
-      readonly signupId: CodecTypes['pg/text@1']['output'] | null;
-      readonly sourceKey: CodecTypes['pg/text@1']['output'];
-      readonly title: CodecTypes['pg/text@1']['output'];
-      readonly type: 'ROSTER_SELECTED' | 'RAID_INVITE';
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
     };
     readonly verification: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1916,30 +1862,12 @@ export type StorageColumnInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['input'] | null;
-      readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['input'];
-      readonly dmRosterSelectedEnabled: CodecTypes['pg/bool@1']['input'];
       readonly email: CodecTypes['pg/text@1']['input'] | null;
       readonly emailVerified: CodecTypes['pg/bool@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly image: CodecTypes['pg/text@1']['input'] | null;
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
-    readonly user_notification: {
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly discordDeliveryStatus: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED_PERMANENT';
-      readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
-      readonly href: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly message: CodecTypes['pg/text@1']['input'];
-      readonly readAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly runId: CodecTypes['pg/text@1']['input'] | null;
-      readonly signupId: CodecTypes['pg/text@1']['input'] | null;
-      readonly sourceKey: CodecTypes['pg/text@1']['input'];
-      readonly title: CodecTypes['pg/text@1']['input'];
-      readonly type: 'ROSTER_SELECTED' | 'RAID_INVITE';
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
     };
     readonly verification: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -2950,12 +2878,12 @@ type ContractBase = Omit<
                     'difficulty',
                     'metricKey',
                   ];
-                  readonly name: 'character_wcl_perf_uq';
                 },
               ];
               indexes: readonly [
                 {
-                  readonly name: 'character_wcl_perf_character_idx';
+                  readonly name: 'character_wcl_performance_characterId_idx_2423fe9d';
+                  readonly prefix: 'character_wcl_performance_characterId_idx';
                   readonly columns: readonly ['characterId'];
                   readonly unique: false;
                 },
@@ -4914,24 +4842,6 @@ type ContractBase = Omit<
                     readonly value: DefaultLiteralValue<'pg/text@1', 'USER'>;
                   };
                 };
-                readonly dmRosterSelectedEnabled: {
-                  readonly nativeType: 'bool';
-                  readonly codecId: 'pg/bool@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/bool@1', true>;
-                  };
-                };
-                readonly dmRaidInviteEnabled: {
-                  readonly nativeType: 'bool';
-                  readonly codecId: 'pg/bool@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/bool@1', true>;
-                  };
-                };
                 readonly createdAt: {
                   readonly nativeType: 'timestamptz';
                   readonly codecId: 'pg/timestamptz-string@1';
@@ -4951,159 +4861,6 @@ type ContractBase = Omit<
               ];
               indexes: readonly [];
               foreignKeys: readonly [];
-            };
-            readonly user_notification: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly userId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly type: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly runId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly signupId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly sourceKey: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly title: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly message: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly href: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly readAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: true;
-                };
-                readonly discordDeliveryStatus: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly discordUserId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly createdAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: false;
-                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
-                };
-                readonly updatedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: false;
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [{ readonly columns: readonly ['sourceKey'] }];
-              indexes: readonly [
-                {
-                  readonly name: 'user_notification_userId_createdAt_idx_f726f04a';
-                  readonly prefix: 'user_notification_userId_createdAt_idx';
-                  readonly columns: readonly ['userId', 'createdAt'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'user_notification_userId_readAt_idx_8bd92969';
-                  readonly prefix: 'user_notification_userId_readAt_idx';
-                  readonly columns: readonly ['userId', 'readAt'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'user_notification_discordDeliveryStatus_idx_bc6e068f';
-                  readonly prefix: 'user_notification_discordDeliveryStatus_idx';
-                  readonly columns: readonly ['discordDeliveryStatus'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'user_notification_userId_idx_a489d58a';
-                  readonly prefix: 'user_notification_userId_idx';
-                  readonly columns: readonly ['userId'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'user_notification_runId_idx_a6016437';
-                  readonly prefix: 'user_notification_runId_idx';
-                  readonly columns: readonly ['runId'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'user_notification_signupId_idx_acdbc7f1';
-                  readonly prefix: 'user_notification_signupId_idx';
-                  readonly columns: readonly ['signupId'];
-                  readonly unique: false;
-                },
-              ];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user_notification';
-                    readonly columns: readonly ['userId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user_notification';
-                    readonly columns: readonly ['runId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'run';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user_notification';
-                    readonly columns: readonly ['signupId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'run_signup';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
             };
             readonly verification: {
               columns: {
@@ -5178,10 +4935,6 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['TANK', 'HEALER', 'DPS'];
             };
-            readonly DiscordDeliveryStatus: {
-              readonly kind: 'valueSet';
-              readonly values: readonly ['PENDING', 'SENT', 'SKIPPED', 'FAILED_PERMANENT'];
-            };
             readonly LootbuddyMode: {
               readonly kind: 'valueSet';
               readonly values: readonly ['LOOT_ONLY', 'PLAYING'];
@@ -5189,10 +4942,6 @@ type ContractBase = Omit<
             readonly LootbuddyVerification: {
               readonly kind: 'valueSet';
               readonly values: readonly ['NONE', 'ACCESS', 'TRIAL'];
-            };
-            readonly NotificationType: {
-              readonly kind: 'valueSet';
-              readonly values: readonly ['ROSTER_SELECTED', 'RAID_INVITE'];
             };
             readonly ParticipationType: {
               readonly kind: 'valueSet';
@@ -5272,10 +5021,6 @@ type ContractBase = Omit<
   readonly targetFamily: 'sql';
   readonly roots: {
     readonly user: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-    readonly user_notification: {
-      readonly namespace: 'public' & NamespaceId;
-      readonly model: 'UserNotification';
-    };
     readonly battle_net_connection: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'BattleNetConnection';
@@ -6646,17 +6391,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['runId'];
                 };
               };
-              readonly notifications: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'UserNotification';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['runId'];
-                };
-              };
               readonly raidLead: {
                 readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
                 readonly cardinality: 'N:1';
@@ -7659,17 +7393,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['id'];
                 };
               };
-              readonly notifications: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'UserNotification';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['signupId'];
-                };
-              };
               readonly offeredRoles: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -8204,14 +7927,6 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly dmRosterSelectedEnabled: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
-              };
-              readonly dmRaidInviteEnabled: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
-              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -8379,17 +8094,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['markedById'];
                 };
               };
-              readonly notifications: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'UserNotification';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['userId'];
-                };
-              };
               readonly ownedRunTemplates: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -8547,126 +8251,6 @@ type ContractBase = Omit<
                 readonly discordUsername: { readonly column: 'discordUsername' };
                 readonly accountStatus: { readonly column: 'accountStatus' };
                 readonly accountRole: { readonly column: 'accountRole' };
-                readonly dmRosterSelectedEnabled: { readonly column: 'dmRosterSelectedEnabled' };
-                readonly dmRaidInviteEnabled: { readonly column: 'dmRaidInviteEnabled' };
-                readonly createdAt: { readonly column: 'createdAt' };
-                readonly updatedAt: { readonly column: 'updatedAt' };
-              };
-            };
-          };
-          readonly UserNotification: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly userId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly type: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly runId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly signupId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly sourceKey: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly title: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly message: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly href: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly readAt: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly discordDeliveryStatus: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly discordUserId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly createdAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly updatedAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly run: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'Run' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['runId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly signup: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RunSignup';
-                };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['signupId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly user: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['userId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'user_notification';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly userId: { readonly column: 'userId' };
-                readonly type: { readonly column: 'type' };
-                readonly runId: { readonly column: 'runId' };
-                readonly signupId: { readonly column: 'signupId' };
-                readonly sourceKey: { readonly column: 'sourceKey' };
-                readonly title: { readonly column: 'title' };
-                readonly message: { readonly column: 'message' };
-                readonly href: { readonly column: 'href' };
-                readonly readAt: { readonly column: 'readAt' };
-                readonly discordDeliveryStatus: { readonly column: 'discordDeliveryStatus' };
-                readonly discordUserId: { readonly column: 'discordUserId' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };
@@ -8886,22 +8470,6 @@ type ContractBase = Omit<
             readonly members: readonly [
               { readonly name: 'ACTIVE'; readonly value: 'ACTIVE' },
               { readonly name: 'REVOKED'; readonly value: 'REVOKED' },
-            ];
-          };
-          readonly NotificationType: {
-            readonly codecId: 'pg/text@1';
-            readonly members: readonly [
-              { readonly name: 'ROSTER_SELECTED'; readonly value: 'ROSTER_SELECTED' },
-              { readonly name: 'RAID_INVITE'; readonly value: 'RAID_INVITE' },
-            ];
-          };
-          readonly DiscordDeliveryStatus: {
-            readonly codecId: 'pg/text@1';
-            readonly members: readonly [
-              { readonly name: 'PENDING'; readonly value: 'PENDING' },
-              { readonly name: 'SENT'; readonly value: 'SENT' },
-              { readonly name: 'SKIPPED'; readonly value: 'SKIPPED' },
-              { readonly name: 'FAILED_PERMANENT'; readonly value: 'FAILED_PERMANENT' },
             ];
           };
         };
@@ -9357,23 +8925,6 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'user';
-            readonly column: 'updatedAt';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
-          readonly onUpdate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'user_notification';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'user_notification';
             readonly column: 'updatedAt';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
