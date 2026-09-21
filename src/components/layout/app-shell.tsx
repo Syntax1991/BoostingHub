@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { APP_BRAND_MARK, APP_BRAND_NAME, APP_BRAND_TAGLINE } from "@/lib/branding";
 import type { AccountRole } from "@/models/enums";
 import {
   canAccessManagement,
@@ -50,11 +51,11 @@ export function AppShell({
       <aside className="hidden w-60 shrink-0 border-r border-border bg-surface md:flex md:flex-col">
         <div className="flex items-center gap-2 border-b border-border px-4 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 font-mono text-sm font-bold text-accent">
-            BB
+            {APP_BRAND_MARK}
           </div>
           <div>
-            <p className="text-sm font-semibold">Boostting Bot</p>
-            <p className="text-[11px] uppercase tracking-wider text-muted">Operations</p>
+            <p className="text-sm font-semibold">{APP_BRAND_NAME}</p>
+            <p className="text-[11px] text-muted">{APP_BRAND_TAGLINE}</p>
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
@@ -116,7 +117,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
           <div className="flex items-center gap-3 md:hidden">
-            <p className="text-sm font-semibold">Boostting Bot</p>
+            <p className="text-sm font-semibold">{APP_BRAND_NAME}</p>
             {showManage ? (
               <Link href="/manage" className="text-xs uppercase tracking-wide text-accent">
                 Manage

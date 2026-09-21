@@ -1,4 +1,5 @@
 import { ROLE_LABELS } from "@/lib/labels";
+import { APP_BRAND_MARK, APP_BRAND_NAME, APP_BRAND_TAGLINE } from "@/lib/branding";
 import { signInWithDevIdentity } from "@/controllers/auth.actions";
 import { DiscordSignInButton } from "@/components/auth/discord-sign-in-button";
 import { Card, PageHeader } from "@/components/ui/primitives";
@@ -27,11 +28,11 @@ export function LoginView({
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-4 py-10">
       <div className="mb-8 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent/15 font-mono font-bold text-accent">
-          BB
+          {APP_BRAND_MARK}
         </div>
         <div>
-          <p className="text-lg font-semibold">Boostting Bot</p>
-          <p className="text-sm text-muted">Internal boosting operations</p>
+          <p className="text-lg font-semibold">{APP_BRAND_NAME}</p>
+          <p className="text-sm text-muted">{APP_BRAND_TAGLINE}</p>
         </div>
       </div>
       <PageHeader
