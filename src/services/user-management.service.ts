@@ -6,9 +6,13 @@ import {
 } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/labels";
+import { defaultRaidBossTotal } from "@/lib/lockout-display";
+import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { ACCOUNT_ROLES, type AccountRole } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { userRepository, type AdminUserListFilters } from "@/repositories/user.repository";
+import { lockoutService } from "@/services/lockout.service";
 import { strikeService } from "@/services/strike.service";
 
 function isAccountRole(value: string): value is AccountRole {
@@ -33,7 +37,49 @@ export const userManagementService = {
       throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
     }
     const strikes = await strikeService.listForUser(admin, userId);
-    return { ...detail, strikes };
+    const currentRaids = getCurrentLockoutRaids();
+    const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
+    const currentLockoutRaids = currentRaids.map((raid) => ({
+      id: raid.id,
+      name: raidContentDisplayName(raid.id, raid.name),
+    }));
+
+    return {
+      ...detail,
+      strikes,
+      currentLockoutRaids,
+      characters: detail.characters.map((character) => {
+        const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
+        const lockouts = lockoutService
+          .summarize(
+            character.lockouts.filter(
+              (lockout) =>
+                lockout.resetIdentifier === currentReset && currentRaidIds.has(lockout.raidId),
+            ),
+          )
+          .map((lockout) => ({
+            ...lockout,
+            raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
+            bossTotal: defaultRaidBossTotal(lockout.raidId),
+            verified: true as const,
+          }));
+
+        return {
+          id: character.id,
+          name: character.name,
+          realm: character.realm,
+          region: character.region,
+          wowClass: character.wowClass,
+          specialization: character.specialization,
+          primaryRole: character.primaryRole,
+          itemLevel: character.itemLevel,
+          isActive: character.isActive,
+          blizzardLinked: character.blizzardLinked,
+          currentReset,
+          lockouts,
+        };
+      }),
+    };
   },
 
   async changeAccountRole(

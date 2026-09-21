@@ -1,7 +1,16 @@
 import { orm } from "@/lib/prisma";
-import type { AccountRole, AccountStatus, RunStatus } from "@/models/enums";
+import type { AccountRole, AccountStatus, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { mapAccountStatus, mapUserRole, asString, asStringOrNull } from "@/lib/persistence";
+import {
+  asBoolean,
+  asNumber,
+  mapAccountStatus,
+  mapDifficulty,
+  mapRegion,
+  mapUserRole,
+  asString,
+  asStringOrNull,
+} from "@/lib/persistence";
 
 export type AdminUserListFilters = {
   query?: string;
@@ -25,10 +34,20 @@ export type AdminUserListRow = {
   revokedAccessCount: number;
 };
 
+export type AdminUserCharacterLockout = {
+  raidId: string;
+  raid: { name: string };
+  difficulty: RaidDifficulty;
+  resetIdentifier: string;
+  isComplete: boolean;
+  bossesDefeated: number;
+};
+
 export type AdminUserCharacterSummary = {
   id: string;
   name: string;
   realm: string;
+  region: WowRegion;
   wowClass: string;
   specialization: string;
   primaryRole: string;
@@ -36,6 +55,8 @@ export type AdminUserCharacterSummary = {
   itemLevel: number | null;
   isActive: boolean;
   blizzardLinked: boolean;
+  /** All stored lockout rows; current-reset projection happens in the service. */
+  lockouts: AdminUserCharacterLockout[];
 };
 
 export type AdminUserAccessSummary = {
@@ -313,7 +334,11 @@ export const userRepository = {
     const record = user as Record<string, unknown>;
     const auth = mapAuthUser(record);
 
-    const characters = await orm.Character.where({ userId }).orderBy((row) => row.name.asc()).all();
+    const characters = await orm.Character
+      .where({ userId })
+      .include("lockouts", (lockout) => lockout.include("raid"))
+      .orderBy((row) => row.name.asc())
+      .all();
     const access = await orm.BoosterQualification.where({ userId }).orderBy((row) => row.updatedAt.desc()).all();
     const audit = await orm.ActivityEvent
       .where({ userId })
@@ -332,16 +357,30 @@ export const userRepository = {
 
     const characterSummaries: AdminUserCharacterSummary[] = characters.map((row) => {
       const character = row as Record<string, unknown>;
+      const lockouts = Array.isArray(character.lockouts) ? character.lockouts : [];
       return {
         id: asString(character.id),
         name: asString(character.name),
         realm: asString(character.realm),
+        region: mapRegion(character.region),
         wowClass: asString(character.wowClass),
         specialization: asStringOrNull(character.specialization) ?? "—",
         primaryRole: asString(character.primaryRole),
         itemLevel: typeof character.itemLevel === "number" ? character.itemLevel : null,
         isActive: Boolean(character.isActive),
         blizzardLinked: Boolean(asStringOrNull(character.blizzardCharacterId)),
+        lockouts: lockouts.map((lockoutRow) => {
+          const lockout = lockoutRow as Record<string, unknown>;
+          const raid = (lockout.raid ?? {}) as Record<string, unknown>;
+          return {
+            raidId: asString(lockout.raidId),
+            raid: { name: asString(raid.name, "Unknown raid") },
+            difficulty: mapDifficulty(lockout.difficulty),
+            resetIdentifier: asString(lockout.resetIdentifier),
+            isComplete: asBoolean(lockout.isComplete),
+            bossesDefeated: asNumber(lockout.bossesDefeated),
+          };
+        }),
       };
     });
 

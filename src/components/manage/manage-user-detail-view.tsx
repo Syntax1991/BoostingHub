@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
-import { ROLE_LABELS } from "@/lib/labels";
+import { ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
+import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
 import type {
   AccountRole,
   BoosterAccessStatus,
   CharacterRole,
   RaidDifficulty,
   WowClass,
+  WowRegion,
 } from "@/models/enums";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import {
@@ -40,11 +42,18 @@ function asAccessStatus(value: string): BoosterAccessStatus {
   return value as BoosterAccessStatus;
 }
 
+function asRegion(value: string): WowRegion {
+  return value as WowRegion;
+}
+
 export function ManageUserDetailView({ data }: { data: Page }) {
-  const { user, characters, access, audit, strikes } = data;
+  const { user, characters, access, audit, strikes, currentLockoutRaids } = data;
   const approved = access.filter((row) => row.status === "APPROVED").length;
   const revoked = access.filter((row) => row.status === "REVOKED").length;
   const activeStrikes = strikes.filter((row) => row.status === "ACTIVE").length;
+  const lockoutRaidLabel = currentLockoutRaids?.length
+    ? currentLockoutRaids.map((raid) => raid.name).join(" · ")
+    : null;
 
   return (
     <div className="min-w-0 overflow-x-hidden">
@@ -120,33 +129,50 @@ export function ManageUserDetailView({ data }: { data: Page }) {
           </div>
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader
             title="Characters"
-            description={`${characters.length} on this account.`}
+            description={
+              characters.length === 0
+                ? "No characters on this account."
+                : `${characters.length} on this account${
+                    lockoutRaidLabel ? ` · current lockouts (${lockoutRaidLabel})` : ""
+                  }`
+            }
           />
           {characters.length === 0 ? (
             <EmptyState title="No characters." description="This user has not added characters yet." />
           ) : (
             <ul className="divide-y divide-border">
               {characters.map((character) => (
-                <li key={character.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium">{character.name}</p>
-                    <p className="text-xs text-muted">
-                      {character.realm}
-                      {character.isActive ? "" : " · inactive"}
-                      {character.blizzardLinked ? " · Battle.net" : ""}
-                    </p>
+                <li key={character.id} className="space-y-2 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium">{character.name}</p>
+                      <p className="text-xs text-muted">
+                        {character.realm} · {REGION_LABELS[asRegion(character.region)]}
+                        {character.isActive ? "" : " · inactive"}
+                        {character.blizzardLinked ? " · Battle.net" : ""}
+                        {" · "}
+                        {character.currentReset}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ClassBadge wowClass={asWowClass(character.wowClass)} />
+                      <RoleBadge role={asCharacterRole(character.primaryRole)} />
+                      <span className="text-xs text-muted">
+                        {character.specialization} · ilvl{" "}
+                        {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ClassBadge wowClass={asWowClass(character.wowClass)} />
-                    <RoleBadge role={asCharacterRole(character.primaryRole)} />
-                    <span className="text-xs text-muted">
-                      {character.specialization} · ilvl{" "}
-                      {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"}
-                    </span>
-                  </div>
+                  <p className="text-xs text-muted">
+                    <span className="font-medium text-foreground">Lockouts: </span>
+                    {formatCompactMultiRaidLockoutProgress(
+                      character.lockouts,
+                      currentLockoutRaids ?? [],
+                    )}
+                  </p>
                 </li>
               ))}
             </ul>
