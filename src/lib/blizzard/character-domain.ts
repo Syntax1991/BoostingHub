@@ -18,6 +18,15 @@ export function isUniqueConstraintViolation(error: unknown): boolean {
   return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
 }
 
+/**
+ * Blizzard profile URLs use lowercase realm slugs with spaces as hyphens and
+ * apostrophes removed (`Mal'Ganis` → `malganis`, `Aman'Thul` → `amanthul`,
+ * `Twisting Nether` → `twisting-nether`). Keeping apostrophes yields 404.
+ */
 export function realmSlugFromDisplayName(realm: string): string {
-  return realm.toLocaleLowerCase("en-US").trim().replace(/\s+/g, "-");
+  return realm
+    .toLocaleLowerCase("en-US")
+    .trim()
+    .replace(/['\u2019]/g, "")
+    .replace(/\s+/g, "-");
 }

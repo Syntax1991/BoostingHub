@@ -15,7 +15,7 @@ function toRaiderIoRegion(region: WowRegion): "eu" | "us" | null {
   return null;
 }
 
-/** Blizzard-compatible realm slug (`Twisting Nether` → `twisting-nether`). */
+/** Blizzard-compatible realm slug (`Mal'Ganis` → `malganis`). */
 export function raiderIoRealmSlugFromRealm(realm: string): string {
   return realmSlugFromDisplayName(realm);
 }
