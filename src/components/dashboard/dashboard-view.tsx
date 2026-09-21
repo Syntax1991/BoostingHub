@@ -3,6 +3,7 @@ import { formatDate, formatTime } from "@/lib/datetime";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { runDetailPath } from "@/lib/run-routes";
+import { APP_CONTROL_CENTER_HEADING } from "@/lib/branding";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
@@ -166,11 +167,11 @@ export function DashboardView({ data }: { data: DashboardData }) {
         {data.showOperations ? (
           <Card className="xl:col-span-2">
             <CardHeader
-              title="Operations"
+              title={APP_CONTROL_CENTER_HEADING}
               description="Assigned Run handoffs that need action."
               action={
                 <Link href="/manage/runs" className="text-xs text-accent hover:underline">
-                  View all operations
+                  View all
                 </Link>
               }
             />
