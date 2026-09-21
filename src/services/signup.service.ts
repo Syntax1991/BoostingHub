@@ -5,6 +5,7 @@ import type {
   LootbuddyVerification,
   WowClass,
 } from "@/models/enums";
+import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
@@ -97,6 +98,12 @@ export const signupService = {
   async getMyRuns(user: AuthenticatedUser) {
     const signups = await signupRepository.listByUserId(user.id);
 
+    // My Runs is active/upcoming participation only — skip terminal/DRAFT Runs
+    // before schedule-conflict projection and before status bucketing.
+    const upcomingSignups = signups.filter((signup) =>
+      UPCOMING_RUN_STATUSES.includes(signup.run.status),
+    );
+
     const byRun = new Map<
       string,
       {
@@ -105,7 +112,7 @@ export const signupService = {
         characters: Array<{ id: string; name: string; region: import("@/models/enums").WowRegion }>;
       }
     >();
-    for (const signup of signups) {
+    for (const signup of upcomingSignups) {
       if (signup.participationType !== "BOOSTER" || !signup.character) continue;
       if (signup.status === "WITHDRAWN") continue;
       const existing = byRun.get(signup.run.id);
@@ -140,7 +147,7 @@ export const signupService = {
       }),
     );
 
-    const items = signups.map((signup) => ({
+    const items = upcomingSignups.map((signup) => ({
       id: signup.id,
       runId: signup.run.id,
       runTitle: signup.run.title,
