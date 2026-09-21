@@ -4,6 +4,7 @@ import { ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { ActiveSessionsSection } from "@/components/profile/active-sessions-section";
+import { NotificationPreferencesCard } from "@/components/profile/notification-preferences-card";
 import { hasRaidLeadAccess } from "@/auth/authorization";
 import type { profileService } from "@/services/profile.service";
 
@@ -58,6 +59,7 @@ export function ProfileView({ data }: { data: Profile }) {
           </div>
         </Card>
         <ActiveSessionsSection sessions={data.sessions} />
+        <NotificationPreferencesCard preferences={data.dmPreferences} />
         <Card>
           <CardHeader title="Booster access" />
           <div className="px-4 py-4 text-sm">

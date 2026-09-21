@@ -3,17 +3,19 @@ import { boosterQualificationRepository } from "@/repositories/booster-qualifica
 import { characterRepository } from "@/repositories/character.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { notificationService } from "@/services/notification.service";
 import { sessionManagementService } from "@/services/session-management.service";
 import { strikeService } from "@/services/strike.service";
 
 export const profileService = {
   async getProfile(user: AuthenticatedUser) {
-    const [characters, qualifications, signups, strikes, sessions] = await Promise.all([
+    const [characters, qualifications, signups, strikes, sessions, dmPreferences] = await Promise.all([
       characterRepository.listByUserId(user.id),
       boosterQualificationRepository.listByUserId(user.id),
       signupRepository.listByUserId(user.id),
       strikeService.listOwn(user),
       sessionManagementService.listOwnSessions(),
+      notificationService.getDmPreferences(user),
     ]);
 
     return {
@@ -23,6 +25,7 @@ export const profileService = {
       boosterAccess: boosterQualificationService.summarize(qualifications),
       strikes,
       sessions,
+      dmPreferences,
       participation: {
         boosterSignups: signups.filter((signup) => signup.participationType === "BOOSTER").length,
         lootbuddySignups: signups.filter((signup) => signup.participationType === "LOOTBUDDY").length,
