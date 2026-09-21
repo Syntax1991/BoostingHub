@@ -485,6 +485,39 @@ export const rosterRepository = {
   },
 
   /**
+   * Drop draft roster slots for withdrawn/deleted signups and bump affected
+   * roster versions so managers refresh. Idempotent when no entries exist.
+   */
+  async clearDraftSelectionsForSignupIds(signupIds: readonly string[]): Promise<void> {
+    const uniqueIds = [...new Set(signupIds.filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      return;
+    }
+    const now = new Date().toISOString();
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const bumpedRosterIds = new Set<string>();
+      for (const signupId of uniqueIds) {
+        const entries = await txOrm.RunRosterEntry.where({ signupId }).all();
+        for (const entry of entries) {
+          const row = entry as Record<string, unknown>;
+          const rosterId = asString(row.rosterId);
+          await txOrm.RunRosterEntry.where({ id: asString(row.id) }).delete();
+          bumpedRosterIds.add(rosterId);
+        }
+      }
+      for (const rosterId of bumpedRosterIds) {
+        const roster = await txOrm.RunRoster.where({ id: rosterId }).first();
+        if (!roster) continue;
+        await txOrm.RunRoster.where({ id: rosterId }).update({
+          version: asNumber((roster as Record<string, unknown>).version, 1) + 1,
+          updatedAt: now,
+        });
+      }
+    });
+  },
+
+  /**
    * Publication is one transaction: signup statuses + publishedRole snapshot,
    * run status, and roster metadata. A thrown DomainError rolls the whole write back.
    */

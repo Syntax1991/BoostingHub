@@ -42,7 +42,12 @@ import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
-import { summarizeRaidBuffCoverageByClass } from "@/services/roster-raid-buffs";
+import {
+  evaluateRaidBuffCoverage,
+  resolveBuffContributorClass,
+  summarizeRaidBuffCoverageByClass,
+} from "@/services/roster-raid-buffs";
+import { validateRosterDraft } from "@/services/roster-validation";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
@@ -148,6 +153,62 @@ function RosterBuilderEditor({
     }
     return count;
   }, [stagedSelections, savedSelections]);
+
+  /** Live Class Buff coverage from the staged draft — updates immediately on select/deselect. */
+  const liveRaidBuffCoverage = useMemo(() => {
+    const participants = domainSignups
+      .filter((signup) => stagedSelections.has(signup.id))
+      .map((signup) => ({
+        signupId: signup.id,
+        userName: signup.userName,
+        participationType: signup.participationType,
+        lootbuddyMode: signup.lootbuddyMode,
+        wowClass: resolveBuffContributorClass({
+          participationType: signup.participationType,
+          lootbuddyMode: signup.lootbuddyMode,
+          lootbuddyClass: signup.lootbuddyClass,
+          characterWowClass: signup.character?.wowClass ?? null,
+        }),
+        characterName: signup.character?.name ?? null,
+      }));
+    return evaluateRaidBuffCoverage(participants);
+  }, [domainSignups, stagedSelections]);
+
+  /** Live composition + publish validation from staged draft selections. */
+  const liveValidation = useMemo(
+    () =>
+      validateRosterDraft({
+        runStatus: data.run.status,
+        selected: domainSignups
+          .filter((signup) => stagedSelections.has(signup.id))
+          .map((signup) => ({
+            signupId: signup.id,
+            userId: signup.userId,
+            userName: signup.userName,
+            characterName: signupDisplayName(signup),
+            participationType: signup.participationType,
+            selectedRole:
+              signup.participationType === "LOOTBUDDY" ? null : (stagedSelections.get(signup.id) ?? null),
+            status: signup.status,
+            characterActive: signup.characterActive,
+            boosterApproved: signup.boosterApproved,
+          })),
+        targets: {
+          tanks: data.run.desiredTankCount,
+          healers: data.run.desiredHealerCount,
+          dps: data.run.desiredDpsCount,
+        },
+      }),
+    [
+      data.run.status,
+      data.run.desiredTankCount,
+      data.run.desiredHealerCount,
+      data.run.desiredDpsCount,
+      domainSignups,
+      stagedSelections,
+    ],
+  );
+  const liveComposition = liveValidation.composition;
 
   function isStagedSelected(signupId: string) {
     return stagedSelections.has(signupId);
@@ -326,7 +387,7 @@ function RosterBuilderEditor({
       const result = await publishRosterAction({
         runId: data.run.id,
         version: data.roster.version,
-        acknowledgeWarnings: acknowledge || data.validation.warnings.length === 0,
+        acknowledgeWarnings: acknowledge || liveValidation.warnings.length === 0,
       });
       if (!result.ok) {
         setError(result.message);
@@ -387,21 +448,17 @@ function RosterBuilderEditor({
       <Card>
         <CardHeader
           title="Composition"
-          description={
-            isDirty
-              ? "Saved draft state. Save roster to recalculate composition, buffs, and validation."
-              : "Targets come from this run. Over/under is a warning, not a hard block."
-          }
+          description="Targets come from this run. Over/under is a warning, not a hard block."
         />
         <div className="grid grid-cols-2 gap-3 px-4 py-4 text-sm md:grid-cols-4">
-          <CompositionMeter label="Tanks" slot={data.composition.tanks} />
-          <CompositionMeter label="Healers" slot={data.composition.healers} />
-          <CompositionMeter label="DPS" slot={data.composition.dps} />
-          <Stat label="Lootbuddies" value={String(data.composition.lootbuddies)} />
+          <CompositionMeter label="Tanks" slot={liveComposition.tanks} />
+          <CompositionMeter label="Healers" slot={liveComposition.healers} />
+          <CompositionMeter label="DPS" slot={liveComposition.dps} />
+          <Stat label="Lootbuddies" value={String(liveComposition.lootbuddies)} />
         </div>
       </Card>
 
-      <ClassBuffChecker coverage={data.raidBuffCoverage} dirty={isDirty} />
+      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
 
       <Card>
         <CardHeader title="Filters" />
@@ -511,18 +568,18 @@ function RosterBuilderEditor({
             <p className="text-warning">
               Unsaved roster changes
               {unsavedChangeCount > 0 ? ` · ${unsavedChangeCount} change${unsavedChangeCount === 1 ? "" : "s"}` : ""}
-              . Save roster to recalculate composition, buffs, and validation.
+              . Save roster to persist.
             </p>
           ) : null}
-          {data.validation.blockers.length === 0 && data.validation.warnings.length === 0 ? (
+          {liveValidation.blockers.length === 0 && liveValidation.warnings.length === 0 ? (
             <p className="text-muted">No blockers or composition warnings.</p>
           ) : null}
-          {data.validation.blockers.map((issue) => (
+          {liveValidation.blockers.map((issue) => (
             <p key={`${issue.code}-${issue.signupId ?? issue.message}`} className="text-danger">
               Cannot publish — {issue.message}
             </p>
           ))}
-          {data.validation.warnings.map((issue) => (
+          {liveValidation.warnings.map((issue) => (
             <p key={`${issue.code}-${issue.message}`} className="text-warning">
               Warning — {issue.message}
             </p>
@@ -544,7 +601,7 @@ function RosterBuilderEditor({
                 ) : null}
                 <Button
                   type="button"
-                  disabled={pending || isDirty || !data.roster.canEdit || !data.validation.canPublish}
+                  disabled={pending || isDirty || !data.roster.canEdit || !liveValidation.canPublish}
                   onClick={() => dialogRef.current?.showModal()}
                 >
                   Publish Roster
@@ -575,16 +632,16 @@ function RosterBuilderEditor({
             PUBLISHED.
           </p>
           <p>
-            {data.summary.tanks} Tanks · {data.summary.healers} Healers · {data.summary.dps} DPS ·{" "}
-            {data.summary.lootbuddies} Lootbuddies
+            {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
+            {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies} Lootbuddies
           </p>
           <p>
-            {data.summary.boosters} Boosters · {data.summary.lootbuddies} Lootbuddies · {data.summary.total}{" "}
-            total selected
+            {liveComposition.boosterTotal} Boosters · {liveComposition.lootbuddies} Lootbuddies ·{" "}
+            {liveComposition.total} total selected
           </p>
-          {data.validation.warnings.length > 0 ? (
+          {liveValidation.warnings.length > 0 ? (
             <div className="space-y-2">
-              {data.validation.warnings.map((issue) => (
+              {liveValidation.warnings.map((issue) => (
                 <p key={issue.message} className="text-warning">
                   {issue.message}
                 </p>
@@ -599,7 +656,7 @@ function RosterBuilderEditor({
               </label>
             </div>
           ) : null}
-          {data.validation.blockers.map((issue) => (
+          {liveValidation.blockers.map((issue) => (
             <p key={issue.message} className="text-danger">
               {issue.message}
             </p>
@@ -614,8 +671,8 @@ function RosterBuilderEditor({
             disabled={
               pending ||
               isDirty ||
-              !data.validation.canPublish ||
-              (data.validation.warnings.length > 0 && !acknowledge)
+              !liveValidation.canPublish ||
+              (liveValidation.warnings.length > 0 && !acknowledge)
             }
             onClick={publish}
           >
@@ -862,7 +919,7 @@ function Stat({ label, value }: { label: string; value: string }) {
  * Coverage means a selected composition contains that class — not that the
  * aura is cast or talented in-game.
  */
-function ClassBuffChecker({ coverage, dirty }: { coverage: RaidBuffCoverage; dirty: boolean }) {
+function ClassBuffChecker({ coverage }: { coverage: RaidBuffCoverage }) {
   const byClass = summarizeRaidBuffCoverageByClass(coverage);
   return (
     <Card>
@@ -870,9 +927,7 @@ function ClassBuffChecker({ coverage, dirty }: { coverage: RaidBuffCoverage; dir
         title="Class Buffs"
         description={`${byClass.coveredCount} / ${byClass.totalCount} covered${
           byClass.missingCount > 0 ? ` · ${byClass.missingCount} missing` : ""
-        }. Class availability only — not live aura verification.${
-          dirty ? " Save roster to recalculate." : ""
-        }`}
+        }. Class availability only — not live aura verification.`}
       />
       <ul className="grid gap-1.5 px-4 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label="Class buff coverage">
         {byClass.classes.map((item) => {

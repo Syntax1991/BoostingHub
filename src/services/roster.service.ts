@@ -369,7 +369,12 @@ export const rosterService = {
       wclPerformance: wclBySignup.get(signup.id) ?? [],
     }));
 
-    const selected = inspected.filter((item) => item.draftSelected);
+    // Draft slots whose signup was withdrawn must not count for composition or
+    // Class Buffs (UI also hides WITHDRAWN candidates). Entry cleanup on withdraw
+    // is best-effort; this filter is the authoritative projection guard.
+    const selected = inspected.filter(
+      (item) => item.draftSelected && item.status !== "WITHDRAWN",
+    );
     const validation = validateRosterDraft({
       runStatus: run.status,
       selected: selected.map(asMember),
@@ -761,7 +766,9 @@ export const rosterService = {
       scheduleConflicts: [] as CharacterScheduleConflict[],
       wclPerformance: [],
     }));
-    const selected = inspected.filter((item) => item.draftSelected);
+    const selected = inspected.filter(
+      (item) => item.draftSelected && item.status !== "WITHDRAWN",
+    );
     const validation = validateRosterDraft({
       runStatus: run.status,
       selected: selected.map(asMember),
