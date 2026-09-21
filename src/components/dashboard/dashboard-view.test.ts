@@ -35,7 +35,7 @@ describe("DashboardView", () => {
     expect(html).toContain("No personal conflicts need attention.");
     expect(html).toContain("No selected upcoming run.");
     expect(html).toContain("Pending: 0");
-    expect(html).not.toContain("Operations");
+    expect(html).not.toContain("Boosting Control Center");
     expect(html).not.toContain("Admin attention");
     expect(html).not.toContain("My Upcoming Runs");
   });
@@ -139,6 +139,9 @@ describe("DashboardView", () => {
         } as never,
       }),
     );
+    expect(html).toContain("Boosting Control Center");
+    expect(html).toContain("View all");
+    expect(html).not.toContain("View all operations");
     expect(html).toContain("Mark Attendance");
     expect(html).toContain("2 unmarked");
     expect(html).toContain("tab=attendance");
