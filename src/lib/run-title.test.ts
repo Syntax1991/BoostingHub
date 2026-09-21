@@ -77,7 +77,7 @@ describe("buildRunTitle", () => {
 });
 
 describe("projectRunContentDisplay coverage tokens", () => {
-  it("projects Venomous as-is and Bundle as summed Nymrissa+VA coverage", () => {
+  it("projects Venomous as-is and Bundle as summed Tide+VA coverage", () => {
     const venomous = projectRunContentDisplay([
       {
         raidId: VENOMOUS_ABYSS_RAID_ID,
@@ -108,7 +108,7 @@ describe("projectRunContentDisplay coverage tokens", () => {
     ]);
     expect(bundle.titleCoverage).toBe("7/9");
     expect(bundle.channelCoverage).toBe("7of9");
-    expect(bundle.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 6/8");
+    expect(bundle.summary).toBe("Tide 1/1 · The Venomous Abyss 6/8");
     expect(bundle.titleCoverage).not.toMatch(/S2B|s2b/);
     expect(bundle.channelCoverage).not.toMatch(/s2b/);
   });

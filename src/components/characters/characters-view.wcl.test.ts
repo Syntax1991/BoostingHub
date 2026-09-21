@@ -57,7 +57,7 @@ function basePage(characters: CharacterRow[]): Page {
     currentResetByRegion: { EU: "2026-W38", US: "2026-W38" },
     currentLockoutRaids: [
       { id: "venomous", name: "The Venomous Abyss" },
-      { id: "tidebound", name: "Nymrissa" },
+      { id: "tidebound", name: "Tide" },
     ],
     battleNet: {
       configured: false,

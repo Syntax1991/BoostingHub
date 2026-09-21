@@ -140,7 +140,7 @@ describe("run content classification + display", () => {
       },
     ]);
     expect(bundle8.productLabel).toBe("Season 2 Bundle");
-    expect(bundle8.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 8/8");
+    expect(bundle8.summary).toBe("Tide 1/1 · The Venomous Abyss 8/8");
     expect(bundle8.titleCoverage).toBe("9/9");
     expect(bundle8.channelCoverage).toBe("9of9");
 
@@ -160,7 +160,7 @@ describe("run content classification + display", () => {
         totalBossCount: 8,
       },
     ]);
-    expect(bundle6.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 6/8");
+    expect(bundle6.summary).toBe("Tide 1/1 · The Venomous Abyss 6/8");
     expect(bundle6.titleCoverage).toBe("7/9");
     expect(bundle6.channelCoverage).toBe("7of9");
 
@@ -187,7 +187,7 @@ describe("run content classification + display", () => {
         totalBossCount: 1,
       },
     ]);
-    expect(display.summary).toBe("The Venomous Abyss 8/8 · Nymrissa 1/1");
+    expect(display.summary).toBe("The Venomous Abyss 8/8 · Tide 1/1");
   });
 });
 
@@ -272,7 +272,7 @@ describe("run content products — create / mass-create / edit", () => {
     });
   });
 
-  it("creates partial Bundle 6 with display summary Nymrissa 1/1 · Venomous 6/8", async () => {
+  it("creates partial Bundle 6 with display summary Tide 1/1 · Venomous 6/8", async () => {
     const { id } = await runService.createRun(lead, {
       contentPreset: "MIDNIGHT_S2_BUNDLE",
       venomousPlannedBossCount: 6,
@@ -287,7 +287,7 @@ describe("run content products — create / mass-create / edit", () => {
     const contents = await runRepository.listRaidContents(id);
     expect(contents.map((row) => row.plannedBossCount)).toEqual([1, 6]);
     const display = projectRunContentDisplay(contents);
-    expect(display.summary).toBe("Nymrissa 1/1 · The Venomous Abyss 6/8");
+    expect(display.summary).toBe("Tide 1/1 · The Venomous Abyss 6/8");
   });
 
   it("mass-creates mixed Venomous + Bundle rows atomically (3 runs / 5 contents)", async () => {

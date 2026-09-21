@@ -47,7 +47,7 @@ export function listCreateRunContentPresets(): Array<{
     { key: "VENOMOUS_ABYSS", displayName: "The Venomous Abyss" },
     {
       key: "MIDNIGHT_S2_BUNDLE",
-      displayName: "Season 2 Bundle — Nymrissa + The Venomous Abyss",
+      displayName: "Season 2 Bundle — Tide + The Venomous Abyss",
     },
   ];
 }
@@ -95,7 +95,7 @@ export function expandRunContentPreset(input: {
 
 /**
  * Coverage tokens for title / Discord channel naming from authoritative contents.
- * Bundle sums Nymrissa + Venomous (e.g. full Bundle → `9/9` / `9of9`); the
+ * Bundle sums Tide + Venomous (e.g. full Bundle → `9/9` / `9of9`); the
  * ordered content summary still lists each raid separately.
  */
 export function projectRunContentCoverage(

@@ -34,7 +34,7 @@ Button visibility is not authorization.
 
 **One canonical workflow, 1–25 drafts.** Route: `/runs/create` (operational Runs hub). There is no separate "single create" vs. "mass create" UI — the same page and the same server action handle a Raid Lead preparing one Run for tonight and an Admin preparing a whole week at once. Same authorization as every other manager action (`RAID_LEAD`/`ADMIN`, enforced server-side regardless of navigation). Legacy `/manage/runs/create` and `/manage/runs/create-many` redirect here.
 
-**Creation products** (not raw Raid rows): `VENOMOUS_ABYSS` (1–8 bosses) and `MIDNIGHT_S2_BUNDLE` (Nymrissa 1/1 + Venomous 1–8). Standalone Tidebound is never offered. Each draft persists authoritative `RunRaidContent` rows only — there is no singular `Run.raidId` / `Run.plannedBossCount` mirror.
+**Creation products** (not raw Raid rows): `VENOMOUS_ABYSS` (1–8 bosses) and `MIDNIGHT_S2_BUNDLE` (Tide 1/1 + Venomous 1–8). Standalone Tidebound is never offered. Each draft persists authoritative `RunRaidContent` rows only — there is no singular `Run.raidId` / `Run.plannedBossCount` mirror.
 
 **Model**: shared defaults (product/preset, difficulty, loot type, raid lead, composition, Venomous planned boss count, notes) + one row per concrete run, each with its own required `scheduledStartAt` and optional per-field overrides, submitted once. The page starts with exactly one staged row — the ordinary one-off experience — and a manager only sees more than one if they explicitly click Add Run or Duplicate. This is a convenience for preparing concrete runs — **not** a recurrence engine; there is no weekly/RRULE templating or scheduled-generation job, and each row is one specific run a manager already has in mind.
 

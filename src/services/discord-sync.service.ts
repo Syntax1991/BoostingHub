@@ -88,7 +88,7 @@ export type SignupEmbedData = {
   raidName: string;
   /** Commercial / classified product label (e.g. Season 2 Bundle). */
   productLabel: string;
-  /** Ordered content summary — per-raid segments (e.g. Nymrissa 1/1 · VA 8/8). Kept for sync/signature; not shown on the signup embed. */
+  /** Ordered content summary — per-raid segments (e.g. Tide 1/1 · VA 8/8). Kept for sync/signature; not shown on the signup embed. */
   contentSummary: string;
   /** Compact title coverage from persisted contents (e.g. `8/8`, Bundle `9/9`). */
   titleCoverage: string;

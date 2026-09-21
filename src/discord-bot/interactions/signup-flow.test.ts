@@ -505,7 +505,7 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
             ...option,
             contentSaves: [
               {
-                raidName: "Nymrissa",
+                raidName: "Tide",
                 totalBossCount: 1,
                 raidSave: {
                   raidId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -541,10 +541,10 @@ describe("raid save (lockout) is informational in the Discord signup flow", () =
 
     const call = interaction.editReply.mock.calls[0]?.[0];
     expect(call.content).not.toContain("Lockouts this reset");
-    expect(call.content).not.toContain("Nymrissa: HC 0/1");
+    expect(call.content).not.toContain("Tide: HC 0/1");
     const menu = call.components[0].components[0].toJSON();
     const synmistOption = menu.options.find((option: { value: string }) => option.value === SYNMIST);
-    expect(synmistOption.description).toContain("Nymrissa");
+    expect(synmistOption.description).toContain("Tide");
     expect(synmistOption.description).toContain("0/1");
     expect(synmistOption.description).toContain("Venomous Abyss");
     expect(synmistOption.description).toContain("3/8");

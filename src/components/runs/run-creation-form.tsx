@@ -329,7 +329,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           </label>
           {sharedIsBundle ? (
             <p className="rounded-md border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
-              Nymrissa 1/1 (fixed) · The Venomous Abyss selectable below
+              Tide 1/1 (fixed) · The Venomous Abyss selectable below
             </p>
           ) : null}
           <label className="block text-sm">
@@ -565,7 +565,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                     </OverrideField>
 
                     {rowPreset === "MIDNIGHT_S2_BUNDLE" ? (
-                      <p className="text-xs text-muted">Nymrissa 1/1 is fixed for the Season 2 Bundle.</p>
+                      <p className="text-xs text-muted">Tide 1/1 is fixed for the Season 2 Bundle.</p>
                     ) : null}
 
                     <OverrideField

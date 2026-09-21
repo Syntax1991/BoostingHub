@@ -209,9 +209,9 @@ export function getCurrentLockoutRaids(): readonly WowRaidCatalogEntry[] {
   return WOW_RAID_CATALOG.filter((raid) => raid.currentForLockouts);
 }
 
-/** Short product-facing raid label (Tidebound → Nymrissa). */
+/** Short product-facing raid label (Tidebound → Tide). */
 export function raidContentDisplayName(raidId: string, raidName: string): string {
-  if (raidId === TIDEBOUND_GROTTO_RAID_ID) return "Nymrissa";
+  if (raidId === TIDEBOUND_GROTTO_RAID_ID) return "Tide";
   return raidName;
 }
 

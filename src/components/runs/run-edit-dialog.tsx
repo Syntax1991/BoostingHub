@@ -264,7 +264,7 @@ export function RunEditDialog({
             </label>
             {contentPreset === "MIDNIGHT_S2_BUNDLE" ? (
               <p className="rounded-md border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
-                Nymrissa 1/1 (fixed)
+                Tide 1/1 (fixed)
               </p>
             ) : null}
             <label className="block text-sm">

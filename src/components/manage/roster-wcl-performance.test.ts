@@ -12,9 +12,9 @@ import type { WclPerformanceRaidSegment } from "@/lib/wcl-performance-display";
 
 describe("roster WCL performance display copy", () => {
   it("renders Bundle multi-role lines without collapsing raids", () => {
-    const nymrissa = formatWclPerformanceRaidLine({
+    const tide = formatWclPerformanceRaidLine({
       raidId: TIDEBOUND_GROTTO_RAID_ID,
-      raidName: "Nymrissa",
+      raidName: "Tide",
       roles: [
         { role: "TANK", specLabel: "Protection", bestPct: 80, avgPct: 55 },
         { role: "HEALER", specLabel: null, bestPct: 70, avgPct: 50 },
@@ -29,9 +29,9 @@ describe("roster WCL performance display copy", () => {
       ],
     });
 
-    expect(nymrissa).toContain("Nymrissa");
-    expect(nymrissa).toContain("Tank (Protection)");
-    expect(nymrissa).toContain("HPS");
+    expect(tide).toContain("Tide");
+    expect(tide).toContain("Tank (Protection)");
+    expect(tide).toContain("HPS");
     expect(venomous).toContain("The Venomous Abyss");
     expect(venomous).not.toMatch(/9\/9|4\/9/);
   });
@@ -40,7 +40,7 @@ describe("roster WCL performance display copy", () => {
     const segments = [
       {
         raidId: TIDEBOUND_GROTTO_RAID_ID,
-        raidName: "Nymrissa",
+        raidName: "Tide",
         roles: [
           { role: "TANK" as const, specLabel: null, bestPct: 40, avgPct: 30 },
           { role: "HEALER" as const, specLabel: "Restoration", bestPct: 80, avgPct: 55 },
@@ -79,7 +79,7 @@ describe("wclPercentileColor", () => {
 const multiRoleSegments: WclPerformanceRaidSegment[] = [
   {
     raidId: TIDEBOUND_GROTTO_RAID_ID,
-    raidName: "Nymrissa",
+    raidName: "Tide",
     roles: [
       { role: "TANK", specLabel: null, bestPct: 40, avgPct: 30 },
       { role: "HEALER", specLabel: "Restoration", bestPct: 80, avgPct: 55 },

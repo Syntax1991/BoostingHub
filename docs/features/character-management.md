@@ -88,7 +88,7 @@ A newly created or imported character is **not** booster-eligible merely because
 ## Lockouts
 
 Stored `CharacterRaidLockout` rows are read-only here. Operators cannot fabricate lockouts.
-Current lockout targets are **all** catalog raids with `currentForLockouts` (Venomous + Tidebound/Nymrissa). Presentation is per-raid with correct boss totals — Tidebound shows as **Nymrissa** and never inherits Venomous's 8-boss denominator. Compact Character list progress is multi-raid (`formatCompactMultiRaidLockoutProgress`), never a merged 9/9.
+Current lockout targets are **all** catalog raids with `currentForLockouts` (Venomous + Tidebound/Tide). Presentation is per-raid with correct boss totals — Tidebound shows as **Tide** and never inherits Venomous's 8-boss denominator. Compact Character list progress is multi-raid (`formatCompactMultiRaidLockoutProgress`), never a merged 9/9.
 
 ## Blizzard authority vs BoostingHub ownership
 

@@ -74,7 +74,7 @@ type RaidSaveInfo = {
   isComplete: boolean;
 };
 type EligibleContentSave = {
-  /** Display name for this Run content (e.g. Nymrissa / The Venomous Abyss). */
+  /** Display name for this Run content (e.g. Tide / The Venomous Abyss). */
   raidName?: string;
   totalBossCount: number;
   raidSave: RaidSaveInfo | null;

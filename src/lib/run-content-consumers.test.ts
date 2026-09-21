@@ -60,7 +60,7 @@ describe("run content lockout projection", () => {
     });
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]!.raidName).toBe("Nymrissa");
+    expect(rows[0]!.raidName).toBe("Tide");
     expect(rows[0]!.label.text).toContain("1/1");
     expect(rows[1]!.raidName).toBe("The Venomous Abyss");
     expect(rows[1]!.label.text).toContain("3/8");
@@ -114,11 +114,11 @@ describe("multi-raid character lockout compact display", () => {
       ],
       [
         { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss" },
-        { id: TIDEBOUND_GROTTO_RAID_ID, name: "Nymrissa" },
+        { id: TIDEBOUND_GROTTO_RAID_ID, name: "Tide" },
       ],
     );
 
-    expect(text).toContain("Nymrissa:");
+    expect(text).toContain("Tide:");
     expect(text).toContain("The Venomous Abyss:");
     expect(text).toContain("1/1");
     expect(text).toContain("3/8");
@@ -159,7 +159,7 @@ describe("Discord Bundle content labels", () => {
     }).toJSON();
 
     expect(embed.description).toContain("Season 2 Bundle");
-    expect(embed.description).toContain("Nymrissa 1/1");
+    expect(embed.description).toContain("Tide 1/1");
     expect(embed.description).toContain("The Venomous Abyss 8/8");
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@111>");
@@ -186,7 +186,7 @@ describe("Discord Bundle content labels", () => {
     }).toJSON();
 
     expect(embed.description).toContain("Season 2 Bundle");
-    expect(embed.description).toContain("Nymrissa 1/1 · The Venomous Abyss 8/8");
+    expect(embed.description).toContain("Tide 1/1 · The Venomous Abyss 8/8");
   });
 
   it("Final Setup remains one message with Bundle product header", () => {
@@ -201,7 +201,7 @@ describe("Discord Bundle content labels", () => {
     };
     const message = formatFinalSetup(input);
     expect(message.body).toContain("**Season 2 Bundle**");
-    expect(message.body).toContain("Nymrissa 1/1 · The Venomous Abyss 8/8");
+    expect(message.body).toContain("Tide 1/1 · The Venomous Abyss 8/8");
     const text = renderFinalSetupText(input);
     expect(text.startsWith("**Final Setup**")).toBe(true);
     expect(text.match(/\*\*Final Setup\*\*/g)).toHaveLength(1);

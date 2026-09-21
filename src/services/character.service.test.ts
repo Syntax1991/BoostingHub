@@ -139,7 +139,7 @@ describe("characterService empty user", () => {
   it("exposes plural currentLockoutRaids only — no singular currentLockoutRaid", async () => {
     const page = await characterService.getCharacterPage(asUser(ids.owner, "Character Owner"));
     expect(page.currentLockoutRaids.map((raid) => raid.name).sort()).toEqual(
-      ["Nymrissa", "The Venomous Abyss"].sort(),
+      ["Tide", "The Venomous Abyss"].sort(),
     );
     expect(page).not.toHaveProperty("currentLockoutRaid");
   });
@@ -328,7 +328,7 @@ describe("characterService ownership and update", () => {
 
     const details = await characterService.getCharacterDetails(owner, first.id);
     expect(details.currentLockoutRaids.map((raid) => raid.name).sort()).toEqual(
-      ["Nymrissa", "The Venomous Abyss"].sort(),
+      ["Tide", "The Venomous Abyss"].sort(),
     );
     expect(details).not.toHaveProperty("currentLockoutRaid");
     expect(details.warcraftLogsId).toBeNull();

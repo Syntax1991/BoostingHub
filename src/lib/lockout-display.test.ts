@@ -11,7 +11,7 @@ import {
 
 const CURRENT = [
   { id: VENOMOUS_ABYSS_RAID_ID, name: "The Venomous Abyss" },
-  { id: TIDEBOUND_GROTTO_RAID_ID, name: "Nymrissa" },
+  { id: TIDEBOUND_GROTTO_RAID_ID, name: "Tide" },
 ] as const;
 
 describe("formatCompactLockoutProgress", () => {
@@ -39,7 +39,7 @@ describe("formatCompactLockoutProgress", () => {
 });
 
 describe("formatCompactMultiRaidLockoutProgress", () => {
-  it("CASE 1: only Nymrissa rows → Venomous Unknown + Nymrissa progress", () => {
+  it("CASE 1: only Tide rows → Venomous Unknown + Tide progress", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
@@ -65,13 +65,13 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       CURRENT,
     );
     expect(text).toBe(
-      "The Venomous Abyss: Unknown · Nymrissa: N 0/1 · HC 0/1 · M 0/1",
+      "The Venomous Abyss: Unknown · Tide: N 0/1 · HC 0/1 · M 0/1",
     );
     expect(text).not.toMatch(/0\/8/);
     expect(text).not.toMatch(/9\/9/);
   });
 
-  it("CASE 2: only Venomous rows → Nymrissa Unknown", () => {
+  it("CASE 2: only Venomous rows → Tide Unknown", () => {
     const text = formatCompactMultiRaidLockoutProgress(
       [
         {
@@ -83,7 +83,7 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       ],
       CURRENT,
     );
-    expect(text).toBe("The Venomous Abyss: N ? · HC 3/8 · M ? · Nymrissa: Unknown");
+    expect(text).toBe("The Venomous Abyss: N ? · HC 3/8 · M ? · Tide: Unknown");
   });
 
   it("CASE 3: both raids have verified rows", () => {
@@ -105,14 +105,14 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       CURRENT,
     );
     expect(text).toContain("The Venomous Abyss:");
-    expect(text).toContain("Nymrissa:");
+    expect(text).toContain("Tide:");
     expect(text).not.toContain("Unknown");
     expect(text).not.toMatch(/9\/9|4\/9/);
   });
 
   it("CASE 4: no current rows → both Unknown, not a collapsed generic Unknown", () => {
     const text = formatCompactMultiRaidLockoutProgress([], CURRENT);
-    expect(text).toBe("The Venomous Abyss: Unknown · Nymrissa: Unknown");
+    expect(text).toBe("The Venomous Abyss: Unknown · Tide: Unknown");
     expect(text).not.toBe("Unknown");
   });
 
@@ -159,7 +159,7 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       ],
       CURRENT,
     );
-    expect(text).toBe("The Venomous Abyss: Unknown · Nymrissa: Unknown");
+    expect(text).toBe("The Venomous Abyss: Unknown · Tide: Unknown");
   });
 
   it("CASE 7: output order follows currentLockoutRaids, not input row order", () => {
@@ -181,9 +181,9 @@ describe("formatCompactMultiRaidLockoutProgress", () => {
       CURRENT,
     );
     const venomousAt = text.indexOf("The Venomous Abyss:");
-    const nymrissaAt = text.indexOf("Nymrissa:");
+    const tideAt = text.indexOf("Tide:");
     expect(venomousAt).toBeGreaterThanOrEqual(0);
-    expect(nymrissaAt).toBeGreaterThan(venomousAt);
+    expect(tideAt).toBeGreaterThan(venomousAt);
   });
 });
 
@@ -204,7 +204,7 @@ describe("projectCurrentRaidLockoutSlots", () => {
       { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", status: "UNKNOWN" },
       {
         raidId: TIDEBOUND_GROTTO_RAID_ID,
-        raidName: "Nymrissa",
+        raidName: "Tide",
         status: "VERIFIED",
         rows: [
           {

@@ -94,10 +94,10 @@ Verified `0/N` (a `CharacterRaidLockout` row with `bossesDefeated = 0`) means **
 - status, raid lead, notes
 - desired tank / healer / DPS counts
 - `signupsOpen`
-- **Authoritative multi-raid contents:** ordered `RunRaidContent` rows (`Run.contents`) — each row is one real raid instance with its own `plannedBossCount` / boss total. Product labels and UI content summaries are projected from these rows (`projectRunContentDisplay`). The detailed summary lists each raid (`Nymrissa 1/1 · The Venomous Abyss 8/8`); compact title / Discord channel coverage for Bundle sums planned and total bosses (`9/9` / `9of9`).
+- **Authoritative multi-raid contents:** ordered `RunRaidContent` rows (`Run.contents`) — each row is one real raid instance with its own `plannedBossCount` / boss total. Product labels and UI content summaries are projected from these rows (`projectRunContentDisplay`). The detailed summary lists each raid (`Tide 1/1 · The Venomous Abyss 8/8`); compact title / Discord channel coverage for Bundle sums planned and total bosses (`9/9` / `9of9`).
 - **No singular Run raid mirror:** `Run.raidId` and `Run.plannedBossCount` have been removed. Missing `RunRaidContent` is an invariant violation.
 
-Commercial Create products (`VENOMOUS_ABYSS`, `MIDNIGHT_S2_BUNDLE`) expand into contents at create/edit time. Standalone Tidebound/Nymrissa is reference content only — not a Create product. RunTemplate remains Venomous-only (stores its own `raidId` / `plannedBossCount`) and normalizes to the `VENOMOUS_ABYSS` preset at the template → Run boundary.
+Commercial Create products (`VENOMOUS_ABYSS`, `MIDNIGHT_S2_BUNDLE`) expand into contents at create/edit time. Standalone Tidebound/Tide is reference content only — not a Create product. RunTemplate remains Venomous-only (stores its own `raidId` / `plannedBossCount`) and normalizes to the `VENOMOUS_ABYSS` preset at the template → Run boundary.
 
 ### Derived title (no manual title entry)
 
@@ -126,7 +126,7 @@ Discord run-channel names are derived from structured Run fields — never parse
 Coverage comes from `contentDisplay.channelCoverage` (same projection as titles):
 
 - single Venomous: `8of8` / `6of8`
-- Season 2 Bundle: `9of9` / `7of9` (Nymrissa + Venomous planned/total summed) — no `s2b-` prefix
+- Season 2 Bundle: `9of9` / `7of9` (Tide + Venomous planned/total summed) — no `s2b-` prefix
 
 Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`). Any change to a naming-source field renames the Run's existing Discord channel in place.
 
