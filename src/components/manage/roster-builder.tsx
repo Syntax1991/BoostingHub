@@ -42,7 +42,11 @@ import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
-import { summarizeRaidBuffCoverageByClass } from "@/services/roster-raid-buffs";
+import {
+  evaluateRaidBuffCoverage,
+  resolveBuffContributorClass,
+  summarizeRaidBuffCoverageByClass,
+} from "@/services/roster-raid-buffs";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
@@ -148,6 +152,26 @@ function RosterBuilderEditor({
     }
     return count;
   }, [stagedSelections, savedSelections]);
+
+  /** Live Class Buff coverage from the staged draft — updates immediately on select/deselect. */
+  const liveRaidBuffCoverage = useMemo(() => {
+    const participants = domainSignups
+      .filter((signup) => stagedSelections.has(signup.id))
+      .map((signup) => ({
+        signupId: signup.id,
+        userName: signup.userName,
+        participationType: signup.participationType,
+        lootbuddyMode: signup.lootbuddyMode,
+        wowClass: resolveBuffContributorClass({
+          participationType: signup.participationType,
+          lootbuddyMode: signup.lootbuddyMode,
+          lootbuddyClass: signup.lootbuddyClass,
+          characterWowClass: signup.character?.wowClass ?? null,
+        }),
+        characterName: signup.character?.name ?? null,
+      }));
+    return evaluateRaidBuffCoverage(participants);
+  }, [domainSignups, stagedSelections]);
 
   function isStagedSelected(signupId: string) {
     return stagedSelections.has(signupId);
@@ -401,7 +425,7 @@ function RosterBuilderEditor({
         </div>
       </Card>
 
-      <ClassBuffChecker coverage={data.raidBuffCoverage} dirty={isDirty} />
+      <ClassBuffChecker coverage={liveRaidBuffCoverage} />
 
       <Card>
         <CardHeader title="Filters" />
@@ -862,7 +886,7 @@ function Stat({ label, value }: { label: string; value: string }) {
  * Coverage means a selected composition contains that class — not that the
  * aura is cast or talented in-game.
  */
-function ClassBuffChecker({ coverage, dirty }: { coverage: RaidBuffCoverage; dirty: boolean }) {
+function ClassBuffChecker({ coverage }: { coverage: RaidBuffCoverage }) {
   const byClass = summarizeRaidBuffCoverageByClass(coverage);
   return (
     <Card>
@@ -870,9 +894,7 @@ function ClassBuffChecker({ coverage, dirty }: { coverage: RaidBuffCoverage; dir
         title="Class Buffs"
         description={`${byClass.coveredCount} / ${byClass.totalCount} covered${
           byClass.missingCount > 0 ? ` · ${byClass.missingCount} missing` : ""
-        }. Class availability only — not live aura verification.${
-          dirty ? " Save roster to recalculate." : ""
-        }`}
+        }. Class availability only — not live aura verification.`}
       />
       <ul className="grid gap-1.5 px-4 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label="Class buff coverage">
         {byClass.classes.map((item) => {

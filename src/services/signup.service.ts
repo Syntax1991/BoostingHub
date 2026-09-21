@@ -425,6 +425,7 @@ export const signupService = {
       toCreate,
       toUpdateRoles,
     });
+    await rosterRepository.clearDraftSelectionsForSignupIds(result.withdrawn);
 
     await activityRepository.create({
       userId: actor.id,
@@ -561,6 +562,7 @@ export const signupService = {
       toUpdate,
       toCreate,
     });
+    await rosterRepository.clearDraftSelectionsForSignupIds(result.withdrawn);
 
     await activityRepository.create({
       userId: actor.id,
@@ -611,6 +613,7 @@ export const signupService = {
       toCreate: [],
       toUpdateRoles: [],
     });
+    await rosterRepository.clearDraftSelectionsForSignupIds(result.withdrawn);
 
     await activityRepository.create({
       userId: actor.id,
@@ -680,6 +683,7 @@ export const signupService = {
     }
 
     let withdrawn = 0;
+    const withdrawnIds: string[] = [];
 
     if (boosterPlan) {
       const result = await signupRepository.applyOfferPlan({
@@ -692,6 +696,7 @@ export const signupService = {
         toUpdateRoles: [],
       });
       withdrawn += result.withdrawn.length;
+      withdrawnIds.push(...result.withdrawn);
     }
 
     if (lootbuddyPlan) {
@@ -703,7 +708,10 @@ export const signupService = {
         toCreate: [],
       });
       withdrawn += result.withdrawn.length;
+      withdrawnIds.push(...result.withdrawn);
     }
+
+    await rosterRepository.clearDraftSelectionsForSignupIds(withdrawnIds);
 
     await activityRepository.create({
       userId: actor.id,
@@ -733,6 +741,7 @@ export const signupService = {
 
     assertSignupTransition(signup.status, "WITHDRAWN");
     await signupRepository.update(signup.id, { status: "WITHDRAWN" });
+    await rosterRepository.clearDraftSelectionsForSignupIds([signup.id]);
     await activityRepository.create({
       userId: user.id,
       type: "SIGNUP_WITHDRAWN",
