@@ -18,6 +18,15 @@ import type {
   WowClass,
   WowRegion,
 } from "@/models/enums";
+import {
+  raidInviteSourceKey,
+  userNotificationRepository,
+} from "@/repositories/user-notification.repository";
+import {
+  raidInviteWebNotification,
+  resolveDiscordDelivery,
+  type NotificationAssignmentInput,
+} from "@/services/notification-content";
 
 export type AttendanceRecord = {
   id: string;
@@ -212,6 +221,8 @@ export const attendanceRepository = {
       const selected = await txOrm.RunSignup
         .where({ runId, status: "SELECTED" })
         .include("offeredRoles")
+        .include("character")
+        .include("user")
         .all();
       if (selected.length === 0) {
         throw new DomainError(
@@ -221,6 +232,8 @@ export const attendanceRepository = {
       }
       const now = new Date().toISOString();
       const rosterId = asString(rosterRow.id);
+      const runRow = run as Record<string, unknown>;
+      const productLabel = asStringOrNull(runRow.title)?.trim() || "Run";
       for (const signup of selected) {
         const signupRow = signup as Record<string, unknown>;
         const signupId = asString(signupRow.id);
@@ -282,6 +295,60 @@ export const attendanceRepository = {
         signupsOpen: false,
         updatedAt: now,
       });
+
+      for (const signup of selected) {
+        const signupRow = signup as Record<string, unknown>;
+        const signupId = asString(signupRow.id);
+        const userId = asString(signupRow.userId);
+        let userRow = (signupRow.user as Record<string, unknown> | undefined) ?? null;
+        if (!userRow) {
+          userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
+        }
+        const dmEnabled = userRow ? userRow.dmRaidInviteEnabled !== false : true;
+        const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
+        const participationType = mapParticipation(signupRow.participationType);
+        const publishedRole =
+          signupRow.publishedRole == null ? null : mapCharacterRole(signupRow.publishedRole);
+        const character = signupRow.character ? (signupRow.character as Record<string, unknown>) : null;
+        const assignment: NotificationAssignmentInput = {
+          participationType,
+          publishedRole,
+          characterName: character ? asStringOrNull(character.name) : null,
+          characterRealm: character ? asStringOrNull(character.realm) : null,
+          wowClass:
+            participationType === "LOOTBUDDY"
+              ? signupRow.lootbuddyClass != null
+                ? mapWowClass(signupRow.lootbuddyClass)
+                : character
+                  ? mapWowClass(character.wowClass)
+                  : null
+              : character
+                ? mapWowClass(character.wowClass)
+                : null,
+        };
+        const copy = raidInviteWebNotification({
+          runId,
+          productLabel,
+          assignment,
+        });
+        const delivery = resolveDiscordDelivery({
+          preferenceEnabled: dmEnabled,
+          discordUserId,
+        });
+        await userNotificationRepository.createInTx(txOrm, {
+          userId,
+          type: "RAID_INVITE",
+          runId,
+          signupId,
+          sourceKey: raidInviteSourceKey(runId, signupId),
+          title: copy.title,
+          message: copy.message,
+          href: copy.href,
+          discordDeliveryStatus: delivery.status,
+          discordUserId: delivery.discordUserId,
+          createdAt: now,
+        });
+      }
     });
   },
 

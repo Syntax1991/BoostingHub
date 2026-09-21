@@ -31,6 +31,15 @@ import {
 import { DomainError } from "@/lib/errors";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signup.repository";
+import {
+  rosterSelectedSourceKey,
+  userNotificationRepository,
+} from "@/repositories/user-notification.repository";
+import {
+  resolveDiscordDelivery,
+  rosterSelectedWebNotification,
+  type NotificationAssignmentInput,
+} from "@/services/notification-content";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -534,6 +543,8 @@ export const rosterRepository = {
     runStatus: RunStatus;
     fromStatus: RunStatus;
     publisherId: string;
+    /** Display title for ROSTER_SELECTED web/DM copy. */
+    runTitle: string;
   }) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
@@ -566,7 +577,21 @@ export const rosterRepository = {
         }
       }
 
+      const previouslySelectedRows = await txOrm.RunSignup.where({
+        runId: input.runId,
+        status: "SELECTED",
+      })
+        .select("id")
+        .all();
+      const previouslySelectedIds = new Set(
+        previouslySelectedRows.map((row) => asString((row as Record<string, unknown>).id)),
+      );
+      const newlySelected = input.selectedSelections.filter(
+        (selection) => !previouslySelectedIds.has(selection.signupId),
+      );
+
       const now = new Date().toISOString();
+      const nextVersion = mapped.version + 1;
       for (const selection of input.selectedSelections) {
         await txOrm.RunSignup.where({ id: selection.signupId }).update({
           status: "SELECTED",
@@ -587,7 +612,7 @@ export const rosterRepository = {
       }
       await txOrm.RunRoster.where({ id: input.rosterId }).update({
         state: "PUBLISHED",
-        version: mapped.version + 1,
+        version: nextVersion,
         publishedAt: now,
         publishedById: input.publisherId,
         updatedAt: now,
@@ -599,6 +624,63 @@ export const rosterRepository = {
         message: mapped.publishedAt ? "Updated a published roster." : "Published a roster.",
         occurredAt: now,
       });
+
+      for (const selection of newlySelected) {
+        const signup = (await txOrm.RunSignup.where({ id: selection.signupId })
+          .include("character")
+          .include("user")
+          .first()) as Record<string, unknown> | null;
+        if (!signup) continue;
+
+        const userId = asString(signup.userId);
+        let userRow = (signup.user as Record<string, unknown> | undefined) ?? null;
+        if (!userRow) {
+          userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
+        }
+        const dmEnabled = userRow ? userRow.dmRosterSelectedEnabled !== false : true;
+        const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
+
+        const participationType = mapParticipation(signup.participationType);
+        const character = signup.character ? (signup.character as Record<string, unknown>) : null;
+        const assignment: NotificationAssignmentInput = {
+          participationType,
+          publishedRole: selection.selectedRole,
+          characterName: character ? asStringOrNull(character.name) : null,
+          characterRealm: character ? asStringOrNull(character.realm) : null,
+          wowClass:
+            participationType === "LOOTBUDDY"
+              ? signup.lootbuddyClass != null
+                ? mapWowClass(signup.lootbuddyClass)
+                : character
+                  ? mapWowClass(character.wowClass)
+                  : null
+              : character
+                ? mapWowClass(character.wowClass)
+                : null,
+        };
+        const copy = rosterSelectedWebNotification({
+          runId: input.runId,
+          runTitle: input.runTitle,
+          assignment,
+        });
+        const delivery = resolveDiscordDelivery({
+          preferenceEnabled: dmEnabled,
+          discordUserId,
+        });
+        await userNotificationRepository.createInTx(txOrm, {
+          userId,
+          type: "ROSTER_SELECTED",
+          runId: input.runId,
+          signupId: selection.signupId,
+          sourceKey: rosterSelectedSourceKey(input.runId, nextVersion, selection.signupId),
+          title: copy.title,
+          message: copy.message,
+          href: copy.href,
+          discordDeliveryStatus: delivery.status,
+          discordUserId: delivery.discordUserId,
+          createdAt: now,
+        });
+      }
     });
   },
 };

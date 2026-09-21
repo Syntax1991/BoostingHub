@@ -126,6 +126,7 @@ In one database transaction:
 4. Run `OPEN` → `ROSTERING` → `PUBLISHED`, or `ROSTERING` → `PUBLISHED`
 5. Roster `state = PUBLISHED`, `version++`, `publishedAt`, `publishedById`
 6. Activity `ROSTER_PUBLISHED` (first time) or `ROSTER_UPDATED` (republish)
+7. `ROSTER_SELECTED` user notifications for **newly** SELECTED signups only (see [user-notifications.md](user-notifications.md)) — draft selection never notifies; Discord DM intent is snapshotted from preferences at publish
 
 Self-withdrawal of a `SELECTED` signup on a `PUBLISHED` run remains forbidden (Phase 2 rule).
 
@@ -162,6 +163,6 @@ The published roster stays live until a replacement publish succeeds. The lead m
 
 - Raid groups 1–8, parties, markers, assignments
 - Wallets / extra organizational cuts (see [run-payouts.md](run-payouts.md))
-- Battle.net, Warcraft Logs, Discord bot, notifications
+- Battle.net, Warcraft Logs, Discord bot (except roster-selected notifications on publish; see [user-notifications.md](user-notifications.md))
 - Customer bookings / boost market
 - Per-user timezones

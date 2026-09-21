@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       roster: work.roster,
       start: work.start,
       raidInvites: work.raidInvites,
+      notificationDms: work.notificationDms,
     });
   } catch (error) {
     return botApiError(error);
