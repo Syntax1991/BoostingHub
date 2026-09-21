@@ -220,8 +220,6 @@ async function cleanupAll() {
 }
 
 const lead = asUser(ids.lead, "Notify Roster Lead", "RAID_LEAD");
-const player = asUser(ids.player, "Notify Player", "USER", "900000000000000001");
-const playerB = asUser(ids.playerB, "Notify Player B", "USER", "900000000000000002");
 
 let charPlayer = "";
 let charPlayerB = "";
