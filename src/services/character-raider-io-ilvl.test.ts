@@ -35,10 +35,10 @@ describe("shouldPreferRaiderIoItemLevel", () => {
 });
 
 describe("resolveRaiderIoItemLevelEnrichment", () => {
-  it("returns RIO ilvl when higher than Blizzard", async () => {
+  it("returns floored RIO ilvl when higher than Blizzard", async () => {
     getCharacterEquippedItemLevel.mockResolvedValue({
       status: "SUCCESS",
-      equippedItemLevel: 312,
+      equippedItemLevel: 312.875,
     });
 
     await expect(

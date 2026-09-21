@@ -113,7 +113,8 @@ async function lookupPublicCharacterProfile(
 
   return {
     wowClass: summary.wowClass,
-    itemLevel: typeof summary.equippedItemLevel === "number" ? summary.equippedItemLevel : null,
+    itemLevel:
+      typeof summary.equippedItemLevel === "number" ? Math.floor(summary.equippedItemLevel) : null,
   };
 }
 

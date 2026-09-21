@@ -1,4 +1,5 @@
 import { raiderIoApiClient } from "@/integrations/raider-io/raider-io-api-client";
+import { toStoredItemLevel } from "@/lib/character-item-level";
 import type { WowRegion } from "@/models/enums";
 
 /**
@@ -9,11 +10,11 @@ export function shouldPreferRaiderIoItemLevel(
   blizzardEquippedItemLevel: number | null | undefined,
   raiderIoEquippedItemLevel: number,
 ): boolean {
-  if (!Number.isFinite(raiderIoEquippedItemLevel)) return false;
-  if (blizzardEquippedItemLevel == null || !Number.isFinite(blizzardEquippedItemLevel)) {
-    return true;
-  }
-  return raiderIoEquippedItemLevel > blizzardEquippedItemLevel;
+  const blizzard = toStoredItemLevel(blizzardEquippedItemLevel);
+  const raiderIo = toStoredItemLevel(raiderIoEquippedItemLevel);
+  if (raiderIo == null) return false;
+  if (blizzard == null) return true;
+  return raiderIo > blizzard;
 }
 
 /**
@@ -36,9 +37,14 @@ export async function resolveRaiderIoItemLevelEnrichment(input: {
     return null;
   }
 
-  if (!shouldPreferRaiderIoItemLevel(input.blizzardEquippedItemLevel, result.equippedItemLevel)) {
+  const raiderIoEquippedItemLevel = toStoredItemLevel(result.equippedItemLevel);
+  if (raiderIoEquippedItemLevel == null) {
     return null;
   }
 
-  return result.equippedItemLevel;
+  if (!shouldPreferRaiderIoItemLevel(input.blizzardEquippedItemLevel, raiderIoEquippedItemLevel)) {
+    return null;
+  }
+
+  return raiderIoEquippedItemLevel;
 }
