@@ -102,3 +102,18 @@ describe("class buff coverage after signup removal", () => {
     expect(coverageFor(selectedIds).buffs.find((b) => b.id === "SKYFURY")?.covered).toBe(true);
   });
 });
+
+describe("live composition from staged selection", () => {
+  it("updates tank/healer/dps counts when a staged signup is removed", async () => {
+    const { composeRoster } = await import("@/services/roster-composition");
+    const selected = [
+      { participationType: "BOOSTER" as const, selectedRole: "TANK" as const },
+      { participationType: "BOOSTER" as const, selectedRole: "HEALER" as const },
+      { participationType: "BOOSTER" as const, selectedRole: "DPS" as const },
+    ];
+    const targets = { tanks: 2, healers: 4, dps: 14 };
+    expect(composeRoster(selected, targets).tanks.selected).toBe(1);
+    expect(composeRoster(selected.slice(1), targets).tanks.selected).toBe(0);
+    expect(composeRoster(selected.slice(1), targets).healers.selected).toBe(1);
+  });
+});
