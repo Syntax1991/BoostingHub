@@ -1,5 +1,6 @@
-import { Geist, Geist_Mono } from "next/font/google";
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { APP_BRAND_NAME, APP_BRAND_TAGLINE } from "@/lib/branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Boostting Bot",
-  description: "Internal World of Warcraft boosting operations platform",
+  title: {
+    default: APP_BRAND_NAME,
+    template: `${APP_BRAND_NAME} · %s`,
+  },
+  description: APP_BRAND_TAGLINE,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
