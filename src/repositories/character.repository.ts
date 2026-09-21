@@ -265,7 +265,7 @@ export const characterRepository = {
       wowClass: input.wowClass,
       specialization: input.specialization,
       primaryRole: input.primaryRole,
-      itemLevel: input.itemLevel,
+      itemLevel: input.itemLevel == null ? null : Math.floor(input.itemLevel),
       isActive: input.isActive,
       blizzardCharacterId: input.blizzardCharacterId ?? null,
       blizzardRealmId: input.blizzardRealmId ?? null,
@@ -300,7 +300,7 @@ export const characterRepository = {
       blizzardRealmId: input.blizzardRealmId,
       ...(input.specialization ? { specialization: input.specialization } : {}),
       ...(input.primaryRole ? { primaryRole: input.primaryRole } : {}),
-      ...(typeof input.itemLevel === "number" ? { itemLevel: input.itemLevel } : {}),
+      ...(typeof input.itemLevel === "number" ? { itemLevel: Math.floor(input.itemLevel) } : {}),
       ...(input.lastSyncedAt !== undefined ? { lastSyncedAt: input.lastSyncedAt } : {}),
       updatedAt: new Date().toISOString(),
     });
@@ -310,7 +310,7 @@ export const characterRepository = {
     await orm.Character.where({ id: characterId }).update({
       name: input.name,
       normalizedName: input.normalizedName,
-      ...(typeof input.itemLevel === "number" ? { itemLevel: input.itemLevel } : {}),
+      ...(typeof input.itemLevel === "number" ? { itemLevel: Math.floor(input.itemLevel) } : {}),
       lastSyncedAt: input.lastSyncedAt,
       updatedAt: new Date().toISOString(),
     });

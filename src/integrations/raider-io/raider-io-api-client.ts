@@ -40,7 +40,9 @@ export function resolveRaiderIoEquippedItemLevel(gear: {
   item_level_equipped?: unknown;
   items?: unknown;
 }): number | null {
-  return asFiniteNumber(gear.item_level_equipped);
+  const equipped = asFiniteNumber(gear.item_level_equipped);
+  if (equipped == null) return null;
+  return Math.floor(equipped);
 }
 
 /**

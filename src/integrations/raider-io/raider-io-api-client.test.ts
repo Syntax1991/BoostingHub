@@ -52,6 +52,8 @@ describe("resolveRaiderIoEquippedItemLevel", () => {
         items: { head: { item_level: 300 } },
       }),
     ).toBe(312);
+
+    expect(resolveRaiderIoEquippedItemLevel({ item_level_equipped: 322.625 })).toBe(322);
   });
 
   it("returns null when reported equipped is missing", () => {

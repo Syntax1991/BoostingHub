@@ -19,7 +19,7 @@ import { lockoutRepository } from "@/repositories/lockout.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { deriveCurrentResetLockouts } from "@/lib/blizzard/raid-lockout-derivation";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { resolveMonotonicItemLevel } from "@/lib/character-item-level";
+import { resolveMonotonicItemLevel, toStoredItemLevel } from "@/lib/character-item-level";
 import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-io-ilvl";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 
@@ -229,8 +229,9 @@ export async function refreshLinkedCharacterProfile(
   // weapons temporarily unequipped) — never write a lower itemLevel than
   // already stored. Soft Raider.IO enrichment may raise the incoming value.
   const syncedAt = new Date().toISOString();
-  const blizzardEquippedItemLevel =
-    typeof summary.equippedItemLevel === "number" ? summary.equippedItemLevel : null;
+  const blizzardEquippedItemLevel = toStoredItemLevel(
+    typeof summary.equippedItemLevel === "number" ? summary.equippedItemLevel : null,
+  );
   const raiderIoItemLevel = await resolveRaiderIoItemLevelEnrichment({
     name: nextName,
     realm: character.realm,

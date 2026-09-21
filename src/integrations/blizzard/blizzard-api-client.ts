@@ -84,6 +84,12 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/** Equipped item level for Character.itemLevel (int4) — never persist fractions. */
+function asEquippedItemLevel(value: unknown): number | null {
+  const n = asNumber(value);
+  return n == null ? null : Math.floor(n);
+}
+
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -338,7 +344,7 @@ export const blizzardApiClient = {
       realmSlug: asString(realm?.slug),
       realmName: asString(realm?.name),
       wowClass,
-      equippedItemLevel: asNumber(record.equipped_item_level),
+      equippedItemLevel: asEquippedItemLevel(record.equipped_item_level),
       activeSpecialization: mapActiveSpecialization(wowClass, record.active_spec),
     };
   },
