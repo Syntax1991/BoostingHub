@@ -179,7 +179,7 @@ export function ManageUserDetailView({ data }: { data: Page }) {
           )}
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader
             title="Booster qualifications"
             description={
