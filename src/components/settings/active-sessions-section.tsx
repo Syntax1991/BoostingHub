@@ -33,7 +33,7 @@ export function ActiveSessionsSection({ sessions }: { sessions: PublicSessionVie
   }
 
   return (
-    <Card className="lg:col-span-2">
+    <Card>
       <CardHeader
         title="Active sessions"
         description="Devices signed into your account. Revoking a session ends it immediately."
