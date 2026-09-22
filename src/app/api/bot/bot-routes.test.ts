@@ -226,6 +226,7 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
     expect(Array.isArray(sync.data.channels)).toBe(true);
     expect(Array.isArray(sync.data.start)).toBe(true);
     expect(Array.isArray(sync.data.raidInvites)).toBe(true);
+    expect(Array.isArray(sync.data.notificationDms)).toBe(true);
     const item = sync.data.channels.find((entry: { runId: string }) => entry.runId === runId);
     expect(item).toBeTruthy();
     expect(item.existingRunChannelId).toBe("contract-chan-1");
@@ -233,7 +234,20 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
     expect(["CURRENT", "NEXT", "ARCHIVE"]).toContain(item.targetBucket);
     expect(typeof item.scheduledStartAt).toBe("string");
     expect(Object.keys(item).sort()).toEqual(
-      ["desiredChannelName", "existingRunChannelId", "runId", "scheduledStartAt", "targetBucket"].sort(),
+      [
+        "archiveArtifactsNeeded",
+        "archiveCloseMessageId",
+        "archiveTranscriptMessageId",
+        "desiredChannelName",
+        "existingRunChannelId",
+        "panelName",
+        "raidLeadDiscordUserId",
+        "raidLeadName",
+        "retireChannel",
+        "runId",
+        "scheduledStartAt",
+        "targetBucket",
+      ].sort(),
     );
   });
 });

@@ -36,6 +36,7 @@ import {
   type GuildRoleIndicators,
 } from "@/discord-bot/class-emoji-lookup";
 import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
+import { buildRosterSelectedDmMessage } from "@/services/notification-content";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -55,6 +56,7 @@ type SignupLaneItem = SyncWork["signups"][number];
 type RosterLaneItem = SyncWork["roster"][number];
 type StartLaneItem = NonNullable<SyncWork["start"]>[number];
 type RaidInviteLaneItem = NonNullable<SyncWork["raidInvites"]>[number];
+type NotificationDmLaneItem = NonNullable<SyncWork["notificationDms"]>[number];
 
 /** Minimal fields shared by every lane that may resolve a Run channel. */
 type RunChannelResolveItem = {
@@ -327,6 +329,20 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
         } catch (error) {
           console.error(
             `[discord-bot] raid invite DM failed for signup ${item.signupId} on run ${item.runId}`,
+            error,
+          );
+          messagePhaseError ??= error;
+        }
+      }
+    }
+
+    if ((work.notificationDms ?? []).length > 0) {
+      for (const item of work.notificationDms ?? []) {
+        try {
+          await syncNotificationDm(client, api, item);
+        } catch (error) {
+          console.error(
+            `[discord-bot] notification DM failed for ${item.notificationId} (${item.type})`,
             error,
           );
           messagePhaseError ??= error;
@@ -761,8 +777,8 @@ async function syncStartPost(
 }
 
 /**
- * Apex-style Raid Invite DM. Always records the signup id after an attempt
- * (including closed-DM failures) so the bot does not retry forever.
+ * Apex-style Raid Invite DM (legacy lane). Always records the signup id after
+ * an attempt (including closed-DM failures) so the bot does not retry forever.
  */
 async function syncRaidInvite(
   client: Client,
@@ -796,6 +812,68 @@ async function syncRaidInvite(
   }
 
   await api.recordDiscordState(item.runId, { kind: "raid-invite", signupId: item.signupId });
+}
+
+/**
+ * UserNotification Discord DM lane. PENDING rows only — SENT / FAILED_PERMANENT /
+ * SKIPPED never appear in sync work. Transient Discord errors leave PENDING.
+ */
+async function syncNotificationDm(
+  client: Client,
+  api: BotApiClient,
+  item: NotificationDmLaneItem,
+): Promise<void> {
+  const content =
+    item.type === "ROSTER_SELECTED"
+      ? buildRosterSelectedDmMessage({
+          productLabel: item.productLabel,
+          scheduledStartAt: item.scheduledStartAt,
+          difficulty: item.difficulty,
+          lootType: item.lootType,
+          assignment: {
+            participationType: item.participationType,
+            publishedRole: item.selectedRole,
+            characterName: item.characterName,
+            characterRealm: null,
+            wowClass: item.wowClass,
+          },
+          runChannelId: item.runChannelId,
+        })
+      : buildRaidInviteMessage({
+          productLabel: item.productLabel,
+          scheduledStartAt: item.scheduledStartAt,
+          difficulty: item.difficulty,
+          lootType: item.lootType,
+          participationType: item.participationType,
+          selectedRole: item.selectedRole,
+          characterName: item.characterName,
+          wowClass: item.wowClass,
+          runChannelId: item.runChannelId,
+        });
+
+  try {
+    const user = await client.users.fetch(item.discordUserId);
+    await user.send({ content });
+    await api.recordDiscordState(item.runId, {
+      kind: "notification-dm",
+      notificationId: item.notificationId,
+      result: "SENT",
+    });
+  } catch (error) {
+    if (isDiscordCannotDmError(error) || isDiscordPermissionError(error)) {
+      console.warn(
+        `[discord-bot] cannot DM notification ${item.notificationId} to ${item.discordUserId} — marking FAILED_PERMANENT`,
+        error,
+      );
+      await api.recordDiscordState(item.runId, {
+        kind: "notification-dm",
+        notificationId: item.notificationId,
+        result: "FAILED_PERMANENT",
+      });
+      return;
+    }
+    throw error;
+  }
 }
 
 async function tryEditMessage(

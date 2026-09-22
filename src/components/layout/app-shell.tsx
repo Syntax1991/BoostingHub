@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   CalendarDays,
   LayoutDashboard,
+  Settings,
   Shield,
   Swords,
   UserRound,
@@ -21,6 +22,8 @@ import {
 import { ROLE_LABELS } from "@/lib/labels";
 import { signOutAction } from "@/controllers/auth.actions";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import type { NotificationBellItem } from "@/services/notification.service";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -28,17 +31,23 @@ const NAV = [
   { href: "/my-runs", label: "My Runs", icon: CalendarDays },
   { href: "/characters", label: "Characters", icon: Users },
   { href: "/profile", label: "Profile", icon: UserRound },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppShell({
   children,
   user,
+  notifications,
 }: {
   children: React.ReactNode;
   user: {
     name: string;
     image: string | null;
     accountRole: AccountRole;
+  };
+  notifications: {
+    unreadCount: number;
+    latest: NotificationBellItem[];
   };
 }) {
   const pathname = usePathname();
@@ -125,6 +134,7 @@ export function AppShell({
             ) : null}
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <NotificationBell unreadCount={notifications.unreadCount} latest={notifications.latest} />
             <div className="text-right">
               <p className="max-w-[180px] truncate text-sm font-medium">{user.name}</p>
               <p className="text-[11px] uppercase tracking-wide text-muted">

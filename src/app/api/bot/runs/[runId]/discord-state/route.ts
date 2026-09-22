@@ -23,6 +23,11 @@ const discordStateSchema = z.discriminatedUnion("kind", [
     transcriptFilename: z.string().min(1).max(200),
   }),
   z.object({ kind: z.literal("raid-invite"), signupId: z.string().uuid() }),
+  z.object({
+    kind: z.literal("notification-dm"),
+    notificationId: z.string().uuid(),
+    result: z.enum(["SENT", "FAILED_PERMANENT"]),
+  }),
 ]);
 
 /**
@@ -36,6 +41,8 @@ const discordStateSchema = z.discriminatedUnion("kind", [
  * Run/Signup state. `clear-channel` drops `runChannelId` after the bot
  * deletes an app-archived Run's Discord channel (transcript remains).
  * `raid-invite` appends a signup id to the Apex Raid Invite sent list.
+ * `notification-dm` updates UserNotification.discordDeliveryStatus (and on
+ * SENT RAID_INVITE also appends the legacy raidInviteSentSignupIds list).
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -60,6 +67,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await discordSyncService.recordStartPost({ runId, channelId: body.channelId, messageId: body.messageId });
     } else if (body.kind === "raid-invite") {
       await discordSyncService.recordRaidInviteSent({ runId, signupId: body.signupId });
+    } else if (body.kind === "notification-dm") {
+      await discordSyncService.recordNotificationDmDelivery({
+        notificationId: body.notificationId,
+        result: body.result,
+      });
     } else {
       await discordSyncService.recordArchiveArtifacts({
         runId,

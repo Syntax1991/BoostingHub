@@ -96,6 +96,17 @@ export type RaidLeadCutMode = (typeof RAID_LEAD_CUT_MODES)[number];
 export const STRIKE_STATUSES = ["ACTIVE", "REVOKED"] as const;
 export type StrikeStatus = (typeof STRIKE_STATUSES)[number];
 
+export const NOTIFICATION_TYPES = ["ROSTER_SELECTED", "RAID_INVITE"] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const DISCORD_DELIVERY_STATUSES = [
+  "PENDING",
+  "SENT",
+  "SKIPPED",
+  "FAILED_PERMANENT",
+] as const;
+export type DiscordDeliveryStatus = (typeof DISCORD_DELIVERY_STATUSES)[number];
+
 export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(
   (status) => status !== "UNMARKED",
 ) as readonly Exclude<AttendanceStatus, "UNMARKED">[];

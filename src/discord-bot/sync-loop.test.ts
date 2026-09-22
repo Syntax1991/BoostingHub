@@ -678,6 +678,7 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
           wowClass: "MONK",
         },
       ],
+      notificationDms: [],
     });
 
     await syncOnce(client as never, botEnv(), api);
@@ -728,6 +729,7 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
           wowClass: "MONK",
         },
       ],
+      notificationDms: [],
     });
 
     await syncOnce(client as never, botEnv(), api);
@@ -737,6 +739,145 @@ describe("syncOnce — Apex-style Raid Invite DMs", () => {
       kind: "raid-invite",
       signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
     });
+  });
+});
+
+describe("syncOnce — UserNotification DMs", () => {
+  it("sends roster pick DM and records SENT", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-roster" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-3", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
+          type: "ROSTER_SELECTED",
+          discordUserId: "discord-user-3",
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+          runChannelId: "run-chan-3",
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+          characterName: "Synmist",
+          wowClass: "MONK",
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    const content = sendDm.mock.calls[0][0].content as string;
+    expect(content).toContain("✅ **Roster Selected**");
+    expect(content).toContain("You are in the published roster.");
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", {
+      kind: "notification-dm",
+      notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
+      result: "SENT",
+    });
+  });
+
+  it("marks FAILED_PERMANENT when Discord rejects the notification DM", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockRejectedValue({ code: 50007, message: "Cannot send messages to this user" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-4", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc2",
+          type: "RAID_INVITE",
+          discordUserId: "discord-user-4",
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4",
+          runChannelId: null,
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: "BOOSTER",
+          selectedRole: "HEALER",
+          characterName: "Synmist",
+          wowClass: "MONK",
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4", {
+      kind: "notification-dm",
+      notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc2",
+      result: "FAILED_PERMANENT",
+    });
+  });
+
+  it("leaves PENDING on transient Discord errors (does not record delivery)", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockRejectedValue(new Error("network blip"));
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-user-5", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc3",
+          type: "RAID_INVITE",
+          discordUserId: "discord-user-5",
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5",
+          runChannelId: null,
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          difficulty: "HEROIC",
+          lootType: "SAVED",
+          participationType: "BOOSTER",
+          selectedRole: "DPS",
+          characterName: "Kael",
+          wowClass: "MAGE",
+        },
+      ],
+    });
+
+    await expect(syncOnce(client as never, botEnv(), api)).rejects.toThrow(/network blip/);
+    expect(api.recordDiscordState).not.toHaveBeenCalled();
   });
 });
 
@@ -914,6 +1055,8 @@ function makeApi(input: {
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
   }>;
+  raidInvites?: Array<Record<string, unknown>>;
+  notificationDms?: Array<Record<string, unknown>>;
 }): BotApiClient {
   return {
     listSyncWork: vi.fn().mockResolvedValue({
@@ -930,7 +1073,8 @@ function makeApi(input: {
       signups: input.signups,
       roster: input.roster,
       start: input.start ?? [],
-      raidInvites: [],
+      raidInvites: input.raidInvites ?? [],
+      notificationDms: input.notificationDms ?? [],
     }),
     recordDiscordState: vi.fn().mockResolvedValue(undefined),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),

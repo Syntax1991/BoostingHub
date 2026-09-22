@@ -156,6 +156,22 @@ enum StrikeStatus {
   REVOKED = "REVOKED"
 }
 
+/// In-app / Discord DM notification kinds for this phase.
+enum NotificationType {
+  @@type("pg/text@1")
+  ROSTER_SELECTED = "ROSTER_SELECTED"
+  RAID_INVITE     = "RAID_INVITE"
+}
+
+/// Discord DM delivery decision snapshotted at notification creation.
+enum DiscordDeliveryStatus {
+  @@type("pg/text@1")
+  PENDING          = "PENDING"
+  SENT             = "SENT"
+  SKIPPED          = "SKIPPED"
+  FAILED_PERMANENT = "FAILED_PERMANENT"
+}
+
 /// Application account. Also serves as the Better Auth `user` table.
 /// Account roles are permissions on the platform, not run participation type.
 model User {
@@ -168,6 +184,10 @@ model User {
   discordUsername String?
   accountStatus   AccountStatus @default(ACTIVE)
   accountRole     AccountRole   @default(USER)
+  /// When true, newly published roster picks may request a Discord DM.
+  dmRosterSelectedEnabled Boolean @default(true)
+  /// When true, Start Run Raid Invite may request a Discord DM.
+  dmRaidInviteEnabled     Boolean @default(true)
   createdAt       TimestamptzString @default(now())
   updatedAt       temporal.updatedAtString()
 
@@ -198,8 +218,39 @@ model User {
   startedRunSnapshots  RunStartSnapshot[] @relation("RunStartStarter")
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
+  notifications        UserNotification[]
 
   @@map("user")
+}
+
+/// Durable per-User notification. Web delivery is always on; Discord DM intent
+/// is snapshotted into discordDeliveryStatus at creation (never re-evaluated
+/// from live preferences for historical rows).
+model UserNotification {
+  id                    String                @id @default(uuid())
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                  NotificationType
+  runId                 String?
+  run                   Run?                  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  signupId              String?
+  signup                RunSignup?            @relation(fields: [signupId], references: [id], onDelete: SetNull)
+  /// Deterministic idempotency key, e.g. roster-selected:<runId>:<version>:<signupId>
+  sourceKey             String                @unique
+  title                 String
+  message               String
+  href                  String
+  readAt                TimestamptzString?
+  discordDeliveryStatus DiscordDeliveryStatus
+  /// Discord snowflake snapshotted when PENDING was chosen; null when SKIPPED.
+  discordUserId         String?
+  createdAt             TimestamptzString     @default(now())
+  updatedAt             temporal.updatedAtString()
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([discordDeliveryStatus])
+  @@map("user_notification")
 }
 
 /// Optional Battle.net link per BoostingHub user + region.
@@ -527,6 +578,7 @@ model Run {
   settlement    RunSettlement?
   strikes       Strike[]
   discordPost   RunDiscordPost?
+  notifications UserNotification[]
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -648,6 +700,7 @@ model RunSignup {
   offeredRoles  RunSignupRole[]
   rosterEntries RunRosterEntry[]
   payoutEntries RunPayoutEntry[]
+  notifications UserNotification[]
 
   /// NULL is distinct per row under Postgres unique-index semantics, so this does
   /// NOT limit a User to one characterless (characterId null) LOOTBUDDY row per

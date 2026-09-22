@@ -301,6 +301,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const { owned, characterId } = await importLinkedShaman("300031", "Bnriohigh");
 
     await orm.Character.where({ id: characterId }).update({
+      itemLevel: 272,
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
@@ -331,6 +332,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const { owned, characterId } = await importLinkedShaman("300032", "Bnriokeep");
 
     await orm.Character.where({ id: characterId }).update({
+      itemLevel: 320,
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
