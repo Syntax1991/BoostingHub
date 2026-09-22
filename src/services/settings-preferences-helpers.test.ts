@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { preferDefaultCharacterId } from "@/lib/default-character-preference";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { buildRunTitle } from "@/lib/run-title";
@@ -94,7 +94,7 @@ describe("community timezone authority regression", () => {
       difficulty: "HEROIC",
       lootType: "VIP",
       coverage: "8of8",
-      raidLeadName: "Syntax_1991",
+      raidLeadChannelName: "Syntax_1991",
     });
     expect(name.length).toBeGreaterThan(0);
     expect(name).toMatch(/hc|vip|syntax/i);
