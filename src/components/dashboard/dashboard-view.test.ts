@@ -31,7 +31,7 @@ const emptyDashboard = {
 
 describe("DashboardView", () => {
   it("renders calm empty personal state for a brand-new USER", () => {
-    const html = renderToStaticMarkup(createElement(DashboardView, { data: emptyDashboard as never }));
+    const html = renderToStaticMarkup(createElement(DashboardView, { data: emptyDashboard as never, timeZone: "Europe/Berlin" }));
     expect(html).toContain("No personal conflicts need attention.");
     expect(html).toContain("No selected upcoming run.");
     expect(html).toContain("Pending: 0");
@@ -42,7 +42,7 @@ describe("DashboardView", () => {
 
   it("renders next selected published role and conflict attention", () => {
     const html = renderToStaticMarkup(
-      createElement(DashboardView, {
+      createElement(DashboardView, { timeZone: "Europe/Berlin",
         data: {
           ...emptyDashboard,
           personal: {
@@ -103,7 +103,7 @@ describe("DashboardView", () => {
 
   it("renders RAID_LEAD operations and ADMIN Mark Paid", () => {
     const html = renderToStaticMarkup(
-      createElement(DashboardView, {
+      createElement(DashboardView, { timeZone: "Europe/Berlin",
         data: {
           ...emptyDashboard,
           showOperations: true,

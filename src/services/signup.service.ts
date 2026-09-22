@@ -8,6 +8,7 @@ import type {
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
+import { preferDefaultCharacterId } from "@/lib/default-character-preference";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -15,6 +16,7 @@ import type { CharacterPageRecord } from "@/repositories/character.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
+import { settingsRepository } from "@/repositories/settings.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
@@ -224,6 +226,11 @@ export const signupService = {
     const eligibilityRun = toEligibilityRun(run);
 
     const booster = evaluateBoosterOptions(characters, eligibilityRun);
+    const settings = await settingsRepository.getSettings(user.id);
+    const { ordered: eligibleOrdered, preferredCharacterId } = preferDefaultCharacterId(
+      booster.eligible,
+      settings.gameplay.defaultCharacterId,
+    );
 
     const ownSignups = await signupRepository.listByRunAndUser(runId, user.id);
     const activeSignups = ownSignups.filter((signup) => signup.status !== "WITHDRAWN");
@@ -249,7 +256,16 @@ export const signupService = {
         status: run.status,
         signupWindowOpen: assertSignupWindowOpen(run),
       },
-      booster,
+      booster: {
+        eligible: eligibleOrdered,
+        ineligible: booster.ineligible,
+      },
+      /**
+       * Eligible preferred Character for UX preselect only. Null when missing,
+       * ineligible, or existing active booster offers already take precedence.
+       */
+      preferredCharacterId:
+        activeBoosterSignups.length > 0 ? null : preferredCharacterId,
       /** The desired-set the Booster half of the signup dialog should preselect on open. Independent of Lootbuddy — a User may hold both at once. */
       activeBoosterOffers: {
         characterIds: activeBoosterSignups

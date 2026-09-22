@@ -65,8 +65,13 @@ async function createTestUser(
     discordUsername: opts.discordUserId ? `u${opts.discordUserId}` : null,
     accountRole,
     accountStatus: "ACTIVE",
+    discordDmEnabled: true,
     dmRosterSelectedEnabled: opts.dmRosterSelectedEnabled ?? true,
     dmRaidInviteEnabled: opts.dmRaidInviteEnabled ?? true,
+    dmRunCancelledEnabled: true,
+    dmRunRescheduledEnabled: true,
+    dmRosterRemovedEnabled: true,
+    timeZone: "Europe/Berlin",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

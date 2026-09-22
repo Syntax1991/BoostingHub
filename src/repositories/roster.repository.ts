@@ -32,11 +32,13 @@ import { DomainError } from "@/lib/errors";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signup.repository";
 import {
+  rosterRemovedSourceKey,
   rosterSelectedSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
 import {
   resolveDiscordDelivery,
+  rosterRemovedWebNotification,
   rosterSelectedWebNotification,
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
@@ -637,7 +639,8 @@ export const rosterRepository = {
         if (!userRow) {
           userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
         }
-        const dmEnabled = userRow ? userRow.dmRosterSelectedEnabled !== false : true;
+        const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
+        const eventDmEnabled = userRow ? userRow.dmRosterSelectedEnabled !== false : true;
         const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
 
         const participationType = mapParticipation(signup.participationType);
@@ -664,7 +667,8 @@ export const rosterRepository = {
           assignment,
         });
         const delivery = resolveDiscordDelivery({
-          preferenceEnabled: dmEnabled,
+          discordDmEnabled,
+          eventDmEnabled,
           discordUserId,
         });
         await userNotificationRepository.createInTx(txOrm, {
@@ -673,6 +677,52 @@ export const rosterRepository = {
           runId: input.runId,
           signupId: selection.signupId,
           sourceKey: rosterSelectedSourceKey(input.runId, nextVersion, selection.signupId),
+          title: copy.title,
+          message: copy.message,
+          href: copy.href,
+          discordDeliveryStatus: delivery.status,
+          discordUserId: delivery.discordUserId,
+          createdAt: now,
+        });
+      }
+
+      const selectedIds = new Set(input.selectedSelections.map((selection) => selection.signupId));
+      const removedSignupIds = [...previouslySelectedIds].filter((signupId) => !selectedIds.has(signupId));
+      for (const signupId of removedSignupIds) {
+        const signup = (await txOrm.RunSignup.where({ id: signupId })
+          .include("character")
+          .include("user")
+          .first()) as Record<string, unknown> | null;
+        if (!signup) continue;
+
+        const userId = asString(signup.userId);
+        let userRow = (signup.user as Record<string, unknown> | undefined) ?? null;
+        if (!userRow) {
+          userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
+        }
+        const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
+        const eventDmEnabled = userRow ? userRow.dmRosterRemovedEnabled !== false : true;
+        const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
+        const character = signup.character ? (signup.character as Record<string, unknown>) : null;
+        const characterLabel = character
+          ? `${asString(character.name)}${asStringOrNull(character.realm) ? `-${asString(character.realm)}` : ""}`
+          : null;
+        const copy = rosterRemovedWebNotification({
+          runId: input.runId,
+          runTitle: input.runTitle,
+          characterLabel,
+        });
+        const delivery = resolveDiscordDelivery({
+          discordDmEnabled,
+          eventDmEnabled,
+          discordUserId,
+        });
+        await userNotificationRepository.createInTx(txOrm, {
+          userId,
+          type: "ROSTER_REMOVED",
+          runId: input.runId,
+          signupId,
+          sourceKey: rosterRemovedSourceKey(input.runId, nextVersion, signupId),
           title: copy.title,
           message: copy.message,
           href: copy.href,

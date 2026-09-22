@@ -63,8 +63,13 @@ async function createTestUser(
     discordUsername: opts.discordUserId ? `u${opts.discordUserId}` : null,
     accountRole,
     accountStatus: "ACTIVE",
+    discordDmEnabled: true,
     dmRosterSelectedEnabled: opts.dmRosterSelectedEnabled ?? true,
     dmRaidInviteEnabled: true,
+    dmRunCancelledEnabled: true,
+    dmRunRescheduledEnabled: true,
+    dmRosterRemovedEnabled: true,
+    timeZone: "Europe/Berlin",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -465,5 +470,129 @@ describe("notification roster publish events", () => {
     );
     expect(afterReselect.length).toBeGreaterThanOrEqual(2);
     expect(afterReselect.some((row) => row.sourceKey !== firstSource)).toBe(true);
+  });
+
+  it("creates ROSTER_REMOVED when published SELECTED becomes NOT_SELECTED", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const healer = await createSignup({
+      runId,
+      userId: ids.player,
+      characterId: charPlayer,
+      role: "HEALER",
+    });
+    const healerAlt = await createSignup({
+      runId,
+      userId: ids.playerB,
+      characterId: charPlayerB,
+      role: "HEALER",
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    for (const signupId of [tank, dps, healer]) {
+      view = await rosterService.getRosterManagementView(lead, runId);
+      await rosterService.setDraftSelection(lead, {
+        runId,
+        signupId,
+        selected: true,
+        version: view.roster.version,
+      });
+    }
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, {
+      runId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.preparePublishedRosterForEditing(lead, {
+      runId,
+      version: view.roster.version,
+    });
+    // Draft deselection alone must not notify.
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.setDraftSelection(lead, {
+      runId,
+      signupId: healer,
+      selected: false,
+      version: view.roster.version,
+    });
+    const midDraft = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_REMOVED",
+    );
+    expect(midDraft).toHaveLength(0);
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.setDraftSelection(lead, {
+      runId,
+      signupId: healerAlt,
+      selected: true,
+      version: view.roster.version,
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, {
+      runId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    const removed = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_REMOVED",
+    );
+    expect(removed).toHaveLength(1);
+    expect(removed[0].title).toBe("Removed from roster");
+    expect(removed[0].discordDeliveryStatus).toBe("PENDING");
+
+    const stillSelected = (await userNotificationRepository.listForUser(ids.playerB, 50)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_REMOVED",
+    );
+    expect(stillSelected).toHaveLength(0);
+  });
+
+  it("master Discord DM OFF snapshots SKIPPED even when event toggle is ON", async () => {
+    await orm.User.where({ id: ids.player }).update({
+      discordDmEnabled: false,
+      dmRosterSelectedEnabled: true,
+      updatedAt: new Date().toISOString(),
+    });
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const healer = await createSignup({
+      runId,
+      userId: ids.player,
+      characterId: charPlayer,
+      role: "HEALER",
+    });
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    for (const signupId of [tank, dps, healer]) {
+      view = await rosterService.getRosterManagementView(lead, runId);
+      await rosterService.setDraftSelection(lead, {
+        runId,
+        signupId,
+        selected: true,
+        version: view.roster.version,
+      });
+    }
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, {
+      runId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+    const notes = (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_SELECTED",
+    );
+    expect(notes).toHaveLength(1);
+    expect(notes[0].discordDeliveryStatus).toBe("SKIPPED");
+
+    await orm.User.where({ id: ids.player }).update({
+      discordDmEnabled: true,
+      updatedAt: new Date().toISOString(),
+    });
+    const afterToggle = await userNotificationRepository.findById(notes[0].id);
+    expect(afterToggle?.discordDeliveryStatus).toBe("SKIPPED");
   });
 });

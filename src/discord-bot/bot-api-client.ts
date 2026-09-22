@@ -141,16 +141,22 @@ export class BotApiClient {
       }>;
       notificationDms: Array<{
         notificationId: string;
-        type: "ROSTER_SELECTED" | "RAID_INVITE";
+        type:
+          | "ROSTER_SELECTED"
+          | "RAID_INVITE"
+          | "RUN_CANCELLED"
+          | "RUN_RESCHEDULED"
+          | "ROSTER_REMOVED";
         discordUserId: string;
         runId: string;
-        signupId: string;
+        signupId: string | null;
         runChannelId: string | null;
         productLabel: string;
         scheduledStartAt: string;
+        previousScheduledStartAt: string | null;
         difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
         lootType: "SAVED" | "UNSAVED" | "VIP";
-        participationType: "BOOSTER" | "LOOTBUDDY";
+        participationType: "BOOSTER" | "LOOTBUDDY" | null;
         selectedRole: "TANK" | "HEALER" | "DPS" | null;
         characterName: string | null;
         wowClass:

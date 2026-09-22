@@ -14,6 +14,7 @@ import {
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { settingsRepository } from "@/repositories/settings.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
@@ -375,6 +376,7 @@ export const characterService = {
     assertOwned(user, character);
 
     await characterRepository.setActive(character.id, false);
+    await settingsRepository.clearDefaultCharacterIfMatches(user.id, character.id);
     await activityRepository.create({
       userId: user.id,
       type: "CHARACTER_DEACTIVATED",

@@ -23,6 +23,7 @@ import { runRepository, type RunCreateWithContentsInput } from "@/repositories/r
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
+import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
 import { runTemplateService } from "@/services/run-template.service";
 import {
   assertComposition,
@@ -804,10 +805,16 @@ export const runService = {
       raidLeadName,
     });
 
+    const scheduleChanged =
+      Date.parse(scheduledStartAt) !== Date.parse(run.scheduledStartAt);
+    const nextScheduleRevision = scheduleChanged ? run.scheduleRevision + 1 : run.scheduleRevision;
+    const previousScheduledStartAt = run.scheduledStartAt;
+
     const fields = {
       title,
       lootType: input.lootType,
       scheduledStartAt,
+      ...(scheduleChanged ? { scheduleRevision: nextScheduleRevision } : {}),
       raidLeadId,
       notes: nextNotes,
       desiredTankCount: input.desiredTankCount,
@@ -825,6 +832,18 @@ export const runService = {
     } else {
       // Non-content updates must not rewrite RunRaidContent / Bundle rows.
       await runRepository.updateFields(run.id, fields);
+    }
+
+    if (scheduleChanged) {
+      await runLifecycleNotificationService.notifyRunRescheduled({
+        runId: run.id,
+        productLabel: display.productLabel,
+        previousScheduledStartAt,
+        nextScheduledStartAt: scheduledStartAt,
+        scheduleRevision: nextScheduleRevision,
+        difficulty,
+        lootType: input.lootType,
+      });
     }
 
     await activityRepository.create({
@@ -894,6 +913,13 @@ export const runService = {
     }
 
     await runRepository.updateFields(run.id, { status: "CANCELLED", signupsOpen: false });
+    await runLifecycleNotificationService.notifyRunCancelled({
+      runId: run.id,
+      runTitle: run.title,
+      scheduledStartAt: run.scheduledStartAt,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+    });
     await activityRepository.create({
       userId: user.id,
       type: "RUN_CANCELLED",

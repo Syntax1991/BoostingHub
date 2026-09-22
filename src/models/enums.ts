@@ -96,7 +96,13 @@ export type RaidLeadCutMode = (typeof RAID_LEAD_CUT_MODES)[number];
 export const STRIKE_STATUSES = ["ACTIVE", "REVOKED"] as const;
 export type StrikeStatus = (typeof STRIKE_STATUSES)[number];
 
-export const NOTIFICATION_TYPES = ["ROSTER_SELECTED", "RAID_INVITE"] as const;
+export const NOTIFICATION_TYPES = [
+  "ROSTER_SELECTED",
+  "RAID_INVITE",
+  "RUN_CANCELLED",
+  "RUN_RESCHEDULED",
+  "ROSTER_REMOVED",
+] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export const DISCORD_DELIVERY_STATUSES = [

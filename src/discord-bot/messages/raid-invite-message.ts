@@ -1,4 +1,5 @@
 import { zonedParts } from "@/lib/datetime";
+import { discordTimestamp } from "@/lib/discord-timestamp";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_LABELS,
@@ -19,7 +20,7 @@ export type RaidInviteMessageInput = {
   runChannelId: string | null;
 };
 
-/** `16/09/2026 15:30` in Europe/Berlin. */
+/** Berlin wall-clock formatting kept for tests / legacy callers. Personal DMs use Discord native timestamps. */
 export function formatRaidInviteSchedule(scheduledStartAt: string): string {
   const parts = zonedParts(new Date(scheduledStartAt), "Europe/Berlin");
   const dd = String(parts.day).padStart(2, "0");
@@ -57,11 +58,11 @@ export function formatRaidInviteAssignment(input: {
 }
 
 /**
- * Raid Invite DM body. Channel line uses a real `<#id>` mention only when
- * `runChannelId` is set — never invents `#unknown` / guild prefixes.
+ * Raid Invite DM body. Uses Discord native timestamps for personal localization.
+ * Channel line uses a real `<#id>` mention only when `runChannelId` is set.
  */
 export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
-  const when = formatRaidInviteSchedule(input.scheduledStartAt);
+  const when = discordTimestamp(input.scheduledStartAt, "F");
   const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
   const assignment = formatRaidInviteAssignment(input);
   const channelId = input.runChannelId?.trim() || null;

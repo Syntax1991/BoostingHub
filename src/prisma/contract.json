@@ -304,6 +304,18 @@
               {
                 "name": "RAID_INVITE",
                 "value": "RAID_INVITE"
+              },
+              {
+                "name": "RUN_CANCELLED",
+                "value": "RUN_CANCELLED"
+              },
+              {
+                "name": "RUN_RESCHEDULED",
+                "value": "RUN_RESCHEDULED"
+              },
+              {
+                "name": "ROSTER_REMOVED",
+                "value": "ROSTER_REMOVED"
               }
             ]
           },
@@ -1599,6 +1611,21 @@
                   "namespace": "public"
                 }
               },
+              "defaultForUsers": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "defaultCharacterId"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
               "lockouts": {
                 "cardinality": "1:N",
                 "on": {
@@ -2513,6 +2540,13 @@
                   "kind": "scalar"
                 }
               },
+              "scheduleRevision": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "scheduledStartAt": {
                 "nullable": false,
                 "type": {
@@ -2759,6 +2793,9 @@
                 },
                 "raidLeadId": {
                   "column": "raidLeadId"
+                },
+                "scheduleRevision": {
+                  "column": "scheduleRevision"
                 },
                 "scheduledStartAt": {
                   "column": "scheduledStartAt"
@@ -5251,6 +5288,20 @@
                   "kind": "scalar"
                 }
               },
+              "defaultCharacterId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordDmEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "discordUserId": {
                 "nullable": true,
                 "type": {
@@ -5272,7 +5323,28 @@
                   "kind": "scalar"
                 }
               },
+              "dmRosterRemovedEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "dmRosterSelectedEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "dmRunCancelledEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "dmRunRescheduledEnabled": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
@@ -5308,6 +5380,13 @@
                 }
               },
               "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "timeZone": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -5470,6 +5549,21 @@
                 },
                 "to": {
                   "model": "Strike",
+                  "namespace": "public"
+                }
+              },
+              "defaultCharacter": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "defaultCharacterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Character",
                   "namespace": "public"
                 }
               },
@@ -5755,6 +5849,12 @@
                 "createdAt": {
                   "column": "createdAt"
                 },
+                "defaultCharacterId": {
+                  "column": "defaultCharacterId"
+                },
+                "discordDmEnabled": {
+                  "column": "discordDmEnabled"
+                },
                 "discordUserId": {
                   "column": "discordUserId"
                 },
@@ -5764,8 +5864,17 @@
                 "dmRaidInviteEnabled": {
                   "column": "dmRaidInviteEnabled"
                 },
+                "dmRosterRemovedEnabled": {
+                  "column": "dmRosterRemovedEnabled"
+                },
                 "dmRosterSelectedEnabled": {
                   "column": "dmRosterSelectedEnabled"
+                },
+                "dmRunCancelledEnabled": {
+                  "column": "dmRunCancelledEnabled"
+                },
+                "dmRunRescheduledEnabled": {
+                  "column": "dmRunRescheduledEnabled"
                 },
                 "email": {
                   "column": "email"
@@ -5781,6 +5890,9 @@
                 },
                 "name": {
                   "column": "name"
+                },
+                "timeZone": {
+                  "column": "timeZone"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -7759,6 +7871,15 @@
                 "raidLeadId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
+                  "nullable": false
+                },
+                "scheduleRevision": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
                   "nullable": false
                 },
                 "scheduledStartAt": {
@@ -10134,6 +10255,20 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "defaultCharacterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "discordDmEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "discordUserId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -10153,7 +10288,34 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
+                "dmRosterRemovedEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "dmRosterSelectedEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "dmRunCancelledEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "dmRunRescheduledEnabled": {
                   "codecId": "pg/bool@1",
                   "default": {
                     "kind": "literal",
@@ -10191,14 +10353,50 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "timeZone": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "Europe/Berlin"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
                   "nullable": false
                 }
               },
-              "foreignKeys": [],
-              "indexes": [],
+              "foreignKeys": [
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "defaultCharacterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "defaultCharacterId"
+                  ],
+                  "name": "user_defaultCharacterId_idx_b1c87c96",
+                  "prefix": "user_defaultCharacterId_idx",
+                  "unique": false
+                }
+              ],
               "primaryKey": {
                 "columns": [
                   "id"
@@ -10225,8 +10423,8 @@
                   "prefix": "user_notification_discordDeliveryStatus_check"
                 },
                 {
-                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE')",
-                  "name": "user_notification_type_check_1b0a5b12",
+                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED')",
+                  "name": "user_notification_type_check_3f82dea7",
                   "prefix": "user_notification_type_check"
                 }
               ],
@@ -10563,7 +10761,10 @@
               "kind": "valueSet",
               "values": [
                 "ROSTER_SELECTED",
-                "RAID_INVITE"
+                "RAID_INVITE",
+                "RUN_CANCELLED",
+                "RUN_RESCHEDULED",
+                "ROSTER_REMOVED"
               ]
             },
             "ParticipationType": {
@@ -10670,7 +10871,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "b6965eeecc4b50ec21177d6973308846f7983e8541be35e450884652b309828c"
+    "storageHash": "58e51ab35e4c9bc152038e5988e98923118ffedbca70c6b767e03d93e9b34c7f"
   },
   "execution": {
     "executionHash": "69f5f642ed3c9ea221dc0f168db405dfb83b45c1d9b2ef787ce08d0b9baa1934",

@@ -16,9 +16,11 @@ import { cn } from "@/lib/cn";
 export function NotificationsView({
   notifications,
   unreadCount,
+  timeZone,
 }: {
   notifications: NotificationBellItem[];
   unreadCount: number;
+  timeZone: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -53,7 +55,7 @@ export function NotificationsView({
     <div>
       <PageHeader
         title="Notifications"
-        description="In-app alerts for roster picks and raid invites. Discord DMs are controlled on Profile."
+        description="In-app alerts for roster and run events. Discord DMs are controlled in Settings."
         actions={
           unreadCount > 0 ? (
             <Button type="button" variant="ghost" disabled={pending} onClick={markAll}>
@@ -75,7 +77,7 @@ export function NotificationsView({
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{item.title}</p>
                     <p className="mt-0.5 text-sm text-muted">{item.message}</p>
-                    <p className="mt-1 text-xs text-muted">{formatDateTime(item.createdAt)}</p>
+                    <p className="mt-1 text-xs text-muted">{formatDateTime(item.createdAt, timeZone)}</p>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     {!item.readAt ? (

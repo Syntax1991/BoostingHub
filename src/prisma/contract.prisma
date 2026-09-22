@@ -159,8 +159,11 @@ enum StrikeStatus {
 /// In-app / Discord DM notification kinds for this phase.
 enum NotificationType {
   @@type("pg/text@1")
-  ROSTER_SELECTED = "ROSTER_SELECTED"
-  RAID_INVITE     = "RAID_INVITE"
+  ROSTER_SELECTED  = "ROSTER_SELECTED"
+  RAID_INVITE      = "RAID_INVITE"
+  RUN_CANCELLED    = "RUN_CANCELLED"
+  RUN_RESCHEDULED  = "RUN_RESCHEDULED"
+  ROSTER_REMOVED   = "ROSTER_REMOVED"
 }
 
 /// Discord DM delivery decision snapshotted at notification creation.
@@ -184,10 +187,23 @@ model User {
   discordUsername String?
   accountStatus   AccountStatus @default(ACTIVE)
   accountRole     AccountRole   @default(USER)
+  /// Master override for Discord DMs. Does not rewrite per-event toggles.
+  discordDmEnabled            Boolean @default(true)
   /// When true, newly published roster picks may request a Discord DM.
-  dmRosterSelectedEnabled Boolean @default(true)
+  dmRosterSelectedEnabled     Boolean @default(true)
   /// When true, Start Run Raid Invite may request a Discord DM.
-  dmRaidInviteEnabled     Boolean @default(true)
+  dmRaidInviteEnabled         Boolean @default(true)
+  /// When true, Run CANCELLED may request a Discord DM.
+  dmRunCancelledEnabled       Boolean @default(true)
+  /// When true, scheduledStartAt changes may request a Discord DM.
+  dmRunRescheduledEnabled     Boolean @default(true)
+  /// When true, published SELECTED → NOT_SELECTED may request a Discord DM.
+  dmRosterRemovedEnabled      Boolean @default(true)
+  /// IANA timezone for personal presentation (not community/Discord channel authority).
+  timeZone                    String  @default("Europe/Berlin")
+  /// Preferred Character for signup UX only — never bypasses eligibility.
+  defaultCharacterId          String?
+  defaultCharacter            Character? @relation("UserDefaultCharacter", fields: [defaultCharacterId], references: [id], onDelete: SetNull)
   createdAt       TimestamptzString @default(now())
   updatedAt       temporal.updatedAtString()
 
@@ -373,6 +389,7 @@ model Character {
   boosterAccess BoosterAccess[]
   payoutEntries RunPayoutEntry[]
   wclPerformance CharacterWclPerformance[]
+  defaultForUsers User[] @relation("UserDefaultCharacter")
 
   @@unique([userId, region, normalizedRealm, normalizedName])
   /// One scoped Blizzard character may link to at most one BoostingHub row.
@@ -554,6 +571,8 @@ model Run {
   /// Independent of difficulty; MYTHIC+SAVED is rejected at the Service layer.
   lootType           RunLootType
   scheduledStartAt   TimestamptzString
+  /// Increments only when scheduledStartAt changes — identity for RUN_RESCHEDULED.
+  scheduleRevision   Int            @default(0)
   status             RunStatus
   raidLeadId         String
   raidLead           User           @relation("RunRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
