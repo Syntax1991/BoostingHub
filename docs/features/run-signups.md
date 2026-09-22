@@ -102,6 +102,19 @@ Required: run, user (server session), character, role, `isBackup`, status `PENDI
 7. No active duplicate for run + user + character + BOOSTER
 8. Cross-run Character reservation (BOOSTER only): a Character that is **draft-selected** or **SELECTED** on another upcoming Run blocks reuse when that Run's `scheduledStartAt` is **less than 2 hours** from the target Run's start (`Math.abs(Δt) < 2h`). Exact **2 hours or more** is allowed. Comparison is symmetric on absolute start timestamps — there is **no** Run-duration / end-time model. Same-Run self-edits are excluded. Mere PENDING offers (not draft-selected / SELECTED) do not reserve. Characterless Lootbuddies are unaffected. Raid lockouts remain informational and never hard-block.
 
+### Run commitment vs schedule conflict
+
+These are separate derived projections:
+
+| Concept | Question | Blocks selection / publish? |
+| --- | --- | --- |
+| **Run commitment** | Is this Character already draft-selected or published SELECTED on another upcoming BoostingHub Run? | **No** — informational only (`RESERVED` / `COMMITTED`) |
+| **Schedule conflict** | Does another reserving Run violate the 2-hour start gap (or weekly unavailability)? | **Yes** — existing blocker semantics |
+
+A Character may be committed elsewhere with **no** schedule conflict (e.g. other Run ≥ 2h away). Roster Builder still shows the commitment so Raid Leads see context without inventing a broader blocker.
+
+Commitment authority reuses the same reserving predicate as reservation (draft-selected **or** `SELECTED`). `COMPLETED` / `CANCELLED` Runs do not hold commitments. While a published Run has a replacement draft being edited, the live `SELECTED` row remains `COMMITTED` until a successful republish.
+
 ## Lootbuddy signup eligibility
 
 Required: `lootbuddyClass`, `lootbuddyMode`. Character optional (legacy only).

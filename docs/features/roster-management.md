@@ -114,6 +114,19 @@ Warnings: composition under or over target.
 
 Signup-time eligibility can rot before publish. Access and lockouts are therefore re-checked at publish.
 
+## Run commitments (informational)
+
+Roster Builder attaches `runCommitments: CharacterRunCommitment[]` to each BOOSTER card via a **batched** repository lookup (`listReservingCommitmentsByCharacterIds`), excluding the target Run.
+
+| State | Meaning |
+| --- | --- |
+| `RESERVED` | Draft-selected on another upcoming Run; not yet published `SELECTED` |
+| `COMMITTED` | Published `SELECTED` on another upcoming Run (`PUBLISHED` / `IN_PROGRESS`, etc.) |
+
+UI: muted “Committed elsewhere” / “Reserved elsewhere” lines. Separately, existing `scheduleConflicts` keep warning styling and still gate new selection / publish.
+
+Commitments are derived only — no persisted `safe` / `committed` flags. They disappear when the other Run completes/cancels, the draft deselects (for `RESERVED`), or a republish removes the published slot (for `COMMITTED`).
+
 ## Publication
 
 Explicit **Publish Roster** action (never a checkbox).
