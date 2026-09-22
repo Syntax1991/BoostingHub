@@ -19,6 +19,10 @@ import {
   getScheduleConflictsForCharacters,
   type CharacterScheduleConflict,
 } from "@/services/character-schedule-conflict.service";
+import {
+  getRunCommitmentsForCharacters,
+  type CharacterRunCommitment,
+} from "@/services/character-run-commitment";
 import { rosterRepository, type RosterSelection, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
@@ -48,6 +52,11 @@ type InspectedSignup = RosterSignupRow & {
   issue: string | null;
   /** Derived schedule integrity conflicts — never auto-withdraw or auto-deselect. */
   scheduleConflicts: CharacterScheduleConflict[];
+  /**
+   * Informational other-Run reservations (draft-selected or published SELECTED).
+   * Never blocks selection by itself — see scheduleConflicts for blockers.
+   */
+  runCommitments: CharacterRunCommitment[];
   /** Informational WCL Best/Avg per Run content × offered role. */
   wclPerformance: WclPerformanceRaidSegment[];
 };
@@ -150,7 +159,7 @@ function inspectSignup(
     lootType: RunLootType;
     contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
   },
-): Omit<InspectedSignup, "draftSelected" | "scheduleConflicts" | "wclPerformance"> {
+): Omit<InspectedSignup, "draftSelected" | "scheduleConflicts" | "runCommitments" | "wclPerformance"> {
   if (run.contents.length === 0) {
     throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
   }
@@ -340,6 +349,10 @@ export const rosterService = {
       difficulty: run.difficulty,
       characters: boosterCharacters,
     });
+    const runCommitmentsByCharacter = await getRunCommitmentsForCharacters({
+      characterIds: boosterCharacters.map((character) => character.id),
+      excludeRunId: run.id,
+    });
 
     const wclBySignup = await resolveRosterWclPerformance({
       difficulty: run.difficulty,
@@ -365,6 +378,10 @@ export const rosterService = {
       scheduleConflicts:
         signup.participationType === "BOOSTER" && signup.character
           ? (scheduleConflictsByCharacter.get(signup.character.id) ?? [])
+          : [],
+      runCommitments:
+        signup.participationType === "BOOSTER" && signup.character
+          ? (runCommitmentsByCharacter.get(signup.character.id) ?? [])
           : [],
       wclPerformance: wclBySignup.get(signup.id) ?? [],
     }));
@@ -764,6 +781,7 @@ export const rosterService = {
       ...inspectSignup(signup, run),
       draftSelected: roster.selectedSignupIds.includes(signup.id),
       scheduleConflicts: [] as CharacterScheduleConflict[],
+      runCommitments: [] as CharacterRunCommitment[],
       wclPerformance: [],
     }));
     const selected = inspected.filter(

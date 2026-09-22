@@ -364,8 +364,29 @@ export const signupRepository = {
   async listReservingCommitmentsByCharacterId(
     characterId: string,
   ): Promise<CharacterReservationCommitmentRow[]> {
+    const byCharacter = await this.listReservingCommitmentsByCharacterIds({
+      characterIds: [characterId],
+    });
+    return byCharacter;
+  },
+
+  /**
+   * Batched upcoming BoostingHub reservations for many Characters.
+   * Same reserving predicate as {@link listReservingCommitmentsByCharacterId}.
+   * No schedule-window filter — callers that need conflict-only rows must use
+   * {@link findAllReservationConflicts} separately.
+   * Sorted by scheduledStartAt ASC, then runId ASC.
+   */
+  async listReservingCommitmentsByCharacterIds(input: {
+    characterIds: string[];
+    excludeRunId?: string;
+  }): Promise<CharacterReservationCommitmentRow[]> {
+    if (input.characterIds.length === 0) {
+      return [];
+    }
+
     const signups = await orm.RunSignup
-      .where({ characterId, participationType: "BOOSTER" })
+      .where((f) => f.characterId.in(input.characterIds))
       .include("run", (run) =>
         run.include("contents", (content) => content.include("raid", (raid) => raid.include("bosses"))),
       )
@@ -373,8 +394,15 @@ export const signupRepository = {
       .all();
 
     const commitments: CharacterReservationCommitmentRow[] = [];
+    const seen = new Set<string>();
+
     for (const raw of signups as Record<string, unknown>[]) {
+      if (mapParticipation(raw.participationType) !== "BOOSTER") continue;
+
       const mapped = mapSignup(raw);
+      const characterId = asStringOrNull(raw.characterId);
+      if (!characterId) continue;
+      if (input.excludeRunId && mapped.run.id === input.excludeRunId) continue;
       if (!UPCOMING_RUN_STATUSES.includes(mapped.run.status)) continue;
       if (mapped.status === "WITHDRAWN") continue;
 
@@ -384,6 +412,10 @@ export const signupRepository = {
       const selectedEntry = rosterEntries.find((entry) => asBoolean(entry.selected, true));
       const draftSelected = Boolean(selectedEntry);
       if (mapped.status !== "SELECTED" && !draftSelected) continue;
+
+      const key = `${characterId}:${mapped.run.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
 
       commitments.push({
         signupId: mapped.id,

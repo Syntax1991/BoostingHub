@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -21,10 +22,12 @@ import {
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
+import { runDetailPath } from "@/lib/run-routes";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_COLORS,
   CLASS_LABELS,
+  DIFFICULTY_LABELS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
@@ -838,6 +841,46 @@ function SignupRowCard({
             </select>
           </div>
         ) : null}
+        {(() => {
+          const runCommitments = signup.runCommitments ?? [];
+          if (runCommitments.length === 0) return null;
+          const committed = runCommitments.filter((item) => item.state === "COMMITTED");
+          const reserved = runCommitments.filter((item) => item.state === "RESERVED");
+          return (
+            <div className={`mt-1 space-y-1 text-xs text-muted ${rowPointer}`}>
+              {committed.length > 0 ? (
+                <div>
+                  <span className="font-medium text-muted">Committed elsewhere</span>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {committed.map((item) => (
+                      <li key={`committed-${item.runId}`}>
+                        <Link href={runDetailPath(item.runId)} className="hover:underline">
+                          {item.productLabel || item.runTitle}
+                        </Link>
+                        {` · ${DIFFICULTY_LABELS[item.difficulty]} · ${formatDateTime(item.scheduledStartAt)}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {reserved.length > 0 ? (
+                <div>
+                  <span className="font-medium text-muted">Reserved elsewhere</span>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {reserved.map((item) => (
+                      <li key={`reserved-${item.runId}`}>
+                        <Link href={runDetailPath(item.runId)} className="hover:underline">
+                          {item.productLabel || item.runTitle}
+                        </Link>
+                        {` · ${DIFFICULTY_LABELS[item.difficulty]} · ${formatDateTime(item.scheduledStartAt)}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
         {scheduleConflicts.length > 0 ? (
           <label htmlFor={checkboxId} className={`mt-1 block space-y-0.5 text-xs text-warning ${rowPointer}`}>
             <span className="font-medium text-warning">Schedule conflict</span>
