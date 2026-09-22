@@ -70,6 +70,8 @@ export type RunListRecord = {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
+  /** Increments only when scheduledStartAt changes. */
+  scheduleRevision: number;
   status: RunStatus;
   raidLeadId: string;
   raidLeadName: string;
@@ -212,6 +214,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     difficulty: mapDifficulty(run.difficulty),
     lootType: mapLootType(run.lootType),
     scheduledStartAt: asString(run.scheduledStartAt),
+    scheduleRevision: asNumber(run.scheduleRevision, 0),
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
@@ -438,6 +441,7 @@ export const runRepository = {
       difficulty?: RaidDifficulty;
       lootType?: RunLootType;
       scheduledStartAt?: string;
+      scheduleRevision?: number;
       raidLeadId?: string;
       notes?: string | null;
       desiredTankCount?: number;
@@ -467,6 +471,7 @@ export const runRepository = {
       difficulty: RaidDifficulty;
       lootType?: RunLootType;
       scheduledStartAt?: string;
+      scheduleRevision?: number;
       raidLeadId?: string;
       notes?: string | null;
       desiredTankCount?: number;

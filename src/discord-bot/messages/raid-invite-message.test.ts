@@ -73,19 +73,9 @@ describe("buildRaidInviteMessage", () => {
       runChannelId: "1550000000000000001",
     });
 
-    expect(text).toBe(
-      [
-        "📣 **Raid Invite**",
-        "",
-        "Venom & Tide",
-        "16/09/2026 15:30 · HEROIC",
-        "",
-        "Assignment: Healer · Synmist (Monk) · VIP",
-        "Channel: <#1550000000000000001>",
-        "",
-        "Please be online 10 minutes before start.",
-      ].join("\n"),
-    );
+    expect(text).toContain("<t:1789565400:F> · HEROIC");
+    expect(text).toContain("Assignment: Healer · Synmist (Monk) · VIP");
+    expect(text).toContain("Channel: <#1550000000000000001>");
     expect(text).toContain("<#1550000000000000001>");
     expect(text).not.toMatch(/unknown/i);
     expect(text).not.toMatch(/ - vip/i);

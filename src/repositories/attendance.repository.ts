@@ -304,7 +304,8 @@ export const attendanceRepository = {
         if (!userRow) {
           userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
         }
-        const dmEnabled = userRow ? userRow.dmRaidInviteEnabled !== false : true;
+        const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
+        const eventDmEnabled = userRow ? userRow.dmRaidInviteEnabled !== false : true;
         const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
         const participationType = mapParticipation(signupRow.participationType);
         const publishedRole =
@@ -332,7 +333,8 @@ export const attendanceRepository = {
           assignment,
         });
         const delivery = resolveDiscordDelivery({
-          preferenceEnabled: dmEnabled,
+          discordDmEnabled,
+          eventDmEnabled,
           discordUserId,
         });
         await userNotificationRepository.createInTx(txOrm, {

@@ -17,6 +17,7 @@ import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 import { isActiveSignupOffer } from "@/services/signup-state";
+import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
 
 /**
  * Where a Run's dedicated Discord channel belongs, decided once here and
@@ -263,19 +264,21 @@ export type RaidInviteWorkItem = {
   wowClass: WowClass | null;
 };
 
-/** Unified Discord DM work from pending UserNotification rows (ROSTER_SELECTED + RAID_INVITE). */
+/** Unified Discord DM work from pending UserNotification rows. */
 export type NotificationDmWorkItem = {
   notificationId: string;
   type: NotificationType;
   discordUserId: string;
   runId: string;
-  signupId: string;
+  signupId: string | null;
   runChannelId: string | null;
   productLabel: string;
   scheduledStartAt: string;
+  /** Set for RUN_RESCHEDULED — previous schedule before this revision. */
+  previousScheduledStartAt: string | null;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  participationType: "BOOSTER" | "LOOTBUDDY";
+  participationType: "BOOSTER" | "LOOTBUDDY" | null;
   selectedRole: CharacterRole | null;
   characterName: string | null;
   wowClass: WowClass | null;
@@ -676,36 +679,70 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
   const items: NotificationDmWorkItem[] = [];
 
   for (const notification of pending) {
-    if (!notification.discordUserId || !notification.runId || !notification.signupId) continue;
-    if (notification.type !== "ROSTER_SELECTED" && notification.type !== "RAID_INVITE") continue;
+    if (!notification.discordUserId || !notification.runId) continue;
 
     const run = await runRepository.findById(notification.runId);
     if (!run || run.archivedAt) continue;
 
-    const signupRows = await rosterRepository.listSignups(run.id);
-    const row = signupRows.find((entry) => entry.id === notification.signupId);
-    if (!row) continue;
-
     const post = await runDiscordPostRepository.findByRunId(run.id);
-    const wowClass =
-      row.participationType === "BOOSTER"
-        ? (row.character?.wowClass ?? null)
-        : (row.lootbuddyClass ?? row.character?.wowClass ?? null);
-
-    items.push({
+    const base = {
       notificationId: notification.id,
       type: notification.type,
       discordUserId: notification.discordUserId,
       runId: run.id,
-      signupId: row.id,
       runChannelId: post?.runChannelId ?? null,
       productLabel: run.contentDisplay.productLabel,
       scheduledStartAt: run.scheduledStartAt,
+      previousScheduledStartAt: null as string | null,
       difficulty: run.difficulty,
       lootType: run.lootType,
-      participationType: row.participationType,
-      selectedRole: row.publishedRole,
-      characterName: row.character?.name ?? null,
+      participationType: null as NotificationDmWorkItem["participationType"],
+      selectedRole: null as CharacterRole | null,
+      characterName: null as string | null,
+      wowClass: null as WowClass | null,
+      signupId: notification.signupId,
+    };
+
+    if (notification.type === "RUN_CANCELLED") {
+      items.push(base);
+      continue;
+    }
+
+    if (notification.type === "RUN_RESCHEDULED") {
+      const parsed = parseRescheduleHrefTimestamps(notification.href);
+      items.push({
+        ...base,
+        previousScheduledStartAt: parsed.previousScheduledStartAt,
+        scheduledStartAt: parsed.nextScheduledStartAt ?? run.scheduledStartAt,
+      });
+      continue;
+    }
+
+    if (
+      notification.type !== "ROSTER_SELECTED" &&
+      notification.type !== "RAID_INVITE" &&
+      notification.type !== "ROSTER_REMOVED"
+    ) {
+      continue;
+    }
+
+    if (!notification.signupId) continue;
+    const signupRows = await rosterRepository.listSignups(run.id);
+    const row = signupRows.find((entry) => entry.id === notification.signupId);
+    if (!row && notification.type !== "ROSTER_REMOVED") continue;
+
+    const wowClass = row
+      ? row.participationType === "BOOSTER"
+        ? (row.character?.wowClass ?? null)
+        : (row.lootbuddyClass ?? row.character?.wowClass ?? null)
+      : null;
+
+    items.push({
+      ...base,
+      signupId: notification.signupId,
+      participationType: row?.participationType ?? null,
+      selectedRole: row?.publishedRole ?? null,
+      characterName: row?.character?.name ?? null,
       wowClass,
     });
   }

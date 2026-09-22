@@ -36,7 +36,7 @@ import {
   type GuildRoleIndicators,
 } from "@/discord-bot/class-emoji-lookup";
 import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
-import { buildRosterSelectedDmMessage } from "@/services/notification-content";
+import { buildRosterSelectedDmMessage, buildRosterRemovedDmMessage, buildRunCancelledDmMessage, buildRunRescheduledDmMessage } from "@/services/notification-content";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -823,33 +823,63 @@ async function syncNotificationDm(
   api: BotApiClient,
   item: NotificationDmLaneItem,
 ): Promise<void> {
-  const content =
-    item.type === "ROSTER_SELECTED"
-      ? buildRosterSelectedDmMessage({
-          productLabel: item.productLabel,
-          scheduledStartAt: item.scheduledStartAt,
-          difficulty: item.difficulty,
-          lootType: item.lootType,
-          assignment: {
-            participationType: item.participationType,
-            publishedRole: item.selectedRole,
-            characterName: item.characterName,
-            characterRealm: null,
-            wowClass: item.wowClass,
-          },
-          runChannelId: item.runChannelId,
-        })
-      : buildRaidInviteMessage({
-          productLabel: item.productLabel,
-          scheduledStartAt: item.scheduledStartAt,
-          difficulty: item.difficulty,
-          lootType: item.lootType,
-          participationType: item.participationType,
-          selectedRole: item.selectedRole,
+  let content: string;
+  switch (item.type) {
+    case "ROSTER_SELECTED":
+      content = buildRosterSelectedDmMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+        assignment: {
+          participationType: item.participationType ?? "BOOSTER",
+          publishedRole: item.selectedRole,
           characterName: item.characterName,
+          characterRealm: null,
           wowClass: item.wowClass,
-          runChannelId: item.runChannelId,
-        });
+        },
+        runChannelId: item.runChannelId,
+      });
+      break;
+    case "RAID_INVITE":
+      content = buildRaidInviteMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+        participationType: item.participationType ?? "BOOSTER",
+        selectedRole: item.selectedRole,
+        characterName: item.characterName,
+        wowClass: item.wowClass,
+        runChannelId: item.runChannelId,
+      });
+      break;
+    case "ROSTER_REMOVED":
+      content = buildRosterRemovedDmMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+      });
+      break;
+    case "RUN_CANCELLED":
+      content = buildRunCancelledDmMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+      });
+      break;
+    case "RUN_RESCHEDULED":
+      content = buildRunRescheduledDmMessage({
+        productLabel: item.productLabel,
+        previousScheduledStartAt: item.previousScheduledStartAt ?? item.scheduledStartAt,
+        nextScheduledStartAt: item.scheduledStartAt,
+      });
+      break;
+    default:
+      return;
+  }
 
   try {
     const user = await client.users.fetch(item.discordUserId);

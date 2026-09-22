@@ -68,8 +68,20 @@ export function rosterSelectedSourceKey(runId: string, publishedVersion: number,
   return `roster-selected:${runId}:${publishedVersion}:${signupId}`;
 }
 
+export function rosterRemovedSourceKey(runId: string, publishedVersion: number, signupId: string): string {
+  return `roster-removed:${runId}:${publishedVersion}:${signupId}`;
+}
+
 export function raidInviteSourceKey(runId: string, signupId: string): string {
   return `raid-invite:${runId}:${signupId}`;
+}
+
+export function runCancelledSourceKey(runId: string, userId: string): string {
+  return `run-cancelled:${runId}:${userId}`;
+}
+
+export function runRescheduledSourceKey(runId: string, scheduleRevision: number, userId: string): string {
+  return `run-rescheduled:${runId}:${scheduleRevision}:${userId}`;
 }
 
 export const userNotificationRepository = {
