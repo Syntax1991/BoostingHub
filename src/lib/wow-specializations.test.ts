@@ -13,6 +13,12 @@ describe("attackTypeForSpecialization", () => {
     expect(attackTypeForSpecialization("HUNTER", "Marksmanship")).toBe("RANGED");
   });
 
+  it("classifies Demon Hunter Havoc as melee and Devourer as ranged", () => {
+    expect(attackTypeForSpecialization("DEMON_HUNTER", "Havoc")).toBe("MELEE");
+    expect(attackTypeForSpecialization("DEMON_HUNTER", "Devourer")).toBe("RANGED");
+    expect(attackTypeForSpecialization("DEMON_HUNTER", "Vengeance")).toBeNull();
+  });
+
   it("returns null for a TANK or HEALER specialization", () => {
     expect(attackTypeForSpecialization("PALADIN", "Protection")).toBeNull();
     expect(attackTypeForSpecialization("PALADIN", "Holy")).toBeNull();

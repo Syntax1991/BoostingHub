@@ -22,6 +22,7 @@ export const WOW_SPECIALIZATIONS: Record<WowClass, readonly WowSpecialization[]>
   DEMON_HUNTER: [
     { name: "Havoc", role: "DPS" },
     { name: "Vengeance", role: "TANK" },
+    { name: "Devourer", role: "DPS" },
   ],
   DRUID: [
     { name: "Balance", role: "DPS" },
@@ -94,7 +95,7 @@ export type DpsAttackType = "MELEE" | "RANGED";
  */
 const DPS_ATTACK_TYPE: Record<WowClass, Record<string, DpsAttackType>> = {
   DEATH_KNIGHT: { Frost: "MELEE", Unholy: "MELEE" },
-  DEMON_HUNTER: { Havoc: "MELEE" },
+  DEMON_HUNTER: { Havoc: "MELEE", Devourer: "RANGED" },
   DRUID: { Balance: "RANGED", Feral: "MELEE" },
   EVOKER: { Devastation: "RANGED", Augmentation: "RANGED" },
   HUNTER: { "Beast Mastery": "RANGED", Marksmanship: "RANGED", Survival: "MELEE" },
