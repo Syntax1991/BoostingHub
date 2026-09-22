@@ -64,6 +64,10 @@
       "model": "RunAttendance",
       "namespace": "public"
     },
+    "run_discord_announcement": {
+      "model": "RunDiscordAnnouncement",
+      "namespace": "public"
+    },
     "run_discord_post": {
       "model": "RunDiscordPost",
       "namespace": "public"
@@ -372,6 +376,19 @@
               {
                 "name": "PUBLISHED",
                 "value": "PUBLISHED"
+              }
+            ]
+          },
+          "RunDiscordAnnouncementType": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "RUN_RESCHEDULED",
+                "value": "RUN_RESCHEDULED"
+              },
+              {
+                "name": "RUN_CANCELLED",
+                "value": "RUN_CANCELLED"
               }
             ]
           },
@@ -2635,6 +2652,21 @@
                   "namespace": "public"
                 }
               },
+              "discordAnnouncements": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunDiscordAnnouncement",
+                  "namespace": "public"
+                }
+              },
               "discordPost": {
                 "cardinality": "1:1",
                 "on": {
@@ -2983,6 +3015,187 @@
               },
               "namespaceId": "public",
               "table": "run_attendance"
+            }
+          },
+          "RunDiscordAnnouncement": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "difficulty": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RaidDifficulty",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lootType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunLootType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "previousScheduledStartAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "productLabel": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "scheduledStartAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "sentAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "sourceKey": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "DiscordDeliveryStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "type": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunDiscordAnnouncementType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lootType": {
+                  "column": "lootType"
+                },
+                "previousScheduledStartAt": {
+                  "column": "previousScheduledStartAt"
+                },
+                "productLabel": {
+                  "column": "productLabel"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "scheduledStartAt": {
+                  "column": "scheduledStartAt"
+                },
+                "sentAt": {
+                  "column": "sentAt"
+                },
+                "sourceKey": {
+                  "column": "sourceKey"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "type": {
+                  "column": "type"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_discord_announcement"
             }
           },
           "RunDiscordPost": {
@@ -8164,6 +8377,184 @@
                 }
               ]
             },
+            "run_discord_announcement": {
+              "checks": [
+                {
+                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
+                  "name": "run_discord_announcement_difficulty_check_05ae26c2",
+                  "prefix": "run_discord_announcement_difficulty_check"
+                },
+                {
+                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')",
+                  "name": "run_discord_announcement_lootType_check_3071d052",
+                  "prefix": "run_discord_announcement_lootType_check"
+                },
+                {
+                  "expression": "\"status\" IN ('PENDING', 'SENT', 'SKIPPED', 'FAILED_PERMANENT')",
+                  "name": "run_discord_announcement_status_check_86966e08",
+                  "prefix": "run_discord_announcement_status_check"
+                },
+                {
+                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED')",
+                  "name": "run_discord_announcement_type_check_b8186a62",
+                  "prefix": "run_discord_announcement_type_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RaidDifficulty",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "lootType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunLootType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "previousScheduledStartAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "productLabel": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "scheduledStartAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "sentAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "sourceKey": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "DiscordDeliveryStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "type": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunDiscordAnnouncementType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_discord_announcement"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "runId",
+                    "createdAt"
+                  ],
+                  "name": "run_discord_announcement_runId_createdAt_idx_7a7455cf",
+                  "prefix": "run_discord_announcement_runId_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "run_discord_announcement_runId_idx_a6016437",
+                  "prefix": "run_discord_announcement_runId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status",
+                    "createdAt"
+                  ],
+                  "name": "run_discord_announcement_status_createdAt_idx_58610442",
+                  "prefix": "run_discord_announcement_status_createdAt_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sourceKey"
+                  ]
+                }
+              ]
+            },
             "run_discord_post": {
               "columns": {
                 "archiveCloseMessageId": {
@@ -10796,6 +11187,13 @@
                 "PUBLISHED"
               ]
             },
+            "RunDiscordAnnouncementType": {
+              "kind": "valueSet",
+              "values": [
+                "RUN_RESCHEDULED",
+                "RUN_CANCELLED"
+              ]
+            },
             "RunLootType": {
               "kind": "valueSet",
               "values": [
@@ -10871,10 +11269,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "58e51ab35e4c9bc152038e5988e98923118ffedbca70c6b767e03d93e9b34c7f"
+    "storageHash": "85e46eb0f05ccd857478f0cec7abbe7b66e9933c5dccd7ab0a876f3c4abaf607"
   },
   "execution": {
-    "executionHash": "69f5f642ed3c9ea221dc0f168db405dfb83b45c1d9b2ef787ce08d0b9baa1934",
+    "executionHash": "3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c",
     "mutations": {
       "defaults": [
         {
@@ -11220,6 +11618,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_attendance"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_discord_announcement"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_discord_announcement"
           }
         },
         {

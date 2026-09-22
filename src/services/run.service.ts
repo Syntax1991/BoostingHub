@@ -23,6 +23,7 @@ import { runRepository, type RunCreateWithContentsInput } from "@/repositories/r
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
+import { runDiscordAnnouncementService } from "@/services/run-discord-announcement.service";
 import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
 import { runTemplateService } from "@/services/run-template.service";
 import {
@@ -835,6 +836,15 @@ export const runService = {
     }
 
     if (scheduleChanged) {
+      await runDiscordAnnouncementService.enqueueRescheduled({
+        runId: run.id,
+        scheduleRevision: nextScheduleRevision,
+        previousScheduledStartAt,
+        scheduledStartAt,
+        productLabel: display.productLabel,
+        difficulty,
+        lootType: input.lootType,
+      });
       await runLifecycleNotificationService.notifyRunRescheduled({
         runId: run.id,
         productLabel: display.productLabel,
@@ -913,6 +923,13 @@ export const runService = {
     }
 
     await runRepository.updateFields(run.id, { status: "CANCELLED", signupsOpen: false });
+    await runDiscordAnnouncementService.enqueueCancelled({
+      runId: run.id,
+      scheduledStartAt: run.scheduledStartAt,
+      productLabel: run.contentDisplay.productLabel || run.title,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+    });
     await runLifecycleNotificationService.notifyRunCancelled({
       runId: run.id,
       runTitle: run.title,

@@ -113,6 +113,10 @@ export const DISCORD_DELIVERY_STATUSES = [
 ] as const;
 export type DiscordDeliveryStatus = (typeof DISCORD_DELIVERY_STATUSES)[number];
 
+/** Shared Run Discord channel lifecycle announcements (not User DMs). */
+export const RUN_DISCORD_ANNOUNCEMENT_TYPES = ["RUN_RESCHEDULED", "RUN_CANCELLED"] as const;
+export type RunDiscordAnnouncementType = (typeof RUN_DISCORD_ANNOUNCEMENT_TYPES)[number];
+
 export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(
   (status) => status !== "UNMARKED",
 ) as readonly Exclude<AttendanceStatus, "UNMARKED">[];
