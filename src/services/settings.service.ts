@@ -20,8 +20,9 @@ export type SettingsDto = UserSettingsRecord & {
 export type { NotificationDmPreferences, RegionalPreferences, GameplayPreferences };
 
 /**
- * User-owned application preferences. Distinct from Profile (identity /
- * operational account data). Only the authenticated owner may read/update.
+ * User-owned application preferences and account security controls (sessions).
+ * Distinct from Profile (identity / operational account data).
+ * Only the authenticated owner may read/update.
  */
 export const settingsService = {
   async getSettings(user: AuthenticatedUser): Promise<SettingsDto> {

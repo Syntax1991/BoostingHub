@@ -17,7 +17,7 @@ function toResult(error: unknown): SessionActionResult {
 export async function revokeSessionAction(sessionId: string): Promise<SessionActionResult> {
   try {
     await sessionManagementService.revokeOwnSession(sessionId);
-    revalidatePath("/profile");
+    revalidatePath("/settings");
     return { ok: true };
   } catch (error) {
     return toResult(error);
@@ -27,7 +27,7 @@ export async function revokeSessionAction(sessionId: string): Promise<SessionAct
 export async function revokeOtherSessionsAction(): Promise<SessionActionResult> {
   try {
     await sessionManagementService.revokeOtherOwnSessions();
-    revalidatePath("/profile");
+    revalidatePath("/settings");
     return { ok: true };
   } catch (error) {
     return toResult(error);
