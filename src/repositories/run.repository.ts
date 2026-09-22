@@ -27,7 +27,36 @@ import {
   mapSignupStatus,
   mapWowClass,
 } from "@/lib/persistence";
+import {
+  insertAnnouncementIgnoreDuplicateTx,
+  type CreateRunDiscordAnnouncementInput,
+} from "@/repositories/run-discord-announcement.repository";
 
+/**
+ * Test-only hooks that force a mid-transaction failure for rollback proofs.
+ * Production callers must never pass these.
+ */
+export type LifecycleAnnouncementTxHooks = {
+  failAfterRunUpdate?: boolean;
+  /** Insert with a nonexistent runId so the FK fails and rolls back the Run write. */
+  failAnnouncementInsert?: boolean;
+};
+
+export type RunFieldsUpdate = {
+  title?: string;
+  difficulty?: RaidDifficulty;
+  lootType?: RunLootType;
+  scheduledStartAt?: string;
+  scheduleRevision?: number;
+  raidLeadId?: string;
+  notes?: string | null;
+  desiredTankCount?: number;
+  desiredHealerCount?: number;
+  desiredDpsCount?: number;
+  discordRolePing?: boolean;
+  status?: RunStatus;
+  signupsOpen?: boolean;
+};
 export type RunListFilters = {
   difficulty?: RaidDifficulty;
   status?: RunStatus;
@@ -434,24 +463,7 @@ export const runRepository = {
    * Content identity changes use updateIdentityIfNoSignupHistory with an
    * explicit contents payload.
    */
-  async updateFields(
-    id: string,
-    fields: {
-      title?: string;
-      difficulty?: RaidDifficulty;
-      lootType?: RunLootType;
-      scheduledStartAt?: string;
-      scheduleRevision?: number;
-      raidLeadId?: string;
-      notes?: string | null;
-      desiredTankCount?: number;
-      desiredHealerCount?: number;
-      desiredDpsCount?: number;
-      discordRolePing?: boolean;
-      status?: RunStatus;
-      signupsOpen?: boolean;
-    },
-  ) {
+  async updateFields(id: string, fields: RunFieldsUpdate) {
     await orm.Run.where({ id }).update({
       ...fields,
       updatedAt: new Date().toISOString(),
@@ -459,10 +471,72 @@ export const runRepository = {
   },
 
   /**
+   * Atomically cancel a Run and insert the RUN_CANCELLED channel announcement.
+   * Either both commit or neither does.
+   */
+  async cancelWithDiscordAnnouncement(
+    runId: string,
+    announcement: CreateRunDiscordAnnouncementInput,
+    hooks: LifecycleAnnouncementTxHooks = {},
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+      await txOrm.Run.where({ id: runId }).update({
+        status: "CANCELLED",
+        signupsOpen: false,
+        updatedAt: now,
+      });
+      if (hooks.failAfterRunUpdate) {
+        throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
+      }
+      if (hooks.failAnnouncementInsert) {
+        await insertAnnouncementIgnoreDuplicateTx(txOrm, {
+          ...announcement,
+          runId: "00000000-0000-4000-8000-000000000000",
+        });
+        return;
+      }
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
+    });
+  },
+
+  /**
+   * Non-content Run field update + optional RunDiscordAnnouncement in one transaction.
+   */
+  async updateFieldsWithDiscordAnnouncement(
+    id: string,
+    fields: RunFieldsUpdate,
+    announcement: CreateRunDiscordAnnouncementInput | null,
+    hooks: LifecycleAnnouncementTxHooks = {},
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+      await txOrm.Run.where({ id }).update({
+        ...fields,
+        updatedAt: now,
+      });
+      if (hooks.failAfterRunUpdate) {
+        throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
+      }
+      if (!announcement) return;
+      if (hooks.failAnnouncementInsert) {
+        await insertAnnouncementIgnoreDuplicateTx(txOrm, {
+          ...announcement,
+          runId: "00000000-0000-4000-8000-000000000000",
+        });
+        return;
+      }
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
+    });
+  },
+
+  /**
    * Identity fields (content composition / difficulty) may change only when no
    * RunSignup row exists, including WITHDRAWN history. When `contents` is
    * provided, the full RunRaidContent set is replaced atomically with the Run
-   * row update.
+   * row update. Optional Discord announcement shares the same transaction.
    */
   async updateIdentityIfNoSignupHistory(
     id: string,
@@ -480,6 +554,8 @@ export const runRepository = {
       discordRolePing?: boolean;
       contents?: RunContentWriteSpec[];
     },
+    announcement: CreateRunDiscordAnnouncementInput | null = null,
+    hooks: LifecycleAnnouncementTxHooks = {},
   ) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
@@ -506,9 +582,20 @@ export const runRepository = {
           "Raid and difficulty cannot change after a signup has been recorded.",
         );
       }
+      if (hooks.failAfterRunUpdate) {
+        throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
+      }
+      if (!announcement) return;
+      if (hooks.failAnnouncementInsert) {
+        await insertAnnouncementIgnoreDuplicateTx(txOrm, {
+          ...announcement,
+          runId: "00000000-0000-4000-8000-000000000000",
+        });
+        return;
+      }
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
     });
   },
-
   async updateStatus(id: string, status: RunStatus) {
     await orm.Run.where({ id }).update({ status, updatedAt: new Date().toISOString() });
   },

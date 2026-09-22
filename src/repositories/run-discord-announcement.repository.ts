@@ -1,4 +1,4 @@
-import { orm } from "@/lib/prisma";
+import { db, orm } from "@/lib/prisma";
 import {
   asString,
   asStringOrNull,
@@ -45,6 +45,8 @@ export type CreateRunDiscordAnnouncementInput = {
   createdAt?: string;
 };
 
+type TxOrm = typeof orm;
+
 function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value)
     ? (value as T)
@@ -77,30 +79,44 @@ export function runCancelledChannelSourceKey(runId: string): string {
   return `run-cancelled:${runId}`;
 }
 
+/** Insert announcement inside an open transaction; no-op when sourceKey already exists. */
+export async function insertAnnouncementIgnoreDuplicateTx(
+  txOrm: TxOrm,
+  input: CreateRunDiscordAnnouncementInput,
+): Promise<void> {
+  const existing = await txOrm.RunDiscordAnnouncement.where({ sourceKey: input.sourceKey }).first();
+  if (existing) return;
+  const now = input.createdAt ?? new Date().toISOString();
+  const id = input.id ?? crypto.randomUUID();
+  const status = input.status ?? "PENDING";
+  await txOrm.RunDiscordAnnouncement.create({
+    id,
+    runId: input.runId,
+    type: input.type,
+    sourceKey: input.sourceKey,
+    previousScheduledStartAt: input.previousScheduledStartAt,
+    scheduledStartAt: input.scheduledStartAt,
+    productLabel: input.productLabel,
+    difficulty: input.difficulty,
+    lootType: input.lootType,
+    status,
+    createdAt: now,
+    sentAt: null,
+    updatedAt: now,
+  });
+}
+
 export const runDiscordAnnouncementRepository = {
   async createIgnoreDuplicate(
     input: CreateRunDiscordAnnouncementInput,
   ): Promise<RunDiscordAnnouncementRecord | null> {
     const existing = await orm.RunDiscordAnnouncement.where({ sourceKey: input.sourceKey }).first();
     if (existing) return null;
-    const now = input.createdAt ?? new Date().toISOString();
     const id = input.id ?? crypto.randomUUID();
-    const status = input.status ?? "PENDING";
     try {
-      await orm.RunDiscordAnnouncement.create({
-        id,
-        runId: input.runId,
-        type: input.type,
-        sourceKey: input.sourceKey,
-        previousScheduledStartAt: input.previousScheduledStartAt,
-        scheduledStartAt: input.scheduledStartAt,
-        productLabel: input.productLabel,
-        difficulty: input.difficulty,
-        lootType: input.lootType,
-        status,
-        createdAt: now,
-        sentAt: null,
-        updatedAt: now,
+      await db.transaction(async (tx) => {
+        const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+        await insertAnnouncementIgnoreDuplicateTx(txOrm, { ...input, id });
       });
     } catch {
       const raced = await orm.RunDiscordAnnouncement.where({ sourceKey: input.sourceKey }).first();
@@ -133,6 +149,11 @@ export const runDiscordAnnouncementRepository = {
 
   async findById(id: string): Promise<RunDiscordAnnouncementRecord | null> {
     const row = await orm.RunDiscordAnnouncement.where({ id }).first();
+    return row ? mapRow(row as Record<string, unknown>) : null;
+  },
+
+  async findBySourceKey(sourceKey: string): Promise<RunDiscordAnnouncementRecord | null> {
+    const row = await orm.RunDiscordAnnouncement.where({ sourceKey }).first();
     return row ? mapRow(row as Record<string, unknown>) : null;
   },
 

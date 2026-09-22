@@ -23,7 +23,10 @@ import { runRepository, type RunCreateWithContentsInput } from "@/repositories/r
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
-import { runDiscordAnnouncementService } from "@/services/run-discord-announcement.service";
+import {
+  runCancelledChannelSourceKey,
+  runRescheduledChannelSourceKey,
+} from "@/repositories/run-discord-announcement.repository";
 import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
 import { runTemplateService } from "@/services/run-template.service";
 import {
@@ -824,27 +827,38 @@ export const runService = {
       discordRolePing: input.discordRolePing ?? run.discordRolePing,
     };
 
+    const rescheduleAnnouncement = scheduleChanged
+      ? {
+          runId: run.id,
+          type: "RUN_RESCHEDULED" as const,
+          sourceKey: runRescheduledChannelSourceKey(run.id, nextScheduleRevision),
+          previousScheduledStartAt,
+          scheduledStartAt,
+          productLabel: display.productLabel,
+          difficulty,
+          lootType: input.lootType,
+          status: "PENDING" as const,
+        }
+      : null;
+
     if (identityChanged) {
-      await runRepository.updateIdentityIfNoSignupHistory(run.id, {
-        ...fields,
-        difficulty,
-        contents: contentChanged ? nextContents : undefined,
-      });
+      await runRepository.updateIdentityIfNoSignupHistory(
+        run.id,
+        {
+          ...fields,
+          difficulty,
+          contents: contentChanged ? nextContents : undefined,
+        },
+        rescheduleAnnouncement,
+      );
+    } else if (rescheduleAnnouncement) {
+      await runRepository.updateFieldsWithDiscordAnnouncement(run.id, fields, rescheduleAnnouncement);
     } else {
       // Non-content updates must not rewrite RunRaidContent / Bundle rows.
       await runRepository.updateFields(run.id, fields);
     }
 
     if (scheduleChanged) {
-      await runDiscordAnnouncementService.enqueueRescheduled({
-        runId: run.id,
-        scheduleRevision: nextScheduleRevision,
-        previousScheduledStartAt,
-        scheduledStartAt,
-        productLabel: display.productLabel,
-        difficulty,
-        lootType: input.lootType,
-      });
       await runLifecycleNotificationService.notifyRunRescheduled({
         runId: run.id,
         productLabel: display.productLabel,
@@ -922,13 +936,16 @@ export const runService = {
       throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
     }
 
-    await runRepository.updateFields(run.id, { status: "CANCELLED", signupsOpen: false });
-    await runDiscordAnnouncementService.enqueueCancelled({
+    await runRepository.cancelWithDiscordAnnouncement(run.id, {
       runId: run.id,
+      type: "RUN_CANCELLED",
+      sourceKey: runCancelledChannelSourceKey(run.id),
+      previousScheduledStartAt: null,
       scheduledStartAt: run.scheduledStartAt,
       productLabel: run.contentDisplay.productLabel || run.title,
       difficulty: run.difficulty,
       lootType: run.lootType,
+      status: "PENDING",
     });
     await runLifecycleNotificationService.notifyRunCancelled({
       runId: run.id,
