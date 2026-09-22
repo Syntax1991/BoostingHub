@@ -4,37 +4,16 @@ import { requireUser } from "@/auth/session";
 import {
   summarizeUserAgent,
   toPublicSessionView,
-  type BetterAuthSessionRecord,
   type PublicSessionView,
 } from "@/auth/session-view";
 import { DomainError } from "@/lib/errors";
-
-function asSessionRecord(session: {
-  id: string;
-  createdAt: Date;
-  updatedAt: Date;
-  expiresAt: Date;
-  token: string;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-  userId: string;
-}): BetterAuthSessionRecord {
-  return {
-    id: session.id,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    expiresAt: session.expiresAt,
-    token: session.token,
-    ipAddress: session.ipAddress ?? null,
-    userAgent: session.userAgent ?? null,
-    userId: session.userId,
-  };
-}
+import { authSessionRepository } from "@/repositories/auth-session.repository";
 
 /**
  * Self-service session management for the signed-in user only.
- * Uses Better Auth 1.7.3 APIs (listSessions / revokeSession / revokeOtherSessions /
- * revokeSessions / signOut). Never returns raw session tokens to callers.
+ * Lists via Prisma (no Better Auth freshAge gate). Revokes via Better Auth
+ * 1.7.3 APIs (revokeSession / revokeOtherSessions / revokeSessions / signOut).
+ * Never returns raw session tokens to callers.
  */
 export const sessionManagementService = {
   async listOwnSessions(): Promise<PublicSessionView[]> {
@@ -45,9 +24,9 @@ export const sessionManagementService = {
       throw new DomainError("NOT_AUTHENTICATED", "Sign in is required.", 401);
     }
 
-    const sessions = await auth.api.listSessions({ headers: requestHeaders });
+    const sessions = await authSessionRepository.listActiveByUserId(current.user.id);
     return sessions
-      .map((session) => toPublicSessionView(asSessionRecord(session), current.session.id))
+      .map((session) => toPublicSessionView(session, current.session.id))
       .sort((a, b) => {
         if (a.isCurrent !== b.isCurrent) {
           return a.isCurrent ? -1 : 1;
@@ -72,15 +51,9 @@ export const sessionManagementService = {
       );
     }
 
-    const sessions = await auth.api.listSessions({ headers: requestHeaders });
-    const target = sessions.find((session) => session.id === sessionId);
+    const target = await authSessionRepository.findOwnedActiveById(current.user.id, sessionId);
     if (!target) {
       throw new DomainError("NOT_FOUND", "Session was not found.", 404);
-    }
-
-    // listSessions is scoped to the caller; still refuse if the row somehow mismatches.
-    if (target.userId !== current.user.id) {
-      throw new DomainError("NOT_AUTHORIZED", "You can only manage your own sessions.", 403);
     }
 
     await auth.api.revokeSession({
