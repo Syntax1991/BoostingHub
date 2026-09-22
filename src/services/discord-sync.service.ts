@@ -2,6 +2,7 @@ import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunS
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
+  effectiveRaidLeadChannelName,
 } from "@/lib/discord-channel-name";
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
@@ -352,6 +353,7 @@ function desiredChannelNameFor(run: {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   raidLeadName: string;
+  raidLeadDiscordRunChannelNickname?: string | null;
   contentDisplay: { channelCoverage: string };
   status?: RunStatus;
   archivedAt?: string | null;
@@ -361,7 +363,10 @@ function desiredChannelNameFor(run: {
     difficulty: run.difficulty,
     lootType: run.lootType,
     coverage: run.contentDisplay.channelCoverage,
-    raidLeadName: run.raidLeadName,
+    raidLeadChannelName: effectiveRaidLeadChannelName({
+      raidLeadName: run.raidLeadName,
+      discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+    }),
   };
   if (shouldRetireDiscordChannel(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);

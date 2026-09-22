@@ -104,6 +104,11 @@ export type RunListRecord = {
   status: RunStatus;
   raidLeadId: string;
   raidLeadName: string;
+  /**
+   * Raid Lead's current Settings nickname for Discord channel naming only.
+   * Null → fall back to raidLeadName. Never affects Run.title.
+   */
+  raidLeadDiscordRunChannelNickname: string | null;
   /** Discord snowflake for the Raid Lead User, when linked. */
   raidLeadDiscordUserId: string | null;
   notes: string | null;
@@ -247,6 +252,8 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     status: mapRunStatus(run.status),
     raidLeadId: asString(run.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown lead"),
+    /** Live nickname for Discord channel naming only — never snapshotted onto the Run. */
+    raidLeadDiscordRunChannelNickname: asStringOrNull(raidLead.discordRunChannelNickname),
     raidLeadDiscordUserId: asStringOrNull(raidLead.discordUserId),
     notes: asStringOrNull(run.notes),
     desiredTankCount: asNumber(run.desiredTankCount),

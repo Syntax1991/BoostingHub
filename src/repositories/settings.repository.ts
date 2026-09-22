@@ -20,10 +20,15 @@ export type GameplayPreferences = {
   defaultCharacterId: string | null;
 };
 
+export type RunChannelPreferences = {
+  discordRunChannelNickname: string | null;
+};
+
 export type UserSettingsRecord = {
   notifications: NotificationDmPreferences;
   regional: RegionalPreferences;
   gameplay: GameplayPreferences;
+  runChannels: RunChannelPreferences;
 };
 
 const DEFAULT_NOTIFICATIONS: NotificationDmPreferences = {
@@ -45,6 +50,7 @@ function mapSettings(row: Record<string, unknown> | null): UserSettingsRecord {
       notifications: { ...DEFAULT_NOTIFICATIONS },
       regional: { timeZone: DEFAULT_TIME_ZONE },
       gameplay: { defaultCharacterId: null },
+      runChannels: { discordRunChannelNickname: null },
     };
   }
   return {
@@ -61,6 +67,9 @@ function mapSettings(row: Record<string, unknown> | null): UserSettingsRecord {
     },
     gameplay: {
       defaultCharacterId: asStringOrNull(row.defaultCharacterId),
+    },
+    runChannels: {
+      discordRunChannelNickname: asStringOrNull(row.discordRunChannelNickname),
     },
   };
 }
@@ -106,6 +115,13 @@ export const settingsRepository = {
   async updateGameplayPreferences(userId: string, gameplay: GameplayPreferences): Promise<void> {
     await orm.User.where({ id: userId }).update({
       defaultCharacterId: gameplay.defaultCharacterId,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  async updateRunChannelPreferences(userId: string, prefs: RunChannelPreferences): Promise<void> {
+    await orm.User.where({ id: userId }).update({
+      discordRunChannelNickname: prefs.discordRunChannelNickname,
       updatedAt: new Date().toISOString(),
     });
   },

@@ -47,6 +47,9 @@ Stored on `User`:
   `dmRunRescheduledEnabled` / `dmRosterRemovedEnabled` (default `true`)
 - `timeZone` (default `Europe/Berlin`) — personal presentation only
 - `defaultCharacterId` (nullable) — signup UX preference only
+- `discordRunChannelNickname` (nullable) — RAID_LEAD/ADMIN only; Discord Run
+  channel Raid Lead segment. Null falls back to `User.name`. Does **not** change
+  `Run.title` or web identity.
 
 ### Effective Discord DM rule
 

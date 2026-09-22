@@ -8,6 +8,9 @@ import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
  *
  * `coverage` comes from `projectRunContentDisplay(...).channelCoverage`
  * (e.g. `8of8` or Bundle `9of9`) — never from singular Run.plannedBossCount.
+ *
+ * `raidLeadChannelName` is the Raid Lead segment source (nickname or User.name).
+ * It never comes from Discord guild nicknames or Run.title.
  */
 export type RunChannelNameInput = {
   scheduledStartAt: string;
@@ -15,16 +18,24 @@ export type RunChannelNameInput = {
   lootType: RunLootType;
   /** Content-native coverage token (`8of8`, `9of9`, …). */
   coverage: string;
-  raidLeadName: string;
+  /** Effective Raid Lead channel-name segment (nickname ?? User.name). */
+  raidLeadChannelName: string;
   timeZone?: string;
 };
 
 /** Discord text channel names are capped at 100 characters. */
 const MAX_CHANNEL_NAME_LENGTH = 100;
 
+/** Max raw length for Settings `discordRunChannelNickname` before slugifying. */
+export const DISCORD_RUN_CHANNEL_NICKNAME_MAX_LENGTH = 24;
+
 const COMBINING_MARKS_PATTERN = new RegExp("[\\u0300-\\u036f]", "g");
 
-function slugSegment(value: string): string {
+/**
+ * Shared slug semantics for Discord Run channel segments and nickname validation.
+ * Empty result means the input cannot form a channel segment.
+ */
+export function slugDiscordChannelSegment(value: string): string {
   return value
     .normalize("NFKD")
     .replace(COMBINING_MARKS_PATTERN, "")
@@ -40,12 +51,12 @@ function trimHyphens(value: string): string {
 /** Pure, deterministic, and safe against unsupported characters in any segment. */
 export function buildDiscordRunChannelName(input: RunChannelNameInput): string {
   const parts = zonedParts(new Date(input.scheduledStartAt), input.timeZone ?? DEFAULT_TIME_ZONE);
-  const weekday = slugSegment(parts.weekday);
+  const weekday = slugDiscordChannelSegment(parts.weekday);
   const hhmm = `${String(parts.hour).padStart(2, "0")}${String(parts.minute).padStart(2, "0")}`;
   const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty].toLowerCase();
   const lootType = input.lootType.toLowerCase();
-  const bossCoverage = slugSegment(input.coverage);
-  const raidLead = slugSegment(input.raidLeadName);
+  const bossCoverage = slugDiscordChannelSegment(input.coverage);
+  const raidLead = slugDiscordChannelSegment(input.raidLeadChannelName);
 
   const segments = [weekday, hhmm, difficulty, lootType, bossCoverage, raidLead].filter(
     (segment) => segment.length > 0,
@@ -63,4 +74,13 @@ export function buildClosedDiscordRunChannelName(input: RunChannelNameInput): st
   const budget = MAX_CHANNEL_NAME_LENGTH - prefix.length;
   const body = live.slice(0, budget).replace(/-+$/g, "");
   return `${prefix}${body}`;
+}
+
+/** Prefer nickname when set; otherwise BoostingHub User.name. Never Discord guild nick. */
+export function effectiveRaidLeadChannelName(input: {
+  raidLeadName: string;
+  discordRunChannelNickname: string | null | undefined;
+}): string {
+  const nick = input.discordRunChannelNickname?.trim();
+  return nick && nick.length > 0 ? nick : input.raidLeadName;
 }

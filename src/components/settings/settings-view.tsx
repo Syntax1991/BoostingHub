@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui/primitives";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
 import { RegionalSettingsCard } from "@/components/settings/regional-settings-card";
 import { GameplaySettingsCard } from "@/components/settings/gameplay-settings-card";
+import { RunChannelSettingsCard } from "@/components/settings/run-channel-settings-card";
 import { ActiveSessionsSection } from "@/components/settings/active-sessions-section";
 import type { PublicSessionView } from "@/auth/session-view";
 import type { settingsService } from "@/services/settings.service";
@@ -24,6 +25,11 @@ export function SettingsView({ data }: { data: SettingsPage }) {
           defaultCharacterId={data.gameplay.defaultCharacterId}
           characters={data.characters}
         />
+        {data.runChannels.canConfigure ? (
+          <RunChannelSettingsCard
+            discordRunChannelNickname={data.runChannels.discordRunChannelNickname}
+          />
+        ) : null}
         <ActiveSessionsSection sessions={data.sessions} />
       </div>
     </div>

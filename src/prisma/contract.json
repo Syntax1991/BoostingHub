@@ -5515,6 +5515,13 @@
                   "kind": "scalar"
                 }
               },
+              "discordRunChannelNickname": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "discordUserId": {
                 "nullable": true,
                 "type": {
@@ -6067,6 +6074,9 @@
                 },
                 "discordDmEnabled": {
                   "column": "discordDmEnabled"
+                },
+                "discordRunChannelNickname": {
+                  "column": "discordRunChannelNickname"
                 },
                 "discordUserId": {
                   "column": "discordUserId"
@@ -10660,6 +10670,11 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
+                "discordRunChannelNickname": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "discordUserId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -11269,7 +11284,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "85e46eb0f05ccd857478f0cec7abbe7b66e9933c5dccd7ab0a876f3c4abaf607"
+    "storageHash": "2f6b4d340d13a3a8edb7b85297e91dcfd4d278924cc8cef9e82d2fa0cf132b64"
   },
   "execution": {
     "executionHash": "3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c",
