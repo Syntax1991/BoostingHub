@@ -144,6 +144,8 @@ type SignupOptionsPayload = {
   booster: { eligible: EligibleCharacterOption[]; ineligible: IneligibleCharacterOption[] };
   activeBoosterOffers: ActiveBoosterOffers;
   activeLootbuddies: ActiveLootbuddy[];
+  /** Eligible Default Character preference — never auto-submits. */
+  preferredCharacterId?: string | null;
 };
 
 /** Rendered once, right after the character-select step — the User should see which of their characters is double-booked before choosing. */
@@ -180,8 +182,10 @@ type ReplyableInteraction = {
 export function buildCharacterSelectOptions(
   eligible: EligibleCharacterOption[],
   activeOffer: ActiveBoosterOffers,
+  preferredCharacterId?: string | null,
 ): StringSelectMenuOptionBuilder[] {
   const activeIds = new Set(activeOffer.characterIds);
+  const preferDefault = activeIds.size === 0 && Boolean(preferredCharacterId);
   return eligible.slice(0, MAX_SELECT_OPTIONS).map((option) => {
     const existingRoles = activeOffer.offeredRolesByCharacterId[option.characterId] ?? [];
     const roleLabel = existingRoles.length > 0
@@ -192,7 +196,10 @@ export function buildCharacterSelectOptions(
     const builder = new StringSelectMenuOptionBuilder()
       .setLabel(roleLabel ? `${option.characterName}-${option.realm} — ${roleLabel}` : `${option.characterName}-${option.realm}`)
       .setValue(option.characterId)
-      .setDefault(activeIds.has(option.characterId));
+      .setDefault(
+        activeIds.has(option.characterId) ||
+          (preferDefault && option.characterId === preferredCharacterId),
+      );
     // Informational only — a saved Character is still fully selectable.
     // Bundle Runs list every content segment (never only Grotto's 0/1).
     const lockoutDescription = formatDiscordCharacterLockoutDescription(option);
@@ -242,11 +249,17 @@ export async function handleSignupButton(interaction: ButtonInteraction, api: Bo
 
   const byId = new Map(eligible.map((option) => [option.characterId, option]));
   const isExistingSignup = options.activeBoosterOffers.characterIds.length > 0;
+  const seedCharacterIds =
+    options.activeBoosterOffers.characterIds.length > 0
+      ? options.activeBoosterOffers.characterIds
+      : options.preferredCharacterId && byId.has(options.preferredCharacterId)
+        ? [options.preferredCharacterId]
+        : [];
   const session = startSession({
     discordUserId: interaction.user.id,
     runId,
     isExistingSignup,
-    offers: options.activeBoosterOffers.characterIds.map((characterId) => {
+    offers: seedCharacterIds.map((characterId) => {
       const existing = options.activeBoosterOffers.offeredRolesByCharacterId[characterId];
       if (existing?.length) {
         return { characterId, offeredRoles: orderedRoles(existing) };
@@ -331,7 +344,11 @@ async function renderCharacterSelectionStep(
     ),
   };
 
-  const selectOptions = buildCharacterSelectOptions(options.booster.eligible, stagedOffer);
+  const selectOptions = buildCharacterSelectOptions(
+    options.booster.eligible,
+    stagedOffer,
+    options.preferredCharacterId,
+  );
   if (selectOptions.length === 0) {
     await interaction.editReply({ content: "You have no eligible booster characters for this run.", components: [] });
     return;

@@ -53,7 +53,7 @@ function operationHref(item: DashboardOperationItem): string {
   return runDetailPath(item.runId);
 }
 
-export function DashboardView({ data }: { data: DashboardData }) {
+export function DashboardView({ data, timeZone }: { data: DashboardData; timeZone: string }) {
   const { personal } = data;
 
   return (
@@ -130,8 +130,8 @@ export function DashboardView({ data }: { data: DashboardData }) {
                   <DifficultyBadge difficulty={personal.nextSelectedRun.difficulty} />
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  {formatDate(personal.nextSelectedRun.scheduledStartAt)}{" "}
-                  {formatTime(personal.nextSelectedRun.scheduledStartAt)}
+                  {formatDate(personal.nextSelectedRun.scheduledStartAt, timeZone)}{" "}
+                  {formatTime(personal.nextSelectedRun.scheduledStartAt, timeZone)}
                 </p>
               </div>
               <ul className="space-y-1 text-xs">
@@ -189,7 +189,7 @@ export function DashboardView({ data }: { data: DashboardData }) {
                         {item.runTitle}
                       </Link>
                       <p className="mt-0.5 text-xs text-muted">
-                        {formatDate(item.scheduledStartAt)} {formatTime(item.scheduledStartAt)} ·{" "}
+                        {formatDate(item.scheduledStartAt, timeZone)} {formatTime(item.scheduledStartAt, timeZone)} ·{" "}
                         {operationHint(item)}
                       </p>
                     </div>
@@ -255,8 +255,8 @@ export function DashboardView({ data }: { data: DashboardData }) {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-muted">
-                        <div>{formatDate(run.scheduledStartAt)}</div>
-                        <div className="text-xs">{formatTime(run.scheduledStartAt)}</div>
+                        <div>{formatDate(run.scheduledStartAt, timeZone)}</div>
+                        <div className="text-xs">{formatTime(run.scheduledStartAt, timeZone)}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div>{run.signupCount} signed</div>

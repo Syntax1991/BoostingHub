@@ -26,7 +26,7 @@ function characterLabel(item: Pick<SignupItem, "characterName" | "characterRealm
   return "Unknown character";
 }
 
-export function MyRunsView({ data }: { data: MyRuns }) {
+export function MyRunsView({ data, timeZone }: { data: MyRuns; timeZone: string }) {
   const hasAnySignup =
     data.selected.length + data.pending.length + data.notSelected.length + data.withdrawn.length > 0;
 
@@ -45,9 +45,9 @@ export function MyRunsView({ data }: { data: MyRuns }) {
         </Card>
       ) : (
       <div className="grid gap-4">
-        <SignupGroup title="Selected" items={data.selected} empty="No selected signups." />
-        <SignupGroup title="Pending" items={data.pending} empty="No pending signups." />
-        <SignupGroup title="Not Selected" items={data.notSelected} empty="No declined signups." />
+        <SignupGroup title="Selected" items={data.selected} empty="No selected signups." timeZone={timeZone} />
+        <SignupGroup title="Pending" items={data.pending} empty="No pending signups." timeZone={timeZone} />
+        <SignupGroup title="Not Selected" items={data.notSelected} empty="No declined signups." timeZone={timeZone} />
         <details className="rounded-md border border-border bg-surface">
           <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
             Withdrawn ({data.withdrawn.length})
@@ -55,7 +55,7 @@ export function MyRunsView({ data }: { data: MyRuns }) {
           {data.withdrawn.length === 0 ? (
             <EmptyState title="No withdrawn signups" description="Withdrawn records stay persisted for audit." />
           ) : (
-            <SignupTable items={data.withdrawn} />
+            <SignupTable items={data.withdrawn} timeZone={timeZone} />
           )}
         </details>
       </div>
@@ -68,10 +68,12 @@ function SignupGroup({
   title,
   items,
   empty,
+  timeZone,
 }: {
   title: string;
   items: SignupItem[];
   empty: string;
+  timeZone: string;
 }) {
   return (
     <Card>
@@ -79,7 +81,7 @@ function SignupGroup({
       {items.length === 0 ? (
         <EmptyState title={empty} description="Status groups stay visible so pending, selected, and not selected never collapse together." />
       ) : (
-        <SignupTable items={items} />
+        <SignupTable items={items} timeZone={timeZone} />
       )}
     </Card>
   );
@@ -125,7 +127,7 @@ function groupByRun(items: SignupItem[]): RunGroup[] {
   return groups;
 }
 
-function SignupTable({ items }: { items: SignupItem[] }) {
+function SignupTable({ items, timeZone }: { items: SignupItem[]; timeZone: string }) {
   const groups = groupByRun(items);
   return (
     <div className="overflow-x-auto">
@@ -162,7 +164,7 @@ function SignupTable({ items }: { items: SignupItem[] }) {
                     <DifficultyBadge difficulty={group.difficulty} />
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted">{formatDateTime(group.scheduledStartAt)}</td>
+                <td className="px-4 py-3 text-muted">{formatDateTime(group.scheduledStartAt, timeZone)}</td>
                 <td className="px-4 py-3">
                   <p className="max-w-[240px] truncate">
                     <span className="text-muted">Offered:</span> {group.offers.map(characterLabel).join(", ")}

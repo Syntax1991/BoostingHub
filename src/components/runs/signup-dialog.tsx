@@ -125,7 +125,14 @@ export function RunSignupButton({
       return;
     }
     setOptions(result.data);
-    setSelectedCharacterIds(new Set(result.data.activeBoosterOffers.characterIds));
+    // Existing active offers win. Otherwise prefer Default Character when eligible.
+    if (result.data.activeBoosterOffers.characterIds.length > 0) {
+      setSelectedCharacterIds(new Set(result.data.activeBoosterOffers.characterIds));
+    } else if (result.data.preferredCharacterId) {
+      setSelectedCharacterIds(new Set([result.data.preferredCharacterId]));
+    } else {
+      setSelectedCharacterIds(new Set());
+    }
     // The already-offered role set wins over the specialization default — the
     // User explicitly chose these roles for this Run; reopening the dialog
     // must never silently revert them.

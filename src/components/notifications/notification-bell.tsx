@@ -12,9 +12,11 @@ import type { NotificationBellItem } from "@/services/notification.service";
 export function NotificationBell({
   unreadCount,
   latest,
+  timeZone,
 }: {
   unreadCount: number;
   latest: NotificationBellItem[];
+  timeZone: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -99,7 +101,7 @@ export function NotificationBell({
                   >
                     <p className="text-sm font-medium">{item.title}</p>
                     <p className="mt-0.5 line-clamp-2 text-xs text-muted">{item.message}</p>
-                    <p className="mt-1 text-[11px] text-muted">{formatDateTime(item.createdAt)}</p>
+                    <p className="mt-1 text-[11px] text-muted">{formatDateTime(item.createdAt, timeZone)}</p>
                   </button>
                 </li>
               ))}

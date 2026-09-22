@@ -38,6 +38,7 @@ export function AppShell({
   children,
   user,
   notifications,
+  timeZone,
 }: {
   children: React.ReactNode;
   user: {
@@ -49,6 +50,7 @@ export function AppShell({
     unreadCount: number;
     latest: NotificationBellItem[];
   };
+  timeZone: string;
 }) {
   const pathname = usePathname();
   const showManage = canAccessManagement(user.accountRole);
@@ -134,7 +136,11 @@ export function AppShell({
             ) : null}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <NotificationBell unreadCount={notifications.unreadCount} latest={notifications.latest} />
+            <NotificationBell
+              unreadCount={notifications.unreadCount}
+              latest={notifications.latest}
+              timeZone={timeZone}
+            />
             <div className="text-right">
               <p className="max-w-[180px] truncate text-sm font-medium">{user.name}</p>
               <p className="text-[11px] uppercase tracking-wide text-muted">
