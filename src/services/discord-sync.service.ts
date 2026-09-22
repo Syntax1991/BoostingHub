@@ -1,4 +1,4 @@
-import type { CharacterRole, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
+import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
@@ -8,13 +8,11 @@ import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
-import {
-  parseRaidInviteSentSignupIds,
-  runDiscordPostRepository,
-} from "@/repositories/run-discord-post.repository";
+import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -248,12 +246,30 @@ export type RunStartSyncWorkItem = {
   targetBucket: DiscordRunChannelTarget;
 };
 
-/** Apex-style Raid Invite DM — one pending SELECTED signup with a linked Discord account. */
+/** Apex-style Raid Invite DM — kept for bot/API backward compatibility; listSyncWork returns []. */
 export type RaidInviteWorkItem = {
   runId: string;
   signupId: string;
   discordUserId: string;
   /** Persisted RunDiscordPost.runChannelId — null when the Run has no dedicated channel yet. */
+  runChannelId: string | null;
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  participationType: "BOOSTER" | "LOOTBUDDY";
+  selectedRole: CharacterRole | null;
+  characterName: string | null;
+  wowClass: WowClass | null;
+};
+
+/** Unified Discord DM work from pending UserNotification rows (ROSTER_SELECTED + RAID_INVITE). */
+export type NotificationDmWorkItem = {
+  notificationId: string;
+  type: NotificationType;
+  discordUserId: string;
+  runId: string;
+  signupId: string;
   runChannelId: string | null;
   productLabel: string;
   scheduledStartAt: string;
@@ -655,6 +671,48 @@ function toStartMember(
   };
 }
 
+async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> {
+  const pending = await userNotificationRepository.listPendingDiscordDelivery(50);
+  const items: NotificationDmWorkItem[] = [];
+
+  for (const notification of pending) {
+    if (!notification.discordUserId || !notification.runId || !notification.signupId) continue;
+    if (notification.type !== "ROSTER_SELECTED" && notification.type !== "RAID_INVITE") continue;
+
+    const run = await runRepository.findById(notification.runId);
+    if (!run || run.archivedAt) continue;
+
+    const signupRows = await rosterRepository.listSignups(run.id);
+    const row = signupRows.find((entry) => entry.id === notification.signupId);
+    if (!row) continue;
+
+    const post = await runDiscordPostRepository.findByRunId(run.id);
+    const wowClass =
+      row.participationType === "BOOSTER"
+        ? (row.character?.wowClass ?? null)
+        : (row.lootbuddyClass ?? row.character?.wowClass ?? null);
+
+    items.push({
+      notificationId: notification.id,
+      type: notification.type,
+      discordUserId: notification.discordUserId,
+      runId: run.id,
+      signupId: row.id,
+      runChannelId: post?.runChannelId ?? null,
+      productLabel: run.contentDisplay.productLabel,
+      scheduledStartAt: run.scheduledStartAt,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+      participationType: row.participationType,
+      selectedRole: row.publishedRole,
+      characterName: row.character?.name ?? null,
+      wowClass,
+    });
+  }
+
+  return items;
+}
+
 /**
  * Presentation-only integration state for the Discord bot. Never a second
  * source of truth: every DTO here is re-derived from the same Run/Signup/
@@ -693,7 +751,9 @@ export const discordSyncService = {
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
     start: RunStartSyncWorkItem[];
+    /** Always empty — Raid Invite DMs come from notificationDms (PENDING UserNotification). */
     raidInvites: RaidInviteWorkItem[];
+    notificationDms: NotificationDmWorkItem[];
   }> {
     const runs = await runRepository.listManaged();
     const channels: ChannelSyncWorkItem[] = [];
@@ -802,41 +862,6 @@ export const discordSyncService = {
         }
       }
 
-      // Apex-style Raid Invite DMs: only after Start Run (IN_PROGRESS+), each
-      // SELECTED participant with a linked Discord account gets one DM (new
-      // SELECTED only while the Run stays started). Publishing the roster days
-      // early must not DM anyone yet. Channel id is optional — the DM omits
-      // the Channel line when RunDiscordPost.runChannelId is not yet set.
-      const raidInviteEligible =
-        (run.status === "IN_PROGRESS" || run.status === "COMPLETED") && !run.archivedAt;
-      if (raidInviteEligible) {
-        const alreadySent = new Set(parseRaidInviteSentSignupIds(post?.raidInviteSentSignupIds ?? null));
-        const signupRows = await rosterRepository.listSignups(run.id);
-        for (const row of signupRows) {
-          if (row.status !== "SELECTED") continue;
-          if (!row.discordUserId) continue;
-          if (alreadySent.has(row.id)) continue;
-          const wowClass =
-            row.participationType === "BOOSTER"
-              ? (row.character?.wowClass ?? null)
-              : (row.lootbuddyClass ?? row.character?.wowClass ?? null);
-          raidInvites.push({
-            runId: run.id,
-            signupId: row.id,
-            discordUserId: row.discordUserId,
-            runChannelId: post?.runChannelId ?? null,
-            productLabel: run.contentDisplay.productLabel,
-            scheduledStartAt: run.scheduledStartAt,
-            difficulty: run.difficulty,
-            lootType: run.lootType,
-            participationType: row.participationType,
-            selectedRole: row.publishedRole,
-            characterName: row.character?.name ?? null,
-            wowClass,
-          });
-        }
-      }
-
       // Operational Run Start post: only after IN_PROGRESS+ with an immutable
       // start snapshot, and only into an already-provisioned dedicated channel.
       // Never creates a first channel. Immutable content → post once (message
@@ -858,7 +883,9 @@ export const discordSyncService = {
       }
     }
 
-    return { channels, signups, roster, start, raidInvites };
+    const notificationDms = await buildPendingNotificationDms();
+
+    return { channels, signups, roster, start, raidInvites, notificationDms };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
@@ -1037,5 +1064,28 @@ export const discordSyncService = {
 
   async recordRaidInviteSent(input: { runId: string; signupId: string }): Promise<void> {
     await runDiscordPostRepository.recordRaidInviteSent(input);
+  },
+
+  /**
+   * Records Discord DM delivery for a PENDING UserNotification.
+   * RAID_INVITE successes also append the legacy raidInviteSentSignupIds list.
+   */
+  async recordNotificationDmDelivery(input: {
+    notificationId: string;
+    result: "SENT" | "FAILED_PERMANENT";
+  }): Promise<void> {
+    const notification = await userNotificationRepository.findById(input.notificationId);
+    await userNotificationRepository.updateDiscordDelivery(input.notificationId, input.result);
+    if (
+      input.result === "SENT" &&
+      notification?.type === "RAID_INVITE" &&
+      notification.runId &&
+      notification.signupId
+    ) {
+      await runDiscordPostRepository.recordRaidInviteSent({
+        runId: notification.runId,
+        signupId: notification.signupId,
+      });
+    }
   },
 };

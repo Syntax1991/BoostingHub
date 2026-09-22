@@ -10,6 +10,8 @@ import { runService } from "@/services/run.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
+import { notificationService } from "@/services/notification.service";
+import { settingsService } from "@/services/settings.service";
 import { runTemplateService } from "@/services/run-template.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
 import { parseManageTemplateFilters } from "@/validators/run-template";
@@ -119,6 +121,25 @@ export const signupController = {
   async getMyRunsPage() {
     const user = await requireUserOrRedirect("/my-runs");
     return signupService.getMyRuns(user);
+  },
+};
+
+export const notificationController = {
+  async getNotificationsPage() {
+    const user = await requireUserOrRedirect("/notifications");
+    return notificationService.listPage(user);
+  },
+
+  async getBellData() {
+    const user = await requireUserOrRedirect("/dashboard");
+    return notificationService.getBellData(user);
+  },
+};
+
+export const settingsController = {
+  async getSettingsPage() {
+    const user = await requireUserOrRedirect("/settings");
+    return settingsService.getSettings(user);
   },
 };
 

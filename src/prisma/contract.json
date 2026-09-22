@@ -116,6 +116,10 @@
       "model": "User",
       "namespace": "public"
     },
+    "user_notification": {
+      "model": "UserNotification",
+      "namespace": "public"
+    },
     "verification": {
       "model": "Verification",
       "namespace": "public"
@@ -239,6 +243,27 @@
               }
             ]
           },
+          "DiscordDeliveryStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PENDING",
+                "value": "PENDING"
+              },
+              {
+                "name": "SENT",
+                "value": "SENT"
+              },
+              {
+                "name": "SKIPPED",
+                "value": "SKIPPED"
+              },
+              {
+                "name": "FAILED_PERMANENT",
+                "value": "FAILED_PERMANENT"
+              }
+            ]
+          },
           "LootbuddyMode": {
             "codecId": "pg/text@1",
             "members": [
@@ -266,6 +291,19 @@
               {
                 "name": "TRIAL",
                 "value": "TRIAL"
+              }
+            ]
+          },
+          "NotificationType": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "ROSTER_SELECTED",
+                "value": "ROSTER_SELECTED"
+              },
+              {
+                "name": "RAID_INVITE",
+                "value": "RAID_INVITE"
               }
             ]
           },
@@ -2578,6 +2616,21 @@
                   "namespace": "public"
                 }
               },
+              "notifications": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "UserNotification",
+                  "namespace": "public"
+                }
+              },
               "raidLead": {
                 "cardinality": "N:1",
                 "on": {
@@ -4299,6 +4352,21 @@
                   "namespace": "public"
                 }
               },
+              "notifications": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "signupId"
+                  ]
+                },
+                "to": {
+                  "model": "UserNotification",
+                  "namespace": "public"
+                }
+              },
               "offeredRoles": {
                 "cardinality": "1:N",
                 "on": {
@@ -5197,6 +5265,20 @@
                   "kind": "scalar"
                 }
               },
+              "dmRaidInviteEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "dmRosterSelectedEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "email": {
                 "nullable": true,
                 "type": {
@@ -5451,6 +5533,21 @@
                   "namespace": "public"
                 }
               },
+              "notifications": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "UserNotification",
+                  "namespace": "public"
+                }
+              },
               "ownedRunTemplates": {
                 "cardinality": "1:N",
                 "on": {
@@ -5664,6 +5761,12 @@
                 "discordUsername": {
                   "column": "discordUsername"
                 },
+                "dmRaidInviteEnabled": {
+                  "column": "dmRaidInviteEnabled"
+                },
+                "dmRosterSelectedEnabled": {
+                  "column": "dmRosterSelectedEnabled"
+                },
                 "email": {
                   "column": "email"
                 },
@@ -5685,6 +5788,215 @@
               },
               "namespaceId": "public",
               "table": "user"
+            }
+          },
+          "UserNotification": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordDeliveryStatus": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "DiscordDeliveryStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "discordUserId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "href": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "message": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "readAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "signupId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sourceKey": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "title": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "type": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "NotificationType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "signup": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "signupId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunSignup",
+                  "namespace": "public"
+                }
+              },
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "discordDeliveryStatus": {
+                  "column": "discordDeliveryStatus"
+                },
+                "discordUserId": {
+                  "column": "discordUserId"
+                },
+                "href": {
+                  "column": "href"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "message": {
+                  "column": "message"
+                },
+                "readAt": {
+                  "column": "readAt"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "signupId": {
+                  "column": "signupId"
+                },
+                "sourceKey": {
+                  "column": "sourceKey"
+                },
+                "title": {
+                  "column": "title"
+                },
+                "type": {
+                  "column": "type"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_notification"
             }
           },
           "Verification": {
@@ -9832,6 +10144,24 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "dmRaidInviteEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "dmRosterSelectedEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "email": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -9883,6 +10213,225 @@
                 {
                   "columns": [
                     "discordUserId"
+                  ]
+                }
+              ]
+            },
+            "user_notification": {
+              "checks": [
+                {
+                  "expression": "\"discordDeliveryStatus\" IN ('PENDING', 'SENT', 'SKIPPED', 'FAILED_PERMANENT')",
+                  "name": "user_notification_discordDeliveryStatus_check_2752241d",
+                  "prefix": "user_notification_discordDeliveryStatus_check"
+                },
+                {
+                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE')",
+                  "name": "user_notification_type_check_1b0a5b12",
+                  "prefix": "user_notification_type_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "discordDeliveryStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "DiscordDeliveryStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "discordUserId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "href": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "message": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "readAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "signupId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "sourceKey": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "title": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "type": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "NotificationType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_notification"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_notification"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "signupId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_notification"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_signup"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "discordDeliveryStatus"
+                  ],
+                  "name": "user_notification_discordDeliveryStatus_idx_bc6e068f",
+                  "prefix": "user_notification_discordDeliveryStatus_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "user_notification_runId_idx_a6016437",
+                  "prefix": "user_notification_runId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "signupId"
+                  ],
+                  "name": "user_notification_signupId_idx_acdbc7f1",
+                  "prefix": "user_notification_signupId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId",
+                    "createdAt"
+                  ],
+                  "name": "user_notification_userId_createdAt_idx_f726f04a",
+                  "prefix": "user_notification_userId_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "user_notification_userId_idx_a489d58a",
+                  "prefix": "user_notification_userId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId",
+                    "readAt"
+                  ],
+                  "name": "user_notification_userId_readAt_idx_8bd92969",
+                  "prefix": "user_notification_userId_readAt_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sourceKey"
                   ]
                 }
               ]
@@ -9986,6 +10535,15 @@
                 "DPS"
               ]
             },
+            "DiscordDeliveryStatus": {
+              "kind": "valueSet",
+              "values": [
+                "PENDING",
+                "SENT",
+                "SKIPPED",
+                "FAILED_PERMANENT"
+              ]
+            },
             "LootbuddyMode": {
               "kind": "valueSet",
               "values": [
@@ -9999,6 +10557,13 @@
                 "NONE",
                 "ACCESS",
                 "TRIAL"
+              ]
+            },
+            "NotificationType": {
+              "kind": "valueSet",
+              "values": [
+                "ROSTER_SELECTED",
+                "RAID_INVITE"
               ]
             },
             "ParticipationType": {
@@ -10105,10 +10670,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e13eedd1751f2a8f28c4322ddbeacbdf97eaa74ee6f99ab1e1d7ab487fd7dedd"
+    "storageHash": "b6965eeecc4b50ec21177d6973308846f7983e8541be35e450884652b309828c"
   },
   "execution": {
-    "executionHash": "1134409d7663950233388dd6e9834317a99058130e40ba4ac320f3867a969d88",
+    "executionHash": "69f5f642ed3c9ea221dc0f168db405dfb83b45c1d9b2ef787ce08d0b9baa1934",
     "mutations": {
       "defaults": [
         {
@@ -10762,6 +11327,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "user"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "user_notification"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "user_notification"
           }
         },
         {

@@ -204,7 +204,9 @@ Each member renders as `<@discordUserId> <:class:> — Character-Realm` when the
 
 ## Raid Invite DMs (Apex-style)
 
-When a Run is **started** (`Start Run` → `IN_PROGRESS`), each **SELECTED** BOOSTER and LOOTBUDDY with a linked Discord account receives one private DM from the bot. Publishing the roster earlier does **not** send invites.
+When a Run is **started** (`Start Run` → `IN_PROGRESS`), BoostingHub creates a `RAID_INVITE` `UserNotification` for each SELECTED participant. Publishing the roster earlier does **not** send invites. Discord DM intent is snapshotted from `User.dmRaidInviteEnabled` + linked Discord id at creation.
+
+The bot delivers from `listSyncWork.notificationDms` (PENDING rows only). Legacy `raidInvites` is always empty — do not regenerate invites from SELECTED + `raidInviteSentSignupIds` (avoids double DMs). See [user-notifications.md](user-notifications.md).
 
 ```text
 📣 **Raid Invite**
@@ -220,10 +222,12 @@ Please be online 10 minutes before start.
 
 - VIP appears only on the Assignment line (never duplicated on the schedule line).
 - `Channel:` uses the persisted `RunDiscordPost.runChannelId` as a real `<#id>` mention. When that id is missing, the Channel line is omitted — never `#unknown`.
-- **After start / late SELECTED**: only signup ids not yet in `RunDiscordPost.raidInviteSentSignupIds` are DMed (JSON array); already-invited ids are skipped.
-- Closed DMs (Discord 50007) are logged and still marked sent so the bot does not retry forever.
+- Closed DMs (Discord 50007) → `FAILED_PERMANENT` (no retry). Transient errors leave `PENDING`.
+- Successful RAID_INVITE DMs also append `RunDiscordPost.raidInviteSentSignupIds` for legacy continuity.
 - Users must share the guild with the bot and allow DMs from server members.
-- App-archived Runs do not send invites.
+- App-archived Runs do not enqueue notification DMs.
+
+Roster Pick DMs (`ROSTER_SELECTED`) use a separate message body (`buildRosterSelectedDmMessage`) and are also delivered via `notificationDms`.
 
 ## `/mysignups`
 

@@ -877,6 +877,7 @@ export const rosterService = {
       fromStatus: run.status,
       runStatus: nextStatus,
       publisherId: user.id,
+      runTitle: run.title,
     });
 
     return validation;
