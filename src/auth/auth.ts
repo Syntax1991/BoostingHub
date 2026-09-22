@@ -22,7 +22,7 @@ export { SESSION_EXPIRES_IN_SECONDS, SESSION_UPDATE_AGE_SECONDS };
  * Session policy (Better Auth 1.7.3):
  * - expiresIn: 30 days (sliding lifetime)
  * - updateAge: 1 day (refresh threshold while active)
- * - freshAge: default 1 day (Better Auth `/list-sessions` only; Profile lists via Prisma)
+ * - freshAge: default 1 day (Better Auth `/list-sessions` only; Settings lists via Prisma)
  * - cookieCache: left disabled (default) so revocation is immediately authoritative
  *
  * OAuth provider tokens (Discord Account rows) are encrypted at rest when

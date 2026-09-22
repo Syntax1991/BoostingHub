@@ -2,11 +2,15 @@ import { PageHeader } from "@/components/ui/primitives";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
 import { RegionalSettingsCard } from "@/components/settings/regional-settings-card";
 import { GameplaySettingsCard } from "@/components/settings/gameplay-settings-card";
+import { ActiveSessionsSection } from "@/components/settings/active-sessions-section";
+import type { PublicSessionView } from "@/auth/session-view";
 import type { settingsService } from "@/services/settings.service";
 
-type Settings = Awaited<ReturnType<typeof settingsService.getSettings>>;
+type SettingsPage = Awaited<ReturnType<typeof settingsService.getSettings>> & {
+  sessions: PublicSessionView[];
+};
 
-export function SettingsView({ data }: { data: Settings }) {
+export function SettingsView({ data }: { data: SettingsPage }) {
   return (
     <div>
       <PageHeader
@@ -20,6 +24,7 @@ export function SettingsView({ data }: { data: Settings }) {
           defaultCharacterId={data.gameplay.defaultCharacterId}
           characters={data.characters}
         />
+        <ActiveSessionsSection sessions={data.sessions} />
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import { signupService } from "@/services/signup.service";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
 import { settingsService } from "@/services/settings.service";
+import { sessionManagementService } from "@/services/session-management.service";
 import { runTemplateService } from "@/services/run-template.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
 import { parseManageTemplateFilters } from "@/validators/run-template";
@@ -139,7 +140,11 @@ export const notificationController = {
 export const settingsController = {
   async getSettingsPage() {
     const user = await requireUserOrRedirect("/settings");
-    return settingsService.getSettings(user);
+    const [settings, sessions] = await Promise.all([
+      settingsService.getSettings(user),
+      sessionManagementService.listOwnSessions(),
+    ]);
+    return { ...settings, sessions };
   },
 };
 

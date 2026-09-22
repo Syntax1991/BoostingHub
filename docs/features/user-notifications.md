@@ -10,6 +10,7 @@ Settings sections:
 1. **Notifications** — Discord DM delivery preferences (in-app is always on)
 2. **Regional** — personal IANA timezone
 3. **Gameplay** — Default Character preference for signup UX
+4. **Active sessions** — list and revoke signed-in devices (via Prisma; revoke via Better Auth)
 
 | Type | When created | Web | Discord DM |
 | --- | --- | --- | --- |
@@ -83,6 +84,6 @@ state. Existing active signup state wins over the preference. Never auto-submits
 ## Surfaces
 
 - Header bell (latest 5 + unread count) → `/notifications`
-- Settings → Notifications / Regional / Gameplay (immediate save)
-- Controllers: `settings.actions.ts`, `notification.actions.ts`
-- Services: `settingsService`, `notificationService`, `runLifecycleNotificationService`
+- Settings → Notifications / Regional / Gameplay / Active sessions
+- Controllers: `settings.actions.ts`, `notification.actions.ts`, `session.actions.ts`
+- Services: `settingsService`, `notificationService`, `runLifecycleNotificationService`, `sessionManagementService`
