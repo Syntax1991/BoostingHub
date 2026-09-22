@@ -77,6 +77,7 @@ export class BotApiClient {
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
         scheduledStartAt: string;
         retireChannel: boolean;
+        pendingLifecycleAnnouncements: boolean;
         archiveArtifactsNeeded: boolean;
         archiveCloseMessageId: string | null;
         archiveTranscriptMessageId: string | null;
@@ -175,6 +176,17 @@ export class BotApiClient {
           | "WARRIOR"
           | null;
       }>;
+      runAnnouncements: Array<{
+        announcementId: string;
+        runId: string;
+        type: "RUN_RESCHEDULED" | "RUN_CANCELLED";
+        runChannelId: string | null;
+        previousScheduledStartAt: string | null;
+        scheduledStartAt: string;
+        productLabel: string;
+        difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
+        lootType: "SAVED" | "UNSAVED" | "VIP";
+      }>;
     }>("/api/bot/discord/sync", {
       headers: classEmojiFingerprint
         ? { "x-class-emoji-fingerprint": classEmojiFingerprint }
@@ -214,6 +226,11 @@ export class BotApiClient {
           kind: "notification-dm";
           notificationId: string;
           result: "SENT" | "FAILED_PERMANENT";
+        }
+      | {
+          kind: "run-announcement";
+          announcementId: string;
+          result: "SENT" | "SKIPPED" | "FAILED_PERMANENT";
         },
   ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
