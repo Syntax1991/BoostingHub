@@ -74,37 +74,6 @@ afterAll(async () => {
   await cleanup();
 });
 
-describe("notificationService preferences", () => {
-  it("defaults both Discord DM prefs to enabled and updates independently", async () => {
-    const initial = await notificationService.getDmPreferences(owner);
-    expect(initial).toEqual({
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: true,
-    });
-
-    const rosterOff = await notificationService.updateDmPreferences(owner, {
-      dmRosterSelectedEnabled: false,
-      dmRaidInviteEnabled: true,
-    });
-    expect(rosterOff.dmRosterSelectedEnabled).toBe(false);
-    expect(rosterOff.dmRaidInviteEnabled).toBe(true);
-
-    const inviteOff = await notificationService.updateDmPreferences(owner, {
-      dmRosterSelectedEnabled: false,
-      dmRaidInviteEnabled: false,
-    });
-    expect(inviteOff).toEqual({
-      dmRosterSelectedEnabled: false,
-      dmRaidInviteEnabled: false,
-    });
-
-    await notificationService.updateDmPreferences(owner, {
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: true,
-    });
-  });
-});
-
 describe("notificationService web read/unread/ownership", () => {
   it("tracks unread count, markRead, markAllRead, and rejects foreign ids", async () => {
     const now = new Date().toISOString();

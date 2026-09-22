@@ -15,11 +15,6 @@ export type NotificationBellItem = {
   createdAt: string;
 };
 
-export type NotificationDmPreferences = {
-  dmRosterSelectedEnabled: boolean;
-  dmRaidInviteEnabled: boolean;
-};
-
 function toBellItem(row: UserNotificationRecord): NotificationBellItem {
   return {
     id: row.id,
@@ -76,20 +71,5 @@ export const notificationService = {
   async markAllRead(user: AuthenticatedUser): Promise<{ marked: number }> {
     const marked = await userNotificationRepository.markAllRead(user.id);
     return { marked };
-  },
-
-  async getDmPreferences(user: AuthenticatedUser): Promise<NotificationDmPreferences> {
-    return userNotificationRepository.getDmPreferences(user.id);
-  },
-
-  async updateDmPreferences(
-    user: AuthenticatedUser,
-    prefs: NotificationDmPreferences,
-  ): Promise<NotificationDmPreferences> {
-    await userNotificationRepository.updateDmPreferences(user.id, {
-      dmRosterSelectedEnabled: prefs.dmRosterSelectedEnabled,
-      dmRaidInviteEnabled: prefs.dmRaidInviteEnabled,
-    });
-    return userNotificationRepository.getDmPreferences(user.id);
   },
 };

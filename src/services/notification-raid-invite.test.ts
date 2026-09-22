@@ -364,7 +364,9 @@ describe("notification raid invite + bot delivery", () => {
     const dm = work.notificationDms.find((item) => item.signupId === healer && item.type === "RAID_INVITE");
     expect(dm).toBeTruthy();
     expect(dm!.notificationId).toBe(pendingPlayer[0].id);
-    expect(work.notificationDms.some((item) => item.signupId === healerSkipped)).toBe(false);
+    expect(work.notificationDms.some((item) => item.signupId === healerSkipped && item.type === "RAID_INVITE")).toBe(
+      false,
+    );
 
     await discordSyncService.recordNotificationDmDelivery({
       notificationId: pendingPlayer[0].id,
@@ -384,7 +386,12 @@ describe("notification raid invite + bot delivery", () => {
       updatedAt: new Date().toISOString(),
     });
     const workPrefs = await discordSyncService.listSyncWork();
-    expect(workPrefs.notificationDms.some((item) => item.signupId === healerSkipped)).toBe(false);
+    expect(
+      workPrefs.notificationDms.some(
+        (item) => item.signupId === healerSkipped && item.type === "RAID_INVITE",
+      ),
+    ).toBe(false);
+    expect(workPrefs.notificationDms.some((item) => item.notificationId === skipped[0].id)).toBe(false);
   });
 
   it("marks FAILED_PERMANENT and does not retry", async () => {

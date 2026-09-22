@@ -128,11 +128,11 @@ export const userNotificationRepository = {
   },
 
   async countUnreadForUser(userId: string): Promise<number> {
-    return Number(
-      await orm.UserNotification.where({ userId })
-        .where((n) => n.readAt.isNull())
-        .count(),
-    );
+    const rows = await orm.UserNotification.where({ userId })
+      .where((n) => n.readAt.isNull())
+      .select("id")
+      .all();
+    return rows.length;
   },
 
   async listLatestForUser(userId: string, limit = 5): Promise<UserNotificationRecord[]> {
@@ -205,32 +205,6 @@ export const userNotificationRepository = {
     await orm.UserNotification.where({ id: notificationId, discordDeliveryStatus: "PENDING" }).update({
       discordDeliveryStatus: status,
       updatedAt: now,
-    });
-  },
-
-  async getDmPreferences(userId: string): Promise<{
-    dmRosterSelectedEnabled: boolean;
-    dmRaidInviteEnabled: boolean;
-  }> {
-    const row = await orm.User.where({ id: userId }).first();
-    if (!row) {
-      return { dmRosterSelectedEnabled: true, dmRaidInviteEnabled: true };
-    }
-    const data = row as Record<string, unknown>;
-    return {
-      dmRosterSelectedEnabled: data.dmRosterSelectedEnabled !== false,
-      dmRaidInviteEnabled: data.dmRaidInviteEnabled !== false,
-    };
-  },
-
-  async updateDmPreferences(
-    userId: string,
-    prefs: { dmRosterSelectedEnabled: boolean; dmRaidInviteEnabled: boolean },
-  ): Promise<void> {
-    await orm.User.where({ id: userId }).update({
-      dmRosterSelectedEnabled: prefs.dmRosterSelectedEnabled,
-      dmRaidInviteEnabled: prefs.dmRaidInviteEnabled,
-      updatedAt: new Date().toISOString(),
     });
   },
 };

@@ -234,7 +234,20 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
     expect(["CURRENT", "NEXT", "ARCHIVE"]).toContain(item.targetBucket);
     expect(typeof item.scheduledStartAt).toBe("string");
     expect(Object.keys(item).sort()).toEqual(
-      ["desiredChannelName", "existingRunChannelId", "runId", "scheduledStartAt", "targetBucket"].sort(),
+      [
+        "archiveArtifactsNeeded",
+        "archiveCloseMessageId",
+        "archiveTranscriptMessageId",
+        "desiredChannelName",
+        "existingRunChannelId",
+        "panelName",
+        "raidLeadDiscordUserId",
+        "raidLeadName",
+        "retireChannel",
+        "runId",
+        "scheduledStartAt",
+        "targetBucket",
+      ].sort(),
     );
   });
 });
