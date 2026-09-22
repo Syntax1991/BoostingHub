@@ -40,8 +40,13 @@ async function createTestUser(id: string, name: string) {
     emailVerified: true,
     accountRole: "USER",
     accountStatus: "ACTIVE",
+    discordDmEnabled: true,
     dmRosterSelectedEnabled: true,
     dmRaidInviteEnabled: true,
+    dmRunCancelledEnabled: true,
+    dmRunRescheduledEnabled: true,
+    dmRosterRemovedEnabled: true,
+    timeZone: "Europe/Berlin",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
