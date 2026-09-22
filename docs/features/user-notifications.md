@@ -5,12 +5,19 @@
 BoostingHub separates **Profile** (identity / account operations) from **Settings**
 (user-controlled application preferences).
 
-The first Settings category is **Notifications**:
+Settings sections:
+
+1. **Notifications** — Discord DM delivery preferences (in-app is always on)
+2. **Regional** — personal IANA timezone
+3. **Gameplay** — Default Character preference for signup UX
 
 | Type | When created | Web | Discord DM |
 | --- | --- | --- | --- |
-| `ROSTER_SELECTED` | Roster **publish** for **newly** SELECTED signups only | Always | If `dmRosterSelectedEnabled` and linked Discord at creation |
-| `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | If `dmRaidInviteEnabled` and linked Discord at creation |
+| `ROSTER_SELECTED` | Roster **publish** for **newly** SELECTED signups only | Always | Master + `dmRosterSelectedEnabled` + Discord linked |
+| `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | Master + `dmRaidInviteEnabled` + Discord linked |
+| `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | Master + `dmRunCancelledEnabled` + Discord linked |
+| `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | Master + `dmRunRescheduledEnabled` + Discord linked |
+| `ROSTER_REMOVED` | Publish: previous SELECTED → NOT_SELECTED | Always | Master + `dmRosterRemovedEnabled` + Discord linked |
 
 There is **no historical backfill**. Draft roster selection never notifies.
 Republish dedupes via deterministic `sourceKey`.
@@ -21,61 +28,61 @@ Route: `/settings`
 
 Sidebar: **Settings** (after Profile).
 
-Only the authenticated owner may view or update their settings. No ADMIN override
-is required or granted for another user's preferences.
+Only the authenticated owner may view or update their settings.
 
 ## Preferences
 
 Stored on `User`:
 
-- `dmRosterSelectedEnabled` (default `true`)
-- `dmRaidInviteEnabled` (default `true`)
+- `discordDmEnabled` (default `true`) — master override; does not rewrite per-event toggles
+- `dmRosterSelectedEnabled` / `dmRaidInviteEnabled` / `dmRunCancelledEnabled` /
+  `dmRunRescheduledEnabled` / `dmRosterRemovedEnabled` (default `true`)
+- `timeZone` (default `Europe/Berlin`) — personal presentation only
+- `defaultCharacterId` (nullable) — signup UX preference only
 
-Preferences are **independent**. In-app notifications cannot be disabled.
-Discord preference is **snapshotted** into `UserNotification.discordDeliveryStatus`
-/ `discordUserId` at creation — later preference changes do not rewrite existing
-rows and never retroactively send skipped events.
+### Effective Discord DM rule
+
+At creation:
+
+`discordDmEnabled AND eventSpecificDmEnabled AND usable Discord identity`
+
+→ `PENDING`, else `SKIPPED`. Snapshotted; never re-evaluated later.
+
+## Quiet Hours
+
+Not implemented in this phase. Future work would need timezone-aware deferred
+delivery (`deliverAfter` / `nextAttemptAt`) and DST-safe scheduling.
 
 ## Idempotency (`sourceKey`)
 
 - Roster pick: `roster-selected:<runId>:<publishedVersion>:<signupId>`
+- Roster removed: `roster-removed:<runId>:<publishedVersion>:<signupId>`
 - Raid invite: `raid-invite:<runId>:<signupId>`
+- Run cancelled: `run-cancelled:<runId>:<userId>`
+- Run rescheduled: `run-rescheduled:<runId>:<scheduleRevision>:<userId>`
 
-Duplicate creates are ignored (`createInTx` / unique `sourceKey`).
+`Run.scheduleRevision` increments only when `scheduledStartAt` changes.
 
-## Publish vs Start boundaries
+## Community timezone authority
 
-- **Publish**: creates `ROSTER_SELECTED` only for signups that were not already
-  SELECTED before this publish (newly selected). Does **not** send Raid Invite.
-- **Start Run**: creates `RAID_INVITE` for every SELECTED signup once the run
-  becomes `IN_PROGRESS`. Does **not** re-create roster-selected rows.
+User timezone must **not** alter:
 
-## Discord delivery states
+- generated `Run.title`
+- Discord channel names
+- raid-ID week boundaries / CURRENT/NEXT classification
 
-| Status | Meaning |
-| --- | --- |
-| `PENDING` | Preference on + Discord linked at creation; bot should DM |
-| `SKIPPED` | Preference off or no Discord id at creation; never returned as sync work |
-| `SENT` | Bot delivered successfully |
-| `FAILED_PERMANENT` | Cannot DM (closed DMs / permission); no retry |
+Shared Discord channel posts prefer Discord native timestamps (`<t:UNIX:F>`)
+where appropriate. Personal DMs also prefer native timestamps.
 
-Transient Discord errors leave the row `PENDING` for a later poll.
-`SKIPPED` / `SENT` / `FAILED_PERMANENT` are never returned as bot work.
+## Default Character
 
-## Bot delivery
-
-`discordSyncService.listSyncWork` exposes `notificationDms` from pending
-`UserNotification` rows (both types). Legacy `raidInvites` is always `[]` so the
-old SELECTED + `raidInviteSentSignupIds` loop cannot double-send. On successful
-`RAID_INVITE` DM, the bot also appends legacy `raidInviteSentSignupIds` for
-continuity.
-
-Delivery result is recorded via `PUT /api/bot/runs/:runId/discord-state` with
-`kind: "notification-dm"`.
+Preference only. Never bypasses Booster Access, qualifications, difficulty,
+weekly availability, lockouts, cross-run reservations, role validity, or active
+state. Existing active signup state wins over the preference. Never auto-submits.
 
 ## Surfaces
 
 - Header bell (latest 5 + unread count) → `/notifications`
-- Settings → Notifications Discord DM toggles (immediate save)
+- Settings → Notifications / Regional / Gameplay (immediate save)
 - Controllers: `settings.actions.ts`, `notification.actions.ts`
-- Services: `settingsService`, `notificationService` → repositories
+- Services: `settingsService`, `notificationService`, `runLifecycleNotificationService`

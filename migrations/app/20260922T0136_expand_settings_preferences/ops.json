@@ -1,0 +1,461 @@
+[
+  {
+    "id": "dropCheckConstraint.user_notification.user_notification_type_check_1b0a5b12",
+    "label": "Drop check constraint \"user_notification_type_check_1b0a5b12\" on \"user_notification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_1b0a5b12",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_1b0a5b12\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_1b0a5b12",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"user_notification_type_check_1b0a5b12\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" DROP CONSTRAINT \"user_notification_type_check_1b0a5b12\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_1b0a5b12\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_1b0a5b12",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.scheduleRevision",
+    "label": "Add column \"scheduleRevision\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "scheduleRevision",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"scheduleRevision\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "scheduleRevision"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"scheduleRevision\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"scheduleRevision\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"scheduleRevision\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "scheduleRevision"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.defaultCharacterId",
+    "label": "Add column \"defaultCharacterId\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "defaultCharacterId",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"defaultCharacterId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "defaultCharacterId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"defaultCharacterId\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"defaultCharacterId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"defaultCharacterId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "defaultCharacterId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.discordDmEnabled",
+    "label": "Add column \"discordDmEnabled\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordDmEnabled",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordDmEnabled\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmEnabled"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordDmEnabled\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordDmEnabled\" bool DEFAULT true NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordDmEnabled\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmEnabled"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.dmRosterRemovedEnabled",
+    "label": "Add column \"dmRosterRemovedEnabled\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "dmRosterRemovedEnabled",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"dmRosterRemovedEnabled\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dmRosterRemovedEnabled"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"dmRosterRemovedEnabled\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"dmRosterRemovedEnabled\" bool DEFAULT true NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"dmRosterRemovedEnabled\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dmRosterRemovedEnabled"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.dmRunCancelledEnabled",
+    "label": "Add column \"dmRunCancelledEnabled\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "dmRunCancelledEnabled",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"dmRunCancelledEnabled\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dmRunCancelledEnabled"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"dmRunCancelledEnabled\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"dmRunCancelledEnabled\" bool DEFAULT true NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"dmRunCancelledEnabled\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dmRunCancelledEnabled"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.dmRunRescheduledEnabled",
+    "label": "Add column \"dmRunRescheduledEnabled\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "dmRunRescheduledEnabled",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"dmRunRescheduledEnabled\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dmRunRescheduledEnabled"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"dmRunRescheduledEnabled\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"dmRunRescheduledEnabled\" bool DEFAULT true NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"dmRunRescheduledEnabled\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dmRunRescheduledEnabled"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.timeZone",
+    "label": "Add column \"timeZone\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "timeZone",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"timeZone\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "timeZone"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"timeZone\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"timeZone\" text DEFAULT 'Europe/Berlin' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"timeZone\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "timeZone"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user_notification.user_notification_type_check_3f82dea7",
+    "label": "Add check constraint \"user_notification_type_check_3f82dea7\" on \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_3f82dea7",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_3f82dea7\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_3f82dea7",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_notification_type_check_3f82dea7\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD CONSTRAINT \"user_notification_type_check_3f82dea7\" CHECK (\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_3f82dea7\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_3f82dea7",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user.user_defaultCharacterId_idx_b1c87c96",
+    "label": "Create index \"user_defaultCharacterId_idx_b1c87c96\" on \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "user_defaultCharacterId_idx_b1c87c96",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_defaultCharacterId_idx_b1c87c96\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_defaultCharacterId_idx_b1c87c96\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_defaultCharacterId_idx_b1c87c96\"",
+        "sql": "CREATE INDEX \"user_defaultCharacterId_idx_b1c87c96\" ON \"public\".\"user\" (\"defaultCharacterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_defaultCharacterId_idx_b1c87c96\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_defaultCharacterId_idx_b1c87c96\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.user.user_defaultCharacterId_fkey",
+    "label": "Add foreign key \"user_defaultCharacterId_fkey\" on \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "user_defaultCharacterId_fkey",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"user_defaultCharacterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_defaultCharacterId_fkey",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"user_defaultCharacterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"user\"\nADD CONSTRAINT \"user_defaultCharacterId_fkey\"\nFOREIGN KEY (\"defaultCharacterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"user_defaultCharacterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_defaultCharacterId_fkey",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  }
+]

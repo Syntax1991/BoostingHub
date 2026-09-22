@@ -64,7 +64,7 @@ If `npx create-db@latest` was used, unclaimed databases expire after 24 hours. P
 
 ## Time display
 
-Timestamps are stored in UTC. `src/lib/datetime.ts` formats them in `Europe/Berlin` until per-user timezones exist. Month names are avoided (`Thu 10/09/2026 21:00`) because Node and browsers disagree on `en-GB` abbreviations such as `Sept` vs `Sep`.
+Timestamps are stored in UTC. Personal surfaces format them with the User's Settings timezone (default `Europe/Berlin`). Community/server authority — Run titles, Discord channel names, raid-ID week boundaries — remains `Europe/Berlin` via `DEFAULT_TIME_ZONE`. Month names are avoided (`Thu 10/09/2026 21:00`) because Node and browsers disagree on `en-GB` abbreviations such as `Sept` vs `Sep`.
 
 ## GitHub workflow
 
