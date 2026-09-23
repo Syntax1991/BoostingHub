@@ -508,4 +508,29 @@ describe("bot API roster and discord-state endpoints", () => {
     sync = await syncGet(req("/api/bot/discord/sync", { headers: { authorization: `Bearer ${TOKEN}` } })).then((r) => r.json());
     expect(sync.data.signups.some((item: { runId: string }) => item.runId === runId)).toBe(false);
   });
+
+  it("channel-gone clears only identity stored in that exact channel and requires a channelId", async () => {
+    const put = (body: unknown) =>
+      discordStatePut(
+        req(`/api/bot/runs/${runId}/discord-state`, {
+          method: "PUT",
+          headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+          body,
+        }),
+        params(runId),
+      );
+    const signupIdentity = async () => {
+      const row = (await orm.RunDiscordPost.where({ runId }).first()) as Record<string, unknown> | null;
+      return { channelId: row?.signupChannelId ?? null, messageId: row?.signupMessageId ?? null };
+    };
+
+    expect((await put({ kind: "signup", channelId: "chan-gone-x", messageId: "msg-gone-x" })).status).toBe(200);
+
+    expect((await put({ kind: "channel-gone" })).status).toBe(400);
+    expect((await put({ kind: "channel-gone", channelId: "some-other-chan" })).status).toBe(200);
+    expect(await signupIdentity()).toEqual({ channelId: "chan-gone-x", messageId: "msg-gone-x" });
+
+    expect((await put({ kind: "channel-gone", channelId: "chan-gone-x" })).status).toBe(200);
+    expect(await signupIdentity()).toEqual({ channelId: null, messageId: null });
+  });
 });

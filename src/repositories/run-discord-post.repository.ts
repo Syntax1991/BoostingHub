@@ -172,6 +172,36 @@ export const runDiscordPostRepository = {
   },
 
   /**
+   * Discord confirmed `channelId` is deleted (Unknown Channel) and the bot may
+   * not replace it. Drops only the live identity that lives in that channel —
+   * run channel, signup post, roster post — so sync work stops re-targeting
+   * it every poll. Fields pointing at any other channel (e.g. a replacement
+   * recorded meanwhile) are untouched. The start post marker, archive
+   * artifacts/transcript and Raid Invite history are kept as history.
+   */
+  async clearDeletedChannelIdentity(runId: string, channelId: string): Promise<void> {
+    const existing = await orm.RunDiscordPost.where({ runId }).first();
+    if (!existing) return;
+    const post = mapRow(existing as Record<string, unknown>);
+    const patch: Record<string, unknown> = {};
+    if (post.runChannelId === channelId) {
+      patch.runChannelId = null;
+    }
+    if (post.signupChannelId === channelId) {
+      patch.signupChannelId = null;
+      patch.signupMessageId = null;
+      patch.lastSignupSignature = null;
+    }
+    if (post.rosterChannelId === channelId) {
+      patch.rosterChannelId = null;
+      patch.rosterMessageId = null;
+      patch.lastRosterVersion = null;
+    }
+    if (Object.keys(patch).length === 0) return;
+    await orm.RunDiscordPost.where({ runId }).update({ ...patch, updatedAt: new Date().toISOString() });
+  },
+
+  /**
    * Appends a signup id to the Raid Invite sent list (idempotent).
    * Closed-DM failures still record so the bot does not retry forever.
    */
