@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
@@ -1458,6 +1458,120 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
       expect(after?.runChannelId).toBe("replacement-chan");
       expect(after?.signupChannelId).toBe("replacement-chan");
       expect(after?.signupMessageId).toBe("replacement-msg");
+    });
+
+    describe("runDiscordPostRepository.clearDeletedChannelIdentity — exact-match writes", () => {
+      async function runWithIdentity(identity: {
+        runChannelId: string | null;
+        signupChannelId: string | null;
+        rosterChannelId: string | null;
+      }) {
+        const id = await createRunAt(nextStart);
+        await discordSyncService.recordRunChannel({ runId: id, channelId: "seed" });
+        await orm.RunDiscordPost.where({ runId: id }).update({
+          runChannelId: identity.runChannelId,
+          signupChannelId: identity.signupChannelId,
+          signupMessageId: identity.signupChannelId ? `${identity.signupChannelId}-signup-msg` : null,
+          lastSignupSignature: identity.signupChannelId ? `${identity.signupChannelId}-sig` : null,
+          rosterChannelId: identity.rosterChannelId,
+          rosterMessageId: identity.rosterChannelId ? `${identity.rosterChannelId}-roster-msg` : null,
+          lastRosterVersion: identity.rosterChannelId ? 7 : null,
+          startChannelId: "start-chan",
+          startMessageId: "start-msg",
+          updatedAt: new Date().toISOString(),
+        });
+        return id;
+      }
+
+      async function identityOf(id: string) {
+        const post = await runDiscordPostRepository.findByRunId(id);
+        return {
+          run: post?.runChannelId ?? null,
+          signup: [post?.signupChannelId ?? null, post?.signupMessageId ?? null, post?.lastSignupSignature ?? null],
+          roster: [post?.rosterChannelId ?? null, post?.rosterMessageId ?? null, post?.lastRosterVersion ?? null],
+          start: [post?.startChannelId ?? null, post?.startMessageId ?? null],
+        };
+      }
+
+      const NEW_SIGNUP = ["new-chan", "new-chan-signup-msg", "new-chan-sig"];
+      const NEW_ROSTER = ["new-chan", "new-chan-roster-msg", 7];
+      const CLEARED = [null, null, null];
+      const START = ["start-chan", "start-msg"];
+
+      it("a stale OLD report never clears NEW run, signup or roster identity", async () => {
+        const id = await runWithIdentity({ runChannelId: "new-chan", signupChannelId: "new-chan", rosterChannelId: "new-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+
+        expect(await identityOf(id)).toEqual({ run: "new-chan", signup: NEW_SIGNUP, roster: NEW_ROSTER, start: START });
+      });
+
+      it("clears each matching group independently and leaves non-matching groups intact", async () => {
+        const signupOnly = await runWithIdentity({ runChannelId: "new-chan", signupChannelId: "old-chan", rosterChannelId: "new-chan" });
+        const runAndRoster = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "new-chan", rosterChannelId: "old-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(signupOnly, "old-chan");
+        await runDiscordPostRepository.clearDeletedChannelIdentity(runAndRoster, "old-chan");
+
+        expect(await identityOf(signupOnly)).toEqual({ run: "new-chan", signup: CLEARED, roster: NEW_ROSTER, start: START });
+        expect(await identityOf(runAndRoster)).toEqual({ run: null, signup: NEW_SIGNUP, roster: CLEARED, start: START });
+      });
+
+      it("is idempotent, and a repeat after a replacement was recorded leaves the replacement intact", async () => {
+        const id = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "old-chan", rosterChannelId: "old-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        expect(await identityOf(id)).toEqual({ run: null, signup: CLEARED, roster: CLEARED, start: START });
+
+        await discordSyncService.recordRunChannel({ runId: id, channelId: "replacement-chan" });
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        expect((await identityOf(id)).run).toBe("replacement-chan");
+      });
+
+      it("RACE: a replacement recorded between the cleanup's database calls survives the stale report", async () => {
+        const id = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "old-chan", rosterChannelId: "old-chan" });
+
+        // Interleave a concurrent replacement write right after the cleanup's
+        // first statement. A read-then-write implementation would then erase
+        // it with a runId-only UPDATE; exact-match writes must not.
+        const originalWhere = orm.RunDiscordPost.where.bind(orm.RunDiscordPost);
+        let calls = 0;
+        const whereSpy = vi.spyOn(orm.RunDiscordPost, "where").mockImplementation(((criteria: Parameters<typeof originalWhere>[0]) => {
+          calls += 1;
+          if (calls === 2) {
+            // Runs before the second statement is built/executed.
+            return {
+              ...originalWhere(criteria),
+              update: async (patch: Record<string, unknown>) => {
+                await originalWhere({ runId: id }).update({
+                  signupChannelId: "new-chan",
+                  signupMessageId: "new-chan-signup-msg",
+                  lastSignupSignature: "new-chan-sig",
+                  rosterChannelId: "new-chan",
+                  rosterMessageId: "new-chan-roster-msg",
+                  lastRosterVersion: 7,
+                  updatedAt: new Date().toISOString(),
+                });
+                return originalWhere(criteria).update(patch as never);
+              },
+              first: async () => originalWhere(criteria).first(),
+            };
+          }
+          return originalWhere(criteria);
+        }) as never);
+
+        try {
+          await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        } finally {
+          whereSpy.mockRestore();
+        }
+
+        const after = await identityOf(id);
+        expect(after.signup).toEqual(NEW_SIGNUP);
+        expect(after.roster).toEqual(NEW_ROSTER);
+        expect(after.start).toEqual(START);
+      });
     });
 
     it("does not disable legitimate provisioning: a restored, re-opened CURRENT/NEXT Run is eligible for a first channel again", async () => {
