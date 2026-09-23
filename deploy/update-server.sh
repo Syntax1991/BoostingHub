@@ -23,12 +23,17 @@ for unit in "${WEB_UNIT}" "${BOT_UNIT}" "${BACKUP_UNIT}"; do
   systemctl cat "${unit}" >/dev/null 2>&1 || fail "systemd unit ${unit} not found; server setup is incomplete"
 done
 
-cd "${APP_DIR}"
+# The backup step below relies on `systemctl start` blocking until the dump has
+# finished and reporting its result. Only Type=oneshot with RemainAfterExit=no
+# guarantees that (and re-runs on every start), so refuse anything else.
+BACKUP_TYPE="$(systemctl show -p Type --value "${BACKUP_UNIT}")"
+[[ "${BACKUP_TYPE}" == "oneshot" ]] \
+  || fail "${BACKUP_UNIT} must be Type=oneshot (actual: ${BACKUP_TYPE:-unset}); nothing was changed"
+BACKUP_REMAIN_AFTER_EXIT="$(systemctl show -p RemainAfterExit --value "${BACKUP_UNIT}")"
+[[ "${BACKUP_REMAIN_AFTER_EXIT}" == "no" ]] \
+  || fail "${BACKUP_UNIT} must use RemainAfterExit=no (actual: ${BACKUP_REMAIN_AFTER_EXIT:-unset}); nothing was changed"
 
-echo "==> Current release"
-BEFORE_SHA="$(app_git rev-parse HEAD)"
-echo "before_sha=${BEFORE_SHA}"
-echo "branch=$(app_git branch --show-current)"
+cd "${APP_DIR}"
 
 # Deployment must never destroy operator changes. Untracked operational files
 # are ignored here and left in place.
@@ -38,8 +43,12 @@ if [[ -n "${TRACKED_CHANGES}" ]]; then
   fail "tracked modifications in ${APP_DIR}; resolve them manually before deploying"
 fi
 
+echo "==> Current release"
+BEFORE_SHA="$(app_git rev-parse HEAD)"
+echo "before_sha=${BEFORE_SHA}"
+echo "branch=$(app_git branch --show-current)"
+
 # The backup must complete before any code, dependency or schema change.
-# `systemctl start` on the oneshot unit blocks until it finishes and fails if it fails.
 echo "==> Database backup (${BACKUP_UNIT})"
 systemctl start "${BACKUP_UNIT}" || fail "backup failed; nothing was changed"
 BACKUP_RESULT="$(systemctl show -p Result --value "${BACKUP_UNIT}")"
