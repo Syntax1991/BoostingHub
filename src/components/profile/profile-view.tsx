@@ -129,14 +129,6 @@ export function ProfileView({ data }: { data: Profile }) {
             </ul>
           )}
         </Card>
-        <Card>
-          <CardHeader title="Reserved" description="These sections are placeholders, not fake ledgers." />
-          <ul className="space-y-2 px-4 py-4 text-sm text-muted">
-            <li>Attendance history — deferred</li>
-            <li>Availability calendar — deferred</li>
-            <li>Profile gold wallet — deferred; completed-run payouts are on the Run Payout tab</li>
-          </ul>
-        </Card>
       </div>
     </div>
   );
