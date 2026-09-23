@@ -1,0 +1,18 @@
+# Timer for boostinghub-backup.service (daily 03:15 + up to 10 min jitter).
+#
+# Reference copy of the live production unit (docs/deployment-production.md).
+# deploy/update-server.sh NEVER installs, enables or reloads units: installing
+# or changing this file on the host is a deliberate operator action (as root):
+#   see boostinghub-backup.service for installation.
+
+[Unit]
+Description=BoostingHub daily database backup timer
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=10min
+Unit=boostinghub-backup.service
+
+[Install]
+WantedBy=timers.target

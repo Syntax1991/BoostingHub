@@ -1,0 +1,30 @@
+# systemd unit for the BoostingHub Discord bot (production VPS). Run exactly one instance.
+#
+# Reference copy of the live production unit (docs/deployment-production.md).
+# deploy/update-server.sh NEVER installs, enables or reloads units: installing
+# or changing this file on the host is a deliberate operator action (as root):
+#   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-discord-bot.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-discord-bot.service    # initial setup only
+#
+# Register slash commands separately when the command list changes:
+#   sudo -u boostinghub npm run bot:register-commands
+# Logs: journalctl -u boostinghub-discord-bot -f
+
+[Unit]
+Description=BoostingHub Discord bot
+After=network-online.target boostinghub-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=boostinghub
+WorkingDirectory=/var/www/boostinghub
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/boostinghub/.env
+ExecStart=/usr/bin/npm run bot:start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
