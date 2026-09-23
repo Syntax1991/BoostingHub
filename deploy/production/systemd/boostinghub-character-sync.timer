@@ -1,0 +1,19 @@
+# Timer for boostinghub-character-sync.service (every 15 minutes).
+#
+# Reference copy of the live production unit (docs/deployment-production.md).
+# deploy/update-server.sh NEVER installs, enables or reloads units: installing
+# or changing this file on the host is a deliberate operator action (as root):
+#   see boostinghub-character-sync.service for installation.
+
+[Unit]
+Description=BoostingHub character sync every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Persistent=true
+Unit=boostinghub-character-sync.service
+
+[Install]
+WantedBy=timers.target

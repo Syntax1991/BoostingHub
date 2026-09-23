@@ -1,0 +1,28 @@
+# Daily PostgreSQL backup for BoostingHub production (root, oneshot).
+#
+# Reference copy of the live production unit (docs/deployment-production.md).
+# deploy/update-server.sh NEVER installs, enables or reloads units: installing
+# or changing this file on the host is a deliberate operator action (as root):
+#   install -d -o root -g root -m 0755 /usr/local/libexec/boostinghub
+#   install -o root -g root -m 0755 deploy/production/backup-db.sh /usr/local/libexec/boostinghub/backup-db.sh
+#   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-backup.service deploy/production/systemd/boostinghub-backup.timer /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-backup.timer    # initial setup only
+#
+# ExecStart points at the ROOT-OWNED installed copy, never at the app checkout:
+# a root service must not execute a file the boostinghub app user can write.
+#
+# deploy/update-server.sh starts this unit before every release and requires
+# Type=oneshot + RemainAfterExit=no so `systemctl start` blocks until the dump
+# finishes and reports its Result. Keep both.
+
+[Unit]
+Description=BoostingHub PostgreSQL daily backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+User=root
+ExecStart=/usr/local/libexec/boostinghub/backup-db.sh
+Nice=10

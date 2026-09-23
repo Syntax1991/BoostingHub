@@ -1,0 +1,31 @@
+# systemd unit for the BoostingHub Next.js web app (production VPS).
+#
+# Reference copy of the live production unit (docs/deployment-production.md).
+# deploy/update-server.sh NEVER installs, enables or reloads units: installing
+# or changing this file on the host is a deliberate operator action (as root):
+#   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-web.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-web.service    # initial setup only
+#
+# Binds to 127.0.0.1 only — Plesk/Apache terminates TLS and proxies :443 → :3000.
+# Logs: journalctl -u boostinghub-web -f
+
+[Unit]
+Description=BoostingHub Next.js web
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=boostinghub
+WorkingDirectory=/var/www/boostinghub
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=/var/www/boostinghub/.env
+ExecStart=/usr/bin/npm run start -- -H 127.0.0.1 -p 3000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
