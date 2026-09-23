@@ -5,7 +5,8 @@ export const markNotificationReadSchema = z.object({
   notificationId: z.string().uuid(),
 });
 
-export const quietHoursPreferencesSchema = z
+/** Nested Quiet Hours block inside updateNotificationPreferencesSchema. */
+export const updateQuietHoursPreferencesSchema = z
   .object({
     enabled: z.boolean(),
     start: z.string().nullable(),
@@ -42,14 +43,14 @@ export const quietHoursPreferencesSchema = z
     }
   });
 
-export const updateDmPreferencesSchema = z.object({
+export const updateNotificationPreferencesSchema = z.object({
   discordDmEnabled: z.boolean(),
   dmRosterSelectedEnabled: z.boolean(),
   dmRaidInviteEnabled: z.boolean(),
   dmRunCancelledEnabled: z.boolean(),
   dmRunRescheduledEnabled: z.boolean(),
   dmRosterRemovedEnabled: z.boolean(),
-  quietHours: quietHoursPreferencesSchema,
+  quietHours: updateQuietHoursPreferencesSchema,
 });
 
 export const updateRegionalPreferencesSchema = z.object({

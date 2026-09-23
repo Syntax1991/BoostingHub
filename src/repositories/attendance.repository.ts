@@ -334,7 +334,7 @@ export const attendanceRepository = {
           assignment,
         });
         const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
-        const delivery = resolveDiscordDelivery({
+        const discordDmDelivery = resolveDiscordDelivery({
           discordDmEnabled,
           eventDmEnabled,
           discordUserId,
@@ -350,9 +350,9 @@ export const attendanceRepository = {
           title: copy.title,
           message: copy.message,
           href: copy.href,
-          discordDeliveryStatus: delivery.status,
-          discordUserId: delivery.discordUserId,
-          discordDeliverAfter: delivery.discordDeliverAfter,
+          discordDeliveryStatus: discordDmDelivery.status,
+          discordUserId: discordDmDelivery.discordUserId,
+          discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
           createdAt: now,
         });
       }

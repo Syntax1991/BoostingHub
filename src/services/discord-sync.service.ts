@@ -372,7 +372,8 @@ function desiredChannelNameFor(run: {
   return buildDiscordRunChannelName(input);
 }
 
-/** App archive, completed, or cancelled — Discord channel is transcribed then deleted. */
+/** App archive, completed, or cancelled — Discord channel is transcribed then deleted.
+ * Terminal Runs must not get a new channel after retirement (`clear-channel`). */
 function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: string | null }): boolean {
   if (run.archivedAt) return true;
   return run.status === "COMPLETED" || run.status === "CANCELLED";
@@ -702,10 +703,10 @@ function toStartMember(
 }
 
 async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> {
-  const pending = await userNotificationRepository.listPendingDiscordDelivery(50);
-  const items: NotificationDmWorkItem[] = [];
+  const pendingNotificationRows = await userNotificationRepository.listPendingDiscordDmNotifications(50);
+  const notificationDmWorkItems: NotificationDmWorkItem[] = [];
 
-  for (const notification of pending) {
+  for (const notification of pendingNotificationRows) {
     if (!notification.discordUserId || !notification.runId) continue;
 
     const run = await runRepository.findById(notification.runId);
@@ -731,13 +732,13 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
     };
 
     if (notification.type === "RUN_CANCELLED") {
-      items.push(base);
+      notificationDmWorkItems.push(base);
       continue;
     }
 
     if (notification.type === "RUN_RESCHEDULED") {
       const parsed = parseRescheduleHrefTimestamps(notification.href);
-      items.push({
+      notificationDmWorkItems.push({
         ...base,
         previousScheduledStartAt: parsed.previousScheduledStartAt,
         scheduledStartAt: parsed.nextScheduledStartAt ?? run.scheduledStartAt,
@@ -755,26 +756,26 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
 
     if (!notification.signupId) continue;
     const signupRows = await rosterRepository.listSignups(run.id);
-    const row = signupRows.find((entry) => entry.id === notification.signupId);
-    if (!row && notification.type !== "ROSTER_REMOVED") continue;
+    const signupRow = signupRows.find((signup) => signup.id === notification.signupId);
+    if (!signupRow && notification.type !== "ROSTER_REMOVED") continue;
 
-    const wowClass = row
-      ? row.participationType === "BOOSTER"
-        ? (row.character?.wowClass ?? null)
-        : (row.lootbuddyClass ?? row.character?.wowClass ?? null)
+    const wowClass = signupRow
+      ? signupRow.participationType === "BOOSTER"
+        ? (signupRow.character?.wowClass ?? null)
+        : (signupRow.lootbuddyClass ?? signupRow.character?.wowClass ?? null)
       : null;
 
-    items.push({
+    notificationDmWorkItems.push({
       ...base,
       signupId: notification.signupId,
-      participationType: row?.participationType ?? null,
-      selectedRole: row?.publishedRole ?? null,
-      characterName: row?.character?.name ?? null,
+      participationType: signupRow?.participationType ?? null,
+      selectedRole: signupRow?.publishedRole ?? null,
+      characterName: signupRow?.character?.name ?? null,
       wowClass,
     });
   }
 
-  return items;
+  return notificationDmWorkItems;
 }
 
 /**
@@ -845,22 +846,26 @@ export const discordSyncService = {
       // (existingRunChannelId is only ever set once the signup path below
       // has already created one).
       if (post?.runChannelId) {
-        const wantsRetire = shouldRetireDiscordChannel(run);
-        const pendingLifecycleAnnouncements = pendingAnnouncementRunIds.has(run.id);
-        const retireChannel = wantsRetire && !pendingLifecycleAnnouncements;
+        // CANCELLED/COMPLETED/app-archived Runs are eligible to retire, but
+        // PENDING RunDiscordAnnouncement rows must finish first — otherwise
+        // the channel can be deleted before RUN_CANCELLED / RUN_RESCHEDULED
+        // posts land. Wire field names (`retireChannel`, …) are stable JSON.
+        const runEligibleForRetirement = shouldRetireDiscordChannel(run);
+        const hasPendingLifecycleAnnouncements = pendingAnnouncementRunIds.has(run.id);
+        const shouldRetireChannelNow = runEligibleForRetirement && !hasPendingLifecycleAnnouncements;
         const archiveDiscordPosted = Boolean(
           post.archiveCloseMessageId && post.archiveTranscriptMessageId,
         );
         const archiveArtifactsNeeded =
-          retireChannel && (!archiveDiscordPosted || !post.archiveTranscriptHtml);
+          shouldRetireChannelNow && (!archiveDiscordPosted || !post.archiveTranscriptHtml);
         channels.push({
           runId: run.id,
           existingRunChannelId: post.runChannelId,
           desiredChannelName: desiredChannelNameFor(run),
           targetBucket,
           scheduledStartAt: run.scheduledStartAt,
-          retireChannel,
-          pendingLifecycleAnnouncements,
+          retireChannel: shouldRetireChannelNow,
+          pendingLifecycleAnnouncements: hasPendingLifecycleAnnouncements,
           archiveArtifactsNeeded,
           archiveCloseMessageId: post.archiveCloseMessageId,
           archiveTranscriptMessageId: post.archiveTranscriptMessageId,

@@ -4,7 +4,11 @@ import { assertBotServiceAuthorized } from "@/auth/bot-auth";
 import { botApiError, botApiOk } from "@/lib/bot-api-result";
 import { discordSyncService } from "@/services/discord-sync.service";
 
-const discordStateSchema = z.discriminatedUnion("kind", [
+/**
+ * Body for PUT /api/bot/runs/:runId/discord-state.
+ * Discriminant `kind` string values are a stable bot↔API wire contract — do not rename them.
+ */
+export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("channel"), channelId: z.string().min(1).max(64) }),
   z.object({ kind: z.literal("clear-channel") }),
   z.object({
@@ -35,6 +39,8 @@ const discordStateSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+export type RunDiscordStateUpdate = z.infer<typeof runDiscordStateUpdateSchema>;
+
 /**
  * PUT /api/bot/runs/:runId/discord-state
  *
@@ -54,42 +60,50 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     assertBotServiceAuthorized(request);
     const { runId } = await params;
-    const body = discordStateSchema.parse(await request.json());
+    const runDiscordStateUpdate = runDiscordStateUpdateSchema.parse(await request.json());
 
-    if (body.kind === "channel") {
-      await discordSyncService.recordRunChannel({ runId, channelId: body.channelId });
-    } else if (body.kind === "clear-channel") {
+    if (runDiscordStateUpdate.kind === "channel") {
+      await discordSyncService.recordRunChannel({ runId, channelId: runDiscordStateUpdate.channelId });
+    } else if (runDiscordStateUpdate.kind === "clear-channel") {
       await discordSyncService.clearRunChannel(runId);
-    } else if (body.kind === "signup") {
+    } else if (runDiscordStateUpdate.kind === "signup") {
       await discordSyncService.recordSignupPost({
         runId,
-        channelId: body.channelId,
-        messageId: body.messageId,
-        classEmojiFingerprint: body.classEmojiFingerprint,
+        channelId: runDiscordStateUpdate.channelId,
+        messageId: runDiscordStateUpdate.messageId,
+        classEmojiFingerprint: runDiscordStateUpdate.classEmojiFingerprint,
       });
-    } else if (body.kind === "roster") {
-      await discordSyncService.recordRosterPost({ runId, channelId: body.channelId, messageId: body.messageId });
-    } else if (body.kind === "start") {
-      await discordSyncService.recordStartPost({ runId, channelId: body.channelId, messageId: body.messageId });
-    } else if (body.kind === "raid-invite") {
-      await discordSyncService.recordRaidInviteSent({ runId, signupId: body.signupId });
-    } else if (body.kind === "notification-dm") {
+    } else if (runDiscordStateUpdate.kind === "roster") {
+      await discordSyncService.recordRosterPost({
+        runId,
+        channelId: runDiscordStateUpdate.channelId,
+        messageId: runDiscordStateUpdate.messageId,
+      });
+    } else if (runDiscordStateUpdate.kind === "start") {
+      await discordSyncService.recordStartPost({
+        runId,
+        channelId: runDiscordStateUpdate.channelId,
+        messageId: runDiscordStateUpdate.messageId,
+      });
+    } else if (runDiscordStateUpdate.kind === "raid-invite") {
+      await discordSyncService.recordRaidInviteSent({ runId, signupId: runDiscordStateUpdate.signupId });
+    } else if (runDiscordStateUpdate.kind === "notification-dm") {
       await discordSyncService.recordNotificationDmDelivery({
-        notificationId: body.notificationId,
-        result: body.result,
+        notificationId: runDiscordStateUpdate.notificationId,
+        result: runDiscordStateUpdate.result,
       });
-    } else if (body.kind === "run-announcement") {
+    } else if (runDiscordStateUpdate.kind === "run-announcement") {
       await discordSyncService.recordRunAnnouncementDelivery({
-        announcementId: body.announcementId,
-        result: body.result,
+        announcementId: runDiscordStateUpdate.announcementId,
+        result: runDiscordStateUpdate.result,
       });
     } else {
       await discordSyncService.recordArchiveArtifacts({
         runId,
-        closeMessageId: body.closeMessageId,
-        transcriptMessageId: body.transcriptMessageId,
-        transcriptHtml: body.transcriptHtml,
-        transcriptFilename: body.transcriptFilename,
+        closeMessageId: runDiscordStateUpdate.closeMessageId,
+        transcriptMessageId: runDiscordStateUpdate.transcriptMessageId,
+        transcriptHtml: runDiscordStateUpdate.transcriptHtml,
+        transcriptFilename: runDiscordStateUpdate.transcriptFilename,
       });
     }
 

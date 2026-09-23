@@ -39,21 +39,21 @@ export function isInQuietHours(input: {
   start: string;
   end: string;
 }): boolean {
-  const start = parseQuietHoursHm(input.start);
-  const end = parseQuietHoursHm(input.end);
-  if (!start || !end) return false;
-  const startMin = quietHoursHmToMinutes(start);
-  const endMin = quietHoursHmToMinutes(end);
-  if (startMin === endMin) return false;
+  const startHm = parseQuietHoursHm(input.start);
+  const endHm = parseQuietHoursHm(input.end);
+  if (!startHm || !endHm) return false;
+  const startMinutes = quietHoursHmToMinutes(startHm);
+  const endMinutes = quietHoursHmToMinutes(endHm);
+  if (startMinutes === endMinutes) return false;
 
-  const parts = zonedParts(input.now, input.timeZone);
-  const nowMin = parts.hour * 60 + parts.minute;
+  const localParts = zonedParts(input.now, input.timeZone);
+  const nowMinutes = localParts.hour * 60 + localParts.minute;
 
-  if (startMin < endMin) {
-    return nowMin >= startMin && nowMin < endMin;
+  if (startMinutes < endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
   }
   // Overnight: quiet from start through midnight, and from midnight until end.
-  return nowMin >= startMin || nowMin < endMin;
+  return nowMinutes >= startMinutes || nowMinutes < endMinutes;
 }
 
 /**
@@ -70,33 +70,33 @@ export function nextQuietHoursEndUtc(input: {
   start: string;
   end: string;
 }): string {
-  const start = parseQuietHoursHm(input.start);
-  const end = parseQuietHoursHm(input.end);
-  if (!start || !end) {
+  const startHm = parseQuietHoursHm(input.start);
+  const endHm = parseQuietHoursHm(input.end);
+  if (!startHm || !endHm) {
     throw new RangeError("Quiet Hours start/end must be valid HH:MM.");
   }
-  const startMin = quietHoursHmToMinutes(start);
-  const endMin = quietHoursHmToMinutes(end);
-  if (startMin === endMin) {
+  const startMinutes = quietHoursHmToMinutes(startHm);
+  const endMinutes = quietHoursHmToMinutes(endHm);
+  if (startMinutes === endMinutes) {
     throw new RangeError("Quiet Hours start and end must differ.");
   }
 
-  const parts = zonedParts(input.now, input.timeZone);
-  const nowMin = parts.hour * 60 + parts.minute;
+  const localParts = zonedParts(input.now, input.timeZone);
+  const nowMinutes = localParts.hour * 60 + localParts.minute;
 
-  let year = parts.year;
-  let month = parts.month;
-  let day = parts.day;
+  let year = localParts.year;
+  let month = localParts.month;
+  let day = localParts.day;
 
-  if (startMin > endMin) {
-    // Overnight: before midnight (nowMin >= start) → end is tomorrow.
-    if (nowMin >= startMin) {
+  if (startMinutes > endMinutes) {
+    // Overnight: still before midnight (now >= start) → exclusive end is tomorrow.
+    if (nowMinutes >= startMinutes) {
       ({ year, month, day } = addLocalCalendarDays(year, month, day, 1));
     }
   }
 
   return zonedLocalWallToUtcIso(
-    { year, month, day, hour: end.hour, minute: end.minute },
+    { year, month, day, hour: endHm.hour, minute: endHm.minute },
     input.timeZone,
     { preferLaterOnAmbiguity: true },
   );

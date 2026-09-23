@@ -4,7 +4,7 @@ import { botApiError, botApiOk } from "@/lib/bot-api-result";
 import { signupService } from "@/services/signup.service";
 import { setCharacterOffersSchema } from "@/validators/signup";
 
-const bodySchema = setCharacterOffersSchema.omit({ runId: true });
+const botSetCharacterOffersBodySchema = setCharacterOffersSchema.omit({ runId: true });
 
 /**
  * PUT /api/bot/runs/:runId/signup
@@ -20,9 +20,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     assertBotServiceAuthorized(request);
     const { runId } = await params;
     const actor = await resolveActingDiscordUser(request.headers.get("x-discord-user-id"));
-    const body = bodySchema.parse(await request.json());
-    const result = await signupService.setCharacterOffers(actor, { runId, ...body });
-    return botApiOk(result);
+    const characterOffers = botSetCharacterOffersBodySchema.parse(await request.json());
+    const offerResult = await signupService.setCharacterOffers(actor, { runId, ...characterOffers });
+    return botApiOk(offerResult);
   } catch (error) {
     return botApiError(error);
   }

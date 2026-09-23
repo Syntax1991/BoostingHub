@@ -120,7 +120,14 @@ export function parseRescheduleHrefTimestamps(href: string): {
 /**
  * Effective Discord DM intent at event creation.
  * Master toggle AND event toggle AND usable Discord identity — snapshotted.
+ * Quiet Hours may set discordDeliverAfter but never change PENDING→SKIPPED.
  */
+export type DiscordDmDeliveryDecision = {
+  status: DiscordDeliveryStatus;
+  discordUserId: string | null;
+  discordDeliverAfter: string | null;
+};
+
 export function resolveDiscordDelivery(input: {
   discordDmEnabled: boolean;
   eventDmEnabled: boolean;
@@ -128,24 +135,17 @@ export function resolveDiscordDelivery(input: {
   quietHours?: QuietHoursSnapshot;
   timeZone?: string;
   now?: Date;
-}): {
-  status: DiscordDeliveryStatus;
-  discordUserId: string | null;
-  discordDeliverAfter: string | null;
-} {
+}): DiscordDmDeliveryDecision {
   const discordUserId = input.discordUserId?.trim() || null;
-  const effective = input.discordDmEnabled && input.eventDmEnabled && Boolean(discordUserId);
-  if (!effective) {
+  const isDiscordDmEligible =
+    input.discordDmEnabled && input.eventDmEnabled && Boolean(discordUserId);
+  if (!isDiscordDmEligible) {
     return { status: "SKIPPED", discordUserId: null, discordDeliverAfter: null };
   }
 
   let discordDeliverAfter: string | null = null;
   const quietHours = input.quietHours;
-  if (
-    quietHours?.enabled &&
-    quietHours.start &&
-    quietHours.end
-  ) {
+  if (quietHours?.enabled && quietHours.start && quietHours.end) {
     const timeZone = input.timeZone ?? DEFAULT_TIME_ZONE;
     const now = input.now ?? new Date();
     if (isInQuietHours({ now, timeZone, start: quietHours.start, end: quietHours.end })) {

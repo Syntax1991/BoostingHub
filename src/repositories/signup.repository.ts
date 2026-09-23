@@ -144,8 +144,9 @@ export type ReservationConflictRow = {
 
 /**
  * Minimum gap between two Run start times for the same Character to be
- * draft-selected / SELECTED on both. Runs closer than this collide for
- * cross-Run reservation. Exactly 2h apart is allowed.
+ * draft-selected / SELECTED on both. Conflict iff abs(startA - startB) < 2h;
+ * exactly 2 hours apart is allowed. RESERVED/COMMITTED commitments are
+ * informational and do not by themselves block via this predicate.
  */
 export const CROSS_RUN_RESERVATION_MIN_GAP_MS = 2 * 60 * 60 * 1000;
 

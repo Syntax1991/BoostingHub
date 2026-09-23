@@ -4,7 +4,7 @@ import { botApiError, botApiOk } from "@/lib/bot-api-result";
 import { signupService } from "@/services/signup.service";
 import { setLootbuddiesSchema } from "@/validators/signup";
 
-const bodySchema = setLootbuddiesSchema.omit({ runId: true });
+const botSetLootbuddiesBodySchema = setLootbuddiesSchema.omit({ runId: true });
 
 /**
  * PUT /api/bot/runs/:runId/lootbuddies
@@ -21,9 +21,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     assertBotServiceAuthorized(request);
     const { runId } = await params;
     const actor = await resolveActingDiscordUser(request.headers.get("x-discord-user-id"));
-    const body = bodySchema.parse(await request.json());
-    const result = await signupService.setLootbuddies(actor, { runId, ...body });
-    return botApiOk(result);
+    const lootbuddyEntries = botSetLootbuddiesBodySchema.parse(await request.json());
+    const lootbuddyResult = await signupService.setLootbuddies(actor, { runId, ...lootbuddyEntries });
+    return botApiOk(lootbuddyResult);
   } catch (error) {
     return botApiError(error);
   }
