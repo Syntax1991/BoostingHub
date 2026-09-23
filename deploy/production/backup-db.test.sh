@@ -110,6 +110,37 @@ check "exits non-zero" '[[ ${RC} -ne 0 ]]'
 check "does not call pg_dump" '[[ ! -e "${LOG}/pg_dump.argv" ]]'
 ENV_CONTENT="${ENV_SAVED}"
 
+echo "# duplicate DATABASE_URL"
+ENV_CONTENT="$(printf '%s\n' 'DATABASE_URL=postgresql://first:DUP_SECRET_ONE@127.0.0.1/first' 'OTHER=1' 'DATABASE_URL=postgresql://second:DUP_SECRET_TWO@127.0.0.1/second')"
+SEED="" run_backup duplicate
+check "exits non-zero" '[[ ${RC} -ne 0 ]]'
+check "reports the duplicate" 'grep -q "DATABASE_URL is defined more than once" <<<"${OUTPUT}"'
+check "does not call pg_dump" '[[ ! -e "${LOG}/pg_dump.argv" ]]'
+check "prints neither value" '! grep -qE "DUP_SECRET|first|second" <<<"${OUTPUT}"'
+check "writes no dump" '[[ -z "$(ls -A "${BACKUPS}")" ]]'
+
+echo "# commented-out DATABASE_URL is not a duplicate"
+ENV_CONTENT="$(printf '%s\n' '# DATABASE_URL=postgresql://old:x@127.0.0.1/old' '' "${ENV_SAVED}")"
+SEED="" run_backup commented
+check "exits 0 and uses the active definition" '[[ ${RC} -eq 0 ]] && grep -q "@127.0.0.1:5432/boostinghub" "${LOG}/pg_dump.argv"'
+
+echo "# single-quoted value with export prefix and surrounding whitespace"
+ENV_CONTENT="  export DATABASE_URL = 'postgresql://boostinghub:${PASSWORD_ENC}@127.0.0.1:5432/boostinghub?sslmode=disable'  "
+SEED="" run_backup single-quoted
+check "exits 0" '[[ ${RC} -eq 0 ]]'
+check "outer quotes removed, URI intact" 'grep -qx -- "--dbname=postgresql://boostinghub@127.0.0.1:5432/boostinghub?sslmode=disable" "${LOG}/pg_dump.argv"'
+check "password still supplied via PGPASSFILE" '[[ "$(cat "${LOG}/pgpass.seen")" == "*:*:*:*:p@ss\:w/rd!\\\\x" ]]'
+
+echo "# quote characters that are not a matching outer pair are kept"
+ENV_CONTENT='DATABASE_URL=postgresql://app@127.0.0.1/boostinghub?application_name=backup"'
+SEED="" run_backup trailing-quote
+check "a lone trailing quote stays part of the value" '[[ ${RC} -eq 0 ]] && grep -qx -- "--dbname=postgresql://app@127.0.0.1/boostinghub?application_name=backup%22" "${LOG}/pg_dump.argv"'
+ENV_CONTENT="DATABASE_URL=\"postgresql://app@127.0.0.1/boostinghub'"
+SEED="" run_backup mismatched-quotes
+check "mismatched outer quotes are not stripped (URL rejected, pg_dump not called)" \
+  '[[ ${RC} -ne 0 && ! -e "${LOG}/pg_dump.argv" ]] && grep -q "not a postgres" <<<"${OUTPUT}"'
+ENV_CONTENT="${ENV_SAVED}"
+
 echo "# retention"
 SEED='
   old="$(date -d "30 days ago" +%Y%m%d%H%M)"

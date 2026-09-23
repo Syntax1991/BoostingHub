@@ -42,13 +42,35 @@ import os, sys
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
-url = None
-for line in Path(os.environ["ENV_FILE"]).read_text(encoding="utf-8").splitlines():
-    if line.startswith("DATABASE_URL="):
-        url = line.split("=", 1)[1].strip().strip('"').strip("'")
-        break
-if not url:
+# Supported .env format (deliberately small, not a shell parser): one
+# KEY=value per line, optional leading "export ", blank lines and full-line #
+# comments ignored, CRLF tolerated. Surrounding whitespace is trimmed and ONE
+# matching outer pair of "..." or '...' is removed; any other quote
+# characters are part of the value. No inline comments or escapes.
+def unquote_outer(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+urls = []
+text = Path(os.environ["ENV_FILE"]).read_text(encoding="utf-8")
+for line in text.replace("\r\n", "\n").split("\n"):
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        continue
+    key, _, value = stripped.partition("=")
+    key = key.strip()
+    if key.startswith("export "):
+        key = key[len("export "):].strip()
+    if key == "DATABASE_URL":
+        urls.append(unquote_outer(value))
+if len(urls) > 1:
+    # Never guess which one is authoritative: backing up the wrong database is worse than failing.
+    sys.exit("DATABASE_URL is defined more than once")
+if not urls or not urls[0]:
     sys.exit("DATABASE_URL missing")
+url = urls[0]
 
 parts = urlsplit(url)
 if parts.scheme not in ("postgres", "postgresql"):

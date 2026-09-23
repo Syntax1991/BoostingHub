@@ -4,7 +4,8 @@
 Read-only. For every key the application or Discord bot reads, prints one of
 MISSING / EMPTY / SET. Only genuinely non-secret values (public URLs, numeric
 Discord snowflake ids, flags, intervals) are shown; secrets show their length
-only; DATABASE_URL-style values show with the password redacted.
+only; database URLs show scheme/user/host/port/database only, with the
+password and every query parameter value hidden.
 
     sudo python3 /var/www/boostinghub/deploy/production/env-status.py
     ENV_FILE=/path/to/.env python3 env-status.py
@@ -16,12 +17,12 @@ import os
 import stat
 import sys
 from pathlib import Path
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlsplit
 
 ENV_FILE = Path(os.environ.get("ENV_FILE", "/var/www/boostinghub/.env"))
 
 # (key, kind) — kind decides how a SET value may be shown:
-#   secret: length only · public: value · db: redacted URL
+#   secret: length only · public: value · db: URL without password or query values
 GROUPS = {
     "web (required)": [
         ("DATABASE_URL", "db"),
@@ -74,34 +75,57 @@ REQUIRED_GROUPS = {"web (required)", "discord bot (required)"}
 DEV_FLAGS = {"DEV_AUTH_ENABLED", "DEV_ACCOUNT_BOOTSTRAP_ENABLED"}
 
 
+def unquote_outer(value: str) -> str:
+    """Trim whitespace and remove ONE matching outer pair of "..." or '...'; other quotes are kept."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
 def parse(raw: bytes):
+    """Deliberately small .env format: KEY=value lines, optional leading "export ",
+    blank lines and full-line # comments ignored, CRLF tolerated, one matching outer
+    quote pair removed. Not a shell parser: no inline comments, no escapes."""
     text = raw.decode("utf-8")
     values, duplicates = {}, set()
     for line in text.replace("\r\n", "\n").split("\n"):
-        if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
-        key, _, value = line.partition("=")
+        key, _, value = stripped.partition("=")
         key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
         if key in values:
             duplicates.add(key)
-        values[key] = value.strip().strip('"').strip("'")
+        values[key] = unquote_outer(value)
     return values, duplicates, "\r" in text
 
 
 def redact_db(value: str) -> str:
-    """Hide the password in the userinfo (up to the LAST '@') and any password= query option."""
+    """Show scheme, user, host, port and database only. The userinfo password
+    (split at the LAST '@') and every query parameter VALUE are hidden; query
+    parameter names are listed, since options like sslpassword can be secret."""
     try:
         parts = urlsplit(value)
+        port = parts.port
+        host = parts.hostname
     except ValueError:
         return "<unparseable, hidden>"
-    userinfo, at, hostport = parts.netloc.rpartition("@")
-    user = userinfo.partition(":")[0]
-    netloc = f"{user}:***@{hostport}" if at and ":" in userinfo else parts.netloc
-    query = "&".join(
-        f"{key}=***" if key.lower() == "password" else f"{key}={val}"
-        for key, val in parse_qsl(parts.query, keep_blank_values=True)
-    )
-    return urlunsplit((parts.scheme, netloc, parts.path, query, ""))
+    userinfo, at, _ = parts.netloc.rpartition("@")
+    user, has_password = userinfo.partition(":")[0], ":" in userinfo
+    location = host or ""
+    if host and ":" in host:
+        location = f"[{host}]"
+    if port is not None:
+        location += f":{port}"
+    auth = (f"{user}:<hidden>@" if has_password else f"{user}@") if at else ""
+    shown = f"{parts.scheme}://{auth}{location}{parts.path}"
+    names = [key for key, _ in parse_qsl(parts.query, keep_blank_values=True)]
+    if names:
+        shown += "?" + "&".join(f"{name}=<hidden>" for name in names)
+    return shown
 
 
 def show(value: str, kind: str) -> str:
@@ -124,10 +148,14 @@ def main() -> int:
     values, duplicates, has_cr = parse(ENV_FILE.read_bytes())
     if has_cr:
         print("WARNING: file contains CR characters (CRLF); systemd EnvironmentFile may keep them in values")
-    for key in sorted(duplicates):
-        print(f"WARNING: {key} is defined more than once (last one wins)")
-
     problems = 0
+    for key in sorted(duplicates):
+        if key == "DATABASE_URL":
+            # backup-db.sh refuses to guess and fails, so this blocks backups and deploys.
+            problems += 1
+            print(f"PROBLEM: {key} is defined more than once (backups refuse to run)")
+        else:
+            print(f"WARNING: {key} is defined more than once (last one wins)")
     for group, keys in GROUPS.items():
         print(f"\n[{group}]")
         for key, kind in keys:

@@ -46,7 +46,7 @@ Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
 | `deploy/update-server.sh` | **The** release helper for normal updates (see below) |
 | `deploy/production/systemd/*.service`, `*.timer` | Reference copies of the six live units |
 | `deploy/production/backup-db.sh` | Backup script; production runs a root-owned installed copy |
-| `deploy/production/env-status.py` | Read-only `.env` check that never prints secret values |
+| `deploy/production/env-status.py` | Read-only `.env` check that never prints secret values. Database URLs show only scheme/user/host/port/database; the password and every query-parameter value are hidden. |
 | `deploy/production/*.test.sh` | Offline tests for the two scripts above (no DB, no credentials) |
 
 **Units and root-owned executables are never installed by a normal deploy.**
@@ -100,17 +100,34 @@ After a deploy, run the [production smoke checklist](#production-smoke-checklist
 ## Initial system setup
 
 This is for a fresh host only. Every step is an explicit operator action, as root.
+Commands never rely on the shell's current directory: application `npm`
+commands always run after `cd /var/www/boostinghub`, and install commands use
+absolute paths.
 
 1. Create the service user and checkout:
-   `useradd --system --create-home --shell /usr/sbin/nologin boostinghub`, then
-   clone `main` into `/var/www/boostinghub` as that user.
+
+   ```bash
+   useradd --system --create-home --shell /usr/sbin/nologin boostinghub
+   install -d -o boostinghub -g boostinghub -m 0770 /var/www/boostinghub
+   sudo -u boostinghub git clone --branch main https://github.com/Syntax1991/BoostingHub.git /var/www/boostinghub
+   ```
+
 2. Create the PostgreSQL role and database (`boostinghub`), listening on localhost only.
 3. Write `/var/www/boostinghub/.env` from `.env.example` (`chown boostinghub:boostinghub`,
    `chmod 600`), then check it without printing secrets:
    `python3 /var/www/boostinghub/deploy/production/env-status.py`
    Production must have `DEV_AUTH_ENABLED=false` and `DEV_ACCOUNT_BOOTSTRAP_ENABLED=false`.
-4. As `boostinghub`: `npm ci --legacy-peer-deps`, `npm run db:emit`,
-   `npm run db:migrate`, `npm run typecheck`, `npm run build`.
+4. Install, validate and build as `boostinghub`, from the app directory:
+
+   ```bash
+   cd /var/www/boostinghub
+   sudo -u boostinghub npm ci --legacy-peer-deps
+   sudo -u boostinghub npm run db:emit
+   sudo -u boostinghub npm run typecheck
+   sudo -u boostinghub npm run build
+   sudo -u boostinghub npm run db:migrate
+   ```
+
 5. Install the root-owned backup executable. A root service must never execute a
    file the app user can write:
 
@@ -125,11 +142,11 @@ This is for a fresh host only. Every step is an explicit operator action, as roo
 6. Install the units (root-owned, `0644`), reload, enable:
 
    ```bash
-   cd /var/www/boostinghub/deploy/production/systemd
+   U=/var/www/boostinghub/deploy/production/systemd
    install -o root -g root -m 0644 \
-     boostinghub-web.service boostinghub-discord-bot.service \
-     boostinghub-character-sync.service boostinghub-character-sync.timer \
-     boostinghub-backup.service boostinghub-backup.timer \
+     "$U/boostinghub-web.service" "$U/boostinghub-discord-bot.service" \
+     "$U/boostinghub-character-sync.service" "$U/boostinghub-character-sync.timer" \
+     "$U/boostinghub-backup.service" "$U/boostinghub-backup.timer" \
      /etc/systemd/system/
    systemctl daemon-reload
    systemctl enable --now boostinghub-web.service boostinghub-discord-bot.service
@@ -143,8 +160,13 @@ This is for a fresh host only. Every step is an explicit operator action, as roo
 9. Set `BETTER_AUTH_URL=https://phoenix-star.de` and register the provider callbacks:
    - Discord OAuth: `https://phoenix-star.de/api/auth/callback/discord`
    - Battle.net: `https://phoenix-star.de/api/integrations/battlenet/callback`
-10. Register slash commands: `sudo -u boostinghub npm run bot:register-commands`
-    (again whenever the command list changes).
+10. Register slash commands (again whenever the command list changes):
+
+    ```bash
+    cd /var/www/boostinghub
+    sudo -u boostinghub npm run bot:register-commands
+    ```
+
 11. Run the smoke checklist.
 
 ## Changing systemd units or the backup script
@@ -178,7 +200,8 @@ still shows `oneshot` / `no`, or the next `update-server.sh` run refuses to depl
 | Permissions | directory `700`, files `600` (root) |
 | Validation | non-zero size and `pg_restore --list`. Empty, failed or invalid dumps are deleted and the run fails. |
 | Retention | 14 days (`RETENTION_DAYS`). Only `boostinghub-*.dump` directly in the directory. |
-| Credentials | read from `.env`; the password goes to `pg_dump` through a private temporary `PGPASSFILE`, never on the command line, never printed |
+| Credentials | `DATABASE_URL` read from `.env`; the password goes to `pg_dump` through a private temporary `PGPASSFILE`, never on the command line, never printed |
+| `.env` format | `KEY=value` per line, optional `export `, `#` comment lines, one matching outer `"…"`/`'…'` pair removed (other quotes are kept). A **missing or duplicated `DATABASE_URL` fails the backup** before `pg_dump` runs. It never guesses which duplicate is meant. |
 
 Manual backup and check:
 
@@ -194,9 +217,17 @@ pg_restore --list /var/backups/boostinghub/<file>.dump >/dev/null && echo valid
 A restore is **never** automatic and never part of a deploy or rollback script.
 It overwrites production data, so it requires an explicit operator decision.
 
-1. Take a fresh backup of the current state first (`systemctl start boostinghub-backup.service`).
-2. Stop writers: `systemctl stop boostinghub-discord-bot.service boostinghub-web.service`
-   and `systemctl stop boostinghub-character-sync.timer`.
+1. Take a fresh backup of the current state first:
+   `systemctl start boostinghub-backup.service`, and check its `Result` is `success`.
+2. Stop **both timers**, so neither a character sync nor a scheduled `pg_dump` can
+   start mid-restore, then stop the writers. Check that no run is still in progress:
+
+   ```bash
+   systemctl stop boostinghub-character-sync.timer boostinghub-backup.timer
+   systemctl stop boostinghub-discord-bot.service boostinghub-web.service
+   systemctl is-active boostinghub-character-sync.service boostinghub-backup.service   # both inactive
+   ```
+
 3. Make sure the application code on disk matches the schema in the dump (see Rollback).
 4. Restore as the PostgreSQL superuser via local peer authentication, so no password
    appears on a command line:
@@ -206,7 +237,15 @@ It overwrites production data, so it requires an explicit operator decision.
      /var/backups/boostinghub/<chosen>.dump
    ```
 
-5. Start the timer and services again, then run the smoke checklist.
+5. Restore the normal state: start the services, then re-enable both timers.
+   Verify all four are `active`, then run the smoke checklist.
+
+   ```bash
+   systemctl start boostinghub-web.service boostinghub-discord-bot.service
+   systemctl start boostinghub-character-sync.timer boostinghub-backup.timer
+   systemctl is-active boostinghub-web boostinghub-discord-bot \
+     boostinghub-character-sync.timer boostinghub-backup.timer
+   ```
 
 Never run `prisma migrate reset`, drop the schema or recreate the database as a
 "fix". Migrations are never auto-reversed.
