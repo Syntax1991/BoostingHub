@@ -2,12 +2,14 @@ import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunS
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
+  effectiveRaidLeadChannelName,
 } from "@/lib/discord-channel-name";
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { attackTypeForSpecialization } from "@/lib/wow-specializations";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
+import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
@@ -193,8 +195,15 @@ export type ChannelSyncWorkItem = {
    * True when the Run channel should be retired (transcript + delete):
    * app-archived (`Run.archivedAt`), COMPLETED, or CANCELLED.
    * Schedule-based PAST/FUTURE ARCHIVE holding stays false.
+   * False while PENDING RunDiscordAnnouncement rows exist for this Run
+   * (cancellation message must post before transcript/delete).
    */
   retireChannel: boolean;
+  /**
+   * True when retirement is desired but blocked by PENDING lifecycle
+   * announcements — bot must not delete the channel this pass.
+   */
+  pendingLifecycleAnnouncements: boolean;
   /**
    * Retirement path: bot should post Discord log artifacts and/or persist HTML
    * for website download. False for schedule-based ARCHIVE holding and after
@@ -284,6 +293,20 @@ export type NotificationDmWorkItem = {
   wowClass: WowClass | null;
 };
 
+/** Shared Run-channel lifecycle announcement (not a User DM). */
+export type RunAnnouncementWorkItem = {
+  announcementId: string;
+  runId: string;
+  type: "RUN_RESCHEDULED" | "RUN_CANCELLED";
+  /** Dedicated Run channel when present — null means bot should mark SKIPPED. */
+  runChannelId: string | null;
+  previousScheduledStartAt: string | null;
+  scheduledStartAt: string;
+  productLabel: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+};
+
 export type RunStartEmbedMember = {
   signupId: string;
   userId: string;
@@ -330,6 +353,7 @@ function desiredChannelNameFor(run: {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   raidLeadName: string;
+  raidLeadDiscordRunChannelNickname?: string | null;
   contentDisplay: { channelCoverage: string };
   status?: RunStatus;
   archivedAt?: string | null;
@@ -339,7 +363,10 @@ function desiredChannelNameFor(run: {
     difficulty: run.difficulty,
     lootType: run.lootType,
     coverage: run.contentDisplay.channelCoverage,
-    raidLeadName: run.raidLeadName,
+    raidLeadChannelName: effectiveRaidLeadChannelName({
+      raidLeadName: run.raidLeadName,
+      discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+    }),
   };
   if (shouldRetireDiscordChannel(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);
@@ -791,6 +818,8 @@ export const discordSyncService = {
     /** Always empty — Raid Invite DMs come from notificationDms (PENDING UserNotification). */
     raidInvites: RaidInviteWorkItem[];
     notificationDms: NotificationDmWorkItem[];
+    /** PENDING RunDiscordAnnouncement rows (channel lifecycle), createdAt ASC. */
+    runAnnouncements: RunAnnouncementWorkItem[];
   }> {
     const runs = await runRepository.listManaged();
     const channels: ChannelSyncWorkItem[] = [];
@@ -799,6 +828,9 @@ export const discordSyncService = {
     const start: RunStartSyncWorkItem[] = [];
     const raidInvites: RaidInviteWorkItem[] = [];
     const classEmojiFingerprint = options.classEmojiFingerprint ?? "";
+
+    const pendingAnnouncements = await runDiscordAnnouncementRepository.listPending(50);
+    const pendingAnnouncementRunIds = new Set(pendingAnnouncements.map((row) => row.runId));
 
     for (const run of runs) {
       const post = await runDiscordPostRepository.findByRunId(run.id);
@@ -813,7 +845,9 @@ export const discordSyncService = {
       // (existingRunChannelId is only ever set once the signup path below
       // has already created one).
       if (post?.runChannelId) {
-        const retireChannel = shouldRetireDiscordChannel(run);
+        const wantsRetire = shouldRetireDiscordChannel(run);
+        const pendingLifecycleAnnouncements = pendingAnnouncementRunIds.has(run.id);
+        const retireChannel = wantsRetire && !pendingLifecycleAnnouncements;
         const archiveDiscordPosted = Boolean(
           post.archiveCloseMessageId && post.archiveTranscriptMessageId,
         );
@@ -826,6 +860,7 @@ export const discordSyncService = {
           targetBucket,
           scheduledStartAt: run.scheduledStartAt,
           retireChannel,
+          pendingLifecycleAnnouncements,
           archiveArtifactsNeeded,
           archiveCloseMessageId: post.archiveCloseMessageId,
           archiveTranscriptMessageId: post.archiveTranscriptMessageId,
@@ -922,7 +957,26 @@ export const discordSyncService = {
 
     const notificationDms = await buildPendingNotificationDms();
 
-    return { channels, signups, roster, start, raidInvites, notificationDms };
+    const runChannelByRunId = new Map<string, string | null>();
+    for (const announcement of pendingAnnouncements) {
+      if (!runChannelByRunId.has(announcement.runId)) {
+        const post = await runDiscordPostRepository.findByRunId(announcement.runId);
+        runChannelByRunId.set(announcement.runId, post?.runChannelId ?? null);
+      }
+    }
+    const runAnnouncements: RunAnnouncementWorkItem[] = pendingAnnouncements.map((row) => ({
+      announcementId: row.id,
+      runId: row.runId,
+      type: row.type,
+      runChannelId: runChannelByRunId.get(row.runId) ?? null,
+      previousScheduledStartAt: row.previousScheduledStartAt,
+      scheduledStartAt: row.scheduledStartAt,
+      productLabel: row.productLabel,
+      difficulty: row.difficulty,
+      lootType: row.lootType,
+    }));
+
+    return { channels, signups, roster, start, raidInvites, notificationDms, runAnnouncements };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
@@ -1124,5 +1178,17 @@ export const discordSyncService = {
         signupId: notification.signupId,
       });
     }
+  },
+
+  /**
+   * Records delivery outcome for a PENDING RunDiscordAnnouncement (channel post).
+   */
+  async recordRunAnnouncementDelivery(input: {
+    announcementId: string;
+    result: "SENT" | "SKIPPED" | "FAILED_PERMANENT";
+  }): Promise<void> {
+    await runDiscordAnnouncementRepository.updateStatus(input.announcementId, input.result, {
+      sentAt: input.result === "SENT" ? new Date().toISOString() : null,
+    });
   },
 };

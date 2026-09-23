@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   contentLockoutsNeedAttention,
   formatContentLockoutLines,
@@ -64,7 +64,7 @@ describe("run content lockout projection", () => {
     expect(rows[0]!.label.text).toContain("1/1");
     expect(rows[1]!.raidName).toBe("The Venomous Abyss");
     expect(rows[1]!.label.text).toContain("3/8");
-    const joined = formatContentLockoutLines(rows).join(" · ");
+    const joined = formatContentLockoutLines(rows).join(" Â· ");
     expect(joined).not.toMatch(/4\/9|9\/9/);
     expect(contentLockoutsNeedAttention(rows)).toBe(true);
   });

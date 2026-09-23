@@ -1,0 +1,242 @@
+[
+  {
+    "id": "table.run_discord_announcement",
+    "label": "Create table \"run_discord_announcement\"",
+    "summary": "Creates table \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_discord_announcement\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_discord_announcement\"",
+        "sql": "CREATE TABLE \"public\".\"run_discord_announcement\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"difficulty\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"lootType\" text NOT NULL,\n  \"previousScheduledStartAt\" timestamptz,\n  \"productLabel\" text NOT NULL,\n  \"runId\" text NOT NULL,\n  \"scheduledStartAt\" timestamptz NOT NULL,\n  \"sentAt\" timestamptz,\n  \"sourceKey\" text NOT NULL,\n  \"status\" text NOT NULL,\n  \"type\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_discord_announcement_difficulty_check_05ae26c2\" CHECK (\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')),\n  CONSTRAINT \"run_discord_announcement_lootType_check_3071d052\" CHECK (\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')),\n  CONSTRAINT \"run_discord_announcement_status_check_86966e08\" CHECK (\"status\" IN ('PENDING', 'SENT', 'SKIPPED', 'FAILED_PERMANENT')),\n  CONSTRAINT \"run_discord_announcement_type_check_b8186a62\" CHECK (\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_discord_announcement\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_discord_announcement.run_discord_announcement_sourceKey_key",
+    "label": "Add unique constraint on \"run_discord_announcement\" (sourceKey)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_discord_announcement_sourceKey_key",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_sourceKey_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_sourceKey_key",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_discord_announcement_sourceKey_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD CONSTRAINT \"run_discord_announcement_sourceKey_key\" UNIQUE (\"sourceKey\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_sourceKey_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_sourceKey_key",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_discord_announcement.run_discord_announcement_runId_createdAt_idx_7a7455cf",
+    "label": "Create index \"run_discord_announcement_runId_createdAt_idx_7a7455cf\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_discord_announcement_runId_createdAt_idx_7a7455cf",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_discord_announcement_runId_createdAt_idx_7a7455cf\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement_runId_createdAt_idx_7a7455cf\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_discord_announcement_runId_createdAt_idx_7a7455cf\"",
+        "sql": "CREATE INDEX \"run_discord_announcement_runId_createdAt_idx_7a7455cf\" ON \"public\".\"run_discord_announcement\" (\"runId\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_discord_announcement_runId_createdAt_idx_7a7455cf\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement_runId_createdAt_idx_7a7455cf\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_discord_announcement.run_discord_announcement_runId_idx_a6016437",
+    "label": "Create index \"run_discord_announcement_runId_idx_a6016437\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_discord_announcement_runId_idx_a6016437",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_discord_announcement_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_discord_announcement_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_discord_announcement_runId_idx_a6016437\" ON \"public\".\"run_discord_announcement\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_discord_announcement_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_discord_announcement.run_discord_announcement_status_createdAt_idx_58610442",
+    "label": "Create index \"run_discord_announcement_status_createdAt_idx_58610442\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_discord_announcement_status_createdAt_idx_58610442",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_discord_announcement_status_createdAt_idx_58610442\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement_status_createdAt_idx_58610442\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_discord_announcement_status_createdAt_idx_58610442\"",
+        "sql": "CREATE INDEX \"run_discord_announcement_status_createdAt_idx_58610442\" ON \"public\".\"run_discord_announcement\" (\"status\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_discord_announcement_status_createdAt_idx_58610442\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_discord_announcement_status_createdAt_idx_58610442\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_discord_announcement.run_discord_announcement_runId_fkey",
+    "label": "Add foreign key \"run_discord_announcement_runId_fkey\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_discord_announcement_runId_fkey",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_discord_announcement_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_runId_fkey",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_discord_announcement_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\"\nADD CONSTRAINT \"run_discord_announcement_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_discord_announcement_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_runId_fkey",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  }
+]

@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'2f6b4d340d13a3a8edb7b85297e91dcfd4d278924cc8cef9e82d2fa0cf132b64'>;
+  StorageHashBase<'85e46eb0f05ccd857478f0cec7abbe7b66e9933c5dccd7ab0a876f3c4abaf607'>;
 export type ExecutionHash =
   ExecutionHashBase<'3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c'>;
 export type ProfileHash =
@@ -660,7 +660,6 @@ export type FieldOutputTypes = {
       readonly dmRosterRemovedEnabled: CodecTypes['pg/bool@1']['output'];
       readonly timeZone: CodecTypes['pg/text@1']['output'];
       readonly defaultCharacterId: CodecTypes['pg/text@1']['output'] | null;
-      readonly discordRunChannelNickname: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -1112,7 +1111,6 @@ export type FieldInputTypes = {
       readonly dmRosterRemovedEnabled: CodecTypes['pg/bool@1']['input'];
       readonly timeZone: CodecTypes['pg/text@1']['input'];
       readonly defaultCharacterId: CodecTypes['pg/text@1']['input'] | null;
-      readonly discordRunChannelNickname: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1552,7 +1550,6 @@ export type StorageColumnTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly defaultCharacterId: CodecTypes['pg/text@1']['output'] | null;
       readonly discordDmEnabled: CodecTypes['pg/bool@1']['output'];
-      readonly discordRunChannelNickname: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['output'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['output'] | null;
       readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['output'];
@@ -2004,7 +2001,6 @@ export type StorageColumnInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly defaultCharacterId: CodecTypes['pg/text@1']['input'] | null;
       readonly discordDmEnabled: CodecTypes['pg/bool@1']['input'];
-      readonly discordRunChannelNickname: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUserId: CodecTypes['pg/text@1']['input'] | null;
       readonly discordUsername: CodecTypes['pg/text@1']['input'] | null;
       readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['input'];
@@ -5189,11 +5185,6 @@ type ContractBase = Omit<
                   };
                 };
                 readonly defaultCharacterId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly discordRunChannelNickname: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
@@ -8660,10 +8651,6 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly discordRunChannelNickname: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -9018,9 +9005,6 @@ type ContractBase = Omit<
                 readonly dmRosterRemovedEnabled: { readonly column: 'dmRosterRemovedEnabled' };
                 readonly timeZone: { readonly column: 'timeZone' };
                 readonly defaultCharacterId: { readonly column: 'defaultCharacterId' };
-                readonly discordRunChannelNickname: {
-                  readonly column: 'discordRunChannelNickname';
-                };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };

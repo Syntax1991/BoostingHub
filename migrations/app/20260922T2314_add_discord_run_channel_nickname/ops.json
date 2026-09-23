@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.user.discordRunChannelNickname",
+    "label": "Add column \"discordRunChannelNickname\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordRunChannelNickname",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordRunChannelNickname\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordRunChannelNickname"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordRunChannelNickname\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordRunChannelNickname\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordRunChannelNickname\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordRunChannelNickname"
+        ]
+      }
+    ]
+  }
+]

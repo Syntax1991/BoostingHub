@@ -28,6 +28,11 @@ const discordStateSchema = z.discriminatedUnion("kind", [
     notificationId: z.string().uuid(),
     result: z.enum(["SENT", "FAILED_PERMANENT"]),
   }),
+  z.object({
+    kind: z.literal("run-announcement"),
+    announcementId: z.string().uuid(),
+    result: z.enum(["SENT", "SKIPPED", "FAILED_PERMANENT"]),
+  }),
 ]);
 
 /**
@@ -43,6 +48,7 @@ const discordStateSchema = z.discriminatedUnion("kind", [
  * `raid-invite` appends a signup id to the Apex Raid Invite sent list.
  * `notification-dm` updates UserNotification.discordDeliveryStatus (and on
  * SENT RAID_INVITE also appends the legacy raidInviteSentSignupIds list).
+ * `run-announcement` updates RunDiscordAnnouncement delivery status.
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -70,6 +76,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     } else if (body.kind === "notification-dm") {
       await discordSyncService.recordNotificationDmDelivery({
         notificationId: body.notificationId,
+        result: body.result,
+      });
+    } else if (body.kind === "run-announcement") {
+      await discordSyncService.recordRunAnnouncementDelivery({
+        announcementId: body.announcementId,
         result: body.result,
       });
     } else {

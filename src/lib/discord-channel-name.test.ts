@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { buildClosedDiscordRunChannelName, buildDiscordRunChannelName } from "@/lib/discord-channel-name";
+﻿import { describe, expect, it } from "vitest";
+import {
+  buildClosedDiscordRunChannelName,
+  buildDiscordRunChannelName,
+  effectiveRaidLeadChannelName,
+  slugDiscordChannelSegment,
+} from "@/lib/discord-channel-name";
 
 // 2026-09-12 20:00 UTC = Saturday 22:00 Europe/Berlin (CEST, UTC+2) during DST.
 const SATURDAY_2200_BERLIN = "2026-09-12T20:00:00.000Z";
@@ -9,7 +14,7 @@ const BASE = {
   difficulty: "HEROIC" as const,
   lootType: "VIP" as const,
   coverage: "7of9",
-  raidLeadName: "Titan",
+  raidLeadChannelName: "Titan",
 };
 
 describe("buildDiscordRunChannelName", () => {
@@ -42,12 +47,16 @@ describe("buildDiscordRunChannelName", () => {
 
   it("normalizes the raid lead name: spaces, punctuation, and diacritics", () => {
     expect(
-      buildDiscordRunChannelName({ ...BASE, raidLeadName: "Dr. Émile O'Connor Jr." }),
+      buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "Dr. Emile O'Connor Jr." }),
     ).toBe("sat-2200-hc-vip-7of9-dr-emile-o-connor-jr");
+    expect(slugDiscordChannelSegment("Sÿntax")).toBe("syntax");
+    expect(buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "Sÿntax" })).toBe(
+      "sat-2200-hc-vip-7of9-syntax",
+    );
   });
 
   it("collapses duplicate separators and never leaves a leading/trailing hyphen", () => {
-    expect(buildDiscordRunChannelName({ ...BASE, raidLeadName: "  --Titan--  " })).toBe(
+    expect(buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "  --Titan--  " })).toBe(
       "sat-2200-hc-vip-7of9-titan",
     );
   });
@@ -68,7 +77,7 @@ describe("buildDiscordRunChannelName", () => {
   });
 
   it("truncates to Discord's 100-character channel name limit without a dangling hyphen", () => {
-    const name = buildDiscordRunChannelName({ ...BASE, raidLeadName: "A".repeat(200) });
+    const name = buildDiscordRunChannelName({ ...BASE, raidLeadChannelName: "A".repeat(200) });
     expect(name.length).toBeLessThanOrEqual(100);
     expect(name.endsWith("-")).toBe(false);
   });
@@ -93,6 +102,37 @@ describe("buildDiscordRunChannelName", () => {
       }),
     ).not.toContain("s2b");
   });
+
+  it("uses nickname slug for Syntax1991 → Syntax", () => {
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        coverage: "9of9",
+        raidLeadChannelName: effectiveRaidLeadChannelName({
+          raidLeadName: "Syntax1991",
+          discordRunChannelNickname: "Syntax",
+        }),
+      }),
+    ).toBe("sat-2200-hc-vip-9of9-syntax");
+  });
+
+  it("falls back to User.name when nickname is null", () => {
+    expect(
+      buildDiscordRunChannelName({
+        ...BASE,
+        coverage: "9of9",
+        raidLeadChannelName: effectiveRaidLeadChannelName({
+          raidLeadName: "Syntax1991",
+          discordRunChannelNickname: null,
+        }),
+      }),
+    ).toBe("sat-2200-hc-vip-9of9-syntax1991");
+  });
+
+  it("slugifies spaces and underscores in nickname", () => {
+    expect(slugDiscordChannelSegment("Syntax 91")).toBe("syntax-91");
+    expect(slugDiscordChannelSegment("Syntax_91")).toBe("syntax-91");
+  });
 });
 
 describe("buildClosedDiscordRunChannelName", () => {
@@ -101,9 +141,19 @@ describe("buildClosedDiscordRunChannelName", () => {
   });
 
   it("stays within Discord's 100-character limit", () => {
-    const name = buildClosedDiscordRunChannelName({ ...BASE, raidLeadName: "A".repeat(200) });
+    const name = buildClosedDiscordRunChannelName({ ...BASE, raidLeadChannelName: "A".repeat(200) });
     expect(name.startsWith("closed-")).toBe(true);
     expect(name.length).toBeLessThanOrEqual(100);
     expect(name.endsWith("-")).toBe(false);
+  });
+
+  it("uses nickname for closed channel names", () => {
+    expect(
+      buildClosedDiscordRunChannelName({
+        ...BASE,
+        coverage: "9of9",
+        raidLeadChannelName: "Syntax",
+      }),
+    ).toBe("closed-sat-2200-hc-vip-9of9-syntax");
   });
 });

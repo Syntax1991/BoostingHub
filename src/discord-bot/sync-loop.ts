@@ -36,6 +36,10 @@ import {
   type GuildRoleIndicators,
 } from "@/discord-bot/class-emoji-lookup";
 import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
+import {
+  buildRunCancelledChannelEmbed,
+  buildRunRescheduledChannelEmbed,
+} from "@/discord-bot/embeds/run-lifecycle-announcement";
 import { buildRosterSelectedDmMessage, buildRosterRemovedDmMessage, buildRunCancelledDmMessage, buildRunRescheduledDmMessage } from "@/services/notification-content";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
@@ -57,6 +61,7 @@ type RosterLaneItem = SyncWork["roster"][number];
 type StartLaneItem = NonNullable<SyncWork["start"]>[number];
 type RaidInviteLaneItem = NonNullable<SyncWork["raidInvites"]>[number];
 type NotificationDmLaneItem = NonNullable<SyncWork["notificationDms"]>[number];
+type RunAnnouncementLaneItem = NonNullable<SyncWork["runAnnouncements"]>[number];
 
 /** Minimal fields shared by every lane that may resolve a Run channel. */
 type RunChannelResolveItem = {
@@ -261,6 +266,21 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     { discordRunCategoryId: env.discordRunCategoryId, discordRunArchiveCategoryId: env.discordRunArchiveCategoryId },
     work.channels,
   );
+
+  // Lifecycle channel announcements must post before retirement transcript/delete
+  // so CANCELLED messages appear in the final transcript.
+  if ((work.runAnnouncements ?? []).length > 0) {
+    for (const item of work.runAnnouncements ?? []) {
+      try {
+        await syncRunAnnouncement(client, api, item, resolvedChannels);
+      } catch (error) {
+        console.error(
+          `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
+          error,
+        );
+      }
+    }
+  }
 
   for (const item of work.channels) {
     if (!item.retireChannel) continue;
@@ -898,6 +918,77 @@ async function syncNotificationDm(
       await api.recordDiscordState(item.runId, {
         kind: "notification-dm",
         notificationId: item.notificationId,
+        result: "FAILED_PERMANENT",
+      });
+      return;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Posts a durable Run-channel lifecycle announcement (reschedule / cancel).
+ * Never creates a channel; never pings roles/members.
+ * Unknown Channel / Missing Access → FAILED_PERMANENT (no infinite retry, no recreate).
+ * No channel id → SKIPPED. Transient errors leave PENDING for a later pass.
+ */
+async function syncRunAnnouncement(
+  client: Client,
+  api: BotApiClient,
+  item: RunAnnouncementLaneItem,
+  resolvedChannels: Map<string, string>,
+): Promise<void> {
+  const runChannelId = resolvedChannels.get(item.runId) ?? item.runChannelId;
+  if (!runChannelId) {
+    await api.recordDiscordState(item.runId, {
+      kind: "run-announcement",
+      announcementId: item.announcementId,
+      result: "SKIPPED",
+    });
+    return;
+  }
+
+  const embed =
+    item.type === "RUN_RESCHEDULED"
+      ? buildRunRescheduledChannelEmbed({
+          productLabel: item.productLabel,
+          previousScheduledStartAt: item.previousScheduledStartAt ?? item.scheduledStartAt,
+          scheduledStartAt: item.scheduledStartAt,
+          difficulty: item.difficulty,
+          lootType: item.lootType,
+        })
+      : buildRunCancelledChannelEmbed({
+          productLabel: item.productLabel,
+          scheduledStartAt: item.scheduledStartAt,
+          difficulty: item.difficulty,
+          lootType: item.lootType,
+        });
+
+  try {
+    const channel = await client.channels.fetch(runChannelId);
+    if (!channel || !channel.isTextBased() || !("send" in channel)) {
+      await api.recordDiscordState(item.runId, {
+        kind: "run-announcement",
+        announcementId: item.announcementId,
+        result: "FAILED_PERMANENT",
+      });
+      return;
+    }
+    await (channel as TextChannel).send({ embeds: [embed] });
+    await api.recordDiscordState(item.runId, {
+      kind: "run-announcement",
+      announcementId: item.announcementId,
+      result: "SENT",
+    });
+  } catch (error) {
+    if (isDiscordUnknownChannelError(error) || isDiscordPermissionError(error)) {
+      console.warn(
+        `[discord-bot] cannot post announcement ${item.announcementId} to channel ${runChannelId} — marking FAILED_PERMANENT`,
+        error,
+      );
+      await api.recordDiscordState(item.runId, {
+        kind: "run-announcement",
+        announcementId: item.announcementId,
         result: "FAILED_PERMANENT",
       });
       return;

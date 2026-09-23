@@ -12,16 +12,23 @@ Settings sections:
 3. **Gameplay** — Default Character preference for signup UX
 4. **Active sessions** — list and revoke signed-in devices (via Prisma; revoke via Better Auth)
 
-| Type | When created | Web | Discord DM |
-| --- | --- | --- | --- |
-| `ROSTER_SELECTED` | Roster **publish** for **newly** SELECTED signups only | Always | Master + `dmRosterSelectedEnabled` + Discord linked |
-| `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | Master + `dmRaidInviteEnabled` + Discord linked |
-| `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | Master + `dmRunCancelledEnabled` + Discord linked |
-| `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | Master + `dmRunRescheduledEnabled` + Discord linked |
-| `ROSTER_REMOVED` | Publish: previous SELECTED → NOT_SELECTED | Always | Master + `dmRosterRemovedEnabled` + Discord linked |
+| Type | When created | Web | Run channel | Discord DM |
+| --- | --- | --- | --- | --- |
+| `ROSTER_SELECTED` | Roster **publish** for **newly** SELECTED signups only | Always | — | Master + `dmRosterSelectedEnabled` + Discord linked |
+| `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | — | Master + `dmRaidInviteEnabled` + Discord linked |
+| `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
+| `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
+| `ROSTER_REMOVED` | Publish: previous SELECTED → NOT_SELECTED | Always | — | Master + `dmRosterRemovedEnabled` + Discord linked |
 
-There is **no historical backfill**. Draft roster selection never notifies.
-Republish dedupes via deterministic `sourceKey`.
+**Run channel announcements** (`RunDiscordAnnouncement`) are shared Run communication.
+They are **not** controlled by User DM preferences (`discordDmEnabled=false` does not
+suppress the channel post). They use deterministic `sourceKey` values distinct from
+UserNotification keys:
+
+- Reschedule: `run-rescheduled:<runId>:<scheduleRevision>`
+- Cancel: `run-cancelled:<runId>`
+
+No historical backfill — only lifecycle events after deployment create rows.
 
 ## Settings ownership
 
@@ -40,6 +47,9 @@ Stored on `User`:
   `dmRunRescheduledEnabled` / `dmRosterRemovedEnabled` (default `true`)
 - `timeZone` (default `Europe/Berlin`) — personal presentation only
 - `defaultCharacterId` (nullable) — signup UX preference only
+- `discordRunChannelNickname` (nullable) — RAID_LEAD/ADMIN only; Discord Run
+  channel Raid Lead segment. Null falls back to `User.name`. Does **not** change
+  `Run.title` or web identity.
 
 ### Effective Discord DM rule
 
