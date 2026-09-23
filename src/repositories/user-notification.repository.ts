@@ -1,4 +1,4 @@
-import { orm } from "@/lib/prisma";
+﻿import { orm } from "@/lib/prisma";
 import { toUtcIso } from "@/lib/datetime";
 import { asString, asStringOrNull } from "@/lib/persistence";
 import {
@@ -53,7 +53,7 @@ function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallbac
     : fallback;
 }
 
-function mapRow(row: Record<string, unknown>): UserNotificationRecord {
+function mapUserNotificationRow(row: Record<string, unknown>): UserNotificationRecord {
   return {
     id: asString(row.id),
     userId: asString(row.userId),
@@ -150,7 +150,7 @@ export const userNotificationRepository = {
       throw new Error(`Failed to create notification ${input.sourceKey}`);
     }
     const created = await orm.UserNotification.where({ id }).first();
-    return created ? mapRow(created as Record<string, unknown>) : null;
+    return created ? mapUserNotificationRow(created as Record<string, unknown>) : null;
   },
 
   async countUnreadForUser(userId: string): Promise<number> {
@@ -166,7 +166,7 @@ export const userNotificationRepository = {
       .orderBy((n) => n.createdAt.desc())
       .limit(limit)
       .all();
-    return rows.map((row) => mapRow(row as Record<string, unknown>));
+    return rows.map((row) => mapUserNotificationRow(row as Record<string, unknown>));
   },
 
   async listForUser(userId: string, limit = 100): Promise<UserNotificationRecord[]> {
@@ -174,17 +174,17 @@ export const userNotificationRepository = {
       .orderBy((n) => n.createdAt.desc())
       .limit(limit)
       .all();
-    return rows.map((row) => mapRow(row as Record<string, unknown>));
+    return rows.map((row) => mapUserNotificationRow(row as Record<string, unknown>));
   },
 
   async findOwned(userId: string, notificationId: string): Promise<UserNotificationRecord | null> {
     const row = await orm.UserNotification.where({ id: notificationId, userId }).first();
-    return row ? mapRow(row as Record<string, unknown>) : null;
+    return row ? mapUserNotificationRow(row as Record<string, unknown>) : null;
   },
 
   async findById(notificationId: string): Promise<UserNotificationRecord | null> {
     const row = await orm.UserNotification.where({ id: notificationId }).first();
-    return row ? mapRow(row as Record<string, unknown>) : null;
+    return row ? mapUserNotificationRow(row as Record<string, unknown>) : null;
   },
 
   async markRead(userId: string, notificationId: string): Promise<UserNotificationRecord | null> {
@@ -215,12 +215,16 @@ export const userNotificationRepository = {
     return unread.length;
   },
 
-  async listPendingDiscordDelivery(
+  /**
+   * PENDING personal Discord DMs immediately eligible for the bot lane.
+   * Quiet Hours deferred rows (future discordDeliverAfter) are excluded.
+   */
+  async listPendingDiscordDmNotifications(
     limit = 50,
     now: Date = new Date(),
   ): Promise<UserNotificationRecord[]> {
     const nowIso = toUtcIso(now);
-    const [readyNull, readyDue] = await Promise.all([
+    const [readyWithoutDelay, readyAfterQuietHours] = await Promise.all([
       orm.UserNotification.where({ discordDeliveryStatus: "PENDING" })
         .where((n) => n.discordDeliverAfter.isNull())
         .orderBy((n) => n.createdAt.asc())
@@ -233,13 +237,13 @@ export const userNotificationRepository = {
         .all(),
     ]);
 
-    const merged = new Map<string, UserNotificationRecord>();
-    for (const row of [...readyNull, ...readyDue]) {
-      const mapped = mapRow(row as Record<string, unknown>);
-      merged.set(mapped.id, mapped);
+    const eligibleById = new Map<string, UserNotificationRecord>();
+    for (const userNotificationRow of [...readyWithoutDelay, ...readyAfterQuietHours]) {
+      const mapped = mapUserNotificationRow(userNotificationRow as Record<string, unknown>);
+      eligibleById.set(mapped.id, mapped);
     }
 
-    return [...merged.values()]
+    return [...eligibleById.values()]
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .slice(0, limit);
   },

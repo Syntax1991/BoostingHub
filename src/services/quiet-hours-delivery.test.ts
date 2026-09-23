@@ -108,7 +108,7 @@ afterAll(async () => {
   await cleanup();
 });
 
-describe("listPendingDiscordDelivery deliverAfter filter", () => {
+describe("listPendingDiscordDmNotifications deliverAfter filter", () => {
   it("returns null/past/now and excludes future + terminal statuses", async () => {
     const now = new Date("2026-06-15T12:00:00.000Z");
     await userNotificationRepository.createIgnoreDuplicate(
@@ -171,7 +171,7 @@ describe("listPendingDiscordDelivery deliverAfter filter", () => {
       }),
     );
 
-    const pending = await userNotificationRepository.listPendingDiscordDelivery(50, now);
+    const pending = await userNotificationRepository.listPendingDiscordDmNotifications(50, now);
     const keys = pending
       .filter((row) => row.userId === ids.user && row.sourceKey.startsWith("qh-"))
       .map((row) => row.sourceKey)

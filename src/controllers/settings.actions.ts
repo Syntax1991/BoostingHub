@@ -5,7 +5,7 @@ import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { settingsService } from "@/services/settings.service";
 import {
-  updateDmPreferencesSchema,
+  updateNotificationPreferencesSchema,
   updateGameplayPreferencesSchema,
   updateRegionalPreferencesSchema,
   updateRunChannelPreferencesSchema,
@@ -14,7 +14,7 @@ import {
 export async function updateNotificationSettingsAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const parsed = updateDmPreferencesSchema.parse(input);
+    const parsed = updateNotificationPreferencesSchema.parse(input);
     await settingsService.updateNotificationDmPreferences(user, parsed);
     revalidatePath("/settings");
     return { ok: true, message: "Notification preferences saved." };

@@ -43,7 +43,8 @@ export const runLifecycleNotificationService = {
         scheduledStartAt: input.scheduledStartAt,
         timeZone,
       });
-      const delivery = resolveDiscordDelivery({
+      // Discord DM intent (incl. Quiet Hours deferral) is snapshotted here — later Settings edits do not rewrite this row.
+      const discordDmDelivery = resolveDiscordDelivery({
         discordDmEnabled: prefs.discordDmEnabled,
         eventDmEnabled: prefs.dmRunCancelledEnabled,
         discordUserId: user?.discordUserId ?? null,
@@ -59,9 +60,9 @@ export const runLifecycleNotificationService = {
         title: copy.title,
         message: copy.message,
         href: copy.href,
-        discordDeliveryStatus: delivery.status,
-        discordUserId: delivery.discordUserId,
-        discordDeliverAfter: delivery.discordDeliverAfter,
+        discordDeliveryStatus: discordDmDelivery.status,
+        discordUserId: discordDmDelivery.discordUserId,
+        discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
       });
     }
   },
@@ -94,7 +95,7 @@ export const runLifecycleNotificationService = {
         nextScheduledStartAt: input.nextScheduledStartAt,
         timeZone,
       });
-      const delivery = resolveDiscordDelivery({
+      const discordDmDelivery = resolveDiscordDelivery({
         discordDmEnabled: prefs.discordDmEnabled,
         eventDmEnabled: prefs.dmRunRescheduledEnabled,
         discordUserId: user?.discordUserId ?? null,
@@ -110,9 +111,9 @@ export const runLifecycleNotificationService = {
         title: copy.title,
         message: copy.message,
         href: copy.href,
-        discordDeliveryStatus: delivery.status,
-        discordUserId: delivery.discordUserId,
-        discordDeliverAfter: delivery.discordDeliverAfter,
+        discordDeliveryStatus: discordDmDelivery.status,
+        discordUserId: discordDmDelivery.discordUserId,
+        discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
       });
     }
   },
