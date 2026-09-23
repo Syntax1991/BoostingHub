@@ -53,7 +53,7 @@ function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallbac
     : fallback;
 }
 
-function mapRow(row: Record<string, unknown>): RunDiscordAnnouncementRecord {
+function mapRunDiscordAnnouncementRow(row: Record<string, unknown>): RunDiscordAnnouncementRecord {
   return {
     id: asString(row.id),
     runId: asString(row.runId),
@@ -124,7 +124,7 @@ export const runDiscordAnnouncementRepository = {
       throw new Error(`Failed to create RunDiscordAnnouncement ${input.sourceKey}`);
     }
     const created = await orm.RunDiscordAnnouncement.where({ id }).first();
-    return created ? mapRow(created as Record<string, unknown>) : null;
+    return created ? mapRunDiscordAnnouncementRow(created as Record<string, unknown>) : null;
   },
 
   async listPending(limit = 50): Promise<RunDiscordAnnouncementRecord[]> {
@@ -134,7 +134,7 @@ export const runDiscordAnnouncementRepository = {
       .limit(limit)
       .all();
     return (rows as Record<string, unknown>[])
-      .map(mapRow)
+      .map(mapRunDiscordAnnouncementRow)
       .sort(
         (a, b) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
@@ -149,12 +149,12 @@ export const runDiscordAnnouncementRepository = {
 
   async findById(id: string): Promise<RunDiscordAnnouncementRecord | null> {
     const row = await orm.RunDiscordAnnouncement.where({ id }).first();
-    return row ? mapRow(row as Record<string, unknown>) : null;
+    return row ? mapRunDiscordAnnouncementRow(row as Record<string, unknown>) : null;
   },
 
   async findBySourceKey(sourceKey: string): Promise<RunDiscordAnnouncementRecord | null> {
     const row = await orm.RunDiscordAnnouncement.where({ sourceKey }).first();
-    return row ? mapRow(row as Record<string, unknown>) : null;
+    return row ? mapRunDiscordAnnouncementRow(row as Record<string, unknown>) : null;
   },
 
   async updateStatus(
