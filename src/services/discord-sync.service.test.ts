@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
@@ -1349,6 +1349,244 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
     expect(channelItem?.archiveArtifactsNeeded).toBe(true);
     expect(channelItem?.archiveCloseMessageId).toBe("close-only");
     expect(channelItem?.archiveTranscriptMessageId).toBe("transcript-only");
+  });
+
+  describe("confirmed-deleted Discord channel (Unknown Channel) quiescence", () => {
+    const RAID_INVITE_SIGNUP_ID = "aaaaaaaa-aaaa-4aaa-8aaa-ds00000000ff";
+
+    /**
+     * Exact production pattern (35 Runs, 2026-09-20 → 2026-09-23): a terminal,
+     * app-archived Run whose channel was retired (transcript + delete +
+     * clear-channel) — runChannelId null, but signupChannelId/signupMessageId
+     * still point at the deleted channel with a pre-archive signature.
+     */
+    async function retiredRunWithDanglingSignupIdentity(channelId: string) {
+      const id = await createRunAt(nextStart);
+      await runService.openRun(lead, id);
+      await discordSyncService.recordRunChannel({ runId: id, channelId });
+      await discordSyncService.recordSignupPost({ runId: id, channelId, messageId: `${channelId}-signup-msg` });
+      await discordSyncService.recordRaidInviteSent({ runId: id, signupId: RAID_INVITE_SIGNUP_ID });
+      await runRepository.updateFields(id, { status: "CANCELLED" });
+      await runService.archiveRun(lead, id);
+      await discordSyncService.recordArchiveArtifacts({
+        runId: id,
+        closeMessageId: "close-dead",
+        transcriptMessageId: "transcript-dead",
+        transcriptHtml: "<html>kept</html>",
+        transcriptFilename: "transcript-kept.html",
+      });
+      await discordSyncService.clearRunChannel(id);
+      return id;
+    }
+
+    it("PRODUCTION FIXTURE: the dangling signup identity yields create-forbidden signup work targeting the deleted channel every poll", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-1");
+
+      for (let poll = 0; poll < 2; poll++) {
+        const work = await discordSyncService.listSyncWork(classificationNow);
+        expect(work.channels.some((entry) => entry.runId === id)).toBe(false);
+        const signup = work.signups.find((entry) => entry.runId === id);
+        expect(signup?.existingRunChannelId).toBe("dead-signup-chan-1");
+        expect(signup?.allowChannelCreate).toBe(false);
+      }
+    });
+
+    it("converges after channel-gone: no further signup/roster/start/channel work, stable across polls", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-2");
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-2" });
+
+      for (let poll = 0; poll < 2; poll++) {
+        const work = await discordSyncService.listSyncWork(classificationNow);
+        expect(work.channels.some((entry) => entry.runId === id)).toBe(false);
+        expect(work.signups.some((entry) => entry.runId === id)).toBe(false);
+        expect(work.roster.some((entry) => entry.runId === id)).toBe(false);
+        expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+      }
+    });
+
+    it("keeps archive transcript metadata, Raid Invite history and signup timestamp while dropping only dead-channel identity", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-3");
+      const before = await runDiscordPostRepository.findByRunId(id);
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-3" });
+
+      const after = await runDiscordPostRepository.findByRunId(id);
+      expect(after?.runChannelId).toBeNull();
+      expect(after?.signupChannelId).toBeNull();
+      expect(after?.signupMessageId).toBeNull();
+      expect(after?.lastSignupSignature).toBeNull();
+      expect(after?.signupPostedAt).toBe(before?.signupPostedAt);
+      expect(after?.archiveCloseMessageId).toBe("close-dead");
+      expect(after?.archiveTranscriptMessageId).toBe("transcript-dead");
+      expect(after?.archiveTranscriptHtml).toBe("<html>kept</html>");
+      expect(after?.archiveTranscriptFilename).toBe("transcript-kept.html");
+      expect(after?.raidInviteSentSignupIds).toBe(before?.raidInviteSentSignupIds);
+    });
+
+    it("roster/start lanes target the same fallback channel, and clearing drops roster identity only when it lived in the dead channel", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-4");
+      await orm.RunDiscordPost.where({ runId: id }).update({
+        rosterChannelId: "dead-signup-chan-4",
+        rosterMessageId: "roster-msg-dead",
+        lastRosterVersion: 3,
+        startChannelId: "legacy-start-chan",
+        startMessageId: "start-msg-legacy",
+        updatedAt: new Date().toISOString(),
+      });
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-4" });
+
+      const after = await runDiscordPostRepository.findByRunId(id);
+      expect(after?.rosterChannelId).toBeNull();
+      expect(after?.rosterMessageId).toBeNull();
+      expect(after?.lastRosterVersion).toBeNull();
+      // Start post marker in another channel is history — never cleared here.
+      expect(after?.startChannelId).toBe("legacy-start-chan");
+      expect(after?.startMessageId).toBe("start-msg-legacy");
+    });
+
+    it("is a no-op for a channel id that no longer matches (e.g. a replacement recorded meanwhile)", async () => {
+      const id = await createRunAt(nextStart);
+      await runService.openRun(lead, id);
+      await discordSyncService.recordRunChannel({ runId: id, channelId: "replacement-chan" });
+      await discordSyncService.recordSignupPost({ runId: id, channelId: "replacement-chan", messageId: "replacement-msg" });
+
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "old-dead-chan" });
+
+      const after = await runDiscordPostRepository.findByRunId(id);
+      expect(after?.runChannelId).toBe("replacement-chan");
+      expect(after?.signupChannelId).toBe("replacement-chan");
+      expect(after?.signupMessageId).toBe("replacement-msg");
+    });
+
+    describe("runDiscordPostRepository.clearDeletedChannelIdentity — exact-match writes", () => {
+      async function runWithIdentity(identity: {
+        runChannelId: string | null;
+        signupChannelId: string | null;
+        rosterChannelId: string | null;
+      }) {
+        const id = await createRunAt(nextStart);
+        await discordSyncService.recordRunChannel({ runId: id, channelId: "seed" });
+        await orm.RunDiscordPost.where({ runId: id }).update({
+          runChannelId: identity.runChannelId,
+          signupChannelId: identity.signupChannelId,
+          signupMessageId: identity.signupChannelId ? `${identity.signupChannelId}-signup-msg` : null,
+          lastSignupSignature: identity.signupChannelId ? `${identity.signupChannelId}-sig` : null,
+          rosterChannelId: identity.rosterChannelId,
+          rosterMessageId: identity.rosterChannelId ? `${identity.rosterChannelId}-roster-msg` : null,
+          lastRosterVersion: identity.rosterChannelId ? 7 : null,
+          startChannelId: "start-chan",
+          startMessageId: "start-msg",
+          updatedAt: new Date().toISOString(),
+        });
+        return id;
+      }
+
+      async function identityOf(id: string) {
+        const post = await runDiscordPostRepository.findByRunId(id);
+        return {
+          run: post?.runChannelId ?? null,
+          signup: [post?.signupChannelId ?? null, post?.signupMessageId ?? null, post?.lastSignupSignature ?? null],
+          roster: [post?.rosterChannelId ?? null, post?.rosterMessageId ?? null, post?.lastRosterVersion ?? null],
+          start: [post?.startChannelId ?? null, post?.startMessageId ?? null],
+        };
+      }
+
+      const NEW_SIGNUP = ["new-chan", "new-chan-signup-msg", "new-chan-sig"];
+      const NEW_ROSTER = ["new-chan", "new-chan-roster-msg", 7];
+      const CLEARED = [null, null, null];
+      const START = ["start-chan", "start-msg"];
+
+      it("a stale OLD report never clears NEW run, signup or roster identity", async () => {
+        const id = await runWithIdentity({ runChannelId: "new-chan", signupChannelId: "new-chan", rosterChannelId: "new-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+
+        expect(await identityOf(id)).toEqual({ run: "new-chan", signup: NEW_SIGNUP, roster: NEW_ROSTER, start: START });
+      });
+
+      it("clears each matching group independently and leaves non-matching groups intact", async () => {
+        const signupOnly = await runWithIdentity({ runChannelId: "new-chan", signupChannelId: "old-chan", rosterChannelId: "new-chan" });
+        const runAndRoster = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "new-chan", rosterChannelId: "old-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(signupOnly, "old-chan");
+        await runDiscordPostRepository.clearDeletedChannelIdentity(runAndRoster, "old-chan");
+
+        expect(await identityOf(signupOnly)).toEqual({ run: "new-chan", signup: CLEARED, roster: NEW_ROSTER, start: START });
+        expect(await identityOf(runAndRoster)).toEqual({ run: null, signup: NEW_SIGNUP, roster: CLEARED, start: START });
+      });
+
+      it("is idempotent, and a repeat after a replacement was recorded leaves the replacement intact", async () => {
+        const id = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "old-chan", rosterChannelId: "old-chan" });
+
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        expect(await identityOf(id)).toEqual({ run: null, signup: CLEARED, roster: CLEARED, start: START });
+
+        await discordSyncService.recordRunChannel({ runId: id, channelId: "replacement-chan" });
+        await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        expect((await identityOf(id)).run).toBe("replacement-chan");
+      });
+
+      it("RACE: a replacement recorded between the cleanup's database calls survives the stale report", async () => {
+        const id = await runWithIdentity({ runChannelId: "old-chan", signupChannelId: "old-chan", rosterChannelId: "old-chan" });
+
+        // Interleave a concurrent replacement write right after the cleanup's
+        // first statement. A read-then-write implementation would then erase
+        // it with a runId-only UPDATE; exact-match writes must not.
+        const originalWhere = orm.RunDiscordPost.where.bind(orm.RunDiscordPost);
+        let calls = 0;
+        const whereSpy = vi.spyOn(orm.RunDiscordPost, "where").mockImplementation(((criteria: Parameters<typeof originalWhere>[0]) => {
+          calls += 1;
+          if (calls === 2) {
+            // Runs before the second statement is built/executed.
+            return {
+              ...originalWhere(criteria),
+              update: async (patch: Record<string, unknown>) => {
+                await originalWhere({ runId: id }).update({
+                  signupChannelId: "new-chan",
+                  signupMessageId: "new-chan-signup-msg",
+                  lastSignupSignature: "new-chan-sig",
+                  rosterChannelId: "new-chan",
+                  rosterMessageId: "new-chan-roster-msg",
+                  lastRosterVersion: 7,
+                  updatedAt: new Date().toISOString(),
+                });
+                return originalWhere(criteria).update(patch as never);
+              },
+              first: async () => originalWhere(criteria).first(),
+            };
+          }
+          return originalWhere(criteria);
+        }) as never);
+
+        try {
+          await runDiscordPostRepository.clearDeletedChannelIdentity(id, "old-chan");
+        } finally {
+          whereSpy.mockRestore();
+        }
+
+        const after = await identityOf(id);
+        expect(after.signup).toEqual(NEW_SIGNUP);
+        expect(after.roster).toEqual(NEW_ROSTER);
+        expect(after.start).toEqual(START);
+      });
+    });
+
+    it("does not disable legitimate provisioning: a restored, re-opened CURRENT/NEXT Run is eligible for a first channel again", async () => {
+      const id = await retiredRunWithDanglingSignupIdentity("dead-signup-chan-5");
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "dead-signup-chan-5" });
+
+      await runService.restoreRun(lead, id);
+      await runRepository.updateFields(id, { status: "OPEN", signupsOpen: true });
+
+      const work = await discordSyncService.listSyncWork(classificationNow);
+      const signup = work.signups.find((entry) => entry.runId === id);
+      expect(signup?.allowChannelCreate).toBe(true);
+      expect(signup?.existingRunChannelId).toBeNull();
+      expect(signup?.existingMessageId).toBeNull();
+    });
   });
 });
 

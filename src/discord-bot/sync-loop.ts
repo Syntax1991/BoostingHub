@@ -490,10 +490,19 @@ async function resolveRunChannel(
         );
         return { channelId: item.existingRunChannelId, created: false };
       }
+      if (!allowCreate) {
+        // Confirmed deleted and no replacement is permitted: persist that, so
+        // listSyncWork stops re-targeting the dead id on every poll.
+        console.warn(
+          `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is gone in Discord (Unknown Channel) and may not be replaced — clearing its stored identity`,
+        );
+        await api.recordDiscordState(item.runId, { kind: "channel-gone", channelId: item.existingRunChannelId });
+        return null;
+      }
       console.warn(
         `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is gone in Discord (Unknown Channel) — provisioning a replacement`,
       );
-      // Confirmed deleted — fall through to create when allowCreate.
+      // Confirmed deleted — fall through to create.
     }
   }
 

@@ -925,14 +925,17 @@ export const discordSyncService = {
       // long as a published roster (and thus a roster post) exists — the
       // only way `RosterEmbedData` content changes is a re-publish, which is
       // exactly what bumps `roster.version`.
-      const hasAnyDiscordPresence = Boolean(post?.runChannelId) || Boolean(post?.signupChannelId);
-      if (run.roster?.publishedAt && hasAnyDiscordPresence) {
+      // Same fallback as the signup lane: the lane must target the channel
+      // its gate is based on, so a deleted channel is confirmed (and
+      // cleared) rather than skipped without evidence on every poll.
+      const dedicatedChannelId = post?.runChannelId ?? post?.signupChannelId ?? null;
+      if (run.roster?.publishedAt && dedicatedChannelId) {
         if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
           roster.push({
             runId: run.id,
             existingChannelId: post?.rosterChannelId ?? null,
             existingMessageId: post?.rosterMessageId ?? null,
-            existingRunChannelId: post?.runChannelId ?? null,
+            existingRunChannelId: dedicatedChannelId,
             desiredChannelName: desiredChannelNameFor(run),
             targetBucket,
           });
@@ -944,7 +947,6 @@ export const discordSyncService = {
       // Never creates a first channel. Immutable content → post once (message
       // id presence is the only dirtiness signal).
       const started = run.status === "IN_PROGRESS" || run.status === "COMPLETED";
-      const dedicatedChannelId = post?.runChannelId ?? post?.signupChannelId ?? null;
       if (started && dedicatedChannelId && !post?.startMessageId) {
         const snapshot = await runStartSnapshotRepository.findByRunId(run.id);
         if (snapshot) {
@@ -952,7 +954,7 @@ export const discordSyncService = {
             runId: run.id,
             existingChannelId: post?.startChannelId ?? null,
             existingMessageId: post?.startMessageId ?? null,
-            existingRunChannelId: post?.runChannelId ?? null,
+            existingRunChannelId: dedicatedChannelId,
             desiredChannelName: desiredChannelNameFor(run),
             targetBucket,
           });
@@ -1156,6 +1158,16 @@ export const discordSyncService = {
 
   async clearRunChannel(runId: string): Promise<void> {
     await runDiscordPostRepository.clearRunChannel(runId);
+  },
+
+  /**
+   * The bot confirmed via Discord Unknown Channel (10003) that `channelId` is
+   * deleted and it was not allowed to provision a replacement. Clearing the
+   * identity that lives in that channel makes listSyncWork stop generating
+   * signup/roster/start work that can only re-fetch the dead id every poll.
+   */
+  async recordRunChannelGone(input: { runId: string; channelId: string }): Promise<void> {
+    await runDiscordPostRepository.clearDeletedChannelIdentity(input.runId, input.channelId);
   },
 
   async recordRaidInviteSent(input: { runId: string; signupId: string }): Promise<void> {

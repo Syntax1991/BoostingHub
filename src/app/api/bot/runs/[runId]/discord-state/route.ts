@@ -11,6 +11,7 @@ import { discordSyncService } from "@/services/discord-sync.service";
 export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("channel"), channelId: z.string().min(1).max(64) }),
   z.object({ kind: z.literal("clear-channel") }),
+  z.object({ kind: z.literal("channel-gone"), channelId: z.string().min(1).max(64) }),
   z.object({
     kind: z.literal("signup"),
     channelId: z.string().min(1).max(64),
@@ -51,6 +52,8 @@ export type RunDiscordStateUpdate = z.infer<typeof runDiscordStateUpdateSchema>;
  * creating a duplicate. Purely bookkeeping — never authoritative
  * Run/Signup state. `clear-channel` drops `runChannelId` after the bot
  * deletes an app-archived Run's Discord channel (transcript remains).
+ * `channel-gone` reports a channel Discord confirmed deleted (Unknown
+ * Channel) that the bot may not replace; identity stored in it is dropped.
  * `raid-invite` appends a signup id to the Apex Raid Invite sent list.
  * `notification-dm` updates UserNotification.discordDeliveryStatus (and on
  * SENT RAID_INVITE also appends the legacy raidInviteSentSignupIds list).
@@ -66,6 +69,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await discordSyncService.recordRunChannel({ runId, channelId: runDiscordStateUpdate.channelId });
     } else if (runDiscordStateUpdate.kind === "clear-channel") {
       await discordSyncService.clearRunChannel(runId);
+    } else if (runDiscordStateUpdate.kind === "channel-gone") {
+      await discordSyncService.recordRunChannelGone({ runId, channelId: runDiscordStateUpdate.channelId });
     } else if (runDiscordStateUpdate.kind === "signup") {
       await discordSyncService.recordSignupPost({
         runId,

@@ -256,6 +256,120 @@ describe("syncOnce — raidboost announce on first channel create", () => {
   });
 });
 
+describe("syncOnce — confirmed-deleted Run channel quiescence", () => {
+  const RUN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1";
+  const DEAD = "dead-signup-chan";
+
+  function markers() {
+    return new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+  }
+
+  /** Makes `client.channels.fetch(channelId)` reject with `error`; every other id keeps the mock behavior. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Discord.js Client mock
+  function failFetch(client: any, channelId: string, error: unknown) {
+    const original = client.channels.fetch.getMockImplementation();
+    client.channels.fetch.mockImplementation(async (id: string) => {
+      if (id === channelId) throw error;
+      return original(id);
+    });
+  }
+
+  const unknownChannel = () => Object.assign(new Error("Unknown Channel"), { code: 10003 });
+  const missingAccess = () => Object.assign(new Error("Missing Access"), { code: 50001 });
+
+  /** Production fixture: CANCELLED + app-archived, runChannelId cleared, signup identity still in the deleted channel. */
+  function retiredSignupItem(allowChannelCreate: boolean) {
+    return {
+      runId: RUN_ID,
+      existingChannelId: DEAD,
+      existingMessageId: "dead-signup-msg",
+      existingRunChannelId: DEAD,
+      desiredChannelName: "closed-tue-1800-hc-unsaved-lead",
+      targetBucket: allowChannelCreate ? ("CURRENT" as const) : ("ARCHIVE" as const),
+      scheduledStartAt: "2026-09-15T16:00:00.000Z",
+      allowChannelCreate,
+      embed: {
+        ...signupEmbed(RUN_ID, "2026-09-15T16:00:00.000Z"),
+        ...(allowChannelCreate ? {} : { runStatus: "CANCELLED", signupWindowOpen: false }),
+      },
+    };
+  }
+
+  function recordedKinds(api: BotApiClient) {
+    return (api.recordDiscordState as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1] as { kind: string; channelId?: string });
+  }
+
+  it("Unknown Channel + create forbidden: records channel-gone for that exact channel, creates nothing, sends nothing", async () => {
+    const { client, createdIds } = makeDiscordClient(markers());
+    failFetch(client, DEAD, unknownChannel());
+    const api = makeApi({ channels: [], signups: [retiredSignupItem(false)], roster: [], start: [] });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(createdIds).toHaveLength(0);
+    expect(recordedKinds(api)).toEqual([{ kind: "channel-gone", channelId: DEAD }]);
+  });
+
+  it("Unknown Channel + create allowed: legitimate replacement still provisions, records the new channel and announces once", async () => {
+    const { client, createdIds } = makeDiscordClient(markers());
+    failFetch(client, DEAD, unknownChannel());
+    const api = makeApi({ channels: [], signups: [retiredSignupItem(true)], roster: [], start: [] });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(createdIds).toHaveLength(1);
+    const kinds = recordedKinds(api);
+    expect(kinds.some((entry) => entry.kind === "channel-gone")).toBe(false);
+    expect(kinds).toContainEqual({ kind: "channel", channelId: createdIds[0] });
+    const created = client.channels.cache.get(createdIds[0]!) as { send: ReturnType<typeof vi.fn> };
+    // One raidboost announce + one signup embed — no duplicate ping or post.
+    expect(created.send).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["Missing Access", missingAccess],
+    ["transient network error", () => new Error("ECONNRESET")],
+  ])("%s keeps the stored identity: no channel-gone, no replacement (even when create is allowed)", async (_label, makeError) => {
+    for (const allowChannelCreate of [false, true]) {
+      const { client, createdIds } = makeDiscordClient(markers());
+      failFetch(client, DEAD, makeError());
+      const api = makeApi({ channels: [], signups: [retiredSignupItem(allowChannelCreate)], roster: [], start: [] });
+
+      await syncOnce(client, botEnv(), api);
+
+      expect(createdIds).toHaveLength(0);
+      expect(recordedKinds(api).some((entry) => entry.kind === "channel-gone" || entry.kind === "channel")).toBe(false);
+    }
+  });
+
+  it("roster and start lanes (never allowed to create) also record channel-gone instead of retrying the dead id", async () => {
+    const { client, createdIds } = makeDiscordClient(markers());
+    failFetch(client, DEAD, unknownChannel());
+    const laneItem = {
+      runId: RUN_ID,
+      existingChannelId: DEAD,
+      existingMessageId: "dead-msg",
+      existingRunChannelId: DEAD,
+      desiredChannelName: "closed-tue-1800-hc-unsaved-lead",
+      targetBucket: "ARCHIVE" as const,
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [laneItem], start: [laneItem] });
+    (api.getRosterEmbedData as ReturnType<typeof vi.fn>).mockResolvedValue({ runId: RUN_ID });
+    (api.getRunStartEmbedData as ReturnType<typeof vi.fn>).mockResolvedValue({ runId: RUN_ID });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(createdIds).toHaveLength(0);
+    expect(recordedKinds(api)).toEqual([
+      { kind: "channel-gone", channelId: DEAD },
+      { kind: "channel-gone", channelId: DEAD },
+    ]);
+  });
+});
+
 describe("syncOnce — same-pass first-channel positioning", () => {
   it("A: first CURRENT channel lands between markers in the SAME pass", async () => {
     const children = new Map<string, Child>([
