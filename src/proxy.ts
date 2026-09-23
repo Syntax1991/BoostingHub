@@ -2,18 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 import { resolveSafeCallbackPath } from "@/auth/safe-callback-path";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/runs", "/my-runs", "/characters", "/profile", "/manage"];
+/**
+ * Every top-level route in src/app/(app). Keep in sync with config.matcher
+ * (which must stay a literal for Next.js static analysis); proxy.test.ts enforces both.
+ */
+export const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/runs",
+  "/my-runs",
+  "/characters",
+  "/profile",
+  "/manage",
+  "/settings",
+  "/notifications",
+];
+
+export function isProtectedPath(pathname: string): boolean {
+  return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 /**
  * Cookie existence check only. Real authorization happens in controllers via requireUser / requireRaidLead.
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-
-  if (!isProtected) {
+  if (!isProtectedPath(pathname)) {
     return NextResponse.next();
   }
 
@@ -29,5 +42,14 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/runs/:path*", "/my-runs/:path*", "/characters/:path*", "/profile/:path*", "/manage/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/runs/:path*",
+    "/my-runs/:path*",
+    "/characters/:path*",
+    "/profile/:path*",
+    "/manage/:path*",
+    "/settings/:path*",
+    "/notifications/:path*",
+  ],
 };
