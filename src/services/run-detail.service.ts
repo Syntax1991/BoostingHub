@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import { effectiveRaidLeadChannelName } from "@/lib/discord-channel-name";
 import {
   classifyRunContents,
   listCreateRunContentPresets,
@@ -185,6 +186,10 @@ export const runDetailService = {
           contentSummary: run.contentDisplay.summary,
           difficulty: run.difficulty,
           lootType: run.lootType,
+          raidLeadDisplayName: effectiveRaidLeadChannelName({
+            raidLeadName: run.raidLeadName,
+            discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+          }),
           targets: {
             tanks: run.desiredTankCount,
             healers: run.desiredHealerCount,

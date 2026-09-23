@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
-import { FINAL_SETUP_LFG_LINE } from "@/lib/run-start-message";
+import { formatFinalSetupLfgLine } from "@/lib/run-start-message";
 import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 
@@ -43,6 +43,7 @@ const startData = {
   difficulty: "HEROIC" as const,
   lootType: "UNSAVED" as const,
   scheduledStartAt: "2026-09-18T17:00:00.000Z",
+  raidLeadDisplayName: "Syntax",
   targets: { tanks: 2, healers: 2, dps: 8 },
   groups: {
     tanks: [
@@ -84,7 +85,8 @@ describe("syncOnce — Final Setup plain-text start posts", () => {
     const payload = send.mock.calls[0]![0] as { content?: string; embeds?: unknown };
     expect(payload.content).toContain("**Final Setup**");
     expect(payload.content).toContain("<@111> <:shaman:999>");
-    expect(payload.content).toContain(FINAL_SETUP_LFG_LINE);
+    expect(payload.content?.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+    expect(payload.content?.match(/LFG HM/g)).toHaveLength(1);
     expect(payload.embeds).toBeUndefined();
     expect(edit).not.toHaveBeenCalled();
     expect(api.recordDiscordState).toHaveBeenCalledWith("run-start-1", {
@@ -160,8 +162,9 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
 
     const signupBlob = JSON.stringify(signup.data);
     const rosterBlob = JSON.stringify(roster.data);
-    expect(signupBlob).not.toContain("LFG HM Krum");
-    expect(rosterBlob).not.toContain("LFG HM Krum");
+    // The Raid Lead LFG footer belongs to Final Setup only.
+    expect(signupBlob).not.toContain("LFG HM");
+    expect(rosterBlob).not.toContain("LFG HM");
     expect(signup.data.title || signup.data.description).toBeTruthy();
     expect(roster.data.title).toBeTruthy();
   });

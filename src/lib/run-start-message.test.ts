@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  FINAL_SETUP_LFG_LINE,
   formatFinalSetup,
+  formatFinalSetupLfgLine,
   renderFinalSetupText,
   type FinalSetupInput,
   type FinalSetupParticipant,
@@ -31,6 +31,7 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
     contentSummary: "The Venomous Abyss 8/8",
     difficulty: "HEROIC",
     lootType: "UNSAVED",
+    raidLeadDisplayName: "Syntax",
     targets: { tanks: 2, healers: 2, dps: 8 },
     groups: {
       tanks: [
@@ -120,6 +121,7 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
     difficulty: input.difficulty,
     lootType: input.lootType,
     scheduledStartAt: "2026-09-18T17:00:00.000Z",
+    raidLeadDisplayName: input.raidLeadDisplayName,
     targets: input.targets,
     groups: {
       tanks: input.groups.tanks.map((m, i) => ({ signupId: `t${i}`, userId: `u${i}`, ...m, saveLabel: "Unsaved" })),
@@ -137,19 +139,36 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
   };
 }
 
+describe("formatFinalSetupLfgLine — Run Raid Lead footer", () => {
+  it("renders the exact footer for Syntax", () => {
+    expect(formatFinalSetupLfgLine("Syntax")).toBe("**LFG HM Syntax write your discord name in the note!**");
+  });
+
+  it("renders the exact footer for Kiri", () => {
+    expect(formatFinalSetupLfgLine("Kiri")).toBe("**LFG HM Kiri write your discord name in the note!**");
+  });
+});
+
 describe("renderFinalSetupText — plain Discord Final Setup", () => {
-  it("starts with bold Final Setup, role headers, and exact LFG footer once", () => {
+  it("starts with bold Final Setup, role headers, and the Raid Lead LFG footer exactly once", () => {
     const text = renderFinalSetupText(sampleInput());
     expect(text.startsWith("**Final Setup**\n\n")).toBe(true);
     expect(text).toContain("🛡 **Tanks** 🛡 2/2");
     expect(text).toContain("✚ **Healers** ✚ 2/2");
     expect(text).toContain("⚔ **DPS** ⚔ 1/8");
     expect(text).toContain("📦 **Lootbuddies** 📦 5");
-    expect(text.endsWith(FINAL_SETUP_LFG_LINE)).toBe(true);
-    expect(text.match(/\*\*LFG HM Krum write your discord name in the note!\*\*/g)).toHaveLength(1);
+    expect(text.endsWith("\n\n**LFG HM Syntax write your discord name in the note!**")).toBe(true);
+    expect(text.match(/LFG HM/g)).toHaveLength(1);
     const lootIdx = text.indexOf("📦 **Lootbuddies**");
-    const lfgIdx = text.indexOf(FINAL_SETUP_LFG_LINE);
+    const lfgIdx = text.indexOf("**LFG HM Syntax");
     expect(lfgIdx).toBeGreaterThan(lootIdx);
+  });
+
+  it("uses the given Raid Lead, never a fixed name", () => {
+    const text = renderFinalSetupText(sampleInput({ raidLeadDisplayName: "Kiri" }));
+    expect(text.endsWith("**LFG HM Kiri write your discord name in the note!**")).toBe(true);
+    expect(text).not.toContain("Krum");
+    expect(text).not.toContain("LFG HM Syntax");
   });
 
   it("renders compact booster rows: mention + class indicator, no character/realm", () => {
@@ -215,18 +234,24 @@ describe("renderFinalSetupText — plain Discord Final Setup", () => {
 });
 
 describe("web / Discord Final Setup parity", () => {
-  it("shares the same plain-text body from the formatter", () => {
-    const input = sampleInput();
+  it("shares the same plain-text body and Raid Lead footer from the formatter", () => {
+    const input = sampleInput({ raidLeadDisplayName: "Kiri" });
     const shared = formatFinalSetup(input);
-    const discordText = renderRunStartMessageText(sampleEmbedData());
+    const discordText = renderRunStartMessageText(sampleEmbedData({ raidLeadDisplayName: "Kiri" }));
     expect(discordText).toBe(renderFinalSetupText(input));
     expect(discordText).toContain(`**${shared.title}**`);
     expect(discordText).toContain(shared.body);
+    expect(discordText.endsWith(formatFinalSetupLfgLine("Kiri"))).toBe(true);
   });
 });
 
 describe("Final Setup Discord length safety", () => {
-  it("keeps a full 2/4/14 + 5 lootbuddy roster under Discord's 2000-char content limit", () => {
+  it("keeps a full 2/4/14 + 5 lootbuddy roster with a max-length Raid Lead under Discord's 2000-char content limit", () => {
+    // Realistic worst case: 19-digit Discord snowflakes for every mention and
+    // custom emoji, and a 32-char Raid Lead name (Discord's display-name /
+    // username cap; the Run channel nickname is capped lower, at 24).
+    const snowflake = (n: number) => `13${String(n).padStart(17, "0")}`;
+    const longestRaidLead = "R".repeat(32);
     const classes: WowClass[] = [
       "WARRIOR",
       "PALADIN",
@@ -244,12 +269,12 @@ describe("Final Setup Discord length safety", () => {
     ];
     const indicators: Partial<Record<WowClass, string>> = {};
     for (const [i, wowClass] of classes.entries()) {
-      indicators[wowClass] = `<:${wowClass.toLowerCase()}:${1000 + i}>`;
+      indicators[wowClass] = `<:${wowClass.toLowerCase()}:${snowflake(900 + i)}>`;
     }
 
     const tanks = Array.from({ length: 2 }, (_, i) =>
       participant({
-        discordUserId: String(10_000 + i),
+        discordUserId: snowflake(10_000 + i),
         userName: `Tank${i}`,
         wowClass: "WARRIOR",
         participationType: "BOOSTER",
@@ -258,7 +283,7 @@ describe("Final Setup Discord length safety", () => {
     );
     const healers = Array.from({ length: 4 }, (_, i) =>
       participant({
-        discordUserId: String(20_000 + i),
+        discordUserId: snowflake(20_000 + i),
         userName: `Heal${i}`,
         wowClass: "PRIEST",
         participationType: "BOOSTER",
@@ -267,7 +292,7 @@ describe("Final Setup Discord length safety", () => {
     );
     const dps = Array.from({ length: 14 }, (_, i) =>
       participant({
-        discordUserId: String(30_000 + i),
+        discordUserId: snowflake(30_000 + i),
         userName: `Dps${i}`,
         wowClass: classes[i % classes.length]!,
         participationType: "BOOSTER",
@@ -276,7 +301,7 @@ describe("Final Setup Discord length safety", () => {
     );
     const lootbuddies = Array.from({ length: 5 }, (_, i) =>
       participant({
-        discordUserId: String(40_000 + i),
+        discordUserId: snowflake(40_000 + i),
         userName: `Loot${i}`,
         participationType: "LOOTBUDDY",
       }),
@@ -284,6 +309,7 @@ describe("Final Setup Discord length safety", () => {
 
     const text = renderFinalSetupText(
       sampleInput({
+        raidLeadDisplayName: longestRaidLead,
         targets: { tanks: 2, healers: 4, dps: 14 },
         groups: { tanks, healers, dps, lootbuddies },
       }),
@@ -291,6 +317,7 @@ describe("Final Setup Discord length safety", () => {
     );
 
     expect(text.length).toBeLessThan(2000);
+    expect(text.endsWith(formatFinalSetupLfgLine(longestRaidLead))).toBe(true);
     expect(text).toContain("🛡 **Tanks** 🛡 2/2");
     expect(text).toContain("✚ **Healers** ✚ 4/4");
     expect(text).toContain("⚔ **DPS** ⚔ 14/14");

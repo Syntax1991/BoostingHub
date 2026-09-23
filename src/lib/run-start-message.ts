@@ -18,7 +18,13 @@ export const CLASS_DISCORD_EMOJI_NAMES: Record<WowClass, string> = {
   WARRIOR: "warrior",
 };
 
-export const FINAL_SETUP_LFG_LINE = "**LFG HM Krum write your discord name in the note!**";
+/**
+ * LFG footer naming the Run's assigned Raid Lead. `raidLeadDisplayName` is the
+ * human-readable effective name (see `effectiveRaidLeadChannelName`), not a slug.
+ */
+export function formatFinalSetupLfgLine(raidLeadDisplayName: string): string {
+  return `**LFG HM ${raidLeadDisplayName} write your discord name in the note!**`;
+}
 
 export type FinalSetupRenderOptions = {
   /** Pre-resolved Discord custom emoji markup (<:name:id>) keyed by WowClass. */
@@ -58,6 +64,11 @@ export type FinalSetupInput = {
   contentSummary?: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
+  /**
+   * The Run's assigned Raid Lead as shown to players: Discord Run channel
+   * nickname, else the Raid Lead's name. Never the user who started the Run.
+   */
+  raidLeadDisplayName: string;
   targets: {
     tanks: number;
     healers: number;
@@ -139,9 +150,9 @@ export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRend
 
 /**
  * Authoritative plain-text Final Setup for Discord content / web Copy message.
- * Title uses Discord markdown bold. Appends the LFG line once at the bottom.
+ * Title uses Discord markdown bold. Appends the Raid Lead's LFG line once at the bottom.
  */
 export function renderFinalSetupText(data: FinalSetupInput, options?: FinalSetupRenderOptions): string {
   const message = formatFinalSetup(data, options);
-  return `**${message.title}**\n\n${message.body}\n\n${FINAL_SETUP_LFG_LINE}`;
+  return `**${message.title}**\n\n${message.body}\n\n${formatFinalSetupLfgLine(data.raidLeadDisplayName)}`;
 }
