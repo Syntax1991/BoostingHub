@@ -479,7 +479,8 @@ export const runRepository = {
 
   /**
    * Atomically cancel a Run and insert the RUN_CANCELLED channel announcement.
-   * Either both commit or neither does.
+   * Either both commit or neither does — never cancel without the announcement
+   * row the bot needs before retiring the Discord channel.
    */
   async cancelWithDiscordAnnouncement(
     runId: string,

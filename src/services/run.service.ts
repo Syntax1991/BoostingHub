@@ -936,6 +936,10 @@ export const runService = {
       throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
     }
 
+    // Channel lifecycle announcement is authoritative and atomic with CANCELLED.
+    // Personal UserNotifications are separate (notifyRunCancelled) and must not
+    // be mixed into this transaction — bot retirement waits on RunDiscordAnnouncement
+    // terminal status before transcript/archive and channel deletion.
     await runRepository.cancelWithDiscordAnnouncement(run.id, {
       runId: run.id,
       type: "RUN_CANCELLED",
