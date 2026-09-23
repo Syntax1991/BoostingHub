@@ -42,6 +42,7 @@ import {
   rosterSelectedWebNotification,
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
+import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -666,10 +667,13 @@ export const rosterRepository = {
           runTitle: input.runTitle,
           assignment,
         });
+        const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
         const delivery = resolveDiscordDelivery({
           discordDmEnabled,
           eventDmEnabled,
           discordUserId,
+          quietHours,
+          timeZone,
         });
         await userNotificationRepository.createInTx(txOrm, {
           userId,
@@ -682,6 +686,7 @@ export const rosterRepository = {
           href: copy.href,
           discordDeliveryStatus: delivery.status,
           discordUserId: delivery.discordUserId,
+          discordDeliverAfter: delivery.discordDeliverAfter,
           createdAt: now,
         });
       }
@@ -712,10 +717,13 @@ export const rosterRepository = {
           runTitle: input.runTitle,
           characterLabel,
         });
+        const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
         const delivery = resolveDiscordDelivery({
           discordDmEnabled,
           eventDmEnabled,
           discordUserId,
+          quietHours,
+          timeZone,
         });
         await userNotificationRepository.createInTx(txOrm, {
           userId,
@@ -728,6 +736,7 @@ export const rosterRepository = {
           href: copy.href,
           discordDeliveryStatus: delivery.status,
           discordUserId: delivery.discordUserId,
+          discordDeliverAfter: delivery.discordDeliverAfter,
           createdAt: now,
         });
       }

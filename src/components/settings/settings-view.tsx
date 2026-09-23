@@ -11,6 +11,23 @@ type SettingsPage = Awaited<ReturnType<typeof settingsService.getSettings>> & {
   sessions: PublicSessionView[];
 };
 
+function notificationSettingsRemountKey(
+  notifications: SettingsPage["notifications"],
+): string {
+  const n = notifications;
+  return [
+    n.discordDmEnabled,
+    n.dmRosterSelectedEnabled,
+    n.dmRaidInviteEnabled,
+    n.dmRunCancelledEnabled,
+    n.dmRunRescheduledEnabled,
+    n.dmRosterRemovedEnabled,
+    n.quietHours.enabled,
+    n.quietHours.start ?? "",
+    n.quietHours.end ?? "",
+  ].join("|");
+}
+
 export function SettingsView({ data }: { data: SettingsPage }) {
   return (
     <div>
@@ -19,7 +36,11 @@ export function SettingsView({ data }: { data: SettingsPage }) {
         description="Manage your BoostingHub preferences."
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <NotificationSettingsCard preferences={data.notifications} />
+        <NotificationSettingsCard
+          key={notificationSettingsRemountKey(data.notifications)}
+          preferences={data.notifications}
+          timeZone={data.regional.timeZone}
+        />
         <RegionalSettingsCard timeZone={data.regional.timeZone} timeZones={data.timeZones} />
         <GameplaySettingsCard
           defaultCharacterId={data.gameplay.defaultCharacterId}

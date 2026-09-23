@@ -1,4 +1,5 @@
 import { orm } from "@/lib/prisma";
+import { toUtcIso } from "@/lib/datetime";
 import { asString, asStringOrNull } from "@/lib/persistence";
 import {
   DISCORD_DELIVERY_STATUSES,
@@ -20,6 +21,7 @@ export type UserNotificationRecord = {
   readAt: string | null;
   discordDeliveryStatus: DiscordDeliveryStatus;
   discordUserId: string | null;
+  discordDeliverAfter: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -36,8 +38,14 @@ export type CreateUserNotificationInput = {
   href: string;
   discordDeliveryStatus: DiscordDeliveryStatus;
   discordUserId: string | null;
+  discordDeliverAfter?: string | null;
   createdAt?: string;
 };
+
+function normalizeDiscordDeliverAfter(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  return toUtcIso(value);
+}
 
 function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value)
@@ -59,6 +67,10 @@ function mapRow(row: Record<string, unknown>): UserNotificationRecord {
     readAt: asStringOrNull(row.readAt),
     discordDeliveryStatus: asEnum(row.discordDeliveryStatus, DISCORD_DELIVERY_STATUSES, "SKIPPED"),
     discordUserId: asStringOrNull(row.discordUserId),
+    discordDeliverAfter:
+      row.discordDeliverAfter != null
+        ? normalizeDiscordDeliverAfter(asString(row.discordDeliverAfter))
+        : null,
     createdAt: asString(row.createdAt),
     updatedAt: asString(row.updatedAt),
   };
@@ -102,6 +114,7 @@ export const userNotificationRepository = {
       readAt: null,
       discordDeliveryStatus: input.discordDeliveryStatus,
       discordUserId: input.discordUserId,
+      discordDeliverAfter: normalizeDiscordDeliverAfter(input.discordDeliverAfter),
       createdAt: now,
       updatedAt: now,
     });
@@ -127,6 +140,7 @@ export const userNotificationRepository = {
         readAt: null,
         discordDeliveryStatus: input.discordDeliveryStatus,
         discordUserId: input.discordUserId,
+        discordDeliverAfter: normalizeDiscordDeliverAfter(input.discordDeliverAfter),
         createdAt: now,
         updatedAt: now,
       });
@@ -201,12 +215,33 @@ export const userNotificationRepository = {
     return unread.length;
   },
 
-  async listPendingDiscordDelivery(limit = 50): Promise<UserNotificationRecord[]> {
-    const rows = await orm.UserNotification.where({ discordDeliveryStatus: "PENDING" })
-      .orderBy((n) => n.createdAt.asc())
-      .limit(limit)
-      .all();
-    return rows.map((row) => mapRow(row as Record<string, unknown>));
+  async listPendingDiscordDelivery(
+    limit = 50,
+    now: Date = new Date(),
+  ): Promise<UserNotificationRecord[]> {
+    const nowIso = toUtcIso(now);
+    const [readyNull, readyDue] = await Promise.all([
+      orm.UserNotification.where({ discordDeliveryStatus: "PENDING" })
+        .where((n) => n.discordDeliverAfter.isNull())
+        .orderBy((n) => n.createdAt.asc())
+        .limit(limit)
+        .all(),
+      orm.UserNotification.where({ discordDeliveryStatus: "PENDING" })
+        .where((n) => n.discordDeliverAfter.lte(nowIso))
+        .orderBy((n) => n.createdAt.asc())
+        .limit(limit)
+        .all(),
+    ]);
+
+    const merged = new Map<string, UserNotificationRecord>();
+    for (const row of [...readyNull, ...readyDue]) {
+      const mapped = mapRow(row as Record<string, unknown>);
+      merged.set(mapped.id, mapped);
+    }
+
+    return [...merged.values()]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, limit);
   },
 
   async updateDiscordDelivery(

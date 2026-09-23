@@ -47,6 +47,8 @@ export const runLifecycleNotificationService = {
         discordDmEnabled: prefs.discordDmEnabled,
         eventDmEnabled: prefs.dmRunCancelledEnabled,
         discordUserId: user?.discordUserId ?? null,
+        quietHours: prefs.quietHours,
+        timeZone,
       });
       await userNotificationRepository.createIgnoreDuplicate({
         userId,
@@ -59,6 +61,7 @@ export const runLifecycleNotificationService = {
         href: copy.href,
         discordDeliveryStatus: delivery.status,
         discordUserId: delivery.discordUserId,
+        discordDeliverAfter: delivery.discordDeliverAfter,
       });
     }
   },
@@ -95,6 +98,8 @@ export const runLifecycleNotificationService = {
         discordDmEnabled: prefs.discordDmEnabled,
         eventDmEnabled: prefs.dmRunRescheduledEnabled,
         discordUserId: user?.discordUserId ?? null,
+        quietHours: prefs.quietHours,
+        timeZone,
       });
       await userNotificationRepository.createIgnoreDuplicate({
         userId,
@@ -107,6 +112,7 @@ export const runLifecycleNotificationService = {
         href: copy.href,
         discordDeliveryStatus: delivery.status,
         discordUserId: delivery.discordUserId,
+        discordDeliverAfter: delivery.discordDeliverAfter,
       });
     }
   },

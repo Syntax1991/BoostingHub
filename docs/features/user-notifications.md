@@ -50,6 +50,10 @@ Stored on `User`:
 - `discordRunChannelNickname` (nullable) — RAID_LEAD/ADMIN only; Discord Run
   channel Raid Lead segment. Null falls back to `User.name`. Does **not** change
   `Run.title` or web identity.
+- `discordDmQuietHoursEnabled` (default `false`) — defer optional personal Discord
+  DMs during a daily local window
+- `discordDmQuietHoursStart` / `discordDmQuietHoursEnd` (nullable `HH:MM`) —
+  local wall-clock window interpreted in `User.timeZone` (Regional Settings)
 
 ### Effective Discord DM rule
 
@@ -59,10 +63,32 @@ At creation:
 
 → `PENDING`, else `SKIPPED`. Snapshotted; never re-evaluated later.
 
+When effective DM is `PENDING` and Quiet Hours are enabled, the current local time
+(in `User.timeZone`) is evaluated once at creation. Inside the window,
+`discordDeliverAfter` is set to the next local end time (exclusive boundary)
+converted to UTC; outside the window it stays `null` (immediately eligible).
+Quiet Hours never turn an intended DM into `SKIPPED`.
+
 ## Quiet Hours
 
-Not implemented in this phase. Future work would need timezone-aware deferred
-delivery (`deliverAfter` / `nextAttemptAt`) and DST-safe scheduling.
+Personal Discord DMs only. In-app notifications, shared Run-channel messages,
+`RunDiscordAnnouncement` lifecycle posts, channel provisioning, and role pings are
+never delayed or suppressed.
+
+- **Timezone authority:** `User.timeZone` (Regional Settings). Times are stored as
+  `HH:MM` local wall clock, not UTC offsets.
+- **Window semantics:** start inclusive, end exclusive. Same-day (`13:00`→`15:00`)
+  and overnight (`22:00`→`07:00`) windows are supported. `start === end` is rejected.
+- **DST:** end instants are derived via IANA timezone rules. Spring-forward
+  nonexistent local times resolve to the first valid instant at or after the
+  requested wall clock; fall-back ambiguous times prefer the **later** occurrence so
+  the quiet period is not shortened.
+- **Snapshot:** `discordDeliverAfter` on `UserNotification` is fixed at event
+  creation. Disabling Quiet Hours, changing start/end, or changing timezone later
+  does **not** retroactively alter existing rows.
+- **Bot delivery:** the existing `notificationDms` lane selects `PENDING` rows where
+  `discordDeliverAfter IS NULL OR discordDeliverAfter <= now` (bounded query). No
+  per-notification timers.
 
 ## Idempotency (`sourceKey`)
 

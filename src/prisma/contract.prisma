@@ -214,6 +214,13 @@ model User {
   /// Optional short name for Discord Run channel Raid Lead segment only.
   /// Null falls back to User.name. Does not affect Run.title or web identity.
   discordRunChannelNickname   String?
+  /// When true, optional personal Discord DMs are deferred during Quiet Hours.
+  /// Does not affect in-app notifications or shared Run-channel messages.
+  discordDmQuietHoursEnabled  Boolean @default(false)
+  /// Local wall-clock HH:MM Quiet Hours start (inclusive), interpreted in timeZone.
+  discordDmQuietHoursStart    String?
+  /// Local wall-clock HH:MM Quiet Hours end (exclusive), interpreted in timeZone.
+  discordDmQuietHoursEnd      String?
   createdAt       TimestamptzString @default(now())
   updatedAt       temporal.updatedAtString()
 
@@ -270,12 +277,16 @@ model UserNotification {
   discordDeliveryStatus DiscordDeliveryStatus
   /// Discord snowflake snapshotted when PENDING was chosen; null when SKIPPED.
   discordUserId         String?
+  /// When set, bot delivery lane must wait until this UTC instant (Quiet Hours snapshot).
+  /// Null means immediately eligible. Never re-evaluated from live Settings.
+  discordDeliverAfter   TimestamptzString?
   createdAt             TimestamptzString     @default(now())
   updatedAt             temporal.updatedAtString()
 
   @@index([userId, createdAt])
   @@index([userId, readAt])
   @@index([discordDeliveryStatus])
+  @@index([discordDeliveryStatus, discordDeliverAfter], map: "user_notification_dm_deliver_idx")
   @@map("user_notification")
 }
 

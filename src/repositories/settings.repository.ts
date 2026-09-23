@@ -3,6 +3,12 @@ import { asStringOrNull } from "@/lib/persistence";
 import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 import { normalizeTimeZone } from "@/lib/timezone";
 
+export type QuietHoursPreferences = {
+  enabled: boolean;
+  start: string | null;
+  end: string | null;
+};
+
 export type NotificationDmPreferences = {
   discordDmEnabled: boolean;
   dmRosterSelectedEnabled: boolean;
@@ -10,6 +16,7 @@ export type NotificationDmPreferences = {
   dmRunCancelledEnabled: boolean;
   dmRunRescheduledEnabled: boolean;
   dmRosterRemovedEnabled: boolean;
+  quietHours: QuietHoursPreferences;
 };
 
 export type RegionalPreferences = {
@@ -38,6 +45,7 @@ const DEFAULT_NOTIFICATIONS: NotificationDmPreferences = {
   dmRunCancelledEnabled: true,
   dmRunRescheduledEnabled: true,
   dmRosterRemovedEnabled: true,
+  quietHours: { enabled: false, start: null, end: null },
 };
 
 function boolPref(value: unknown, fallback = true): boolean {
@@ -61,6 +69,11 @@ function mapSettings(row: Record<string, unknown> | null): UserSettingsRecord {
       dmRunCancelledEnabled: boolPref(row.dmRunCancelledEnabled),
       dmRunRescheduledEnabled: boolPref(row.dmRunRescheduledEnabled),
       dmRosterRemovedEnabled: boolPref(row.dmRosterRemovedEnabled),
+      quietHours: {
+        enabled: row.discordDmQuietHoursEnabled === true,
+        start: asStringOrNull(row.discordDmQuietHoursStart),
+        end: asStringOrNull(row.discordDmQuietHoursEnd),
+      },
     },
     regional: {
       timeZone: normalizeTimeZone(typeof row.timeZone === "string" ? row.timeZone : null),
@@ -101,6 +114,9 @@ export const settingsRepository = {
       dmRunCancelledEnabled: prefs.dmRunCancelledEnabled,
       dmRunRescheduledEnabled: prefs.dmRunRescheduledEnabled,
       dmRosterRemovedEnabled: prefs.dmRosterRemovedEnabled,
+      discordDmQuietHoursEnabled: prefs.quietHours.enabled,
+      discordDmQuietHoursStart: prefs.quietHours.start,
+      discordDmQuietHoursEnd: prefs.quietHours.end,
       updatedAt: new Date().toISOString(),
     });
   },

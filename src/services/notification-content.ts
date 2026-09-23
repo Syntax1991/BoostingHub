@@ -1,10 +1,10 @@
-import { formatDateTime } from "@/lib/datetime";
+import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/datetime";
 import { discordTimestamp } from "@/lib/discord-timestamp";
+import { isInQuietHours, nextQuietHoursEndUtc, type QuietHoursSnapshot } from "@/lib/quiet-hours";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { runDetailPath } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
 import type { DiscordDeliveryStatus } from "@/models/enums";
-import { DEFAULT_TIME_ZONE } from "@/lib/datetime";
 
 export type NotificationAssignmentInput = {
   participationType: ParticipationType;
@@ -125,13 +125,40 @@ export function resolveDiscordDelivery(input: {
   discordDmEnabled: boolean;
   eventDmEnabled: boolean;
   discordUserId: string | null | undefined;
-}): { status: DiscordDeliveryStatus; discordUserId: string | null } {
+  quietHours?: QuietHoursSnapshot;
+  timeZone?: string;
+  now?: Date;
+}): {
+  status: DiscordDeliveryStatus;
+  discordUserId: string | null;
+  discordDeliverAfter: string | null;
+} {
   const discordUserId = input.discordUserId?.trim() || null;
   const effective = input.discordDmEnabled && input.eventDmEnabled && Boolean(discordUserId);
   if (!effective) {
-    return { status: "SKIPPED", discordUserId: null };
+    return { status: "SKIPPED", discordUserId: null, discordDeliverAfter: null };
   }
-  return { status: "PENDING", discordUserId };
+
+  let discordDeliverAfter: string | null = null;
+  const quietHours = input.quietHours;
+  if (
+    quietHours?.enabled &&
+    quietHours.start &&
+    quietHours.end
+  ) {
+    const timeZone = input.timeZone ?? DEFAULT_TIME_ZONE;
+    const now = input.now ?? new Date();
+    if (isInQuietHours({ now, timeZone, start: quietHours.start, end: quietHours.end })) {
+      discordDeliverAfter = nextQuietHoursEndUtc({
+        now,
+        timeZone,
+        start: quietHours.start,
+        end: quietHours.end,
+      });
+    }
+  }
+
+  return { status: "PENDING", discordUserId, discordDeliverAfter };
 }
 
 /**

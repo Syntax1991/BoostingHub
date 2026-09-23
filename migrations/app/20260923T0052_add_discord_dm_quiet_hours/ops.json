@@ -1,0 +1,209 @@
+[
+  {
+    "id": "column.public.user.discordDmQuietHoursEnabled",
+    "label": "Add column \"discordDmQuietHoursEnabled\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordDmQuietHoursEnabled",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordDmQuietHoursEnabled\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmQuietHoursEnabled"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordDmQuietHoursEnabled\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordDmQuietHoursEnabled\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordDmQuietHoursEnabled\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmQuietHoursEnabled"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.discordDmQuietHoursEnd",
+    "label": "Add column \"discordDmQuietHoursEnd\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordDmQuietHoursEnd",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordDmQuietHoursEnd\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmQuietHoursEnd"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordDmQuietHoursEnd\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordDmQuietHoursEnd\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordDmQuietHoursEnd\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmQuietHoursEnd"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.discordDmQuietHoursStart",
+    "label": "Add column \"discordDmQuietHoursStart\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordDmQuietHoursStart",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordDmQuietHoursStart\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmQuietHoursStart"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordDmQuietHoursStart\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordDmQuietHoursStart\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordDmQuietHoursStart\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordDmQuietHoursStart"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user_notification.discordDeliverAfter",
+    "label": "Add column \"discordDeliverAfter\" to \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordDeliverAfter",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordDeliverAfter\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_notification",
+          "discordDeliverAfter"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordDeliverAfter\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD COLUMN \"discordDeliverAfter\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordDeliverAfter\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_notification",
+          "discordDeliverAfter"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user_notification.user_notification_dm_deliver_idx",
+    "label": "Create index \"user_notification_dm_deliver_idx\" on \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "user_notification_dm_deliver_idx",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_notification_dm_deliver_idx\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_notification_dm_deliver_idx\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_notification_dm_deliver_idx\"",
+        "sql": "CREATE INDEX \"user_notification_dm_deliver_idx\" ON \"public\".\"user_notification\" (\"discordDeliveryStatus\", \"discordDeliverAfter\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_notification_dm_deliver_idx\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_notification_dm_deliver_idx\""
+        ]
+      }
+    ]
+  }
+]

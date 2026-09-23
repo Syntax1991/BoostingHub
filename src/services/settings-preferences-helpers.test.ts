@@ -67,8 +67,8 @@ describe("resolveDiscordDelivery master override", () => {
         discordDmEnabled: true,
         eventDmEnabled: true,
         discordUserId: "1",
-      }).status,
-    ).toBe("PENDING");
+      }),
+    ).toEqual({ status: "PENDING", discordUserId: "1", discordDeliverAfter: null });
   });
 });
 

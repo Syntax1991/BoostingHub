@@ -27,6 +27,7 @@ import {
   resolveDiscordDelivery,
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
+import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
 
 export type AttendanceRecord = {
   id: string;
@@ -332,10 +333,13 @@ export const attendanceRepository = {
           productLabel,
           assignment,
         });
+        const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
         const delivery = resolveDiscordDelivery({
           discordDmEnabled,
           eventDmEnabled,
           discordUserId,
+          quietHours,
+          timeZone,
         });
         await userNotificationRepository.createInTx(txOrm, {
           userId,
@@ -348,6 +352,7 @@ export const attendanceRepository = {
           href: copy.href,
           discordDeliveryStatus: delivery.status,
           discordUserId: delivery.discordUserId,
+          discordDeliverAfter: delivery.discordDeliverAfter,
           createdAt: now,
         });
       }
