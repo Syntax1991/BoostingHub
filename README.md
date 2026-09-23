@@ -199,6 +199,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Authentication](docs/authentication.md)
 - [Development](docs/development.md)
 - [Git workflow](docs/git-workflow.md)
+- [Production operations](docs/deployment-production.md)
 - [Application shell](docs/features/application-shell.md)
 - [Character management](docs/features/character-management.md)
 - [Battle.net integration](docs/features/blizzard-integration.md)
