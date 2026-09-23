@@ -5515,6 +5515,27 @@
                   "kind": "scalar"
                 }
               },
+              "discordDmQuietHoursEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordDmQuietHoursEnd": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordDmQuietHoursStart": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "discordRunChannelNickname": {
                 "nullable": true,
                 "type": {
@@ -6075,6 +6096,15 @@
                 "discordDmEnabled": {
                   "column": "discordDmEnabled"
                 },
+                "discordDmQuietHoursEnabled": {
+                  "column": "discordDmQuietHoursEnabled"
+                },
+                "discordDmQuietHoursEnd": {
+                  "column": "discordDmQuietHoursEnd"
+                },
+                "discordDmQuietHoursStart": {
+                  "column": "discordDmQuietHoursStart"
+                },
                 "discordRunChannelNickname": {
                   "column": "discordRunChannelNickname"
                 },
@@ -6129,6 +6159,13 @@
             "fields": {
               "createdAt": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordDeliverAfter": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
@@ -6289,6 +6326,9 @@
               "fields": {
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "discordDeliverAfter": {
+                  "column": "discordDeliverAfter"
                 },
                 "discordDeliveryStatus": {
                   "column": "discordDeliveryStatus"
@@ -10670,6 +10710,25 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
+                "discordDmQuietHoursEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "discordDmQuietHoursEnd": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "discordDmQuietHoursStart": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "discordRunChannelNickname": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -10844,6 +10903,11 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "discordDeliverAfter": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "discordDeliveryStatus": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -10982,6 +11046,14 @@
                   ],
                   "name": "user_notification_discordDeliveryStatus_idx_bc6e068f",
                   "prefix": "user_notification_discordDeliveryStatus_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "discordDeliveryStatus",
+                    "discordDeliverAfter"
+                  ],
+                  "name": "user_notification_dm_deliver_idx",
                   "unique": false
                 },
                 {
@@ -11284,7 +11356,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2f6b4d340d13a3a8edb7b85297e91dcfd4d278924cc8cef9e82d2fa0cf132b64"
+    "storageHash": "6405043c2e829b78862b77955df72fcb210c31ac115ccb227c865be57da941fe"
   },
   "execution": {
     "executionHash": "3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c",

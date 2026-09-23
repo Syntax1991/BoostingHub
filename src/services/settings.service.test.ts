@@ -39,6 +39,9 @@ async function createTestUser(id: string, name: string) {
     dmRunCancelledEnabled: true,
     dmRunRescheduledEnabled: true,
     dmRosterRemovedEnabled: true,
+    discordDmQuietHoursEnabled: false,
+    discordDmQuietHoursStart: null,
+    discordDmQuietHoursEnd: null,
     timeZone: "Europe/Berlin",
     defaultCharacterId: null,
     createdAt: new Date().toISOString(),
@@ -90,6 +93,23 @@ async function cleanup() {
 const owner = asUser(ids.owner, "Settings Owner");
 const other = asUser(ids.other, "Settings Other");
 
+const defaultQuietHours = { enabled: false, start: null, end: null } as const;
+
+function baseNotificationPrefs(
+  overrides: Partial<import("@/repositories/settings.repository").NotificationDmPreferences> = {},
+) {
+  return {
+    discordDmEnabled: true,
+    dmRosterSelectedEnabled: true,
+    dmRaidInviteEnabled: true,
+    dmRunCancelledEnabled: true,
+    dmRunRescheduledEnabled: true,
+    dmRosterRemovedEnabled: true,
+    quietHours: defaultQuietHours,
+    ...overrides,
+  };
+}
+
 beforeAll(async () => {
   await cleanup();
   await createTestUser(ids.owner, "Settings Owner");
@@ -113,6 +133,7 @@ describe("settingsService preferences v2", () => {
       dmRunCancelledEnabled: true,
       dmRunRescheduledEnabled: true,
       dmRosterRemovedEnabled: true,
+      quietHours: defaultQuietHours,
     });
   });
 
@@ -122,23 +143,22 @@ describe("settingsService preferences v2", () => {
   });
 
   it("turning master OFF preserves individual event fields", async () => {
-    await settingsService.updateNotificationDmPreferences(owner, {
-      discordDmEnabled: true,
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: false,
-      dmRunCancelledEnabled: true,
-      dmRunRescheduledEnabled: false,
-      dmRosterRemovedEnabled: true,
-    });
+    await settingsService.updateNotificationDmPreferences(
+      owner,
+      baseNotificationPrefs({
+        dmRaidInviteEnabled: false,
+        dmRunRescheduledEnabled: false,
+      }),
+    );
 
-    const masterOff = await settingsService.updateNotificationDmPreferences(owner, {
-      discordDmEnabled: false,
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: false,
-      dmRunCancelledEnabled: true,
-      dmRunRescheduledEnabled: false,
-      dmRosterRemovedEnabled: true,
-    });
+    const masterOff = await settingsService.updateNotificationDmPreferences(
+      owner,
+      baseNotificationPrefs({
+        discordDmEnabled: false,
+        dmRaidInviteEnabled: false,
+        dmRunRescheduledEnabled: false,
+      }),
+    );
     expect(masterOff.notifications.discordDmEnabled).toBe(false);
     expect(masterOff.notifications.dmRosterSelectedEnabled).toBe(true);
     expect(masterOff.notifications.dmRaidInviteEnabled).toBe(false);
@@ -189,23 +209,54 @@ describe("settingsService preferences v2", () => {
     await settingsService.updateGameplayPreferences(owner, { defaultCharacterId: null });
   });
 
+  it("validates Quiet Hours when enabled and preserves times when disabled", async () => {
+    const enabled = await settingsService.updateNotificationDmPreferences(
+      owner,
+      baseNotificationPrefs({
+        quietHours: { enabled: true, start: "22:00", end: "07:00" },
+      }),
+    );
+    expect(enabled.notifications.quietHours).toEqual({
+      enabled: true,
+      start: "22:00",
+      end: "07:00",
+    });
+
+    await expect(
+      settingsService.updateNotificationDmPreferences(
+        owner,
+        baseNotificationPrefs({
+          quietHours: { enabled: true, start: "09:00", end: "09:00" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED" } satisfies Partial<DomainError>);
+
+    const disabled = await settingsService.updateNotificationDmPreferences(
+      owner,
+      baseNotificationPrefs({
+        quietHours: { enabled: false, start: "22:00", end: "07:00" },
+      }),
+    );
+    expect(disabled.notifications.quietHours).toEqual({
+      enabled: false,
+      start: "22:00",
+      end: "07:00",
+    });
+  });
+
   it("does not let another user change the owner's preferences via their own update", async () => {
-    await settingsService.updateNotificationDmPreferences(owner, {
-      discordDmEnabled: true,
-      dmRosterSelectedEnabled: true,
-      dmRaidInviteEnabled: true,
-      dmRunCancelledEnabled: true,
-      dmRunRescheduledEnabled: true,
-      dmRosterRemovedEnabled: true,
-    });
-    await settingsService.updateNotificationDmPreferences(other, {
-      discordDmEnabled: false,
-      dmRosterSelectedEnabled: false,
-      dmRaidInviteEnabled: false,
-      dmRunCancelledEnabled: false,
-      dmRunRescheduledEnabled: false,
-      dmRosterRemovedEnabled: false,
-    });
+    await settingsService.updateNotificationDmPreferences(owner, baseNotificationPrefs());
+    await settingsService.updateNotificationDmPreferences(
+      other,
+      baseNotificationPrefs({
+        discordDmEnabled: false,
+        dmRosterSelectedEnabled: false,
+        dmRaidInviteEnabled: false,
+        dmRunCancelledEnabled: false,
+        dmRunRescheduledEnabled: false,
+        dmRosterRemovedEnabled: false,
+      }),
+    );
 
     const ownerSettings = await settingsService.getSettings(owner);
     const otherSettings = await settingsService.getSettings(other);

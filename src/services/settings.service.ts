@@ -15,6 +15,7 @@ import {
   slugDiscordChannelSegment,
 } from "@/lib/discord-channel-name";
 import { isValidIanaTimeZone, listIanaTimeZones } from "@/lib/timezone";
+import { updateDmPreferencesSchema } from "@/validators/notification";
 
 export type SettingsDto = Omit<UserSettingsRecord, "runChannels"> & {
   runChannels: RunChannelPreferences & { canConfigure: boolean };
@@ -76,7 +77,13 @@ export const settingsService = {
     user: AuthenticatedUser,
     prefs: NotificationDmPreferences,
   ): Promise<SettingsDto> {
-    await settingsRepository.updateNotificationDmPreferences(user.id, prefs);
+    const parsed = updateDmPreferencesSchema.safeParse(prefs);
+    if (!parsed.success) {
+      const message =
+        parsed.error.issues[0]?.message ?? "Invalid notification preferences.";
+      throw new DomainError("VALIDATION_FAILED", message, 400);
+    }
+    await settingsRepository.updateNotificationDmPreferences(user.id, parsed.data);
     return this.getSettings(user);
   },
 
