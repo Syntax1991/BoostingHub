@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { markAllPresentAction, setAttendanceAction } from "@/controllers/attendance.actions";
+import { markAllPresentAction, replaceParticipantAction, setAttendanceAction } from "@/controllers/attendance.actions";
 import { Button } from "@/components/ui/button";
 import { AttendanceStatusBadge, ClassBadge, ParticipationBadge, RoleBadge } from "@/components/ui/badges";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { ATTENDANCE_STATUS_LABELS } from "@/lib/labels";
-import { ATTENDANCE_STATUSES, type AttendanceStatus } from "@/models/enums";
+import { ATTENDANCE_STATUS_LABELS, CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
+import { EXTERNAL_BOOSTER_NAME_MAX_LENGTH, externalBoosterInputError } from "@/lib/external-booster";
+import { rolesForClass } from "@/lib/wow-specializations";
+import {
+  ATTENDANCE_STATUSES,
+  WOW_CLASSES,
+  type AttendanceStatus,
+  type CharacterRole,
+  type WowClass,
+} from "@/models/enums";
+import type { ReplacementInput } from "@/services/attendance.service";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
@@ -121,6 +130,7 @@ function ManagerAttendancePanel({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [noteRowId, setNoteRowId] = useState<string | null>(null);
+  const [replaceRowId, setReplaceRowId] = useState<string | null>(null);
   const canMutate = manager.canMutate;
   const unmarked = manager.summary.unmarked;
 
@@ -262,6 +272,15 @@ function ManagerAttendancePanel({
                       <Button type="button" variant="ghost" className="h-8" onClick={() => setNoteRowId(row.id)}>
                         Note
                       </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8"
+                        disabled={pending}
+                        onClick={() => setReplaceRowId(row.id)}
+                      >
+                        Replace
+                      </Button>
                     </div>
                   </td>
                 ) : null}
@@ -270,6 +289,33 @@ function ManagerAttendancePanel({
           </tbody>
         </table>
       </div>
+      {manager.externalBoosters.length > 0 ? (
+        <div className="border-t border-border px-4 py-3 text-sm">
+          <p className="text-xs uppercase tracking-wide text-muted">External boosters (no attendance or payout)</p>
+          <ul className="mt-2 flex flex-wrap gap-3">
+            {manager.externalBoosters.map((booster) => (
+              <li key={booster.id} className="flex items-center gap-2">
+                <span className="font-medium">@{booster.name}</span>
+                <ClassBadge wowClass={booster.wowClass} />
+                <RoleBadge role={booster.role} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {replaceRowId ? (
+        <ReplaceParticipantDialog
+          row={manager.rows.find((item) => item.id === replaceRowId) ?? null}
+          candidates={manager.replacementCandidates}
+          pending={pending}
+          onClose={() => setReplaceRowId(null)}
+          onReplace={(replacement) => {
+            const attendanceId = replaceRowId;
+            setReplaceRowId(null);
+            runMutation(() => replaceParticipantAction({ attendanceId, replacement }));
+          }}
+        />
+      ) : null}
       {noteRowId ? (
         <AttendanceNoteDialog
           row={manager.rows.find((item) => item.id === noteRowId) ?? null}
@@ -285,6 +331,182 @@ function ManagerAttendancePanel({
         <RunCompleteDialog runId={runId} unmarkedCount={unmarked} onClose={onCompleteClose} />
       ) : null}
     </Card>
+  );
+}
+
+type ManagerRow = NonNullable<RunDetailView["attendance"]["manager"]>["rows"][number];
+type ReplacementCandidate = NonNullable<RunDetailView["attendance"]["manager"]>["replacementCandidates"][number];
+
+/**
+ * Swap a participant (e.g. a no-show) after Start: the original becomes
+ * No-show (no cut); a signed-up replacement gets a Present row (full cut)
+ * and a Raid Invite; an external booster only joins the Final Setup.
+ */
+function ReplaceParticipantDialog({
+  row,
+  candidates,
+  pending,
+  onClose,
+  onReplace,
+}: {
+  row: ManagerRow | null;
+  candidates: ReplacementCandidate[];
+  pending: boolean;
+  onClose: () => void;
+  onReplace: (replacement: ReplacementInput) => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const matching = candidates.filter((candidate) => candidate.participationType === row?.participationType);
+  const [mode, setMode] = useState<"signup" | "external">(matching.length > 0 ? "signup" : "external");
+  const [signupId, setSignupId] = useState(matching[0]?.signupId ?? "");
+  const [name, setName] = useState("");
+  const role: CharacterRole = row?.selectedRole ?? "DPS";
+  const [wowClass, setWowClass] = useState<WowClass>(
+    () => WOW_CLASSES.find((option) => rolesForClass(option).includes(role)) ?? "MAGE",
+  );
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    dialogRef.current?.showModal();
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const onDialogClose = () => onClose();
+    dialog.addEventListener("close", onDialogClose);
+    return () => dialog.removeEventListener("close", onDialogClose);
+  }, [onClose]);
+
+  if (!row) {
+    return null;
+  }
+  const externalAllowed = row.participationType === "BOOSTER";
+  const classesForRole = WOW_CLASSES.filter((option) => rolesForClass(option).includes(role));
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (mode === "signup") {
+      if (!signupId) {
+        setFormError("Pick who steps in.");
+        return;
+      }
+      onReplace({ kind: "signup", signupId });
+      return;
+    }
+    const problem = externalBoosterInputError({ name, wowClass, role });
+    if (problem) {
+      setFormError(problem);
+      return;
+    }
+    onReplace({ kind: "external", name, wowClass, role });
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className="w-[min(30rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
+    >
+      <form className="space-y-3" onSubmit={submit}>
+        <div className="border-b border-border px-4 py-3">
+          <h2 id={titleId} className="text-sm font-semibold">
+            Replace {row.characterName} ({row.userName})
+          </h2>
+          <p className="mt-1 text-xs text-muted">
+            {row.characterName} is marked No-show (no cut). A signed-up replacement is marked Present (full cut) and
+            gets a Raid Invite. The Discord Final Setup post is updated.
+          </p>
+        </div>
+        <div className="space-y-3 px-4 py-2 text-sm">
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="replacement-mode"
+                checked={mode === "signup"}
+                disabled={matching.length === 0}
+                onChange={() => setMode("signup")}
+              />
+              Signed-up player
+            </label>
+            {externalAllowed ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="replacement-mode"
+                  checked={mode === "external"}
+                  onChange={() => setMode("external")}
+                />
+                External booster
+              </label>
+            ) : null}
+          </div>
+          {mode === "signup" ? (
+            matching.length === 0 ? (
+              <p className="text-muted">No other signups can step in.</p>
+            ) : (
+              <label className="block">
+                <span className="mb-1 block text-xs text-muted">Who steps in</span>
+                <select
+                  value={signupId}
+                  onChange={(event) => setSignupId(event.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
+                >
+                  {matching.map((candidate) => (
+                    <option key={candidate.signupId} value={candidate.signupId}>
+                      {candidate.characterName ?? "Lootbuddy"} ({candidate.userName})
+                      {candidate.wowClass ? ` · ${CLASS_LABELS[candidate.wowClass]}` : ""}
+                      {candidate.offeredRoles.length > 0
+                        ? ` · ${candidate.offeredRoles.map((offered) => CHARACTER_ROLE_LABELS[offered]).join("/")}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs text-muted">Name (e.g. Discord name)</span>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  maxLength={EXTERNAL_BOOSTER_NAME_MAX_LENGTH + 1}
+                  className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
+                  placeholder="dawn"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs text-muted">Class ({CHARACTER_ROLE_LABELS[role]})</span>
+                <select
+                  value={wowClass}
+                  onChange={(event) => setWowClass(event.target.value as WowClass)}
+                  className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
+                >
+                  {classesForRole.map((option) => (
+                    <option key={option} value={option}>
+                      {CLASS_LABELS[option]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {formError ? (
+            <p role="alert" className="text-danger">
+              {formError}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || (mode === "signup" && matching.length === 0)}>
+            Replace
+          </Button>
+        </div>
+      </form>
+    </dialog>
   );
 }
 

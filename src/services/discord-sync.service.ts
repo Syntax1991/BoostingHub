@@ -1134,10 +1134,15 @@ export const discordSyncService = {
 
       // Operational Run Start post: only after IN_PROGRESS+ with an immutable
       // start snapshot, and only into an already-provisioned dedicated channel.
-      // Never creates a first channel. Immutable content → post once (message
-      // id presence is the only dirtiness signal).
+      // Never creates a first channel. Posted once; edited in place only when a
+      // replacement after Start bumped the roster version past the one the
+      // post was rendered from (a null baseline — older posts — never re-edits).
       const started = run.status === "IN_PROGRESS" || run.status === "COMPLETED";
-      if (started && dedicatedChannelId && !post?.startMessageId) {
+      const startPostStale =
+        post?.lastStartRosterVersion != null &&
+        run.roster != null &&
+        post.lastStartRosterVersion !== run.roster.version;
+      if (started && dedicatedChannelId && (!post?.startMessageId || startPostStale)) {
         const snapshot = await runStartSnapshotRepository.findByRunId(run.id);
         if (snapshot) {
           start.push({
@@ -1284,6 +1289,8 @@ export const discordSyncService = {
     const bySignupId = new Map(signupRows.map((row) => [row.id, row]));
     const members: RunStartEmbedMember[] = [];
     for (const row of attendance) {
+      // A no-show (e.g. replaced after Start) is not in the raid.
+      if (row.status === "NO_SHOW" || row.status === "EXCUSED") continue;
       const signup = bySignupId.get(row.signupId);
       if (!signup) continue;
       members.push(toStartMember(signup, run));
@@ -1323,10 +1330,13 @@ export const discordSyncService = {
   },
 
   async recordStartPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
+    const roster = await rosterRepository.findByRunId(input.runId);
     await runDiscordPostRepository.recordStartPost({
       runId: input.runId,
       startChannelId: input.channelId,
       startMessageId: input.messageId,
+      // Baseline for later replacement edits (see the start lane in listSyncWork).
+      lastStartRosterVersion: roster?.version ?? null,
     });
   },
 

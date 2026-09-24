@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'a2610b424b6d8e89c59ad5c6e53c89e83b866d960a218fd5c2b457ed35a06d05'>;
+  StorageHashBase<'afb462bc9bb4914a27f98ec03af85ab70e9691f2eb755b863759050f4773aa36'>;
 export type ExecutionHash =
   ExecutionHashBase<'37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f'>;
 export type ProfileHash =
@@ -477,6 +477,7 @@ export type FieldOutputTypes = {
       readonly lastRosterVersion: CodecTypes['pg/int4@1']['output'] | null;
       readonly startChannelId: CodecTypes['pg/text@1']['output'] | null;
       readonly startMessageId: CodecTypes['pg/text@1']['output'] | null;
+      readonly lastStartRosterVersion: CodecTypes['pg/int4@1']['output'] | null;
       readonly startPostedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly archiveCloseMessageId: CodecTypes['pg/text@1']['output'] | null;
       readonly archiveTranscriptMessageId: CodecTypes['pg/text@1']['output'] | null;
@@ -962,6 +963,7 @@ export type FieldInputTypes = {
       readonly lastRosterVersion: CodecTypes['pg/int4@1']['input'] | null;
       readonly startChannelId: CodecTypes['pg/text@1']['input'] | null;
       readonly startMessageId: CodecTypes['pg/text@1']['input'] | null;
+      readonly lastStartRosterVersion: CodecTypes['pg/int4@1']['input'] | null;
       readonly startPostedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly archiveCloseMessageId: CodecTypes['pg/text@1']['input'] | null;
       readonly archiveTranscriptMessageId: CodecTypes['pg/text@1']['input'] | null;
@@ -1441,6 +1443,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly lastRosterVersion: CodecTypes['pg/int4@1']['output'] | null;
       readonly lastSignupSignature: CodecTypes['pg/text@1']['output'] | null;
+      readonly lastStartRosterVersion: CodecTypes['pg/int4@1']['output'] | null;
       readonly raidInviteSentSignupIds: CodecTypes['pg/text@1']['output'] | null;
       readonly rosterChannelId: CodecTypes['pg/text@1']['output'] | null;
       readonly rosterMessageId: CodecTypes['pg/text@1']['output'] | null;
@@ -1926,6 +1929,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly lastRosterVersion: CodecTypes['pg/int4@1']['input'] | null;
       readonly lastSignupSignature: CodecTypes['pg/text@1']['input'] | null;
+      readonly lastStartRosterVersion: CodecTypes['pg/int4@1']['input'] | null;
       readonly raidInviteSentSignupIds: CodecTypes['pg/text@1']['input'] | null;
       readonly rosterChannelId: CodecTypes['pg/text@1']['input'] | null;
       readonly rosterMessageId: CodecTypes['pg/text@1']['input'] | null;
@@ -3818,6 +3822,11 @@ type ContractBase = Omit<
                 readonly startMessageId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly lastStartRosterVersion: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
                   readonly nullable: true;
                 };
                 readonly startPostedAt: {
@@ -7577,6 +7586,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly lastStartRosterVersion: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
               readonly startPostedAt: {
                 readonly nullable: true;
                 readonly type: {
@@ -7647,6 +7660,7 @@ type ContractBase = Omit<
                 readonly lastRosterVersion: { readonly column: 'lastRosterVersion' };
                 readonly startChannelId: { readonly column: 'startChannelId' };
                 readonly startMessageId: { readonly column: 'startMessageId' };
+                readonly lastStartRosterVersion: { readonly column: 'lastStartRosterVersion' };
                 readonly startPostedAt: { readonly column: 'startPostedAt' };
                 readonly archiveCloseMessageId: { readonly column: 'archiveCloseMessageId' };
                 readonly archiveTranscriptMessageId: {

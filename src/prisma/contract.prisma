@@ -1009,6 +1009,11 @@ model RunDiscordPost {
   /// Operational Run Start roster post (separate from signup + published roster).
   startChannelId      String?
   startMessageId      String?
+  /// RunRoster.version the posted Final Setup reflects. A replacement after
+  /// Start bumps the roster version, so a differing value means the post must
+  /// be edited. Null for posts made before this existed (never re-edited
+  /// unless a replacement sets the baseline first).
+  lastStartRosterVersion Int?
   startPostedAt       TimestamptzString?
   /// Ticket-Tool-style close banner posted once when the Run is app-archived.
   archiveCloseMessageId      String?

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { attendanceService } from "@/services/attendance.service";
-import { markAllPresentSchema, setAttendanceSchema } from "@/validators/attendance";
+import { markAllPresentSchema, replaceParticipantSchema, setAttendanceSchema } from "@/validators/attendance";
 
 function revalidateAttendance(runId: string) {
   revalidatePath("/runs");
@@ -21,6 +21,18 @@ export async function setAttendanceAction(input: unknown): Promise<ActionResult>
     const updated = await attendanceService.setStatus(user, parsed);
     revalidateAttendance(updated.runId);
     return { ok: true, message: "Attendance updated." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function replaceParticipantAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = replaceParticipantSchema.parse(input);
+    const result = await attendanceService.replaceParticipant(user, parsed);
+    revalidateAttendance(result.runId);
+    return { ok: true, message: `Replaced with ${result.replacementName}. The Final Setup post will update.` };
   } catch (error) {
     return mapActionError(error);
   }
