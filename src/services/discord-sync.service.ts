@@ -273,6 +273,12 @@ export type SignupSyncWorkItem = {
    * replacement channel — that re-fires Raidboost Announce role pings.
    */
   allowChannelCreate: boolean;
+  /**
+   * False once this Run's signup post has gone out (`signupPostedAt`). A
+   * channel recreated after the first one was deleted must not repeat the
+   * Raidboost Announce role pings.
+   */
+  announceOnCreate: boolean;
 };
 export type RosterSyncWorkItem = {
   runId: string;
@@ -980,6 +986,7 @@ export const discordSyncService = {
             targetBucket,
             scheduledStartAt: run.scheduledStartAt,
             allowChannelCreate: eligibleForFirstProvisioning,
+            announceOnCreate: !post?.signupPostedAt,
           });
         }
       }

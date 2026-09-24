@@ -329,6 +329,76 @@ describe("syncOnce — confirmed-deleted Run channel quiescence", () => {
     expect(created.send).toHaveBeenCalledTimes(2);
   });
 
+  it("recreating a channel for a Run whose signup already posted once skips the Raidboost role ping", async () => {
+    const { client, createdIds } = makeDiscordClient(markers());
+    failFetch(client, DEAD, unknownChannel());
+    const api = makeApi({
+      channels: [],
+      signups: [{ ...retiredSignupItem(true), announceOnCreate: false }],
+      roster: [],
+      start: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(createdIds).toHaveLength(1);
+    expect(recordedKinds(api)).toContainEqual({ kind: "channel", channelId: createdIds[0] });
+    const created = client.channels.cache.get(createdIds[0]!) as { send: ReturnType<typeof vi.fn> };
+    // Signup embed only — no announce, no role mentions.
+    expect(created.send).toHaveBeenCalledTimes(1);
+    const only = created.send.mock.calls[0][0] as { content?: string; allowedMentions?: { roles?: string[] } };
+    expect(only.content).toBeUndefined();
+    expect(only.allowedMentions?.roles ?? []).toEqual([]);
+  });
+
+  it("channel reconciliation: Unknown Channel for a stored Run channel records channel-gone once", async () => {
+    const { client, createdIds } = makeDiscordClient(markers());
+    failFetch(client, DEAD, unknownChannel());
+    const api = makeApi({
+      channels: [
+        {
+          runId: RUN_ID,
+          existingRunChannelId: DEAD,
+          desiredChannelName: "tue-1800-hc-unsaved-lead",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-15T16:00:00.000Z",
+        },
+      ],
+      signups: [],
+      roster: [],
+      start: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(createdIds).toHaveLength(0);
+    expect(api.recordDiscordState).toHaveBeenCalledTimes(1);
+    expect(api.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "channel-gone", channelId: DEAD });
+  });
+
+  it("channel reconciliation: Missing Access keeps the stored Run channel (no channel-gone)", async () => {
+    const { client } = makeDiscordClient(markers());
+    failFetch(client, DEAD, missingAccess());
+    const api = makeApi({
+      channels: [
+        {
+          runId: RUN_ID,
+          existingRunChannelId: DEAD,
+          desiredChannelName: "tue-1800-hc-unsaved-lead",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-15T16:00:00.000Z",
+        },
+      ],
+      signups: [],
+      roster: [],
+      start: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(recordedKinds(api).some((entry) => entry.kind === "channel-gone")).toBe(false);
+  });
+
   it.each([
     ["Missing Access", missingAccess],
     ["transient network error", () => new Error("ECONNRESET")],
@@ -1364,6 +1434,7 @@ function makeApi(input: {
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
     scheduledStartAt: string;
     allowChannelCreate?: boolean;
+    announceOnCreate?: boolean;
     embed: unknown;
   }>;
   roster: Array<{

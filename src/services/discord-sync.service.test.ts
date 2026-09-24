@@ -1620,6 +1620,26 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
       expect(signup?.allowChannelCreate).toBe(true);
       expect(signup?.existingRunChannelId).toBeNull();
       expect(signup?.existingMessageId).toBeNull();
+      // Its signup went out once before, so the replacement must not ping roles again.
+      expect(signup?.announceOnCreate).toBe(false);
+    });
+
+    it("a fresh open Run announces on create; after its channel is deleted, the recreate does not (2026-09-24)", async () => {
+      const id = await createRunAt(nextStart);
+      await runService.openRun(lead, id);
+
+      let signup = (await discordSyncService.listSyncWork(classificationNow)).signups.find((entry) => entry.runId === id);
+      expect(signup?.allowChannelCreate).toBe(true);
+      expect(signup?.announceOnCreate).toBe(true);
+
+      await discordSyncService.recordRunChannel({ runId: id, channelId: "deleted-live-chan" });
+      await discordSyncService.recordSignupPost({ runId: id, channelId: "deleted-live-chan", messageId: "deleted-live-msg" });
+      await discordSyncService.recordRunChannelGone({ runId: id, channelId: "deleted-live-chan" });
+
+      signup = (await discordSyncService.listSyncWork(classificationNow)).signups.find((entry) => entry.runId === id);
+      expect(signup?.allowChannelCreate).toBe(true);
+      expect(signup?.existingRunChannelId).toBeNull();
+      expect(signup?.announceOnCreate).toBe(false);
     });
   });
 });

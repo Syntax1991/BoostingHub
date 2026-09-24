@@ -20,6 +20,7 @@
  * text channels (`#current-id`, `#next-id`) and by ordering the Run channels
  * around them, not by separate parent categories.
  */
+import { isDiscordUnknownChannelError } from "@/discord-bot/discord-api-errors";
 import { raidWeekMinuteFromChannelName, raidWeekMinuteFromSchedule } from "@/lib/discord-channel-name";
 
 export type ReconcilableChannel = {
@@ -30,7 +31,11 @@ export type ReconcilableChannel = {
   setParent(categoryId: string, options?: { lockPermissions?: boolean }): Promise<unknown>;
 };
 
-/** Resolves a channel id to a reconcilable channel, or null if it can't be resolved (deleted, inaccessible, or an incompatible channel type). */
+/**
+ * Resolves a channel id to a reconcilable channel, or null when it resolves
+ * to nothing usable (e.g. an incompatible channel type). Discord API errors
+ * are thrown as-is — only an Unknown Channel (10003) error proves deletion.
+ */
 export type ChannelFetcher = (channelId: string) => Promise<ReconcilableChannel | null>;
 
 export type ChannelReconciliationEnv = {
@@ -53,7 +58,10 @@ export type ChannelReconciliationItem = {
 
 export type ChannelReconciliationResult =
   | { status: "ok"; channelId: string }
+  /** Discord confirmed the channel is deleted (Unknown Channel, 10003). */
   | { status: "missing" }
+  /** Fetch resolved to nothing usable (not proof of deletion) — keep the stored id. */
+  | { status: "unresolved" }
   | { status: "error"; error: unknown };
 
 /**
@@ -78,14 +86,20 @@ export async function reconcileExistingRunChannel(
   try {
     channel = await fetchChannel(item.existingRunChannelId);
   } catch (error) {
+    if (isDiscordUnknownChannelError(error)) {
+      console.warn(
+        `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is gone in Discord (Unknown Channel) — recording it`,
+      );
+      return { status: "missing" };
+    }
     return { status: "error", error };
   }
 
   if (!channel) {
     console.warn(
-      `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} is gone in Discord (Unknown Channel) — skipping reconciliation`,
+      `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} did not resolve to a reconcilable channel — keeping stored id`,
     );
-    return { status: "missing" };
+    return { status: "unresolved" };
   }
 
   if (channel.name !== item.desiredChannelName) {
@@ -134,11 +148,17 @@ export async function reconcileExistingRunChannel(
  * runId -> channelId map for the signup/roster message paths to reuse
  * within the same sync pass, instead of re-resolving (and potentially
  * re-renaming/re-moving) the same channel a second time.
+ *
+ * `onConfirmedMissing` is called once per item whose channel Discord
+ * confirmed deleted (Unknown Channel), so the caller can persist that and the
+ * item stops coming back every poll. Never called for Missing Access,
+ * transient errors, or channels that merely did not resolve.
  */
 export async function reconcileChannels(
   fetchChannel: ChannelFetcher,
   env: ChannelReconciliationEnv,
   items: ChannelReconciliationItem[],
+  onConfirmedMissing?: (item: ChannelReconciliationItem) => Promise<void>,
 ): Promise<Map<string, string>> {
   const resolved = new Map<string, string>();
   for (const item of items) {
@@ -146,6 +166,8 @@ export async function reconcileChannels(
       const result = await reconcileExistingRunChannel(fetchChannel, env, item);
       if (result.status === "ok") {
         resolved.set(item.runId, result.channelId);
+      } else if (result.status === "missing" && onConfirmedMissing) {
+        await onConfirmedMissing(item);
       }
     } catch (error) {
       console.error(`[discord-bot] channel reconciliation crashed for run ${item.runId}`, error);
