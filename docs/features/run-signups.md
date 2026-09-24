@@ -145,6 +145,15 @@ Computed by `canSelfWithdrawSignup` in `signup-state.ts`. The view only renders 
 
 Prefer clear actions: **Cancel Booster Signup**, **Remove/Edit Lootbuddies** via `setLootbuddies`. Per-row withdraw remains available where lifecycle allows.
 
+### Picked players withdraw with a reason
+
+A **picked** signup (`SELECTED` on the published roster, or in the saved roster draft — see `isPickedSignup`) can withdraw only with a **reason** (3–300 chars), and only until the Run starts (`OPEN` / `ROSTERING` / `PUBLISHED`). After Start Run the Raid Lead replaces no-shows instead.
+
+- Web: the signup's **Withdraw** button asks for the reason (`canWithdrawWithReason` → `withdrawPickedSignupAction`). A plain withdraw of a picked row answers `WITHDRAW_REASON_REQUIRED` and the button switches to the reason form. All other withdrawal paths (offer edit, Cancel Booster, Lootbuddy edit) still refuse picked rows.
+- Discord: **Cancel Signup** opens a reason modal for a picked User (see [discord-bot.md](discord-bot.md)).
+- Effect (one transaction, `withdrawPickedSignupAtomic`): signup → `WITHDRAWN` with `withdrawReason` stored, its roster entry removed (slot free), roster version bumped (Discord signup/roster posts refresh), and a `ROSTER_WITHDRAWN` notification to the Run's Raid Lead with the reason and a link to the Roster tab (web + Discord DM; master DM toggle and Quiet Hours apply). The player gets no "removed" DM.
+- Re-offering the same Character later clears the old `withdrawReason`.
+
 ## Duplicate rules
 
 Unique key: `(runId, userId, characterId, participationType)`.

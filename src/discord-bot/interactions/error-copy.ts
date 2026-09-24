@@ -15,6 +15,7 @@ const MESSAGES: Record<string, string> = {
   SIGNUP_OFFER_ROSTER_SELECTED:
     "A currently selected offer can't be removed — ask the raid lead to change the roster selection first.",
   INVALID_STATE_TRANSITION: "That signup can no longer be changed.",
+  WITHDRAW_REASON_REQUIRED: "You are on the roster — please give the raid lead a reason (at least 3 characters).",
   INVALID_CHARACTER_ROLE: "One of the selected characters can't be offered in that role.",
   VALIDATION_FAILED: "That selection isn't valid — try again.",
   ACCOUNT_DISABLED: "Your BoostingHub account is disabled.",

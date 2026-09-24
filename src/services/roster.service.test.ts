@@ -562,8 +562,8 @@ describe("rosterService publish and republish", () => {
     expect((await signupRepository.findById(ids.publishedKael))?.status).toBe("SELECTED");
   });
 
-  it("still forbids self-withdraw of a selected signup on a published run", async () => {
-    await expectDomainCode(signupService.withdrawSignup(kael, ids.publishedKael), "INVALID_STATE_TRANSITION");
+  it("a selected player on a published run can only withdraw with a reason", async () => {
+    await expectDomainCode(signupService.withdrawSignup(kael, ids.publishedKael), "WITHDRAW_REASON_REQUIRED");
   });
 });
 

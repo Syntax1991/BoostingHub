@@ -184,13 +184,14 @@ describe("signupService create/withdraw", () => {
     await expectDomainCode(signupService.withdrawSignup(mira, foreign!.id), "NOT_AUTHORIZED");
   });
 
-  it("rejects self-withdraw of a selected signup after roster publication", async () => {
+  it("a selected signup after roster publication withdraws only with a reason", async () => {
     const mine = await signupService.getMyRuns(kael);
     const published = mine.selected.find((item) => item.runId === ids.published);
     expect(published?.canWithdraw).toBe(false);
+    expect(published?.canWithdrawWithReason).toBe(true);
     await expectDomainCode(
       signupService.withdrawSignup(kael, published!.id),
-      "INVALID_STATE_TRANSITION",
+      "WITHDRAW_REASON_REQUIRED",
     );
   });
 

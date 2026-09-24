@@ -8,6 +8,8 @@ import {
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import { attackTypeForSpecialization, defaultDpsAttackTypeForClass } from "@/lib/wow-specializations";
+import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
+import { runDetailPath } from "@/lib/run-routes";
 import type { ExternalBooster } from "@/lib/external-booster";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
@@ -343,6 +345,13 @@ export type NotificationDmWorkItem = {
   selectedRole: CharacterRole | null;
   characterName: string | null;
   wowClass: WowClass | null;
+  /** Set for ROSTER_WITHDRAWN (to the Raid Lead): who left, why, and where to replace them. */
+  withdrawal: {
+    playerName: string;
+    characterLabel: string | null;
+    reason: string;
+    rosterUrl: string | null;
+  } | null;
 };
 
 /** Shared Run-channel lifecycle announcement (not a User DM). */
@@ -818,6 +827,15 @@ function toStartMember(
   };
 }
 
+/** Public website link for DMs; null when the canonical origin is not configured. */
+function absoluteAppUrl(path: string): string | null {
+  try {
+    return `${resolveBetterAuthBaseURL().replace(/\/$/, "")}${path}`;
+  } catch {
+    return null;
+  }
+}
+
 async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> {
   const pendingNotificationRows = await userNotificationRepository.listPendingDiscordDmNotifications(50);
   const notificationDmWorkItems: NotificationDmWorkItem[] = [];
@@ -846,6 +864,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
       characterName: null as string | null,
       wowClass: null as WowClass | null,
       signupId: notification.signupId,
+      withdrawal: null as NotificationDmWorkItem["withdrawal"],
     };
 
     if (notification.type === "RUN_CANCELLED") {
@@ -859,6 +878,32 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
         ...base,
         previousScheduledStartAt: parsed.previousScheduledStartAt,
         scheduledStartAt: parsed.nextScheduledStartAt ?? run.scheduledStartAt,
+      });
+      continue;
+    }
+
+    if (notification.type === "ROSTER_WITHDRAWN") {
+      const withdrawnRow = notification.signupId
+        ? (await rosterRepository.listSignups(run.id)).find((signup) => signup.id === notification.signupId)
+        : undefined;
+      // The row's reason can be gone if the player signed up again before a
+      // Quiet-Hours-delayed DM went out; the notification text still has it.
+      const reasonMarker = notification.message.lastIndexOf("Reason: ");
+      const reason =
+        withdrawnRow?.withdrawReason ??
+        (reasonMarker >= 0 ? notification.message.slice(reasonMarker + "Reason: ".length) : notification.message);
+      notificationDmWorkItems.push({
+        ...base,
+        participationType: withdrawnRow?.participationType ?? null,
+        characterName: withdrawnRow?.character?.name ?? null,
+        withdrawal: {
+          playerName: withdrawnRow?.userName ?? "A player",
+          characterLabel: withdrawnRow?.character
+            ? `${withdrawnRow.character.name}-${withdrawnRow.character.realm}`
+            : null,
+          reason,
+          rosterUrl: absoluteAppUrl(runDetailPath(run.id, "roster")),
+        },
       });
       continue;
     }

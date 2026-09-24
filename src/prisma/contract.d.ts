@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'c85b5ac147fb990a2a877fac6346c50336afdd8cee55b49c12996d6bd1834e6e'>;
+  StorageHashBase<'a2610b424b6d8e89c59ad5c6e53c89e83b866d960a218fd5c2b457ed35a06d05'>;
 export type ExecutionHash =
   ExecutionHashBase<'37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f'>;
 export type ProfileHash =
@@ -606,6 +606,7 @@ export type FieldOutputTypes = {
       readonly lootbuddyMode: 'LOOT_ONLY' | 'PLAYING' | null;
       readonly lootbuddyVerification: 'NONE' | 'ACCESS' | 'TRIAL' | null;
       readonly notes: CodecTypes['pg/text@1']['output'] | null;
+      readonly withdrawReason: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -694,7 +695,12 @@ export type FieldOutputTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
       readonly type:
-        'ROSTER_SELECTED' | 'RAID_INVITE' | 'RUN_CANCELLED' | 'RUN_RESCHEDULED' | 'ROSTER_REMOVED';
+        | 'ROSTER_SELECTED'
+        | 'RAID_INVITE'
+        | 'RUN_CANCELLED'
+        | 'RUN_RESCHEDULED'
+        | 'ROSTER_REMOVED'
+        | 'ROSTER_WITHDRAWN';
       readonly runId: CodecTypes['pg/text@1']['output'] | null;
       readonly signupId: CodecTypes['pg/text@1']['output'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
@@ -1085,6 +1091,7 @@ export type FieldInputTypes = {
       readonly lootbuddyMode: 'LOOT_ONLY' | 'PLAYING' | null;
       readonly lootbuddyVerification: 'NONE' | 'ACCESS' | 'TRIAL' | null;
       readonly notes: CodecTypes['pg/text@1']['input'] | null;
+      readonly withdrawReason: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1173,7 +1180,12 @@ export type FieldInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
       readonly type:
-        'ROSTER_SELECTED' | 'RAID_INVITE' | 'RUN_CANCELLED' | 'RUN_RESCHEDULED' | 'ROSTER_REMOVED';
+        | 'ROSTER_SELECTED'
+        | 'RAID_INVITE'
+        | 'RUN_CANCELLED'
+        | 'RUN_RESCHEDULED'
+        | 'ROSTER_REMOVED'
+        | 'ROSTER_WITHDRAWN';
       readonly runId: CodecTypes['pg/text@1']['input'] | null;
       readonly signupId: CodecTypes['pg/text@1']['input'] | null;
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
@@ -1566,6 +1578,7 @@ export type StorageColumnTypes = {
       readonly status: 'PENDING' | 'SELECTED' | 'NOT_SELECTED' | 'WITHDRAWN';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
+      readonly withdrawReason: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly run_signup_role: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1662,7 +1675,12 @@ export type StorageColumnTypes = {
       readonly sourceKey: CodecTypes['pg/text@1']['output'];
       readonly title: CodecTypes['pg/text@1']['output'];
       readonly type:
-        'ROSTER_SELECTED' | 'RAID_INVITE' | 'RUN_CANCELLED' | 'RUN_RESCHEDULED' | 'ROSTER_REMOVED';
+        | 'ROSTER_SELECTED'
+        | 'RAID_INVITE'
+        | 'RUN_CANCELLED'
+        | 'RUN_RESCHEDULED'
+        | 'ROSTER_REMOVED'
+        | 'ROSTER_WITHDRAWN';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
     };
@@ -2045,6 +2063,7 @@ export type StorageColumnInputTypes = {
       readonly status: 'PENDING' | 'SELECTED' | 'NOT_SELECTED' | 'WITHDRAWN';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
+      readonly withdrawReason: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly run_signup_role: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -2141,7 +2160,12 @@ export type StorageColumnInputTypes = {
       readonly sourceKey: CodecTypes['pg/text@1']['input'];
       readonly title: CodecTypes['pg/text@1']['input'];
       readonly type:
-        'ROSTER_SELECTED' | 'RAID_INVITE' | 'RUN_CANCELLED' | 'RUN_RESCHEDULED' | 'ROSTER_REMOVED';
+        | 'ROSTER_SELECTED'
+        | 'RAID_INVITE'
+        | 'RUN_CANCELLED'
+        | 'RUN_RESCHEDULED'
+        | 'ROSTER_REMOVED'
+        | 'ROSTER_WITHDRAWN';
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
     };
@@ -4652,6 +4676,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
+                readonly withdrawReason: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly createdAt: {
                   readonly nativeType: 'timestamptz';
                   readonly codecId: 'pg/timestamptz-string@1';
@@ -5690,6 +5719,7 @@ type ContractBase = Omit<
                 'RUN_CANCELLED',
                 'RUN_RESCHEDULED',
                 'ROSTER_REMOVED',
+                'ROSTER_WITHDRAWN',
               ];
             };
             readonly ParticipationType: {
@@ -8346,6 +8376,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly withdrawReason: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -8450,6 +8484,7 @@ type ContractBase = Omit<
                 readonly lootbuddyMode: { readonly column: 'lootbuddyMode' };
                 readonly lootbuddyVerification: { readonly column: 'lootbuddyVerification' };
                 readonly notes: { readonly column: 'notes' };
+                readonly withdrawReason: { readonly column: 'withdrawReason' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };
@@ -9683,6 +9718,7 @@ type ContractBase = Omit<
               { readonly name: 'RUN_CANCELLED'; readonly value: 'RUN_CANCELLED' },
               { readonly name: 'RUN_RESCHEDULED'; readonly value: 'RUN_RESCHEDULED' },
               { readonly name: 'ROSTER_REMOVED'; readonly value: 'ROSTER_REMOVED' },
+              { readonly name: 'ROSTER_WITHDRAWN'; readonly value: 'ROSTER_WITHDRAWN' },
             ];
           };
           readonly DiscordDeliveryStatus: {

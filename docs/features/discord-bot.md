@@ -196,7 +196,9 @@ Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain availabl
 
 ### Cancel Signup button
 
-`POST .../signup/cancel` — withdraws the User's active **BOOSTER and LOOTBUDDY** participation (`cancelActiveSignups`). A protected row rejects the whole cancellation. Lootbuddy-only Users can leave via this same button.
+`POST .../signup/cancel` (optional body `{ reason }`) — withdraws the User's active **BOOSTER and LOOTBUDDY** participation (`withdrawFromRun`). Lootbuddy-only Users can leave via this same button.
+
+A **picked** User (on the roster or its saved draft) must give a reason: without one the API answers `WITHDRAW_REASON_REQUIRED` and writes nothing, and the button opens a **modal** (`boostinghub:withdraw-reason:<runId>`, one paragraph field, 3–300 chars). The button therefore replies without deferring (a modal must be the first response). The modal submit withdraws with the reason; the Raid Lead gets a `ROSTER_WITHDRAWN` DM (**Roster Withdrawal**: player, character, reason — escaped so it cannot mention anyone — and a link to the Roster tab built from `BETTER_AUTH_URL`). After Start Run a picked User cannot withdraw.
 
 ## Final roster embed
 

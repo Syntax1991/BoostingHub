@@ -102,6 +102,7 @@ export const NOTIFICATION_TYPES = [
   "RUN_CANCELLED",
   "RUN_RESCHEDULED",
   "ROSTER_REMOVED",
+  "ROSTER_WITHDRAWN",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

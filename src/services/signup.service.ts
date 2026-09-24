@@ -24,6 +24,9 @@ import {
   assertSignupTransition,
   canSelfWithdrawSignup,
   isBlockingDuplicate,
+  isPickedSignup,
+  normalizeWithdrawReason,
+  PICKED_WITHDRAW_RUN_STATUSES,
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
 } from "@/services/signup-state";
@@ -172,6 +175,11 @@ export const signupService = {
       lootbuddyMode: signup.lootbuddyMode,
       lootbuddyVerification: signup.lootbuddyVerification,
       canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
+      /** Published pick: withdraws only with a reason. Draft picks find out via WITHDRAW_REASON_REQUIRED. */
+      canWithdrawWithReason:
+        signup.userId === user.id &&
+        signup.status === "SELECTED" &&
+        PICKED_WITHDRAW_RUN_STATUSES.includes(signup.run.status),
       scheduleConflicts:
         signup.participationType === "BOOSTER" && signup.character && signup.status !== "WITHDRAWN"
           ? (conflictsByRunCharacter.get(`${signup.run.id}:${signup.character.id}`) ?? [])
@@ -189,9 +197,13 @@ export const signupService = {
   /** Own signups on one run for the participant-facing Run detail Signups section. */
   async listOwnForRun(user: AuthenticatedUser, runId: string) {
     const signups = await signupRepository.listByRunId(runId);
+    const draftSelectedSignupIds = (await rosterRepository.findByRunId(runId))?.selectedSignupIds ?? [];
     return signups
       .filter((signup) => signup.userId === user.id)
-      .map((signup) => ({
+      .map((signup) => {
+        // A picked row is withdrawn only with a reason (withdrawPickedSignup).
+        const picked = isPickedSignup(signup, draftSelectedSignupIds);
+        return {
         id: signup.id,
         characterName: signup.character?.name ?? null,
         characterRealm: signup.character?.realm ?? null,
@@ -202,8 +214,10 @@ export const signupService = {
         lootbuddyClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
         lootbuddyMode: signup.lootbuddyMode,
         lootbuddyVerification: signup.lootbuddyVerification,
-        canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
-      }));
+        canWithdraw: !picked && canSelfWithdrawSignup(signup.status, signup.run.status),
+        canWithdrawWithReason: picked && PICKED_WITHDRAW_RUN_STATUSES.includes(signup.run.status),
+        };
+      });
   },
 
   /**
@@ -738,6 +752,95 @@ export const signupService = {
     return { withdrawn };
   },
 
+  /**
+   * A picked player — published SELECTED, or in the saved roster draft —
+   * withdraws with a required reason until the Run starts. Frees the slot and
+   * tells the Raid Lead (web + Discord DM) why. Every other withdrawal path
+   * still refuses picked rows, so a picked player can only leave this way.
+   */
+  async withdrawPickedSignup(user: AuthenticatedUser, input: { signupId: string; reason: string }) {
+    const signup = await signupRepository.findById(input.signupId);
+    if (!signup) {
+      throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+    }
+    if (signup.userId !== user.id) {
+      throw new DomainError("NOT_AUTHORIZED", "You can only withdraw your own signup.", 403);
+    }
+    const run = await runRepository.findById(signup.run.id);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    const roster = await rosterRepository.findByRunId(run.id);
+    if (!isPickedSignup(signup, roster?.selectedSignupIds ?? [])) {
+      throw new DomainError("INVALID_STATE_TRANSITION", "Only a signup that is on the roster is withdrawn with a reason.");
+    }
+    if (!PICKED_WITHDRAW_RUN_STATUSES.includes(run.status)) {
+      throw new DomainError(
+        "INVALID_STATE_TRANSITION",
+        "This run has already started — ask the raid lead to replace you.",
+      );
+    }
+    const reason = normalizeWithdrawReason(input.reason);
+
+    await rosterRepository.withdrawPickedSignupAtomic({
+      runId: run.id,
+      runTitle: run.title,
+      signupId: signup.id,
+      reason,
+      raidLeadId: run.raidLeadId,
+      playerName: user.name,
+      characterLabel: signup.character ? `${signup.character.name}-${signup.character.realm}` : null,
+    });
+  },
+
+  /**
+   * Discord "Cancel Signup": withdraws all of the User's active participation
+   * on this Run. Picked rows need a reason (the bot asks for it in a modal
+   * when this throws WITHDRAW_REASON_REQUIRED) and go through
+   * `withdrawPickedSignup`; the rest are cancelled as before.
+   */
+  async withdrawFromRun(actor: AuthenticatedUser, input: { runId: string; reason?: string | null }) {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    const active = (await signupRepository.listByRunAndUser(input.runId, actor.id)).filter(
+      (signup) => signup.status !== "WITHDRAWN",
+    );
+    const roster = await rosterRepository.findByRunId(input.runId);
+    const picked = active.filter((signup) => isPickedSignup(signup, roster?.selectedSignupIds ?? []));
+
+    if (picked.length > 0) {
+      if (!PICKED_WITHDRAW_RUN_STATUSES.includes(run.status)) {
+        throw new DomainError(
+          "INVALID_STATE_TRANSITION",
+          "This run has already started — ask the raid lead to replace you.",
+        );
+      }
+      if (!input.reason?.trim()) {
+        throw new DomainError(
+          "WITHDRAW_REASON_REQUIRED",
+          "You are on the roster — tell the raid lead why you are withdrawing.",
+        );
+      }
+      // Validate before any write so a bad reason withdraws nothing.
+      const reason = normalizeWithdrawReason(input.reason);
+      for (const signup of picked) {
+        await this.withdrawPickedSignup(actor, { signupId: signup.id, reason });
+      }
+    }
+
+    let withdrawn = picked.length;
+    if (active.length > picked.length) {
+      const result = await this.cancelActiveSignups(actor, { runId: input.runId });
+      withdrawn += result.withdrawn;
+    }
+    if (withdrawn === 0) {
+      throw new DomainError("NOT_FOUND", "You have no active signup on this run.", 404);
+    }
+    return { withdrawn };
+  },
+
   async withdrawSignup(user: AuthenticatedUser, signupId: string) {
     const signup = await signupRepository.findById(signupId);
     if (!signup) {
@@ -745,6 +848,16 @@ export const signupService = {
     }
     if (signup.userId !== user.id) {
       throw new DomainError("NOT_AUTHORIZED", "You can only withdraw your own signup.", 403);
+    }
+    const draftSelectedSignupIds = (await rosterRepository.findByRunId(signup.run.id))?.selectedSignupIds ?? [];
+    if (
+      isPickedSignup(signup, draftSelectedSignupIds) &&
+      PICKED_WITHDRAW_RUN_STATUSES.includes(signup.run.status)
+    ) {
+      throw new DomainError(
+        "WITHDRAW_REASON_REQUIRED",
+        "You are on the roster — tell the raid lead why you are withdrawing.",
+      );
     }
     if (!canSelfWithdrawSignup(signup.status, signup.run.status)) {
       throw new DomainError(

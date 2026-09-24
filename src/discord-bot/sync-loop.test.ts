@@ -980,6 +980,65 @@ describe("syncOnce — UserNotification DMs", () => {
     });
   });
 
+  it("sends the Raid Lead a withdrawal DM with the player's reason and the roster link", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-withdrawn" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-lead", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc9",
+          type: "ROSTER_WITHDRAWN",
+          discordUserId: "discord-lead",
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9",
+          signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb9",
+          runChannelId: null,
+          productLabel: "Venom & Tide",
+          scheduledStartAt: "2026-09-16T13:30:00.000Z",
+          previousScheduledStartAt: null,
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: "BOOSTER",
+          selectedRole: null,
+          characterName: "Synmist",
+          wowClass: null,
+          withdrawal: {
+            playerName: "Kiri",
+            characterLabel: "Synmist-Thrall",
+            reason: "Sick, sorry",
+            rosterUrl: "https://phoenix-star.de/runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9?tab=roster",
+          },
+        },
+      ],
+    });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).toHaveBeenCalledTimes(1);
+    const content = sendDm.mock.calls[0][0].content as string;
+    expect(content).toContain("**Roster Withdrawal**");
+    expect(content).toContain("**Kiri** (Synmist-Thrall) withdrew from the roster.");
+    expect(content).toContain("Reason: Sick, sorry");
+    expect(content).toContain("?tab=roster");
+    expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9", {
+      kind: "notification-dm",
+      notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc9",
+      result: "SENT",
+    });
+  });
+
   it("marks FAILED_PERMANENT when Discord rejects the notification DM", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],

@@ -18,6 +18,7 @@ Settings sections:
 | `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | — | Master + `dmRaidInviteEnabled` + Discord linked |
 | `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
 | `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
+| `ROSTER_WITHDRAWN` | To the Run's **Raid Lead** when a picked player withdraws (with their reason, links the Roster tab) | Always | — | Master + Discord linked (no per-event toggle) |
 | `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always | — | Master + `dmRosterRemovedEnabled` + Discord linked |
 
 **Run channel announcements** (`RunDiscordAnnouncement`) are shared Run communication.

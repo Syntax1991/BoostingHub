@@ -22,6 +22,8 @@ const ACTIONS = [
   "lootbuddy-mode-select",
   "lootbuddy-confirm",
   "lootbuddy-discard",
+  /** Modal asking a picked player for their withdrawal reason. */
+  "withdraw-reason",
 ] as const;
 export type ButtonAction = (typeof ACTIONS)[number];
 

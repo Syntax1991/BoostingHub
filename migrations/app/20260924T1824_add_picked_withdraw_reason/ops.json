@@ -1,0 +1,128 @@
+[
+  {
+    "id": "dropCheckConstraint.user_notification.user_notification_type_check_3f82dea7",
+    "label": "Drop check constraint \"user_notification_type_check_3f82dea7\" on \"user_notification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_3f82dea7",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_3f82dea7\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_3f82dea7",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"user_notification_type_check_3f82dea7\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" DROP CONSTRAINT \"user_notification_type_check_3f82dea7\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_3f82dea7\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_3f82dea7",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_signup.withdrawReason",
+    "label": "Add column \"withdrawReason\" to \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "withdrawReason",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"withdrawReason\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "withdrawReason"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"withdrawReason\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD COLUMN \"withdrawReason\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"withdrawReason\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_signup",
+          "withdrawReason"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user_notification.user_notification_type_check_6413e97d",
+    "label": "Add check constraint \"user_notification_type_check_6413e97d\" on \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_6413e97d",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_6413e97d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_6413e97d",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_notification_type_check_6413e97d\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD CONSTRAINT \"user_notification_type_check_6413e97d\" CHECK (\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_6413e97d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_6413e97d",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  }
+]

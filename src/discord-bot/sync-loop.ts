@@ -47,7 +47,13 @@ import {
   buildRunCancelledChannelEmbed,
   buildRunRescheduledChannelEmbed,
 } from "@/discord-bot/embeds/run-lifecycle-announcement";
-import { buildRosterSelectedDmMessage, buildRosterRemovedDmMessage, buildRunCancelledDmMessage, buildRunRescheduledDmMessage } from "@/services/notification-content";
+import {
+  buildRosterSelectedDmMessage,
+  buildRosterRemovedDmMessage,
+  buildRosterWithdrawnDmMessage,
+  buildRunCancelledDmMessage,
+  buildRunRescheduledDmMessage,
+} from "@/services/notification-content";
 import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
@@ -980,6 +986,16 @@ async function syncNotificationDm(
         scheduledStartAt: item.scheduledStartAt,
         difficulty: item.difficulty,
         lootType: item.lootType,
+      });
+      break;
+    case "ROSTER_WITHDRAWN":
+      if (!item.withdrawal) return;
+      content = buildRosterWithdrawnDmMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+        ...item.withdrawal,
       });
       break;
     case "RUN_CANCELLED":

@@ -117,7 +117,11 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
                   ) : null}
                 </div>
               </div>
-              {signup.canWithdraw ? <WithdrawButton signupId={signup.id} /> : null}
+              {signup.canWithdrawWithReason ? (
+                <WithdrawButton signupId={signup.id} requireReason />
+              ) : signup.canWithdraw ? (
+                <WithdrawButton signupId={signup.id} />
+              ) : null}
             </li>
           ))}
         </ul>

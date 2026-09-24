@@ -202,7 +202,11 @@ function SignupTable({ items, timeZone }: { items: SignupItem[]; timeZone: strin
                             Schedule conflict
                           </span>
                         ) : null}
-                        {offer.canWithdraw ? <WithdrawButton signupId={offer.id} /> : null}
+                        {offer.canWithdrawWithReason ? (
+                          <WithdrawButton signupId={offer.id} requireReason />
+                        ) : offer.canWithdraw ? (
+                          <WithdrawButton signupId={offer.id} />
+                        ) : null}
                       </li>
                     ))}
                   </ul>

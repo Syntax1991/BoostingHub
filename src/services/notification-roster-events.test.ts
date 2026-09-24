@@ -10,6 +10,7 @@ import {
 } from "@/repositories/user-notification.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { signupService } from "@/services/signup.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { renderFinalSetupText } from "@/lib/run-start-message";
 import type { CharacterRole } from "@/models/enums";
@@ -781,5 +782,99 @@ describe("external boosters (hand-added, not registered)", () => {
     await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections, externalBoosters: [] });
     view = await rosterService.getRosterManagementView(lead, runId);
     expect(view.roster.externalBoosters).toEqual([]);
+  });
+});
+
+describe("picked player withdraws with a reason", () => {
+  const player = asUser(ids.player, "Notify Roster Player", "USER", "900000000000000001");
+
+  async function publishedRunWithPickedHealer() {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const healer = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [
+        { signupId: tank, selectedRole: "TANK" },
+        { signupId: healer, selectedRole: "HEALER" },
+      ],
+    });
+    return { runId, tank, healer };
+  }
+
+  it("draft pick: plain withdraw asks for a reason; with one the slot frees and the Raid Lead is notified", async () => {
+    const { runId, healer } = await publishedRunWithPickedHealer();
+    const before = await rosterService.getRosterManagementView(lead, runId);
+
+    await expect(signupService.withdrawSignup(player, healer)).rejects.toMatchObject({ code: "WITHDRAW_REASON_REQUIRED" });
+    await expect(signupService.withdrawPickedSignup(player, { signupId: healer, reason: "  " })).rejects.toMatchObject({
+      code: "WITHDRAW_REASON_REQUIRED",
+    });
+    expect((await orm.RunSignup.where({ id: healer }).first() as { status: string }).status).toBe("PENDING");
+
+    await signupService.withdrawPickedSignup(player, { signupId: healer, reason: "Sick, sorry" });
+
+    const row = (await orm.RunSignup.where({ id: healer }).first()) as { status: string; withdrawReason: string };
+    expect(row.status).toBe("WITHDRAWN");
+    expect(row.withdrawReason).toBe("Sick, sorry");
+    const after = await rosterService.getRosterManagementView(lead, runId);
+    expect(after.roster.version).toBe(before.roster.version + 1);
+    expect(after.composition.healers.selected).toBe(0);
+
+    const leadNotes = (await userNotificationRepository.listForUser(ids.lead, 50)).filter(
+      (note) => note.runId === runId && note.type === "ROSTER_WITHDRAWN",
+    );
+    expect(leadNotes).toHaveLength(1);
+    expect(leadNotes[0].message).toContain("Reason: Sick, sorry");
+    expect(leadNotes[0].href).toBe(`/runs/${runId}?tab=roster`);
+    // The player left on their own — no "removed from roster" DM for them.
+    const playerRemoved = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+      (note) => note.runId === runId && note.type === "ROSTER_REMOVED",
+    );
+    expect(playerRemoved).toHaveLength(0);
+  });
+
+  it("Discord cancel: picked without a reason writes nothing; with a reason withdraws and queues the Raid Lead DM", async () => {
+    const { runId, healer } = await publishedRunWithPickedHealer();
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+
+    await expect(signupService.withdrawFromRun(player, { runId })).rejects.toMatchObject({ code: "WITHDRAW_REASON_REQUIRED" });
+    expect((await orm.RunSignup.where({ id: healer }).first() as { status: string }).status).toBe("SELECTED");
+
+    await orm.User.where({ id: ids.lead }).update({ discordUserId: "900000000000000099", updatedAt: new Date().toISOString() });
+    try {
+      const result = await signupService.withdrawFromRun(player, { runId, reason: "Work came up" });
+      expect(result.withdrawn).toBe(1);
+      const rosterEmbed = await discordSyncService.getRosterEmbedData(runId);
+      expect(rosterEmbed?.groups.healers).toHaveLength(0);
+
+      const work = await discordSyncService.listSyncWork();
+      const dm = work.notificationDms.find((item) => item.runId === runId && item.type === "ROSTER_WITHDRAWN");
+      expect(dm?.discordUserId).toBe("900000000000000099");
+      expect(dm?.withdrawal).toMatchObject({ playerName: "Notify Player", reason: "Work came up" });
+      expect(dm?.withdrawal?.rosterUrl?.endsWith(`/runs/${runId}?tab=roster`)).toBe(true);
+    } finally {
+      await orm.User.where({ id: ids.lead }).update({ discordUserId: null, updatedAt: new Date().toISOString() });
+    }
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.run.status).toBe("PUBLISHED");
+  });
+
+  it("after the Run started, a picked player can no longer withdraw", async () => {
+    const { runId, healer } = await publishedRunWithPickedHealer();
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    await runService.startRun(lead, { runId });
+
+    await expect(signupService.withdrawPickedSignup(player, { signupId: healer, reason: "Sick" })).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+    });
+    await expect(signupService.withdrawFromRun(player, { runId, reason: "Sick" })).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+    });
   });
 });

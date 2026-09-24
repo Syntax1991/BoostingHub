@@ -155,8 +155,16 @@ export class BotApiClient {
           | "RAID_INVITE"
           | "RUN_CANCELLED"
           | "RUN_RESCHEDULED"
-          | "ROSTER_REMOVED";
+          | "ROSTER_REMOVED"
+          | "ROSTER_WITHDRAWN";
         discordUserId: string;
+        /** ROSTER_WITHDRAWN only; optional for an older API. */
+        withdrawal?: {
+          playerName: string;
+          characterLabel: string | null;
+          reason: string;
+          rosterUrl: string | null;
+        } | null;
         runId: string;
         signupId: string | null;
         runChannelId: string | null;
@@ -279,10 +287,12 @@ export class BotApiClient {
     );
   }
 
-  cancelSignup(runId: string, discordUserId: string) {
+  /** Throws WITHDRAW_REASON_REQUIRED when the User is picked and no reason was given. */
+  cancelSignup(runId: string, discordUserId: string, reason?: string) {
     return this.request<{ withdrawn: number }>(`/api/bot/runs/${runId}/signup/cancel`, {
       method: "POST",
       discordUserId,
+      ...(reason === undefined ? {} : { body: JSON.stringify({ reason }) }),
     });
   }
 

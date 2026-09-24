@@ -35,12 +35,14 @@ import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signu
 import {
   rosterRemovedSourceKey,
   rosterSelectedSourceKey,
+  rosterWithdrawnSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
 import {
   resolveDiscordDelivery,
   rosterRemovedWebNotification,
   rosterSelectedWebNotification,
+  rosterWithdrawnWebNotification,
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
 import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
@@ -87,6 +89,8 @@ export type RosterSignupRow = {
   lootbuddyMode: LootbuddyMode | null;
   lootbuddyVerification: LootbuddyVerification | null;
   character: RosterCharacterSnapshot | null;
+  /** Reason a picked player gave when withdrawing; null otherwise. */
+  withdrawReason: string | null;
 };
 
 /** One draft-selected roster slot: which signup, and the role the Raid Lead assigned it. */
@@ -161,6 +165,7 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
     lootbuddyVerification:
       row.lootbuddyVerification == null ? null : mapLootbuddyVerification(row.lootbuddyVerification),
     character: character ? mapCharacter(character) : null,
+    withdrawReason: asStringOrNull(row.withdrawReason),
   };
 }
 
@@ -572,6 +577,102 @@ export const rosterRepository = {
           updatedAt: now,
         });
       }
+    });
+  },
+
+  /**
+   * A picked player (published SELECTED or in the saved draft) withdraws with
+   * a reason, in one transaction:
+   * - the signup becomes WITHDRAWN (published role cleared, reason stored)
+   * - its roster entry is removed, freeing the slot
+   * - the roster version is bumped, so the Discord signup/roster posts refresh
+   * - the Run's Raid Lead gets a ROSTER_WITHDRAWN notification (web + DM)
+   *
+   * The caller has already checked ownership, run status and that the signup
+   * is picked; this re-checks the signup is still active inside the transaction.
+   */
+  async withdrawPickedSignupAtomic(input: {
+    runId: string;
+    runTitle: string;
+    signupId: string;
+    reason: string;
+    raidLeadId: string;
+    playerName: string;
+    characterLabel: string | null;
+  }): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const signup = (await txOrm.RunSignup.where({ id: input.signupId }).first()) as Record<string, unknown> | null;
+      if (!signup) {
+        throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+      }
+      const status = mapSignupStatus(signup.status);
+      if (status === "WITHDRAWN" || status === "NOT_SELECTED") {
+        throw new DomainError("INVALID_STATE_TRANSITION", "This signup is no longer on the roster.");
+      }
+
+      const now = new Date().toISOString();
+      await txOrm.RunSignup.where({ id: input.signupId }).update({
+        status: "WITHDRAWN",
+        publishedRole: null,
+        withdrawReason: input.reason,
+        updatedAt: now,
+      });
+
+      const roster = (await txOrm.RunRoster.where({ runId: input.runId }).first()) as Record<string, unknown> | null;
+      let version = 1;
+      if (roster) {
+        const rosterId = asString(roster.id);
+        const entries = await txOrm.RunRosterEntry.where({ rosterId, signupId: input.signupId }).all();
+        for (const entry of entries as Array<Record<string, unknown>>) {
+          await txOrm.RunRosterEntry.where({ id: asString(entry.id) }).delete();
+        }
+        version = asNumber(roster.version, 1) + 1;
+        await txOrm.RunRoster.where({ id: rosterId }).update({ version, updatedAt: now });
+      }
+
+      await txOrm.ActivityEvent.create({
+        id: crypto.randomUUID(),
+        userId: asString(signup.userId),
+        type: "SIGNUP_WITHDRAWN",
+        message: `${input.playerName} withdrew from the roster for ${input.runTitle}.`,
+        occurredAt: now,
+      });
+
+      // A Raid Lead withdrawing their own slot needs no notification.
+      if (input.raidLeadId === asString(signup.userId)) return;
+
+      const leadRow = (await txOrm.User.where({ id: input.raidLeadId }).first()) as Record<string, unknown> | null;
+      const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(leadRow);
+      const delivery = resolveDiscordDelivery({
+        discordDmEnabled: leadRow ? leadRow.discordDmEnabled !== false : true,
+        // No per-event toggle: a Raid Lead always wants to know their roster lost a player.
+        eventDmEnabled: true,
+        discordUserId: leadRow ? asStringOrNull(leadRow.discordUserId) : null,
+        quietHours,
+        timeZone,
+      });
+      const copy = rosterWithdrawnWebNotification({
+        runId: input.runId,
+        runTitle: input.runTitle,
+        playerName: input.playerName,
+        characterLabel: input.characterLabel,
+        reason: input.reason,
+      });
+      await userNotificationRepository.createInTx(txOrm, {
+        userId: input.raidLeadId,
+        type: "ROSTER_WITHDRAWN",
+        runId: input.runId,
+        signupId: input.signupId,
+        sourceKey: rosterWithdrawnSourceKey(input.runId, version, input.signupId),
+        title: copy.title,
+        message: copy.message,
+        href: copy.href,
+        discordDeliveryStatus: delivery.status,
+        discordUserId: delivery.discordUserId,
+        discordDeliverAfter: delivery.discordDeliverAfter,
+        createdAt: now,
+      });
     });
   },
 
