@@ -16,6 +16,7 @@ import {
   handleStaleLootbuddyWizardButton,
   handleStaleLootbuddyWizardSelect,
 } from "@/discord-bot/interactions/signup-flow";
+import { handleGuideCommand } from "@/discord-bot/commands/guide";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 
@@ -98,6 +99,10 @@ export function createBotClient(env: BotEnv): Client {
 
       if (interaction.isChatInputCommand() && interaction.commandName === "mysignups") {
         await handleMySignupsCommand(interaction, api);
+      }
+
+      if (interaction.isChatInputCommand() && interaction.commandName === "guide") {
+        await handleGuideCommand(interaction, env.discordGuildId);
       }
     } catch (error) {
       console.error("[discord-bot] unhandled interaction error", error);
