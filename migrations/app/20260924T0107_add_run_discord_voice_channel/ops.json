@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.run_discord_post.voiceChannelId",
+    "label": "Add column \"voiceChannelId\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "voiceChannelId",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"voiceChannelId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "voiceChannelId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"voiceChannelId\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"voiceChannelId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"voiceChannelId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "voiceChannelId"
+        ]
+      }
+    ]
+  }
+]

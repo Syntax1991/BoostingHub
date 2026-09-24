@@ -533,4 +533,25 @@ describe("bot API roster and discord-state endpoints", () => {
     expect((await put({ kind: "channel-gone", channelId: "chan-gone-x" })).status).toBe(200);
     expect(await signupIdentity()).toEqual({ channelId: null, messageId: null });
   });
+
+  it("voice-channel records and clear-voice-channel exact-match clears the Run voice channel", async () => {
+    const put = (body: unknown) =>
+      discordStatePut(
+        req(`/api/bot/runs/${runId}/discord-state`, {
+          method: "PUT",
+          headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+          body,
+        }),
+        params(runId),
+      );
+    const voice = async () => ((await orm.RunDiscordPost.where({ runId }).first()) as Record<string, unknown> | null)?.voiceChannelId ?? null;
+
+    expect((await put({ kind: "voice-channel" })).status).toBe(400);
+    expect((await put({ kind: "voice-channel", channelId: "voice-222" })).status).toBe(200);
+    expect(await voice()).toBe("voice-222");
+    expect((await put({ kind: "clear-voice-channel", channelId: "voice-other" })).status).toBe(200);
+    expect(await voice()).toBe("voice-222");
+    expect((await put({ kind: "clear-voice-channel", channelId: "voice-222" })).status).toBe(200);
+    expect(await voice()).toBeNull();
+  });
 });

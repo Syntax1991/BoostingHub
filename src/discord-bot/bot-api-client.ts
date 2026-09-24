@@ -208,6 +208,7 @@ export class BotApiClient {
       | { kind: "channel"; channelId: string }
       | { kind: "clear-channel" }
       | { kind: "channel-gone"; channelId: string }
+      | { kind: "voice-channel" | "clear-voice-channel"; channelId: string }
       | {
           kind: "signup";
           channelId: string;

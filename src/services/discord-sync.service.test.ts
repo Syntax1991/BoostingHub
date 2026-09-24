@@ -1739,3 +1739,55 @@ describe("Final Setup LFG footer uses the assigned Run Raid Lead", () => {
     }
   });
 });
+
+describe("RunDiscordPost.voiceChannelId state", () => {
+  async function runWithDiscordState(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(11), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "text-chan" });
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      signupChannelId: "text-chan",
+      signupMessageId: "signup-msg",
+      rosterMessageId: "roster-msg",
+      startMessageId: "start-msg",
+      archiveCloseMessageId: "close-msg",
+      raidInviteSentSignupIds: "[\"s1\"]",
+      updatedAt: new Date().toISOString(),
+    });
+    return id;
+  }
+
+  function otherState(post: Awaited<ReturnType<typeof runDiscordPostRepository.findByRunId>>) {
+    return [post?.runChannelId, post?.signupMessageId, post?.rosterMessageId, post?.startMessageId, post?.archiveCloseMessageId, post?.raidInviteSentSignupIds];
+  }
+
+  it("records the voice channel without touching any other Discord state, idempotently", async () => {
+    const id = await runWithDiscordState();
+    const before = otherState(await runDiscordPostRepository.findByRunId(id));
+    expect((await runDiscordPostRepository.findByRunId(id))?.voiceChannelId).toBeNull();
+
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+
+    const after = await runDiscordPostRepository.findByRunId(id);
+    expect(after?.voiceChannelId).toBe("voice-1");
+    expect(otherState(after)).toEqual(before);
+  });
+
+  it("clears only while the stored id still matches, never another channel or other state", async () => {
+    const id = await runWithDiscordState();
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    const before = otherState(await runDiscordPostRepository.findByRunId(id));
+
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-old" });
+    expect((await runDiscordPostRepository.findByRunId(id))?.voiceChannelId).toBe("voice-new");
+
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    const after = await runDiscordPostRepository.findByRunId(id);
+    expect(after?.voiceChannelId).toBeNull();
+    expect(otherState(after)).toEqual(before);
+  });
+});

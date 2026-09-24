@@ -1173,6 +1173,16 @@ export const discordSyncService = {
    * identity that lives in that channel makes listSyncWork stop generating
    * signup/roster/start work that can only re-fetch the dead id every poll.
    */
+  /** Bot created the Run's temporary voice channel. */
+  async recordRunVoiceChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await runDiscordPostRepository.recordRunVoiceChannel(input);
+  },
+
+  /** Bot deleted the voice channel, or Discord confirmed it is gone (exact-match clear). */
+  async clearRunVoiceChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await runDiscordPostRepository.clearRunVoiceChannel(input);
+  },
+
   async recordRunChannelGone(input: { runId: string; channelId: string }): Promise<void> {
     await runDiscordPostRepository.clearDeletedChannelIdentity(input.runId, input.channelId);
   },
