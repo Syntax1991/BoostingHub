@@ -291,13 +291,15 @@ function ManagerAttendancePanel({
       </div>
       {manager.externalBoosters.length > 0 ? (
         <div className="border-t border-border px-4 py-3 text-sm">
-          <p className="text-xs uppercase tracking-wide text-muted">External boosters (no attendance or payout)</p>
+          <p className="text-xs uppercase tracking-wide text-muted">
+            External boosters &amp; lootbuddies (no attendance or payout)
+          </p>
           <ul className="mt-2 flex flex-wrap gap-3">
             {manager.externalBoosters.map((booster) => (
               <li key={booster.id} className="flex items-center gap-2">
                 <span className="font-medium">@{booster.name}</span>
                 <ClassBadge wowClass={booster.wowClass} />
-                <RoleBadge role={booster.role} />
+                {booster.role ? <RoleBadge role={booster.role} /> : <ParticipationBadge type="LOOTBUDDY" />}
               </li>
             ))}
           </ul>
@@ -379,8 +381,10 @@ function ReplaceParticipantDialog({
   if (!row) {
     return null;
   }
-  const externalAllowed = row.participationType === "BOOSTER";
-  const classesForRole = WOW_CLASSES.filter((option) => rolesForClass(option).includes(role));
+  const lootbuddySlot = row.participationType === "LOOTBUDDY";
+  const classesForRole = lootbuddySlot
+    ? WOW_CLASSES
+    : WOW_CLASSES.filter((option) => rolesForClass(option).includes(role));
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -392,7 +396,12 @@ function ReplaceParticipantDialog({
       onReplace({ kind: "signup", signupId });
       return;
     }
-    const problem = externalBoosterInputError({ name, wowClass, role });
+    const problem = externalBoosterInputError({
+      name,
+      wowClass,
+      participationType: lootbuddySlot ? "LOOTBUDDY" : "BOOSTER",
+      role: lootbuddySlot ? null : role,
+    });
     if (problem) {
       setFormError(problem);
       return;
@@ -428,17 +437,15 @@ function ReplaceParticipantDialog({
               />
               Signed-up player
             </label>
-            {externalAllowed ? (
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="replacement-mode"
-                  checked={mode === "external"}
-                  onChange={() => setMode("external")}
-                />
-                External booster
-              </label>
-            ) : null}
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="replacement-mode"
+                checked={mode === "external"}
+                onChange={() => setMode("external")}
+              />
+              {lootbuddySlot ? "External lootbuddy" : "External booster"}
+            </label>
           </div>
           {mode === "signup" ? (
             matching.length === 0 ? (
@@ -476,7 +483,9 @@ function ReplaceParticipantDialog({
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs text-muted">Class ({CHARACTER_ROLE_LABELS[role]})</span>
+                <span className="mb-1 block text-xs text-muted">
+                  Class ({lootbuddySlot ? "Lootbuddy" : CHARACTER_ROLE_LABELS[role]})
+                </span>
                 <select
                   value={wowClass}
                   onChange={(event) => setWowClass(event.target.value as WowClass)}

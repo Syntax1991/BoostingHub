@@ -37,8 +37,8 @@ function externalFinalSetupParticipant(booster: ExternalBooster): FinalSetupPart
     characterRealm: "",
     wowClass: booster.wowClass,
     classLabel: CLASS_LABELS[booster.wowClass],
-    participationType: "BOOSTER",
-    selectedRole: booster.role,
+    participationType: booster.participationType,
+    selectedRole: booster.participationType === "LOOTBUDDY" ? null : booster.role,
   };
 }
 

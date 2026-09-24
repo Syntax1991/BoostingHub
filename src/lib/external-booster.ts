@@ -1,25 +1,30 @@
-import type { CharacterRole, WowClass } from "@/models/enums";
+import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
 import { CHARACTER_ROLES, WOW_CLASSES } from "@/models/enums";
-import { asString, mapCharacterRole, mapWowClass } from "@/lib/persistence";
+import { asString, mapCharacterRole, mapParticipation, mapWowClass } from "@/lib/persistence";
 import { isRoleValidForClass } from "@/lib/wow-specializations";
 
 /**
- * A booster the Raid Lead adds to a roster by hand because they are not
- * registered on the website (in-house helpers). Saved with the roster draft;
- * rendered as `@name <class>` in Discord.
+ * A booster or lootbuddy the Raid Lead adds to a roster by hand because they
+ * are not registered on the website (in-house helpers). Rendered as
+ * `@name <class>` in Discord. A BOOSTER fills a Tank/Healer/DPS slot (role
+ * set); a LOOTBUDDY has a class but no role.
  */
 export type ExternalBooster = {
   id: string;
   name: string;
   wowClass: WowClass;
-  role: CharacterRole;
+  participationType: ParticipationType;
+  /** Always set for BOOSTER; null for LOOTBUDDY. */
+  role: CharacterRole | null;
 };
 
-/** What the Roster builder submits — ids are server-assigned on save. */
+/** What the External Boosters dialog submits — ids are server-assigned on save. */
 export type ExternalBoosterInput = {
   name: string;
   wowClass: WowClass;
-  role: CharacterRole;
+  /** Omitted by older clients → BOOSTER. */
+  participationType?: ParticipationType;
+  role: CharacterRole | null;
 };
 
 export const EXTERNAL_BOOSTER_NAME_MAX_LENGTH = 32;
@@ -50,11 +55,27 @@ export function externalBoosterInputError(input: ExternalBoosterInput): string |
     return `"${name}" is not a valid external booster name (letters, numbers, space, . _ - only).`;
   }
   if (!(WOW_CLASSES as readonly string[]).includes(input.wowClass)) return "External booster needs a class.";
-  if (!(CHARACTER_ROLES as readonly string[]).includes(input.role)) return "External booster needs a role.";
+  if ((input.participationType ?? "BOOSTER") === "LOOTBUDDY") {
+    return null;
+  }
+  if (!input.role || !(CHARACTER_ROLES as readonly string[]).includes(input.role)) {
+    return "External booster needs a role.";
+  }
   if (!isRoleValidForClass(input.wowClass, input.role)) {
     return `${name} cannot play that role on this class.`;
   }
   return null;
+}
+
+/** Trimmed name, explicit participation type, and no role for a lootbuddy. Assumes a valid input. */
+export function normalizeExternalBoosterInput(input: ExternalBoosterInput): Required<ExternalBoosterInput> {
+  const participationType = input.participationType ?? "BOOSTER";
+  return {
+    name: normalizeExternalBoosterName(input.name),
+    wowClass: input.wowClass,
+    participationType,
+    role: participationType === "LOOTBUDDY" ? null : input.role,
+  };
 }
 
 /** Maps persisted RunExternalBooster rows, oldest first (the order they were listed in). */
@@ -65,10 +86,27 @@ export function mapExternalBoosters(value: unknown): ExternalBooster[] {
       (a, b) =>
         asString(a.createdAt).localeCompare(asString(b.createdAt)) || asString(a.id).localeCompare(asString(b.id)),
     )
-    .map((row) => ({
-      id: asString(row.id),
-      name: asString(row.name),
-      wowClass: mapWowClass(row.wowClass),
-      role: mapCharacterRole(row.role),
-    }));
+    .map((row) => {
+      const participationType = row.participationType == null ? "BOOSTER" : mapParticipation(row.participationType);
+      return {
+        id: asString(row.id),
+        name: asString(row.name),
+        wowClass: mapWowClass(row.wowClass),
+        participationType,
+        role: participationType === "LOOTBUDDY" || row.role == null ? null : mapCharacterRole(row.role),
+      };
+    });
+}
+
+/** External entries that fill a Tank/Healer/DPS slot. */
+export function externalBoostersOnly(boosters: readonly ExternalBooster[]): Array<ExternalBooster & { role: CharacterRole }> {
+  return boosters.filter(
+    (booster): booster is ExternalBooster & { role: CharacterRole } =>
+      booster.participationType === "BOOSTER" && booster.role != null,
+  );
+}
+
+/** External lootbuddies (class only). */
+export function externalLootbuddies(boosters: readonly ExternalBooster[]): ExternalBooster[] {
+  return boosters.filter((booster) => booster.participationType === "LOOTBUDDY");
 }

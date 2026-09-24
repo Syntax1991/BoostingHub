@@ -1,6 +1,14 @@
 import { z } from "zod";
-import { CHARACTER_ROLES, WOW_CLASSES } from "@/models/enums";
+import { CHARACTER_ROLES, PARTICIPATION_TYPES, WOW_CLASSES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
+
+/** One hand-added external: a booster (role required) or a lootbuddy (no role). Older clients omit the type → booster. */
+const externalBoosterEntrySchema = z.object({
+  name: z.string().max(64),
+  wowClass: z.enum(WOW_CLASSES),
+  participationType: z.enum(PARTICIPATION_TYPES).optional(),
+  role: z.enum(CHARACTER_ROLES).nullable(),
+});
 
 export const rosterRunSchema = z.object({
   runId: entityIdSchema,
@@ -28,11 +36,7 @@ export const saveRosterDraftSchema = z.object({
   /** Hand-added unregistered boosters; full set, replaces the saved ones. Name rules live in lib/external-booster.ts. */
   externalBoosters: z
     .array(
-      z.object({
-        name: z.string().max(64),
-        wowClass: z.enum(WOW_CLASSES),
-        role: z.enum(CHARACTER_ROLES),
-      }),
+      externalBoosterEntrySchema,
     )
     .max(100)
     .optional(),
@@ -43,11 +47,7 @@ export const saveExternalBoostersSchema = z.object({
   version: z.number().int().positive(),
   externalBoosters: z
     .array(
-      z.object({
-        name: z.string().max(64),
-        wowClass: z.enum(WOW_CLASSES),
-        role: z.enum(CHARACTER_ROLES),
-      }),
+      externalBoosterEntrySchema,
     )
     .max(100),
 });

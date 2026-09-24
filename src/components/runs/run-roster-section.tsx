@@ -51,11 +51,13 @@ export function RunRosterSection({ data }: { data: RunDetailView }) {
             <li key={booster.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
               <div>
                 <p className="font-medium">@{booster.name}</p>
-                <p className="text-xs text-muted">External booster</p>
+                <p className="text-xs text-muted">
+                  {booster.participationType === "LOOTBUDDY" ? "External lootbuddy" : "External booster"}
+                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <ClassBadge wowClass={booster.wowClass} />
-                <RoleBadge role={booster.role} />
+                {booster.role ? <RoleBadge role={booster.role} /> : <ParticipationBadge type="LOOTBUDDY" />}
               </div>
             </li>
           ))}

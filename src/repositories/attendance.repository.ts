@@ -500,13 +500,15 @@ export const attendanceRepository = {
         });
       } else {
         const { name, wowClass } = input.replacement;
-        const externalRole = input.replacement.role;
+        // An external steps into the same kind of slot: booster in the original's role, or lootbuddy.
+        const participationType = originalRecord.participationType;
         await txOrm.RunExternalBooster.create({
           id: crypto.randomUUID(),
           rosterId,
           name,
           wowClass,
-          role: externalRole,
+          participationType,
+          role: participationType === "LOOTBUDDY" ? null : input.replacement.role,
           createdAt: now,
           updatedAt: now,
         });

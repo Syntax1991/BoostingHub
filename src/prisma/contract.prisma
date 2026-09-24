@@ -827,10 +827,13 @@ model RunExternalBooster {
   rosterId  String
   roster    RunRoster     @relation(fields: [rosterId], references: [id], onDelete: Cascade)
   /// Display name (usually the Discord name), rendered as `@name`.
-  name      String
-  wowClass  WowClass
-  role      CharacterRole
-  createdAt TimestamptzString @default(now())
+  name              String
+  wowClass          WowClass
+  /// BOOSTER fills a Tank/Healer/DPS slot; LOOTBUDDY is an unregistered lootbuddy.
+  participationType ParticipationType @default(BOOSTER)
+  /// Required for BOOSTER; always null for LOOTBUDDY.
+  role              CharacterRole?
+  createdAt         TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
 
   @@index([rosterId])

@@ -806,7 +806,8 @@ async function replaceExternalBoostersInTx(
       rosterId,
       name: booster.name,
       wowClass: booster.wowClass,
-      role: booster.role,
+      participationType: booster.participationType ?? "BOOSTER",
+      role: (booster.participationType ?? "BOOSTER") === "LOOTBUDDY" ? null : booster.role,
       createdAt,
       updatedAt: createdAt,
     });

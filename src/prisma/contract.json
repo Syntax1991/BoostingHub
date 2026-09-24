@@ -3486,8 +3486,21 @@
                   "kind": "scalar"
                 }
               },
-              "role": {
+              "participationType": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ParticipationType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "role": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -3554,6 +3567,9 @@
                 },
                 "name": {
                   "column": "name"
+                },
+                "participationType": {
+                  "column": "participationType"
                 },
                 "role": {
                   "column": "role"
@@ -8925,6 +8941,11 @@
             "run_external_booster": {
               "checks": [
                 {
+                  "expression": "\"participationType\" IN ('BOOSTER', 'LOOTBUDDY')",
+                  "name": "run_external_booster_participationType_check_c88ba3d2",
+                  "prefix": "run_external_booster_participationType_check"
+                },
+                {
                   "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
                   "name": "run_external_booster_role_check_b1616ae6",
                   "prefix": "run_external_booster_role_check"
@@ -8955,10 +8976,25 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "participationType": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "BOOSTER"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ParticipationType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
                 "role": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": false,
+                  "nullable": true,
                   "valueSet": {
                     "entityKind": "valueSet",
                     "entityName": "CharacterRole",
@@ -11636,7 +11672,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "afb462bc9bb4914a27f98ec03af85ab70e9691f2eb755b863759050f4773aa36"
+    "storageHash": "d15547a2c6dd3b86346f672849fcc38e6c1a83e93dba522b6b926ea2cd2062f9"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",

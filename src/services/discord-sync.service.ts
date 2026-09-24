@@ -516,7 +516,9 @@ function buildSignupRoleProjection(
 
   const externals = run.roster?.externalBoosters ?? [];
   const pickedExternal = (role: CharacterRole) =>
-    externals.filter((booster) => booster.role === role).map(externalSignupEmbedMember);
+    externals
+      .filter((booster) => booster.participationType === "BOOSTER" && booster.role === role)
+      .map(externalSignupEmbedMember);
 
   const rosteredUserIds = new Set(pickedRows.map((signup) => signup.userId));
   const waitingSignups = activeSignups.filter((signup) => !rosteredUserIds.has(signup.userId));
@@ -565,9 +567,12 @@ function buildSignupRoleProjection(
     ),
     ...pickedExternal("DPS"),
   ];
-  const pickedLoot = sortSignupEmbedMembers(
-    pickedRows.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
-  );
+  const pickedLoot = [
+    ...sortSignupEmbedMembers(
+      pickedRows.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
+    ),
+    ...externals.filter((booster) => booster.participationType === "LOOTBUDDY").map(externalSignupEmbedMember),
+  ];
 
   const members = {
     signed: {
@@ -727,8 +732,8 @@ function externalStartMember(booster: ExternalBooster): RunStartEmbedMember {
     wowClass: booster.wowClass,
     classLabel: CLASS_LABELS[booster.wowClass],
     saveLabel: "External",
-    participationType: "BOOSTER",
-    selectedRole: booster.role,
+    participationType: booster.participationType,
+    selectedRole: booster.participationType === "LOOTBUDDY" ? null : booster.role,
   };
 }
 
@@ -1230,7 +1235,10 @@ export const discordSyncService = {
           ...externalMembers((b) => b.role === "DPS" && !externalDpsRanged(b)),
         ],
         rangedDps: [...rangedDps.map(toMember), ...externalMembers(externalDpsRanged)],
-        lootbuddies: selected.filter((row) => row.participationType === "LOOTBUDDY").map(toMember),
+        lootbuddies: [
+          ...selected.filter((row) => row.participationType === "LOOTBUDDY").map(toMember),
+          ...externalMembers((b) => b.participationType === "LOOTBUDDY"),
+        ],
       },
       totalSelected: selected.length + externals.length,
     };
