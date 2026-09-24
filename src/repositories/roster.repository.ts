@@ -347,24 +347,7 @@ export const rosterRepository = {
       await this.assertVersion(mapped, expectedVersion);
 
       if (options?.externalBoosters) {
-        const saved = await txOrm.RunExternalBooster.where({ rosterId }).all();
-        for (const row of saved as Array<Record<string, unknown>>) {
-          await txOrm.RunExternalBooster.where({ id: asString(row.id) }).delete();
-        }
-        // One millisecond apart so the saved order is the order they were listed in.
-        const base = Date.now();
-        for (const [index, booster] of options.externalBoosters.entries()) {
-          const createdAt = new Date(base + index).toISOString();
-          await txOrm.RunExternalBooster.create({
-            id: crypto.randomUUID(),
-            rosterId,
-            name: booster.name,
-            wowClass: booster.wowClass,
-            role: booster.role,
-            createdAt,
-            updatedAt: createdAt,
-          });
-        }
+        await replaceExternalBoostersInTx(txOrm, rosterId, options.externalBoosters);
       }
 
       const nextBySignupId = new Map(selections.map((selection) => [selection.signupId, selection]));
@@ -581,6 +564,33 @@ export const rosterRepository = {
   },
 
   /**
+   * Replaces the roster's external boosters on their own (the Run header's
+   * External Boosters dialog) and bumps the roster version once, so the
+   * Discord roster / Final Setup posts refresh. Optimistic on `expectedVersion`.
+   */
+  async replaceExternalBoosters(rosterId: string, expectedVersion: number, boosters: ExternalBoosterInput[]) {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const roster = await txOrm.RunRoster.where({ id: rosterId }).first();
+      if (!roster) {
+        throw new DomainError("NOT_FOUND", "Roster was not found.");
+      }
+      const version = asNumber((roster as Record<string, unknown>).version, 1);
+      if (version !== expectedVersion) {
+        throw new DomainError(
+          "ROSTER_ALREADY_CHANGED",
+          "This roster changed since you loaded it. Refresh and try again.",
+        );
+      }
+      await replaceExternalBoostersInTx(txOrm, rosterId, boosters);
+      await txOrm.RunRoster.where({ id: rosterId }).update({
+        version: version + 1,
+        updatedAt: new Date().toISOString(),
+      });
+    });
+  },
+
+  /**
    * A picked player (published SELECTED or in the saved draft) withdraws with
    * a reason, in one transaction:
    * - the signup becomes WITHDRAWN (published role cleared, reason stored)
@@ -773,6 +783,33 @@ export const rosterRepository = {
     });
   },
 };
+
+
+/** Replaces the full external booster set of a roster, keeping the listed order. */
+async function replaceExternalBoostersInTx(
+  txOrm: TxOrm,
+  rosterId: string,
+  boosters: readonly ExternalBoosterInput[],
+): Promise<void> {
+  const saved = await txOrm.RunExternalBooster.where({ rosterId }).all();
+  for (const row of saved as Array<Record<string, unknown>>) {
+    await txOrm.RunExternalBooster.where({ id: asString(row.id) }).delete();
+  }
+  // One millisecond apart so the saved order is the order they were listed in.
+  const base = Date.now();
+  for (const [index, booster] of boosters.entries()) {
+    const createdAt = new Date(base + index).toISOString();
+    await txOrm.RunExternalBooster.create({
+      id: crypto.randomUUID(),
+      rosterId,
+      name: booster.name,
+      wowClass: booster.wowClass,
+      role: booster.role,
+      createdAt,
+      updatedAt: createdAt,
+    });
+  }
+}
 
 type RosterNotificationSelection = { signupId: string; selectedRole: CharacterRole | null };
 

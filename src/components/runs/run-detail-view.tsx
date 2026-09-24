@@ -48,6 +48,11 @@ export function RunDetailView({
             editor={data.editor}
             unmarkedCount={data.attendance.manager?.summary.unmarked ?? 0}
             finalSetupPreview={data.finalSetupPreview}
+            externalBoosters={
+              data.manager?.roster.canEdit
+                ? { boosters: data.manager.roster.externalBoosters, rosterVersion: data.manager.roster.version }
+                : null
+            }
           />
         </div>
       ) : null}

@@ -38,6 +38,20 @@ export const saveRosterDraftSchema = z.object({
     .optional(),
 });
 
+export const saveExternalBoostersSchema = z.object({
+  runId: entityIdSchema,
+  version: z.number().int().positive(),
+  externalBoosters: z
+    .array(
+      z.object({
+        name: z.string().max(64),
+        wowClass: z.enum(WOW_CLASSES),
+        role: z.enum(CHARACTER_ROLES),
+      }),
+    )
+    .max(100),
+});
+
 export const rosterVersionSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),

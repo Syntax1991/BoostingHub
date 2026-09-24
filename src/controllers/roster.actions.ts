@@ -7,8 +7,20 @@ import {
   publishRosterSchema,
   rosterRunSchema,
   rosterVersionSchema,
+  saveExternalBoostersSchema,
   saveRosterDraftSchema,
 } from "@/validators/roster";
+
+export async function saveExternalBoostersAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = saveExternalBoostersSchema.parse(input);
+    await rosterService.saveExternalBoosters(user, parsed);
+    return { ok: true, message: "External boosters saved." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
 
 export async function saveRosterDraftAction(input: unknown): Promise<ActionResult> {
   try {

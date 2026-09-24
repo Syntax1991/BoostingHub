@@ -617,6 +617,34 @@ export const rosterService = {
    * writing; rejects malformed same-user Booster batches instead of silently
    * normalizing. OPEN → ROSTERING only when the saved selection is non-empty.
    */
+  /**
+   * External Boosters dialog (Run header): saves the roster's full external
+   * booster set on its own, without touching the signup draft. Allowed while
+   * the roster is editable; after Start use Replace on the Attendance tab.
+   */
+  async saveExternalBoosters(
+    user: AuthenticatedUser,
+    input: { runId: string; version: number; externalBoosters: ExternalBoosterInput[] },
+  ) {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    assertCanManageRun(user, run);
+    if (!EDITABLE_RUN_STATUSES.includes(run.status)) {
+      throw new DomainError("INVALID_ROSTER_SELECTION", "External boosters can only be changed before the run starts.");
+    }
+    const externalBoosters = input.externalBoosters.map(normalizeExternalBoosterInput);
+    if (externalBoosters.length > EXTERNAL_BOOSTERS_MAX_PER_ROSTER) {
+      throw new DomainError(
+        "INVALID_ROSTER_SELECTION",
+        `A roster can have at most ${EXTERNAL_BOOSTERS_MAX_PER_ROSTER} external boosters.`,
+      );
+    }
+    const roster = await rosterRepository.ensure(input.runId);
+    await rosterRepository.replaceExternalBoosters(roster.id, input.version, externalBoosters);
+  },
+
   async saveDraftSelection(
     user: AuthenticatedUser,
     input: {
