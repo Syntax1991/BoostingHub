@@ -35,6 +35,11 @@
   border-color: var(--border);
 }
 
+html {
+  /* Dark-only app: native controls render dark, and forced-dark modes leave it alone. */
+  color-scheme: dark;
+}
+
 html,
 body {
   background: var(--background);
