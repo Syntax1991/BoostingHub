@@ -712,6 +712,8 @@ export const rosterService = {
       scheduledStartAt: run.scheduledStartAt,
       // Repository race-check only newly added Characters (already-selected stay).
       selectedCharacterIds: newlySelectedCharacters.map((row) => row.id),
+      // Save Roster already DMs players; Publish later only DMs what changed since.
+      notify: { runId: input.runId, runTitle: run.title },
     });
 
     if (run.status === "OPEN" && selectedIds.length > 0) {

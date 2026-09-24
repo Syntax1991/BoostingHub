@@ -315,6 +315,11 @@ export const rosterRepository = {
       targetRunId?: string;
       scheduledStartAt?: string;
       selectedCharacterIds?: string[];
+      /**
+       * Save Roster: tell players about the saved selection right away
+       * (see notifyRosterSelectionChangesInTx). Omitted when seeding a draft.
+       */
+      notify?: { runId: string; runTitle: string };
     },
   ) {
     await db.transaction(async (tx) => {
@@ -392,6 +397,16 @@ export const rosterRepository = {
         version: mapped.version + 1,
         updatedAt: now,
       });
+
+      if (options?.notify) {
+        await notifyRosterSelectionChangesInTx(txOrm, {
+          runId: options.notify.runId,
+          runTitle: options.notify.runTitle,
+          version: mapped.version + 1,
+          selections,
+          now,
+        });
+      }
     });
   },
 
@@ -580,21 +595,17 @@ export const rosterRepository = {
         }
       }
 
-      const previouslySelectedRows = await txOrm.RunSignup.where({
-        runId: input.runId,
-        status: "SELECTED",
-      })
-        .select("id")
-        .all();
-      const previouslySelectedIds = new Set(
-        previouslySelectedRows.map((row) => asString((row as Record<string, unknown>).id)),
-      );
-      const newlySelected = input.selectedSelections.filter(
-        (selection) => !previouslySelectedIds.has(selection.signupId),
-      );
-
       const now = new Date().toISOString();
       const nextVersion = mapped.version + 1;
+      // Before the status writes below: legacy signups without roster
+      // notifications fall back to their current SELECTED status.
+      await notifyRosterSelectionChangesInTx(txOrm, {
+        runId: input.runId,
+        runTitle: input.runTitle,
+        version: nextVersion,
+        selections: input.selectedSelections,
+        now,
+      });
       for (const selection of input.selectedSelections) {
         await txOrm.RunSignup.where({ id: selection.signupId }).update({
           status: "SELECTED",
@@ -627,119 +638,180 @@ export const rosterRepository = {
         message: mapped.publishedAt ? "Updated a published roster." : "Published a roster.",
         occurredAt: now,
       });
-
-      for (const selection of newlySelected) {
-        const signup = (await txOrm.RunSignup.where({ id: selection.signupId })
-          .include("character")
-          .include("user")
-          .first()) as Record<string, unknown> | null;
-        if (!signup) continue;
-
-        const userId = asString(signup.userId);
-        let userRow = (signup.user as Record<string, unknown> | undefined) ?? null;
-        if (!userRow) {
-          userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
-        }
-        const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
-        const eventDmEnabled = userRow ? userRow.dmRosterSelectedEnabled !== false : true;
-        const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
-
-        const participationType = mapParticipation(signup.participationType);
-        const character = signup.character ? (signup.character as Record<string, unknown>) : null;
-        const assignment: NotificationAssignmentInput = {
-          participationType,
-          publishedRole: selection.selectedRole,
-          characterName: character ? asStringOrNull(character.name) : null,
-          characterRealm: character ? asStringOrNull(character.realm) : null,
-          wowClass:
-            participationType === "LOOTBUDDY"
-              ? signup.lootbuddyClass != null
-                ? mapWowClass(signup.lootbuddyClass)
-                : character
-                  ? mapWowClass(character.wowClass)
-                  : null
-              : character
-                ? mapWowClass(character.wowClass)
-                : null,
-        };
-        const copy = rosterSelectedWebNotification({
-          runId: input.runId,
-          runTitle: input.runTitle,
-          assignment,
-        });
-        const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
-        const discordDmDelivery = resolveDiscordDelivery({
-          discordDmEnabled,
-          eventDmEnabled,
-          discordUserId,
-          quietHours,
-          timeZone,
-        });
-        await userNotificationRepository.createInTx(txOrm, {
-          userId,
-          type: "ROSTER_SELECTED",
-          runId: input.runId,
-          signupId: selection.signupId,
-          sourceKey: rosterSelectedSourceKey(input.runId, nextVersion, selection.signupId),
-          title: copy.title,
-          message: copy.message,
-          href: copy.href,
-          discordDeliveryStatus: discordDmDelivery.status,
-          discordUserId: discordDmDelivery.discordUserId,
-          discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
-          createdAt: now,
-        });
-      }
-
-      const selectedIds = new Set(input.selectedSelections.map((selection) => selection.signupId));
-      const removedSignupIds = [...previouslySelectedIds].filter((signupId) => !selectedIds.has(signupId));
-      for (const signupId of removedSignupIds) {
-        const signup = (await txOrm.RunSignup.where({ id: signupId })
-          .include("character")
-          .include("user")
-          .first()) as Record<string, unknown> | null;
-        if (!signup) continue;
-
-        const userId = asString(signup.userId);
-        let userRow = (signup.user as Record<string, unknown> | undefined) ?? null;
-        if (!userRow) {
-          userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
-        }
-        const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
-        const eventDmEnabled = userRow ? userRow.dmRosterRemovedEnabled !== false : true;
-        const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
-        const character = signup.character ? (signup.character as Record<string, unknown>) : null;
-        const characterLabel = character
-          ? `${asString(character.name)}${asStringOrNull(character.realm) ? `-${asString(character.realm)}` : ""}`
-          : null;
-        const copy = rosterRemovedWebNotification({
-          runId: input.runId,
-          runTitle: input.runTitle,
-          characterLabel,
-        });
-        const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
-        const discordDmDelivery = resolveDiscordDelivery({
-          discordDmEnabled,
-          eventDmEnabled,
-          discordUserId,
-          quietHours,
-          timeZone,
-        });
-        await userNotificationRepository.createInTx(txOrm, {
-          userId,
-          type: "ROSTER_REMOVED",
-          runId: input.runId,
-          signupId,
-          sourceKey: rosterRemovedSourceKey(input.runId, nextVersion, signupId),
-          title: copy.title,
-          message: copy.message,
-          href: copy.href,
-          discordDeliveryStatus: discordDmDelivery.status,
-          discordUserId: discordDmDelivery.discordUserId,
-          discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
-          createdAt: now,
-        });
-      }
     });
   },
 };
+
+type RosterNotificationSelection = { signupId: string; selectedRole: CharacterRole | null };
+
+/**
+ * Roster notifications (web + Discord DM) follow what each signup was last
+ * told — its latest ROSTER_SELECTED / ROSTER_REMOVED — not its signup status.
+ * Save Roster and Publish both call this, so a player hears "selected" once
+ * (on whichever comes first) and "removed" once when a later save or publish
+ * drops them. Signups with no roster notification yet (published before this
+ * rule existed) fall back to their SELECTED status. Withdrawn signups are
+ * never told they were removed.
+ */
+async function notifyRosterSelectionChangesInTx(
+  txOrm: TxOrm,
+  input: {
+    runId: string;
+    runTitle: string;
+    /** Roster version this change produces — part of each notification's idempotency key. */
+    version: number;
+    selections: RosterNotificationSelection[];
+    now: string;
+  },
+): Promise<void> {
+  const lastBySignupId = new Map<string, { version: number; selected: boolean }>();
+  const notifications = await txOrm.UserNotification.where({ runId: input.runId }).all();
+  for (const row of notifications as Array<Record<string, unknown>>) {
+    const type = asString(row.type);
+    const signupId = asStringOrNull(row.signupId);
+    if (!signupId || (type !== "ROSTER_SELECTED" && type !== "ROSTER_REMOVED")) continue;
+    // sourceKey is `roster-{selected|removed}:<runId>:<version>:<signupId>`; the
+    // strictly increasing roster version orders them without relying on timestamps.
+    const version = Number(asString(row.sourceKey).split(":")[2]);
+    const previous = lastBySignupId.get(signupId);
+    if (!previous || version > previous.version) {
+      lastBySignupId.set(signupId, { version, selected: type === "ROSTER_SELECTED" });
+    }
+  }
+
+  const signups = await txOrm.RunSignup.where({ runId: input.runId }).all();
+  const statusBySignupId = new Map(
+    (signups as Array<Record<string, unknown>>).map((row) => [asString(row.id), asString(row.status)]),
+  );
+  const isNotifiedSelected = (signupId: string) =>
+    lastBySignupId.get(signupId)?.selected ?? statusBySignupId.get(signupId) === "SELECTED";
+
+  const selectedIds = new Set(input.selections.map((selection) => selection.signupId));
+  for (const selection of input.selections) {
+    if (!isNotifiedSelected(selection.signupId)) {
+      await createRosterSelectedNotificationInTx(txOrm, { ...input, selection });
+    }
+  }
+  for (const signupId of statusBySignupId.keys()) {
+    if (selectedIds.has(signupId) || !isNotifiedSelected(signupId)) continue;
+    if (statusBySignupId.get(signupId) === "WITHDRAWN") continue;
+    await createRosterRemovedNotificationInTx(txOrm, { ...input, signupId });
+  }
+}
+
+async function createRosterSelectedNotificationInTx(
+  txOrm: TxOrm,
+  input: { runId: string; runTitle: string; version: number; now: string; selection: RosterNotificationSelection },
+): Promise<void> {
+  const signup = (await txOrm.RunSignup.where({ id: input.selection.signupId })
+    .include("character")
+    .include("user")
+    .first()) as Record<string, unknown> | null;
+  if (!signup) return;
+
+  const userId = asString(signup.userId);
+  let userRow = (signup.user as Record<string, unknown> | undefined) ?? null;
+  if (!userRow) {
+    userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
+  }
+  const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
+  const eventDmEnabled = userRow ? userRow.dmRosterSelectedEnabled !== false : true;
+  const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
+
+  const participationType = mapParticipation(signup.participationType);
+  const character = signup.character ? (signup.character as Record<string, unknown>) : null;
+  const assignment: NotificationAssignmentInput = {
+    participationType,
+    publishedRole: input.selection.selectedRole,
+    characterName: character ? asStringOrNull(character.name) : null,
+    characterRealm: character ? asStringOrNull(character.realm) : null,
+    wowClass:
+      participationType === "LOOTBUDDY"
+        ? signup.lootbuddyClass != null
+          ? mapWowClass(signup.lootbuddyClass)
+          : character
+            ? mapWowClass(character.wowClass)
+            : null
+        : character
+          ? mapWowClass(character.wowClass)
+          : null,
+  };
+  const copy = rosterSelectedWebNotification({
+    runId: input.runId,
+    runTitle: input.runTitle,
+    assignment,
+  });
+  const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
+  const discordDmDelivery = resolveDiscordDelivery({
+    discordDmEnabled,
+    eventDmEnabled,
+    discordUserId,
+    quietHours,
+    timeZone,
+  });
+  await userNotificationRepository.createInTx(txOrm, {
+    userId,
+    type: "ROSTER_SELECTED",
+    runId: input.runId,
+    signupId: input.selection.signupId,
+    sourceKey: rosterSelectedSourceKey(input.runId, input.version, input.selection.signupId),
+    title: copy.title,
+    message: copy.message,
+    href: copy.href,
+    discordDeliveryStatus: discordDmDelivery.status,
+    discordUserId: discordDmDelivery.discordUserId,
+    discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
+    createdAt: input.now,
+  });
+}
+
+async function createRosterRemovedNotificationInTx(
+  txOrm: TxOrm,
+  input: { runId: string; runTitle: string; version: number; now: string; signupId: string },
+): Promise<void> {
+  const signup = (await txOrm.RunSignup.where({ id: input.signupId })
+    .include("character")
+    .include("user")
+    .first()) as Record<string, unknown> | null;
+  if (!signup) return;
+
+  const userId = asString(signup.userId);
+  let userRow = (signup.user as Record<string, unknown> | undefined) ?? null;
+  if (!userRow) {
+    userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
+  }
+  const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
+  const eventDmEnabled = userRow ? userRow.dmRosterRemovedEnabled !== false : true;
+  const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
+  const character = signup.character ? (signup.character as Record<string, unknown>) : null;
+  const characterLabel = character
+    ? `${asString(character.name)}${asStringOrNull(character.realm) ? `-${asString(character.realm)}` : ""}`
+    : null;
+  const copy = rosterRemovedWebNotification({
+    runId: input.runId,
+    runTitle: input.runTitle,
+    characterLabel,
+  });
+  const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
+  const discordDmDelivery = resolveDiscordDelivery({
+    discordDmEnabled,
+    eventDmEnabled,
+    discordUserId,
+    quietHours,
+    timeZone,
+  });
+  await userNotificationRepository.createInTx(txOrm, {
+    userId,
+    type: "ROSTER_REMOVED",
+    runId: input.runId,
+    signupId: input.signupId,
+    sourceKey: rosterRemovedSourceKey(input.runId, input.version, input.signupId),
+    title: copy.title,
+    message: copy.message,
+    href: copy.href,
+    discordDeliveryStatus: discordDmDelivery.status,
+    discordUserId: discordDmDelivery.discordUserId,
+    discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
+    createdAt: input.now,
+  });
+}

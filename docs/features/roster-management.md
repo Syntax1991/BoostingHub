@@ -139,7 +139,9 @@ In one database transaction:
 4. Run `OPEN` → `ROSTERING` → `PUBLISHED`, or `ROSTERING` → `PUBLISHED`
 5. Roster `state = PUBLISHED`, `version++`, `publishedAt`, `publishedById`
 6. Activity `ROSTER_PUBLISHED` (first time) or `ROSTER_UPDATED` (republish)
-7. `ROSTER_SELECTED` user notifications for **newly** SELECTED signups only (see [user-notifications.md](user-notifications.md)) — draft selection never notifies; Discord DM intent is snapshotted from preferences at publish
+7. `ROSTER_SELECTED` / `ROSTER_REMOVED` user notifications only for changes the player has not been told yet (see [user-notifications.md](user-notifications.md)). **Save Roster** already notifies (see below), so publishing a saved roster usually sends nothing new; Discord DM intent is snapshotted from preferences when the notification is created
+
+**Save Roster notifies.** Saving the draft (`saveDraftSelection`) sends `ROSTER_SELECTED` to each selected player who was not already told they are in, and `ROSTER_REMOVED` to each player who was told they are in but is no longer selected (never to `WITHDRAWN` offers). What a player was last told is their latest `ROSTER_SELECTED`/`ROSTER_REMOVED` notification for that signup (ordered by the roster version in its `sourceKey`); signups without one fall back to their `SELECTED` status. Seeding a replacement draft from the published roster never notifies.
 
 Self-withdrawal of a `SELECTED` signup on a `PUBLISHED` run remains forbidden (Phase 2 rule).
 
@@ -176,6 +178,6 @@ The published roster stays live until a replacement publish succeeds. The lead m
 
 - Raid groups 1–8, parties, markers, assignments
 - Wallets / extra organizational cuts (see [run-payouts.md](run-payouts.md))
-- Battle.net, Warcraft Logs, Discord bot (except roster-selected notifications on publish; see [user-notifications.md](user-notifications.md))
+- Battle.net, Warcraft Logs, Discord bot (except roster notifications on Save Roster / publish; see [user-notifications.md](user-notifications.md))
 - Customer bookings / boost market
 - Per-user timezones

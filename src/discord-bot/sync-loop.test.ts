@@ -972,7 +972,7 @@ describe("syncOnce — UserNotification DMs", () => {
     expect(sendDm).toHaveBeenCalledTimes(1);
     const content = sendDm.mock.calls[0][0].content as string;
     expect(content).toContain("✅ **Roster Selected**");
-    expect(content).toContain("You are in the published roster.");
+    expect(content).toContain("You are in the roster.");
     expect(api.recordDiscordState).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", {
       kind: "notification-dm",
       notificationId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
