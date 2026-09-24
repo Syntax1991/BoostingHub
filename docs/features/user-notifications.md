@@ -14,11 +14,11 @@ Settings sections:
 
 | Type | When created | Web | Run channel | Discord DM |
 | --- | --- | --- | --- | --- |
-| `ROSTER_SELECTED` | Roster **publish** for **newly** SELECTED signups only | Always | — | Master + `dmRosterSelectedEnabled` + Discord linked |
+| `ROSTER_SELECTED` | **Save Roster** or publish, for selected signups not already told they are in | Always | — | Master + `dmRosterSelectedEnabled` + Discord linked |
 | `RAID_INVITE` | **Start Run** for each SELECTED signup | Always | — | Master + `dmRaidInviteEnabled` + Discord linked |
 | `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
 | `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
-| `ROSTER_REMOVED` | Publish: previous SELECTED → NOT_SELECTED | Always | — | Master + `dmRosterRemovedEnabled` + Discord linked |
+| `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always | — | Master + `dmRosterRemovedEnabled` + Discord linked |
 
 **Run channel announcements** (`RunDiscordAnnouncement`) are shared Run communication.
 They are **not** controlled by User DM preferences (`discordDmEnabled=false` does not

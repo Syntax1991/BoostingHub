@@ -551,6 +551,79 @@ describe("notification roster publish events", () => {
     expect(stillSelected).toHaveLength(0);
   });
 
+  it("Save Roster notifies selected players once; Publish afterwards does not repeat it", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const healer = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const selections = [
+      { signupId: tank, selectedRole: "TANK" as const },
+      { signupId: healer, selectedRole: "HEALER" as const },
+    ];
+    const playerRosterNotes = async () =>
+      (await userNotificationRepository.listForUser(ids.player, 50)).filter((row) => row.runId === runId);
+
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections });
+
+    let notes = await playerRosterNotes();
+    expect(notes.map((row) => row.type)).toEqual(["ROSTER_SELECTED"]);
+    expect(notes[0].discordDeliveryStatus).toBe("PENDING");
+    expect(notes[0].message).toContain("as Healer ·");
+
+    // Saving the same selection again does not notify again.
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections });
+    // Neither does publishing what was already saved.
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+
+    notes = await playerRosterNotes();
+    expect(notes.map((row) => row.type)).toEqual(["ROSTER_SELECTED"]);
+  });
+
+  it("Save Roster that drops a notified player sends one removal; re-adding notifies again", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const healer = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const healerAlt = await createSignup({ runId, userId: ids.playerB, characterId: charPlayerB, role: "HEALER" });
+    const base: Array<{ signupId: string; selectedRole: "TANK" | "HEALER" | "DPS" }> = [
+      { signupId: tank, selectedRole: "TANK" as const },
+    ];
+    const save = async (extra: typeof base) => {
+      const view = await rosterService.getRosterManagementView(lead, runId);
+      await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections: [...base, ...extra] });
+    };
+    const playerTypes = async () =>
+      (await userNotificationRepository.listForUser(ids.player, 50))
+        .filter((row) => row.runId === runId)
+        .sort((a, b) => a.sourceKey.localeCompare(b.sourceKey, undefined, { numeric: true }))
+        .map((row) => row.type);
+
+    await save([{ signupId: healer, selectedRole: "HEALER" }]);
+    await save([{ signupId: healerAlt, selectedRole: "HEALER" }]);
+    await save([{ signupId: healerAlt, selectedRole: "HEALER" }]);
+
+    const removed = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_REMOVED",
+    );
+    expect(removed).toHaveLength(1);
+    expect(removed[0].message).toContain("no longer in the roster");
+
+    await save([{ signupId: healer, selectedRole: "HEALER" }]);
+    const selectedAgain = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+      (row) => row.runId === runId && row.type === "ROSTER_SELECTED",
+    );
+    expect(selectedAgain).toHaveLength(2);
+    expect((await playerTypes()).length).toBe(3);
+
+    // Publishing the saved state sends nothing new to either player.
+    const view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await playerTypes()).length).toBe(3);
+    const altNotes = (await userNotificationRepository.listForUser(ids.playerB, 50)).filter((row) => row.runId === runId);
+    expect(altNotes.map((row) => row.type).sort()).toEqual(["ROSTER_REMOVED", "ROSTER_SELECTED"]);
+  });
+
   it("master Discord DM OFF snapshots SKIPPED even when event toggle is ON", async () => {
     await orm.User.where({ id: ids.player }).update({
       discordDmEnabled: false,

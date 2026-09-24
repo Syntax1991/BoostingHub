@@ -49,7 +49,7 @@ export function rosterRemovedWebNotification(input: {
   const suffix = input.characterLabel ? ` (${input.characterLabel})` : "";
   return {
     title: "Removed from roster",
-    message: `You are no longer in the published roster for ${input.runTitle}${suffix}.`,
+    message: `You are no longer in the roster for ${input.runTitle}${suffix}.`,
     href: runDetailPath(input.runId),
   };
 }
@@ -189,7 +189,7 @@ export function buildRosterSelectedDmMessage(input: {
   if (channelId) {
     lines.push(`Channel: <#${channelId}>`);
   }
-  lines.push("", "You are in the published roster.");
+  lines.push("", "You are in the roster.");
   return lines.join("\n");
 }
 
@@ -207,7 +207,7 @@ export function buildRosterRemovedDmMessage(input: {
     input.productLabel,
     `${when} · ${difficulty} · ${input.lootType}`,
     "",
-    "You are no longer in the published roster for this run.",
+    "You are no longer in the roster for this run.",
   ].join("\n");
 }
 
