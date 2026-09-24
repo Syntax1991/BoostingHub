@@ -158,6 +158,8 @@ export class BotApiClient {
           | "ROSTER_REMOVED"
           | "ROSTER_WITHDRAWN";
         discordUserId: string;
+        /** ROSTER_SELECTED for a character swap ("Roster Update"); optional for an older API. */
+        rosterUpdate?: boolean;
         /** ROSTER_WITHDRAWN only; optional for an older API. */
         withdrawal?: {
           playerName: string;

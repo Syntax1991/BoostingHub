@@ -40,6 +40,8 @@ export type CreateUserNotificationInput = {
   discordUserId: string | null;
   discordDeliverAfter?: string | null;
   createdAt?: string;
+  /** Pre-read (record only, e.g. a suppressed roster swap removal). Defaults to unread. */
+  readAt?: string | null;
 };
 
 function normalizeDiscordDeliverAfter(value: string | null | undefined): string | null {
@@ -80,6 +82,18 @@ export function rosterSelectedSourceKey(runId: string, publishedVersion: number,
   return `roster-selected:${runId}:${publishedVersion}:${signupId}`;
 }
 
+/**
+ * A ROSTER_SELECTED for a booster whose character was swapped (same player,
+ * other booster signup). Same shape as rosterSelectedSourceKey — the version is
+ * still the 3rd segment — but the prefix tells the DM renderer to say
+ * "Roster Update" instead of "Roster Selected".
+ */
+export const ROSTER_SWAPPED_SOURCE_KEY_PREFIX = "roster-swapped:";
+
+export function rosterSwappedSourceKey(runId: string, publishedVersion: number, signupId: string): string {
+  return `${ROSTER_SWAPPED_SOURCE_KEY_PREFIX}${runId}:${publishedVersion}:${signupId}`;
+}
+
 export function rosterRemovedSourceKey(runId: string, publishedVersion: number, signupId: string): string {
   return `roster-removed:${runId}:${publishedVersion}:${signupId}`;
 }
@@ -116,7 +130,7 @@ export const userNotificationRepository = {
       title: input.title,
       message: input.message,
       href: input.href,
-      readAt: null,
+      readAt: input.readAt ?? null,
       discordDeliveryStatus: input.discordDeliveryStatus,
       discordUserId: input.discordUserId,
       discordDeliverAfter: normalizeDiscordDeliverAfter(input.discordDeliverAfter),

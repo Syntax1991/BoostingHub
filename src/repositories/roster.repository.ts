@@ -35,6 +35,7 @@ import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signu
 import {
   rosterRemovedSourceKey,
   rosterSelectedSourceKey,
+  rosterSwappedSourceKey,
   rosterWithdrawnSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
@@ -42,6 +43,7 @@ import {
   resolveDiscordDelivery,
   rosterRemovedWebNotification,
   rosterSelectedWebNotification,
+  rosterSwappedWebNotification,
   rosterWithdrawnWebNotification,
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
@@ -852,25 +854,60 @@ async function notifyRosterSelectionChangesInTx(
   const statusBySignupId = new Map(
     (signups as Array<Record<string, unknown>>).map((row) => [asString(row.id), asString(row.status)]),
   );
+  const signupById = new Map(
+    (signups as Array<Record<string, unknown>>).map((row) => [
+      asString(row.id),
+      { userId: asString(row.userId), participationType: asString(row.participationType) },
+    ]),
+  );
   const isNotifiedSelected = (signupId: string) =>
     lastBySignupId.get(signupId)?.selected ?? statusBySignupId.get(signupId) === "SELECTED";
 
   const selectedIds = new Set(input.selections.map((selection) => selection.signupId));
+  const isLeaving = (signupId: string) =>
+    !selectedIds.has(signupId) && isNotifiedSelected(signupId) && statusBySignupId.get(signupId) !== "WITHDRAWN";
+  // A player holds at most one booster slot. A booster signup that leaves while
+  // another booster signup of the same player joins is a character swap: the
+  // player gets one "Roster Update" for the new character, and the old one's
+  // removal is only recorded (read, no DM) to keep this state.
+  const boosterUsersLeaving = new Set(
+    [...statusBySignupId.keys()]
+      .filter((signupId) => isLeaving(signupId) && signupById.get(signupId)?.participationType === "BOOSTER")
+      .map((signupId) => signupById.get(signupId)!.userId),
+  );
+  const boosterUsersStillSelected = new Set(
+    input.selections
+      .map((selection) => signupById.get(selection.signupId))
+      .filter((signup) => signup?.participationType === "BOOSTER")
+      .map((signup) => signup!.userId),
+  );
   for (const selection of input.selections) {
     if (!isNotifiedSelected(selection.signupId)) {
-      await createRosterSelectedNotificationInTx(txOrm, { ...input, selection });
+      const signup = signupById.get(selection.signupId);
+      const swap = signup?.participationType === "BOOSTER" && boosterUsersLeaving.has(signup.userId);
+      await createRosterSelectedNotificationInTx(txOrm, { ...input, selection, swap });
     }
   }
   for (const signupId of statusBySignupId.keys()) {
     if (selectedIds.has(signupId) || !isNotifiedSelected(signupId)) continue;
     if (statusBySignupId.get(signupId) === "WITHDRAWN") continue;
-    await createRosterRemovedNotificationInTx(txOrm, { ...input, signupId });
+    const signup = signupById.get(signupId);
+    const swapped = signup?.participationType === "BOOSTER" && boosterUsersStillSelected.has(signup.userId);
+    await createRosterRemovedNotificationInTx(txOrm, { ...input, signupId, silent: swapped });
   }
 }
 
 async function createRosterSelectedNotificationInTx(
   txOrm: TxOrm,
-  input: { runId: string; runTitle: string; version: number; now: string; selection: RosterNotificationSelection },
+  input: {
+    runId: string;
+    runTitle: string;
+    version: number;
+    now: string;
+    selection: RosterNotificationSelection;
+    /** Character swap of a player already in the roster — rendered as "Roster Update". */
+    swap?: boolean;
+  },
 ): Promise<void> {
   const signup = (await txOrm.RunSignup.where({ id: input.selection.signupId })
     .include("character")
@@ -905,7 +942,7 @@ async function createRosterSelectedNotificationInTx(
           ? mapWowClass(character.wowClass)
           : null,
   };
-  const copy = rosterSelectedWebNotification({
+  const copy = (input.swap ? rosterSwappedWebNotification : rosterSelectedWebNotification)({
     runId: input.runId,
     runTitle: input.runTitle,
     assignment,
@@ -923,7 +960,11 @@ async function createRosterSelectedNotificationInTx(
     type: "ROSTER_SELECTED",
     runId: input.runId,
     signupId: input.selection.signupId,
-    sourceKey: rosterSelectedSourceKey(input.runId, input.version, input.selection.signupId),
+    sourceKey: (input.swap ? rosterSwappedSourceKey : rosterSelectedSourceKey)(
+      input.runId,
+      input.version,
+      input.selection.signupId,
+    ),
     title: copy.title,
     message: copy.message,
     href: copy.href,
@@ -936,7 +977,15 @@ async function createRosterSelectedNotificationInTx(
 
 async function createRosterRemovedNotificationInTx(
   txOrm: TxOrm,
-  input: { runId: string; runTitle: string; version: number; now: string; signupId: string },
+  input: {
+    runId: string;
+    runTitle: string;
+    version: number;
+    now: string;
+    signupId: string;
+    /** Record only: no Discord DM and already read (a character swap, not a removal). */
+    silent?: boolean;
+  },
 ): Promise<void> {
   const signup = (await txOrm.RunSignup.where({ id: input.signupId })
     .include("character")
@@ -978,9 +1027,10 @@ async function createRosterRemovedNotificationInTx(
     title: copy.title,
     message: copy.message,
     href: copy.href,
-    discordDeliveryStatus: discordDmDelivery.status,
-    discordUserId: discordDmDelivery.discordUserId,
-    discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
+    discordDeliveryStatus: input.silent ? "SKIPPED" : discordDmDelivery.status,
+    discordUserId: input.silent ? null : discordDmDelivery.discordUserId,
+    discordDeliverAfter: input.silent ? null : discordDmDelivery.discordDeliverAfter,
+    readAt: input.silent ? input.now : null,
     createdAt: input.now,
   });
 }

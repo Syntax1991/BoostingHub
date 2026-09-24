@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildRosterWithdrawnDmMessage, rosterWithdrawnWebNotification } from "@/services/notification-content";
+import {
+  buildRosterSelectedDmMessage,
+  buildRosterWithdrawnDmMessage,
+  rosterWithdrawnWebNotification,
+} from "@/services/notification-content";
 
 const BASE = {
   productLabel: "Venomous Abyss 8/8",
@@ -48,5 +52,29 @@ describe("roster withdrawal notification (to the Raid Lead)", () => {
     expect(copy.title).toBe("Player withdrew");
     expect(copy.message).toBe("Kiri (Kirilight-Thrall) withdrew from the roster for Fri HC. Reason: Sick");
     expect(copy.href).toBe("/runs/r1?tab=roster");
+  });
+});
+
+describe("roster pick DM", () => {
+  const assignment = {
+    participationType: "BOOSTER" as const,
+    publishedRole: "HEALER" as const,
+    characterName: "Synbloom",
+    characterRealm: null,
+    wowClass: "DRUID" as const,
+  };
+
+  it("first pick says Roster Selected", () => {
+    const dm = buildRosterSelectedDmMessage({ ...BASE, assignment, runChannelId: null });
+    expect(dm).toContain("**Roster Selected**");
+    expect(dm).toContain("You are in the roster.");
+  });
+
+  it("a character swap says Roster Update with the new assignment", () => {
+    const dm = buildRosterSelectedDmMessage({ ...BASE, assignment, runChannelId: null, update: true });
+    expect(dm).toContain("**Roster Update**");
+    expect(dm).not.toContain("Roster Selected");
+    expect(dm).toContain("Synbloom");
+    expect(dm).toContain("you are still in the roster");
   });
 });

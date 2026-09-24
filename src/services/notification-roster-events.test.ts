@@ -1059,3 +1059,64 @@ describe("External Boosters dialog (saved on their own)", () => {
     ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
   });
 });
+
+describe("character swap in the roster", () => {
+  it("swapping a player's booster character sends one 'Roster Update' DM, no removal DM", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const altCharacter = await createCharacter({
+      userId: ids.player,
+      name: `Swapalt${Date.now() % 100000}`,
+      wowClass: "PRIEST",
+      specialization: "Holy",
+      primaryRole: "HEALER",
+    });
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const main = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const alt = await createSignup({ runId, userId: ids.player, characterId: altCharacter, role: "HEALER" });
+    const save = async (healer: string | null) => {
+      const view = await rosterService.getRosterManagementView(lead, runId);
+      await rosterService.saveDraftSelection(lead, {
+        runId,
+        version: view.roster.version,
+        selections: [
+          { signupId: tank, selectedRole: "TANK" as const },
+          ...(healer ? [{ signupId: healer, selectedRole: "HEALER" as const }] : []),
+        ],
+      });
+    };
+    const playerNotes = async () =>
+      (await userNotificationRepository.listForUser(ids.player, 50)).filter((note) => note.runId === runId);
+
+    await save(main);
+    await save(alt);
+
+    let notes = await playerNotes();
+    const dms = notes.filter((note) => note.discordDeliveryStatus === "PENDING");
+    expect(dms.map((note) => [note.type, note.signupId])).toEqual(
+      expect.arrayContaining([
+        ["ROSTER_SELECTED", main],
+        ["ROSTER_SELECTED", alt],
+      ]),
+    );
+    expect(dms.some((note) => note.type === "ROSTER_REMOVED")).toBe(false);
+    const update = dms.find((note) => note.signupId === alt)!;
+    expect(update.title).toBe("Roster updated");
+    expect(update.sourceKey.startsWith("roster-swapped:")).toBe(true);
+    const work = await discordSyncService.listSyncWork();
+    const updateDm = work.notificationDms.find((item) => item.notificationId === update.id);
+    expect(updateDm?.rosterUpdate).toBe(true);
+    const firstPickDm = work.notificationDms.find(
+      (item) => item.runId === runId && item.signupId === main && item.type === "ROSTER_SELECTED",
+    );
+    expect(firstPickDm?.rosterUpdate).toBe(false);
+    const recordOnly = notes.find((note) => note.type === "ROSTER_REMOVED" && note.signupId === main);
+    expect(recordOnly?.discordDeliveryStatus).toBe("SKIPPED");
+    expect(recordOnly?.readAt).not.toBeNull();
+
+    // Taking the player out entirely is a real removal again.
+    await save(null);
+    notes = await playerNotes();
+    const removed = notes.filter((note) => note.type === "ROSTER_REMOVED" && note.discordDeliveryStatus === "PENDING");
+    expect(removed.map((note) => note.signupId)).toEqual([alt]);
+  });
+});
