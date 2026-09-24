@@ -1,3 +1,4 @@
+import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { orm } from "@/lib/prisma";
 import {
   asBoolean,
@@ -44,6 +45,8 @@ export type CharacterPageRecord = {
     resetIdentifier: string;
     isComplete: boolean;
     bossesDefeated: number;
+    /** Catalog boss ids killed this reset; null when unknown (older sync). */
+    killedBossIds?: string[] | null;
   }>;
 };
 
@@ -130,6 +133,7 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
         resetIdentifier: asString(record.resetIdentifier),
         isComplete: asBoolean(record.isComplete),
         bossesDefeated: asNumber(record.bossesDefeated),
+        killedBossIds: parseKilledBossIds(record.killedBossIds),
       };
     }),
   };

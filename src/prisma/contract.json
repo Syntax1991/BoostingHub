@@ -1950,6 +1950,13 @@
                   "kind": "scalar"
                 }
               },
+              "killedBossIds": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "raidId": {
                 "nullable": false,
                 "type": {
@@ -2023,6 +2030,9 @@
                 },
                 "isComplete": {
                   "column": "isComplete"
+                },
+                "killedBossIds": {
+                  "column": "killedBossIds"
                 },
                 "raidId": {
                   "column": "raidId"
@@ -7806,6 +7816,11 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
+                "killedBossIds": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "raidId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -11672,7 +11687,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d15547a2c6dd3b86346f672849fcc38e6c1a83e93dba522b6b926ea2cd2062f9"
+    "storageHash": "e98563859594fd00daa0d639f97732df3fafec261bfc8689e680decc7b02c94e"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",

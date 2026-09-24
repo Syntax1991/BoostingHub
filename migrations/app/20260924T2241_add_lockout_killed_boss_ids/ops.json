@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.character_raid_lockout.killedBossIds",
+    "label": "Add column \"killedBossIds\" to \"character_raid_lockout\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "killedBossIds",
+        "table": "character_raid_lockout"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"killedBossIds\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character_raid_lockout",
+          "killedBossIds"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"killedBossIds\"",
+        "sql": "ALTER TABLE \"public\".\"character_raid_lockout\" ADD COLUMN \"killedBossIds\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"killedBossIds\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character_raid_lockout",
+          "killedBossIds"
+        ]
+      }
+    ]
+  }
+]

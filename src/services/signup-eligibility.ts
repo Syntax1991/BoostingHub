@@ -20,6 +20,7 @@ export type EligibilityLockout = {
   resetIdentifier: string;
   isComplete: boolean;
   bossesDefeated: number;
+  killedBossIds?: string[] | null;
 };
 
 export type EligibilityCharacter = {

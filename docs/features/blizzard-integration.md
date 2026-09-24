@@ -141,6 +141,8 @@ using the regional `profile-{region}` namespace and server-side client-credentia
 | Manaforge Omega | Historical (existing Runs keep this id) | `1302` |
 | The Venomous Abyss | **Current** lockout target (`currentForLockouts: true`) | `1320` |
 
+Besides the count (`bossesDefeated`), each verified row stores **which** catalog bosses were killed this reset (`CharacterRaidLockout.killedBossIds`, JSON array of catalog boss ids). The lockout lines on the Roster builder, the Signups list and the signup dialog show them on hover (✓ killed · ✗ open, catalog order). Rows synced before this existed show "boss details after the next character sync".
+
 Lockout refresh uses the explicit `currentForLockouts` flag — not array order, newest DB row, or boss count (both raids have 8 bosses). Matching prefers Blizzard journal instance + encounter ids; localized names (e.g. de_DE “Der Giftige Abgrund”) are presentation only. Tidebound Grotto (single-boss lair, instance `1317`) is not merged into Venomous Abyss lockouts.
 
 Run creation lists raids with `availableForRuns: true` via `raidRepository.ensureReferenceRaids` (both historical Manaforge and current Venomous). Historical Manaforge Runs are never rewritten to Venomous.

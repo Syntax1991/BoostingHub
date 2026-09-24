@@ -75,6 +75,8 @@ export type SignupRaidSaveInfo = {
   bossesDefeated: number;
   totalBossCount: number;
   isComplete: boolean;
+  /** Catalog boss ids killed this reset; null/absent when unknown (older sync). */
+  killedBossIds?: string[] | null;
 };
 
 /**

@@ -102,6 +102,7 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
           difficulty: row.difficulty,
           bossesDefeated: row.bossesDefeated,
           isComplete: row.isComplete,
+          killedBossIds: row.bosses.filter((boss) => boss.killedThisReset).map((boss) => boss.bossId),
         })),
         verifiedAt: derived.verifiedAt,
       });

@@ -12,7 +12,7 @@ import {
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
-import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
+import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import {
   CHARACTER_ROLES,
@@ -449,7 +449,10 @@ export function BoosterCharacterChecklist({
                       {group.characterName}-{group.realm} · {CLASS_LABELS[group.wowClass]}
                     </span>
                     {lockoutLines.length > 0 ? (
-                      <span className={`text-xs ${lockoutAttention ? "text-warning" : "text-muted"}`}>
+                      <span
+                        className={`cursor-help text-xs underline decoration-dotted underline-offset-2 ${lockoutAttention ? "text-warning" : "text-muted"}`}
+                        title={formatContentLockoutTooltip(group.contentSaves)}
+                      >
                         {lockoutLines.join(" · ")}
                       </span>
                     ) : null}

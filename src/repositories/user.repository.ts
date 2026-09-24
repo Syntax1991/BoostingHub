@@ -1,3 +1,4 @@
+import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { orm } from "@/lib/prisma";
 import type { AccountRole, AccountStatus, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
 import type { AuthenticatedUser } from "@/auth/authorization";
@@ -41,6 +42,8 @@ export type AdminUserCharacterLockout = {
   resetIdentifier: string;
   isComplete: boolean;
   bossesDefeated: number;
+  /** Catalog boss ids killed this reset; null when unknown (older sync). */
+  killedBossIds?: string[] | null;
 };
 
 export type AdminUserCharacterSummary = {
@@ -379,6 +382,7 @@ export const userRepository = {
             resetIdentifier: asString(lockout.resetIdentifier),
             isComplete: asBoolean(lockout.isComplete),
             bossesDefeated: asNumber(lockout.bossesDefeated),
+            killedBossIds: parseKilledBossIds(lockout.killedBossIds),
           };
         }),
       };

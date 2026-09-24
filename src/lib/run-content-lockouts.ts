@@ -5,6 +5,7 @@ import {
   type RaidLockoutLabel,
 } from "@/lib/raid-lockout-label";
 import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { lockoutBossBreakdown, type LockoutBossState } from "@/lib/lockout-bosses";
 import type { RunRaidContentRecord } from "@/repositories/run.repository";
 
 /**
@@ -19,6 +20,8 @@ export type RunContentRaidSaveInfo = {
   totalBossCount: number;
   raidSave: SignupRaidSaveInfo | null;
   label: RaidLockoutLabel;
+  /** Per-boss kill state for the tooltip; null when unknown (no save, or synced before boss tracking). */
+  bosses: LockoutBossState[] | null;
 };
 
 export type LockoutMatchInput = {
@@ -62,6 +65,7 @@ export function projectRunContentLockouts(input: {
       totalBossCount: content.totalBossCount,
       raidSave,
       label,
+      bosses: raidSave ? lockoutBossBreakdown(content.raidId, raidSave.killedBossIds) : null,
     };
   });
 }
@@ -74,4 +78,18 @@ export function contentLockoutsNeedAttention(rows: readonly RunContentRaidSaveIn
 /** Compact multi-line or single-line secondary metadata for UI cards. */
 export function formatContentLockoutLines(rows: readonly RunContentRaidSaveInfo[]): string[] {
   return rows.map((row) => `${row.raidName}: ${row.label.text}`);
+}
+
+/**
+ * Hover text for a lockout line: which bosses this Character already killed
+ * this reset (✓) and which are still open (✗), one line per Run content.
+ */
+export function formatContentLockoutTooltip(rows: readonly RunContentRaidSaveInfo[]): string {
+  return rows
+    .map((row) => {
+      if (!row.raidSave) return `${row.raidName}: lockout unknown`;
+      if (!row.bosses) return `${row.raidName}: boss details after the next character sync`;
+      return `${row.raidName}: ${row.bosses.map((boss) => `${boss.killed ? "✓" : "✗"} ${boss.name}`).join(" · ")}`;
+    })
+    .join("\n");
 }
