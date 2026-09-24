@@ -9,13 +9,19 @@ import { loadBotEnv } from "@/discord-bot/env";
  */
 async function main() {
   const env = loadBotEnv();
-  const commands = [new SlashCommandBuilder().setName("mysignups").setDescription("Show your current signups, grouped by Run.")];
+  const commands = [
+    new SlashCommandBuilder().setName("mysignups").setDescription("Show your current signups, grouped by Run."),
+    new SlashCommandBuilder()
+      .setName("guide")
+      .setDescription("Get a link to a BoostingHub guide.")
+      .addSubcommand((sub) => sub.setName("booster").setDescription("Link to the Booster Guide.")),
+  ];
 
   const rest = new REST().setToken(env.discordBotToken);
   await rest.put(Routes.applicationGuildCommands(env.discordApplicationId, env.discordGuildId), {
     body: commands.map((command) => command.toJSON()),
   });
-  console.log("[discord-bot] registered guild slash commands: /mysignups");
+  console.log("[discord-bot] registered guild slash commands: /mysignups, /guide booster");
 }
 
 main().catch((error) => {
