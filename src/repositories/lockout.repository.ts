@@ -1,3 +1,4 @@
+import { serializeKilledBossIds } from "@/lib/lockout-bosses";
 import { orm } from "@/lib/prisma";
 import type { RaidDifficulty } from "@/models/enums";
 import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
@@ -46,6 +47,8 @@ export const lockoutRepository = {
         difficulty: RaidDifficulty;
         bossesDefeated: number;
         isComplete: boolean;
+        /** Catalog boss ids killed this reset (for the lockout boss tooltip). */
+        killedBossIds?: readonly string[];
       }>;
       verifiedAt: string;
     },
@@ -65,6 +68,7 @@ export const lockoutRepository = {
         await orm.CharacterRaidLockout.where({ id }).update({
           bossesDefeated: row.bossesDefeated,
           isComplete: row.isComplete,
+          ...(row.killedBossIds ? { killedBossIds: serializeKilledBossIds(row.killedBossIds) } : {}),
           updatedAt: input.verifiedAt,
         });
         continue;
@@ -78,6 +82,7 @@ export const lockoutRepository = {
         resetIdentifier: input.resetIdentifier,
         bossesDefeated: row.bossesDefeated,
         isComplete: row.isComplete,
+        killedBossIds: row.killedBossIds ? serializeKilledBossIds(row.killedBossIds) : null,
         createdAt: input.verifiedAt,
         updatedAt: input.verifiedAt,
       });

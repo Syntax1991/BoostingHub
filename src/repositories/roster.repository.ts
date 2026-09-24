@@ -1,3 +1,4 @@
+import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { db, orm } from "@/lib/prisma";
 import type {
   CharacterRole,
@@ -68,6 +69,8 @@ export type RosterCharacterSnapshot = {
     resetIdentifier: string;
     isComplete: boolean;
     bossesDefeated: number;
+    /** Catalog boss ids killed this reset; null when unknown (older sync). */
+    killedBossIds?: string[] | null;
   }>;
 };
 
@@ -139,6 +142,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
         resetIdentifier: asString(record.resetIdentifier),
         isComplete: asBoolean(record.isComplete),
         bossesDefeated: asNumber(record.bossesDefeated),
+        killedBossIds: parseKilledBossIds(record.killedBossIds),
       };
     }),
   };

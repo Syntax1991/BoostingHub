@@ -15,6 +15,7 @@ type ExactRaidLockout = {
   resetIdentifier: string;
   isComplete: boolean;
   bossesDefeated: number;
+  killedBossIds?: string[] | null;
 };
 
 /**
@@ -65,6 +66,8 @@ export const lockoutService = {
       bossesDefeated: lockout.bossesDefeated,
       totalBossCount,
       isComplete: lockout.isComplete,
+      // Only when known (synced with boss tracking) — absent means "which bosses" is unknown.
+      ...(lockout.killedBossIds ? { killedBossIds: lockout.killedBossIds } : {}),
     };
   },
 

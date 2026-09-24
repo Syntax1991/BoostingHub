@@ -31,7 +31,7 @@ import {
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
-import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
+import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import {
   filterWclPerformanceForGroupRole,
   compareByWclPerf,
@@ -857,7 +857,10 @@ function SignupRowCard({
             </span>
           ) : null}
           {lockoutLines.length > 0 ? (
-            <span className={lockoutAttention ? "text-warning" : undefined}>
+            <span
+              className={`cursor-help underline decoration-dotted underline-offset-2 ${lockoutAttention ? "text-warning" : ""}`}
+              title={formatContentLockoutTooltip(signup.contentSaves ?? [])}
+            >
               {lockoutLines.join(" · ")}
             </span>
           ) : null}

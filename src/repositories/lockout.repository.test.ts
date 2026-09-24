@@ -73,6 +73,24 @@ afterAll(async () => {
 });
 
 describe("lockoutRepository.replaceVerifiedCurrentResetLockouts", () => {
+  it("stores which bosses were killed and keeps them on a later sync without the list", async () => {
+    const reset = getRegionalWeeklyReset("EU");
+    const killed = ["bb000001-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "bb000002-bbbb-4bbb-8bbb-bbbbbbbbbbbb"];
+    await lockoutRepository.replaceVerifiedCurrentResetLockouts(ids.character, {
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      resetIdentifier: reset.resetIdentifier,
+      rows: [{ difficulty: "HEROIC", bossesDefeated: 2, isComplete: false, killedBossIds: killed }],
+      verifiedAt: new Date().toISOString(),
+    });
+    const row = await orm.CharacterRaidLockout.where({
+      characterId: ids.character,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      resetIdentifier: reset.resetIdentifier,
+    }).first();
+    expect(JSON.parse(String((row as { killedBossIds: string }).killedBossIds))).toEqual(killed);
+  });
+
   it("keeps Venomous rows when Tidebound is replaced for the same reset", async () => {
     const reset = getRegionalWeeklyReset("EU");
     const verifiedAt = new Date().toISOString();

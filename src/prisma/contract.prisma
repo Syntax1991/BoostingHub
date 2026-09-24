@@ -576,6 +576,9 @@ model CharacterRaidLockout {
   resetIdentifier  String
   bossesDefeated   Int            @default(0)
   isComplete       Boolean        @default(false)
+  /// JSON array of catalog boss ids (wow-raid-catalog) killed this reset, from
+  /// the Blizzard encounters sync. Null for rows synced before this existed.
+  killedBossIds    String?
   createdAt        TimestamptzString @default(now())
   updatedAt        temporal.updatedAtString()
 

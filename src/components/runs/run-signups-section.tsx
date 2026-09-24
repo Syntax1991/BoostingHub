@@ -10,7 +10,7 @@ import {
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
-import { formatContentLockoutLines } from "@/lib/run-content-lockouts";
+import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
 import type { WowClass } from "@/models/enums";
@@ -231,7 +231,10 @@ function ManagerSignupList({
                     ) : null}
                     <SignupStatusBadge status={signup.status} />
                     {lockoutLines.length > 0 ? (
-                      <span className={`text-xs ${lockoutAttention ? "text-warning" : "text-muted"}`}>
+                      <span
+                        className={`cursor-help text-xs underline decoration-dotted underline-offset-2 ${lockoutAttention ? "text-warning" : "text-muted"}`}
+                        title={formatContentLockoutTooltip(signup.contentSaves ?? [])}
+                      >
                         {lockoutLines.join(" · ")}
                       </span>
                     ) : null}
