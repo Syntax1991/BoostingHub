@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   mergeWeekSectionItemsForOrdering,
+  planWeekSectionOrder,
   reconcileChannels,
   reconcileExistingRunChannel,
   reconcileWeekSectionPositions,
@@ -798,5 +799,105 @@ describe("reconcileWeekSectionPositionsUntilSettled — fresh verify + bounded r
     expect(result).toEqual({ status: "ok", moved: 0, attempts: 1, verified: true });
     expect(setPositions).not.toHaveBeenCalled();
     expect(sleep).not.toHaveBeenCalled();
+  });
+});
+
+describe("planWeekSectionOrder — BoostingHub and manual Run channels sorted together by time", () => {
+  const named = (id: string, position: number, name: string): CategoryChild => ({ id, position, name });
+  // Production snapshot 2026-09-24: BoostingHub's Fri 22:15 channel sat above the manual Fri 13:00 one.
+  const productionChildren = [
+    named(CURRENT_MARKER, 0, "💰-current-id"),
+    named("bh-fri-2215", 1, "fri-2215-hc-vip-7of9-uwe"),
+    named("m-fri-1300", 2, "fri-1300-nm-vip-9of9-locheia"),
+    named("m-fri-1530", 3, "fri-1530-nm-vip-9of9-locheia"),
+    named("m-fri-2000", 4, "fri-2000-nm-vip-9of9-alantra"),
+    named("m-sat-1300", 5, "sat-1300-nm-vip-9of9-locheia"),
+    named("m-sun-2330", 6, "sun-2330-nm-vip-9of9-uwe"),
+    named("m-mon-1930", 7, "mon-1930-hc-vip-7of9-alantra"),
+    named("m-tue-2330", 8, "tue-2330-hc-vip-7of9-uwe"),
+    named(NEXT_MARKER, 9, "💫-next-id"),
+  ];
+  // Fri 2026-09-25 22:15 Europe/Berlin (CEST) = 20:15Z.
+  const bhFri2215 = weekItem({ runId: "run-bh", existingRunChannelId: "bh-fri-2215", scheduledStartAt: "2026-09-25T20:15:00.000Z" });
+
+  function finalIds(children: CategoryChild[], items: WeekSectionItem[]): string[] {
+    const plan = planWeekSectionOrder(children, weekEnv, items);
+    if (plan.status !== "ok") throw new Error(plan.reason);
+    return plan.finalOrderIds;
+  }
+
+  it("PRODUCTION: interleaves the BoostingHub channel into the manual channels by time", () => {
+    expect(finalIds(productionChildren, [bhFri2215])).toEqual([
+      CURRENT_MARKER,
+      "m-fri-1300",
+      "m-fri-1530",
+      "m-fri-2000",
+      "bh-fri-2215",
+      "m-sat-1300",
+      "m-sun-2330",
+      "m-mon-1930",
+      "m-tue-2330",
+      NEXT_MARKER,
+    ]);
+  });
+
+  it("is idempotent: an already time-sorted category needs no write", async () => {
+    const sorted = finalIds(productionChildren, [bhFri2215]).map((id, position) => ({
+      ...productionChildren.find((c) => c.id === id)!,
+      position,
+    }));
+    const plan = planWeekSectionOrder(sorted, weekEnv, [bhFri2215]);
+    expect(plan.status === "ok" && plan.alreadyInOrder).toBe(true);
+    const setPositions = vi.fn().mockResolvedValue(undefined);
+    await reconcileWeekSectionPositions(listerFor(sorted), setPositions, weekEnv, [bhFri2215]);
+    expect(setPositions).not.toHaveBeenCalled();
+  });
+
+  it("keeps channels without a recognisable time at the end of their section, in their relative order", () => {
+    const children = [
+      named(CURRENT_MARKER, 0, "current"),
+      named("notes", 1, "raid-notes"),
+      named("m-sat", 2, "sat-1300-nm-vip-9of9-a"),
+      named("rules", 3, "rules"),
+      named("m-thu", 4, "thu-2000-nm-vip-9of9-b"),
+      named(NEXT_MARKER, 5, "next"),
+    ];
+    expect(finalIds(children, [])).toEqual([CURRENT_MARKER, "m-thu", "m-sat", "notes", "rules", NEXT_MARKER]);
+  });
+
+  it("sorts the NEXT section the same way and never moves channels between sections or above the CURRENT marker", () => {
+    const children = [
+      named("above", 0, "fri-0900-above-marker"),
+      named(CURRENT_MARKER, 1, "current"),
+      named("m-cur-sun", 2, "sun-2000-cur"),
+      named(NEXT_MARKER, 3, "next"),
+      named("m-next-tue", 4, "tue-1000-next"),
+      named("m-next-thu", 5, "thu-1800-next"),
+      named("bh-next", 6, "wed-2000-bh"),
+    ];
+    // Wed 2026-10-07 20:00 Berlin = 18:00Z, NEXT week.
+    const bhNext = weekItem({ runId: "run-next", existingRunChannelId: "bh-next", targetBucket: "NEXT", scheduledStartAt: "2026-10-07T18:00:00.000Z" });
+    expect(finalIds(children, [bhNext])).toEqual(["above", CURRENT_MARKER, "m-cur-sun", NEXT_MARKER, "bh-next", "m-next-thu", "m-next-tue"]);
+  });
+
+  it("raid week starts Wednesday 06:00: Wed 05:00 sorts after Tue 23:30, Wed 06:00 first", () => {
+    const children = [
+      named(CURRENT_MARKER, 0, "current"),
+      named("wed-0500", 1, "wed-0500-late"),
+      named("tue-2330", 2, "tue-2330-x"),
+      named("wed-0600", 3, "wed-0600-first"),
+      named(NEXT_MARKER, 4, "next"),
+    ];
+    expect(finalIds(children, [])).toEqual([CURRENT_MARKER, "wed-0600", "tue-2330", "wed-0500", NEXT_MARKER]);
+  });
+
+  it("ties (same time): BoostingHub channel first, then previous order", () => {
+    const children = [
+      named(CURRENT_MARKER, 0, "current"),
+      named("m-dup", 1, "fri-2215-hc-vip-7of9-uwe"),
+      named("bh-fri-2215", 2, "fri-2215-hc-vip-7of9-uwe"),
+      named(NEXT_MARKER, 3, "next"),
+    ];
+    expect(finalIds(children, [bhFri2215])).toEqual([CURRENT_MARKER, "bh-fri-2215", "m-dup", NEXT_MARKER]);
   });
 });
