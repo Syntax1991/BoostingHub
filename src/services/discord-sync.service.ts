@@ -18,7 +18,10 @@ import { runDiscordPostRepository } from "@/repositories/run-discord-post.reposi
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
-import { userNotificationRepository } from "@/repositories/user-notification.repository";
+import {
+  ROSTER_SWAPPED_SOURCE_KEY_PREFIX,
+  userNotificationRepository,
+} from "@/repositories/user-notification.repository";
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
@@ -345,6 +348,8 @@ export type NotificationDmWorkItem = {
   selectedRole: CharacterRole | null;
   characterName: string | null;
   wowClass: WowClass | null;
+  /** ROSTER_SELECTED for a character swap — rendered as "Roster Update". */
+  rosterUpdate: boolean;
   /** Set for ROSTER_WITHDRAWN (to the Raid Lead): who left, why, and where to replace them. */
   withdrawal: {
     playerName: string;
@@ -865,6 +870,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
       wowClass: null as WowClass | null,
       signupId: notification.signupId,
       withdrawal: null as NotificationDmWorkItem["withdrawal"],
+      rosterUpdate: notification.sourceKey.startsWith(ROSTER_SWAPPED_SOURCE_KEY_PREFIX),
     };
 
     if (notification.type === "RUN_CANCELLED") {

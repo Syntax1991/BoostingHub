@@ -960,6 +960,7 @@ async function syncNotificationDm(
           wowClass: item.wowClass,
         },
         runChannelId: item.runChannelId,
+        update: item.rosterUpdate === true,
       });
       break;
     case "RAID_INVITE":

@@ -42,6 +42,19 @@ export function rosterSelectedWebNotification(input: {
   };
 }
 
+/** A booster's character was swapped for another of their signups — still in the roster. */
+export function rosterSwappedWebNotification(input: {
+  runId: string;
+  runTitle: string;
+  assignment: NotificationAssignmentInput;
+}): { title: string; message: string; href: string } {
+  return {
+    title: "Roster updated",
+    message: `Your roster slot for ${input.runTitle} changed to ${formatNotificationAssignment(input.assignment)}.`,
+    href: runDetailPath(input.runId),
+  };
+}
+
 export function rosterRemovedWebNotification(input: {
   runId: string;
   runTitle: string;
@@ -189,13 +202,15 @@ export function buildRosterSelectedDmMessage(input: {
   lootType: RunLootType;
   assignment: NotificationAssignmentInput;
   runChannelId: string | null;
+  /** Character swap for a player already in the roster: "Roster Update" instead of "Roster Selected". */
+  update?: boolean;
 }): string {
   const when = discordTimestamp(input.scheduledStartAt, "F");
   const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
   const loot = input.lootType;
   const assignment = formatRosterDmAssignment(input.assignment);
   const lines = [
-    "✅ **Roster Selected**",
+    input.update ? "🔁 **Roster Update**" : "✅ **Roster Selected**",
     "",
     input.productLabel,
     `${when} · ${difficulty} · ${loot}`,
@@ -206,7 +221,7 @@ export function buildRosterSelectedDmMessage(input: {
   if (channelId) {
     lines.push(`Channel: <#${channelId}>`);
   }
-  lines.push("", "You are in the roster.");
+  lines.push("", input.update ? "Your character changed — you are still in the roster." : "You are in the roster.");
   return lines.join("\n");
 }
 
