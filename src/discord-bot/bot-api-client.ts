@@ -101,6 +101,7 @@ export class BotApiClient {
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
         scheduledStartAt: string;
         allowChannelCreate: boolean;
+        announceOnCreate?: boolean;
         embed: unknown;
       }>;
       roster: Array<{

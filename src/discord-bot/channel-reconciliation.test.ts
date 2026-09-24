@@ -158,12 +158,30 @@ describe("reconcileExistingRunChannel — missing category configuration", () =>
 });
 
 describe("reconcileExistingRunChannel — channel resolution failures", () => {
-  it("missing/inaccessible channel: no throw, a warning is logged, status is 'missing'", async () => {
+  it("Unknown Channel (10003): no throw, a warning is logged, status is 'missing' (confirmed deletion)", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await reconcileExistingRunChannel(fetcherFor(null), envConfigured, item());
+    const fetcher: ChannelFetcher = vi.fn().mockRejectedValue(Object.assign(new Error("Unknown Channel"), { code: 10003 }));
+    const result = await reconcileExistingRunChannel(fetcher, envConfigured, item());
 
     expect(result).toEqual({ status: "missing" });
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown Channel"));
+    warnSpy.mockRestore();
+  });
+
+  it("Missing Access or a transient failure is an 'error', never a deletion", async () => {
+    for (const error of [Object.assign(new Error("Missing Access"), { code: 50001 }), new Error("socket hang up")]) {
+      const fetcher: ChannelFetcher = vi.fn().mockRejectedValue(error);
+      const result = await reconcileExistingRunChannel(fetcher, envConfigured, item());
+      expect(result).toEqual({ status: "error", error });
+    }
+  });
+
+  it("a channel that resolves to nothing reconcilable is 'unresolved', not a deletion", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await reconcileExistingRunChannel(fetcherFor(null), envConfigured, item());
+
+    expect(result).toEqual({ status: "unresolved" });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("keeping stored id"));
     warnSpy.mockRestore();
   });
 
@@ -216,6 +234,68 @@ describe("reconcileChannels — channel-only pass and failure isolation", () => 
     expect(resolved.has("run-missing")).toBe(false);
     expect(resolved.get("run-good")).toBe("chan-good");
     expect(goodChannel.setParent).toHaveBeenCalledWith(ARCHIVE_CATEGORY, { lockPermissions: false });
+
+    vi.restoreAllMocks();
+  });
+
+  it("reports only confirmed deletions to onConfirmedMissing, once per item", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const goodChannel = fakeChannel({ id: "chan-good", parentId: ACTIVE_CATEGORY });
+    const fetcher: ChannelFetcher = vi.fn(async (channelId: string) => {
+      if (channelId === "chan-deleted") throw Object.assign(new Error("Unknown Channel"), { code: 10003 });
+      if (channelId === "chan-forbidden") throw Object.assign(new Error("Missing Access"), { code: 50001 });
+      if (channelId === "chan-unresolved") return null;
+      return goodChannel;
+    });
+    const onConfirmedMissing = vi.fn().mockResolvedValue(undefined);
+
+    const resolved = await reconcileChannels(
+      fetcher,
+      envConfigured,
+      [
+        item({ runId: "run-deleted", existingRunChannelId: "chan-deleted" }),
+        item({ runId: "run-forbidden", existingRunChannelId: "chan-forbidden" }),
+        item({ runId: "run-unresolved", existingRunChannelId: "chan-unresolved" }),
+        item({ runId: "run-good", existingRunChannelId: "chan-good" }),
+      ],
+      onConfirmedMissing,
+    );
+
+    expect(onConfirmedMissing).toHaveBeenCalledTimes(1);
+    expect(onConfirmedMissing).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-deleted", existingRunChannelId: "chan-deleted" }),
+    );
+    expect(resolved.has("run-deleted")).toBe(false);
+    expect(resolved.get("run-good")).toBe("chan-good");
+
+    vi.restoreAllMocks();
+  });
+
+  it("a failing onConfirmedMissing does not stop the rest from reconciling", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const goodChannel = fakeChannel({ id: "chan-good", name: "wrong-name", parentId: ACTIVE_CATEGORY });
+    const fetcher: ChannelFetcher = vi.fn(async (channelId: string) => {
+      if (channelId === "chan-deleted") throw Object.assign(new Error("Unknown Channel"), { code: 10003 });
+      return goodChannel;
+    });
+
+    const resolved = await reconcileChannels(
+      fetcher,
+      envConfigured,
+      [
+        item({ runId: "run-deleted", existingRunChannelId: "chan-deleted" }),
+        item({ runId: "run-good", existingRunChannelId: "chan-good", desiredChannelName: "right-name" }),
+      ],
+      vi.fn().mockRejectedValue(new Error("API down")),
+    );
+
+    expect(goodChannel.setName).toHaveBeenCalledWith("right-name");
+    expect(resolved.get("run-good")).toBe("chan-good");
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("channel reconciliation crashed for run run-deleted"),
+      expect.any(Error),
+    );
 
     vi.restoreAllMocks();
   });

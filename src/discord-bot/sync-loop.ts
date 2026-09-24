@@ -135,39 +135,34 @@ export function startSyncLoop(client: Client, env: BotEnv, api: BotApiClient): N
 
 /**
  * Resolves a channel id to the narrow shape channel-reconciliation.ts needs,
- * or null if Discord confirmed it is gone (Unknown Channel). Cache-first
+ * or null if it resolves to nothing reconcilable. Cache-first
  * (`client.channels.cache`) to avoid an unnecessary REST call on every poll;
- * falls back to `fetch` on a cache miss. Permission / rate-limit / network
- * failures are rethrown so callers do not treat a live but inaccessible
- * channel as deleted.
+ * falls back to `fetch` on a cache miss. Every Discord error — including
+ * Unknown Channel — is rethrown so reconciliation can tell a confirmed
+ * deletion apart from a live but inaccessible channel.
  */
 function makeChannelFetcher(client: Client): ChannelFetcher {
   return async (channelId) => {
-    try {
-      const cached = client.channels.cache.get(channelId);
-      const channel = cached ?? (await client.channels.fetch(channelId));
-      if (!channel || !("setName" in channel) || !("setParent" in channel) || !("parentId" in channel)) {
-        return null;
-      }
-      const typed = channel as unknown as {
-        id: string;
-        name: string;
-        parentId: string | null;
-        setName: (name: string) => Promise<unknown>;
-        setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown>;
-      };
-      const reconcilable: ReconcilableChannel = {
-        id: typed.id,
-        name: typed.name,
-        parentId: typed.parentId,
-        setName: (name) => typed.setName(name),
-        setParent: (id, options) => typed.setParent(id, options),
-      };
-      return reconcilable;
-    } catch (error) {
-      if (isDiscordUnknownChannelError(error)) return null;
-      throw error;
+    const cached = client.channels.cache.get(channelId);
+    const channel = cached ?? (await client.channels.fetch(channelId));
+    if (!channel || !("setName" in channel) || !("setParent" in channel) || !("parentId" in channel)) {
+      return null;
     }
+    const typed = channel as unknown as {
+      id: string;
+      name: string;
+      parentId: string | null;
+      setName: (name: string) => Promise<unknown>;
+      setParent: (id: string, options?: { lockPermissions?: boolean }) => Promise<unknown>;
+    };
+    const reconcilable: ReconcilableChannel = {
+      id: typed.id,
+      name: typed.name,
+      parentId: typed.parentId,
+      setName: (name) => typed.setName(name),
+      setParent: (id, options) => typed.setParent(id, options),
+    };
+    return reconcilable;
   };
 }
 
@@ -268,11 +263,15 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
   // its correct place before any new signup/roster message work is applied.
   // The resulting map lets the message paths below reuse the same resolved
   // channel instead of re-resolving (and potentially re-renaming/re-moving)
-  // it a second time within the same pass.
+  // it a second time within the same pass. A channel Discord confirms deleted
+  // is recorded as `channel-gone` once, so it stops reappearing every poll.
   const resolvedChannels = await reconcileChannels(
     makeChannelFetcher(client),
     { discordRunCategoryId: env.discordRunCategoryId, discordRunArchiveCategoryId: env.discordRunArchiveCategoryId },
     work.channels,
+    async (gone) => {
+      await api.recordDiscordState(gone.runId, { kind: "channel-gone", channelId: gone.existingRunChannelId });
+    },
   );
 
   // Temporary Run voice channels next — independent of text channels and of
@@ -639,7 +638,9 @@ async function syncSignupPost(
   const section = createdSectionItem(item, channelId, created);
 
   try {
-    if (created) {
+    // A recreated channel for a Run whose signup already went out once must
+    // not ping the Raidboost roles again. Older API payloads omit the flag.
+    if (created && item.announceOnCreate !== false) {
       await postRaidboostAnnounce(client, env, channelId, data);
     }
 
