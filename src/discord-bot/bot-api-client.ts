@@ -159,6 +159,8 @@ export class BotApiClient {
         runId: string;
         signupId: string | null;
         runChannelId: string | null;
+        /** Persisted Run voice channel at delivery time; optional for an older API. */
+        voiceChannelId?: string | null;
         productLabel: string;
         scheduledStartAt: string;
         previousScheduledStartAt: string | null;

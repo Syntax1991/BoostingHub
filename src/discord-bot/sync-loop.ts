@@ -277,7 +277,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
   // Temporary Run voice channels next — independent of text channels and of
   // their ordering — so Raid Invite DMs later in this same pass can link a
   // voice channel created now.
-  await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? []);
+  const resolvedVoiceChannels = await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? []);
 
   // Lifecycle channel announcements must post before retirement transcript/delete
   // so CANCELLED messages appear in the final transcript.
@@ -371,7 +371,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     if ((work.notificationDms ?? []).length > 0) {
       for (const item of work.notificationDms ?? []) {
         try {
-          await syncNotificationDm(client, api, item);
+          await syncNotificationDm(client, api, item, resolvedVoiceChannels);
         } catch (error) {
           console.error(
             `[discord-bot] notification DM failed for ${item.notificationId} (${item.type})`,
@@ -903,6 +903,8 @@ async function syncRaidInvite(
     characterName: item.characterName,
     wowClass: item.wowClass,
     runChannelId: item.runChannelId,
+    // Legacy lane (listSyncWork always returns [] for it) — no voice link.
+    voiceChannelId: null,
   });
 
   try {
@@ -930,6 +932,7 @@ async function syncNotificationDm(
   client: Client,
   api: BotApiClient,
   item: NotificationDmLaneItem,
+  resolvedVoiceChannels: ResolvedVoiceChannels,
 ): Promise<void> {
   let content: string;
   switch (item.type) {
@@ -960,6 +963,11 @@ async function syncNotificationDm(
         characterName: item.characterName,
         wowClass: item.wowClass,
         runChannelId: item.runChannelId,
+        // This pass's voice outcome wins over the projection taken before it
+        // (just created → link it; deleted/gone this pass → omit it).
+        voiceChannelId: resolvedVoiceChannels.has(item.runId)
+          ? (resolvedVoiceChannels.get(item.runId) ?? null)
+          : (item.voiceChannelId ?? null),
       });
       break;
     case "ROSTER_REMOVED":

@@ -178,6 +178,63 @@ describe("syncOnce — temporary Run voice channels", () => {
     expect(api.recordDiscordState).not.toHaveBeenCalled();
   });
 
+  function raidInviteDm(runId: string, voiceChannelId: string | null) {
+    return {
+      notificationId: `aaaaaaaa-aaaa-4aaa-8aaa-${runId.slice(-12).padStart(12, "0")}`,
+      type: "RAID_INVITE",
+      discordUserId: "discord-user-1",
+      runId,
+      signupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      runChannelId: "111",
+      voiceChannelId,
+      productLabel: "Season 2 Bundle",
+      scheduledStartAt: "2026-09-16T13:30:00.000Z",
+      previousScheduledStartAt: null,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      participationType: "BOOSTER",
+      selectedRole: "HEALER",
+      characterName: "Synlight",
+      wowClass: "PRIEST",
+    };
+  }
+
+  it("SAME PASS: a voice channel created this pass is linked in that pass's Raid Invite (projection had null)", async () => {
+    const { client, dmSend } = makeClient({ nextVoiceId: "222" });
+    const api = makeApi([provision], [raidInviteDm(RUN_ID, null)]);
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(dmSend).toHaveBeenCalledTimes(1);
+    const content = (dmSend.mock.calls[0]![0] as { content: string }).content;
+    expect(content).toContain("Channel: <#111>");
+    expect(content).toContain("Voice: <#222>");
+    expect(api.recordDiscordState).toHaveBeenCalledWith(RUN_ID, { kind: "voice-channel", channelId: "222" });
+  });
+
+  it("SAME PASS: a voice channel deleted this pass is never linked, even if the projection still had its id", async () => {
+    const { client, dmSend } = makeClient({ existingVoice: { "333": 0 } });
+    const api = makeApi(
+      [{ ...provision, existingVoiceChannelId: "333", action: "RETIRE_IF_EMPTY" }],
+      [raidInviteDm(RUN_ID, "333")],
+    );
+
+    await syncOnce(client, botEnv(), api);
+
+    const content = (dmSend.mock.calls[0]![0] as { content: string }).content;
+    expect(content).not.toContain("Voice:");
+    expect(content).not.toContain("<#333>");
+  });
+
+  it("a Run untouched by this pass's voice lane uses the delivery-time persisted id", async () => {
+    const { client, dmSend } = makeClient();
+    const api = makeApi([], [raidInviteDm("run-voice-other", "444")]);
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((dmSend.mock.calls[0]![0] as { content: string }).content).toContain("Voice: <#444>");
+  });
+
   it("terminal Run: occupied channel kept; empty channel deleted and cleared", async () => {
     const occupied = makeClient({ existingVoice: { "333": 2 } });
     const occupiedApi = makeApi([{ ...provision, existingVoiceChannelId: "333", action: "RETIRE_IF_EMPTY" }]);

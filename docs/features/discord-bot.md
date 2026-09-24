@@ -220,18 +220,35 @@ The bot delivers from `listSyncWork.notificationDms` (PENDING rows only). Legacy
 
 Assignment: {Role} · {Character} ({Class}) · VIP
 Channel: <#runChannelId>
+Voice: <#voiceChannelId>
 
 Please be online 10 minutes before start.
 ```
 
 - VIP appears only on the Assignment line (never duplicated on the schedule line).
 - `Channel:` uses the persisted `RunDiscordPost.runChannelId` as a real `<#id>` mention. When that id is missing, the Channel line is omitted — never `#unknown`.
+- `Voice:` links the Run's temporary voice channel (see below). The bot prefers the voice channel it created or deleted **in the same sync pass** (voice runs before DMs), else `RunDiscordPost.voiceChannelId` read when the DM is due — so a Quiet-Hours-delayed invite never links a channel that was already deleted. Omitted when there is none. The mention is rendered by the bot only; `UserNotification.message` never contains it.
 - Closed DMs (Discord 50007) → `FAILED_PERMANENT` (no retry). Transient errors leave `PENDING`.
 - Successful RAID_INVITE DMs also append `RunDiscordPost.raidInviteSentSignupIds` for legacy continuity.
 - Users must share the guild with the bot and allow DMs from server members.
 - App-archived Runs do not enqueue notification DMs.
 
 Roster Pick DMs (`ROSTER_SELECTED`) use a separate message body (`buildRosterSelectedDmMessage`) and are also delivered via `notificationDms`.
+
+## Temporary Run voice channels
+
+When a Run is `IN_PROGRESS` (after Start Run, with a start snapshot), the bot creates **one** Guild Voice channel for it:
+
+- **Name:** `Raid with <effective Raid Lead>` (`formatRunVoiceChannelName`), where the effective Raid Lead is the assigned Raid Lead's Discord Run channel nickname, else their name (`effectiveRaidLeadChannelName`). Human-readable (not slugged); never `Run.title`, the Start Run actor or a roster member. Renamed if the effective name changes while the Run is running.
+- **Where:** the dedicated `DISCORD_RUN_VOICE_CATEGORY_ID` category — never the text Run category (voice channels take no part in CURRENT/NEXT ordering). Permissions are inherited from that category; there are no per-participant overwrites.
+- **Lifecycle** (`listSyncWork.voiceChannels`, `src/discord-bot/voice-channels.ts`):
+  - `IN_PROGRESS`: the channel is kept, **even when nobody is in it yet**.
+  - `COMPLETED` / `CANCELLED` / app-archived: kept **while anyone is connected**; on the first sync pass after it becomes empty it is deleted, and `RunDiscordPost.voiceChannelId` is cleared only after the delete succeeded.
+  - No retroactive creation: a Run that ended before the bot observed it gets no voice channel.
+- **Independence:** voice is Run-level infrastructure — created regardless of Quiet Hours or anyone's DM preferences, and independent of the text channel's retirement/transcript.
+- **Failures never affect the Run:** creation errors (incl. Missing Permissions) persist nothing and retry next poll; Unknown Channel clears the stored id (and, while still `IN_PROGRESS`, recreates once); Missing Permissions / transient errors during cleanup keep the id for a retry; a stored id that is not a voice channel is never deleted or replaced (operator error is logged).
+- **Requires** the `GuildVoiceStates` gateway intent (non-privileged; `src/discord-bot/intents.ts`) so member counts are current, and the bot needs **Manage Channels**, **View Channel** and **Connect** visibility in the voice category.
+- **Disabled** when `DISCORD_RUN_VOICE_CATEGORY_ID` is unset. An id that is not a category is logged each pass and nothing is created — no fallback.
 
 ## `/mysignups`
 
@@ -243,7 +260,7 @@ The one slash command. Read-only, ephemeral, registered per-guild (`npm run bot:
 - Discord bot: a second, independent long-lived Node process — it holds a persistent Gateway WebSocket, which does not fit a request-scoped Next.js process.
 - Suggested host: Plesk with SSH, `systemd` managing the bot process — see [`deploy/production/systemd/boostinghub-discord-bot.service`](../../deploy/production/systemd/boostinghub-discord-bot.service) (the tracked copy of the live production unit; installation is described in [`docs/deployment-production.md`](../deployment-production.md)), or run `npm run bot:start` under any other process supervisor. Run exactly one bot instance. Register slash commands once per deploy (or whenever the command list changes) with `npm run bot:register-commands` — the gateway process does not do this itself.
 - Required Discord bot permissions: **View Channels, Send Messages, Embed Links, Read Message History, Manage Channels** (the last one only for per-Run channel creation/rename/reposition — not requested when running in legacy single-channel mode). Never grant Administrator to solve a permission gap.
-- Environment variables: see `.env.example` (`DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`, `DISCORD_RUN_CATEGORY_ID` (preferred, the one active Run category) plus `DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID`/`DISCORD_RUN_NEXT_MARKER_CHANNEL_ID` (section ordering anchors) or `DISCORD_SIGNUP_CHANNEL_ID`/`DISCORD_ROSTER_CHANNEL_ID` (legacy fallback), `DISCORD_RUN_ARCHIVE_CATEGORY_ID`, `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, `BOOSTINGHUB_API_BASE_URL`, `BOOSTINGHUB_BOT_API_TOKEN`). Secrets live only in the server environment, never in the repository.
+- Environment variables: see `.env.example` (`DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`, `DISCORD_RUN_CATEGORY_ID` (preferred, the one active Run category) plus `DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID`/`DISCORD_RUN_NEXT_MARKER_CHANNEL_ID` (section ordering anchors) or `DISCORD_SIGNUP_CHANNEL_ID`/`DISCORD_ROSTER_CHANNEL_ID` (legacy fallback), `DISCORD_RUN_ARCHIVE_CATEGORY_ID`, `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, optional `DISCORD_RUN_VOICE_CATEGORY_ID` (temporary Run voice channels), `BOOSTINGHUB_API_BASE_URL`, `BOOSTINGHUB_BOT_API_TOKEN`). Secrets live only in the server environment, never in the repository.
 
 ### Run lifecycle → Discord
 

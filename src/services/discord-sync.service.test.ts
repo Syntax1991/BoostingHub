@@ -10,6 +10,7 @@ import { runRepository } from "@/repositories/run.repository";
 import { discordSyncService, planRunVoiceChannel } from "@/services/discord-sync.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { formatFinalSetupLfgLine, renderFinalSetupText } from "@/lib/run-start-message";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import { rosterService } from "@/services/roster.service";
@@ -1823,6 +1824,53 @@ describe("listSyncWork — voiceChannels lane", () => {
     await runService.startRun(lead, { runId: id });
     await runRepository.updateFields(id, { status: "COMPLETED" });
     expect(await voiceItem(id)).toBeUndefined();
+  });
+
+  it("voice provisioning is Run-level: present even when no participant gets any DM", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    const work = await discordSyncService.listSyncWork();
+    expect(work.notificationDms.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.voiceChannels.find((entry) => entry.runId === id)?.action).toBe("PROVISION");
+  });
+
+  it("Quiet-Hours-delayed RAID_INVITE uses the voice id persisted at delivery time, and omits it once cleared", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-222" });
+    const signup = (await orm.RunSignup.where({ runId: id }).first()) as { id: string };
+    const notificationId = crypto.randomUUID();
+    await userNotificationRepository.createIgnoreDuplicate({
+      id: notificationId,
+      userId: ids.extra,
+      type: "RAID_INVITE",
+      runId: id,
+      signupId: signup.id,
+      sourceKey: `raid-invite-voice-test:${id}`,
+      title: "Raid invite",
+      message: "You are invited.",
+      href: `/runs/${id}`,
+      discordDeliveryStatus: "PENDING",
+      discordUserId: "999999999999999999",
+      discordDeliverAfter: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+    });
+    const dm = async () => (await discordSyncService.listSyncWork()).notificationDms.find((entry) => entry.notificationId === notificationId);
+
+    // Deferred by Quiet Hours: not yet due, but the voice channel already exists.
+    expect(await dm()).toBeUndefined();
+    expect((await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id)?.action).toBe("RECONCILE");
+
+    await orm.UserNotification.where({ id: notificationId }).update({ discordDeliverAfter: new Date(Date.now() - 60_000).toISOString() });
+    expect((await dm())?.voiceChannelId).toBe("voice-222");
+
+    // Run ended and its empty voice channel was deleted before the DM went out.
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-222" });
+    expect((await dm())?.voiceChannelId).toBeNull();
+
+    const stored = (await orm.UserNotification.where({ id: notificationId }).first()) as { message: string };
+    expect(stored.message).not.toContain("Voice");
+    await orm.UserNotification.where({ id: notificationId }).delete();
   });
 
   it("IN_PROGRESS without a start snapshot is not provisioned", async () => {

@@ -317,6 +317,13 @@ export type NotificationDmWorkItem = {
   runId: string;
   signupId: string | null;
   runChannelId: string | null;
+  /**
+   * Current persisted RunDiscordPost.voiceChannelId, read when the DM is due
+   * (so a Quiet-Hours-delayed invite never links a voice channel already
+   * deleted). The bot prefers its same-pass value. Rendered as a mention by
+   * the Discord renderer only — never stored in UserNotification.message.
+   */
+  voiceChannelId: string | null;
   productLabel: string;
   scheduledStartAt: string;
   /** Set for RUN_RESCHEDULED — previous schedule before this revision. */
@@ -757,6 +764,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
       discordUserId: notification.discordUserId,
       runId: run.id,
       runChannelId: post?.runChannelId ?? null,
+      voiceChannelId: post?.voiceChannelId ?? null,
       productLabel: run.contentDisplay.productLabel,
       scheduledStartAt: run.scheduledStartAt,
       previousScheduledStartAt: null as string | null,

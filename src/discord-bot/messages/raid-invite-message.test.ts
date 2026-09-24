@@ -71,6 +71,7 @@ describe("buildRaidInviteMessage", () => {
       characterName: "Synmist",
       wowClass: "MONK",
       runChannelId: "1550000000000000001",
+      voiceChannelId: null,
     });
 
     expect(text).toContain("<t:1789565400:F> · HEROIC");
@@ -93,6 +94,7 @@ describe("buildRaidInviteMessage", () => {
       characterName: "Synmist",
       wowClass: "MONK",
       runChannelId: null,
+      voiceChannelId: null,
     });
 
     expect(text).not.toContain("Channel:");
@@ -112,9 +114,48 @@ describe("buildRaidInviteMessage", () => {
       characterName: "Bob",
       wowClass: "HUNTER",
       runChannelId: "   ",
+      voiceChannelId: "   ",
     });
     expect(text).not.toContain("Channel:");
+    expect(text).not.toContain("Voice:");
     expect(text).not.toMatch(/#\s*unknown/i);
     expect(text).not.toMatch(/VIP/i);
+  });
+
+  describe("Channel / Voice lines", () => {
+    const base = {
+      productLabel: "Season 2 Bundle",
+      scheduledStartAt: "2026-09-16T13:30:00.000Z",
+      difficulty: "HEROIC" as const,
+      lootType: "UNSAVED" as const,
+      participationType: "BOOSTER" as const,
+      selectedRole: "HEALER" as const,
+      characterName: "Synlight",
+      wowClass: "PRIEST" as const,
+    };
+    const head = ["📣 **Raid Invite**", "", "Season 2 Bundle", "<t:1789565400:F> · HEROIC", "", "Assignment: Healer · Synlight (Priest)"];
+    const tail = ["", "Please be online 10 minutes before start."];
+
+    it("text + voice: both lines, Channel before Voice", () => {
+      expect(buildRaidInviteMessage({ ...base, runChannelId: "111", voiceChannelId: "222" })).toBe(
+        [...head, "Channel: <#111>", "Voice: <#222>", ...tail].join("\n"),
+      );
+    });
+
+    it("text only: no Voice line", () => {
+      expect(buildRaidInviteMessage({ ...base, runChannelId: "111", voiceChannelId: null })).toBe(
+        [...head, "Channel: <#111>", ...tail].join("\n"),
+      );
+    });
+
+    it("voice only: no Channel line", () => {
+      expect(buildRaidInviteMessage({ ...base, runChannelId: null, voiceChannelId: "222" })).toBe(
+        [...head, "Voice: <#222>", ...tail].join("\n"),
+      );
+    });
+
+    it("neither: no Channel or Voice line", () => {
+      expect(buildRaidInviteMessage({ ...base, runChannelId: null, voiceChannelId: null })).toBe([...head, ...tail].join("\n"));
+    });
   });
 });
