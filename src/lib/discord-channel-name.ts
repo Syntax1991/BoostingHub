@@ -77,6 +77,31 @@ export function buildClosedDiscordRunChannelName(input: RunChannelNameInput): st
 }
 
 /** Prefer nickname when set; otherwise BoostingHub User.name. Never Discord guild nick. */
+/** Discord channel names are 1–100 characters. */
+export const DISCORD_CHANNEL_NAME_MAX = 100;
+const RUN_VOICE_CHANNEL_PREFIX = "Raid with ";
+
+function isControlOrLineBreak(codePoint: number): boolean {
+  return codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f) || codePoint === 0x2028 || codePoint === 0x2029;
+}
+
+/**
+ * Human-readable name for a Run's temporary GuildVoice channel:
+ * `Raid with <effective Raid Lead>` (see `effectiveRaidLeadChannelName`).
+ * Not a text-channel slug. Control characters and line breaks become spaces,
+ * whitespace collapses, and the Raid Lead part is cut (by code point) so the
+ * whole name fits Discord's 100-character limit.
+ */
+export function formatRunVoiceChannelName(raidLeadDisplayName: string): string {
+  const cleaned = Array.from(raidLeadDisplayName, (char) => (isControlOrLineBreak(char.codePointAt(0)!) ? " " : char))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const room = DISCORD_CHANNEL_NAME_MAX - RUN_VOICE_CHANNEL_PREFIX.length;
+  const lead = Array.from(cleaned).slice(0, room).join("").trim();
+  return `${RUN_VOICE_CHANNEL_PREFIX}${lead}`.trim();
+}
+
 export function effectiveRaidLeadChannelName(input: {
   raidLeadName: string;
   discordRunChannelNickname: string | null | undefined;

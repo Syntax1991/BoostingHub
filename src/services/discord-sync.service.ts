@@ -3,6 +3,7 @@ import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
   effectiveRaidLeadChannelName,
+  formatRunVoiceChannelName,
 } from "@/lib/discord-channel-name";
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
@@ -221,6 +222,41 @@ export type ChannelSyncWorkItem = {
   panelName: string;
 };
 
+/**
+ * Temporary per-Run GuildVoice channel lifecycle, independent of the text
+ * channel lane (`channels`) and its CURRENT/NEXT ordering.
+ * - PROVISION: IN_PROGRESS, start snapshot exists, no voice channel yet
+ * - RECONCILE: IN_PROGRESS with a voice channel — keep it, even when empty
+ * - RETIRE_IF_EMPTY: COMPLETED / CANCELLED / app-archived (or otherwise no
+ *   longer IN_PROGRESS) — delete only once nobody is connected
+ */
+export type DiscordRunVoiceChannelAction = "PROVISION" | "RECONCILE" | "RETIRE_IF_EMPTY";
+
+export type DiscordRunVoiceChannelWorkItem = {
+  runId: string;
+  existingVoiceChannelId: string | null;
+  /** `Raid with <effective Raid Lead>` — never Run.title or the Start Run actor. */
+  desiredVoiceChannelName: string;
+  action: DiscordRunVoiceChannelAction;
+};
+
+/**
+ * Pure lifecycle decision for a Run's voice channel. First creation only for an
+ * IN_PROGRESS, non-archived Run with a start snapshot — never retroactively for
+ * a Run that already ended before the bot observed it.
+ */
+export function planRunVoiceChannel(input: {
+  status: RunStatus;
+  archivedAt: string | null;
+  voiceChannelId: string | null;
+  hasStartSnapshot: boolean;
+}): DiscordRunVoiceChannelAction | null {
+  const running = input.status === "IN_PROGRESS" && !input.archivedAt;
+  if (input.voiceChannelId) return running ? "RECONCILE" : "RETIRE_IF_EMPTY";
+  if (running && input.hasStartSnapshot) return "PROVISION";
+  return null;
+}
+
 export type SignupSyncWorkItem = {
   runId: string;
   existingChannelId: string | null;
@@ -281,6 +317,13 @@ export type NotificationDmWorkItem = {
   runId: string;
   signupId: string | null;
   runChannelId: string | null;
+  /**
+   * Current persisted RunDiscordPost.voiceChannelId, read when the DM is due
+   * (so a Quiet-Hours-delayed invite never links a voice channel already
+   * deleted). The bot prefers its same-pass value. Rendered as a mention by
+   * the Discord renderer only — never stored in UserNotification.message.
+   */
+  voiceChannelId: string | null;
   productLabel: string;
   scheduledStartAt: string;
   /** Set for RUN_RESCHEDULED — previous schedule before this revision. */
@@ -721,6 +764,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
       discordUserId: notification.discordUserId,
       runId: run.id,
       runChannelId: post?.runChannelId ?? null,
+      voiceChannelId: post?.voiceChannelId ?? null,
       productLabel: run.contentDisplay.productLabel,
       scheduledStartAt: run.scheduledStartAt,
       previousScheduledStartAt: null as string | null,
@@ -815,6 +859,8 @@ export const discordSyncService = {
     options: { classEmojiFingerprint?: string } = {},
   ): Promise<{
     channels: ChannelSyncWorkItem[];
+    /** Temporary per-Run voice channels — separate from `channels` (text) and its ordering. */
+    voiceChannels: DiscordRunVoiceChannelWorkItem[];
     signups: SignupSyncWorkItem[];
     roster: RosterSyncWorkItem[];
     start: RunStartSyncWorkItem[];
@@ -826,6 +872,7 @@ export const discordSyncService = {
   }> {
     const runs = await runRepository.listManaged();
     const channels: ChannelSyncWorkItem[] = [];
+    const voiceChannels: DiscordRunVoiceChannelWorkItem[] = [];
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
     const start: RunStartSyncWorkItem[] = [];
@@ -874,6 +921,30 @@ export const discordSyncService = {
           raidLeadName: run.raidLeadName,
           raidLeadDiscordUserId: run.raidLeadDiscordUserId,
           panelName: run.contentDisplay.productLabel,
+        });
+      }
+
+      // Voice lifecycle is Run-level infrastructure: derived from Run state only,
+      // never from notification recipients or their DM preferences.
+      const voiceChannelId = post?.voiceChannelId ?? null;
+      const needsSnapshotCheck = !voiceChannelId && run.status === "IN_PROGRESS" && !run.archivedAt;
+      const voiceAction = planRunVoiceChannel({
+        status: run.status,
+        archivedAt: run.archivedAt,
+        voiceChannelId,
+        hasStartSnapshot: needsSnapshotCheck ? Boolean(await runStartSnapshotRepository.findByRunId(run.id)) : false,
+      });
+      if (voiceAction) {
+        voiceChannels.push({
+          runId: run.id,
+          existingVoiceChannelId: voiceChannelId,
+          desiredVoiceChannelName: formatRunVoiceChannelName(
+            effectiveRaidLeadChannelName({
+              raidLeadName: run.raidLeadName,
+              discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+            }),
+          ),
+          action: voiceAction,
         });
       }
 
@@ -985,7 +1056,7 @@ export const discordSyncService = {
       lootType: row.lootType,
     }));
 
-    return { channels, signups, roster, start, raidInvites, notificationDms, runAnnouncements };
+    return { channels, voiceChannels, signups, roster, start, raidInvites, notificationDms, runAnnouncements };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
@@ -1173,6 +1244,16 @@ export const discordSyncService = {
    * identity that lives in that channel makes listSyncWork stop generating
    * signup/roster/start work that can only re-fetch the dead id every poll.
    */
+  /** Bot created the Run's temporary voice channel. */
+  async recordRunVoiceChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await runDiscordPostRepository.recordRunVoiceChannel(input);
+  },
+
+  /** Bot deleted the voice channel, or Discord confirmed it is gone (exact-match clear). */
+  async clearRunVoiceChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await runDiscordPostRepository.clearRunVoiceChannel(input);
+  },
+
   async recordRunChannelGone(input: { runId: string; channelId: string }): Promise<void> {
     await runDiscordPostRepository.clearDeletedChannelIdentity(input.runId, input.channelId);
   },

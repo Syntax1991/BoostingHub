@@ -12,6 +12,8 @@ export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("channel"), channelId: z.string().min(1).max(64) }),
   z.object({ kind: z.literal("clear-channel") }),
   z.object({ kind: z.literal("channel-gone"), channelId: z.string().min(1).max(64) }),
+  z.object({ kind: z.literal("voice-channel"), channelId: z.string().min(1).max(64) }),
+  z.object({ kind: z.literal("clear-voice-channel"), channelId: z.string().min(1).max(64) }),
   z.object({
     kind: z.literal("signup"),
     channelId: z.string().min(1).max(64),
@@ -54,6 +56,8 @@ export type RunDiscordStateUpdate = z.infer<typeof runDiscordStateUpdateSchema>;
  * deletes an app-archived Run's Discord channel (transcript remains).
  * `channel-gone` reports a channel Discord confirmed deleted (Unknown
  * Channel) that the bot may not replace; identity stored in it is dropped.
+ * `voice-channel` records the Run's temporary voice channel;
+ * `clear-voice-channel` drops it only while it still equals that id.
  * `raid-invite` appends a signup id to the Apex Raid Invite sent list.
  * `notification-dm` updates UserNotification.discordDeliveryStatus (and on
  * SENT RAID_INVITE also appends the legacy raidInviteSentSignupIds list).
@@ -71,6 +75,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await discordSyncService.clearRunChannel(runId);
     } else if (runDiscordStateUpdate.kind === "channel-gone") {
       await discordSyncService.recordRunChannelGone({ runId, channelId: runDiscordStateUpdate.channelId });
+    } else if (runDiscordStateUpdate.kind === "voice-channel") {
+      await discordSyncService.recordRunVoiceChannel({ runId, channelId: runDiscordStateUpdate.channelId });
+    } else if (runDiscordStateUpdate.kind === "clear-voice-channel") {
+      await discordSyncService.clearRunVoiceChannel({ runId, channelId: runDiscordStateUpdate.channelId });
     } else if (runDiscordStateUpdate.kind === "signup") {
       await discordSyncService.recordSignupPost({
         runId,

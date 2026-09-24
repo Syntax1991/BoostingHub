@@ -4,6 +4,8 @@ import { asNumberOrNull, asString, asStringOrNull } from "@/lib/persistence";
 export type RunDiscordPostRecord = {
   runId: string;
   runChannelId: string | null;
+  /** Temporary GuildVoice channel while the Run is (or recently was) IN_PROGRESS. */
+  voiceChannelId: string | null;
   signupChannelId: string | null;
   signupMessageId: string | null;
   signupPostedAt: string | null;
@@ -38,6 +40,7 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
   return {
     runId: asString(row.runId),
     runChannelId: asStringOrNull(row.runChannelId),
+    voiceChannelId: asStringOrNull(row.voiceChannelId),
     signupChannelId: asStringOrNull(row.signupChannelId),
     signupMessageId: asStringOrNull(row.signupMessageId),
     signupPostedAt: asStringOrNull(row.signupPostedAt),
@@ -123,6 +126,26 @@ export const runDiscordPostRepository = {
    */
   async recordRunChannel(input: { runId: string; channelId: string }): Promise<void> {
     await upsert(input.runId, { runChannelId: input.channelId });
+  },
+
+  /**
+   * Recorded immediately after the bot creates the Run's temporary voice
+   * channel, so a retry never creates a second one. Touches no other field.
+   */
+  async recordRunVoiceChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await upsert(input.runId, { voiceChannelId: input.channelId });
+  },
+
+  /**
+   * Clears the voice channel identity only while it still equals `channelId`
+   * (checked by the UPDATE itself), so a stale report can never erase a
+   * newer voice channel. Idempotent.
+   */
+  async clearRunVoiceChannel(input: { runId: string; channelId: string }): Promise<void> {
+    await orm.RunDiscordPost.where({ runId: input.runId, voiceChannelId: input.channelId }).update({
+      voiceChannelId: null,
+      updatedAt: new Date().toISOString(),
+    });
   },
 
   /**
@@ -236,6 +259,7 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
     id: crypto.randomUUID(),
     runId,
     runChannelId: null,
+    voiceChannelId: null,
     signupChannelId: null,
     signupMessageId: null,
     signupPostedAt: null,

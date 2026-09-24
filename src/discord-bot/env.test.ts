@@ -101,6 +101,21 @@ describe("loadBotEnv — one active category plus marker channels", () => {
   });
 });
 
+describe("loadBotEnv — temporary Run voice channels", () => {
+  it("leaves DISCORD_RUN_VOICE_CATEGORY_ID null when unset or blank (feature disabled, startup ok)", () => {
+    expect(loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" })).discordRunVoiceCategoryId).toBeNull();
+    expect(
+      loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_RUN_VOICE_CATEGORY_ID: "   " })).discordRunVoiceCategoryId,
+    ).toBeNull();
+  });
+
+  it("resolves DISCORD_RUN_VOICE_CATEGORY_ID independently of the text Run category", () => {
+    const env = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_RUN_VOICE_CATEGORY_ID: " voice-cat " }));
+    expect(env.discordRunVoiceCategoryId).toBe("voice-cat");
+    expect(env.discordRunCategoryId).toBe("category-1");
+  });
+});
+
 describe("loadBotEnv — sync interval", () => {
   it("defaults to 5s so embeds refresh quickly without an explicit env override", () => {
     const env = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" }));

@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     );
     return botApiOk({
       channels: work.channels,
+      voiceChannels: work.voiceChannels,
       signups,
       roster: work.roster,
       start: work.start,

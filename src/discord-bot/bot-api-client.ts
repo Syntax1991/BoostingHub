@@ -70,6 +70,13 @@ export class BotApiClient {
 
   listSyncWork(classEmojiFingerprint = "") {
     return this.request<{
+      /** Temporary per-Run voice channels; optional so an older API response is tolerated. */
+      voiceChannels?: Array<{
+        runId: string;
+        existingVoiceChannelId: string | null;
+        desiredVoiceChannelName: string;
+        action: "PROVISION" | "RECONCILE" | "RETIRE_IF_EMPTY";
+      }>;
       channels: Array<{
         runId: string;
         existingRunChannelId: string;
@@ -152,6 +159,8 @@ export class BotApiClient {
         runId: string;
         signupId: string | null;
         runChannelId: string | null;
+        /** Persisted Run voice channel at delivery time; optional for an older API. */
+        voiceChannelId?: string | null;
         productLabel: string;
         scheduledStartAt: string;
         previousScheduledStartAt: string | null;
@@ -208,6 +217,7 @@ export class BotApiClient {
       | { kind: "channel"; channelId: string }
       | { kind: "clear-channel" }
       | { kind: "channel-gone"; channelId: string }
+      | { kind: "voice-channel" | "clear-voice-channel"; channelId: string }
       | {
           kind: "signup";
           channelId: string;

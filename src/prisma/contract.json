@@ -3346,6 +3346,13 @@
                   "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
                 }
+              },
+              "voiceChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {
@@ -3429,6 +3436,9 @@
                 },
                 "updatedAt": {
                   "column": "updatedAt"
+                },
+                "voiceChannelId": {
+                  "column": "voiceChannelId"
                 }
               },
               "namespaceId": "public",
@@ -8715,6 +8725,11 @@
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "voiceChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 }
               },
               "foreignKeys": [
@@ -11356,7 +11371,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6405043c2e829b78862b77955df72fcb210c31ac115ccb227c865be57da941fe"
+    "storageHash": "85ba44364f9fa3d98e2cce5fb06cc0653843e3db62bfb6317df792ab14749c1f"
   },
   "execution": {
     "executionHash": "3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c",

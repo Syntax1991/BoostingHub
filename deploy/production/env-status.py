@@ -44,6 +44,7 @@ GROUPS = {
         ("DISCORD_RUN_NEXT_MARKER_CHANNEL_ID", "public"),
         ("DISCORD_RUN_ARCHIVE_CATEGORY_ID", "public"),
         ("DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID", "public"),
+        ("DISCORD_RUN_VOICE_CATEGORY_ID", "public"),
         ("DISCORD_PING_ROLE_TANK_ID", "public"),
         ("DISCORD_PING_ROLE_HEALER_ID", "public"),
         ("DISCORD_PING_ROLE_DPS_ID", "public"),

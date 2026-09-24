@@ -298,6 +298,26 @@ systemctl restart boostinghub-web.service boostinghub-discord-bot.service
   run the normal `update-server.sh`. It checks out `main` and fast-forwards it.
   Running it **before** `main` is fixed redeploys the bad commit.
 
+## Optional: temporary Run voice channels
+
+When a Run starts, the bot can create a voice channel `Raid with <Raid Lead>`
+and link it in Raid Invite DMs. It is kept while the Run is `IN_PROGRESS`, then
+deleted once the Run is `COMPLETED` / `CANCELLED` / app-archived **and** nobody
+is connected (see `docs/features/discord-bot.md` § Temporary Run voice channels).
+It is off until configured:
+
+1. In Discord, create a dedicated category for these channels (not the text Run
+   category). Its permissions are inherited by every Run voice channel; give the
+   bot **View Channel**, **Connect** and **Manage Channels** there.
+2. Add `DISCORD_RUN_VOICE_CATEGORY_ID="<category id>"` to `/var/www/boostinghub/.env`
+   and check it with `env-status.py`.
+3. Restart the bot so it picks up the variable and the `GuildVoiceStates`
+   gateway intent (non-privileged, no Developer Portal toggle):
+   `systemctl restart boostinghub-discord-bot.service` (or the next normal deploy).
+
+An id that does not resolve to a category is logged by the bot on every pass
+and nothing is created.
+
 ## Production smoke checklist
 
 - [ ] `sudo -u boostinghub git -C /var/www/boostinghub rev-parse HEAD` is the expected SHA,

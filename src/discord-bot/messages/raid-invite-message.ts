@@ -18,6 +18,8 @@ export type RaidInviteMessageInput = {
   wowClass: WowClass | null;
   /** Persisted `RunDiscordPost.runChannelId` — omit Channel line when null/empty. */
   runChannelId: string | null;
+  /** The Run's temporary voice channel (same-pass or persisted) — omit Voice line when null/empty. */
+  voiceChannelId: string | null;
 };
 
 /** Berlin wall-clock formatting kept for tests / legacy callers. Personal DMs use Discord native timestamps. */
@@ -59,13 +61,14 @@ export function formatRaidInviteAssignment(input: {
 
 /**
  * Raid Invite DM body. Uses Discord native timestamps for personal localization.
- * Channel line uses a real `<#id>` mention only when `runChannelId` is set.
+ * Channel / Voice lines use real `<#id>` mentions only when their id is set.
  */
 export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
   const when = discordTimestamp(input.scheduledStartAt, "F");
   const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
   const assignment = formatRaidInviteAssignment(input);
   const channelId = input.runChannelId?.trim() || null;
+  const voiceChannelId = input.voiceChannelId?.trim() || null;
 
   const lines = [
     "📣 **Raid Invite**",
@@ -78,6 +81,9 @@ export function buildRaidInviteMessage(input: RaidInviteMessageInput): string {
 
   if (channelId) {
     lines.push(`Channel: <#${channelId}>`);
+  }
+  if (voiceChannelId) {
+    lines.push(`Voice: <#${voiceChannelId}>`);
   }
 
   lines.push("", "Please be online 10 minutes before start.");

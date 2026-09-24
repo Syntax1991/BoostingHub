@@ -964,6 +964,11 @@ model RunDiscordPost {
   /// creation and posting never creates a second channel on retry. Identity
   /// is this id, never the generated name (names may be renamed later).
   runChannelId        String?
+  /// Temporary Discord GuildVoice channel for an IN_PROGRESS Run (bot-side
+  /// DISCORD_RUN_VOICE_CATEGORY_ID configured). Created once on start; kept
+  /// while the Run is IN_PROGRESS; after COMPLETED / CANCELLED / app-archive
+  /// it is deleted only once nobody is connected, then this is cleared.
+  voiceChannelId      String?
   signupChannelId     String?
   signupMessageId     String?
   signupPostedAt      TimestamptzString?

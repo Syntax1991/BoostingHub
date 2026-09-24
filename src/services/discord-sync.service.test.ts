@@ -7,9 +7,10 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { discordSyncService } from "@/services/discord-sync.service";
+import { discordSyncService, planRunVoiceChannel } from "@/services/discord-sync.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { userNotificationRepository } from "@/repositories/user-notification.repository";
 import { formatFinalSetupLfgLine, renderFinalSetupText } from "@/lib/run-start-message";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import { rosterService } from "@/services/roster.service";
@@ -1737,5 +1738,196 @@ describe("Final Setup LFG footer uses the assigned Run Raid Lead", () => {
     } finally {
       await setLeadNickname(null);
     }
+  });
+});
+
+describe("planRunVoiceChannel — temporary Run voice lifecycle decision", () => {
+  const plan = (status: Parameters<typeof planRunVoiceChannel>[0]["status"], voiceChannelId: string | null, extra: { archivedAt?: string | null; hasStartSnapshot?: boolean } = {}) =>
+    planRunVoiceChannel({ status, voiceChannelId, archivedAt: extra.archivedAt ?? null, hasStartSnapshot: extra.hasStartSnapshot ?? true });
+
+  it("provisions only for IN_PROGRESS with a start snapshot and no voice channel yet", () => {
+    expect(plan("IN_PROGRESS", null)).toBe("PROVISION");
+    expect(plan("IN_PROGRESS", null, { hasStartSnapshot: false })).toBeNull();
+    for (const status of ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED", "COMPLETED", "CANCELLED"] as const) {
+      expect(plan(status, null)).toBeNull();
+    }
+    expect(plan("IN_PROGRESS", null, { archivedAt: "2026-09-24T00:00:00.000Z" })).toBeNull();
+  });
+
+  it("keeps (RECONCILE) while IN_PROGRESS, RETIRE_IF_EMPTY once terminal or app-archived", () => {
+    expect(plan("IN_PROGRESS", "voice-1")).toBe("RECONCILE");
+    expect(plan("COMPLETED", "voice-1")).toBe("RETIRE_IF_EMPTY");
+    expect(plan("CANCELLED", "voice-1")).toBe("RETIRE_IF_EMPTY");
+    expect(plan("IN_PROGRESS", "voice-1", { archivedAt: "2026-09-24T00:00:00.000Z" })).toBe("RETIRE_IF_EMPTY");
+  });
+});
+
+describe("listSyncWork — voiceChannels lane", () => {
+  async function setLeadNickname(nickname: string | null) {
+    await orm.User.where({ id: ids.lead }).update({ discordRunChannelNickname: nickname, updatedAt: new Date().toISOString() });
+  }
+
+  async function publishedRun(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(13), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await createSignup({ runId: id, userId: ids.extra, characterId: null, participationType: "LOOTBUDDY", role: null, lootbuddyClass: "MAGE", lootbuddyMode: "LOOT_ONLY" });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const signup of view.groups.lootbuddies) {
+      view = await rosterService.getRosterManagementView(lead, id);
+      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    return id;
+  }
+
+  const voiceItem = async (id: string) => (await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id);
+
+  it("PUBLISHED → none; started by an ADMIN → PROVISION `Raid with <assigned Raid Lead>`; recorded → RECONCILE; terminal → RETIRE_IF_EMPTY", async () => {
+    try {
+      await setLeadNickname("Syntax");
+      const id = await publishedRun();
+      expect(await voiceItem(id)).toBeUndefined();
+
+      await runService.startRun(admin, { runId: id });
+      expect(await voiceItem(id)).toEqual({
+        runId: id,
+        existingVoiceChannelId: null,
+        desiredVoiceChannelName: "Raid with Syntax",
+        action: "PROVISION",
+      });
+
+      await setLeadNickname(null);
+      expect((await voiceItem(id))?.desiredVoiceChannelName).toBe("Raid with Discord Lead");
+
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-9" });
+      expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RECONCILE" });
+
+      for (const status of ["COMPLETED", "CANCELLED"] as const) {
+        await runRepository.updateFields(id, { status });
+        expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
+      }
+
+      await runRepository.updateFields(id, { status: "IN_PROGRESS" });
+      await orm.Run.where({ id }).update({ archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
+    } finally {
+      await setLeadNickname(null);
+    }
+  });
+
+  it("a Run completed before the bot ever polled gets no voice channel", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    expect(await voiceItem(id)).toBeUndefined();
+  });
+
+  it("voice provisioning is Run-level: present even when no participant gets any DM", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    const work = await discordSyncService.listSyncWork();
+    expect(work.notificationDms.some((entry) => entry.runId === id)).toBe(false);
+    expect(work.voiceChannels.find((entry) => entry.runId === id)?.action).toBe("PROVISION");
+  });
+
+  it("Quiet-Hours-delayed RAID_INVITE uses the voice id persisted at delivery time, and omits it once cleared", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-222" });
+    const signup = (await orm.RunSignup.where({ runId: id }).first()) as { id: string };
+    const notificationId = crypto.randomUUID();
+    await userNotificationRepository.createIgnoreDuplicate({
+      id: notificationId,
+      userId: ids.extra,
+      type: "RAID_INVITE",
+      runId: id,
+      signupId: signup.id,
+      sourceKey: `raid-invite-voice-test:${id}`,
+      title: "Raid invite",
+      message: "You are invited.",
+      href: `/runs/${id}`,
+      discordDeliveryStatus: "PENDING",
+      discordUserId: "999999999999999999",
+      discordDeliverAfter: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+    });
+    const dm = async () => (await discordSyncService.listSyncWork()).notificationDms.find((entry) => entry.notificationId === notificationId);
+
+    // Deferred by Quiet Hours: not yet due, but the voice channel already exists.
+    expect(await dm()).toBeUndefined();
+    expect((await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id)?.action).toBe("RECONCILE");
+
+    await orm.UserNotification.where({ id: notificationId }).update({ discordDeliverAfter: new Date(Date.now() - 60_000).toISOString() });
+    expect((await dm())?.voiceChannelId).toBe("voice-222");
+
+    // Run ended and its empty voice channel was deleted before the DM went out.
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-222" });
+    expect((await dm())?.voiceChannelId).toBeNull();
+
+    const stored = (await orm.UserNotification.where({ id: notificationId }).first()) as { message: string };
+    expect(stored.message).not.toContain("Voice");
+    await orm.UserNotification.where({ id: notificationId }).delete();
+  });
+
+  it("IN_PROGRESS without a start snapshot is not provisioned", async () => {
+    const id = await publishedRun();
+    await runRepository.updateFields(id, { status: "IN_PROGRESS" });
+    expect(await voiceItem(id)).toBeUndefined();
+  });
+});
+
+describe("RunDiscordPost.voiceChannelId state", () => {
+  async function runWithDiscordState(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(11), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "text-chan" });
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      signupChannelId: "text-chan",
+      signupMessageId: "signup-msg",
+      rosterMessageId: "roster-msg",
+      startMessageId: "start-msg",
+      archiveCloseMessageId: "close-msg",
+      raidInviteSentSignupIds: "[\"s1\"]",
+      updatedAt: new Date().toISOString(),
+    });
+    return id;
+  }
+
+  function otherState(post: Awaited<ReturnType<typeof runDiscordPostRepository.findByRunId>>) {
+    return [post?.runChannelId, post?.signupMessageId, post?.rosterMessageId, post?.startMessageId, post?.archiveCloseMessageId, post?.raidInviteSentSignupIds];
+  }
+
+  it("records the voice channel without touching any other Discord state, idempotently", async () => {
+    const id = await runWithDiscordState();
+    const before = otherState(await runDiscordPostRepository.findByRunId(id));
+    expect((await runDiscordPostRepository.findByRunId(id))?.voiceChannelId).toBeNull();
+
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+
+    const after = await runDiscordPostRepository.findByRunId(id);
+    expect(after?.voiceChannelId).toBe("voice-1");
+    expect(otherState(after)).toEqual(before);
+  });
+
+  it("clears only while the stored id still matches, never another channel or other state", async () => {
+    const id = await runWithDiscordState();
+    await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    const before = otherState(await runDiscordPostRepository.findByRunId(id));
+
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-old" });
+    expect((await runDiscordPostRepository.findByRunId(id))?.voiceChannelId).toBe("voice-new");
+
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-new" });
+    const after = await runDiscordPostRepository.findByRunId(id);
+    expect(after?.voiceChannelId).toBeNull();
+    expect(otherState(after)).toEqual(before);
   });
 });
