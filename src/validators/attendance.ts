@@ -22,7 +22,8 @@ export const replaceParticipantSchema = z.object({
       kind: z.literal("external"),
       name: z.string().max(64),
       wowClass: z.enum(WOW_CLASSES),
-      role: z.enum(CHARACTER_ROLES),
+      /** Ignored for a lootbuddy slot. */
+      role: z.enum(CHARACTER_ROLES).nullable(),
     }),
   ]),
 });

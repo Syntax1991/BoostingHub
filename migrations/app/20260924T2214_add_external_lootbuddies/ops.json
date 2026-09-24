@@ -1,0 +1,129 @@
+[
+  {
+    "id": "column.public.run_external_booster.participationType",
+    "label": "Add column \"participationType\" to \"run_external_booster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "participationType",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"participationType\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_external_booster",
+          "participationType"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"participationType\"",
+        "sql": "ALTER TABLE \"public\".\"run_external_booster\" ADD COLUMN \"participationType\" text DEFAULT 'BOOSTER' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"participationType\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_external_booster",
+          "participationType"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.dropNotNull.run_external_booster.role",
+    "label": "Drop NOT NULL on \"run_external_booster\".\"role\"",
+    "operationClass": "widening",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "role",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"role\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_external_booster",
+          "role"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop NOT NULL on \"role\"",
+        "sql": "ALTER TABLE \"public\".\"run_external_booster\" ALTER COLUMN \"role\" DROP NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"role\" is nullable",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "run_external_booster",
+          "role",
+          "YES"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_external_booster.run_external_booster_participationType_check_c88ba3d2",
+    "label": "Add check constraint \"run_external_booster_participationType_check_c88ba3d2\" on \"run_external_booster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_external_booster_participationType_check_c88ba3d2",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_external_booster_participationType_check_c88ba3d2\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_participationType_check_c88ba3d2",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_external_booster_participationType_check_c88ba3d2\"",
+        "sql": "ALTER TABLE \"public\".\"run_external_booster\" ADD CONSTRAINT \"run_external_booster_participationType_check_c88ba3d2\" CHECK (\"participationType\" IN ('BOOSTER', 'LOOTBUDDY'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_external_booster_participationType_check_c88ba3d2\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_participationType_check_c88ba3d2",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ]
+  }
+]

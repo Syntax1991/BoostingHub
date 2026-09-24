@@ -3,6 +3,7 @@ import {
   EXTERNAL_BOOSTER_NAME_MAX_LENGTH,
   externalBoosterInputError,
   mapExternalBoosters,
+  normalizeExternalBoosterInput,
   normalizeExternalBoosterName,
 } from "@/lib/external-booster";
 import { defaultDpsAttackTypeForClass } from "@/lib/wow-specializations";
@@ -38,6 +39,20 @@ describe("external booster input", () => {
     }
   });
 
+  it("a lootbuddy needs a class but no role; a booster still needs a valid role", () => {
+    expect(externalBoosterInputError({ name: "loot", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null })).toBeNull();
+    expect(externalBoosterInputError({ name: "dawn", wowClass: "MAGE", participationType: "BOOSTER", role: null })).toMatch(
+      /needs a role/,
+    );
+    expect(normalizeExternalBoosterInput({ name: " @loot ", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: "DPS" })).toEqual({
+      name: "loot",
+      wowClass: "ROGUE",
+      participationType: "LOOTBUDDY",
+      role: null,
+    });
+    expect(normalizeExternalBoosterInput({ name: "dawn", wowClass: "MAGE", role: "DPS" }).participationType).toBe("BOOSTER");
+  });
+
   it("rejects a role the class cannot play", () => {
     expect(externalBoosterInputError({ name: "dawn", wowClass: "MAGE", role: "TANK" })).toMatch(/cannot play/);
     expect(externalBoosterInputError({ name: "dawn", wowClass: "PALADIN", role: "TANK" })).toBeNull();
@@ -50,9 +65,14 @@ describe("external booster input", () => {
         { id: "a", name: "first", wowClass: "MAGE", role: "DPS", createdAt: "2026-09-24T18:00:00.000Z" },
       ]),
     ).toEqual([
-      { id: "a", name: "first", wowClass: "MAGE", role: "DPS" },
-      { id: "b", name: "second", wowClass: "PRIEST", role: "HEALER" },
+      { id: "a", name: "first", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+      { id: "b", name: "second", wowClass: "PRIEST", participationType: "BOOSTER", role: "HEALER" },
     ]);
+    expect(
+      mapExternalBoosters([
+        { id: "c", name: "loot", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null, createdAt: "x" },
+      ]),
+    ).toEqual([{ id: "c", name: "loot", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null }]);
     expect(mapExternalBoosters(undefined)).toEqual([]);
   });
 

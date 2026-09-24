@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/errors";
 import {
   EXTERNAL_BOOSTERS_MAX_PER_ROSTER,
   externalBoosterInputError,
-  normalizeExternalBoosterName,
+  normalizeExternalBoosterInput as normalizeExternalEntry,
   type ExternalBooster,
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
@@ -248,14 +248,14 @@ function asMember(row: InspectedSignup) {
 function normalizeExternalBoosterInput(input: ExternalBoosterInput): ExternalBoosterInput {
   const error = externalBoosterInputError(input);
   if (error) throw new DomainError("INVALID_ROSTER_SELECTION", error);
-  return { name: normalizeExternalBoosterName(input.name), wowClass: input.wowClass, role: input.role };
+  return normalizeExternalEntry(input);
 }
 
 function externalBoosterRaidBuffParticipant(booster: ExternalBooster): RaidBuffParticipant {
   return {
     signupId: `external:${booster.id}`,
     userName: booster.name,
-    participationType: "BOOSTER",
+    participationType: booster.participationType,
     lootbuddyMode: null,
     wowClass: booster.wowClass,
     characterName: booster.name,

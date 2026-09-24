@@ -175,9 +175,8 @@ export const attendanceService = {
 
     let replacement = input.replacement;
     if (replacement.kind === "external") {
-      if (row.participationType !== "BOOSTER") {
-        throw new DomainError("INVALID_ROSTER_SELECTION", "Only a booster slot can be filled by an external booster.");
-      }
+      // The external takes the same kind of slot: a booster in the original's role, or a lootbuddy.
+      replacement = { ...replacement, participationType: row.participationType };
       const invalid = externalBoosterInputError(replacement);
       if (invalid) throw new DomainError("INVALID_ROSTER_SELECTION", invalid);
       replacement = { ...replacement, name: normalizeExternalBoosterName(replacement.name) };

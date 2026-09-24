@@ -14,7 +14,7 @@ import {
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
 import { rolesForClass } from "@/lib/wow-specializations";
-import { WOW_CLASSES, type CharacterRole, type WowClass } from "@/models/enums";
+import { WOW_CLASSES, type CharacterRole, type ParticipationType, type WowClass } from "@/models/enums";
 
 type StagedBooster = ExternalBoosterInput & { key: string };
 
@@ -44,6 +44,7 @@ export function ExternalBoostersDialog({
   );
   const [name, setName] = useState("");
   const [wowClass, setWowClass] = useState<WowClass>("MAGE");
+  const [kind, setKind] = useState<ParticipationType>("BOOSTER");
   const [role, setRole] = useState<CharacterRole>("DPS");
   const classRoles = rolesForClass(wowClass);
 
@@ -69,7 +70,7 @@ export function ExternalBoostersDialog({
 
   function add(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const input = { name, wowClass, role };
+    const input = { name, wowClass, participationType: kind, role: kind === "LOOTBUDDY" ? null : role };
     const problem = externalBoosterInputError(input);
     if (problem) {
       setError(problem);
@@ -93,10 +94,11 @@ export function ExternalBoostersDialog({
       const result = await saveExternalBoostersAction({
         runId,
         version: rosterVersion,
-        externalBoosters: staged.map(({ name: boosterName, wowClass: boosterClass, role: boosterRole }) => ({
-          name: boosterName,
-          wowClass: boosterClass,
-          role: boosterRole,
+        externalBoosters: staged.map((booster) => ({
+          name: booster.name,
+          wowClass: booster.wowClass,
+          participationType: booster.participationType ?? "BOOSTER",
+          role: booster.role,
         })),
       });
       if (!result.ok) {
@@ -114,6 +116,7 @@ export function ExternalBoostersDialog({
       (booster, index) =>
         booster.name === boosters[index]!.name &&
         booster.wowClass === boosters[index]!.wowClass &&
+        (booster.participationType ?? "BOOSTER") === boosters[index]!.participationType &&
         booster.role === boosters[index]!.role,
     );
 
@@ -128,8 +131,9 @@ export function ExternalBoostersDialog({
           External boosters
         </h2>
         <p className="mt-1 text-xs text-muted">
-          Boosters without a website account. They count toward the role targets and appear as @name with their class
-          in the Discord roster and Final Setup. No DMs, attendance or payouts.
+          Boosters and lootbuddies without a website account. Boosters fill a Tank/Healer/DPS slot, lootbuddies count
+          as lootbuddies. Both appear as @name with their class in the Discord roster and Final Setup. No DMs,
+          attendance or payouts.
         </p>
       </div>
       <div className="space-y-3 px-4 py-4 text-sm">
@@ -149,7 +153,10 @@ export function ExternalBoostersDialog({
                   @{booster.name}
                 </span>
                 <span className="text-muted">
-                  {CLASS_LABELS[booster.wowClass]} · {CHARACTER_ROLE_LABELS[booster.role]}
+                  {CLASS_LABELS[booster.wowClass]} ·{" "}
+                  {booster.participationType === "LOOTBUDDY" || !booster.role
+                    ? "Lootbuddy"
+                    : CHARACTER_ROLE_LABELS[booster.role]}
                 </span>
                 <Button
                   type="button"
@@ -164,7 +171,7 @@ export function ExternalBoostersDialog({
             ))}
           </ul>
         )}
-        <form onSubmit={add} className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
+        <form onSubmit={add} className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-end">
           <label className="block">
             <span className="mb-1 block text-xs text-muted">Name (e.g. Discord name)</span>
             <input
@@ -190,19 +197,34 @@ export function ExternalBoostersDialog({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs text-muted">Role</span>
+            <span className="mb-1 block text-xs text-muted">Type</span>
             <select
-              value={role}
-              onChange={(event) => setRole(event.target.value as CharacterRole)}
+              value={kind}
+              onChange={(event) => setKind(event.target.value as ParticipationType)}
               className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
             >
-              {classRoles.map((option) => (
-                <option key={option} value={option}>
-                  {CHARACTER_ROLE_LABELS[option]}
-                </option>
-              ))}
+              <option value="BOOSTER">Booster</option>
+              <option value="LOOTBUDDY">Lootbuddy</option>
             </select>
           </label>
+          {kind === "BOOSTER" ? (
+            <label className="block">
+              <span className="mb-1 block text-xs text-muted">Role</span>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as CharacterRole)}
+                className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
+              >
+                {classRoles.map((option) => (
+                  <option key={option} value={option}>
+                    {CHARACTER_ROLE_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span aria-hidden="true" />
+          )}
           <Button type="submit" variant="secondary" disabled={pending}>
             Add
           </Button>

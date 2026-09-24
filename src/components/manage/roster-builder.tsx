@@ -179,7 +179,7 @@ function RosterBuilderEditor({
     const externals = externalBoosters.map((booster) => ({
       signupId: `external:${booster.id}`,
       userName: booster.name,
-      participationType: "BOOSTER" as const,
+      participationType: booster.participationType,
       lootbuddyMode: null,
       wowClass: booster.wowClass,
       characterName: booster.name,
@@ -571,6 +571,7 @@ function RosterBuilderEditor({
         title="Lootbuddies"
         empty="No lootbuddy signups"
         signups={filteredLootbuddies}
+        externals={externalBoosters.filter((booster) => booster.participationType === "LOOTBUDDY")}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}

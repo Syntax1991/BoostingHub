@@ -1120,3 +1120,52 @@ describe("character swap in the roster", () => {
     expect(removed.map((note) => note.signupId)).toEqual([alt]);
   });
 });
+
+describe("external lootbuddies", () => {
+  it("count as lootbuddies (not a role slot) and appear as lootbuddies in Discord and the Final Setup", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId: tank, selectedRole: "TANK" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveExternalBoosters(lead, {
+      runId,
+      version: view.roster.version,
+      externalBoosters: [
+        { name: "lootmage", wowClass: "MAGE", participationType: "LOOTBUDDY", role: null },
+        { name: "dawn", wowClass: "WARRIOR", participationType: "BOOSTER", role: "DPS" },
+      ],
+    });
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.composition.lootbuddies).toBe(1);
+    expect(view.composition.dps.selected).toBe(1);
+    expect(view.composition.boosterTotal).toBe(2);
+    expect(view.raidBuffCoverage.buffs.find((buff) => buff.id === "ARCANE_INTELLECT")?.covered).toBe(true);
+
+    const signupEmbed = await discordSyncService.getSignupEmbedData(runId);
+    expect(signupEmbed?.members.picked.lootbuddies.map((member) => member.userName)).toEqual(["lootmage"]);
+    expect(signupEmbed?.members.picked.dps.map((member) => member.userName)).toEqual(["dawn"]);
+
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    const rosterEmbed = await discordSyncService.getRosterEmbedData(runId);
+    expect(rosterEmbed?.groups.lootbuddies.map((member) => [member.userName, member.external])).toEqual([["lootmage", true]]);
+
+    await runService.startRun(lead, { runId });
+    const start = await discordSyncService.getRunStartEmbedData(runId);
+    expect(start?.groups.lootbuddies.map((member) => [member.userName, member.selectedRole])).toEqual([["lootmage", null]]);
+    const text = renderFinalSetupText({
+      raidName: start!.raidName,
+      difficulty: start!.difficulty,
+      lootType: start!.lootType,
+      raidLeadDisplayName: start!.raidLeadDisplayName,
+      targets: start!.targets,
+      groups: start!.groups,
+    });
+    expect(text).toMatch(/Lootbuddies\*\* 📦 1\n@lootmage/);
+  });
+});
