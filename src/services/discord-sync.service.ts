@@ -7,7 +7,8 @@ import {
 } from "@/lib/discord-channel-name";
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
-import { attackTypeForSpecialization } from "@/lib/wow-specializations";
+import { attackTypeForSpecialization, defaultDpsAttackTypeForClass } from "@/lib/wow-specializations";
+import type { ExternalBooster } from "@/lib/external-booster";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
@@ -140,6 +141,8 @@ export type RosterEmbedMember = {
   characterRealm: string;
   /** WoW class for Discord class emoji — null when unknown. */
   wowClass: WowClass | null;
+  /** Hand-added unregistered booster — rendered as `@name <class>`. */
+  external?: boolean;
 };
 
 export type RosterEmbedData = {
@@ -497,6 +500,10 @@ function buildSignupRoleProjection(
     }
   }
 
+  const externals = run.roster?.externalBoosters ?? [];
+  const pickedExternal = (role: CharacterRole) =>
+    externals.filter((booster) => booster.role === role).map(externalSignupEmbedMember);
+
   const rosteredUserIds = new Set(pickedRows.map((signup) => signup.userId));
   const waitingSignups = activeSignups.filter((signup) => !rosteredUserIds.has(signup.userId));
 
@@ -519,21 +526,31 @@ function buildSignupRoleProjection(
     waitingSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
   );
 
-  const pickedTanks = sortSignupEmbedMembers(
-    pickedRows
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "TANK")
-      .map(toSignupEmbedMember),
-  );
-  const pickedHealers = sortSignupEmbedMembers(
-    pickedRows
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "HEALER")
-      .map(toSignupEmbedMember),
-  );
-  const pickedDps = sortSignupEmbedMembers(
-    pickedRows
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "DPS")
-      .map(toSignupEmbedMember),
-  );
+  // External boosters are listed after the registered picks, in the order they were added.
+  const pickedTanks = [
+    ...sortSignupEmbedMembers(
+      pickedRows
+        .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "TANK")
+        .map(toSignupEmbedMember),
+    ),
+    ...pickedExternal("TANK"),
+  ];
+  const pickedHealers = [
+    ...sortSignupEmbedMembers(
+      pickedRows
+        .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "HEALER")
+        .map(toSignupEmbedMember),
+    ),
+    ...pickedExternal("HEALER"),
+  ];
+  const pickedDps = [
+    ...sortSignupEmbedMembers(
+      pickedRows
+        .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "DPS")
+        .map(toSignupEmbedMember),
+    ),
+    ...pickedExternal("DPS"),
+  ];
   const pickedLoot = sortSignupEmbedMembers(
     pickedRows.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
   );
@@ -581,6 +598,20 @@ function buildSignupRoleProjection(
         picked: members.picked.lootbuddies.length,
       },
     },
+  };
+}
+
+/** Rendered as `@name <class>` — no Discord id, so never a real ping. */
+function externalSignupEmbedMember(booster: ExternalBooster): SignupEmbedMember {
+  return {
+    signupId: `external:${booster.id}`,
+    userId: `external:${booster.id}`,
+    userName: booster.name,
+    discordUsername: booster.name,
+    discordUserId: null,
+    characterName: null,
+    characterRealm: null,
+    wowClass: booster.wowClass,
   };
 }
 
@@ -658,6 +689,35 @@ function buildSignupEmbedSignature(
 }
 
 /** A characterless Lootbuddy has no Character to name — its own Class snapshot stands in for display; legacy Character-backed Lootbuddy rows still show their Character. */
+function externalRosterEmbedMember(booster: ExternalBooster): RosterEmbedMember {
+  return {
+    userId: `external:${booster.id}`,
+    userName: booster.name,
+    discordUserId: null,
+    characterName: booster.name,
+    characterRealm: "",
+    wowClass: booster.wowClass,
+    external: true,
+  };
+}
+
+/** Final Setup row for a hand-added booster: `@name <class>`, no lockout data. */
+function externalStartMember(booster: ExternalBooster): RunStartEmbedMember {
+  return {
+    signupId: `external:${booster.id}`,
+    userId: `external:${booster.id}`,
+    userName: booster.name,
+    discordUserId: null,
+    characterName: booster.name,
+    characterRealm: "",
+    wowClass: booster.wowClass,
+    classLabel: CLASS_LABELS[booster.wowClass],
+    saveLabel: "External",
+    participationType: "BOOSTER",
+    selectedRole: booster.role,
+  };
+}
+
 function toMember(row: RosterSignupRow): RosterEmbedMember {
   const lootbuddyClassLabel = row.lootbuddyClass ? CLASS_LABELS[row.lootbuddyClass] : null;
   const wowClass =
@@ -1090,6 +1150,11 @@ export const discordSyncService = {
     );
     const rangedIds = new Set(rangedDps.map((row) => row.id));
     const meleeDps = dps.filter((row) => !rangedIds.has(row.id));
+    const externals = run.roster.externalBoosters;
+    const externalMembers = (predicate: (booster: ExternalBooster) => boolean) =>
+      externals.filter(predicate).map(externalRosterEmbedMember);
+    const externalDpsRanged = (booster: ExternalBooster) =>
+      booster.role === "DPS" && defaultDpsAttackTypeForClass(booster.wowClass) === "RANGED";
 
     return {
       runId: run.id,
@@ -1102,13 +1167,16 @@ export const discordSyncService = {
       version: run.roster.version,
       targets: { tanks: run.desiredTankCount, healers: run.desiredHealerCount },
       groups: {
-        tanks: boosterByRole(selected, "TANK").map(toMember),
-        healers: boosterByRole(selected, "HEALER").map(toMember),
-        meleeDps: meleeDps.map(toMember),
-        rangedDps: rangedDps.map(toMember),
+        tanks: [...boosterByRole(selected, "TANK").map(toMember), ...externalMembers((b) => b.role === "TANK")],
+        healers: [...boosterByRole(selected, "HEALER").map(toMember), ...externalMembers((b) => b.role === "HEALER")],
+        meleeDps: [
+          ...meleeDps.map(toMember),
+          ...externalMembers((b) => b.role === "DPS" && !externalDpsRanged(b)),
+        ],
+        rangedDps: [...rangedDps.map(toMember), ...externalMembers(externalDpsRanged)],
         lootbuddies: selected.filter((row) => row.participationType === "LOOTBUDDY").map(toMember),
       },
-      totalSelected: selected.length,
+      totalSelected: selected.length + externals.length,
     };
   },
 
@@ -1174,6 +1242,10 @@ export const discordSyncService = {
       const signup = bySignupId.get(row.signupId);
       if (!signup) continue;
       members.push(toStartMember(signup, run));
+    }
+    // Hand-added external boosters have no attendance row; they join from the roster.
+    for (const booster of run.roster?.externalBoosters ?? []) {
+      members.push(externalStartMember(booster));
     }
 
     const tanks = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "TANK").sort(compareStartMembers);

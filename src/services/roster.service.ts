@@ -1,6 +1,13 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanManageRun, canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import {
+  EXTERNAL_BOOSTERS_MAX_PER_ROSTER,
+  externalBoosterInputError,
+  normalizeExternalBoosterName,
+  type ExternalBooster,
+  type ExternalBoosterInput,
+} from "@/lib/external-booster";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
 import { lockoutService } from "@/services/lockout.service";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
@@ -238,6 +245,23 @@ function asMember(row: InspectedSignup) {
 }
 
 /** Maps a draft-selected signup into the pure Class Buff Checker participant shape. */
+function normalizeExternalBoosterInput(input: ExternalBoosterInput): ExternalBoosterInput {
+  const error = externalBoosterInputError(input);
+  if (error) throw new DomainError("INVALID_ROSTER_SELECTION", error);
+  return { name: normalizeExternalBoosterName(input.name), wowClass: input.wowClass, role: input.role };
+}
+
+function externalBoosterRaidBuffParticipant(booster: ExternalBooster): RaidBuffParticipant {
+  return {
+    signupId: `external:${booster.id}`,
+    userName: booster.name,
+    participationType: "BOOSTER",
+    lootbuddyMode: null,
+    wowClass: booster.wowClass,
+    characterName: booster.name,
+  };
+}
+
 function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
   return {
     signupId: row.id,
@@ -400,9 +424,13 @@ export const rosterService = {
         healers: run.desiredHealerCount,
         dps: run.desiredDpsCount,
       },
+      externalBoosters: roster.externalBoosters,
     });
     const composition = validation.composition;
-    const raidBuffCoverage: RaidBuffCoverage = evaluateRaidBuffCoverage(selected.map(asRaidBuffParticipant));
+    const raidBuffCoverage: RaidBuffCoverage = evaluateRaidBuffCoverage([
+      ...selected.map(asRaidBuffParticipant),
+      ...roster.externalBoosters.map(externalBoosterRaidBuffParticipant),
+    ]);
     const canEdit = EDITABLE_RUN_STATUSES.includes(run.status);
     const publishedSelection = inspected.filter((item) => item.status === "SELECTED");
     // WITHDRAWN is a dead end (no outgoing transition) and must never appear as a
@@ -442,6 +470,7 @@ export const rosterService = {
         // Version 1 + empty draft means the published selection was never copied into
         // the draft. Later empty drafts (after the raidlead deselected everyone) keep a
         // higher version so Publish remains available.
+        externalBoosters: roster.externalBoosters,
         needsPublishSeed:
           Boolean(roster.publishedAt) &&
           roster.selectedSignupIds.length === 0 &&
@@ -594,6 +623,11 @@ export const rosterService = {
       runId: string;
       version: number;
       selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+      /**
+       * Full set of hand-added external boosters for this roster. Omitted by
+       * older clients — the saved ones are then left untouched.
+       */
+      externalBoosters?: ExternalBoosterInput[];
     },
   ) {
     const run = await runRepository.findById(input.runId);
@@ -618,6 +652,14 @@ export const rosterService = {
         );
       }
       requested.set(selection.signupId, selection.selectedRole);
+    }
+
+    const externalBoosters = input.externalBoosters?.map(normalizeExternalBoosterInput);
+    if (externalBoosters && externalBoosters.length > EXTERNAL_BOOSTERS_MAX_PER_ROSTER) {
+      throw new DomainError(
+        "INVALID_ROSTER_SELECTION",
+        `A roster can have at most ${EXTERNAL_BOOSTERS_MAX_PER_ROSTER} external boosters.`,
+      );
     }
 
     const selectedIds = [...requested.keys()];
@@ -714,6 +756,7 @@ export const rosterService = {
       selectedCharacterIds: newlySelectedCharacters.map((row) => row.id),
       // Save Roster already DMs players; Publish later only DMs what changed since.
       notify: { runId: input.runId, runTitle: run.title },
+      externalBoosters,
     });
 
     if (run.status === "OPEN" && selectedIds.length > 0) {
@@ -797,6 +840,7 @@ export const rosterService = {
         healers: run.desiredHealerCount,
         dps: run.desiredDpsCount,
       },
+      externalBoosters: roster.externalBoosters,
     });
 
     if (!validation.canPublish) {

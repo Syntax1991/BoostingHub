@@ -59,6 +59,20 @@ describe("formatRosterParticipantLine", () => {
   it("falls back to class label when guild emoji is missing", () => {
     expect(formatRosterParticipantLine(data.groups.healers[0]!, {})).toBe("Priest — Dawnward-Silvermoon");
   });
+
+  it("renders an external booster as @name + class, never a mention", () => {
+    const external = {
+      userId: "external:1",
+      userName: "dawn",
+      discordUserId: null,
+      characterName: "dawn",
+      characterRealm: "",
+      wowClass: "MAGE" as const,
+      external: true,
+    };
+    expect(formatRosterParticipantLine(external, { MAGE: "<:mage:9>" })).toBe("@dawn <:mage:9>");
+    expect(formatRosterParticipantLine(external, {})).toBe("@dawn Mage");
+  });
 });
 
 describe("buildRosterEmbed", () => {

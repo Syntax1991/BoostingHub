@@ -72,6 +72,16 @@ The same User **may** hold one selected BOOSTER **plus** any number of selected 
 
 If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers on that run become `NOT_SELECTED` on publish. Lootbuddy rows are decided independently per `RunSignup.id`.
 
+## External boosters
+
+Boosters who are **not registered** on the website (e.g. in-house helpers) are added by hand in the Roster builder's **External boosters** card: a name (usually their Discord name, a leading `@` is stripped), a WoW class and a role the class can play. Stored in `RunExternalBooster` (per `RunRoster`).
+
+- Staged locally like every other draft edit and persisted by **Save Roster** (`saveDraftSelection` → `externalBoosters`, the full set; omitted = unchanged). Seeding a replacement draft never touches them.
+- Count toward the Tank/Healer/DPS composition and the Class Buff Checker; never create validation blockers.
+- Shown as `@name <class emoji>` (plain text, never a ping) in the signup embed's picked lists, the published Discord roster embed (DPS split melee/ranged by class), the Start Run preview and the Final Setup post.
+- Not signups: no notifications/DMs, no attendance, payouts, strikes, lockouts or Raid Invites.
+- Names allow letters, digits, space, `.`, `_`, `-` (max 32); `everyone`/`here` and markdown/mention syntax are rejected. Max 40 per roster.
+
 ## Composition
 
 Targets come from the run (`desiredTankCount`, `desiredHealerCount`, `desiredDpsCount`), never hardcoded 2/4/14.

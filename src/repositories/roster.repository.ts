@@ -29,6 +29,7 @@ import {
   mapWowClass,
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
+import { mapExternalBoosters, type ExternalBooster, type ExternalBoosterInput } from "@/lib/external-booster";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signup.repository";
 import {
@@ -105,6 +106,8 @@ export type RosterRecord = {
   selectedSignupIds: string[];
   /** Same slots as `selectedSignupIds`, carrying each slot's assigned role. */
   selections: RosterSelection[];
+  /** Unregistered boosters the Raid Lead added by hand (see lib/external-booster.ts). */
+  externalBoosters: ExternalBooster[];
 };
 
 function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
@@ -204,6 +207,7 @@ function mapRoster(row: Record<string, unknown>): RosterRecord {
     publishedByName: publisher ? asString(publisher.name) : null,
     selectedSignupIds: selections.map((selection) => selection.signupId),
     selections,
+    externalBoosters: mapExternalBoosters(row.externalBoosters),
   };
 }
 
@@ -214,6 +218,7 @@ export const rosterRepository = {
     const row = await orm.RunRoster
       .where({ runId })
       .include("entries")
+      .include("externalBoosters")
       .include("publishedBy")
       .first();
     return row ? mapRoster(row as Record<string, unknown>) : null;
@@ -320,6 +325,11 @@ export const rosterRepository = {
        * (see notifyRosterSelectionChangesInTx). Omitted when seeding a draft.
        */
       notify?: { runId: string; runTitle: string };
+      /**
+       * Save Roster: the full set of external boosters, replacing the saved
+       * ones. Omitted (undefined) leaves them untouched, e.g. when seeding.
+       */
+      externalBoosters?: ExternalBoosterInput[];
     },
   ) {
     await db.transaction(async (tx) => {
@@ -330,6 +340,27 @@ export const rosterRepository = {
       }
       const mapped = mapRoster(roster as Record<string, unknown>);
       await this.assertVersion(mapped, expectedVersion);
+
+      if (options?.externalBoosters) {
+        const saved = await txOrm.RunExternalBooster.where({ rosterId }).all();
+        for (const row of saved as Array<Record<string, unknown>>) {
+          await txOrm.RunExternalBooster.where({ id: asString(row.id) }).delete();
+        }
+        // One millisecond apart so the saved order is the order they were listed in.
+        const base = Date.now();
+        for (const [index, booster] of options.externalBoosters.entries()) {
+          const createdAt = new Date(base + index).toISOString();
+          await txOrm.RunExternalBooster.create({
+            id: crypto.randomUUID(),
+            rosterId,
+            name: booster.name,
+            wowClass: booster.wowClass,
+            role: booster.role,
+            createdAt,
+            updatedAt: createdAt,
+          });
+        }
+      }
 
       const nextBySignupId = new Map(selections.map((selection) => [selection.signupId, selection]));
       const next = new Set(nextBySignupId.keys());

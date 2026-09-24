@@ -29,14 +29,18 @@ function roleEmoji(key: RoleDiscordEmojiKey, roleIndicators?: GuildRoleIndicator
   return roleIndicators?.[key] ?? ROLE_EMOJI_FALLBACK[key];
 }
 
-/** `<@id> <:class:> — Character-Realm` (or `<:class:> — Character-Realm` when unlinked). */
+/** `<@id> <:class:> — Character-Realm` (or `<:class:> — Character-Realm` when unlinked; `@name <:class:>` for an external booster). */
 export function formatRosterParticipantLine(
   member: RosterEmbedMember,
   classIndicators?: Partial<Record<WowClass, string>>,
 ): string {
+  const indicator = classIndicator(member.wowClass, null, classIndicators);
+  if (member.external) {
+    // Hand-added unregistered booster: `@name <class>` (plain text, never a ping).
+    return [`@${member.userName}`, indicator].filter(Boolean).join(" ");
+  }
   const character = characterLabel(member.characterName, member.characterRealm);
   const mention = member.discordUserId ? `<@${member.discordUserId}>` : null;
-  const indicator = classIndicator(member.wowClass, null, classIndicators);
 
   const head = [mention, indicator].filter(Boolean).join(" ");
   return head ? `${head} — ${character}` : character;

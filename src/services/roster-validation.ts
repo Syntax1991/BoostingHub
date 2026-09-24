@@ -37,8 +37,19 @@ export function validateRosterDraft(input: {
   runStatus: RunStatus;
   selected: RosterValidationMember[];
   targets: { tanks: number; healers: number; dps: number };
+  /** Unregistered boosters added by hand — count toward the role targets, nothing else to check. */
+  externalBoosters?: ReadonlyArray<{ role: CharacterRole }>;
 }): RosterValidationResult {
-  const composition = composeRoster(input.selected, input.targets);
+  const composition = composeRoster(
+    [
+      ...input.selected,
+      ...(input.externalBoosters ?? []).map((booster) => ({
+        participationType: "BOOSTER" as const,
+        selectedRole: booster.role,
+      })),
+    ],
+    input.targets,
+  );
   const blockers: RosterIssue[] = [];
 
   if (!PUBLISHABLE_RUN_STATUSES.includes(input.runStatus)) {

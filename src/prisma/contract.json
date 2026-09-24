@@ -72,6 +72,10 @@
       "model": "RunDiscordPost",
       "namespace": "public"
     },
+    "run_external_booster": {
+      "model": "RunExternalBooster",
+      "namespace": "public"
+    },
     "run_payout_entry": {
       "model": "RunPayoutEntry",
       "namespace": "public"
@@ -3445,6 +3449,115 @@
               "table": "run_discord_post"
             }
           },
+          "RunExternalBooster": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "rosterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "wowClass": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowClass",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              }
+            },
+            "relations": {
+              "roster": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "rosterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRoster",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "name": {
+                  "column": "name"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "rosterId": {
+                  "column": "rosterId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "wowClass": {
+                  "column": "wowClass"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_external_booster"
+            }
+          },
           "RunPayoutEntry": {
             "fields": {
               "adjustmentReason": {
@@ -3951,6 +4064,21 @@
                 },
                 "to": {
                   "model": "RunRosterEntry",
+                  "namespace": "public"
+                }
+              },
+              "externalBoosters": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "rosterId"
+                  ]
+                },
+                "to": {
+                  "model": "RunExternalBooster",
                   "namespace": "public"
                 }
               },
@@ -8765,6 +8893,108 @@
                 }
               ]
             },
+            "run_external_booster": {
+              "checks": [
+                {
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_external_booster_role_check_b1616ae6",
+                  "prefix": "run_external_booster_role_check"
+                },
+                {
+                  "expression": "\"wowClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR')",
+                  "name": "run_external_booster_wowClass_check_8876c2a5",
+                  "prefix": "run_external_booster_wowClass_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "rosterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "wowClass": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowClass",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "rosterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_external_booster"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_roster"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "rosterId"
+                  ],
+                  "name": "run_external_booster_rosterId_idx_ca029c6b",
+                  "prefix": "run_external_booster_rosterId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "run_payout_entry": {
               "checks": [
                 {
@@ -11371,10 +11601,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "85ba44364f9fa3d98e2cce5fb06cc0653843e3db62bfb6317df792ab14749c1f"
+    "storageHash": "c85b5ac147fb990a2a877fac6346c50336afdd8cee55b49c12996d6bd1834e6e"
   },
   "execution": {
-    "executionHash": "3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c",
+    "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",
     "mutations": {
       "defaults": [
         {
@@ -11772,6 +12002,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_discord_post"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_external_booster"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_external_booster"
           }
         },
         {
