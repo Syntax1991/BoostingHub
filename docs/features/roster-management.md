@@ -99,8 +99,8 @@ Derived composition helper on the Roster Builder (informational — never a publ
 
 - **Source of truth:** current **draft** selection (`RunRosterEntry.selected === true`), not every signup.
 - **Booster:** counts by `character.wowClass` when selected.
-- **PLAYING Lootbuddy:** counts by `lootbuddyClass ?? character?.wowClass` when selected (includes legacy Character-backed rows).
-- **LOOT_ONLY Lootbuddy:** never counts, even when selected.
+- **Lootbuddy (LOOT_ONLY and PLAYING):** counts by `lootbuddyClass ?? character?.wowClass` when selected (includes legacy Character-backed rows) — a loot-only Lootbuddy is still in the raid group and brings its class buff. (Discord signups always create `LOOT_ONLY` rows.)
+- **External booster:** counts by its class.
 - **Duplicates:** multiple Mages still cover Arcane Intellect once; provider detail retains every `signupId`.
 - **Meaning:** class *availability* in the selected composition — not live aura cast / talent verification.
 - **No persistence:** coverage is computed by `evaluateRaidBuffCoverage` in `roster-raid-buffs.ts`. No coverage tables or stored counts.

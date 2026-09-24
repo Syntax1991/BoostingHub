@@ -5,8 +5,8 @@ import type { LootbuddyMode, ParticipationType, WowClass } from "@/models/enums"
  *
  * A buff is "covered" when the CURRENTLY SELECTED draft roster contains at least
  * one participation whose class can provide it. BOOSTER uses Character class;
- * PLAYING Lootbuddy uses lootbuddyClass (with legacy Character fallback);
- * LOOT_ONLY never contributes.
+ * a Lootbuddy — LOOT_ONLY or PLAYING, both are in the raid group — uses
+ * lootbuddyClass (with legacy Character fallback).
  */
 
 export const RAID_BUFF_KINDS = ["BUFF", "DEBUFF"] as const;
@@ -163,7 +163,7 @@ export function summarizeRaidBuffCoverageByClass(coverage: RaidBuffCoverage): Ra
 
 /**
  * Resolves the class a draft-selected participation contributes to buff coverage.
- * Returns null when the row must not count (LOOT_ONLY, unknown class, etc.).
+ * Returns null only when no class is known.
  */
 export function resolveBuffContributorClass(participant: {
   participationType: ParticipationType;
@@ -175,9 +175,7 @@ export function resolveBuffContributorClass(participant: {
     return participant.characterWowClass;
   }
   if (participant.participationType === "LOOTBUDDY") {
-    if (participant.lootbuddyMode !== "PLAYING") {
-      return null;
-    }
+    // Loot-only or playing, a Lootbuddy sits in the raid and brings its class buff.
     return participant.lootbuddyClass ?? participant.characterWowClass;
   }
   return null;
