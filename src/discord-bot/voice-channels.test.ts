@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   reconcileRunVoiceChannels,
+  type CreatedVoiceChannel,
   type RunVoiceChannelAdapters,
   type RunVoiceChannelWorkItem,
   type VoiceChannelView,
@@ -22,17 +23,28 @@ function voice(memberCount: number, name = "Raid with Syntax") {
 
 function adapters(options: {
   channel?: VoiceChannelView | (() => never);
-  create?: (() => Promise<string>) | null;
+  create?: (() => Promise<CreatedVoiceChannel>) | null;
+  createdId?: string;
+  recordFails?: unknown;
+  compensationFails?: unknown;
 } = {}) {
-  const recordVoiceChannel = vi.fn().mockResolvedValue(undefined);
+  const createdDelete = vi.fn(async () => {
+    if (options.compensationFails) throw options.compensationFails;
+  });
+  const recordVoiceChannel = vi.fn(async () => {
+    if (options.recordFails) throw options.recordFails;
+  });
   const clearVoiceChannel = vi.fn().mockResolvedValue(undefined);
-  const createVoiceChannel = options.create === null ? null : vi.fn(options.create ?? (async () => "222"));
+  const createVoiceChannel =
+    options.create === null
+      ? null
+      : vi.fn(options.create ?? (async (): Promise<CreatedVoiceChannel> => ({ id: options.createdId ?? "222", delete: createdDelete })));
   const fetchChannel = vi.fn(async () => {
     if (typeof options.channel === "function") return options.channel();
     return options.channel ?? voice(0);
   });
   const value: RunVoiceChannelAdapters = { fetchChannel, createVoiceChannel, recordVoiceChannel, clearVoiceChannel };
-  return { value, fetchChannel, createVoiceChannel, recordVoiceChannel, clearVoiceChannel };
+  return { value, fetchChannel, createVoiceChannel, recordVoiceChannel, clearVoiceChannel, createdDelete };
 }
 
 function item(action: RunVoiceChannelWorkItem["action"], existingVoiceChannelId: string | null = "voice-1"): RunVoiceChannelWorkItem {
@@ -68,6 +80,74 @@ describe("reconcileRunVoiceChannels — creation", () => {
     const retry = adapters();
     await reconcileRunVoiceChannels(retry.value, [item("PROVISION", null)]);
     expect(retry.createVoiceChannel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("reconcileRunVoiceChannels — create → persist atomicity", () => {
+  it("A: persist failure → created once, record tried once, compensating delete, NOT in the resolved map", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const a = adapters({ recordFails: new Error("bot api 503") });
+    const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
+    expect(a.createVoiceChannel).toHaveBeenCalledTimes(1);
+    expect(a.recordVoiceChannel).toHaveBeenCalledTimes(1);
+    expect(a.recordVoiceChannel).toHaveBeenCalledWith("run-1", "222");
+    expect(a.createdDelete).toHaveBeenCalledTimes(1);
+    expect(resolved.has("run-1")).toBe(false);
+    error.mockRestore();
+  });
+
+  it("D: persist AND compensation fail → not resolved, high-signal ORPHANED error with run and channel id, no throw", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const a = adapters({ recordFails: new Error("bot api 503"), compensationFails: missingPermissions() });
+    const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
+    expect(resolved.has("run-1")).toBe(false);
+    const orphan = error.mock.calls.map((call) => String(call[0])).find((message) => message.includes("ORPHANED VOICE CHANNEL"));
+    expect(orphan).toContain("run-1");
+    expect(orphan).toContain("222");
+    error.mockRestore();
+  });
+
+  it("E: normal success → persisted, then resolved; no compensation", async () => {
+    const a = adapters();
+    const resolved = await reconcileRunVoiceChannels(a.value, [item("PROVISION", null)]);
+    expect(a.recordVoiceChannel).toHaveBeenCalledWith("run-1", "222");
+    expect(a.createdDelete).not.toHaveBeenCalled();
+    expect(resolved.get("run-1")).toBe("222");
+  });
+
+  it("Unknown-Channel recreate whose persist fails leaves the run resolved to null (never the unpersisted id)", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const a = adapters({ channel: () => { throw unknownChannel(); }, recordFails: new Error("bot api 503") });
+    const resolved = await reconcileRunVoiceChannels(a.value, [item("RECONCILE")]);
+    expect(a.clearVoiceChannel).toHaveBeenCalledWith("run-1", "voice-1");
+    expect(a.createdDelete).toHaveBeenCalledTimes(1);
+    expect(resolved.get("run-1")).toBeNull();
+    error.mockRestore();
+  });
+});
+
+describe("reconcileRunVoiceChannels — no creator (category unset/invalid) still manages existing channels", () => {
+  it("RECONCILE keeps and renames an existing channel without any creator", async () => {
+    const channel = voice(0, "Raid with Simon");
+    const a = adapters({ channel, create: null });
+    const resolved = await reconcileRunVoiceChannels(a.value, [item("RECONCILE")]);
+    expect(channel.setName).toHaveBeenCalledWith("Raid with Syntax");
+    expect(a.clearVoiceChannel).not.toHaveBeenCalled();
+    expect(resolved.get("run-1")).toBe("voice-1");
+  });
+
+  it("RETIRE_IF_EMPTY deletes an empty channel and keeps an occupied one without any creator", async () => {
+    const empty = voice(0);
+    const emptyAdapters = adapters({ channel: empty, create: null });
+    await reconcileRunVoiceChannels(emptyAdapters.value, [item("RETIRE_IF_EMPTY")]);
+    expect(empty.delete).toHaveBeenCalledTimes(1);
+    expect(emptyAdapters.clearVoiceChannel).toHaveBeenCalledWith("run-1", "voice-1");
+
+    const occupied = voice(4);
+    const occupiedAdapters = adapters({ channel: occupied, create: null });
+    await reconcileRunVoiceChannels(occupiedAdapters.value, [item("RETIRE_IF_EMPTY")]);
+    expect(occupied.delete).not.toHaveBeenCalled();
+    expect(occupiedAdapters.clearVoiceChannel).not.toHaveBeenCalled();
   });
 });
 

@@ -12,6 +12,10 @@
  *   successful delete (or when Discord confirms it is already gone).
  * Never touches the text Run channel or its CURRENT/NEXT ordering. Failures
  * are logged and retried next poll — they never affect the Run itself.
+ * Only first creation needs the voice category; existing channels are
+ * managed (kept, renamed, cleaned up) even when creation is unavailable.
+ * A created channel is exposed only after its id is persisted; if recording
+ * fails it is deleted again (best effort) so no untracked duplicate remains.
  */
 import { isDiscordUnknownChannelError } from "@/discord-bot/discord-api-errors";
 
@@ -35,11 +39,21 @@ export type VoiceChannelView =
   /** Fetch resolved to nothing without a confirmed Unknown Channel error — not proof of deletion. */
   | { kind: "unresolved" };
 
+/** A voice channel just created in Discord, with a handle to undo it if it cannot be recorded. */
+export type CreatedVoiceChannel = {
+  id: string;
+  delete(reason: string): Promise<unknown>;
+};
+
 export type RunVoiceChannelAdapters = {
   /** Throws Discord API errors as-is (Unknown Channel 10003, Missing Access, network…). */
   fetchChannel(channelId: string): Promise<VoiceChannelView>;
-  /** Creates a GuildVoice channel in the voice category; null when the category is unusable. */
-  createVoiceChannel: ((name: string) => Promise<string>) | null;
+  /**
+   * Creates a GuildVoice channel in the voice category. Null when creation is
+   * not possible this pass (category unset, unusable, or not needed) — existing
+   * channels are still managed without it.
+   */
+  createVoiceChannel: ((name: string) => Promise<CreatedVoiceChannel>) | null;
   recordVoiceChannel(runId: string, channelId: string): Promise<void>;
   clearVoiceChannel(runId: string, channelId: string): Promise<void>;
 };
@@ -53,19 +67,37 @@ async function provision(
   resolved: ResolvedVoiceChannels,
 ): Promise<void> {
   if (!adapters.createVoiceChannel) return;
-  let channelId: string;
+  let created: CreatedVoiceChannel;
   try {
-    channelId = await adapters.createVoiceChannel(item.desiredVoiceChannelName);
+    created = await adapters.createVoiceChannel(item.desiredVoiceChannelName);
   } catch (error) {
     console.error(`[discord-bot] failed to create voice channel for run ${item.runId} — will retry next poll`, error);
     return;
   }
-  resolved.set(item.runId, channelId);
+
+  // A new channel only counts once its identity is persisted. Otherwise the
+  // next poll would still see PROVISION and create a second channel, and a
+  // Raid Invite could link a channel nothing tracks.
   try {
-    await adapters.recordVoiceChannel(item.runId, channelId);
-  } catch (error) {
-    console.error(`[discord-bot] created voice channel ${channelId} for run ${item.runId} but could not record it`, error);
+    await adapters.recordVoiceChannel(item.runId, created.id);
+  } catch (recordError) {
+    console.error(
+      `[discord-bot] created voice channel ${created.id} for run ${item.runId} but could not record it — deleting it so the next poll can retry cleanly`,
+      recordError,
+    );
+    try {
+      await created.delete(`BoostingHub could not record this voice channel for run ${item.runId}`);
+    } catch (deleteError) {
+      if (!isDiscordUnknownChannelError(deleteError)) {
+        console.error(
+          `[discord-bot] ORPHANED VOICE CHANNEL: run ${item.runId} channel ${created.id} was created but neither recorded nor deleted — delete it manually in Discord`,
+          deleteError,
+        );
+      }
+    }
+    return;
   }
+  resolved.set(item.runId, created.id);
 }
 
 async function reconcile(

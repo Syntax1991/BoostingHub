@@ -431,10 +431,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
 }
 
 /**
- * Temporary per-Run GuildVoice channels (see voice-channels.ts). Disabled when
- * DISCORD_RUN_VOICE_CATEGORY_ID is unset. A configured id that does not
- * resolve to a GuildCategory is an operator error: nothing is created (no
- * fallback category), but existing channels are still kept/cleaned up.
+ * Temporary per-Run GuildVoice channels (see voice-channels.ts).
+ * DISCORD_RUN_VOICE_CATEGORY_ID controls FIRST creation only: it is resolved
+ * only when this pass has PROVISION work. Unset → nothing new is created; an
+ * id that is not a GuildCategory → operator error, nothing created, no
+ * fallback. Either way, already-created channels are still fetched, kept,
+ * renamed and cleaned up, so removing the env never orphans them.
  * Never throws — voice is a convenience and must not break the sync pass.
  */
 async function syncRunVoiceChannels(
@@ -443,12 +445,12 @@ async function syncRunVoiceChannels(
   api: BotApiClient,
   items: RunVoiceChannelWorkItem[],
 ): Promise<ResolvedVoiceChannels> {
+  if (items.length === 0) return new Map();
   const voiceCategoryId = env.discordRunVoiceCategoryId ?? null;
-  if (!voiceCategoryId || items.length === 0) return new Map();
 
   try {
     let createVoiceChannel: RunVoiceChannelAdapters["createVoiceChannel"] = null;
-    if (items.some((item) => item.action !== "RETIRE_IF_EMPTY")) {
+    if (voiceCategoryId && items.some((item) => item.action === "PROVISION")) {
       const category = await client.channels.fetch(voiceCategoryId).catch(() => null);
       if (category && category.type === ChannelType.GuildCategory) {
         createVoiceChannel = async (name) => {
@@ -457,7 +459,7 @@ async function syncRunVoiceChannels(
             type: ChannelType.GuildVoice,
             parent: category.id,
           });
-          return created.id;
+          return { id: created.id, delete: (reason) => created.delete(reason) };
         };
       } else {
         console.error(

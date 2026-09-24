@@ -248,7 +248,8 @@ When a Run is `IN_PROGRESS` (after Start Run, with a start snapshot), the bot cr
 - **Independence:** voice is Run-level infrastructure — created regardless of Quiet Hours or anyone's DM preferences, and independent of the text channel's retirement/transcript.
 - **Failures never affect the Run:** creation errors (incl. Missing Permissions) persist nothing and retry next poll; Unknown Channel clears the stored id (and, while still `IN_PROGRESS`, recreates once); Missing Permissions / transient errors during cleanup keep the id for a retry; a stored id that is not a voice channel is never deleted or replaced (operator error is logged).
 - **Requires** the `GuildVoiceStates` gateway intent (non-privileged; `src/discord-bot/intents.ts`) so member counts are current, and the bot needs **Manage Channels**, **View Channel** and **Connect** visibility in the voice category.
-- **Disabled** when `DISCORD_RUN_VOICE_CATEGORY_ID` is unset. An id that is not a category is logged each pass and nothing is created — no fallback.
+- **`DISCORD_RUN_VOICE_CATEGORY_ID` controls first creation only.** Unset → no new voice channels. An id that is not a category → logged on passes with creation work, nothing created, no fallback. In both cases channels created earlier are still kept, renamed and cleaned up by the rules above, so removing the variable never orphans them.
+- **Create → persist:** a new channel is linked (and treated as the Run's channel) only after `RunDiscordPost.voiceChannelId` is recorded. If recording fails, the bot deletes the just-created channel (best effort) and the next poll retries cleanly; if that delete also fails it logs `ORPHANED VOICE CHANNEL` with the Run and channel id for manual cleanup.
 
 ## `/mysignups`
 
