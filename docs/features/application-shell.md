@@ -7,7 +7,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 ## User flow
 
 1. Sign in at `/` with Discord or a development identity.
-2. Land on `/dashboard`.
+2. Land on `/dashboard`. The dashboard's **Recent Activity** (community-wide operational events) is shown to raid leads and admins only; regular users never receive those events.
 3. Move between Runs, My Runs, Characters, Profile. Open a Run from those lists at `/runs/[runId]`.
 4. Raid leads and admins also see Manage, with a role-based sub-nav (Overview / Runs; ADMIN also Booster Access / Users).
 

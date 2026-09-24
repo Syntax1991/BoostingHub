@@ -29,7 +29,8 @@ export const dashboardService = {
       runRepository.listUpcoming(),
       signupService.getMyRuns(user),
       characterRepository.listByUserId(user.id),
-      activityRepository.listRecent(),
+      // Community-wide operational events are for Raid Leads and Admins only.
+      showOperations ? activityRepository.listRecent() : Promise.resolve([]),
       showOperations ? listManagedRunOperationalHandoffs(user) : Promise.resolve([]),
     ]);
 
@@ -91,6 +92,7 @@ export const dashboardService = {
         lockoutAttentionCount: lockoutAttention.length,
         lockoutAttention,
       },
+      showRecentActivity: showOperations,
       recentActivity: activity.map((event) => ({
         id: event.id,
         type: event.type,
