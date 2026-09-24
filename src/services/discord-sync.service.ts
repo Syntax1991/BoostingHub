@@ -547,26 +547,31 @@ function buildSignupRoleProjection(
     },
   };
 
+  // "Signed" counts PEOPLE who can play the role, not characters: a User who
+  // offers six healer characters is one available healer. The member lists
+  // still carry every offered character for the Raid Lead.
+  const distinctUsers = (list: SignupEmbedMember[]) => new Set(list.map((member) => member.userId)).size;
+
   return {
     members,
     roleStatus: {
       tank: {
-        signed: members.signed.tanks.length,
+        signed: distinctUsers(members.signed.tanks),
         picked: members.picked.tanks.length,
         target: run.desiredTankCount,
       },
       healer: {
-        signed: members.signed.healers.length,
+        signed: distinctUsers(members.signed.healers),
         picked: members.picked.healers.length,
         target: run.desiredHealerCount,
       },
       dps: {
-        signed: members.signed.dps.length,
+        signed: distinctUsers(members.signed.dps),
         picked: members.picked.dps.length,
         target: run.desiredDpsCount,
       },
       lootbuddy: {
-        signed: members.signed.lootbuddies.length,
+        signed: distinctUsers(members.signed.lootbuddies),
         picked: members.picked.lootbuddies.length,
       },
     },

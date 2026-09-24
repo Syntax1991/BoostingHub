@@ -306,6 +306,32 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(data?.runStatus).toBe("OPEN");
   });
 
+  it("role counts are PEOPLE per role: one User with 3 healer characters is 1 healer, all characters still listed", async () => {
+    const roleRunId = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(15), desiredTankCount: 1, desiredHealerCount: 2, desiredDpsCount: 2 }))
+      .then((run) => run.id);
+    createdRunIds.push(roleRunId);
+    await runService.openRun(lead, roleRunId);
+
+    // "Synblast" case: one User, several healer characters — one of them also offers DPS.
+    const healAlt1 = await createCharacter(ids.extra, "Synblast", "PRIEST", "Holy", "HEALER");
+    const healAlt2 = await createCharacter(ids.extra, "Synlight", "PRIEST", "Discipline", "HEALER");
+    const healAlt3 = await createCharacter(ids.extra, "Synpal", "PALADIN", "Holy", "HEALER");
+    for (const characterId of [healAlt1, healAlt2, healAlt3]) {
+      await createSignup({ runId: roleRunId, userId: ids.extra, characterId, participationType: "BOOSTER", role: "HEALER" });
+    }
+    const multiRole = (await orm.RunSignup.where({ runId: roleRunId, characterId: healAlt3 }).first()) as { id: string };
+    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId: multiRole.id, role: "DPS" });
+    await createSignup({ runId: roleRunId, userId: ids.healer, characterId: healerChar, participationType: "BOOSTER", role: "HEALER" });
+
+    const data = await discordSyncService.getSignupEmbedData(roleRunId);
+    expect(data?.uniqueSignupCount).toBe(2);
+    expect(data?.roleStatus.healer.signed).toBe(2);
+    expect(data?.members.signed.healers).toHaveLength(4);
+    expect(data?.roleStatus.dps.signed).toBe(1);
+    expect(data?.roleStatus.tank.signed).toBe(0);
+  });
+
   it("returns null for an unknown run", async () => {
     const data = await discordSyncService.getSignupEmbedData("r0000000-0000-4000-8000-000000000000");
     expect(data).toBeNull();
