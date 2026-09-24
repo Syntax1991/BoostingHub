@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { APP_BRAND_NAME, APP_BRAND_TAGLINE } from "@/lib/branding";
 import "./globals.css";
@@ -19,6 +19,16 @@ export const metadata: Metadata = {
     template: `${APP_BRAND_NAME} · %s`,
   },
   description: APP_BRAND_TAGLINE,
+};
+
+/**
+ * The app is dark-only. Declaring it (`<meta name="color-scheme" content="dark">`)
+ * stops browsers' auto-dark / "force dark pages" modes (e.g. Opera GX) from
+ * recoloring it — they otherwise lighten the dark borders to near-white.
+ */
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: "#0c0e12",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
