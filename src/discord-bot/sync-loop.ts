@@ -41,7 +41,7 @@ import {
   buildRunRescheduledChannelEmbed,
 } from "@/discord-bot/embeds/run-lifecycle-announcement";
 import { buildRosterSelectedDmMessage, buildRosterRemovedDmMessage, buildRunCancelledDmMessage, buildRunRescheduledDmMessage } from "@/services/notification-content";
-import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
+import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import {
   mergeWeekSectionItemsForOrdering,
   reconcileChannels,
@@ -789,7 +789,9 @@ async function syncStartPost(
   const { channelId } = resolved;
 
   const content = renderRunStartMessageText(data, { classIndicators });
-  const editPayload: MessageEditOptions = { content, embeds: [] };
+  // Same explicit policy for send and edit: only selected roster users may be pinged.
+  const allowedMentions = finalSetupAllowedMentions(data);
+  const editPayload: MessageEditOptions = { content, embeds: [], allowedMentions };
 
   if (item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, editPayload);
@@ -801,7 +803,7 @@ async function syncStartPost(
 
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isTextBased() || !("send" in channel)) return;
-  const message = await channel.send({ content });
+  const message = await channel.send({ content, allowedMentions });
   await api.recordDiscordState(item.runId, { kind: "start", channelId: message.channelId, messageId: message.id });
 }
 

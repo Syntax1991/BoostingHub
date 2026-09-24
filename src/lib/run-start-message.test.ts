@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  escapeDiscordInlineText,
   formatFinalSetup,
   formatFinalSetupLfgLine,
   renderFinalSetupText,
@@ -149,6 +150,45 @@ describe("formatFinalSetupLfgLine — Run Raid Lead footer", () => {
   });
 });
 
+describe("escapeDiscordInlineText — dynamic Raid Lead text safety", () => {
+  const ZWSP = String.fromCharCode(0x200b);
+
+  it("leaves ordinary names unchanged", () => {
+    for (const name of ["Syntax", "Kiri", "Simon", "Syn Tax", "Kiri-91", "Simön"]) {
+      expect(escapeDiscordInlineText(name)).toBe(name);
+    }
+  });
+
+  it("escapes markdown so the name cannot close or change the surrounding bold footer", () => {
+    const line = formatFinalSetupLfgLine("**Admin**");
+    expect(line).toBe("**LFG HM \\*\\*Admin\\*\\* write your discord name in the note!**");
+    // Only the footer's own opening/closing ** remain unescaped.
+    expect(line.match(/(?<!\\)\*\*/g)).toHaveLength(2);
+    expect(escapeDiscordInlineText("_x_ ~~y~~ `z` ||s|| [l](u) > q # h \\")).toBe(
+      "\\_x\\_ \\~\\~y\\~\\~ \\`z\\` \\|\\|s\\|\\| \\[l\\](u) \\> q \\# h \\\\",
+    );
+  });
+
+  it("collapses CR/LF (and U+2028/2029) so the footer stays one logical line", () => {
+    const hostile = `Syntax\r\n**Admin says** hi\n\n@everyone${String.fromCharCode(0x2028)}bye\r`;
+    const line = formatFinalSetupLfgLine(hostile);
+    expect(line).not.toMatch(/[\r\n]/);
+    expect(line.includes(String.fromCharCode(0x2028))).toBe(false);
+    const text = renderFinalSetupText(sampleInput({ raidLeadDisplayName: hostile }));
+    const normal = renderFinalSetupText(sampleInput());
+    expect(text.split("\n")).toHaveLength(normal.split("\n").length);
+    expect(text.endsWith(line)).toBe(true);
+  });
+
+  it("neutralises raw @ mentions and mention markup in the Raid Lead name", () => {
+    expect(formatFinalSetupLfgLine("@everyone Syntax")).toBe(
+      `**LFG HM @${ZWSP}everyone Syntax write your discord name in the note!**`,
+    );
+    expect(formatFinalSetupLfgLine("@here Kiri")).not.toMatch(/@here/);
+    expect(formatFinalSetupLfgLine("<@123456789012345678>")).not.toContain("<@123456789012345678>");
+  });
+});
+
 describe("renderFinalSetupText — plain Discord Final Setup", () => {
   it("starts with bold Final Setup, role headers, and the Raid Lead LFG footer exactly once", () => {
     const text = renderFinalSetupText(sampleInput());
@@ -249,9 +289,12 @@ describe("Final Setup Discord length safety", () => {
   it("keeps a full 2/4/14 + 5 lootbuddy roster with a max-length Raid Lead under Discord's 2000-char content limit", () => {
     // Realistic worst case: 19-digit Discord snowflakes for every mention and
     // custom emoji, and a 32-char Raid Lead name (Discord's display-name /
-    // username cap; the Run channel nickname is capped lower, at 24).
+    // username cap; the Run channel nickname is capped lower, at 24) made only
+    // of characters that escaping doubles — the longest possible footer.
     const snowflake = (n: number) => `13${String(n).padStart(17, "0")}`;
-    const longestRaidLead = "R".repeat(32);
+    const longestRaidLead = "@*_<".repeat(8);
+    expect(longestRaidLead).toHaveLength(32);
+    expect(escapeDiscordInlineText(longestRaidLead)).toHaveLength(64);
     const classes: WowClass[] = [
       "WARRIOR",
       "PALADIN",
