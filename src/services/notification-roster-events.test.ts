@@ -990,3 +990,66 @@ describe("replace a participant after Start", () => {
     ).rejects.toMatchObject({ code: "ATTENDANCE_NOT_MANAGEABLE" });
   });
 });
+
+describe("External Boosters dialog (saved on their own)", () => {
+  it("saves the full set, bumps the roster version, keeps the signup draft, and locks after Start", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [{ signupId: tank, selectedRole: "TANK" }],
+    });
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveExternalBoosters(lead, {
+      runId,
+      version: view.roster.version,
+      externalBoosters: [
+        { name: "@dawn", wowClass: "MAGE", role: "DPS" },
+        { name: "holy", wowClass: "PRIEST", role: "HEALER" },
+      ],
+    });
+    const after = await rosterService.getRosterManagementView(lead, runId);
+    expect(after.roster.version).toBe(view.roster.version + 1);
+    expect(after.roster.externalBoosters.map((booster) => booster.name)).toEqual(["dawn", "holy"]);
+    expect(after.composition.tanks.selected).toBe(1);
+    expect(after.composition.healers.selected).toBe(1);
+
+    // Stale version and invalid input are rejected.
+    await expect(
+      rosterService.saveExternalBoosters(lead, { runId, version: view.roster.version, externalBoosters: [] }),
+    ).rejects.toMatchObject({ code: "ROSTER_ALREADY_CHANGED" });
+    await expect(
+      rosterService.saveExternalBoosters(lead, {
+        runId,
+        version: after.roster.version,
+        externalBoosters: [{ name: "@everyone", wowClass: "MAGE", role: "DPS" }],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
+    await expect(
+      rosterService.saveExternalBoosters(asUser(ids.player, "Notify Player"), {
+        runId,
+        version: after.roster.version,
+        externalBoosters: [],
+      }),
+    ).rejects.toBeTruthy();
+
+    // A later Save Roster from the builder (no externalBoosters field) leaves them alone.
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: after.roster.version,
+      selections: [{ signupId: tank, selectedRole: "TANK" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.roster.externalBoosters).toHaveLength(2);
+
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    await runService.startRun(lead, { runId });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await expect(
+      rosterService.saveExternalBoosters(lead, { runId, version: view.roster.version, externalBoosters: [] }),
+    ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
+  });
+});

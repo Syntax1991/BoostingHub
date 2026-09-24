@@ -51,15 +51,6 @@ import {
   summarizeRaidBuffCoverageByClass,
 } from "@/services/roster-raid-buffs";
 import { validateRosterDraft } from "@/services/roster-validation";
-import {
-  EXTERNAL_BOOSTERS_MAX_PER_ROSTER,
-  EXTERNAL_BOOSTER_NAME_MAX_LENGTH,
-  externalBoosterInputError,
-  normalizeExternalBoosterName,
-  type ExternalBoosterInput,
-} from "@/lib/external-booster";
-import { rolesForClass } from "@/lib/wow-specializations";
-import { WOW_CLASSES } from "@/models/enums";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
@@ -110,17 +101,6 @@ function collectSavedSelections(data: RosterView): StagedSelections {
   return selections;
 }
 
-/** A hand-added external booster in the local draft; `key` is only for React lists. */
-type StagedExternalBooster = ExternalBoosterInput & { key: string };
-
-function externalBoosterKey(boosters: readonly ExternalBoosterInput[]): string {
-  return boosters.map((booster) => `${booster.name}|${booster.wowClass}|${booster.role}`).join(";");
-}
-
-function stageSavedExternals(boosters: RosterView["roster"]["externalBoosters"]): StagedExternalBooster[] {
-  return boosters.map(({ id, ...booster }) => ({ ...booster, key: id }));
-}
-
 /**
  * Remount the editor only when the authoritative server draft snapshot changes
  * (version and/or saved selected ids). Harmless parent rerenders keep local staged
@@ -128,7 +108,7 @@ function stageSavedExternals(boosters: RosterView["roster"]["externalBoosters"])
  */
 export function RosterBuilderView({ data, embedded = false }: { data: RosterView; embedded?: boolean }) {
   const savedSelections = collectSavedSelections(data);
-  const savedSelectionKey = `${buildRosterSavedSelectionKey(data.roster.version, selectionEntries(savedSelections))}|${externalBoosterKey(data.roster.externalBoosters)}`;
+  const savedSelectionKey = buildRosterSavedSelectionKey(data.roster.version, selectionEntries(savedSelections));
   return (
     <RosterBuilderEditor
       key={savedSelectionKey}
@@ -164,13 +144,10 @@ function RosterBuilderEditor({
 
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
-  const savedExternals = data.roster.externalBoosters;
-  const [stagedExternals, setStagedExternals] = useState<StagedExternalBooster[]>(() =>
-    stageSavedExternals(savedExternals),
-  );
+  // Edited in the Run header's External Boosters dialog; counted here as saved.
+  const externalBoosters = data.roster.externalBoosters;
 
-  const externalsDirty = externalBoosterKey(stagedExternals) !== externalBoosterKey(savedExternals);
-  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections) || externalsDirty;
+  const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
   const unsavedChangeCount = useMemo(() => {
     let count = 0;
     for (const [id, role] of stagedSelections) {
@@ -179,15 +156,8 @@ function RosterBuilderEditor({
     for (const id of savedSelections.keys()) {
       if (!stagedSelections.has(id)) count += 1;
     }
-    // Each added or removed external booster is one change.
-    const savedKeys = savedExternals.map((booster) => externalBoosterKey([booster]));
-    for (const booster of stagedExternals) {
-      const index = savedKeys.indexOf(externalBoosterKey([booster]));
-      if (index === -1) count += 1;
-      else savedKeys.splice(index, 1);
-    }
-    return count + savedKeys.length;
-  }, [stagedSelections, savedSelections, stagedExternals, savedExternals]);
+    return count;
+  }, [stagedSelections, savedSelections]);
 
   /** Live Class Buff coverage from the staged draft — updates immediately on select/deselect. */
   const liveRaidBuffCoverage = useMemo(() => {
@@ -206,8 +176,8 @@ function RosterBuilderEditor({
         }),
         characterName: signup.character?.name ?? null,
       }));
-    const externals = stagedExternals.map((booster) => ({
-      signupId: `external:${booster.key}`,
+    const externals = externalBoosters.map((booster) => ({
+      signupId: `external:${booster.id}`,
       userName: booster.name,
       participationType: "BOOSTER" as const,
       lootbuddyMode: null,
@@ -215,7 +185,7 @@ function RosterBuilderEditor({
       characterName: booster.name,
     }));
     return evaluateRaidBuffCoverage([...participants, ...externals]);
-  }, [domainSignups, stagedSelections, stagedExternals]);
+  }, [domainSignups, stagedSelections, externalBoosters]);
 
   /** Live composition + publish validation from staged draft selections. */
   const liveValidation = useMemo(
@@ -241,7 +211,7 @@ function RosterBuilderEditor({
           healers: data.run.desiredHealerCount,
           dps: data.run.desiredDpsCount,
         },
-        externalBoosters: stagedExternals,
+        externalBoosters,
       }),
     [
       data.run.status,
@@ -250,7 +220,7 @@ function RosterBuilderEditor({
       data.run.desiredDpsCount,
       domainSignups,
       stagedSelections,
-      stagedExternals,
+      externalBoosters,
     ],
   );
   const liveComposition = liveValidation.composition;
@@ -390,29 +360,6 @@ function RosterBuilderEditor({
     setError(null);
     setErrorCode(null);
     setStagedSelections(new Map(savedSelections));
-    setStagedExternals(stageSavedExternals(savedExternals));
-  }
-
-  /** Returns an error message, or null when the booster was staged. */
-  function addExternalBooster(input: ExternalBoosterInput): string | null {
-    if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return "The roster cannot be edited right now.";
-    const invalid = externalBoosterInputError(input);
-    if (invalid) return invalid;
-    if (stagedExternals.length >= EXTERNAL_BOOSTERS_MAX_PER_ROSTER) {
-      return `A roster can have at most ${EXTERNAL_BOOSTERS_MAX_PER_ROSTER} external boosters.`;
-    }
-    setError(null);
-    setErrorCode(null);
-    setStagedExternals((previous) => [
-      ...previous,
-      { ...input, name: normalizeExternalBoosterName(input.name), key: crypto.randomUUID() },
-    ]);
-    return null;
-  }
-
-  function removeExternalBooster(key: string) {
-    if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
-    setStagedExternals((previous) => previous.filter((booster) => booster.key !== key));
   }
 
   function saveRoster() {
@@ -424,7 +371,6 @@ function RosterBuilderEditor({
         runId: data.run.id,
         version: data.roster.version,
         selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
-        externalBoosters: stagedExternals.map(({ name, wowClass, role }) => ({ name, wowClass, role })),
       });
       if (!result.ok) {
         setError(result.message);
@@ -630,14 +576,6 @@ function RosterBuilderEditor({
         onAssignRole={assignRole}
       />
 
-      <ExternalBoostersSection
-        boosters={stagedExternals}
-        editing={editing}
-        locked={togglesLocked}
-        onAdd={addExternalBooster}
-        onRemove={removeExternalBooster}
-      />
-
       <Card>
         <CardHeader title="Roster validation" />
         <div className="space-y-2 px-4 py-4 text-sm">
@@ -758,133 +696,6 @@ function RosterBuilderEditor({
         </div>
       </dialog>
     </div>
-  );
-}
-
-/**
- * Boosters who are not registered on the website (e.g. in-house helpers).
- * Staged locally like every other roster edit and persisted by Save Roster;
- * shown as `@name <class>` in the Discord roster and Final Setup.
- */
-function ExternalBoostersSection({
-  boosters,
-  editing,
-  locked,
-  onAdd,
-  onRemove,
-}: {
-  boosters: StagedExternalBooster[];
-  editing: boolean;
-  locked: boolean;
-  onAdd: (input: ExternalBoosterInput) => string | null;
-  onRemove: (key: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [wowClass, setWowClass] = useState<WowClass>("MAGE");
-  const [role, setRole] = useState<CharacterRole>("DPS");
-  const [formError, setFormError] = useState<string | null>(null);
-  const classRoles = rolesForClass(wowClass);
-
-  function changeClass(next: WowClass) {
-    setWowClass(next);
-    const roles = rolesForClass(next);
-    if (!roles.includes(role)) setRole(roles.includes("DPS") ? "DPS" : roles[0]!);
-  }
-
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const problem = onAdd({ name, wowClass, role });
-    setFormError(problem);
-    if (!problem) setName("");
-  }
-
-  return (
-    <Card>
-      <CardHeader
-        title="External boosters"
-        description="Boosters without a website account. They count toward the role targets and appear as @name with their class in the Discord roster and Final Setup. They get no DMs, attendance or payouts."
-      />
-      <div className="space-y-3 px-4 py-4 text-sm">
-        {boosters.length === 0 ? (
-          <p className="text-muted">No external boosters.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
-            {boosters.map((booster) => (
-              <li key={booster.key} className="flex flex-wrap items-center gap-3 px-3 py-2">
-                <ClassIcon wowClass={booster.wowClass} size={18} />
-                <span className="font-medium" style={{ color: CLASS_COLORS[booster.wowClass] }}>
-                  @{booster.name}
-                </span>
-                <span className="text-muted">
-                  {CLASS_LABELS[booster.wowClass]} · {CHARACTER_ROLE_LABELS[booster.role]}
-                </span>
-                {editing ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="ml-auto"
-                    disabled={locked}
-                    onClick={() => onRemove(booster.key)}
-                  >
-                    Remove
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-        {editing ? (
-          <form onSubmit={submit} className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
-            <label className="text-sm">
-              <span className="mb-1 block text-xs text-muted">Name (e.g. Discord name)</span>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                maxLength={EXTERNAL_BOOSTER_NAME_MAX_LENGTH + 1}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                placeholder="dawn"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-xs text-muted">Class</span>
-              <select
-                value={wowClass}
-                onChange={(event) => changeClass(event.target.value as WowClass)}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              >
-                {WOW_CLASSES.map((option) => (
-                  <option key={option} value={option}>
-                    {CLASS_LABELS[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-xs text-muted">Role</span>
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value as CharacterRole)}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              >
-                {classRoles.map((option) => (
-                  <option key={option} value={option}>
-                    {CHARACTER_ROLE_LABELS[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Button type="submit" disabled={locked}>
-              Add
-            </Button>
-          </form>
-        ) : null}
-        {formError ? (
-          <p role="alert" className="text-danger">
-            {formError}
-          </p>
-        ) : null}
-      </div>
-    </Card>
   );
 }
 

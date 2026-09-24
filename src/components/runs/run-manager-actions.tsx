@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { RunCancelDialog } from "@/components/runs/run-cancel-dialog";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
+import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dialog";
+import type { ExternalBooster } from "@/lib/external-booster";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { FinalSetupInput } from "@/lib/run-start-message";
@@ -20,16 +22,20 @@ export function RunManagerActions({
   editor,
   unmarkedCount = 0,
   finalSetupPreview,
+  externalBoosters = null,
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
   editor: RunDetailView["editor"];
   unmarkedCount?: number;
   finalSetupPreview?: FinalSetupInput | null;
+  /** Set while the roster is editable — opens the External Boosters dialog. */
+  externalBoosters?: { boosters: ExternalBooster[]; rosterVersion: number } | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
@@ -48,6 +54,7 @@ export function RunManagerActions({
   }
 
   const hasActions =
+    Boolean(externalBoosters) ||
     capabilities.canEdit ||
     capabilities.canOpen ||
     capabilities.canCloseSignups ||
@@ -63,6 +70,11 @@ export function RunManagerActions({
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {externalBoosters ? (
+          <Button type="button" variant="secondary" onClick={() => setExternalOpen(true)}>
+            External Boosters{externalBoosters.boosters.length > 0 ? ` (${externalBoosters.boosters.length})` : ""}
+          </Button>
+        ) : null}
         {capabilities.canEdit ? (
           <Button type="button" variant="secondary" onClick={() => setEditOpen(true)}>
             Edit Run
@@ -120,6 +132,14 @@ export function RunManagerActions({
       ) : null}
       {editOpen && editor ? (
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
+      ) : null}
+      {externalOpen && externalBoosters ? (
+        <ExternalBoostersDialog
+          runId={runId}
+          rosterVersion={externalBoosters.rosterVersion}
+          boosters={externalBoosters.boosters}
+          onClose={() => setExternalOpen(false)}
+        />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
       {startOpen ? (

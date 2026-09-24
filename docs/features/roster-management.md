@@ -74,9 +74,9 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 
 ## External boosters
 
-Boosters who are **not registered** on the website (e.g. in-house helpers) are added by hand in the Roster builder's **External boosters** card: a name (usually their Discord name, a leading `@` is stripped), a WoW class and a role the class can play. Stored in `RunExternalBooster` (per `RunRoster`).
+Boosters who are **not registered** on the website (e.g. in-house helpers) are added by hand via the **External Boosters** button in the Run header (left of **Edit Run**, managers only, while the roster is editable: `OPEN` / `ROSTERING` / `PUBLISHED`). The dialog takes a name (usually their Discord name, a leading `@` is stripped), a WoW class and a role the class can play. Stored in `RunExternalBooster` (per `RunRoster`).
 
-- Staged locally like every other draft edit and persisted by **Save Roster** (`saveDraftSelection` → `externalBoosters`, the full set; omitted = unchanged). Seeding a replacement draft never touches them.
+- The dialog saves the full set on its own (`rosterService.saveExternalBoosters`, optimistic on the roster version) and bumps the roster version once; the page reloads, so unsaved Roster builder edits are lost. Save Roster from the builder leaves them untouched (`saveDraftSelection` without `externalBoosters`); seeding a replacement draft never touches them. After Start, use **Replace** on the Attendance tab instead.
 - Count toward the Tank/Healer/DPS composition and the Class Buff Checker; never create validation blockers.
 - Shown as `@name <class emoji>` (plain text, never a ping) in the signup embed's picked lists, the published Discord roster embed (DPS split melee/ranged by class), the Start Run preview and the Final Setup post.
 - Not signups: no notifications/DMs, no attendance, payouts, strikes, lockouts or Raid Invites.
