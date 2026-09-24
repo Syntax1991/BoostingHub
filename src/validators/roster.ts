@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CHARACTER_ROLES } from "@/models/enums";
+import { CHARACTER_ROLES, WOW_CLASSES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
 
 export const rosterRunSchema = z.object({
@@ -25,6 +25,17 @@ export const saveRosterDraftSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),
   selections: z.array(rosterSelectionSchema),
+  /** Hand-added unregistered boosters; full set, replaces the saved ones. Name rules live in lib/external-booster.ts. */
+  externalBoosters: z
+    .array(
+      z.object({
+        name: z.string().max(64),
+        wowClass: z.enum(WOW_CLASSES),
+        role: z.enum(CHARACTER_ROLES),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
 export const rosterVersionSchema = z.object({

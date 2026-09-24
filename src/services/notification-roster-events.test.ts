@@ -10,6 +10,8 @@ import {
 } from "@/repositories/user-notification.repository";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
+import { discordSyncService } from "@/services/discord-sync.service";
+import { renderFinalSetupText } from "@/lib/run-start-message";
 import type { CharacterRole } from "@/models/enums";
 
 const ids = {
@@ -164,6 +166,13 @@ async function cleanupRun(runId: string) {
   for (const row of notes) {
     await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
   }
+  // Started Runs (external booster Final Setup test) carry attendance + a start snapshot.
+  const attendance = await orm.RunAttendance.where({ runId }).select("id").all();
+  for (const row of attendance) {
+    await orm.RunAttendance.where({ id: (row as { id: string }).id }).delete();
+  }
+  const snapshot = await orm.RunStartSnapshot.where({ runId }).first();
+  if (snapshot) await orm.RunStartSnapshot.where({ runId }).delete();
   const roster = await orm.RunRoster.where({ runId }).first();
   if (roster) {
     const rosterId = (roster as { id: string }).id;
@@ -667,5 +676,110 @@ describe("notification roster publish events", () => {
     });
     const afterToggle = await userNotificationRepository.findById(notes[0].id);
     expect(afterToggle?.discordDeliveryStatus).toBe("SKIPPED");
+  });
+});
+
+describe("external boosters (hand-added, not registered)", () => {
+  it("are saved with Save Roster, count toward targets, show in Discord roster + Final Setup, and never notify", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const healer = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const selections = [
+      { signupId: tank, selectedRole: "TANK" as const },
+      { signupId: healer, selectedRole: "HEALER" as const },
+    ];
+
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections,
+      externalBoosters: [
+        { name: "@dawn", wowClass: "MAGE", role: "DPS" },
+        { name: "rogue guy", wowClass: "ROGUE", role: "DPS" },
+      ],
+    });
+
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.roster.externalBoosters.map(({ name, wowClass, role }) => ({ name, wowClass, role }))).toEqual([
+      { name: "dawn", wowClass: "MAGE", role: "DPS" },
+      { name: "rogue guy", wowClass: "ROGUE", role: "DPS" },
+    ]);
+    expect(view.composition.dps.selected).toBe(2);
+
+    // A save that omits externalBoosters (older client) leaves them alone.
+    await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.roster.externalBoosters).toHaveLength(2);
+
+    // Signup embed "picked" lists include them.
+    const signupEmbed = await discordSyncService.getSignupEmbedData(runId);
+    expect(signupEmbed?.members.picked.dps.map((member) => member.userName)).toEqual(["dawn", "rogue guy"]);
+    expect(signupEmbed?.roleStatus.dps.picked).toBe(2);
+
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+
+    const rosterEmbed = await discordSyncService.getRosterEmbedData(runId);
+    expect(rosterEmbed?.groups.rangedDps.map((member) => [member.userName, member.external])).toEqual([["dawn", true]]);
+    expect(rosterEmbed?.groups.meleeDps.map((member) => [member.userName, member.external])).toEqual([
+      ["rogue guy", true],
+    ]);
+    expect(rosterEmbed?.totalSelected).toBe(4);
+
+    await runService.startRun(lead, { runId });
+    const start = await discordSyncService.getRunStartEmbedData(runId);
+    expect(start?.groups.dps.map((member) => [member.userName, member.discordUserId, member.wowClass])).toEqual([
+      ["dawn", null, "MAGE"],
+      ["rogue guy", null, "ROGUE"],
+    ]);
+    const finalSetup = renderFinalSetupText({
+      raidName: start!.raidName,
+      difficulty: start!.difficulty,
+      lootType: start!.lootType,
+      raidLeadDisplayName: start!.raidLeadDisplayName,
+      targets: start!.targets,
+      groups: start!.groups,
+    });
+    expect(finalSetup).toContain("@dawn Mage");
+
+    const externalNotes = (await orm.UserNotification.where({ runId }).all()).filter(
+      (row) => !(row as { signupId: string | null }).signupId,
+    );
+    expect(externalNotes).toHaveLength(0);
+  });
+
+  it("an empty list removes them; invalid names are rejected", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const selections = [{ signupId: tank, selectedRole: "TANK" as const }];
+
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections,
+      externalBoosters: [{ name: "dawn", wowClass: "MAGE", role: "DPS" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await expect(
+      rosterService.saveDraftSelection(lead, {
+        runId,
+        version: view.roster.version,
+        selections,
+        externalBoosters: [{ name: "<@123>", wowClass: "MAGE", role: "DPS" }],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
+    await expect(
+      rosterService.saveDraftSelection(lead, {
+        runId,
+        version: view.roster.version,
+        selections,
+        externalBoosters: [{ name: "dawn", wowClass: "MAGE", role: "TANK" }],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
+
+    await rosterService.saveDraftSelection(lead, { runId, version: view.roster.version, selections, externalBoosters: [] });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.roster.externalBoosters).toEqual([]);
   });
 });

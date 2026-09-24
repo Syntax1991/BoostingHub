@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'85ba44364f9fa3d98e2cce5fb06cc0653843e3db62bfb6317df792ab14749c1f'>;
+  StorageHashBase<'c85b5ac147fb990a2a877fac6346c50336afdd8cee55b49c12996d6bd1834e6e'>;
 export type ExecutionHash =
-  ExecutionHashBase<'3e7f9ecc62cbb86a80c9f223b3f391f2d94866a9e295ea7ee436e4959940941c'>;
+  ExecutionHashBase<'37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -483,6 +483,28 @@ export type FieldOutputTypes = {
       readonly archiveTranscriptHtml: CodecTypes['pg/text@1']['output'] | null;
       readonly archiveTranscriptFilename: CodecTypes['pg/text@1']['output'] | null;
       readonly raidInviteSentSignupIds: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    };
+    readonly RunExternalBooster: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly rosterId: CodecTypes['pg/text@1']['output'];
+      readonly name: CodecTypes['pg/text@1']['output'];
+      readonly wowClass:
+        | 'DEATH_KNIGHT'
+        | 'DEMON_HUNTER'
+        | 'DRUID'
+        | 'EVOKER'
+        | 'HUNTER'
+        | 'MAGE'
+        | 'MONK'
+        | 'PALADIN'
+        | 'PRIEST'
+        | 'ROGUE'
+        | 'SHAMAN'
+        | 'WARLOCK'
+        | 'WARRIOR';
+      readonly role: 'TANK' | 'HEALER' | 'DPS';
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -943,6 +965,28 @@ export type FieldInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
+    readonly RunExternalBooster: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly rosterId: CodecTypes['pg/text@1']['input'];
+      readonly name: CodecTypes['pg/text@1']['input'];
+      readonly wowClass:
+        | 'DEATH_KNIGHT'
+        | 'DEMON_HUNTER'
+        | 'DRUID'
+        | 'EVOKER'
+        | 'HUNTER'
+        | 'MAGE'
+        | 'MONK'
+        | 'PALADIN'
+        | 'PRIEST'
+        | 'ROGUE'
+        | 'SHAMAN'
+        | 'WARLOCK'
+        | 'WARRIOR';
+      readonly role: 'TANK' | 'HEALER' | 'DPS';
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
+    };
     readonly RunPayoutEntry: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly settlementId: CodecTypes['pg/text@1']['input'];
@@ -1400,6 +1444,28 @@ export type StorageColumnTypes = {
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly voiceChannelId: CodecTypes['pg/text@1']['output'] | null;
     };
+    readonly run_external_booster: {
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly name: CodecTypes['pg/text@1']['output'];
+      readonly role: 'TANK' | 'HEALER' | 'DPS';
+      readonly rosterId: CodecTypes['pg/text@1']['output'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly wowClass:
+        | 'DEATH_KNIGHT'
+        | 'DEMON_HUNTER'
+        | 'DRUID'
+        | 'EVOKER'
+        | 'HUNTER'
+        | 'MAGE'
+        | 'MONK'
+        | 'PALADIN'
+        | 'PRIEST'
+        | 'ROGUE'
+        | 'SHAMAN'
+        | 'WARLOCK'
+        | 'WARRIOR';
+    };
     readonly run_payout_entry: {
       readonly adjustmentReason: CodecTypes['pg/text@1']['output'] | null;
       readonly amountGold: CodecTypes['pg/int4@1']['output'];
@@ -1856,6 +1922,28 @@ export type StorageColumnInputTypes = {
       readonly startPostedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly voiceChannelId: CodecTypes['pg/text@1']['input'] | null;
+    };
+    readonly run_external_booster: {
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly name: CodecTypes['pg/text@1']['input'];
+      readonly role: 'TANK' | 'HEALER' | 'DPS';
+      readonly rosterId: CodecTypes['pg/text@1']['input'];
+      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly wowClass:
+        | 'DEATH_KNIGHT'
+        | 'DEMON_HUNTER'
+        | 'DRUID'
+        | 'EVOKER'
+        | 'HUNTER'
+        | 'MAGE'
+        | 'MONK'
+        | 'PALADIN'
+        | 'PRIEST'
+        | 'ROGUE'
+        | 'SHAMAN'
+        | 'WARLOCK'
+        | 'WARRIOR';
     };
     readonly run_payout_entry: {
       readonly adjustmentReason: CodecTypes['pg/text@1']['input'] | null;
@@ -3763,6 +3851,70 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'run';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+              ];
+            };
+            readonly run_external_booster: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly rosterId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly name: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly wowClass: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly role: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly updatedAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: false;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'run_external_booster_rosterId_idx_ca029c6b';
+                  readonly prefix: 'run_external_booster_rosterId_idx';
+                  readonly columns: readonly ['rosterId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_external_booster';
+                    readonly columns: readonly ['rosterId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_roster';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -5696,6 +5848,10 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RunAttendance';
     };
+    readonly run_external_booster: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'RunExternalBooster';
+    };
     readonly run_roster_entry: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RunRosterEntry';
@@ -7476,6 +7632,70 @@ type ContractBase = Omit<
               };
             };
           };
+          readonly RunExternalBooster: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly rosterId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly name: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly wowClass: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly role: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+              readonly updatedAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+            };
+            readonly relations: {
+              readonly roster: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunRoster';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['rosterId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'run_external_booster';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly rosterId: { readonly column: 'rosterId' };
+                readonly name: { readonly column: 'name' };
+                readonly wowClass: { readonly column: 'wowClass' };
+                readonly role: { readonly column: 'role' };
+                readonly createdAt: { readonly column: 'createdAt' };
+                readonly updatedAt: { readonly column: 'updatedAt' };
+              };
+            };
+          };
           readonly RunPayoutEntry: {
             readonly fields: {
               readonly id: {
@@ -7767,6 +7987,17 @@ type ContractBase = Omit<
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
                   readonly model: 'RunRosterEntry';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['rosterId'];
+                };
+              };
+              readonly externalBoosters: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunExternalBooster';
                 };
                 readonly cardinality: '1:N';
                 readonly on: {
@@ -9754,6 +9985,23 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'run_discord_post';
+            readonly column: 'updatedAt';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
+          readonly onUpdate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'run_external_booster';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'run_external_booster';
             readonly column: 'updatedAt';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };

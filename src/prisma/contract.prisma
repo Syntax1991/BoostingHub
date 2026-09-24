@@ -785,7 +785,8 @@ model RunRoster {
   createdAt     TimestamptzString @default(now())
   updatedAt     temporal.updatedAtString()
 
-  entries RunRosterEntry[]
+  entries          RunRosterEntry[]
+  externalBoosters RunExternalBooster[]
 
   @@map("run_roster")
 }
@@ -809,6 +810,26 @@ model RunAttendance {
   @@index([runId])
   @@index([status])
   @@map("run_attendance")
+}
+
+/// A booster added by the Raid Lead who is not registered on the website
+/// (e.g. an in-house helper). Saved with the roster draft (Save Roster),
+/// counts toward the role targets and is shown as `@name <class>` in the
+/// Discord roster / Final Setup. Never part of signups, attendance, payouts,
+/// strikes or notifications.
+model RunExternalBooster {
+  id        String        @id @default(uuid())
+  rosterId  String
+  roster    RunRoster     @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  /// Display name (usually the Discord name), rendered as `@name`.
+  name      String
+  wowClass  WowClass
+  role      CharacterRole
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@index([rosterId])
+  @@map("run_external_booster")
 }
 
 model RunRosterEntry {

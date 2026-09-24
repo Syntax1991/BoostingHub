@@ -1,3 +1,4 @@
+import { mapExternalBoosters, type ExternalBooster } from "@/lib/external-booster";
 import { db, orm } from "@/lib/prisma";
 import { DomainError } from "@/lib/errors";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
@@ -132,6 +133,8 @@ export type RunListRecord = {
     publishedAt: string | null;
     draftSelectedCount: number;
     selections: RosterSelectionOnRun[];
+    /** Unregistered boosters added by hand; saved with the draft, count toward targets. */
+    externalBoosters: ExternalBooster[];
   } | null;
 };
 
@@ -306,6 +309,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
               selectedRole: row.selectedRole == null ? null : mapCharacterRole(row.selectedRole),
             };
           }),
+          externalBoosters: mapExternalBoosters(roster.externalBoosters),
         }
       : null,
   };
@@ -319,7 +323,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
       .orderBy((run) => run.scheduledStartAt.asc());
 
     if (filters.difficulty) {
@@ -342,7 +346,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
       .first();
 
     return run ? mapRun(run as Record<string, unknown>) : null;
@@ -361,7 +365,7 @@ export const runRepository = {
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
-      .include("roster", (roster) => roster.include("entries"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
       .orderBy((run) => run.scheduledStartAt.asc())
       .all();
 

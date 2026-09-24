@@ -1,0 +1,122 @@
+[
+  {
+    "id": "table.run_external_booster",
+    "label": "Create table \"run_external_booster\"",
+    "summary": "Creates table \"run_external_booster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_external_booster\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_external_booster\"",
+        "sql": "CREATE TABLE \"public\".\"run_external_booster\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"name\" text NOT NULL,\n  \"role\" text NOT NULL,\n  \"rosterId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"wowClass\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_external_booster_role_check_b1616ae6\" CHECK (\"role\" IN ('TANK', 'HEALER', 'DPS')),\n  CONSTRAINT \"run_external_booster_wowClass_check_8876c2a5\" CHECK (\"wowClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_external_booster\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_external_booster.run_external_booster_rosterId_idx_ca029c6b",
+    "label": "Create index \"run_external_booster_rosterId_idx_ca029c6b\" on \"run_external_booster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_external_booster_rosterId_idx_ca029c6b",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_external_booster_rosterId_idx_ca029c6b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_external_booster_rosterId_idx_ca029c6b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_external_booster_rosterId_idx_ca029c6b\"",
+        "sql": "CREATE INDEX \"run_external_booster_rosterId_idx_ca029c6b\" ON \"public\".\"run_external_booster\" (\"rosterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_external_booster_rosterId_idx_ca029c6b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_external_booster_rosterId_idx_ca029c6b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_external_booster.run_external_booster_rosterId_fkey",
+    "label": "Add foreign key \"run_external_booster_rosterId_fkey\" on \"run_external_booster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_external_booster_rosterId_fkey",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_external_booster_rosterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_rosterId_fkey",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_external_booster_rosterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_external_booster\"\nADD CONSTRAINT \"run_external_booster_rosterId_fkey\"\nFOREIGN KEY (\"rosterId\")\nREFERENCES \"public\".\"run_roster\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_external_booster_rosterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_rosterId_fkey",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ]
+  }
+]

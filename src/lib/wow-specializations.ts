@@ -109,6 +109,16 @@ const DPS_ATTACK_TYPE: Record<WowClass, Record<string, DpsAttackType>> = {
   WARRIOR: { Arms: "MELEE", Fury: "MELEE" },
 };
 
+/**
+ * Best guess when only the class is known (e.g. an external booster): RANGED
+ * when most of the class's DPS specializations are ranged, else MELEE.
+ */
+export function defaultDpsAttackTypeForClass(wowClass: WowClass): DpsAttackType {
+  const types = Object.values(DPS_ATTACK_TYPE[wowClass]);
+  const ranged = types.filter((type) => type === "RANGED").length;
+  return ranged * 2 > types.length ? "RANGED" : "MELEE";
+}
+
 /** Null for a non-DPS specialization (TANK/HEALER) or an unrecognized spec name. */
 export function attackTypeForSpecialization(wowClass: WowClass, specialization: string | null): DpsAttackType | null {
   if (!specialization) return null;

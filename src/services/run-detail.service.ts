@@ -1,3 +1,4 @@
+import type { ExternalBooster } from "@/lib/external-booster";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
@@ -26,6 +27,20 @@ import { rosterService, type RosterManagementView } from "@/services/roster.serv
 import { signupService } from "@/services/signup.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+
+/** Hand-added unregistered booster: renders as `@name <class>` in the Final Setup. */
+function externalFinalSetupParticipant(booster: ExternalBooster): FinalSetupParticipant {
+  return {
+    discordUserId: null,
+    userName: booster.name,
+    characterName: booster.name,
+    characterRealm: "",
+    wowClass: booster.wowClass,
+    classLabel: CLASS_LABELS[booster.wowClass],
+    participationType: "BOOSTER",
+    selectedRole: booster.role,
+  };
+}
 
 function toFinalSetupParticipant(signup: {
   userName: string;
@@ -179,7 +194,8 @@ export const runDetailService = {
       const selectedSignups = (await rosterRepository.listSignups(runId)).filter(
         (signup) => signup.status === "SELECTED",
       );
-      if (selectedSignups.length > 0) {
+      const externalBoosters = run.roster?.externalBoosters ?? [];
+      if (selectedSignups.length > 0 || externalBoosters.length > 0) {
         finalSetupPreview = {
           raidName: run.contentDisplay.productLabel,
           productLabel: run.contentDisplay.productLabel,
@@ -195,7 +211,10 @@ export const runDetailService = {
             healers: run.desiredHealerCount,
             dps: run.desiredDpsCount,
           },
-          groups: groupFinalSetupParticipants(selectedSignups.map(toFinalSetupParticipant)),
+          groups: groupFinalSetupParticipants([
+            ...selectedSignups.map(toFinalSetupParticipant),
+            ...externalBoosters.map(externalFinalSetupParticipant),
+          ]),
         };
       }
     }

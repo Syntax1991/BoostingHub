@@ -17,6 +17,20 @@ function member(overrides: Partial<RosterValidationMember>): RosterValidationMem
 }
 
 describe("validateRosterDraft", () => {
+  it("counts external boosters toward the role targets without adding blockers", () => {
+    const result = validateRosterDraft({
+      runStatus: "ROSTERING",
+      selected: [member({ selectedRole: "HEALER" })],
+      targets: { tanks: 1, healers: 1, dps: 2 },
+      externalBoosters: [{ role: "TANK" }, { role: "DPS" }, { role: "DPS" }],
+    });
+    expect(result.composition.tanks.selected).toBe(1);
+    expect(result.composition.dps.selected).toBe(2);
+    expect(result.composition.boosterTotal).toBe(4);
+    expect(result.blockers).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
   it("treats composition mismatch as warnings, not blockers", () => {
     const result = validateRosterDraft({
       runStatus: "ROSTERING",
