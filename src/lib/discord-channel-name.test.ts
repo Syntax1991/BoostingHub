@@ -5,6 +5,8 @@ import {
   DISCORD_CHANNEL_NAME_MAX,
   effectiveRaidLeadChannelName,
   formatRunVoiceChannelName,
+  raidWeekMinuteFromChannelName,
+  raidWeekMinuteFromSchedule,
   slugDiscordChannelSegment,
 } from "@/lib/discord-channel-name";
 
@@ -158,6 +160,21 @@ describe("buildDiscordRunChannelName", () => {
     const name = formatRunVoiceChannelName("X".repeat(300));
     expect(name.length).toBeLessThanOrEqual(DISCORD_CHANNEL_NAME_MAX);
     expect(name.startsWith("Raid with X")).toBe(true);
+  });
+
+  it("raid-week minute: channel names and schedules share one scale starting Wednesday 06:00 Berlin", () => {
+    expect(raidWeekMinuteFromChannelName("wed-0600-first")).toBe(0);
+    expect(raidWeekMinuteFromChannelName("fri-1300-nm-vip-9of9-locheia")).toBe(2 * 1440 + 7 * 60);
+    expect(raidWeekMinuteFromChannelName("wed-0500-late")).toBe(7 * 1440 - 60);
+    expect(raidWeekMinuteFromChannelName("FRI-1300-x")).toBe(raidWeekMinuteFromChannelName("fri-1300-x"));
+    for (const invalid of ["general", "raid-notes", "fri-2560-x", "fri-1299-x", "closed-fri-1300-x", "fri1300", "💰-current-id"]) {
+      expect(raidWeekMinuteFromChannelName(invalid)).toBeNull();
+    }
+    // A BoostingHub channel's own name parses to the same minute as its schedule (CET and CEST).
+    for (const scheduledStartAt of [SATURDAY_2200_BERLIN, "2026-09-25T20:15:00.000Z", "2026-01-14T05:30:00.000Z"]) {
+      const name = buildDiscordRunChannelName({ ...BASE, scheduledStartAt, coverage: "9of9" });
+      expect(raidWeekMinuteFromChannelName(name)).toBe(raidWeekMinuteFromSchedule(scheduledStartAt));
+    }
   });
 
   it("slugifies spaces and underscores in nickname", () => {

@@ -20,6 +20,7 @@
  * text channels (`#current-id`, `#next-id`) and by ordering the Run channels
  * around them, not by separate parent categories.
  */
+import { raidWeekMinuteFromChannelName, raidWeekMinuteFromSchedule } from "@/lib/discord-channel-name";
 
 export type ReconcilableChannel = {
   readonly id: string;
@@ -161,6 +162,8 @@ export async function reconcileChannels(
 export type CategoryChild = {
   readonly id: string;
   readonly position: number;
+  /** Channel name — lets manually created Run channels (`fri-1300-…`) sort by time too. */
+  readonly name?: string;
 };
 
 /** Lists the current children of a category (Run channels, the two markers, and any unmanaged channels), or null if the category itself can't be resolved. */
@@ -235,6 +238,36 @@ export function relativeOrderMatches(
   );
 }
 
+/**
+ * One CURRENT or NEXT section in time order: BoostingHub Run channels (time
+ * from `scheduledStartAt`) and manually created Run channels already in that
+ * section (time parsed from a `{weekday}-{HHMM}-…` name) are interleaved by
+ * minute of the raid week. Ties: BoostingHub first, then previous order.
+ * Unmanaged channels without a recognisable time keep their relative order
+ * at the end of the section. Nothing moves between sections, and unmanaged
+ * channels are only repositioned — never renamed, edited or deleted.
+ */
+function sortSectionByTime(
+  managedItems: ReadonlyArray<WeekSectionItem>,
+  childById: ReadonlyMap<string, CategoryChild>,
+  unmanaged: ReadonlyArray<CategoryChild>,
+): CategoryChild[] {
+  type Entry = { child: CategoryChild; minute: number; rank: number; index: number };
+  const timed: Entry[] = [];
+  managedItems.forEach((item, index) => {
+    const child = childById.get(item.existingRunChannelId);
+    if (child) timed.push({ child, minute: raidWeekMinuteFromSchedule(item.scheduledStartAt), rank: 0, index });
+  });
+  const untimed: CategoryChild[] = [];
+  unmanaged.forEach((child, index) => {
+    const minute = child.name ? raidWeekMinuteFromChannelName(child.name) : null;
+    if (minute === null) untimed.push(child);
+    else timed.push({ child, minute, rank: 1, index });
+  });
+  timed.sort((a, b) => a.minute - b.minute || a.rank - b.rank || a.index - b.index);
+  return [...timed.map((entry) => entry.child), ...untimed];
+}
+
 type WeekSectionPlan =
   | {
       status: "ok";
@@ -283,12 +316,6 @@ export function planWeekSectionOrder(
   const managedIds = new Set([...currentManaged, ...nextManaged].map((item) => item.existingRunChannelId));
 
   const childById = new Map(children.map((child) => [child.id, child]));
-  const resolvedCurrentManaged = currentManaged
-    .map((item) => childById.get(item.existingRunChannelId))
-    .filter((c): c is CategoryChild => Boolean(c));
-  const resolvedNextManaged = nextManaged
-    .map((item) => childById.get(item.existingRunChannelId))
-    .filter((c): c is CategoryChild => Boolean(c));
 
   const byPositionAsc = sortChildrenByPosition(children);
   const isMarker = (c: CategoryChild) => c.id === currentMarker.id || c.id === nextMarker.id;
@@ -309,11 +336,9 @@ export function planWeekSectionOrder(
   const finalOrder: CategoryChild[] = [
     ...unmanagedBefore,
     currentMarker,
-    ...resolvedCurrentManaged,
-    ...unmanagedBetween,
+    ...sortSectionByTime(currentManaged, childById, unmanagedBetween),
     nextMarker,
-    ...resolvedNextManaged,
-    ...unmanagedAfter,
+    ...sortSectionByTime(nextManaged, childById, unmanagedAfter),
   ];
 
   const currentOrderIds = byPositionAsc.map((c) => c.id);
@@ -382,12 +407,14 @@ export function mergeWeekSectionItemsForOrdering(
  * asserted up front and never itself changed by this function.
  *
  * A channel not owned by BoostingHub (not one of the two markers and not a
- * `runId`'s `existingRunChannelId` in `items`) keeps its relative position
- * among other unmanaged channels in whichever of the three zones (before
- * `#current-id`, between the markers, after `#next-id`) it already occupied
- * — it is never renamed, deleted, or reparented, and never reordered
- * relative to other unmanaged channels, only shifted as a block if managed
- * channels are inserted/removed around it.
+ * `runId`'s `existingRunChannelId` in `items`) stays in whichever of the three
+ * zones (before `#current-id`, between the markers, after `#next-id`) it
+ * already occupied and is never renamed, deleted, or reparented. Inside the
+ * CURRENT and NEXT sections, manually created Run channels whose name starts
+ * with `{weekday}-{HHMM}` are sorted by time together with BoostingHub's own
+ * Run channels (see `sortSectionByTime`); other unmanaged channels keep their
+ * relative order at the end of their section, and channels above
+ * `#current-id` are left untouched.
  */
 export async function reconcileWeekSectionPositions(
   listCategoryChildren: CategoryChannelLister,
