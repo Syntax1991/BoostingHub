@@ -9,6 +9,7 @@ import {
   setCharacterOffersSchema,
   setLootbuddiesSchema,
   signupOptionsSchema,
+  withdrawPickedSignupSchema,
   withdrawSignupSchema,
 } from "@/validators/signup";
 
@@ -94,6 +95,18 @@ export async function cancelBoosterSignupAction(input: unknown): Promise<ActionR
     const parsed = cancelSignupSchema.parse(input);
     await signupService.cancelBoosterSignup(user, parsed);
     return { ok: true, message: "Booster signup cancelled." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+/** A picked player (roster or saved draft) withdraws with a reason; the Raid Lead is notified. */
+export async function withdrawPickedSignupAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = withdrawPickedSignupSchema.parse(input);
+    await signupService.withdrawPickedSignup(user, parsed);
+    return { ok: true, message: "You withdrew from the roster. The raid lead has been told why." };
   } catch (error) {
     return mapActionError(error);
   }

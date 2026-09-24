@@ -222,3 +222,38 @@ export function planLootbuddyReconciliation(input: {
     blocked: [],
   };
 }
+
+/** A picked player may withdraw (with a reason) until the Run starts. */
+export const PICKED_WITHDRAW_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
+export const WITHDRAW_REASON_MIN_LENGTH = 3;
+export const WITHDRAW_REASON_MAX_LENGTH = 300;
+
+/**
+ * "Picked" = on the published roster (SELECTED) or in the saved roster draft —
+ * with Save Roster notifications the player already knows either way.
+ */
+export function isPickedSignup(
+  signup: { id: string; status: SignupStatus },
+  draftSelectedSignupIds: readonly string[],
+): boolean {
+  if (signup.status === "WITHDRAWN") return false;
+  return signup.status === "SELECTED" || draftSelectedSignupIds.includes(signup.id);
+}
+
+/** Collapses whitespace; throws WITHDRAW_REASON_REQUIRED when too short and VALIDATION_FAILED when too long. */
+export function normalizeWithdrawReason(value: string | null | undefined): string {
+  const reason = (value ?? "").replace(/\s+/g, " ").trim();
+  if (reason.length < WITHDRAW_REASON_MIN_LENGTH) {
+    throw new DomainError(
+      "WITHDRAW_REASON_REQUIRED",
+      "You are on the roster — tell the raid lead why you are withdrawing.",
+    );
+  }
+  if (reason.length > WITHDRAW_REASON_MAX_LENGTH) {
+    throw new DomainError(
+      "VALIDATION_FAILED",
+      `Keep the reason under ${WITHDRAW_REASON_MAX_LENGTH} characters.`,
+    );
+  }
+  return reason;
+}

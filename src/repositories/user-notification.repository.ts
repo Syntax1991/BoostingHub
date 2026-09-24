@@ -84,6 +84,11 @@ export function rosterRemovedSourceKey(runId: string, publishedVersion: number, 
   return `roster-removed:${runId}:${publishedVersion}:${signupId}`;
 }
 
+/** One per withdrawal: the roster version the withdrawal produced keeps a later re-pick + re-withdraw distinct. */
+export function rosterWithdrawnSourceKey(runId: string, rosterVersion: number, signupId: string): string {
+  return `roster-withdrawn:${runId}:${rosterVersion}:${signupId}`;
+}
+
 export function raidInviteSourceKey(runId: string, signupId: string): string {
   return `raid-invite:${runId}:${signupId}`;
 }

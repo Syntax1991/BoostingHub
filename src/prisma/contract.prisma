@@ -164,6 +164,8 @@ enum NotificationType {
   RUN_CANCELLED    = "RUN_CANCELLED"
   RUN_RESCHEDULED  = "RUN_RESCHEDULED"
   ROSTER_REMOVED   = "ROSTER_REMOVED"
+  /// To the Run's Raid Lead: a picked player withdrew (with their reason).
+  ROSTER_WITHDRAWN = "ROSTER_WITHDRAWN"
 }
 
 /// Discord DM delivery decision snapshotted at notification creation.
@@ -735,6 +737,9 @@ model RunSignup {
   lootbuddyMode         LootbuddyMode?
   lootbuddyVerification LootbuddyVerification?
   notes                 String?
+  /// Reason a picked (roster-selected) player gave when withdrawing. Required
+  /// for that withdrawal and sent to the Raid Lead; null for every other row.
+  withdrawReason        String?
   createdAt             TimestamptzString      @default(now())
   updatedAt             temporal.updatedAtString()
 

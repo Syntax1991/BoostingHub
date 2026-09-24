@@ -651,6 +651,8 @@ export const signupRepository = {
           status: "PENDING",
           publishedRole: null,
           isBackup: false,
+          // A new offer starts clean — the old withdrawal reason no longer applies.
+          withdrawReason: null,
           updatedAt: now,
         });
         await syncOfferedRoles(txOrm, offer.id, offer.offeredRoles, now);

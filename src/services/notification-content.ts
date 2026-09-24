@@ -3,6 +3,7 @@ import { discordTimestamp } from "@/lib/discord-timestamp";
 import { isInQuietHours, nextQuietHoursEndUtc, type QuietHoursSnapshot } from "@/lib/quiet-hours";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { runDetailPath } from "@/lib/run-routes";
+import { escapeDiscordInlineText } from "@/lib/run-start-message";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, WowClass } from "@/models/enums";
 import type { DiscordDeliveryStatus } from "@/models/enums";
 
@@ -51,6 +52,22 @@ export function rosterRemovedWebNotification(input: {
     title: "Removed from roster",
     message: `You are no longer in the roster for ${input.runTitle}${suffix}.`,
     href: runDetailPath(input.runId),
+  };
+}
+
+/** To the Raid Lead when a picked player withdraws — the reason is always included. */
+export function rosterWithdrawnWebNotification(input: {
+  runId: string;
+  runTitle: string;
+  playerName: string;
+  characterLabel: string | null;
+  reason: string;
+}): { title: string; message: string; href: string } {
+  const who = input.characterLabel ? `${input.playerName} (${input.characterLabel})` : input.playerName;
+  return {
+    title: "Player withdrew",
+    message: `${who} withdrew from the roster for ${input.runTitle}. Reason: ${input.reason}`,
+    href: runDetailPath(input.runId, "roster"),
   };
 }
 
@@ -209,6 +226,40 @@ export function buildRosterRemovedDmMessage(input: {
     "",
     "You are no longer in the roster for this run.",
   ].join("\n");
+}
+
+/**
+ * Raid Lead DM when a picked player withdraws. Player-controlled text (name,
+ * character, reason) is escaped so it cannot mention anyone or break markdown.
+ */
+export function buildRosterWithdrawnDmMessage(input: {
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  playerName: string;
+  characterLabel: string | null;
+  reason: string;
+  rosterUrl: string | null;
+}): string {
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  const who = input.characterLabel
+    ? `**${escapeDiscordInlineText(input.playerName)}** (${escapeDiscordInlineText(input.characterLabel)})`
+    : `**${escapeDiscordInlineText(input.playerName)}**`;
+  const lines = [
+    "🚪 **Roster Withdrawal**",
+    "",
+    input.productLabel,
+    `${when} · ${difficulty} · ${input.lootType}`,
+    "",
+    `${who} withdrew from the roster.`,
+    `Reason: ${escapeDiscordInlineText(input.reason)}`,
+  ];
+  if (input.rosterUrl) {
+    lines.push("", `Pick a replacement: ${input.rosterUrl}`);
+  }
+  return lines.join("\n");
 }
 
 export function buildRunCancelledDmMessage(input: {

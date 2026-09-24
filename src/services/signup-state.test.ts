@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   isActiveSignupOffer,
+  isPickedSignup,
+  normalizeWithdrawReason,
+  PICKED_WITHDRAW_RUN_STATUSES,
+  WITHDRAW_REASON_MAX_LENGTH,
   planCharacterOfferReconciliation,
   planLootbuddyReconciliation,
   type OfferReconciliationSignup,
@@ -174,5 +178,29 @@ describe("planLootbuddyReconciliation", () => {
     });
     expect(plan).toBeNull();
     expect(blocked).toEqual([{ signupId: "lb-1", reason: "ROSTER_SELECTED" }]);
+  });
+});
+
+describe("picked-player withdrawal rules", () => {
+  it("treats published SELECTED and saved-draft rows as picked, never WITHDRAWN ones", () => {
+    expect(isPickedSignup({ id: "a", status: "SELECTED" }, [])).toBe(true);
+    expect(isPickedSignup({ id: "b", status: "PENDING" }, ["b"])).toBe(true);
+    expect(isPickedSignup({ id: "c", status: "NOT_SELECTED" }, ["c"])).toBe(true);
+    expect(isPickedSignup({ id: "d", status: "PENDING" }, ["x"])).toBe(false);
+    expect(isPickedSignup({ id: "e", status: "WITHDRAWN" }, ["e"])).toBe(false);
+  });
+
+  it("allows it only until the Run starts", () => {
+    expect(PICKED_WITHDRAW_RUN_STATUSES).toEqual(["OPEN", "ROSTERING", "PUBLISHED"]);
+  });
+
+  it("requires a real reason and caps its length", () => {
+    expect(normalizeWithdrawReason("  sick,\n  sorry  ")).toBe("sick, sorry");
+    for (const missing of [undefined, null, "", "  ", "ab"]) {
+      expect(() => normalizeWithdrawReason(missing)).toThrow(expect.objectContaining({ code: "WITHDRAW_REASON_REQUIRED" }));
+    }
+    expect(() => normalizeWithdrawReason("x".repeat(WITHDRAW_REASON_MAX_LENGTH + 1))).toThrow(
+      expect.objectContaining({ code: "VALIDATION_FAILED" }),
+    );
   });
 });

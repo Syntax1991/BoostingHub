@@ -324,6 +324,10 @@
               {
                 "name": "ROSTER_REMOVED",
                 "value": "ROSTER_REMOVED"
+              },
+              {
+                "name": "ROSTER_WITHDRAWN",
+                "value": "ROSTER_WITHDRAWN"
               }
             ]
           },
@@ -4722,6 +4726,13 @@
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
+              },
+              "withdrawReason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {
@@ -4874,6 +4885,9 @@
                 },
                 "userId": {
                   "column": "userId"
+                },
+                "withdrawReason": {
+                  "column": "withdrawReason"
                 }
               },
               "namespaceId": "public",
@@ -10093,6 +10107,11 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "withdrawReason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 }
               },
               "foreignKeys": [
@@ -11133,8 +11152,8 @@
                   "prefix": "user_notification_discordDeliveryStatus_check"
                 },
                 {
-                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED')",
-                  "name": "user_notification_type_check_3f82dea7",
+                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN')",
+                  "name": "user_notification_type_check_6413e97d",
                   "prefix": "user_notification_type_check"
                 }
               ],
@@ -11487,7 +11506,8 @@
                 "RAID_INVITE",
                 "RUN_CANCELLED",
                 "RUN_RESCHEDULED",
-                "ROSTER_REMOVED"
+                "ROSTER_REMOVED",
+                "ROSTER_WITHDRAWN"
               ]
             },
             "ParticipationType": {
@@ -11601,7 +11621,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "c85b5ac147fb990a2a877fac6346c50336afdd8cee55b49c12996d6bd1834e6e"
+    "storageHash": "a2610b424b6d8e89c59ad5c6e53c89e83b866d960a218fd5c2b457ed35a06d05"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",

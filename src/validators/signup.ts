@@ -18,6 +18,12 @@ export const withdrawSignupSchema = z.object({
   signupId: entityIdSchema,
 });
 
+/** Picked player withdrawing — the reason's length rules live in signup-state.ts. */
+export const withdrawPickedSignupSchema = z.object({
+  signupId: entityIdSchema,
+  reason: z.string().max(2000),
+});
+
 export const signupOptionsSchema = z.object({
   runId: entityIdSchema,
 });

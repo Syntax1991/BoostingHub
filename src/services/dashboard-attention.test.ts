@@ -29,6 +29,7 @@ function baseItem(overrides: Partial<MyRunsProjection["selected"][number]> = {})
     lootbuddyMode: null,
     lootbuddyVerification: null,
     canWithdraw: true,
+    canWithdrawWithReason: false,
     scheduleConflicts: [],
     ...overrides,
   };

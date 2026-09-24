@@ -3,7 +3,7 @@ import { BOT_GATEWAY_INTENTS } from "@/discord-bot/intents";
 import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custom-ids";
 import type { BotEnv } from "@/discord-bot/env";
-import { handleCancelButton } from "@/discord-bot/interactions/cancel-handler";
+import { handleCancelButton, handleWithdrawReasonModal } from "@/discord-bot/interactions/cancel-handler";
 import {
   handleCharacterSelect,
   handleConfirmSignupButton,
@@ -67,6 +67,14 @@ export function createBotClient(env: BotEnv): Client {
             break;
           default:
             break;
+        }
+        return;
+      }
+
+      if (interaction.isModalSubmit()) {
+        const parsed = parseCustomId(interaction.customId);
+        if (parsed?.action === "withdraw-reason") {
+          await handleWithdrawReasonModal(interaction, api, parsed.runId);
         }
         return;
       }
