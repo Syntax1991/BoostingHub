@@ -57,15 +57,15 @@ describe("resolveBuffContributorClass", () => {
     ).toBe("MAGE");
   });
 
-  it("returns null for LOOT_ONLY even when class is known", () => {
+  it("counts a LOOT_ONLY lootbuddy's class too — it is in the raid", () => {
     expect(
       resolveBuffContributorClass({
         participationType: "LOOTBUDDY",
         lootbuddyMode: "LOOT_ONLY",
         lootbuddyClass: "PRIEST",
-        characterWowClass: "PRIEST",
+        characterWowClass: null,
       }),
-    ).toBeNull();
+    ).toBe("PRIEST");
   });
 
   it("returns null when class cannot be resolved", () => {
@@ -103,17 +103,17 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(result.buffs.find((item) => item.id === "ARCANE_INTELLECT")?.covered).toBe(false);
   });
 
-  it("D: Mage LOOT_ONLY does not cover (wowClass already resolved to null by caller)", () => {
+  it("D: Mage LOOT_ONLY Lootbuddy covers Arcane Intellect", () => {
     const byId = coverageById([
       participant({
         signupId: "lb1",
-        wowClass: null,
+        wowClass: "MAGE",
         participationType: "LOOTBUDDY",
         lootbuddyMode: "LOOT_ONLY",
         characterName: null,
       }),
     ]);
-    expect(byId.ARCANE_INTELLECT?.covered).toBe(false);
+    expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
   });
 
   it("E: Mage PLAYING Lootbuddy covers Arcane Intellect", () => {
@@ -190,11 +190,11 @@ describe("evaluateRaidBuffCoverage", () => {
     expect(new Set(result.buffs.flatMap((item) => item.providers.map((p) => p.signupId))).size).toBe(3);
   });
 
-  it("J: LOOT_ONLY Priest does not cover Fortitude; PLAYING Warrior covers Battle Shout", () => {
+  it("J: LOOT_ONLY Priest covers Fortitude; PLAYING Warrior covers Battle Shout", () => {
     const byId = coverageById([
       participant({
         signupId: "lb-priest",
-        wowClass: null,
+        wowClass: "PRIEST",
         participationType: "LOOTBUDDY",
         lootbuddyMode: "LOOT_ONLY",
         characterName: null,
@@ -207,7 +207,7 @@ describe("evaluateRaidBuffCoverage", () => {
         characterName: null,
       }),
     ]);
-    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(false);
+    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(true);
     expect(byId.BATTLE_SHOUT?.covered).toBe(true);
   });
 
@@ -330,6 +330,6 @@ describe("evaluateRaidBuffCoverage", () => {
 
     expect(byId.SKYFURY?.covered).toBe(true);
     expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
-    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(false);
+    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(true);
   });
 });

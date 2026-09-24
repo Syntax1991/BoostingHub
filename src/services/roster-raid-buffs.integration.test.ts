@@ -240,7 +240,8 @@ describe("rosterService Class Buff Checker integration", () => {
     const byId = Object.fromEntries(view.raidBuffCoverage.buffs.map((item) => [item.id, item]));
     expect(byId.SKYFURY?.covered).toBe(true);
     expect(byId.ARCANE_INTELLECT?.covered).toBe(true);
-    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(false);
+    // A LOOT_ONLY Lootbuddy is in the raid too and brings its class buff.
+    expect(byId.POWER_WORD_FORTITUDE?.covered).toBe(true);
 
     // Deselect protected rows before withdrawing offers.
     for (const signupId of [booster.id, mage.id, priest.id]) {
