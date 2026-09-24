@@ -289,7 +289,8 @@ export const runDetailService = {
             : activeOwn
                 .map((signup) => `${signup.participationType} · ${signup.status}`)
                 .join("; "),
-        publishedMemberCount: publishedRoster?.members.length ?? 0,
+        publishedMemberCount:
+          (publishedRoster?.members.length ?? 0) + (publishedRoster?.externalBoosters.length ?? 0),
         hasPublishedRoster: Boolean(publishedRoster),
       },
       permissions: {

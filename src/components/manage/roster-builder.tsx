@@ -535,6 +535,7 @@ function RosterBuilderEditor({
         title="Tanks"
         empty="No tank signups"
         signups={filteredTanks}
+        externals={externalBoosters.filter((booster) => booster.role === "TANK")}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -546,6 +547,7 @@ function RosterBuilderEditor({
         title="Healers"
         empty="No healer signups"
         signups={filteredHealers}
+        externals={externalBoosters.filter((booster) => booster.role === "HEALER")}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -557,6 +559,7 @@ function RosterBuilderEditor({
         title="DPS"
         empty="No DPS signups"
         signups={filteredDps}
+        externals={externalBoosters.filter((booster) => booster.role === "DPS")}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -703,6 +706,7 @@ function SignupSection({
   title,
   empty,
   signups,
+  externals = [],
   editing,
   locked,
   isRoleCopyChecked,
@@ -713,6 +717,8 @@ function SignupSection({
   title: string;
   empty: string;
   signups: SignupRow[];
+  /** Saved external boosters in this role — read-only here (edit via the Run header dialog). */
+  externals?: RosterView["roster"]["externalBoosters"];
   editing: boolean;
   locked: boolean;
   isRoleCopyChecked: (signup: SignupRow) => boolean;
@@ -723,7 +729,28 @@ function SignupSection({
   const grouped = groupByUser(signups);
   return (
     <Card>
-      <CardHeader title={title} description={`${signups.length} signup${signups.length === 1 ? "" : "s"}`} />
+      <CardHeader
+        title={title}
+        description={`${signups.length} signup${signups.length === 1 ? "" : "s"}${
+          externals.length > 0 ? ` · ${externals.length} external` : ""
+        }`}
+      />
+      {externals.length > 0 ? (
+        <ul className="divide-y divide-border border-b border-border">
+          {externals.map((booster) => (
+            <li key={booster.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+              <ClassIcon wowClass={booster.wowClass} size={18} />
+              <span className="font-medium" style={{ color: CLASS_COLORS[booster.wowClass] }}>
+                @{booster.name}
+              </span>
+              <span className="rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-xs text-accent">
+                External · Selected
+              </span>
+              <span className="text-xs text-muted">Edit via External Boosters at the top</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {signups.length === 0 ? (
         <EmptyState title={empty} description="New signups appear here after refresh while the window is open." />
       ) : (

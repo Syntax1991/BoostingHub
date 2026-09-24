@@ -26,7 +26,7 @@ export function RunRosterSection({ data }: { data: RunDetailView }) {
         title="Published roster"
         description={`Published by ${data.publishedRoster.publishedByName ?? "Unknown"} · ${formatDateTime(data.publishedRoster.publishedAt)}`}
       />
-      {data.publishedRoster.members.length === 0 ? (
+      {data.publishedRoster.members.length === 0 && data.publishedRoster.externalBoosters.length === 0 ? (
         <EmptyState title="No selected members." description="Publication metadata exists, but no SELECTED signups remain." />
       ) : (
         <ul className="divide-y divide-border">
@@ -44,6 +44,18 @@ export function RunRosterSection({ data }: { data: RunDetailView }) {
                 {member.selectedRole ? <RoleBadge role={member.selectedRole} /> : null}
                 <ParticipationBadge type={member.participationType} />
                 {member.isBackup ? <span className="text-xs text-muted">Backup</span> : null}
+              </div>
+            </li>
+          ))}
+          {data.publishedRoster.externalBoosters.map((booster) => (
+            <li key={booster.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+              <div>
+                <p className="font-medium">@{booster.name}</p>
+                <p className="text-xs text-muted">External booster</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ClassBadge wowClass={booster.wowClass} />
+                <RoleBadge role={booster.role} />
               </div>
             </li>
           ))}

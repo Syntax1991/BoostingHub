@@ -721,6 +721,12 @@ describe("external boosters (hand-added, not registered)", () => {
 
     await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
 
+    const published = await rosterService.getPublishedRosterView(runId);
+    expect(published?.externalBoosters.map((booster) => [booster.name, booster.wowClass, booster.role])).toEqual([
+      ["dawn", "MAGE", "DPS"],
+      ["rogue guy", "ROGUE", "DPS"],
+    ]);
+
     const rosterEmbed = await discordSyncService.getRosterEmbedData(runId);
     expect(rosterEmbed?.groups.rangedDps.map((member) => [member.userName, member.external])).toEqual([["dawn", true]]);
     expect(rosterEmbed?.groups.meleeDps.map((member) => [member.userName, member.external])).toEqual([
