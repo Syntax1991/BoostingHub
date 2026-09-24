@@ -1,4 +1,5 @@
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { Client, Events } from "discord.js";
+import { BOT_GATEWAY_INTENTS } from "@/discord-bot/intents";
 import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { parseCharacterScopedCustomId, parseCustomId } from "@/discord-bot/custom-ids";
 import type { BotEnv } from "@/discord-bot/env";
@@ -25,7 +26,7 @@ import { startSyncLoop } from "@/discord-bot/sync-loop";
  */
 export function createBotClient(env: BotEnv): Client {
   const api = new BotApiClient(env);
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const client = new Client({ intents: [...BOT_GATEWAY_INTENTS] });
 
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[discord-bot] logged in as ${readyClient.user.tag}`);

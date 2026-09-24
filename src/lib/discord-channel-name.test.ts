@@ -2,7 +2,9 @@
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
+  DISCORD_CHANNEL_NAME_MAX,
   effectiveRaidLeadChannelName,
+  formatRunVoiceChannelName,
   slugDiscordChannelSegment,
 } from "@/lib/discord-channel-name";
 
@@ -135,6 +137,27 @@ describe("buildDiscordRunChannelName", () => {
     expect(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: "   " })).toBe("Kiri");
     // Human-readable, not slugged: the Final Setup message shows it as-is.
     expect(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syn Tax" })).toBe("Syn Tax");
+  });
+
+  it("temporary Run voice channel: `Raid with <effective Raid Lead>`, human-readable, not slugged", () => {
+    expect(formatRunVoiceChannelName(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syntax" }))).toBe("Raid with Syntax");
+    expect(formatRunVoiceChannelName(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: null }))).toBe("Raid with Kiri");
+    expect(formatRunVoiceChannelName(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: "  " }))).toBe("Raid with Kiri");
+    expect(formatRunVoiceChannelName("Syn Tax")).toBe("Raid with Syn Tax");
+    expect(formatRunVoiceChannelName("Syntax")).not.toContain("raid-with");
+  });
+
+  it("temporary Run voice channel: line breaks and control characters cannot malform the name", () => {
+    const hostile = `  Syn${String.fromCharCode(13, 10)}tax${String.fromCharCode(9)}${String.fromCharCode(0)}${String.fromCharCode(0x2028)}Lead  `;
+    const name = formatRunVoiceChannelName(hostile);
+    expect(name).toBe("Raid with Syn tax Lead");
+    expect(Array.from(name).every((char) => char.codePointAt(0)! >= 0x20)).toBe(true);
+  });
+
+  it("temporary Run voice channel: stays within Discord's 100-character channel name limit", () => {
+    const name = formatRunVoiceChannelName("X".repeat(300));
+    expect(name.length).toBeLessThanOrEqual(DISCORD_CHANNEL_NAME_MAX);
+    expect(name.startsWith("Raid with X")).toBe(true);
   });
 
   it("slugifies spaces and underscores in nickname", () => {

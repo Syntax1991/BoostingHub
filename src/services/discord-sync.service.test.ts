@@ -7,7 +7,7 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { discordSyncService } from "@/services/discord-sync.service";
+import { discordSyncService, planRunVoiceChannel } from "@/services/discord-sync.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { formatFinalSetupLfgLine, renderFinalSetupText } from "@/lib/run-start-message";
@@ -1737,6 +1737,98 @@ describe("Final Setup LFG footer uses the assigned Run Raid Lead", () => {
     } finally {
       await setLeadNickname(null);
     }
+  });
+});
+
+describe("planRunVoiceChannel — temporary Run voice lifecycle decision", () => {
+  const plan = (status: Parameters<typeof planRunVoiceChannel>[0]["status"], voiceChannelId: string | null, extra: { archivedAt?: string | null; hasStartSnapshot?: boolean } = {}) =>
+    planRunVoiceChannel({ status, voiceChannelId, archivedAt: extra.archivedAt ?? null, hasStartSnapshot: extra.hasStartSnapshot ?? true });
+
+  it("provisions only for IN_PROGRESS with a start snapshot and no voice channel yet", () => {
+    expect(plan("IN_PROGRESS", null)).toBe("PROVISION");
+    expect(plan("IN_PROGRESS", null, { hasStartSnapshot: false })).toBeNull();
+    for (const status of ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED", "COMPLETED", "CANCELLED"] as const) {
+      expect(plan(status, null)).toBeNull();
+    }
+    expect(plan("IN_PROGRESS", null, { archivedAt: "2026-09-24T00:00:00.000Z" })).toBeNull();
+  });
+
+  it("keeps (RECONCILE) while IN_PROGRESS, RETIRE_IF_EMPTY once terminal or app-archived", () => {
+    expect(plan("IN_PROGRESS", "voice-1")).toBe("RECONCILE");
+    expect(plan("COMPLETED", "voice-1")).toBe("RETIRE_IF_EMPTY");
+    expect(plan("CANCELLED", "voice-1")).toBe("RETIRE_IF_EMPTY");
+    expect(plan("IN_PROGRESS", "voice-1", { archivedAt: "2026-09-24T00:00:00.000Z" })).toBe("RETIRE_IF_EMPTY");
+  });
+});
+
+describe("listSyncWork — voiceChannels lane", () => {
+  async function setLeadNickname(nickname: string | null) {
+    await orm.User.where({ id: ids.lead }).update({ discordRunChannelNickname: nickname, updatedAt: new Date().toISOString() });
+  }
+
+  async function publishedRun(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(13), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await createSignup({ runId: id, userId: ids.extra, characterId: null, participationType: "LOOTBUDDY", role: null, lootbuddyClass: "MAGE", lootbuddyMode: "LOOT_ONLY" });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const signup of view.groups.lootbuddies) {
+      view = await rosterService.getRosterManagementView(lead, id);
+      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    return id;
+  }
+
+  const voiceItem = async (id: string) => (await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id);
+
+  it("PUBLISHED → none; started by an ADMIN → PROVISION `Raid with <assigned Raid Lead>`; recorded → RECONCILE; terminal → RETIRE_IF_EMPTY", async () => {
+    try {
+      await setLeadNickname("Syntax");
+      const id = await publishedRun();
+      expect(await voiceItem(id)).toBeUndefined();
+
+      await runService.startRun(admin, { runId: id });
+      expect(await voiceItem(id)).toEqual({
+        runId: id,
+        existingVoiceChannelId: null,
+        desiredVoiceChannelName: "Raid with Syntax",
+        action: "PROVISION",
+      });
+
+      await setLeadNickname(null);
+      expect((await voiceItem(id))?.desiredVoiceChannelName).toBe("Raid with Discord Lead");
+
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-9" });
+      expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RECONCILE" });
+
+      for (const status of ["COMPLETED", "CANCELLED"] as const) {
+        await runRepository.updateFields(id, { status });
+        expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
+      }
+
+      await runRepository.updateFields(id, { status: "IN_PROGRESS" });
+      await orm.Run.where({ id }).update({ archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      expect(await voiceItem(id)).toMatchObject({ existingVoiceChannelId: "voice-9", action: "RETIRE_IF_EMPTY" });
+    } finally {
+      await setLeadNickname(null);
+    }
+  });
+
+  it("a Run completed before the bot ever polled gets no voice channel", async () => {
+    const id = await publishedRun();
+    await runService.startRun(lead, { runId: id });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    expect(await voiceItem(id)).toBeUndefined();
+  });
+
+  it("IN_PROGRESS without a start snapshot is not provisioned", async () => {
+    const id = await publishedRun();
+    await runRepository.updateFields(id, { status: "IN_PROGRESS" });
+    expect(await voiceItem(id)).toBeUndefined();
   });
 });
 

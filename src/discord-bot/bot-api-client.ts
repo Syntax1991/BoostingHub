@@ -70,6 +70,13 @@ export class BotApiClient {
 
   listSyncWork(classEmojiFingerprint = "") {
     return this.request<{
+      /** Temporary per-Run voice channels; optional so an older API response is tolerated. */
+      voiceChannels?: Array<{
+        runId: string;
+        existingVoiceChannelId: string | null;
+        desiredVoiceChannelName: string;
+        action: "PROVISION" | "RECONCILE" | "RETIRE_IF_EMPTY";
+      }>;
       channels: Array<{
         runId: string;
         existingRunChannelId: string;

@@ -9,7 +9,14 @@ import {
   type Client,
   type MessageEditOptions,
   type TextChannel,
+  type VoiceChannel,
 } from "discord.js";
+import {
+  reconcileRunVoiceChannels,
+  type ResolvedVoiceChannels,
+  type RunVoiceChannelAdapters,
+  type RunVoiceChannelWorkItem,
+} from "@/discord-bot/voice-channels";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { isDiscordUnknownChannelError, isDiscordCannotDmError } from "@/discord-bot/discord-api-errors";
@@ -267,6 +274,11 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     work.channels,
   );
 
+  // Temporary Run voice channels next — independent of text channels and of
+  // their ordering — so Raid Invite DMs later in this same pass can link a
+  // voice channel created now.
+  await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? []);
+
   // Lifecycle channel announcements must post before retirement transcript/delete
   // so CANCELLED messages appear in the final transcript.
   if ((work.runAnnouncements ?? []).length > 0) {
@@ -415,6 +427,71 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
 
   if (messagePhaseError) {
     throw messagePhaseError;
+  }
+}
+
+/**
+ * Temporary per-Run GuildVoice channels (see voice-channels.ts). Disabled when
+ * DISCORD_RUN_VOICE_CATEGORY_ID is unset. A configured id that does not
+ * resolve to a GuildCategory is an operator error: nothing is created (no
+ * fallback category), but existing channels are still kept/cleaned up.
+ * Never throws — voice is a convenience and must not break the sync pass.
+ */
+async function syncRunVoiceChannels(
+  client: Client,
+  env: BotEnv,
+  api: BotApiClient,
+  items: RunVoiceChannelWorkItem[],
+): Promise<ResolvedVoiceChannels> {
+  const voiceCategoryId = env.discordRunVoiceCategoryId ?? null;
+  if (!voiceCategoryId || items.length === 0) return new Map();
+
+  try {
+    let createVoiceChannel: RunVoiceChannelAdapters["createVoiceChannel"] = null;
+    if (items.some((item) => item.action !== "RETIRE_IF_EMPTY")) {
+      const category = await client.channels.fetch(voiceCategoryId).catch(() => null);
+      if (category && category.type === ChannelType.GuildCategory) {
+        createVoiceChannel = async (name) => {
+          const created = await (category as CategoryChannel).guild.channels.create({
+            name,
+            type: ChannelType.GuildVoice,
+            parent: category.id,
+          });
+          return created.id;
+        };
+      } else {
+        console.error(
+          `[discord-bot] DISCORD_RUN_VOICE_CATEGORY_ID ${voiceCategoryId} does not resolve to a category — no Run voice channels will be created`,
+        );
+      }
+    }
+
+    const adapters: RunVoiceChannelAdapters = {
+      fetchChannel: async (channelId) => {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel) return { kind: "unresolved" };
+        if (channel.type !== ChannelType.GuildVoice) return { kind: "other" };
+        const voice = channel as VoiceChannel;
+        return {
+          kind: "voice",
+          name: voice.name,
+          memberCount: voice.members.size,
+          setName: (name) => voice.setName(name),
+          delete: (reason) => voice.delete(reason),
+        };
+      },
+      createVoiceChannel,
+      recordVoiceChannel: async (runId, channelId) => {
+        await api.recordDiscordState(runId, { kind: "voice-channel", channelId });
+      },
+      clearVoiceChannel: async (runId, channelId) => {
+        await api.recordDiscordState(runId, { kind: "clear-voice-channel", channelId });
+      },
+    };
+    return await reconcileRunVoiceChannels(adapters, items);
+  } catch (error) {
+    console.error("[discord-bot] Run voice channel sync failed", error);
+    return new Map();
   }
 }
 
