@@ -6,6 +6,26 @@ import { attendanceRepository, type AttendanceRecord } from "@/repositories/atte
 import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
+import {
+  externalBoosterInputError,
+  normalizeExternalBoosterName,
+  type ExternalBoosterInput,
+} from "@/lib/external-booster";
+import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
+
+/** Who can step in for a participant after Start: active signups of this Run that are not on the roster. */
+export type ReplacementCandidate = {
+  signupId: string;
+  userName: string;
+  characterName: string | null;
+  wowClass: WowClass | null;
+  participationType: ParticipationType;
+  offeredRoles: CharacterRole[];
+};
+
+export type ReplacementInput =
+  | { kind: "signup"; signupId: string }
+  | ({ kind: "external" } & ExternalBoosterInput);
 
 function noteValue(note: string | null | undefined): string | null {
   const trimmed = note?.trim() ?? "";
@@ -106,13 +126,70 @@ export const attendanceService = {
   async getManagerAttendance(user: AuthenticatedUser, runId: string) {
     const run = await loadManagedRun(user, runId);
     const rows = await attendanceRepository.listByRunId(runId);
+    const canMutate = run.status === "IN_PROGRESS";
+    const signups = canMutate ? await rosterRepository.listSignups(runId) : [];
+    const replacementCandidates: ReplacementCandidate[] = signups
+      .filter((signup) => signup.status === "PENDING" || signup.status === "NOT_SELECTED")
+      .filter((signup) => !rows.some((row) => row.signupId === signup.id))
+      .map((signup) => ({
+        signupId: signup.id,
+        userName: signup.userName,
+        characterName: signup.character?.name ?? null,
+        wowClass: signup.character?.wowClass ?? signup.lootbuddyClass ?? null,
+        participationType: signup.participationType,
+        offeredRoles: signup.offeredRoles,
+      }));
     return {
       runStatus: run.status,
       started: rows.length > 0,
-      canMutate: run.status === "IN_PROGRESS",
+      canMutate,
       summary: summaryFrom(rows),
       rows: rows.map(toManagerRow),
+      replacementCandidates,
+      /** Hand-added boosters in the raid (Final Setup only — no attendance or payout). */
+      externalBoosters: run.roster?.externalBoosters ?? [],
     };
+  },
+
+  /**
+   * Swaps a participant of a started Run (typically a no-show) for another
+   * signup of this Run or an external booster. The original is marked NO_SHOW
+   * (no cut); a registered replacement gets its own PRESENT row (full cut) and
+   * a Raid Invite. See attendanceRepository.replaceParticipantAtomic.
+   */
+  async replaceParticipant(user: AuthenticatedUser, input: { attendanceId: string; replacement: ReplacementInput }) {
+    const row = await attendanceRepository.findById(input.attendanceId);
+    if (!row) {
+      throw new DomainError("ATTENDANCE_NOT_FOUND", "Attendance was not found.", 404);
+    }
+    const run = await runRepository.findById(row.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    if (!canManageRun(user, run)) {
+      throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "You cannot manage attendance for this run.", 403);
+    }
+    if (run.status !== "IN_PROGRESS") {
+      throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "Participants can only be replaced while the run is in progress.");
+    }
+
+    let replacement = input.replacement;
+    if (replacement.kind === "external") {
+      if (row.participationType !== "BOOSTER") {
+        throw new DomainError("INVALID_ROSTER_SELECTION", "Only a booster slot can be filled by an external booster.");
+      }
+      const invalid = externalBoosterInputError(replacement);
+      if (invalid) throw new DomainError("INVALID_ROSTER_SELECTION", invalid);
+      replacement = { ...replacement, name: normalizeExternalBoosterName(replacement.name) };
+    }
+
+    const result = await attendanceRepository.replaceParticipantAtomic({
+      runId: row.runId,
+      attendanceId: row.id,
+      managerId: user.id,
+      replacement,
+    });
+    return { runId: row.runId, replacementName: result.replacementName };
   },
 
   async getOwnAttendance(user: AuthenticatedUser, runId: string) {

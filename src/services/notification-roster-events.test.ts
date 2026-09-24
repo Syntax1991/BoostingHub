@@ -11,6 +11,7 @@ import {
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { renderFinalSetupText } from "@/lib/run-start-message";
 import type { CharacterRole } from "@/models/enums";
@@ -876,5 +877,116 @@ describe("picked player withdraws with a reason", () => {
     await expect(signupService.withdrawFromRun(player, { runId, reason: "Sick" })).rejects.toMatchObject({
       code: "INVALID_STATE_TRANSITION",
     });
+  });
+});
+
+describe("replace a participant after Start", () => {
+  async function startedRunWithHealer() {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const healer = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const bench = await createSignup({ runId, userId: ids.playerB, characterId: charPlayerB, role: "HEALER" });
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.saveDraftSelection(lead, {
+      runId,
+      version: view.roster.version,
+      selections: [
+        { signupId: tank, selectedRole: "TANK" },
+        { signupId: healer, selectedRole: "HEALER" },
+      ],
+    });
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    // The Final Setup was already posted in the Run channel.
+    await discordSyncService.recordRunChannel({ runId, channelId: `chan-${runId}` });
+    await runService.startRun(lead, { runId });
+    await discordSyncService.recordStartPost({ runId, channelId: `chan-${runId}`, messageId: `start-${runId}` });
+    const attendance = await attendanceService.getManagerAttendance(lead, runId);
+    const healerRow = attendance.rows.find((row) => row.userName === "Notify Player")!;
+    return { runId, healer, bench, healerRowId: healerRow.id };
+  }
+
+  it("a signed-up replacement: original No-show, replacement Present (full cut) + Raid Invite, Final Setup re-edited", async () => {
+    const { runId, healer, bench, healerRowId } = await startedRunWithHealer();
+    const before = await attendanceService.getManagerAttendance(lead, runId);
+    expect(before.replacementCandidates.map((candidate) => candidate.signupId)).toEqual([bench]);
+    let work = await discordSyncService.listSyncWork();
+    expect(work.start?.some((item) => item.runId === runId)).toBe(false);
+
+    await attendanceService.replaceParticipant(lead, {
+      attendanceId: healerRowId,
+      replacement: { kind: "signup", signupId: bench },
+    });
+
+    const after = await attendanceService.getManagerAttendance(lead, runId);
+    const original = after.rows.find((row) => row.id === healerRowId)!;
+    expect(original.status).toBe("NO_SHOW");
+    expect(original.note).toMatch(/^Replaced by Notify Player B/);
+    const stepIn = after.rows.find((row) => row.userName === "Notify Player B")!;
+    expect(stepIn.status).toBe("PRESENT");
+    expect(stepIn.selectedRole).toBe("HEALER");
+    expect(stepIn.note).toBe("Replacement for Notify Player");
+
+    const signups = await orm.RunSignup.where({ runId }).all();
+    const statusOf = (id: string) => (signups.find((row) => (row as { id: string }).id === id) as { status: string }).status;
+    expect(statusOf(healer)).toBe("NOT_SELECTED");
+    expect(statusOf(bench)).toBe("SELECTED");
+
+    const invites = (await userNotificationRepository.listForUser(ids.playerB, 50)).filter(
+      (note) => note.runId === runId && note.type === "RAID_INVITE",
+    );
+    expect(invites).toHaveLength(1);
+
+    const start = await discordSyncService.getRunStartEmbedData(runId);
+    expect(start?.groups.healers.map((member) => member.userName)).toEqual(["Notify Player B"]);
+    work = await discordSyncService.listSyncWork();
+    const startItem = work.start?.find((item) => item.runId === runId);
+    expect(startItem?.existingMessageId).toBe(`start-${runId}`);
+
+    // Once the edit is recorded the post is current again.
+    await discordSyncService.recordStartPost({ runId, channelId: `chan-${runId}`, messageId: `start-${runId}` });
+    work = await discordSyncService.listSyncWork();
+    expect(work.start?.some((item) => item.runId === runId)).toBe(false);
+  });
+
+  it("an external replacement joins the Final Setup only; the no-show gets no cut", async () => {
+    const { runId, healerRowId } = await startedRunWithHealer();
+
+    await attendanceService.replaceParticipant(lead, {
+      attendanceId: healerRowId,
+      replacement: { kind: "external", name: "@dawn", wowClass: "PRIEST", role: "HEALER" },
+    });
+
+    const after = await attendanceService.getManagerAttendance(lead, runId);
+    expect(after.rows.find((row) => row.id === healerRowId)?.status).toBe("NO_SHOW");
+    expect(after.externalBoosters.map((booster) => booster.name)).toEqual(["dawn"]);
+    const start = await discordSyncService.getRunStartEmbedData(runId);
+    expect(start?.groups.healers.map((member) => [member.userName, member.discordUserId])).toEqual([["dawn", null]]);
+
+    await expect(
+      attendanceService.replaceParticipant(lead, {
+        attendanceId: healerRowId,
+        replacement: { kind: "external", name: "dawn", wowClass: "MAGE", role: "HEALER" },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
+  });
+
+  it("only while the Run is in progress, and only by a manager", async () => {
+    const { runId, bench, healerRowId } = await startedRunWithHealer();
+    const player = asUser(ids.player, "Notify Player");
+    await expect(
+      attendanceService.replaceParticipant(player, {
+        attendanceId: healerRowId,
+        replacement: { kind: "signup", signupId: bench },
+      }),
+    ).rejects.toMatchObject({ code: "ATTENDANCE_NOT_MANAGEABLE" });
+
+    await orm.Run.where({ id: runId }).update({ status: "COMPLETED", updatedAt: new Date().toISOString() });
+    await expect(
+      attendanceService.replaceParticipant(lead, {
+        attendanceId: healerRowId,
+        replacement: { kind: "signup", signupId: bench },
+      }),
+    ).rejects.toMatchObject({ code: "ATTENDANCE_NOT_MANAGEABLE" });
   });
 });

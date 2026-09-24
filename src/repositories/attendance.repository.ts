@@ -1,7 +1,10 @@
 import { db, orm } from "@/lib/prisma";
 import { DomainError } from "@/lib/errors";
+import type { ExternalBoosterInput } from "@/lib/external-booster";
+import { ATTENDANCE_NOTE_MAX } from "@/services/run-state";
 import {
   asBoolean,
+  asNumber,
   asString,
   asStringOrNull,
   mapAttendanceStatus,
@@ -97,6 +100,70 @@ function mapAttendance(row: Record<string, unknown>): AttendanceRecord {
     participationType: mapParticipation(signup.participationType),
     isBackup: asBoolean(signup.isBackup),
   };
+}
+
+/** RAID_INVITE (web + DM) for one participant who is joining a started Run. */
+async function createRaidInviteNotificationInTx(
+  txOrm: TxOrm,
+  input: { runId: string; productLabel: string; signupRow: Record<string, unknown>; now: string },
+): Promise<void> {
+  const { runId, productLabel, signupRow, now } = input;
+  const signupId = asString(signupRow.id);
+  const userId = asString(signupRow.userId);
+  let userRow = (signupRow.user as Record<string, unknown> | undefined) ?? null;
+  if (!userRow) {
+    userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
+  }
+  const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
+  const eventDmEnabled = userRow ? userRow.dmRaidInviteEnabled !== false : true;
+  const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
+  const participationType = mapParticipation(signupRow.participationType);
+  const publishedRole =
+    signupRow.publishedRole == null ? null : mapCharacterRole(signupRow.publishedRole);
+  const character = signupRow.character ? (signupRow.character as Record<string, unknown>) : null;
+  const assignment: NotificationAssignmentInput = {
+    participationType,
+    publishedRole,
+    characterName: character ? asStringOrNull(character.name) : null,
+    characterRealm: character ? asStringOrNull(character.realm) : null,
+    wowClass:
+      participationType === "LOOTBUDDY"
+        ? signupRow.lootbuddyClass != null
+          ? mapWowClass(signupRow.lootbuddyClass)
+          : character
+            ? mapWowClass(character.wowClass)
+            : null
+        : character
+          ? mapWowClass(character.wowClass)
+          : null,
+  };
+  const copy = raidInviteWebNotification({
+    runId,
+    productLabel,
+    assignment,
+  });
+  const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
+  const discordDmDelivery = resolveDiscordDelivery({
+    discordDmEnabled,
+    eventDmEnabled,
+    discordUserId,
+    quietHours,
+    timeZone,
+  });
+  await userNotificationRepository.createInTx(txOrm, {
+    userId,
+    type: "RAID_INVITE",
+    runId,
+    signupId,
+    sourceKey: raidInviteSourceKey(runId, signupId),
+    title: copy.title,
+    message: copy.message,
+    href: copy.href,
+    discordDeliveryStatus: discordDmDelivery.status,
+    discordUserId: discordDmDelivery.discordUserId,
+    discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
+    createdAt: now,
+  });
 }
 
 function attendanceQuery() {
@@ -298,65 +365,198 @@ export const attendanceRepository = {
       });
 
       for (const signup of selected) {
-        const signupRow = signup as Record<string, unknown>;
-        const signupId = asString(signupRow.id);
-        const userId = asString(signupRow.userId);
-        let userRow = (signupRow.user as Record<string, unknown> | undefined) ?? null;
-        if (!userRow) {
-          userRow = ((await txOrm.User.where({ id: userId }).first()) as Record<string, unknown> | null) ?? null;
-        }
-        const discordDmEnabled = userRow ? userRow.discordDmEnabled !== false : true;
-        const eventDmEnabled = userRow ? userRow.dmRaidInviteEnabled !== false : true;
-        const discordUserId = userRow ? asStringOrNull(userRow.discordUserId) : null;
-        const participationType = mapParticipation(signupRow.participationType);
-        const publishedRole =
-          signupRow.publishedRole == null ? null : mapCharacterRole(signupRow.publishedRole);
-        const character = signupRow.character ? (signupRow.character as Record<string, unknown>) : null;
-        const assignment: NotificationAssignmentInput = {
-          participationType,
-          publishedRole,
-          characterName: character ? asStringOrNull(character.name) : null,
-          characterRealm: character ? asStringOrNull(character.realm) : null,
-          wowClass:
-            participationType === "LOOTBUDDY"
-              ? signupRow.lootbuddyClass != null
-                ? mapWowClass(signupRow.lootbuddyClass)
-                : character
-                  ? mapWowClass(character.wowClass)
-                  : null
-              : character
-                ? mapWowClass(character.wowClass)
-                : null,
-        };
-        const copy = raidInviteWebNotification({
+        await createRaidInviteNotificationInTx(txOrm, {
           runId,
           productLabel,
-          assignment,
-        });
-        const { quietHours, timeZone } = quietHoursDeliveryContextFromUserRow(userRow);
-        const discordDmDelivery = resolveDiscordDelivery({
-          discordDmEnabled,
-          eventDmEnabled,
-          discordUserId,
-          quietHours,
-          timeZone,
-        });
-        await userNotificationRepository.createInTx(txOrm, {
-          userId,
-          type: "RAID_INVITE",
-          runId,
-          signupId,
-          sourceKey: raidInviteSourceKey(runId, signupId),
-          title: copy.title,
-          message: copy.message,
-          href: copy.href,
-          discordDeliveryStatus: discordDmDelivery.status,
-          discordUserId: discordDmDelivery.discordUserId,
-          discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
-          createdAt: now,
+          signupRow: signup as Record<string, unknown>,
+          now,
         });
       }
     });
+  },
+
+  /**
+   * Replaces a participant of a started Run (e.g. a no-show), in one transaction:
+   * - the original attendance row becomes NO_SHOW (0 cut) with a "Replaced by" note,
+   *   and the original signup leaves the live roster (NOT_SELECTED)
+   * - a registered replacement (a PENDING / NOT_SELECTED signup of this Run with
+   *   the same participation type) becomes SELECTED in the original's role and
+   *   gets its own PRESENT attendance row (full cut) plus a Raid Invite
+   * - an external replacement is added to the roster as an external booster
+   *   (Final Setup only — no account, so no attendance or payout)
+   * - the roster version is bumped so the Discord roster and Final Setup
+   *   posts are edited
+   */
+  async replaceParticipantAtomic(input: {
+    runId: string;
+    attendanceId: string;
+    managerId: string;
+    replacement: { kind: "signup"; signupId: string } | ({ kind: "external" } & ExternalBoosterInput);
+  }): Promise<{ replacementName: string }> {
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const run = (await txOrm.Run.where({ id: input.runId }).first()) as Record<string, unknown> | null;
+      if (!run || asString(run.status) !== "IN_PROGRESS") {
+        throw new DomainError("ATTENDANCE_NOT_MANAGEABLE", "Participants can only be replaced while the run is in progress.");
+      }
+      const original = (await txOrm.RunAttendance.where({ id: input.attendanceId })
+        .include("rosterEntry", (entry) => entry.include("signup", (signup) => signup.include("user").include("character")))
+        .first()) as Record<string, unknown> | null;
+      if (!original || asString(original.runId) !== input.runId) {
+        throw new DomainError("ATTENDANCE_NOT_FOUND", "Attendance was not found.", 404);
+      }
+      const originalRecord = mapAttendance(original);
+      const roster = (await txOrm.RunRoster.where({ runId: input.runId }).first()) as Record<string, unknown> | null;
+      if (!roster) {
+        throw new DomainError("NOT_FOUND", "Roster was not found.", 404);
+      }
+      const rosterId = asString(roster.id);
+      const now = new Date().toISOString();
+      const role = originalRecord.participationType === "BOOSTER" ? originalRecord.selectedRole : null;
+
+      let replacementName: string;
+      if (input.replacement.kind === "signup") {
+        const replacementSignupId = input.replacement.signupId;
+        const signup = (await txOrm.RunSignup.where({ id: replacementSignupId })
+          .include("user")
+          .include("character")
+          .first()) as Record<string, unknown> | null;
+        if (!signup || asString(signup.runId) !== input.runId) {
+          throw new DomainError("NOT_FOUND", "The replacement signup was not found on this run.", 404);
+        }
+        const status = asString(signup.status);
+        if (status !== "PENDING" && status !== "NOT_SELECTED") {
+          throw new DomainError("INVALID_ROSTER_SELECTION", "Only a pending or not-selected signup can step in.");
+        }
+        if (mapParticipation(signup.participationType) !== originalRecord.participationType) {
+          throw new DomainError(
+            "INVALID_ROSTER_SELECTION",
+            originalRecord.participationType === "BOOSTER"
+              ? "A booster slot can only be filled by a booster signup."
+              : "A lootbuddy slot can only be filled by a lootbuddy signup.",
+          );
+        }
+        const replacementUserId = asString(signup.userId);
+        if (originalRecord.participationType === "BOOSTER") {
+          const attending = (await this.listByRunIdInTx(txOrm, input.runId)).some(
+            (row) =>
+              row.userId === replacementUserId &&
+              row.participationType === "BOOSTER" &&
+              row.status !== "NO_SHOW" &&
+              row.status !== "EXCUSED",
+          );
+          if (attending) {
+            throw new DomainError("INVALID_ROSTER_SELECTION", "That player already holds a booster slot in this run.");
+          }
+        }
+
+        await txOrm.RunSignup.where({ id: replacementSignupId }).update({
+          status: "SELECTED",
+          publishedRole: role,
+          updatedAt: now,
+        });
+        const existingEntry = (await txOrm.RunRosterEntry.where({ rosterId, signupId: replacementSignupId }).first()) as
+          | Record<string, unknown>
+          | null;
+        let rosterEntryId = existingEntry ? asString(existingEntry.id) : "";
+        if (existingEntry) {
+          await txOrm.RunRosterEntry.where({ id: rosterEntryId }).update({ selected: true, selectedRole: role, updatedAt: now });
+        } else {
+          rosterEntryId = crypto.randomUUID();
+          await txOrm.RunRosterEntry.create({
+            id: rosterEntryId,
+            rosterId,
+            signupId: replacementSignupId,
+            selected: true,
+            selectedRole: role,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        const existingAttendance = await txOrm.RunAttendance.where({ rosterEntryId }).first();
+        if (existingAttendance) {
+          throw new DomainError("INVALID_ROSTER_SELECTION", "That signup already has an attendance row.");
+        }
+        const user = (signup.user as Record<string, unknown> | undefined) ?? {};
+        const character = signup.character as Record<string, unknown> | undefined;
+        replacementName = character ? `${asString(user.name)} (${asString(character.name)})` : asString(user.name);
+        await txOrm.RunAttendance.create({
+          id: crypto.randomUUID(),
+          runId: input.runId,
+          rosterEntryId,
+          // Stepping in counts as attending: a full cut unless the Raid Lead changes it.
+          status: "PRESENT",
+          note: `Replacement for ${originalRecord.userName}`.slice(0, ATTENDANCE_NOTE_MAX),
+          markedAt: now,
+          markedById: input.managerId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await createRaidInviteNotificationInTx(txOrm, {
+          runId: input.runId,
+          productLabel: asStringOrNull(run.title)?.trim() || "Run",
+          signupRow: { ...signup, publishedRole: role },
+          now,
+        });
+      } else {
+        const { name, wowClass } = input.replacement;
+        const externalRole = input.replacement.role;
+        await txOrm.RunExternalBooster.create({
+          id: crypto.randomUUID(),
+          rosterId,
+          name,
+          wowClass,
+          role: externalRole,
+          createdAt: now,
+          updatedAt: now,
+        });
+        replacementName = `@${name} (external)`;
+      }
+
+      await txOrm.RunAttendance.where({ id: input.attendanceId }).update({
+        status: "NO_SHOW",
+        note: `Replaced by ${replacementName}`.slice(0, ATTENDANCE_NOTE_MAX),
+        markedAt: now,
+        markedById: input.managerId,
+        updatedAt: now,
+      });
+      if (originalRecord.signupId) {
+        await txOrm.RunSignup.where({ id: originalRecord.signupId }).update({
+          status: "NOT_SELECTED",
+          publishedRole: null,
+          updatedAt: now,
+        });
+      }
+
+      const previousVersion = asNumber(roster.version, 1);
+      await txOrm.RunRoster.where({ id: rosterId }).update({ version: previousVersion + 1, updatedAt: now });
+      // A Final Setup posted before this column existed has no baseline yet;
+      // anchor it to the pre-replacement version so the post gets edited.
+      const post = (await txOrm.RunDiscordPost.where({ runId: input.runId }).first()) as Record<string, unknown> | null;
+      if (post && asStringOrNull(post.startMessageId) && post.lastStartRosterVersion == null) {
+        await txOrm.RunDiscordPost.where({ runId: input.runId }).update({
+          lastStartRosterVersion: previousVersion,
+          updatedAt: now,
+        });
+      }
+
+      await txOrm.ActivityEvent.create({
+        id: crypto.randomUUID(),
+        userId: input.managerId,
+        type: "PARTICIPANT_REPLACED",
+        message: `Replaced ${originalRecord.userName} with ${replacementName}.`,
+        occurredAt: now,
+      });
+      return { replacementName };
+    });
+  },
+
+  async listByRunIdInTx(txOrm: TxOrm, runId: string): Promise<AttendanceRecord[]> {
+    const rows = await txOrm.RunAttendance.where({ runId })
+      .include("markedBy")
+      .include("rosterEntry", (entry) => entry.include("signup", (signup) => signup.include("user").include("character")))
+      .all();
+    return rows.map((row) => mapAttendance(row as Record<string, unknown>));
   },
 
   async completeRunIfAttendanceComplete(runId: string) {
