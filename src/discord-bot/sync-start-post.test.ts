@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
-import { FINAL_SETUP_LFG_LINE } from "@/lib/run-start-message";
+import { formatFinalSetupLfgLine } from "@/lib/run-start-message";
+import { finalSetupAllowedMentions } from "@/discord-bot/messages/run-start-message";
 import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 
@@ -43,6 +44,7 @@ const startData = {
   difficulty: "HEROIC" as const,
   lootType: "UNSAVED" as const,
   scheduledStartAt: "2026-09-18T17:00:00.000Z",
+  raidLeadDisplayName: "Syntax",
   targets: { tanks: 2, healers: 2, dps: 8 },
   groups: {
     tanks: [
@@ -84,7 +86,8 @@ describe("syncOnce — Final Setup plain-text start posts", () => {
     const payload = send.mock.calls[0]![0] as { content?: string; embeds?: unknown };
     expect(payload.content).toContain("**Final Setup**");
     expect(payload.content).toContain("<@111> <:shaman:999>");
-    expect(payload.content).toContain(FINAL_SETUP_LFG_LINE);
+    expect(payload.content?.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+    expect(payload.content?.match(/LFG HM/g)).toHaveLength(1);
     expect(payload.embeds).toBeUndefined();
     expect(edit).not.toHaveBeenCalled();
     expect(api.recordDiscordState).toHaveBeenCalledWith("run-start-1", {
@@ -112,6 +115,86 @@ describe("syncOnce — Final Setup plain-text start posts", () => {
       channelId: CHANNEL_ID,
       messageId: "msg-old",
     });
+  });
+});
+
+describe("syncOnce — Final Setup explicit allowedMentions", () => {
+  function member(signupId: string, discordUserId: string | null, userName: string, participationType: "BOOSTER" | "LOOTBUDDY", selectedRole: "TANK" | "HEALER" | "DPS" | null) {
+    return {
+      signupId,
+      userId: `u-${signupId}`,
+      userName,
+      discordUserId,
+      characterName: userName,
+      characterRealm: "Draenor",
+      wowClass: "SHAMAN" as const,
+      classLabel: "Shaman",
+      saveLabel: "Unsaved",
+      participationType,
+      selectedRole,
+    };
+  }
+
+  // Duplicate Discord ids (same user on two rows) and no-id rows whose fallback
+  // text would read "@everyone" / "@here"; hostile Raid Lead display name.
+  const mentionData = {
+    ...startData,
+    raidLeadDisplayName: "@everyone Syntax\n**pwned**",
+    groups: {
+      tanks: [member("t1", "111", "Dusk", "BOOSTER", "TANK")],
+      healers: [member("h1", "222", "Mend", "BOOSTER", "HEALER"), member("h2", null, "everyone", "BOOSTER", "HEALER")],
+      dps: [member("d1", "333", "Blade", "BOOSTER", "DPS"), member("d2", "111", "DuskAlt", "BOOSTER", "DPS")],
+      lootbuddies: [member("l1", null, "here", "LOOTBUDDY", null), member("l2", "222", "Mend", "LOOTBUDDY", null)],
+    },
+    totalSelected: 7,
+  };
+  const expectedPolicy = { parse: [], users: ["111", "222", "333"], roles: [], repliedUser: false };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("send: only unique, non-null selected roster Discord ids may be mentioned; no @everyone/@here/role parsing", async () => {
+    const send = vi.fn().mockResolvedValue({ id: "msg-new", channelId: CHANNEL_ID });
+    const { client } = makeStartClient({ send, edit: vi.fn() });
+
+    await syncOnce(client, botEnv(), makeStartApi({ existingMessageId: null, data: mentionData }));
+
+    const payload = send.mock.calls[0]![0] as { content: string; allowedMentions?: unknown };
+    expect(payload.allowedMentions).toEqual(expectedPolicy);
+    expect(finalSetupAllowedMentions(mentionData)).toEqual(expectedPolicy);
+    // The informational fallback text stays, but parse: [] keeps it inert.
+    expect(payload.content).toContain("@everyone");
+    expect(payload.content).toContain("@here");
+    // The hostile Raid Lead name stays on one footer line without a raw @everyone.
+    const footer = payload.content.slice(payload.content.lastIndexOf("\n") + 1);
+    expect(footer.startsWith("**LFG HM @")).toBe(true);
+    expect(footer).not.toMatch(/@everyone/);
+    expect(footer).toContain("\\*\\*pwned\\*\\*");
+    expect(payload.content.match(/LFG HM/g)).toHaveLength(1);
+  });
+
+  it("edit: the existing Final Setup message receives the same allowedMentions policy", async () => {
+    const send = vi.fn().mockResolvedValue({ id: "msg-new", channelId: CHANNEL_ID });
+    const edit = vi.fn().mockResolvedValue(undefined);
+    const { client: sendClient } = makeStartClient({ send, edit: vi.fn() });
+    await syncOnce(sendClient, botEnv(), makeStartApi({ existingMessageId: null, data: mentionData }));
+    const sendPolicy = (send.mock.calls[0]![0] as { allowedMentions?: unknown }).allowedMentions;
+
+    const { client } = makeStartClient({ send: vi.fn(), edit, existingMessageId: "msg-old" });
+    await syncOnce(client, botEnv(), makeStartApi({ existingMessageId: "msg-old", data: mentionData }));
+
+    const payload = edit.mock.calls[0]![0] as { allowedMentions?: unknown; embeds?: unknown[] };
+    expect(payload.allowedMentions).toEqual(expectedPolicy);
+    expect(payload.allowedMentions).toEqual(sendPolicy);
+    expect(payload.embeds).toEqual([]);
+  });
+
+  it("a roster with no Discord ids permits no user mentions at all", () => {
+    const policy = finalSetupAllowedMentions({
+      groups: { tanks: [member("t1", null, "everyone", "BOOSTER", "TANK")], healers: [], dps: [], lootbuddies: [member("l1", null, "here", "LOOTBUDDY", null)] },
+    });
+    expect(policy).toEqual({ parse: [], users: [], roles: [], repliedUser: false });
   });
 });
 
@@ -160,14 +243,15 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
 
     const signupBlob = JSON.stringify(signup.data);
     const rosterBlob = JSON.stringify(roster.data);
-    expect(signupBlob).not.toContain("LFG HM Krum");
-    expect(rosterBlob).not.toContain("LFG HM Krum");
+    // The Raid Lead LFG footer belongs to Final Setup only.
+    expect(signupBlob).not.toContain("LFG HM");
+    expect(rosterBlob).not.toContain("LFG HM");
     expect(signup.data.title || signup.data.description).toBeTruthy();
     expect(roster.data.title).toBeTruthy();
   });
 });
 
-function makeStartApi(input: { existingMessageId: string | null }): BotApiClient {
+function makeStartApi(input: { existingMessageId: string | null; data?: unknown }): BotApiClient {
   return {
     listSyncWork: vi.fn().mockResolvedValue({
       channels: [],
@@ -186,7 +270,7 @@ function makeStartApi(input: { existingMessageId: string | null }): BotApiClient
     }),
     recordDiscordState: vi.fn().mockResolvedValue(undefined),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
-    getRunStartEmbedData: vi.fn().mockResolvedValue(startData),
+    getRunStartEmbedData: vi.fn().mockResolvedValue(input.data ?? startData),
   } as unknown as BotApiClient;
 }
 

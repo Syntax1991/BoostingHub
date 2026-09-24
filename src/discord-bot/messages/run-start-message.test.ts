@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FINAL_SETUP_LFG_LINE, renderFinalSetupText } from "@/lib/run-start-message";
+import { formatFinalSetupLfgLine, renderFinalSetupText } from "@/lib/run-start-message";
 import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import type { RunStartEmbedData } from "@/services/discord-sync.service";
 
@@ -13,6 +13,7 @@ function sampleData(): RunStartEmbedData {
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     scheduledStartAt: "2026-09-18T17:00:00.000Z",
+    raidLeadDisplayName: "Kiri",
     targets: { tanks: 2, healers: 2, dps: 8 },
     groups: {
       tanks: [
@@ -65,6 +66,7 @@ describe("renderRunStartMessageText", () => {
           contentSummary: "The Venomous Abyss 8/8",
           difficulty: "HEROIC",
           lootType: "UNSAVED",
+          raidLeadDisplayName: "Kiri",
           targets: { tanks: 2, healers: 2, dps: 8 },
           groups: {
             tanks: [
@@ -100,7 +102,9 @@ describe("renderRunStartMessageText", () => {
     );
     expect(text).toContain("<@111> <:shaman:999>");
     expect(text).toContain("<@222>");
-    expect(text).toContain(FINAL_SETUP_LFG_LINE);
+    expect(text.endsWith("**LFG HM Kiri write your discord name in the note!**")).toBe(true);
+    expect(text.endsWith(formatFinalSetupLfgLine("Kiri"))).toBe(true);
+    expect(text).not.toContain("Krum");
     expect(text).not.toContain("Duskmaven");
   });
 });

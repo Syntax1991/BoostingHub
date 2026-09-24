@@ -333,6 +333,8 @@ export type RunStartEmbedData = {
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   scheduledStartAt: string;
+  /** Assigned Run Raid Lead's effective display name (Run channel nickname, else name) for the LFG footer. */
+  raidLeadDisplayName: string;
   /** Desired composition from the Run — never inferred from selected counts. */
   targets: {
     tanks: number;
@@ -1105,6 +1107,11 @@ export const discordSyncService = {
       difficulty: run.difficulty,
       lootType: run.lootType,
       scheduledStartAt: run.scheduledStartAt,
+      // The assigned Raid Lead, never the user who clicked Start Run.
+      raidLeadDisplayName: effectiveRaidLeadChannelName({
+        raidLeadName: run.raidLeadName,
+        discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+      }),
       targets: {
         tanks: run.desiredTankCount,
         healers: run.desiredHealerCount,

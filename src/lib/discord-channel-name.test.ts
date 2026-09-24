@@ -129,6 +129,14 @@ describe("buildDiscordRunChannelName", () => {
     ).toBe("sat-2200-hc-vip-9of9-syntax1991");
   });
 
+  it("effective Raid Lead name: nickname wins, else raw name (also used by the Final Setup footer)", () => {
+    expect(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syntax" })).toBe("Syntax");
+    expect(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: null })).toBe("Kiri");
+    expect(effectiveRaidLeadChannelName({ raidLeadName: "Kiri", discordRunChannelNickname: "   " })).toBe("Kiri");
+    // Human-readable, not slugged: the Final Setup message shows it as-is.
+    expect(effectiveRaidLeadChannelName({ raidLeadName: "Simon", discordRunChannelNickname: "Syn Tax" })).toBe("Syn Tax");
+  });
+
   it("slugifies spaces and underscores in nickname", () => {
     expect(slugDiscordChannelSegment("Syntax 91")).toBe("syntax-91");
     expect(slugDiscordChannelSegment("Syntax_91")).toBe("syntax-91");

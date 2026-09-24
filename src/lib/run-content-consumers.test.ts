@@ -196,6 +196,7 @@ describe("Discord Bundle content labels", () => {
       contentSummary: display.summary,
       difficulty: "HEROIC" as const,
       lootType: "UNSAVED" as const,
+      raidLeadDisplayName: "Syntax",
       targets: { tanks: 1, healers: 1, dps: 1 },
       groups: { tanks: [], healers: [], dps: [], lootbuddies: [] },
     };

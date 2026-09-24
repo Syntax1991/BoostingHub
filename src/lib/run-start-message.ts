@@ -18,7 +18,37 @@ export const CLASS_DISCORD_EMOJI_NAMES: Record<WowClass, string> = {
   WARRIOR: "warrior",
 };
 
-export const FINAL_SETUP_LFG_LINE = "**LFG HM Krum write your discord name in the note!**";
+const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
+/** CR, LF and the Unicode line/paragraph separators (U+2028, U+2029). */
+const LINE_BREAKS = new RegExp(`[\\r\\n${String.fromCharCode(0x2028, 0x2029)}]+`, "g");
+/** Discord markdown and mention syntax characters that must stay literal inline. */
+const DISCORD_MARKDOWN_CHARS = /[\\*_~`|<>[\]#]/g;
+
+/**
+ * Makes user-controlled text safe to embed inline in Discord markdown while
+ * keeping ordinary names unchanged (Syntax, Kiri, Simon):
+ * - line breaks collapse to one space → stays one logical line
+ * - markdown / mention syntax characters are backslash-escaped → cannot close
+ *   the surrounding bold or form <@id>, <#id>, links, code, spoilers
+ * - "@" gets a zero-width space after it → "@everyone"/"@here"/"@name" never
+ *   parse as mentions, even if a sender forgot allowedMentions
+ */
+export function escapeDiscordInlineText(value: string): string {
+  return value
+    .replace(LINE_BREAKS, " ")
+    .trim()
+    .replace(DISCORD_MARKDOWN_CHARS, (char) => `\\${char}`)
+    .replace(/@/g, `@${ZERO_WIDTH_SPACE}`);
+}
+
+/**
+ * LFG footer naming the Run's assigned Raid Lead. `raidLeadDisplayName` is the
+ * human-readable effective name (see `effectiveRaidLeadChannelName`), not a slug;
+ * it is escaped so it cannot change the footer's markdown, lines or mentions.
+ */
+export function formatFinalSetupLfgLine(raidLeadDisplayName: string): string {
+  return `**LFG HM ${escapeDiscordInlineText(raidLeadDisplayName)} write your discord name in the note!**`;
+}
 
 export type FinalSetupRenderOptions = {
   /** Pre-resolved Discord custom emoji markup (<:name:id>) keyed by WowClass. */
@@ -58,6 +88,11 @@ export type FinalSetupInput = {
   contentSummary?: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
+  /**
+   * The Run's assigned Raid Lead as shown to players: Discord Run channel
+   * nickname, else the Raid Lead's name. Never the user who started the Run.
+   */
+  raidLeadDisplayName: string;
   targets: {
     tanks: number;
     healers: number;
@@ -139,9 +174,9 @@ export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRend
 
 /**
  * Authoritative plain-text Final Setup for Discord content / web Copy message.
- * Title uses Discord markdown bold. Appends the LFG line once at the bottom.
+ * Title uses Discord markdown bold. Appends the Raid Lead's LFG line once at the bottom.
  */
 export function renderFinalSetupText(data: FinalSetupInput, options?: FinalSetupRenderOptions): string {
   const message = formatFinalSetup(data, options);
-  return `**${message.title}**\n\n${message.body}\n\n${FINAL_SETUP_LFG_LINE}`;
+  return `**${message.title}**\n\n${message.body}\n\n${formatFinalSetupLfgLine(data.raidLeadDisplayName)}`;
 }

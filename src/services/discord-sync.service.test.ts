@@ -8,6 +8,10 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
+import { runDetailService } from "@/services/run-detail.service";
+import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import { formatFinalSetupLfgLine, renderFinalSetupText } from "@/lib/run-start-message";
+import { renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import type { ParticipationType, CharacterRole } from "@/models/enums";
@@ -27,6 +31,7 @@ const ids = {
   ranged: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000005",
   loot: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000006",
   extra: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000007",
+  admin: "aaaaaaaa-aaaa-4aaa-8aaa-ds0000000008",
 };
 const createdUserIds = Object.values(ids);
 const createdRunIds: string[] = [];
@@ -202,6 +207,7 @@ async function cleanupRun(runId: string) {
 }
 
 const lead = asUser(ids.lead, "Discord Lead", "RAID_LEAD");
+const admin = asUser(ids.admin, "Discord Admin", "ADMIN");
 
 let runId = "";
 let draftRunId = "";
@@ -232,6 +238,7 @@ beforeAll(async () => {
   await createTestUser(ids.ranged, "Discord Ranged", "333333333333333333");
   await createTestUser(ids.loot, "Discord Loot", "444444444444444444");
   await createTestUser(ids.extra, "Discord Extra", null);
+  await createTestUser(ids.admin, "Discord Admin", null, "ADMIN");
 
   tankChar = await createCharacter(ids.tank, "Dstank", "PALADIN", "Protection", "TANK");
   healerChar = await createCharacter(ids.healer, "Dsheal", "PRIEST", "Holy", "HEALER");
@@ -1658,5 +1665,77 @@ describe("discordSyncService — run start operational post", () => {
     await discordSyncService.recordStartPost({ runId: id, channelId: "start-chan-1", messageId: "start-msg-1" });
     work = await discordSyncService.listSyncWork();
     expect(work.start.some((entry) => entry.runId === id)).toBe(false);
+  });
+});
+
+describe("Final Setup LFG footer uses the assigned Run Raid Lead", () => {
+  async function setLeadNickname(nickname: string | null) {
+    await orm.User.where({ id: ids.lead }).update({
+      discordRunChannelNickname: nickname,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function publishedRunWithLootbuddy(): Promise<string> {
+    const id = await runService
+      .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(9), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await createSignup({
+      runId: id,
+      userId: ids.extra,
+      characterId: null,
+      participationType: "LOOTBUDDY",
+      role: null,
+      lootbuddyClass: "MAGE",
+      lootbuddyMode: "LOOT_ONLY",
+    });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    for (const signup of view.groups.lootbuddies) {
+      view = await rosterService.getRosterManagementView(lead, id);
+      await rosterService.setDraftSelection(lead, { runId: id, signupId: signup.id, selected: true, version: view.roster.version });
+    }
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    return id;
+  }
+
+  it("web preview and Discord Final Setup name the assigned Raid Lead (nickname first), not the ADMIN who started the Run", async () => {
+    try {
+      await setLeadNickname("Syntax");
+      const id = await publishedRunWithLootbuddy();
+
+      // Web Start Run preview / Copy message (PUBLISHED).
+      const detail = await runDetailService.getRunDetail(lead, id);
+      expect(detail.finalSetupPreview?.raidLeadDisplayName).toBe("Syntax");
+      const previewText = renderFinalSetupText(detail.finalSetupPreview!);
+      expect(previewText.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+      expect(previewText).not.toContain("Krum");
+
+      // An ADMIN — not the assigned Raid Lead — clicks Start Run.
+      await runService.startRun(admin, { runId: id });
+      const snapshot = await runStartSnapshotRepository.findByRunId(id);
+      expect(snapshot?.startedById).toBe(ids.admin);
+
+      // Discord projection still uses the assigned Raid Lead.
+      const embed = await discordSyncService.getRunStartEmbedData(id);
+      expect(embed?.raidLeadDisplayName).toBe("Syntax");
+      expect(embed?.raidLeadDisplayName).not.toBe("Discord Admin");
+      const discordText = renderRunStartMessageText(embed!);
+      expect(discordText.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+      expect(discordText.match(/LFG HM/g)).toHaveLength(1);
+
+      // Same footer on both paths.
+      expect(discordText.slice(discordText.lastIndexOf("\n") + 1)).toBe(previewText.slice(previewText.lastIndexOf("\n") + 1));
+
+      // Nickname null or blank → falls back to the Raid Lead's name.
+      await setLeadNickname(null);
+      expect((await discordSyncService.getRunStartEmbedData(id))?.raidLeadDisplayName).toBe("Discord Lead");
+      await setLeadNickname("   ");
+      expect((await discordSyncService.getRunStartEmbedData(id))?.raidLeadDisplayName).toBe("Discord Lead");
+    } finally {
+      await setLeadNickname(null);
+    }
   });
 });
