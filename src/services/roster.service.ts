@@ -348,6 +348,8 @@ export const rosterService = {
       publishedAt: roster.publishedAt,
       publishedByName: roster.publishedByName,
       members,
+      /** Hand-added boosters without an account — shown alongside the members. */
+      externalBoosters: roster.externalBoosters,
     };
   },
 
