@@ -322,6 +322,7 @@ export function DashboardView({ data, timeZone }: { data: DashboardData; timeZon
           )}
         </Card>
 
+        {data.showRecentActivity ? (
         <Card className="xl:col-span-3">
           <CardHeader title="Recent Activity" description="Operational events for this community." />
           {data.recentActivity.length === 0 ? (
@@ -339,6 +340,7 @@ export function DashboardView({ data, timeZone }: { data: DashboardData; timeZon
             </ul>
           )}
         </Card>
+        ) : null}
       </div>
     </div>
   );
