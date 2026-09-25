@@ -1045,7 +1045,11 @@ model RunDiscordPost {
   /// be edited. Null for posts made before this existed (never re-edited
   /// unless a replacement sets the baseline first).
   lastStartRosterVersion Int?
-  startPostedAt       TimestamptzString?
+  /// Voice channel id the posted Final Setup links (null = no Voice line).
+  /// Differing from voiceChannelId while the Run is running means the post
+  /// must be edited to add, replace or remove the Voice mention.
+  lastStartVoiceChannelId String?
+  startPostedAt      TimestamptzString?
   /// Ticket-Tool-style close banner posted once when the Run is app-archived.
   archiveCloseMessageId      String?
   /// HTML transcript attachment message posted once on app-archive (may equal close message id when posted together).

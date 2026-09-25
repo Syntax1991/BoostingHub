@@ -145,6 +145,8 @@ export class BotApiClient {
         existingRunChannelId: string | null;
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+        /** Persisted voice channel; the bot prefers its same-pass voice outcome. */
+        voiceChannelId?: string | null;
       }>;
       raidInvites: Array<{
         runId: string;
@@ -261,7 +263,8 @@ export class BotApiClient {
           messageId: string;
           classEmojiFingerprint?: string;
         }
-      | { kind: "roster" | "start"; channelId: string; messageId: string }
+      | { kind: "roster"; channelId: string; messageId: string }
+      | { kind: "start"; channelId: string; messageId: string; voiceChannelId: string | null }
       | {
           kind: "archive-artifacts";
           closeMessageId: string;

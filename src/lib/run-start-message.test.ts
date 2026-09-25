@@ -273,6 +273,36 @@ describe("renderFinalSetupText — plain Discord Final Setup", () => {
   });
 });
 
+describe("renderFinalSetupText — Run Voice channel line", () => {
+  it("voice id present → clickable `Voice: <#id>` after the participant sections, right before the LFG footer", () => {
+    const text = renderFinalSetupText(sampleInput(), { voiceChannelId: "1552000000000000001" });
+    expect(text).toContain("\n\nVoice: <#1552000000000000001>\n\n**LFG HM Syntax");
+    expect(text.match(/Voice:/g)).toHaveLength(1);
+    expect(text.indexOf("Voice:")).toBeGreaterThan(text.indexOf("📦 **Lootbuddies**"));
+    expect(text.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+  });
+
+  it("voice id null / blank / absent → no Voice line, identical to the pre-voice output", () => {
+    const baseline = renderFinalSetupText(sampleInput());
+    for (const voiceChannelId of [null, undefined, "", "   "]) {
+      const text = renderFinalSetupText(sampleInput(), { voiceChannelId });
+      expect(text).toBe(baseline);
+      expect(text).not.toContain("Voice");
+    }
+  });
+
+  it("web preview (no render options) never shows a Voice line", () => {
+    expect(renderFinalSetupText(sampleInput())).not.toContain("Voice");
+    expect(renderRunStartMessageText(sampleEmbedData())).not.toContain("Voice");
+  });
+
+  it("the Discord wrapper passes the voice id through with class indicators", () => {
+    const text = renderRunStartMessageText(sampleEmbedData(), { classIndicators: { SHAMAN: "<:shaman:999>" }, voiceChannelId: "777" });
+    expect(text).toContain("<:shaman:999>");
+    expect(text).toContain("Voice: <#777>");
+  });
+});
+
 describe("web / Discord Final Setup parity", () => {
   it("shares the same plain-text body and Raid Lead footer from the formatter", () => {
     const input = sampleInput({ raidLeadDisplayName: "Kiri" });
@@ -356,10 +386,11 @@ describe("Final Setup Discord length safety", () => {
         targets: { tanks: 2, healers: 4, dps: 14 },
         groups: { tanks, healers, dps, lootbuddies },
       }),
-      { classIndicators: indicators },
+      { classIndicators: indicators, voiceChannelId: snowflake(50_000) },
     );
 
     expect(text.length).toBeLessThan(2000);
+    expect(text).toContain(`Voice: <#${snowflake(50_000)}>`);
     expect(text.endsWith(formatFinalSetupLfgLine(longestRaidLead))).toBe(true);
     expect(text).toContain("🛡 **Tanks** 🛡 2/2");
     expect(text).toContain("✚ **Healers** ✚ 4/4");

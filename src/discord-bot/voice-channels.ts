@@ -61,6 +61,20 @@ export type RunVoiceChannelAdapters = {
 /** runId → current voice channel id this pass (null = confirmed gone / deleted this pass). */
 export type ResolvedVoiceChannels = Map<string, string | null>;
 
+/**
+ * The voice channel a message rendered in this pass should link. This pass's
+ * outcome wins, even when it is null (just created → link it; deleted/gone
+ * this pass → omit it); a Run absent from the pass falls back to the
+ * projection taken before it. Never provisions or looks anything up.
+ */
+export function effectiveVoiceChannelId(
+  resolved: ResolvedVoiceChannels,
+  runId: string,
+  persistedVoiceChannelId: string | null | undefined,
+): string | null {
+  return resolved.has(runId) ? (resolved.get(runId) ?? null) : (persistedVoiceChannelId ?? null);
+}
+
 async function provision(
   adapters: RunVoiceChannelAdapters,
   item: RunVoiceChannelWorkItem,

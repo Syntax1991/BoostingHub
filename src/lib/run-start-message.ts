@@ -53,6 +53,12 @@ export function formatFinalSetupLfgLine(raidLeadDisplayName: string): string {
 export type FinalSetupRenderOptions = {
   /** Pre-resolved Discord custom emoji markup (<:name:id>) keyed by WowClass. */
   classIndicators?: Partial<Record<WowClass, string>>;
+  /**
+   * The started Run's temporary Discord voice channel. Only the Discord post
+   * passes it; the web preview (before Start) never has one, so it shows no
+   * Voice line. Null/blank → no Voice line.
+   */
+  voiceChannelId?: string | null;
 };
 
 /** Prefer a resolved Discord class emoji; otherwise the human class label. */
@@ -178,5 +184,8 @@ export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRend
  */
 export function renderFinalSetupText(data: FinalSetupInput, options?: FinalSetupRenderOptions): string {
   const message = formatFinalSetup(data, options);
-  return `**${message.title}**\n\n${message.body}\n\n${formatFinalSetupLfgLine(data.raidLeadDisplayName)}`;
+  const voiceChannelId = options?.voiceChannelId?.trim() || null;
+  // Channel mention (<#id>): clickable, and never a user/role ping.
+  const voiceLine = voiceChannelId ? `\n\nVoice: <#${voiceChannelId}>` : "";
+  return `**${message.title}**\n\n${message.body}${voiceLine}\n\n${formatFinalSetupLfgLine(data.raidLeadDisplayName)}`;
 }

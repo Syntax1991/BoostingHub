@@ -3410,6 +3410,13 @@
                   "kind": "scalar"
                 }
               },
+              "lastStartVoiceChannelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "raidInviteSentSignupIds": {
                 "nullable": true,
                 "type": {
@@ -3554,6 +3561,9 @@
                 },
                 "lastStartRosterVersion": {
                   "column": "lastStartRosterVersion"
+                },
+                "lastStartVoiceChannelId": {
+                  "column": "lastStartVoiceChannelId"
                 },
                 "raidInviteSentSignupIds": {
                   "column": "raidInviteSentSignupIds"
@@ -9358,6 +9368,11 @@
                   "nativeType": "int4",
                   "nullable": true
                 },
+                "lastStartVoiceChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "raidInviteSentSignupIds": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -12463,7 +12478,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "b3dee35fc7b9568f86082e4e88873fd0da9334450dfe0a2fcf5570e06f5a3c8b"
+    "storageHash": "ed3a2a3abfc593e7f2eda1a17c3d336fac7625844500efd7998e685a32c6735a"
   },
   "execution": {
     "executionHash": "983cb3f9073373ca741cc7af5a300ead7834aac3129200dd4732449c9a602392",

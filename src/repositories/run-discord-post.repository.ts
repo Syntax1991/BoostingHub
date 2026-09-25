@@ -19,6 +19,8 @@ export type RunDiscordPostRecord = {
   startPostedAt: string | null;
   /** RunRoster.version the posted Final Setup reflects; null for older posts. */
   lastStartRosterVersion: number | null;
+  /** Voice channel the posted Final Setup links; null = no Voice line. */
+  lastStartVoiceChannelId: string | null;
   archiveCloseMessageId: string | null;
   archiveTranscriptMessageId: string | null;
   archiveTranscriptHtml: string | null;
@@ -55,6 +57,7 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     startMessageId: asStringOrNull(row.startMessageId),
     startPostedAt: asStringOrNull(row.startPostedAt),
     lastStartRosterVersion: asNumberOrNull(row.lastStartRosterVersion),
+    lastStartVoiceChannelId: asStringOrNull(row.lastStartVoiceChannelId),
     archiveCloseMessageId: asStringOrNull(row.archiveCloseMessageId),
     archiveTranscriptMessageId: asStringOrNull(row.archiveTranscriptMessageId),
     archiveTranscriptHtml: asStringOrNull(row.archiveTranscriptHtml),
@@ -116,12 +119,15 @@ export const runDiscordPostRepository = {
     startMessageId: string;
     /** Roster version the posted content was rendered from. */
     lastStartRosterVersion: number | null;
+    /** Voice channel id the posted content links; null when it has no Voice line. */
+    lastStartVoiceChannelId: string | null;
   }): Promise<void> {
     await upsert(input.runId, {
       startChannelId: input.startChannelId,
       startMessageId: input.startMessageId,
       startPostedAt: new Date().toISOString(),
       lastStartRosterVersion: input.lastStartRosterVersion,
+      lastStartVoiceChannelId: input.lastStartVoiceChannelId,
     });
   },
 
