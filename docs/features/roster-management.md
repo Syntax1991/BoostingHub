@@ -72,12 +72,35 @@ The same User **may** hold one selected BOOSTER **plus** any number of selected 
 
 If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers on that run become `NOT_SELECTED` on publish. Lootbuddy rows are decided independently per `RunSignup.id`.
 
+## Roster lifecycle and lock point
+
+- **Publish Roster** communicates the currently planned lineup. It does **not** freeze it.
+- **`PUBLISHED`** stays editable until Start (UI: "Published · Editable until Start"): select or drop signups, change assigned roles, **Add Player**, edit External Boosters — the Run stays `PUBLISHED`.
+- A saved draft that differs from the live published roster (membership or assigned role; `roster-publish-state.ts` `hasUnpublishedRosterChanges`) shows **Unpublished changes**; the primary action is then **Update Roster** (a republish). A freshly published roster, or a seeded draft identical to it, is clean.
+- **Start Run** (`PUBLISHED → IN_PROGRESS`) is the authoritative freeze. Start is refused while there are unpublished changes ("Roster has unpublished changes. Update the roster before starting the Run.") so a replacement is never silently left out. From `IN_PROGRESS` on the roster editor is read-only and every roster mutation (draft, roles, Add Player, External Boosters, publish) is rejected server-side.
+- **Attendance Replace** (Attendance tab, `IN_PROGRESS` only) is the separate post-start operational substitution — it records a no-show and a replacement, it is not roster editing. See [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
+
+**Concurrency.** Every roster-writing transaction locks the `RunRoster` row first, re-reads its version and re-checks inside the transaction that the Run has not started. Start takes the same lock before it reads the published roster, so a concurrent Save / Update Roster / Add Player either commits first (and is included, or makes Start refuse with unpublished changes) or waits and then fails because the Run is `IN_PROGRESS`.
+
+## Add Player (registered players)
+
+**Add Player** (Boosters card, managers only, while the roster is editable) adds a **registered** player who did not sign up — typically a last-minute replacement. Flow: search a player (server-side, `ACTIVE` accounts, name or Discord username, max 10 results, only id / name / Discord username exposed) → choose one of their Characters → role → **Add to Roster**.
+
+- The player is rostered as a normal **BOOSTER `RunSignup`** — never a `RunExternalBooster` — so My Runs, commitments, reservations, notifications, Discord, Final Setup, attendance and payout treat them like any pick.
+- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass: Character owned and active, Booster Access for the Run difficulty, a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts stay informational.
+- An existing active offer for that Character is reused (the assigned role is added to its offered roles if missing); otherwise a normal `PENDING` offer is created. A `WITHDRAWN` offer is never revived — the player has to sign up again.
+- Atomic: the signup (reuse / role extension / creation) and the draft slot are written in one transaction with the Save Roster race checks and notifications (`rosterRepository.addManagedBoosterAtomic`). On any failure (version race, reservation race, withdrawal) nothing is left behind.
+- Disabled while the builder has unsaved local edits ("Save your current roster changes before adding a player.") — it is a server mutation and must not overwrite an unsaved draft.
+- Logged as Activity `ROSTER_PLAYER_ADDED`.
+- Scope: registered **Boosters** only. Lootbuddies are added via their own signup or as External lootbuddies.
+
 ## External boosters
 
 Boosters who are **not registered** on the website (e.g. in-house helpers) are added by hand via the **External Boosters** button in the Run header (left of **Edit Run**, managers only, while the roster is editable: `OPEN` / `ROSTERING` / `PUBLISHED`). The dialog takes a name (usually their Discord name, a leading `@` is stripped), a WoW class and a **type**: **Booster** (plus a role the class can play) or **Lootbuddy** (class only, no role). Stored in `RunExternalBooster` (per `RunRoster`, `participationType` + nullable `role`).
 
 - The dialog saves the full set on its own (`rosterService.saveExternalBoosters`, optimistic on the roster version) and bumps the roster version once; the page reloads, so unsaved Roster builder edits are lost. Save Roster from the builder leaves them untouched (`saveDraftSelection` without `externalBoosters`); seeding a replacement draft never touches them. After Start, use **Replace** on the Attendance tab instead.
 - External boosters count toward the Tank/Healer/DPS composition, external lootbuddies toward the lootbuddy count; both count in the Class Buff Checker and never create validation blockers. External lootbuddies are listed with the lootbuddies everywhere (roster views, signup embed, Discord roster, Final Setup as `@name`). Replace after Start fills a lootbuddy slot with an external lootbuddy.
+- **Live roster data, not draft data:** there is no separate published snapshot. Saving them while `PUBLISHED` changes the published roster (`getPublishedRosterView`) immediately, bumps the roster version (so the Discord roster post is edited) and is **not** an "unpublished change" — Start and the Final Setup use the current rows.
 - Shown as `@name <class emoji>` (plain text, never a ping) in the signup embed's picked lists, the published Discord roster embed (DPS split melee/ranged by class), the Start Run preview and the Final Setup post.
 - Not signups: no notifications/DMs, no attendance, payouts, strikes, lockouts or Raid Invites.
 - Names allow letters, digits, space, `.`, `_`, `-` (max 32); `everyone`/`here` and markdown/mention syntax are rejected. Max 40 per roster.
@@ -139,7 +162,7 @@ Commitments are derived only — no persisted `safe` / `committed` flags. They d
 
 ## Publication
 
-Explicit **Publish Roster** action (never a checkbox).
+Explicit **Publish Roster** action (never a checkbox); on an already published roster it is labelled **Update Roster**.
 
 In one database transaction:
 
@@ -161,7 +184,7 @@ A published run may still receive **new** `PENDING` signups if `signupsOpen` and
 
 **Edit Published Roster** copies current `SELECTED` signups into the draft when the draft is still empty (`version === 1` and no entries). It does **not** revert signup statuses.
 
-The published roster stays live until a replacement publish succeeds. The lead may add a newly arrived `PENDING` offer, drop someone, and republish.
+The published roster stays live until a replacement publish succeeds. The lead may add a newly arrived `PENDING` offer, **Add Player** for someone who never signed up, drop someone, and **Update Roster**. The Run stays `PUBLISHED`; Update Roster edits the existing Discord roster post in place and only notifies players about actual changes.
 
 `IN_PROGRESS` and `COMPLETED` runs reject draft mutation, publish, and republish. See [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
 
