@@ -103,3 +103,66 @@ describe("buildArchiveTranscriptHtml", () => {
     expect(html).not.toContain(`msg ${ARCHIVE_TRANSCRIPT_MESSAGE_CAP}`);
   });
 });
+
+describe("buildArchiveTranscriptHtml — Run archive regression", () => {
+  it("renders byte-identical Run transcript HTML (shared transcript helpers must not change it)", () => {
+    const html = buildArchiveTranscriptHtml({
+      serverName: "Guild <S>",
+      serverId: "g1",
+      channelName: "closed-sat-2200",
+      channelId: "c1",
+      runId: "run-1",
+      messages: [
+        BASE_MSG,
+        {
+          id: "m2",
+          createdAt: "2026-09-12T20:05:00.000Z",
+          authorDisplayName: "Lead",
+          authorUsername: "lead",
+          authorDiscriminator: "",
+          authorId: "u2",
+          content: "",
+          embeds: [{ title: null, description: null }],
+        },
+      ],
+    });
+    expect(html).toMatchInlineSnapshot(`
+      "<Server-Info>
+          Server: Guild <S> (g1)
+          Channel: closed-sat-2200 (c1)
+          Messages: 2
+          Attachments Saved: 0
+          Attachments Skipped: 0 (due maximum file size limits.)
+          
+      <User-Info>
+          1 - lead#0 (u2)
+          1 - titan#0 (u1)
+
+      <Base-Transcript>
+      <style>
+      body{margin:0;font-family:Whitney,"Helvetica Neue",Helvetica,Arial,sans-serif;background:#313338;color:#dbdee1}
+      .transcript{padding:16px 24px;max-width:900px;margin:0 auto}
+      .message{padding:8px 0;border-top:1px solid #3f4147}
+      .meta{font-size:12px;color:#949ba4;margin-bottom:4px}
+      .meta strong{color:#f2f3f5;font-size:14px}
+      .tag,.id,time{margin-left:6px}
+      .content{white-space:pre-wrap;word-break:break-word;line-height:1.375}
+      .embed{margin-top:6px;padding:8px 12px;border-left:4px solid #57f287;background:#2b2d31;border-radius:0 4px 4px 0}
+      .embed-title{font-weight:600;margin-bottom:4px}
+      </style>
+      <div class="transcript">
+      <div class="message" data-id="m1">
+        <div class="meta"><strong>Titan</strong> <span class="tag">titan#0</span> <span class="id">(u1)</span> <time>2026-09-12 20:00:00 UTC</time></div>
+        <div class="content">Hello &lt;world&gt;</div>
+        <div class="embed"><div class="embed-title">Signup</div><div class="embed-description">Open now</div></div>
+      </div>
+      <div class="message" data-id="m2">
+        <div class="meta"><strong>Lead</strong> <span class="tag">lead#0</span> <span class="id">(u2)</span> <time>2026-09-12 20:05:00 UTC</time></div>
+        <div class="content"><em>(no text)</em></div>
+        
+      </div>
+      </div>
+      "
+    `);
+  });
+});

@@ -19,6 +19,11 @@ import {
 import { handleGuideCommand } from "@/discord-bot/commands/guide";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
+import { isTicketCustomId } from "@/discord-bot/tickets/ticket-custom-ids";
+import { retryPendingTicketDeletes } from "@/discord-bot/tickets/ticket-close";
+import { createTicketDiscordPort } from "@/discord-bot/tickets/ticket-discord-port";
+import { handleTicketInteraction } from "@/discord-bot/tickets/ticket-interactions";
+import { syncSupportPanel } from "@/discord-bot/tickets/ticket-panel";
 
 /**
  * Wires the gateway client to the pure embed/interaction modules. This file
@@ -28,14 +33,33 @@ import { startSyncLoop } from "@/discord-bot/sync-loop";
 export function createBotClient(env: BotEnv): Client {
   const api = new BotApiClient(env);
   const client = new Client({ intents: [...BOT_GATEWAY_INTENTS] });
+  // Support tickets are interaction-driven: no timer, no polling.
+  const tickets = env.tickets
+    ? { api, port: createTicketDiscordPort(client, env.discordGuildId), env: env.tickets }
+    : null;
 
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[discord-bot] logged in as ${readyClient.user.tag}`);
     startSyncLoop(client, env, api);
+    if (tickets) {
+      syncSupportPanel(tickets)
+        .then((result) => console.log(`[discord-bot] ticket panel: ${result}`))
+        .catch((error) => console.error("[discord-bot] ticket panel sync failed", error));
+      retryPendingTicketDeletes(tickets)
+        .then((closed) => closed > 0 && console.log(`[discord-bot] finished ${closed} pending ticket close(s)`))
+        .catch((error) => console.error("[discord-bot] pending ticket delete retry failed", error));
+    } else {
+      console.log("[discord-bot] ticket system disabled (no DISCORD_TICKET_* configured)");
+    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
+      if ("customId" in interaction && isTicketCustomId(interaction.customId)) {
+        await handleTicketInteraction(interaction, tickets);
+        return;
+      }
+
       if (interaction.isButton()) {
         const parsed = parseCustomId(interaction.customId);
         if (!parsed) return;

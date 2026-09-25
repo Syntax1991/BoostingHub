@@ -129,3 +129,66 @@ describe("loadBotEnv — sync interval", () => {
     expect(env.syncIntervalMs).toBe(15_000);
   });
 });
+
+describe("loadBotEnv — Support ticket config group", () => {
+  const TICKET_ENV = {
+    DISCORD_TICKET_PANEL_CHANNEL_ID: "100000000000000001",
+    DISCORD_TICKET_CATEGORY_ID: "100000000000000002",
+    DISCORD_TICKET_ARCHIVE_LOG_CHANNEL_ID: "100000000000000003",
+    DISCORD_TICKET_ADMIN_ROLE_ID: "100000000000000004",
+    DISCORD_TICKET_MODERATOR_ROLE_ID: "100000000000000005",
+    DISCORD_TICKET_RAID_STAFF_ROLE_ID: "100000000000000006",
+    DISCORD_TICKET_MYTHIC_PLUS_STAFF_ROLE_ID: "100000000000000007",
+  };
+
+  it("all ticket variables absent: feature disabled, bot env loads", () => {
+    const env = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1" }));
+    expect(env.tickets).toBeNull();
+    expect(env.discordRunCategoryId).toBe("category-1");
+  });
+
+  it("whitespace-only ticket variables count as unset", () => {
+    const env = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_TICKET_CATEGORY_ID: "  " }));
+    expect(env.tickets).toBeNull();
+  });
+
+  it("partial ticket config fails startup naming the missing keys but no values", () => {
+    const partial = { ...TICKET_ENV, DISCORD_TICKET_MODERATOR_ROLE_ID: undefined, DISCORD_TICKET_ARCHIVE_LOG_CHANNEL_ID: "" };
+    let message = "";
+    try {
+      loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", ...partial }));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/partially configured/);
+    expect(message).toContain("DISCORD_TICKET_MODERATOR_ROLE_ID");
+    expect(message).toContain("DISCORD_TICKET_ARCHIVE_LOG_CHANNEL_ID");
+    expect(message).not.toContain("DISCORD_TICKET_ADMIN_ROLE_ID");
+    expect(message).not.toContain("100000000000000004");
+  });
+
+  it("a single ticket variable alone is a partial config", () => {
+    expect(() =>
+      loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", DISCORD_TICKET_ADMIN_ROLE_ID: "100000000000000004" })),
+    ).toThrow(/DISCORD_TICKET_PANEL_CHANNEL_ID/);
+  });
+
+  it("rejects non-snowflake ticket ids", () => {
+    expect(() =>
+      loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", ...TICKET_ENV, DISCORD_TICKET_ADMIN_ROLE_ID: "Phoenix Admin" })),
+    ).toThrow(/DISCORD_TICKET_ADMIN_ROLE_ID/);
+  });
+
+  it("full ticket config enables the feature", () => {
+    const env = loadBotEnv(baseEnv({ DISCORD_RUN_CATEGORY_ID: "category-1", ...TICKET_ENV }));
+    expect(env.tickets).toEqual({
+      panelChannelId: "100000000000000001",
+      categoryId: "100000000000000002",
+      archiveLogChannelId: "100000000000000003",
+      adminRoleId: "100000000000000004",
+      moderatorRoleId: "100000000000000005",
+      raidStaffRoleId: "100000000000000006",
+      mythicPlusStaffRoleId: "100000000000000007",
+    });
+  });
+});

@@ -1,4 +1,30 @@
 import type { BotEnv } from "@/discord-bot/env";
+import type { SupportTicketStatus, SupportTicketType } from "@/models/enums";
+
+/** Bot-facing Support ticket DTO (never contains the transcript body). */
+export type BotSupportTicket = {
+  id: string;
+  number: number;
+  type: SupportTicketType;
+  status: SupportTicketStatus;
+  creatorDiscordUserId: string;
+  creatorDisplayName: string;
+  subject: string;
+  description: string;
+  reference: string | null;
+  reportedDiscordUserId: string | null;
+  reportedBoosterLabel: string | null;
+  channelId: string | null;
+  channelName: string | null;
+  createdAt: string;
+  openedAt: string | null;
+  closedAt: string | null;
+  closedByDiscordUserId: string | null;
+  archiveMessageId: string | null;
+  lastError: string | null;
+};
+
+export type BotSupportTicketPanel = { channelId: string; messageId: string; lastSignature: string | null };
 
 export class BotApiError extends Error {
   readonly status: number;
@@ -300,5 +326,80 @@ export class BotApiClient {
 
   getMySignups(discordUserId: string) {
     return this.request<unknown>("/api/bot/my-signups", { discordUserId });
+  }
+
+  reserveTicket(input: {
+    type: SupportTicketType;
+    creatorDiscordUserId: string;
+    creatorDisplayName: string;
+    subject: string;
+    description: string;
+    reference: string | null;
+    booster: string | null;
+  }) {
+    return this.request<{ outcome: "RESERVED" | "EXISTING"; ticket: BotSupportTicket }>("/api/bot/tickets", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  getTicket(ticketId: string) {
+    return this.request<BotSupportTicket>(`/api/bot/tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  private ticketAction<T = BotSupportTicket>(ticketId: string, action: string, body: unknown = {}) {
+    return this.request<T>(`/api/bot/tickets/${encodeURIComponent(ticketId)}/${action}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  activateTicket(ticketId: string, input: { channelId: string; channelName: string }) {
+    return this.ticketAction(ticketId, "activate", input);
+  }
+
+  abortTicketOpening(ticketId: string, reason: string) {
+    return this.ticketAction(ticketId, "abort-opening", { reason });
+  }
+
+  beginTicketClose(ticketId: string, closedByDiscordUserId: string) {
+    return this.ticketAction<{ acquired: boolean; ticket: BotSupportTicket }>(ticketId, "begin-close", {
+      closedByDiscordUserId,
+    });
+  }
+
+  recordTicketTranscript(
+    ticketId: string,
+    input: { transcriptHtml: string; transcriptFilename: string; messageCount: number; truncated: boolean },
+  ) {
+    return this.ticketAction(ticketId, "transcript", input);
+  }
+
+  recordTicketArchive(ticketId: string, archiveMessageId: string) {
+    return this.ticketAction(ticketId, "archive", { archiveMessageId });
+  }
+
+  finalizeTicketClose(ticketId: string) {
+    return this.ticketAction(ticketId, "finalize-close");
+  }
+
+  recordTicketCloseFailure(ticketId: string, stage: "TRANSCRIPT" | "ARCHIVE" | "DELETE", message: string) {
+    return this.ticketAction(ticketId, "close-failed", { stage, message: message.slice(0, 500) || "unknown" });
+  }
+
+  markTicketChannelMissing(ticketId: string, channelId: string) {
+    return this.ticketAction(ticketId, "channel-missing", { channelId });
+  }
+
+  listTicketsPendingChannelDelete() {
+    return this.request<BotSupportTicket[]>("/api/bot/tickets/pending-deletes");
+  }
+
+  getTicketPanel() {
+    return this.request<BotSupportTicketPanel | null>("/api/bot/ticket-panel");
+  }
+
+  recordTicketPanel(input: { channelId: string; messageId: string; lastSignature: string }) {
+    return this.request<BotSupportTicketPanel>("/api/bot/ticket-panel", { method: "PUT", body: JSON.stringify(input) });
   }
 }

@@ -184,6 +184,30 @@ enum RunDiscordAnnouncementType {
   RUN_CANCELLED   = "RUN_CANCELLED"
 }
 
+/// Discord Support ticket category. Drives the modal fields and which
+/// configured Staff roles can see and close the ticket (bot-side matrix).
+enum SupportTicketType {
+  @@type("pg/text@1")
+  ADMIN_SUPPORT       = "ADMIN_SUPPORT"
+  RAID_SUPPORT        = "RAID_SUPPORT"
+  MYTHIC_PLUS_SUPPORT = "MYTHIC_PLUS_SUPPORT"
+  GENERAL_SUPPORT     = "GENERAL_SUPPORT"
+  REPORT_BOOSTER      = "REPORT_BOOSTER"
+}
+
+/// Support ticket lifecycle. OPENING: reserved, Discord channel not active
+/// yet. OPEN: live channel. CLOSING: close confirmed, archive/delete running
+/// or retryable. CLOSED: channel retired. FAILED: the reservation never
+/// became a live ticket (Discord channel creation failed or went stale).
+enum SupportTicketStatus {
+  @@type("pg/text@1")
+  OPENING = "OPENING"
+  OPEN    = "OPEN"
+  CLOSING = "CLOSING"
+  CLOSED  = "CLOSED"
+  FAILED  = "FAILED"
+}
+
 /// Application account. Also serves as the Better Auth `user` table.
 /// Account roles are permissions on the platform, not run participation type.
 model User {
@@ -254,6 +278,7 @@ model User {
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
   notifications        UserNotification[]
+  supportTickets       SupportTicket[] @relation("SupportTicketCreator")
 
   @@map("user")
 }
@@ -1062,4 +1087,71 @@ model RunDiscordAnnouncement {
   @@index([status, createdAt])
   @@index([runId, createdAt])
   @@map("run_discord_announcement")
+}
+
+/// Discord Support ticket. Authoritative lifecycle lives here; the Discord
+/// bot only creates/deletes the private channel and reports back through the
+/// Bot API. Content is private to the creator and the Staff roles for its type.
+model SupportTicket {
+  id                    String              @id @default(uuid())
+  /// Human-facing sequential number (#0042), unique. Allocated as max+1 with
+  /// retry on the unique constraint — gaps are possible, duplicates are not.
+  number                Int                 @unique
+  type                  SupportTicketType
+  status                SupportTicketStatus @default(OPENING)
+  /// `<creatorDiscordUserId>:<type>` while OPENING/OPEN, null otherwise. The
+  /// unique index is the race-safe "one active ticket per type" guard.
+  activeKey             String?             @unique
+  /// Linked BoostingHub account when the Discord user has one; optional.
+  creatorUserId         String?
+  creatorUser           User?               @relation("SupportTicketCreator", fields: [creatorUserId], references: [id], onDelete: SetNull)
+  creatorDiscordUserId  String
+  /// Display-name snapshot at creation.
+  creatorDisplayName    String
+  subject               String
+  description           String
+  /// Free-text Run / Raid / Key reference as the user typed it.
+  reference             String?
+  /// REPORT_BOOSTER only: parsed from a mention or raw id, never guessed.
+  reportedDiscordUserId String?
+  /// REPORT_BOOSTER only: the Booster field as typed.
+  reportedBoosterLabel  String?
+  /// Live private Discord text channel; cleared when the ticket is CLOSED.
+  channelId             String?             @unique
+  channelName           String?
+  openedAt              TimestamptzString?
+  closingStartedAt      TimestamptzString?
+  /// Short lease so two concurrent close confirmations never both archive.
+  closeLockUntil        TimestamptzString?
+  closedAt              TimestamptzString?
+  closedByDiscordUserId String?
+  /// Operator-visible reason for the last failed open/close step.
+  lastError             String?
+  /// Archive-log message carrying summary + transcript; set once, never re-sent.
+  archiveMessageId      String?
+  transcriptHtml        String?
+  transcriptFilename    String?
+  transcriptMessageCount Int?
+  transcriptTruncated   Boolean             @default(false)
+  createdAt             TimestamptzString   @default(now())
+  updatedAt             temporal.updatedAtString()
+
+  @@index([creatorDiscordUserId])
+  @@index([status])
+  @@map("support_ticket")
+}
+
+/// Identity of the one permanent Discord Support panel message, so a bot
+/// restart edits/reuses it instead of posting a duplicate. Singleton row.
+model DiscordTicketPanel {
+  /// Singleton key, always "support".
+  id            String            @id
+  channelId     String
+  messageId     String
+  /// Content version of the posted panel; differs → edit in place.
+  lastSignature String?
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@map("discord_ticket_panel")
 }
