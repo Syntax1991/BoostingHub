@@ -19,7 +19,33 @@ Settings sections:
 | `RUN_CANCELLED` | Run → `CANCELLED` for Users with PENDING/SELECTED | Always | YES if dedicated channel exists (before retirement) | Master + `dmRunCancelledEnabled` + Discord linked |
 | `RUN_RESCHEDULED` | `scheduledStartAt` actually changes | Always | YES if dedicated channel exists | Master + `dmRunRescheduledEnabled` + Discord linked |
 | `ROSTER_WITHDRAWN` | To the Run's **Raid Lead** when a picked player withdraws (with their reason, links the Roster tab) | Always | — | Master + Discord linked (no per-event toggle) |
-| `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always | — | Master + `dmRosterRemovedEnabled` + Discord linked |
+| `ROSTER_REMOVED` | **Save Roster** or publish, for signups last told they are in that are no longer selected (not WITHDRAWN) | Always (except character-swap bookkeeping, below) | — | Master + `dmRosterRemovedEnabled` + Discord linked |
+
+**Booster character swap.** When a player's booster character is exchanged for
+another of their booster signups (same User, same Run), the player gets exactly
+**one** user-facing notification: a `ROSTER_SELECTED` with a `roster-swapped:`
+source key, titled **"Roster updated"**, which also drives the single
+"Roster Update" DM (subject to `dmRosterSelectedEnabled`). The old character's
+`ROSTER_REMOVED` is still written, but only as hidden bookkeeping state
+(`visibleInApp = false`, `SKIPPED`, already read): it is never shown in the bell
+or on `/notifications`, never counts as unread, and never sends a removal DM.
+It exists so later Save Roster / Publish runs know that signup was already
+taken out. A genuine removal (no other booster signup of the player stays
+selected) and every Lootbuddy removal remain normal visible notifications.
+
+### In-app visibility (`visibleInApp`)
+
+`UserNotification.visibleInApp` (default `true`) separates user-facing
+notifications from internal notification-state rows. Every user-facing
+repository read — `countUnreadForUser`, `listLatestForUser`, `listForUser`,
+`findOwned` (and so `markRead`), `markAllRead` — filters `visibleInApp = true`
+in the query itself, so the bell's "latest 5" and the page's limit count visible
+rows only. Being read is not the same as being hidden. Internal roster state
+(`notifyRosterSelectionChangesInTx`) reads `UserNotification` directly and still
+sees hidden rows. The `add_notification_visible_in_app` migration backfilled
+`visibleInApp = false` only for historical removals provably paired with a
+same-user/run/version `roster-swapped:` event and created already read with no
+DM; every other historical row stayed visible.
 
 **Run channel announcements** (`RunDiscordAnnouncement`) are shared Run communication.
 They are **not** controlled by User DM preferences (`discordDmEnabled=false` does not
@@ -95,6 +121,7 @@ never delayed or suppressed.
 
 - Roster pick: `roster-selected:<runId>:<publishedVersion>:<signupId>`
 - Roster removed: `roster-removed:<runId>:<publishedVersion>:<signupId>`
+- Roster update (booster character swap): `roster-swapped:<runId>:<publishedVersion>:<signupId>`
 - Raid invite: `raid-invite:<runId>:<signupId>`
 - Run cancelled: `run-cancelled:<runId>:<userId>`
 - Run rescheduled: `run-rescheduled:<runId>:<scheduleRevision>:<userId>`
@@ -120,7 +147,7 @@ state. Existing active signup state wins over the preference. Never auto-submits
 
 ## Surfaces
 
-- Header bell (latest 5 + unread count) → `/notifications`
+- Header bell (latest 5 visible + unread count of visible rows) → `/notifications` (same visibility)
 - Settings → Notifications / Regional / Gameplay / Active sessions
 - Controllers: `settings.actions.ts`, `notification.actions.ts`, `session.actions.ts`
 - Services: `settingsService`, `notificationService`, `runLifecycleNotificationService`, `sessionManagementService`
