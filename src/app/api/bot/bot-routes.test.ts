@@ -554,4 +554,28 @@ describe("bot API roster and discord-state endpoints", () => {
     expect((await put({ kind: "clear-voice-channel", channelId: "voice-222" })).status).toBe(200);
     expect(await voice()).toBeNull();
   });
+
+  it("start records the Voice channel the Final Setup rendered (absent/null → none)", async () => {
+    const put = (body: unknown) =>
+      discordStatePut(
+        req(`/api/bot/runs/${runId}/discord-state`, {
+          method: "PUT",
+          headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+          body,
+        }),
+        params(runId),
+      );
+    const rendered = async () =>
+      ((await orm.RunDiscordPost.where({ runId }).first()) as Record<string, unknown> | null)?.lastStartVoiceChannelId ?? null;
+
+    expect((await put({ kind: "start", channelId: "chan-s", messageId: "msg-s", voiceChannelId: "voice-9" })).status).toBe(200);
+    expect(await rendered()).toBe("voice-9");
+    expect((await put({ kind: "start", channelId: "chan-s", messageId: "msg-s", voiceChannelId: null })).status).toBe(200);
+    expect(await rendered()).toBeNull();
+    expect((await put({ kind: "start", channelId: "chan-s", messageId: "msg-s", voiceChannelId: "voice-9" })).status).toBe(200);
+    // Older bots omit the field: their posts have no Voice line.
+    expect((await put({ kind: "start", channelId: "chan-s", messageId: "msg-s" })).status).toBe(200);
+    expect(await rendered()).toBeNull();
+    expect((await put({ kind: "start", channelId: "chan-s", messageId: "msg-s", voiceChannelId: "" })).status).toBe(400);
+  });
 });

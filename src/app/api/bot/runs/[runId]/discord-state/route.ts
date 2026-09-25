@@ -21,7 +21,13 @@ export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
     classEmojiFingerprint: z.string().max(4000).optional(),
   }),
   z.object({ kind: z.literal("roster"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
-  z.object({ kind: z.literal("start"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
+  z.object({
+    kind: z.literal("start"),
+    channelId: z.string().min(1).max(64),
+    messageId: z.string().min(1).max(64),
+    /** Voice channel the posted Final Setup links; absent/null = no Voice line. */
+    voiceChannelId: z.string().min(1).max(64).nullable().optional(),
+  }),
   z.object({
     kind: z.literal("archive-artifacts"),
     closeMessageId: z.string().min(1).max(64),
@@ -97,6 +103,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         runId,
         channelId: runDiscordStateUpdate.channelId,
         messageId: runDiscordStateUpdate.messageId,
+        voiceChannelId: runDiscordStateUpdate.voiceChannelId ?? null,
       });
     } else if (runDiscordStateUpdate.kind === "raid-invite") {
       await discordSyncService.recordRaidInviteSent({ runId, signupId: runDiscordStateUpdate.signupId });

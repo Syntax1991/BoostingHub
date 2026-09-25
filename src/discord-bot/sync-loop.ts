@@ -12,6 +12,7 @@ import {
   type VoiceChannel,
 } from "discord.js";
 import {
+  effectiveVoiceChannelId,
   reconcileRunVoiceChannels,
   type ResolvedVoiceChannels,
   type RunVoiceChannelAdapters,
@@ -357,7 +358,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
       try {
         const data = (await api.getRunStartEmbedData(item.runId).catch(() => null)) as RunStartEmbedData | null;
         if (!data) continue;
-        await syncStartPost(client, env, api, item, data, resolvedChannels, classIndicators);
+        await syncStartPost(client, env, api, item, data, resolvedChannels, classIndicators, resolvedVoiceChannels);
       } catch (error) {
         console.error(`[discord-bot] start sync failed for run ${item.runId}`, error);
         messagePhaseError ??= error;
@@ -874,12 +875,15 @@ async function syncStartPost(
   data: RunStartEmbedData,
   resolvedChannels: Map<string, string>,
   classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  resolvedVoiceChannels: ResolvedVoiceChannels,
 ): Promise<void> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
   if (!resolved) return;
   const { channelId } = resolved;
 
-  const content = renderRunStartMessageText(data, { classIndicators });
+  // Display only: the voice lane above already provisioned/replaced/cleared.
+  const voiceChannelId = effectiveVoiceChannelId(resolvedVoiceChannels, item.runId, item.voiceChannelId);
+  const content = renderRunStartMessageText(data, { classIndicators, voiceChannelId });
   // Same explicit policy for send and edit: only selected roster users may be pinged.
   const allowedMentions = finalSetupAllowedMentions(data);
   const editPayload: MessageEditOptions = { content, embeds: [], allowedMentions };
@@ -887,7 +891,12 @@ async function syncStartPost(
   if (item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, editPayload);
     if (edited) {
-      await api.recordDiscordState(item.runId, { kind: "start", channelId, messageId: item.existingMessageId });
+      await api.recordDiscordState(item.runId, {
+        kind: "start",
+        channelId,
+        messageId: item.existingMessageId,
+        voiceChannelId,
+      });
       return;
     }
   }
@@ -895,7 +904,12 @@ async function syncStartPost(
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isTextBased() || !("send" in channel)) return;
   const message = await channel.send({ content, allowedMentions });
-  await api.recordDiscordState(item.runId, { kind: "start", channelId: message.channelId, messageId: message.id });
+  await api.recordDiscordState(item.runId, {
+    kind: "start",
+    channelId: message.channelId,
+    messageId: message.id,
+    voiceChannelId,
+  });
 }
 
 /**
@@ -980,9 +994,7 @@ async function syncNotificationDm(
         runChannelId: item.runChannelId,
         // This pass's voice outcome wins over the projection taken before it
         // (just created → link it; deleted/gone this pass → omit it).
-        voiceChannelId: resolvedVoiceChannels.has(item.runId)
-          ? (resolvedVoiceChannels.get(item.runId) ?? null)
-          : (item.voiceChannelId ?? null),
+        voiceChannelId: effectiveVoiceChannelId(resolvedVoiceChannels, item.runId, item.voiceChannelId),
       });
       break;
     case "ROSTER_REMOVED":

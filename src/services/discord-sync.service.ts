@@ -14,7 +14,7 @@ import type { ExternalBooster } from "@/lib/external-booster";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
-import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import { runDiscordPostRepository, type RunDiscordPostRecord } from "@/repositories/run-discord-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
@@ -304,6 +304,11 @@ export type RunStartSyncWorkItem = {
   existingRunChannelId: string | null;
   desiredChannelName: string;
   targetBucket: DiscordRunChannelTarget;
+  /**
+   * Persisted RunDiscordPost.voiceChannelId when the work was listed. The bot
+   * prefers its same-pass voice outcome and falls back to this.
+   */
+  voiceChannelId: string | null;
 };
 
 /** Apex-style Raid Invite DM — kept for bot/API backward compatibility; listSyncWork returns []. */
@@ -438,6 +443,21 @@ function desiredChannelNameFor(run: {
   };
   if (shouldRetireDiscordChannel(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);
+}
+
+/**
+ * The posted Final Setup links a different Voice channel than the persisted
+ * one (added, replaced or cleared). Only while the Run is running — the same
+ * window in which the voice lifecycle provisions/replaces — so a terminal
+ * Run's post-retirement voice cleanup never re-targets a retired channel.
+ */
+export function isStartVoiceStale(
+  run: { status: RunStatus; archivedAt: string | null },
+  post: Pick<RunDiscordPostRecord, "startMessageId" | "voiceChannelId" | "lastStartVoiceChannelId"> | null,
+): boolean {
+  if (!post?.startMessageId) return false;
+  if (run.status !== "IN_PROGRESS" || run.archivedAt) return false;
+  return (post.lastStartVoiceChannelId ?? null) !== (post.voiceChannelId ?? null);
 }
 
 /** App archive, completed, or cancelled — Discord channel is transcribed then deleted.
@@ -1147,13 +1167,14 @@ export const discordSyncService = {
       // start snapshot, and only into an already-provisioned dedicated channel.
       // Never creates a first channel. Posted once; edited in place only when a
       // replacement after Start bumped the roster version past the one the
-      // post was rendered from (a null baseline — older posts — never re-edits).
+      // post was rendered from (a null baseline — older posts — never re-edits),
+      // or when the Voice channel it links differs from the persisted one.
       const started = run.status === "IN_PROGRESS" || run.status === "COMPLETED";
       const startPostStale =
         post?.lastStartRosterVersion != null &&
         run.roster != null &&
         post.lastStartRosterVersion !== run.roster.version;
-      if (started && dedicatedChannelId && (!post?.startMessageId || startPostStale)) {
+      if (started && dedicatedChannelId && (!post?.startMessageId || startPostStale || isStartVoiceStale(run, post))) {
         const snapshot = await runStartSnapshotRepository.findByRunId(run.id);
         if (snapshot) {
           start.push({
@@ -1163,6 +1184,7 @@ export const discordSyncService = {
             existingRunChannelId: dedicatedChannelId,
             desiredChannelName: desiredChannelNameFor(run),
             targetBucket,
+            voiceChannelId,
           });
         }
       }
@@ -1343,14 +1365,21 @@ export const discordSyncService = {
     };
   },
 
-  async recordStartPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
+  async recordStartPost(input: {
+    runId: string;
+    channelId: string;
+    messageId: string;
+    /** Voice channel the posted content links; null when it has no Voice line. */
+    voiceChannelId?: string | null;
+  }): Promise<void> {
     const roster = await rosterRepository.findByRunId(input.runId);
     await runDiscordPostRepository.recordStartPost({
       runId: input.runId,
       startChannelId: input.channelId,
       startMessageId: input.messageId,
-      // Baseline for later replacement edits (see the start lane in listSyncWork).
+      // Baselines for later edits (see the start lane in listSyncWork).
       lastStartRosterVersion: roster?.version ?? null,
+      lastStartVoiceChannelId: input.voiceChannelId ?? null,
     });
   },
 

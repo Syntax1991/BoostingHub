@@ -1831,6 +1831,80 @@ describe("listSyncWork — voiceChannels lane", () => {
   }
 
   const voiceItem = async (id: string) => (await discordSyncService.listSyncWork()).voiceChannels.find((entry) => entry.runId === id);
+  const startItem = async (id: string) => (await discordSyncService.listSyncWork()).start.find((entry) => entry.runId === id);
+
+  describe("Final Setup Voice link: start work carries the persisted id and goes stale on voice changes", () => {
+    async function startedRunWithChannel(): Promise<string> {
+      const id = await publishedRun();
+      await discordSyncService.recordRunChannel({ runId: id, channelId: "text-chan-v" });
+      await runService.startRun(lead, { runId: id });
+      return id;
+    }
+    const recordStart = (id: string, voiceChannelId?: string | null) =>
+      discordSyncService.recordStartPost({ runId: id, channelId: "text-chan-v", messageId: "start-msg-v", voiceChannelId });
+
+    it("first send carries the persisted voice id (null before the voice lane records one)", async () => {
+      const id = await startedRunWithChannel();
+      expect(await startItem(id)).toMatchObject({ existingMessageId: null, voiceChannelId: null });
+
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: null, voiceChannelId: "voice-1" });
+
+      await recordStart(id, "voice-1");
+      expect(await startItem(id)).toBeUndefined();
+    });
+
+    it("existing post: voice recorded later → stale; replaced → stale with the new id; cleared → stale with null; re-rendered → clean", async () => {
+      const id = await startedRunWithChannel();
+      await recordStart(id, null);
+      expect(await startItem(id)).toBeUndefined();
+
+      // Provisioned after the post went out (no roster-version bump).
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: "voice-1" });
+      await recordStart(id, "voice-1");
+      expect(await startItem(id)).toBeUndefined();
+
+      // Manually deleted → cleared → replacement provisioned.
+      await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-2" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: "voice-2" });
+      await recordStart(id, "voice-2");
+      expect(await startItem(id)).toBeUndefined();
+      expect((await runDiscordPostRepository.findByRunId(id))?.lastStartVoiceChannelId).toBe("voice-2");
+
+      // Confirmed gone and not (yet) replaced → the stale mention must be removed.
+      await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-2" });
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: null });
+      await recordStart(id, null);
+      expect(await startItem(id)).toBeUndefined();
+    });
+
+    it("self-heal: a post recorded without a Voice line while a voice channel exists is edited", async () => {
+      const id = await startedRunWithChannel();
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      // Older bot / post made before this existed: no voiceChannelId reported.
+      await recordStart(id);
+      expect((await runDiscordPostRepository.findByRunId(id))?.lastStartVoiceChannelId).toBeNull();
+      expect(await startItem(id)).toMatchObject({ existingMessageId: "start-msg-v", voiceChannelId: "voice-1" });
+    });
+
+    it("terminal Run: post-completion voice cleanup never re-targets the Final Setup", async () => {
+      const id = await startedRunWithChannel();
+      await discordSyncService.recordRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      await recordStart(id, "voice-1");
+
+      await runRepository.updateFields(id, { status: "COMPLETED" });
+      await discordSyncService.clearRunVoiceChannel({ runId: id, channelId: "voice-1" });
+      expect(await startItem(id)).toBeUndefined();
+    });
+
+    it("no voice feature: a posted Final Setup without voice is never re-edited", async () => {
+      const id = await startedRunWithChannel();
+      await recordStart(id, null);
+      expect(await startItem(id)).toBeUndefined();
+    });
+  });
 
   it("PUBLISHED → none; started by an ADMIN → PROVISION `Raid with <assigned Raid Lead>`; recorded → RECONCILE; terminal → RETIRE_IF_EMPTY", async () => {
     try {
