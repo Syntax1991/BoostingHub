@@ -16,6 +16,11 @@ import { FindMissingWarcraftLogsButton } from "@/components/characters/find-miss
 import { WeeklyAvailabilityDialog } from "@/components/characters/weekly-availability-dialog";
 import { formatWeeklyAvailabilityButtonLabel } from "@/lib/weekly-availability-display";
 import { cn } from "@/lib/cn";
+import {
+  BLIZZARD_PROFILE_UNAVAILABLE_HINT,
+  BLIZZARD_PROFILE_UNAVAILABLE_TITLE,
+  BLIZZARD_SYNC_STALE_HINT,
+} from "@/lib/blizzard/sync-state";
 import type { characterController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof characterController.getCharactersPage>>;
@@ -130,9 +135,24 @@ export function CharactersView({ data }: { data: Page }) {
                       <AvailabilityCell character={character} />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
-                      {character.lastSyncedAt
-                        ? `Synced ${formatDateTime(character.lastSyncedAt)}`
-                        : formatDateTime(character.updatedAt)}
+                      {character.blizzardSyncState.kind === "PROFILE_UNAVAILABLE" ? (
+                        <span className="cursor-help text-warning" title={BLIZZARD_PROFILE_UNAVAILABLE_HINT}>
+                          {BLIZZARD_PROFILE_UNAVAILABLE_TITLE}
+                        </span>
+                      ) : character.blizzardSyncState.kind === "AWAITING_FIRST_SYNC" ? (
+                        "Waiting for first Blizzard sync"
+                      ) : character.lastSyncedAt ? (
+                        <>
+                          {`Synced ${formatDateTime(character.lastSyncedAt)}`}
+                          {character.blizzardSyncState.kind === "STALE" ? (
+                            <span className="mt-0.5 block cursor-help text-warning" title={BLIZZARD_SYNC_STALE_HINT}>
+                              Blizzard sync failing
+                            </span>
+                          ) : null}
+                        </>
+                      ) : (
+                        formatDateTime(character.updatedAt)
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">

@@ -592,3 +592,35 @@ describe("scheduledJobLockRepository", () => {
     await scheduledJobLockRepository.releaseLock(third!);
   });
 });
+
+describe("scheduledCharacterSyncService.runOnce — Blizzard profile unavailable (404)", () => {
+  it("F: counts it, keeps last-good data, and does not mark the character fresh", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const userId = await createUser("Owner 404");
+    await createConnection(userId, "EU");
+    const old = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
+    const unavailable = await createCharacter({ userId, name: "Scasuna", lastSyncedAt: old, itemLevel: 640 });
+
+    apiMocks.getCharacterProfileStatus.mockRejectedValue(
+      new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", "Blizzard resource was not found (character-status).", 404),
+    );
+
+    const result = await scheduledCharacterSyncService.runOnce();
+    expect(result).toMatchObject({ status: "COMPLETED", failed: 1, profileUnavailable: 1, refreshed: 0 });
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("profileUnavailable=1"));
+
+    const row = await characterRepository.findById(unavailable.id);
+    expect(row?.itemLevel).toBe(640);
+    expect(new Date(row!.lastSyncedAt!).getTime()).toBe(new Date(old).getTime());
+    expect(apiMocks.getCharacterRaidEncounters).not.toHaveBeenCalled();
+
+    // Not fresh: still a candidate for the very next tick under the normal stale window.
+    const staleBefore = new Date(Date.now() - resolveScheduledSyncStaleMs()).toISOString();
+    const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
+    expect(candidates.some((candidate) => candidate.character.id === unavailable.id)).toBe(true);
+
+    warn.mockRestore();
+    info.mockRestore();
+  });
+});

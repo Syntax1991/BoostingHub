@@ -60,6 +60,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-16T00:00:00.000Z",
     lastSyncedAt: null,
+    blizzardSyncState: { kind: "NOT_LINKED" as const },
     blizzardLinked: false,
     blizzardCharacterId: null,
     blizzardRealmId: null,

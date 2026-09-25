@@ -21,6 +21,8 @@ import { characterWeeklyAvailabilityService } from "@/services/character-weekly-
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
+import { deriveBlizzardSyncState } from "@/lib/blizzard/sync-state";
+import { DEFAULT_STALE_MINUTES, resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
 
 /**
  * Low-level, already-resolved creation input. Not reachable from any
@@ -98,6 +100,30 @@ async function assertIdentityAvailable(input: {
   }
 }
 
+/** Characters-page sync state (never synced / failing / fine), derived from lastSyncedAt — see sync-state.ts. */
+function blizzardSyncStateFor(character: {
+  blizzardCharacterId: string | null;
+  isActive: boolean;
+  lastSyncedAt: string | null;
+  createdAt: string;
+}) {
+  let staleMinutes = DEFAULT_STALE_MINUTES;
+  try {
+    staleMinutes = resolveScheduledSyncStaleMs() / 60_000;
+  } catch {
+    // A misconfigured env fails the scheduler loudly; the page just uses the default.
+  }
+  return deriveBlizzardSyncState(
+    {
+      blizzardLinked: Boolean(character.blizzardCharacterId),
+      isActive: character.isActive,
+      lastSyncedAt: character.lastSyncedAt,
+      createdAt: character.createdAt,
+    },
+    { now: new Date(), staleMinutes },
+  );
+}
+
 function characterLabel(character: { name: string; realm: string; region: WowRegion }) {
   return `${character.name}-${character.realm} (${character.region})`;
 }
@@ -150,6 +176,7 @@ export const characterService = {
           itemLevel: character.itemLevel,
           isActive: character.isActive,
           lastSyncedAt: character.lastSyncedAt,
+          blizzardSyncState: blizzardSyncStateFor(character),
           updatedAt: character.updatedAt,
           blizzardLinked: Boolean(character.blizzardCharacterId),
           blizzardRealmId: character.blizzardRealmId,
@@ -213,6 +240,7 @@ export const characterService = {
       createdAt: character.createdAt,
       updatedAt: character.updatedAt,
       lastSyncedAt: character.lastSyncedAt,
+      blizzardSyncState: blizzardSyncStateFor(character),
       blizzardLinked: Boolean(character.blizzardCharacterId),
       blizzardCharacterId: character.blizzardCharacterId,
       blizzardRealmId: character.blizzardRealmId,

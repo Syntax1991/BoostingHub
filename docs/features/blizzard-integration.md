@@ -111,6 +111,18 @@ The owned-character candidate list on `/characters` is DB-only (import-session s
 
 Import/link still proceeds with best-effort enrichment. Missing profile data means default/null suggestions rather than blocking the owned list. Refresh fails with a clear domain error only when the profile itself cannot be read (not found, unavailable, rate-limited); a valid profile that simply omits equipped item level does not fail the refresh, and never becomes a 0 sentinel.
 
+### Blizzard profile unavailable (status/profile 404)
+
+Real case: a Battle.net-imported character (`Åsúna-Blackmoore`) whose **status** and **profile summary** endpoints return 404 while the **raid encounters** endpoint for the same realm/name path answers 200.
+
+- The status + profile summary are the authoritative identity check (Blizzard character id, realm id, class, name). A 404 on either — like `is_valid: false` — is classified as `BLIZZARD_PROFILE_UNAVAILABLE` (not "deleted", not a successful zero-data sync).
+- **No raid fallback:** encounters are never requested or persisted when the profile could not be verified. Realm/name paths are not a stable identity (rename, realm transfer, deletion and profile propagation lag all look the same), so raid data is never attached to an unverified identity.
+- **Nothing is written:** item level, name, lockouts and `lastSyncedAt` stay exactly as they were. A previously synced character keeps its last known good data; a never-synced one stays unknown (null), never 0.
+- **Retry:** `lastSyncedAt` only advances on a verified sync, so the scheduler keeps the character a candidate on its normal cadence; manual Refresh can retry subject to the usual 60-second cooldown. One 404 never creates a permanent failure state.
+- **Diagnostics:** the sync logs `[blizzard-sync] profile unavailable: region=… realm=… name=<normalized> endpoint=character-status|character-summary http=404` (no tokens/headers). The scheduled job reports `profileUnavailable=` as a subset of `failed`.
+- **UI:** manual Refresh shows "Blizzard profile unavailable. … Log into the character once, log out, then refresh again later." The Characters list and details derive the state from existing data (no sync-status column): a linked character never synced ~30 minutes after it was created shows **Blizzard profile unavailable** with that hint; a previously synced character whose last successful sync is older than the stale window + 30 minutes keeps showing its last known data plus **Blizzard sync failing**.
+- Other failures keep their semantics: 429 → `BATTLENET_RATE_LIMITED`; 401/403, 5xx, timeouts, malformed JSON → `BLIZZARD_SYNC_FAILED`.
+
 ## Rename and realm transfer
 
 On Refresh:
