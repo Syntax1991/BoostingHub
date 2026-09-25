@@ -22,6 +22,8 @@ export type UserNotificationRecord = {
   discordDeliveryStatus: DiscordDeliveryStatus;
   discordUserId: string | null;
   discordDeliverAfter: string | null;
+  /** false = internal notification-state row, never shown on a user-facing surface. */
+  visibleInApp: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -42,6 +44,12 @@ export type CreateUserNotificationInput = {
   createdAt?: string;
   /** Pre-read (record only, e.g. a suppressed roster swap removal). Defaults to unread. */
   readAt?: string | null;
+  /**
+   * false = internal bookkeeping (e.g. the old character's removal in a booster
+   * character swap): kept for roster notification state, but excluded from the
+   * bell, the Notifications page and the unread count. Defaults to true.
+   */
+  visibleInApp?: boolean;
 };
 
 function normalizeDiscordDeliverAfter(value: string | null | undefined): string | null {
@@ -73,6 +81,7 @@ function mapUserNotificationRow(row: Record<string, unknown>): UserNotificationR
       row.discordDeliverAfter != null
         ? normalizeDiscordDeliverAfter(asString(row.discordDeliverAfter))
         : null,
+    visibleInApp: row.visibleInApp !== false,
     createdAt: asString(row.createdAt),
     updatedAt: asString(row.updatedAt),
   };
@@ -134,6 +143,7 @@ export const userNotificationRepository = {
       discordDeliveryStatus: input.discordDeliveryStatus,
       discordUserId: input.discordUserId,
       discordDeliverAfter: normalizeDiscordDeliverAfter(input.discordDeliverAfter),
+      visibleInApp: input.visibleInApp ?? true,
       createdAt: now,
       updatedAt: now,
     });
@@ -160,6 +170,7 @@ export const userNotificationRepository = {
         discordDeliveryStatus: input.discordDeliveryStatus,
         discordUserId: input.discordUserId,
         discordDeliverAfter: normalizeDiscordDeliverAfter(input.discordDeliverAfter),
+        visibleInApp: input.visibleInApp ?? true,
         createdAt: now,
         updatedAt: now,
       });
@@ -172,8 +183,13 @@ export const userNotificationRepository = {
     return created ? mapUserNotificationRow(created as Record<string, unknown>) : null;
   },
 
+  // User-facing reads below only ever see visibleInApp rows; the filter is part
+  // of the query so limits count visible notifications. Internal roster state
+  // (notifyRosterSelectionChangesInTx) reads UserNotification directly and
+  // still sees the hidden bookkeeping rows.
+
   async countUnreadForUser(userId: string): Promise<number> {
-    const rows = await orm.UserNotification.where({ userId })
+    const rows = await orm.UserNotification.where({ userId, visibleInApp: true })
       .where((n) => n.readAt.isNull())
       .select("id")
       .all();
@@ -181,7 +197,7 @@ export const userNotificationRepository = {
   },
 
   async listLatestForUser(userId: string, limit = 5): Promise<UserNotificationRecord[]> {
-    const rows = await orm.UserNotification.where({ userId })
+    const rows = await orm.UserNotification.where({ userId, visibleInApp: true })
       .orderBy((n) => n.createdAt.desc())
       .limit(limit)
       .all();
@@ -189,7 +205,7 @@ export const userNotificationRepository = {
   },
 
   async listForUser(userId: string, limit = 100): Promise<UserNotificationRecord[]> {
-    const rows = await orm.UserNotification.where({ userId })
+    const rows = await orm.UserNotification.where({ userId, visibleInApp: true })
       .orderBy((n) => n.createdAt.desc())
       .limit(limit)
       .all();
@@ -197,7 +213,7 @@ export const userNotificationRepository = {
   },
 
   async findOwned(userId: string, notificationId: string): Promise<UserNotificationRecord | null> {
-    const row = await orm.UserNotification.where({ id: notificationId, userId }).first();
+    const row = await orm.UserNotification.where({ id: notificationId, userId, visibleInApp: true }).first();
     return row ? mapUserNotificationRow(row as Record<string, unknown>) : null;
   },
 
@@ -211,7 +227,7 @@ export const userNotificationRepository = {
     if (!existing) return null;
     if (existing.readAt) return existing;
     const now = new Date().toISOString();
-    await orm.UserNotification.where({ id: notificationId, userId }).update({
+    await orm.UserNotification.where({ id: notificationId, userId, visibleInApp: true }).update({
       readAt: now,
       updatedAt: now,
     });
@@ -219,7 +235,7 @@ export const userNotificationRepository = {
   },
 
   async markAllRead(userId: string): Promise<number> {
-    const unread = await orm.UserNotification.where({ userId })
+    const unread = await orm.UserNotification.where({ userId, visibleInApp: true })
       .where((n) => n.readAt.isNull())
       .select("id")
       .all();

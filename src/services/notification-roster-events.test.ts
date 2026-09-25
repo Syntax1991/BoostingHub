@@ -13,6 +13,7 @@ import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
+import { notificationService } from "@/services/notification.service";
 import { renderFinalSetupText } from "@/lib/run-start-message";
 import type { CharacterRole } from "@/models/enums";
 
@@ -161,6 +162,43 @@ async function createSignup(input: {
     createdAt: now,
   });
   return id;
+}
+
+async function createLootbuddySignup(input: { runId: string; userId: string }) {
+  const id = crypto.randomUUID();
+  createdSignupIds.push(id);
+  const now = new Date().toISOString();
+  await orm.RunSignup.create({
+    id,
+    runId: input.runId,
+    userId: input.userId,
+    characterId: null,
+    participationType: "LOOTBUDDY",
+    isBackup: false,
+    status: "PENDING",
+    publishedRole: null,
+    lootbuddyClass: "MAGE",
+    lootbuddyMode: "LOOT_ONLY",
+    lootbuddyVerification: "NONE",
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+/** Every stored notification of a user for a run — including hidden bookkeeping rows. */
+async function storedNotes(userId: string, runId: string) {
+  const rows = (await orm.UserNotification.where({ userId, runId }).all()) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: String(row.id),
+    type: String(row.type),
+    signupId: row.signupId == null ? null : String(row.signupId),
+    sourceKey: String(row.sourceKey),
+    title: String(row.title),
+    readAt: row.readAt == null ? null : String(row.readAt),
+    discordDeliveryStatus: String(row.discordDeliveryStatus),
+    visibleInApp: row.visibleInApp as boolean,
+  }));
 }
 
 async function cleanupRun(runId: string) {
@@ -1061,18 +1099,23 @@ describe("External Boosters dialog (saved on their own)", () => {
 });
 
 describe("character swap in the roster", () => {
-  it("swapping a player's booster character sends one 'Roster Update' DM, no removal DM", async () => {
+  const playerUser = asUser(ids.player, "Notify Player", "USER", "900000000000000001");
+
+  async function swapFixture(extraCharacters = 1) {
     const runId = await createPublishedReadyRun(1);
-    const altCharacter = await createCharacter({
-      userId: ids.player,
-      name: `Swapalt${Date.now() % 100000}`,
-      wowClass: "PRIEST",
-      specialization: "Holy",
-      primaryRole: "HEALER",
-    });
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
     const main = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
-    const alt = await createSignup({ runId, userId: ids.player, characterId: altCharacter, role: "HEALER" });
+    const alts: string[] = [];
+    for (let index = 0; index < extraCharacters; index += 1) {
+      const altCharacter = await createCharacter({
+        userId: ids.player,
+        name: `Swapalt${index}${Date.now() % 100000}`,
+        wowClass: "PRIEST",
+        specialization: "Holy",
+        primaryRole: "HEALER",
+      });
+      alts.push(await createSignup({ runId, userId: ids.player, characterId: altCharacter, role: "HEALER" }));
+    }
     const save = async (healer: string | null) => {
       const view = await rosterService.getRosterManagementView(lead, runId);
       await rosterService.saveDraftSelection(lead, {
@@ -1085,9 +1128,21 @@ describe("character swap in the roster", () => {
       });
     };
     const playerNotes = async () =>
-      (await userNotificationRepository.listForUser(ids.player, 50)).filter((note) => note.runId === runId);
+      (await userNotificationRepository.listForUser(ids.player, 100)).filter((note) => note.runId === runId);
+    return { runId, main, alts, save, playerNotes };
+  }
+
+  it("swapping a player's booster character sends one 'Roster Update' DM, no removal DM", async () => {
+    const {
+      runId,
+      main,
+      alts: [alt],
+      save,
+      playerNotes,
+    } = await swapFixture();
 
     await save(main);
+    const unreadBeforeSwap = await userNotificationRepository.countUnreadForUser(ids.player);
     await save(alt);
 
     let notes = await playerNotes();
@@ -1101,6 +1156,7 @@ describe("character swap in the roster", () => {
     expect(dms.some((note) => note.type === "ROSTER_REMOVED")).toBe(false);
     const update = dms.find((note) => note.signupId === alt)!;
     expect(update.title).toBe("Roster updated");
+    expect(update.visibleInApp).toBe(true);
     expect(update.sourceKey.startsWith("roster-swapped:")).toBe(true);
     const work = await discordSyncService.listSyncWork();
     const updateDm = work.notificationDms.find((item) => item.notificationId === update.id);
@@ -1109,15 +1165,246 @@ describe("character swap in the roster", () => {
       (item) => item.runId === runId && item.signupId === main && item.type === "ROSTER_SELECTED",
     );
     expect(firstPickDm?.rosterUpdate).toBe(false);
-    const recordOnly = notes.find((note) => note.type === "ROSTER_REMOVED" && note.signupId === main);
+    expect(work.notificationDms.some((item) => item.runId === runId && item.type === "ROSTER_REMOVED")).toBe(false);
+
+    // The old character's removal is kept as hidden internal state only.
+    const recordOnly = (await storedNotes(ids.player, runId)).find(
+      (note) => note.type === "ROSTER_REMOVED" && note.signupId === main,
+    );
+    expect(recordOnly).toBeDefined();
+    expect(recordOnly?.visibleInApp).toBe(false);
     expect(recordOnly?.discordDeliveryStatus).toBe("SKIPPED");
     expect(recordOnly?.readAt).not.toBeNull();
+
+    // No user-facing surface returns it; the swap adds exactly one unread.
+    expect(notes.map((note) => [note.type, note.signupId, note.title])).toEqual([
+      ["ROSTER_SELECTED", alt, "Roster updated"],
+      ["ROSTER_SELECTED", main, "Roster selected"],
+    ]);
+    const latest = await userNotificationRepository.listLatestForUser(ids.player, 5);
+    expect(latest.some((note) => note.id === recordOnly!.id)).toBe(false);
+    expect(latest.some((note) => note.title === "Removed from roster" && note.runId === runId)).toBe(false);
+    expect(latest[0]?.id).toBe(update.id);
+    expect(await userNotificationRepository.countUnreadForUser(ids.player)).toBe(unreadBeforeSwap + 1);
+    expect(await userNotificationRepository.findOwned(ids.player, recordOnly!.id)).toBeNull();
 
     // Taking the player out entirely is a real removal again.
     await save(null);
     notes = await playerNotes();
-    const removed = notes.filter((note) => note.type === "ROSTER_REMOVED" && note.discordDeliveryStatus === "PENDING");
-    expect(removed.map((note) => note.signupId)).toEqual([alt]);
+    const removed = notes.filter((note) => note.type === "ROSTER_REMOVED");
+    expect(removed.map((note) => [note.signupId, note.discordDeliveryStatus, note.visibleInApp])).toEqual([
+      [alt, "PENDING", true],
+    ]);
+  });
+
+  it("bell and Notifications page show only visible notifications, filling the limit with visible rows", async () => {
+    // Start from a clean slate for this player so the expectations are exact.
+    const existing = await orm.UserNotification.where({ userId: ids.player }).select("id").all();
+    for (const row of existing) {
+      await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
+    }
+    const {
+      runId,
+      main,
+      alts: [alt],
+      save,
+    } = await swapFixture();
+
+    const seedKey = (index: number) => `test-bell-seed:${runId}:${index}`;
+    const seed = async (index: number, input: { createdAt: string; visibleInApp: boolean; read: boolean }) => {
+      await userNotificationRepository.createIgnoreDuplicate({
+        userId: ids.player,
+        type: "RUN_RESCHEDULED",
+        runId,
+        signupId: null,
+        sourceKey: seedKey(index),
+        title: `Seed ${index}`,
+        message: `Seed ${index}`,
+        href: `/runs/${runId}`,
+        discordDeliveryStatus: "SKIPPED",
+        discordUserId: null,
+        createdAt: input.createdAt,
+        visibleInApp: input.visibleInApp,
+      });
+      if (input.read) {
+        await orm.UserNotification.where({ sourceKey: seedKey(index) }).update({ readAt: input.createdAt });
+      }
+    };
+    const minutesFromNow = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+    // Four older visible notifications (the first two already read).
+    for (let index = 0; index < 4; index += 1) {
+      await seed(index, { createdAt: minutesFromNow(-60 + index), visibleInApp: true, read: index < 2 });
+    }
+
+    await save(main);
+    await save(alt);
+
+    const stored = await storedNotes(ids.player, runId);
+    const hiddenRemoval = stored.find((note) => note.type === "ROSTER_REMOVED" && note.signupId === main)!;
+    expect(hiddenRemoval.visibleInApp).toBe(false);
+    const update = stored.find((note) => note.sourceKey.startsWith("roster-swapped:"))!;
+    expect(update.visibleInApp).toBe(true);
+    expect(update.title).toBe("Roster updated");
+
+    // Three newer hidden (and unread) rows must neither take bell slots nor count as unread.
+    for (let index = 4; index < 7; index += 1) {
+      await seed(index, { createdAt: minutesFromNow(index), visibleInApp: false, read: false });
+    }
+
+    const bell = await notificationService.getBellData(playerUser);
+    expect(bell.latest.map((item) => item.title)).toEqual([
+      "Roster updated",
+      "Roster selected",
+      "Seed 3",
+      "Seed 2",
+      "Seed 1",
+    ]);
+    expect(bell.latest.some((item) => item.id === hiddenRemoval.id)).toBe(false);
+    // Visible unread: Seed 2, Seed 3, the first pick and the roster update.
+    expect(bell.unreadCount).toBe(4);
+
+    const page = await notificationService.listPage(playerUser);
+    expect(page.notifications.map((item) => item.title)).toEqual([
+      "Roster updated",
+      "Roster selected",
+      "Seed 3",
+      "Seed 2",
+      "Seed 1",
+      "Seed 0",
+    ]);
+    expect(page.unreadCount).toBe(bell.unreadCount);
+
+    // A hidden id is not reachable through ownership lookup / mark read.
+    await expect(notificationService.markRead(playerUser, hiddenRemoval.id)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    await notificationService.markAllRead(playerUser);
+    expect((await notificationService.getBellData(playerUser)).unreadCount).toBe(0);
+    const hiddenSeed = await orm.UserNotification.where({ sourceKey: seedKey(6) }).first();
+    expect((hiddenSeed as Record<string, unknown>).readAt).toBeNull();
+  });
+
+  it("a real removal (no replacement booster) stays visible, unread, and follows the removal DM preference", async () => {
+    const { main, save, playerNotes } = await swapFixture(0);
+
+    await save(main);
+    const unreadBefore = await userNotificationRepository.countUnreadForUser(ids.player);
+    await save(null);
+
+    const removed = (await playerNotes()).filter((note) => note.type === "ROSTER_REMOVED");
+    expect(removed).toHaveLength(1);
+    expect(removed[0]).toMatchObject({
+      signupId: main,
+      title: "Removed from roster",
+      visibleInApp: true,
+      readAt: null,
+      discordDeliveryStatus: "PENDING",
+    });
+    expect((await userNotificationRepository.listLatestForUser(ids.player, 5))[0]?.id).toBe(removed[0].id);
+    expect(await userNotificationRepository.countUnreadForUser(ids.player)).toBe(unreadBefore + 1);
+    expect(await userNotificationRepository.findOwned(ids.player, removed[0].id)).not.toBeNull();
+    const work = await discordSyncService.listSyncWork();
+    expect(work.notificationDms.some((item) => item.notificationId === removed[0].id)).toBe(true);
+
+    // With the removal DM turned off it is still a visible notification, just no DM.
+    await orm.User.where({ id: ids.player }).update({ dmRosterRemovedEnabled: false });
+    try {
+      await save(main);
+      await save(null);
+    } finally {
+      await orm.User.where({ id: ids.player }).update({ dmRosterRemovedEnabled: true });
+    }
+    const removedAgain = (await playerNotes()).filter((note) => note.type === "ROSTER_REMOVED");
+    expect(removedAgain).toHaveLength(2);
+    expect(removedAgain[0]).toMatchObject({ visibleInApp: true, readAt: null, discordDeliveryStatus: "SKIPPED" });
+  });
+
+  it("repeated swaps A → B → C show only roster updates; dropping C is one real removal; Publish adds nothing", async () => {
+    const {
+      runId,
+      main,
+      alts: [b, c],
+      save,
+      playerNotes,
+    } = await swapFixture(2);
+    const byVersion = <T extends { sourceKey: string }>(rows: T[]) =>
+      [...rows].sort((x, y) =>
+        x.sourceKey.split(":")[2].localeCompare(y.sourceKey.split(":")[2], undefined, { numeric: true }),
+      );
+
+    await save(main);
+    await save(b);
+    // Publishing the already-saved swap must not create another update/removal pair.
+    const storedBeforePublish = (await storedNotes(ids.player, runId)).length;
+    expect(storedBeforePublish).toBe(3);
+    let view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await storedNotes(ids.player, runId)).length).toBe(storedBeforePublish);
+
+    await save(c);
+
+    let visible = await playerNotes();
+    expect(visible.some((note) => note.type === "ROSTER_REMOVED")).toBe(false);
+    const selected = byVersion(visible.filter((note) => note.type === "ROSTER_SELECTED"));
+    expect(selected.map((note) => [note.signupId, note.sourceKey.split(":")[0], note.title])).toEqual([
+      [main, "roster-selected", "Roster selected"],
+      [b, "roster-swapped", "Roster updated"],
+      [c, "roster-swapped", "Roster updated"],
+    ]);
+    const hidden = byVersion((await storedNotes(ids.player, runId)).filter((note) => !note.visibleInApp));
+    expect(hidden.map((note) => [note.type, note.signupId])).toEqual([
+      ["ROSTER_REMOVED", main],
+      ["ROSTER_REMOVED", b],
+    ]);
+
+    // Save + Publish again: still nothing new.
+    await save(c);
+    view = await rosterService.getRosterManagementView(lead, runId);
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await storedNotes(ids.player, runId)).length).toBe(5);
+
+    await save(null);
+    visible = await playerNotes();
+    const removed = visible.filter((note) => note.type === "ROSTER_REMOVED");
+    expect(removed.map((note) => [note.signupId, note.title, note.visibleInApp])).toEqual([
+      [c, "Removed from roster", true],
+    ]);
+  });
+
+  it("lootbuddy removals stay visible even while the same player keeps another selected participation", async () => {
+    const runId = await createPublishedReadyRun(1);
+    const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
+    const booster = await createSignup({ runId, userId: ids.player, characterId: charPlayer, role: "HEALER" });
+    const lootbuddy = await createLootbuddySignup({ runId, userId: ids.player });
+    const save = async (entries: Array<{ signupId: string; selectedRole: CharacterRole | null }>) => {
+      const view = await rosterService.getRosterManagementView(lead, runId);
+      await rosterService.saveDraftSelection(lead, {
+        runId,
+        version: view.roster.version,
+        selections: [{ signupId: tank, selectedRole: "TANK" as const }, ...entries],
+      });
+    };
+    const playerNotes = async () =>
+      (await userNotificationRepository.listForUser(ids.player, 100)).filter((note) => note.runId === runId);
+
+    await save([
+      { signupId: booster, selectedRole: "HEALER" },
+      { signupId: lootbuddy, selectedRole: null },
+    ]);
+    // Lootbuddy leaves, the booster stays: a real, visible removal for the lootbuddy entry.
+    await save([{ signupId: booster, selectedRole: "HEALER" }]);
+    let removed = (await playerNotes()).filter((note) => note.type === "ROSTER_REMOVED");
+    expect(removed.map((note) => [note.signupId, note.visibleInApp, note.discordDeliveryStatus])).toEqual([
+      [lootbuddy, true, "PENDING"],
+    ]);
+
+    // Booster leaves while the lootbuddy is (re)selected: not a booster character swap either.
+    await save([{ signupId: lootbuddy, selectedRole: null }]);
+    removed = (await playerNotes()).filter((note) => note.type === "ROSTER_REMOVED");
+    expect(removed.map((note) => note.signupId).sort()).toEqual([booster, lootbuddy].sort());
+    expect(removed.every((note) => note.visibleInApp && note.discordDeliveryStatus === "PENDING")).toBe(true);
+    expect((await playerNotes()).some((note) => note.sourceKey.startsWith("roster-swapped:"))).toBe(false);
+    expect((await storedNotes(ids.player, runId)).every((note) => note.visibleInApp)).toBe(true);
   });
 });
 
