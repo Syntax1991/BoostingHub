@@ -330,6 +330,9 @@ async function syncOfferedRoles(
   }
 }
 
+/** For other repositories' transactions that write a signup's offered roles (e.g. Raid Lead Add Player). */
+export const syncOfferedRolesInTx = syncOfferedRoles;
+
 export const signupRepository = {
   async findReservationConflicts(input: ReservationConflictQueryInput): Promise<ReservationConflictRow[]> {
     return queryReservationConflicts(orm, input);

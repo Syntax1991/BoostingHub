@@ -9,6 +9,7 @@ import {
   saveRosterDraftAction,
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
+import { AddPlayerDialog } from "@/components/manage/add-player-dialog";
 import {
   ClassBadge,
   ClassIcon,
@@ -140,6 +141,7 @@ function RosterBuilderEditor({
   const [perfFilter, setPerfFilter] = useState<WclPerfFilter>("ALL");
   const [perfSort, setPerfSort] = useState<WclPerfSort>("DEFAULT");
   const [acknowledge, setAcknowledge] = useState(false);
+  const [addPlayerOpen, setAddPlayerOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
@@ -416,6 +418,10 @@ function RosterBuilderEditor({
 
   const editing = data.roster.canEdit && !data.roster.needsPublishSeed;
   const togglesLocked = pending;
+  const isPublished = Boolean(data.roster.publishedAt);
+  const publishLabel = isPublished ? "Update Roster" : "Publish Roster";
+  // An already published roster only needs Update Roster once the saved draft differs.
+  const nothingToPublish = isPublished && !data.roster.hasUnpublishedChanges;
 
   return (
     <div className="space-y-4">
@@ -524,7 +530,24 @@ function RosterBuilderEditor({
         <CardHeader
           title="Boosters"
           description={`${uniqueFilteredBoosters} signup${uniqueFilteredBoosters === 1 ? "" : "s"}`}
+          action={
+            editing ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending || isDirty}
+                onClick={() => setAddPlayerOpen(true)}
+              >
+                Add Player
+              </Button>
+            ) : null
+          }
         />
+        {editing && isDirty ? (
+          <p className="border-t border-border px-4 py-2 text-xs text-muted">
+            Save your current roster changes before adding a player.
+          </p>
+        ) : null}
         <p className="border-t border-border px-4 py-3 text-xs text-muted">
           Unique Booster signups. Multi-role offers appear in every matching role section below — section
           counts are role offers and may sum higher than this total.
@@ -581,7 +604,25 @@ function RosterBuilderEditor({
       />
 
       <Card>
-        <CardHeader title="Roster validation" />
+        <CardHeader
+          title="Roster validation"
+          description={
+            data.roster.canEdit
+              ? isPublished
+                ? "Published · Editable until Start"
+                : undefined
+              : isPublished
+                ? "Locked · The run has started"
+                : undefined
+          }
+          action={
+            data.roster.canEdit && data.roster.hasUnpublishedChanges ? (
+              <span className="rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs text-warning">
+                Unpublished changes
+              </span>
+            ) : null
+          }
+        />
         <div className="space-y-2 px-4 py-4 text-sm">
           {isDirty ? (
             <p className="text-warning">
@@ -620,16 +661,21 @@ function RosterBuilderEditor({
                 ) : null}
                 <Button
                   type="button"
-                  disabled={pending || isDirty || !data.roster.canEdit || !liveValidation.canPublish}
+                  disabled={pending || isDirty || !data.roster.canEdit || !liveValidation.canPublish || nothingToPublish}
                   onClick={() => dialogRef.current?.showModal()}
                 >
-                  Publish Roster
+                  {publishLabel}
                 </Button>
               </>
             )}
           </div>
           {isDirty && !data.roster.needsPublishSeed ? (
             <p className="text-xs text-muted">Save roster changes before publishing.</p>
+          ) : null}
+          {!isDirty && data.roster.canEdit && data.roster.hasUnpublishedChanges ? (
+            <p className="text-xs text-warning">
+              The saved roster differs from the published one. Update the roster before starting the run.
+            </p>
           ) : null}
         </div>
       </Card>
@@ -641,15 +687,23 @@ function RosterBuilderEditor({
       >
         <div className="border-b border-border px-4 py-3">
           <h2 id="publish-title" className="text-base font-semibold" tabIndex={-1}>
-            Publish roster
+            {isPublished ? "Update published roster" : "Publish roster"}
           </h2>
         </div>
         <div className="space-y-3 px-4 py-4 text-sm">
-          <p>
-            Publishing will mark draft-selected signups as SELECTED, mark remaining active candidates as
-            NOT_SELECTED, lock self-withdrawal for selected players on a published run, and set the run to
-            PUBLISHED.
-          </p>
+          {isPublished ? (
+            <p>
+              Updating replaces the published roster with the saved draft: draft-selected signups become SELECTED,
+              the rest NOT_SELECTED, and the Discord roster post is edited. The run stays PUBLISHED and the roster
+              remains editable until the run starts.
+            </p>
+          ) : (
+            <p>
+              Publishing will mark draft-selected signups as SELECTED, mark remaining active candidates as
+              NOT_SELECTED, lock self-withdrawal for selected players on a published run, and set the run to
+              PUBLISHED. The roster stays editable until the run starts.
+            </p>
+          )}
           <p>
             {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
             {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies} Lootbuddies
@@ -695,10 +749,18 @@ function RosterBuilderEditor({
             }
             onClick={publish}
           >
-            {pending ? "Publishing…" : "Confirm publish"}
+            {pending ? (isPublished ? "Updating…" : "Publishing…") : isPublished ? "Confirm update" : "Confirm publish"}
           </Button>
         </div>
       </dialog>
+      {addPlayerOpen ? (
+        <AddPlayerDialog
+          runId={data.run.id}
+          rosterVersion={data.roster.version}
+          onClose={() => setAddPlayerOpen(false)}
+          onAdded={() => router.refresh()}
+        />
+      ) : null}
     </div>
   );
 }

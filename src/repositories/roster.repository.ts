@@ -32,7 +32,7 @@ import {
 import { DomainError } from "@/lib/errors";
 import { mapExternalBoosters, type ExternalBooster, type ExternalBoosterInput } from "@/lib/external-booster";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
-import { mapOfferedRoles, queryReservationConflicts } from "@/repositories/signup.repository";
+import { mapOfferedRoles, queryReservationConflicts, syncOfferedRolesInTx } from "@/repositories/signup.repository";
 import {
   rosterRemovedSourceKey,
   rosterSelectedSourceKey,
@@ -224,6 +224,143 @@ function mapRoster(row: Record<string, unknown>): RosterRecord {
 
 type TxOrm = typeof orm;
 
+/** Run statuses in which the roster may still change. Start Run (→ IN_PROGRESS) is the lock point. */
+const PRE_START_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
+
+const ROSTER_ALREADY_CHANGED_MESSAGE = "This roster changed since you loaded it. Refresh and try again.";
+
+/**
+ * Serializes roster writes with each other and with Start Run. The RunRoster
+ * row is locked first (a no-op UPDATE takes the row lock until commit), then
+ * re-read, so its version, draft entries and the Run status read afterwards
+ * are current for the rest of the transaction. Every roster transaction —
+ * including Start — takes this lock before touching anything else, so they
+ * never deadlock on each other and a writer queued behind Start sees the
+ * committed IN_PROGRESS status.
+ */
+export async function lockRosterInTx(txOrm: TxOrm, rosterId: string): Promise<RosterRecord> {
+  await txOrm.RunRoster.where({ id: rosterId }).update({ updatedAt: new Date().toISOString() });
+  const row = await txOrm.RunRoster.where({ id: rosterId }).include("entries").include("publishedBy").first();
+  if (!row) {
+    throw new DomainError("NOT_FOUND", "Roster was not found.");
+  }
+  return mapRoster(row as Record<string, unknown>);
+}
+
+/** Inside a roster transaction (after lockRosterInTx): the Run has not started. */
+async function assertRunPreStartInTx(txOrm: TxOrm, runId: string): Promise<void> {
+  const run = (await txOrm.Run.where({ id: runId }).first()) as Record<string, unknown> | null;
+  const status = run ? (asString(run.status) as RunStatus) : null;
+  if (!status || !PRE_START_RUN_STATUSES.includes(status)) {
+    throw new DomainError("INVALID_ROSTER_SELECTION", "The roster is locked once the run has started.");
+  }
+}
+
+type DraftWriteOptions = {
+  targetRunId?: string;
+  scheduledStartAt?: string;
+  selectedCharacterIds?: string[];
+  /** Save Roster: tell players about the saved selection right away (see notifyRosterSelectionChangesInTx). */
+  notify?: { runId: string; runTitle: string };
+  /** Save Roster: the full set of external boosters, replacing the saved ones. Undefined leaves them untouched. */
+  externalBoosters?: ExternalBoosterInput[];
+};
+
+/**
+ * Writes a complete draft selection into an already locked, version-checked
+ * roster and bumps its version once: WITHDRAWN and cross-Run reservation race
+ * checks, entry diffing (a slot that stays keeps its entry row), then the
+ * optional Save Roster notifications.
+ */
+async function writeDraftSelectionsInTx(
+  txOrm: TxOrm,
+  roster: RosterRecord,
+  selections: RosterSelection[],
+  options?: DraftWriteOptions,
+): Promise<void> {
+  const rosterId = roster.id;
+  if (options?.externalBoosters) {
+    await replaceExternalBoostersInTx(txOrm, rosterId, options.externalBoosters);
+  }
+
+  const nextBySignupId = new Map(selections.map((selection) => [selection.signupId, selection]));
+  const next = new Set(nextBySignupId.keys());
+  const now = new Date().toISOString();
+
+  for (const signupId of next) {
+    const signupRow = await txOrm.RunSignup.where({ id: signupId }).first();
+    if (!signupRow) {
+      throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+    }
+    const status = mapSignupStatus((signupRow as Record<string, unknown>).status);
+    if (status === "WITHDRAWN") {
+      throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+    }
+  }
+
+  if (
+    options?.selectedCharacterIds &&
+    options.selectedCharacterIds.length > 0 &&
+    options.targetRunId &&
+    options.scheduledStartAt
+  ) {
+    const conflicts = await queryReservationConflicts(txOrm, {
+      characterIds: options.selectedCharacterIds,
+      excludeRunId: options.targetRunId,
+      scheduledStartAt: options.scheduledStartAt,
+    });
+    if (conflicts.length > 0) {
+      throw new DomainError(
+        "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+        `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
+      );
+    }
+  }
+
+  const current = new Map(roster.selections.map((selection) => [selection.signupId, selection]));
+  for (const signupId of current.keys()) {
+    if (!next.has(signupId)) {
+      await txOrm.RunRosterEntry.where({ rosterId, signupId }).delete();
+    }
+  }
+  for (const [signupId, selection] of nextBySignupId) {
+    const existing = current.get(signupId);
+    if (!existing) {
+      await txOrm.RunRosterEntry.create({
+        id: crypto.randomUUID(),
+        rosterId,
+        signupId,
+        selected: true,
+        selectedRole: selection.selectedRole,
+        createdAt: now,
+        updatedAt: now,
+      });
+      continue;
+    }
+    if (existing.selectedRole !== selection.selectedRole) {
+      await txOrm.RunRosterEntry.where({ rosterId, signupId }).update({
+        selectedRole: selection.selectedRole,
+        updatedAt: now,
+      });
+    }
+  }
+
+  await txOrm.RunRoster.where({ id: rosterId }).update({
+    version: roster.version + 1,
+    updatedAt: now,
+  });
+
+  if (options?.notify) {
+    await notifyRosterSelectionChangesInTx(txOrm, {
+      runId: options.notify.runId,
+      runTitle: options.notify.runTitle,
+      version: roster.version + 1,
+      selections,
+      now,
+    });
+  }
+}
+
 export const rosterRepository = {
   async findByRunId(runId: string): Promise<RosterRecord | null> {
     const row = await orm.RunRoster
@@ -327,112 +464,123 @@ export const rosterRepository = {
     rosterId: string,
     expectedVersion: number,
     selections: RosterSelection[],
-    options?: {
-      targetRunId?: string;
-      scheduledStartAt?: string;
-      selectedCharacterIds?: string[];
-      /**
-       * Save Roster: tell players about the saved selection right away
-       * (see notifyRosterSelectionChangesInTx). Omitted when seeding a draft.
-       */
-      notify?: { runId: string; runTitle: string };
-      /**
-       * Save Roster: the full set of external boosters, replacing the saved
-       * ones. Omitted (undefined) leaves them untouched, e.g. when seeding.
-       */
-      externalBoosters?: ExternalBoosterInput[];
-    },
+    options?: DraftWriteOptions,
   ) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      const roster = await txOrm.RunRoster.where({ id: rosterId }).include("entries").first();
-      if (!roster) {
-        throw new DomainError("NOT_FOUND", "Roster was not found.");
-      }
-      const mapped = mapRoster(roster as Record<string, unknown>);
-      await this.assertVersion(mapped, expectedVersion);
+      const roster = await lockRosterInTx(txOrm, rosterId);
+      await this.assertVersion(roster, expectedVersion);
+      await assertRunPreStartInTx(txOrm, roster.runId);
+      await writeDraftSelectionsInTx(txOrm, roster, selections, options);
+    });
+  },
 
-      if (options?.externalBoosters) {
-        await replaceExternalBoostersInTx(txOrm, rosterId, options.externalBoosters);
-      }
-
-      const nextBySignupId = new Map(selections.map((selection) => [selection.signupId, selection]));
-      const next = new Set(nextBySignupId.keys());
+  /**
+   * Raid Lead "Add Player" in ONE transaction: resolves the registered User's
+   * BOOSTER signup for the Character — reusing an active offer (adding the
+   * assigned role to its offered roles when missing) or creating a normal
+   * PENDING offer, never reviving a WITHDRAWN one — and saves it into the
+   * draft, replacing that User's other Booster slot (one per User). Uses the
+   * same locked, version-checked draft write as Save Roster (WITHDRAWN and
+   * cross-Run reservation race checks, Save Roster notifications). Any failure
+   * rolls everything back: no synthetic signup, role change or draft change
+   * is left behind. Eligibility (access, availability, class roles) is
+   * validated by the caller before this runs.
+   */
+  async addManagedBoosterAtomic(input: {
+    rosterId: string;
+    expectedVersion: number;
+    runId: string;
+    runTitle: string;
+    scheduledStartAt: string;
+    userId: string;
+    characterId: string;
+    role: CharacterRole;
+  }): Promise<{ signupId: string; created: boolean }> {
+    let result: { signupId: string; created: boolean } | null = null;
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const roster = await lockRosterInTx(txOrm, input.rosterId);
+      await this.assertVersion(roster, input.expectedVersion);
+      await assertRunPreStartInTx(txOrm, roster.runId);
       const now = new Date().toISOString();
 
-      for (const signupId of next) {
-        const signupRow = await txOrm.RunSignup.where({ id: signupId }).first();
-        if (!signupRow) {
-          throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
-        }
-        const status = mapSignupStatus((signupRow as Record<string, unknown>).status);
-        if (status === "WITHDRAWN") {
-          throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
-        }
-      }
+      const userBoosterRows = (
+        (await txOrm.RunSignup.where({ runId: input.runId, userId: input.userId })
+          .include("offeredRoles")
+          .all()) as Array<Record<string, unknown>>
+      ).filter((row) => mapParticipation(row.participationType) === "BOOSTER");
+      const existing = userBoosterRows.find((row) => asStringOrNull(row.characterId) === input.characterId);
 
-      if (
-        options?.selectedCharacterIds &&
-        options.selectedCharacterIds.length > 0 &&
-        options.targetRunId &&
-        options.scheduledStartAt
-      ) {
-        const conflicts = await queryReservationConflicts(txOrm, {
-          characterIds: options.selectedCharacterIds,
-          excludeRunId: options.targetRunId,
-          scheduledStartAt: options.scheduledStartAt,
-        });
-        if (conflicts.length > 0) {
+      let signupId: string;
+      let created = false;
+      if (existing) {
+        if (mapSignupStatus(existing.status) === "WITHDRAWN") {
           throw new DomainError(
-            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-            `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
+            "SIGNUP_WITHDRAWN",
+            "That character was withdrawn from this run. The player needs to sign up again.",
           );
         }
-      }
-
-      const current = new Map(mapped.selections.map((selection) => [selection.signupId, selection]));
-      for (const signupId of current.keys()) {
-        if (!next.has(signupId)) {
-          await txOrm.RunRosterEntry.where({ rosterId, signupId }).delete();
+        signupId = asString(existing.id);
+        const offeredRoles = mapOfferedRoles(existing.offeredRoles);
+        if (!offeredRoles.includes(input.role)) {
+          await syncOfferedRolesInTx(txOrm, signupId, [...offeredRoles, input.role], now);
         }
-      }
-      for (const [signupId, selection] of nextBySignupId) {
-        const existing = current.get(signupId);
-        if (!existing) {
-          await txOrm.RunRosterEntry.create({
-            id: crypto.randomUUID(),
-            rosterId,
-            signupId,
-            selected: true,
-            selectedRole: selection.selectedRole,
-            createdAt: now,
-            updatedAt: now,
-          });
-          continue;
-        }
-        if (existing.selectedRole !== selection.selectedRole) {
-          await txOrm.RunRosterEntry.where({ rosterId, signupId }).update({
-            selectedRole: selection.selectedRole,
-            updatedAt: now,
-          });
-        }
-      }
-
-      await txOrm.RunRoster.where({ id: rosterId }).update({
-        version: mapped.version + 1,
-        updatedAt: now,
-      });
-
-      if (options?.notify) {
-        await notifyRosterSelectionChangesInTx(txOrm, {
-          runId: options.notify.runId,
-          runTitle: options.notify.runTitle,
-          version: mapped.version + 1,
-          selections,
-          now,
+      } else {
+        signupId = crypto.randomUUID();
+        created = true;
+        await txOrm.RunSignup.create({
+          id: signupId,
+          runId: input.runId,
+          userId: input.userId,
+          characterId: input.characterId,
+          participationType: "BOOSTER",
+          isBackup: false,
+          status: "PENDING",
+          publishedRole: null,
+          lootbuddyClass: null,
+          lootbuddyMode: null,
+          lootbuddyVerification: null,
+          createdAt: now,
+          updatedAt: now,
         });
+        await syncOfferedRolesInTx(txOrm, signupId, [input.role], now);
       }
+
+      // Keep every other saved slot except this User's other Booster rows and
+      // slots whose signup has been withdrawn meanwhile (Save Roster omits
+      // those too); then (re)assign this slot.
+      const otherUserBoosterIds = new Set(
+        userBoosterRows.map((row) => asString(row.id)).filter((id) => id !== signupId),
+      );
+      const keptIds = roster.selections
+        .map((selection) => selection.signupId)
+        .filter((id) => id !== signupId && !otherUserBoosterIds.has(id));
+      const withdrawnIds = new Set(
+        keptIds.length === 0
+          ? []
+          : ((await txOrm.RunSignup.where((signup) => signup.id.in(keptIds)).select("id", "status").all()) as Array<
+              Record<string, unknown>
+            >)
+              .filter((row) => mapSignupStatus(row.status) === "WITHDRAWN")
+              .map((row) => asString(row.id)),
+      );
+      const selections: RosterSelection[] = roster.selections.filter(
+        (selection) => keptIds.includes(selection.signupId) && !withdrawnIds.has(selection.signupId),
+      );
+      selections.push({ signupId, selectedRole: input.role });
+
+      await writeDraftSelectionsInTx(txOrm, roster, selections, {
+        targetRunId: input.runId,
+        scheduledStartAt: input.scheduledStartAt,
+        // Race-check the Character unless it already held this draft slot.
+        selectedCharacterIds: roster.selectedSignupIds.includes(signupId) ? [] : [input.characterId],
+        notify: { runId: input.runId, runTitle: input.runTitle },
+      });
+      result = { signupId, created };
     });
+    if (!result) throw new DomainError("NOT_FOUND", "Roster was not found.");
+    return result;
   },
 
   /**
@@ -458,12 +606,9 @@ export const rosterRepository = {
   }) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      const rosterRow = await txOrm.RunRoster.where({ id: input.rosterId }).include("entries").include("publishedBy").first();
-      if (!rosterRow) {
-        throw new DomainError("NOT_FOUND", "Roster was not found.");
-      }
-      const roster = mapRoster(rosterRow as Record<string, unknown>);
+      const roster = await lockRosterInTx(txOrm, input.rosterId);
       await this.assertVersion(roster, input.expectedVersion);
+      await assertRunPreStartInTx(txOrm, roster.runId);
       const now = new Date().toISOString();
 
       // Race-safety net for NEW draft selection only. Already-selected Characters
@@ -548,23 +693,18 @@ export const rosterRepository = {
     const now = new Date().toISOString();
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      const bumpedRosterIds = new Set<string>();
-      for (const signupId of uniqueIds) {
-        const entries = await txOrm.RunRosterEntry.where({ signupId }).all();
-        for (const entry of entries) {
-          const row = entry as Record<string, unknown>;
-          const rosterId = asString(row.rosterId);
-          await txOrm.RunRosterEntry.where({ id: asString(row.id) }).delete();
-          bumpedRosterIds.add(rosterId);
-        }
-      }
-      for (const rosterId of bumpedRosterIds) {
-        const roster = await txOrm.RunRoster.where({ id: rosterId }).first();
-        if (!roster) continue;
-        await txOrm.RunRoster.where({ id: rosterId }).update({
-          version: asNumber((roster as Record<string, unknown>).version, 1) + 1,
-          updatedAt: now,
-        });
+      const entries = (await txOrm.RunRosterEntry.where((entry) => entry.signupId.in(uniqueIds)).all()) as Array<
+        Record<string, unknown>
+      >;
+      // Lock the affected rosters first (sorted, one consistent order) — the
+      // same lock-before-write order as every roster write and Start Run.
+      const rosterIds = [...new Set(entries.map((row) => asString(row.rosterId)))].sort();
+      for (const rosterId of rosterIds) {
+        const roster = await lockRosterInTx(txOrm, rosterId);
+        await txOrm.RunRosterEntry.where((entry) => entry.signupId.in(uniqueIds))
+          .where({ rosterId })
+          .delete();
+        await txOrm.RunRoster.where({ id: rosterId }).update({ version: roster.version + 1, updatedAt: now });
       }
     });
   },
@@ -577,17 +717,12 @@ export const rosterRepository = {
   async replaceExternalBoosters(rosterId: string, expectedVersion: number, boosters: ExternalBoosterInput[]) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      const roster = await txOrm.RunRoster.where({ id: rosterId }).first();
-      if (!roster) {
-        throw new DomainError("NOT_FOUND", "Roster was not found.");
-      }
-      const version = asNumber((roster as Record<string, unknown>).version, 1);
+      const roster = await lockRosterInTx(txOrm, rosterId);
+      const version = roster.version;
       if (version !== expectedVersion) {
-        throw new DomainError(
-          "ROSTER_ALREADY_CHANGED",
-          "This roster changed since you loaded it. Refresh and try again.",
-        );
+        throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
       }
+      await assertRunPreStartInTx(txOrm, roster.runId);
       await replaceExternalBoostersInTx(txOrm, rosterId, boosters);
       await txOrm.RunRoster.where({ id: rosterId }).update({
         version: version + 1,
@@ -618,6 +753,16 @@ export const rosterRepository = {
   }): Promise<void> {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      // Lock first (same order as every roster write and Start), then make sure
+      // the Run has not started meanwhile — a started lineup is frozen.
+      const rosterRow = (await txOrm.RunRoster.where({ runId: input.runId }).select("id").first()) as Record<
+        string,
+        unknown
+      > | null;
+      if (rosterRow) {
+        await lockRosterInTx(txOrm, asString(rosterRow.id));
+      }
+      await assertRunPreStartInTx(txOrm, input.runId);
       const signup = (await txOrm.RunSignup.where({ id: input.signupId }).first()) as Record<string, unknown> | null;
       if (!signup) {
         throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
@@ -714,17 +859,11 @@ export const rosterRepository = {
   }) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      const roster = await txOrm.RunRoster.where({ id: input.rosterId }).include("entries").first();
-      if (!roster) {
-        throw new DomainError("NOT_FOUND", "Roster was not found.");
-      }
-      const mapped = mapRoster(roster as Record<string, unknown>);
+      const mapped = await lockRosterInTx(txOrm, input.rosterId);
       if (mapped.version !== input.expectedVersion) {
-        throw new DomainError(
-          "ROSTER_ALREADY_CHANGED",
-          "This roster changed since you loaded it. Refresh and try again.",
-        );
+        throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
       }
+      await assertRunPreStartInTx(txOrm, input.runId);
 
       // Race-safety net: the caller already checked cross-Run reservation
       // before opening this transaction, but another Run could have reserved

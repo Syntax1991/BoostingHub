@@ -62,3 +62,24 @@ export const publishRosterSchema = z.object({
   version: z.number().int().positive(),
   acknowledgeWarnings: z.boolean(),
 });
+
+/** Add Player: bounded player search for a Run the actor manages. */
+export const rosterPlayerSearchSchema = z.object({
+  runId: entityIdSchema,
+  query: z.string().trim().min(2, "Type at least 2 characters.").max(64),
+});
+
+/** Add Player: the chosen player's Characters for this Run. */
+export const rosterManualAddOptionsSchema = z.object({
+  runId: entityIdSchema,
+  userId: entityIdSchema,
+});
+
+/** Add Player: roster a registered player's Character as a Booster in the assigned role. */
+export const rosterAddPlayerSchema = z.object({
+  runId: entityIdSchema,
+  version: z.number().int().positive(),
+  userId: entityIdSchema,
+  characterId: entityIdSchema,
+  role: z.enum(CHARACTER_ROLES),
+});

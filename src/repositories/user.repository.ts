@@ -1,5 +1,6 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { orm } from "@/lib/prisma";
+import { or } from "@prisma/orm-postgres/orm-client";
 import type { AccountRole, AccountStatus, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
@@ -162,6 +163,28 @@ export const userRepository = {
       image: asStringOrNull(user.image),
       accountStatus: "ACTIVE" as AccountStatus,
     }));
+  },
+
+  /**
+   * Raid Lead player picker: ACTIVE accounts whose name or Discord username
+   * contains `query` (case-insensitive), bounded by `limit`. Never loads the
+   * full user table into the page.
+   */
+  async searchActivePlayers(query: string, limit = 10): Promise<Array<{ id: string; name: string; discordUsername: string | null }>> {
+    const needle = query.trim();
+    if (needle.length === 0) return [];
+    // Escape LIKE wildcards so a literal "%" or "_" in a name matches itself.
+    const pattern = `%${needle.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const rows = await orm.User.where({ accountStatus: "ACTIVE" })
+      .where((user) => or(user.name.ilike(pattern), user.discordUsername.ilike(pattern)))
+      .select("id", "name", "discordUsername")
+      .orderBy((user) => user.name.asc())
+      .limit(limit)
+      .all();
+    return rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return { id: asString(record.id), name: asString(record.name), discordUsername: asStringOrNull(record.discordUsername) };
+    });
   },
 
   async findById(id: string) {

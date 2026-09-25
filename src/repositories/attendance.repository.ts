@@ -11,6 +11,7 @@ import {
   mapCharacterRole,
   mapParticipation,
   mapRegion,
+  mapSignupStatus,
   mapWowClass,
 } from "@/lib/persistence";
 import { CLASS_LABELS } from "@/lib/labels";
@@ -31,6 +32,8 @@ import {
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
 import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
+import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
+import { lockRosterInTx } from "@/repositories/roster.repository";
 
 export type AttendanceRecord = {
   id: string;
@@ -266,6 +269,12 @@ export const attendanceRepository = {
   ) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      // Start is the roster lock point. Take the roster lock before reading
+      // anything (the same order every roster write uses): a concurrent Save /
+      // Publish / Add Player either committed before this and is included, or
+      // waits and then fails because the Run is IN_PROGRESS.
+      const rosterLookup = (await txOrm.RunRoster.where({ runId }).select("id").first()) as Record<string, unknown> | null;
+      const lockedRoster = rosterLookup ? await lockRosterInTx(txOrm, asString(rosterLookup.id)) : null;
       const run = await txOrm.Run.where({ id: runId }).first();
       if (!run || asString((run as Record<string, unknown>).status) !== "PUBLISHED") {
         throw new DomainError("RUN_NOT_PUBLISHED", "Only a published run can be started.");
@@ -274,12 +283,34 @@ export const attendanceRepository = {
       if (existingSnapshot) {
         throw new DomainError("RUN_ALREADY_STARTED", "This run has already started.");
       }
-      const roster = await txOrm.RunRoster.where({ runId }).first();
-      const rosterRow = roster as Record<string, unknown> | undefined;
-      if (!rosterRow || !asStringOrNull(rosterRow.publishedAt)) {
+      if (!lockedRoster || !lockedRoster.publishedAt) {
         throw new DomainError(
           "RUN_CANNOT_START",
           "A published roster with at least one selected participant is required.",
+        );
+      }
+      const rosterRow = { id: lockedRoster.id };
+      // Start snapshots the published roster; a saved replacement that was
+      // never re-published would silently be left out, so refuse instead.
+      const runSignups = (await txOrm.RunSignup.where({ runId })
+        .select("id", "status", "participationType", "publishedRole")
+        .all()) as Array<Record<string, unknown>>;
+      if (
+        hasUnpublishedRosterChanges({
+          publishedAt: lockedRoster.publishedAt,
+          version: lockedRoster.version,
+          draft: lockedRoster.selections,
+          signups: runSignups.map((row) => ({
+            id: asString(row.id),
+            status: mapSignupStatus(row.status),
+            participationType: mapParticipation(row.participationType),
+            publishedRole: row.publishedRole == null ? null : mapCharacterRole(row.publishedRole),
+          })),
+        })
+      ) {
+        throw new DomainError(
+          "ROSTER_UNPUBLISHED_CHANGES",
+          "Roster has unpublished changes. Update the roster before starting the Run.",
         );
       }
       const existing = await txOrm.RunAttendance.where({ runId }).select("id").all();

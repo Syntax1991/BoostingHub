@@ -22,6 +22,7 @@ export function RunManagerActions({
   editor,
   unmarkedCount = 0,
   finalSetupPreview,
+  rosterHasUnpublishedChanges = false,
   externalBoosters = null,
 }: {
   run: RunDetailView["run"];
@@ -29,6 +30,8 @@ export function RunManagerActions({
   editor: RunDetailView["editor"];
   unmarkedCount?: number;
   finalSetupPreview?: FinalSetupInput | null;
+  /** Saved roster draft differs from the published roster — Start will be refused server-side. */
+  rosterHasUnpublishedChanges?: boolean;
   /** Set while the roster is editable — opens the External Boosters dialog. */
   externalBoosters?: { boosters: ExternalBooster[]; rosterVersion: number } | null;
 }) {
@@ -143,7 +146,12 @@ export function RunManagerActions({
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
       {startOpen ? (
-        <RunStartDialog runId={runId} finalSetup={finalSetupPreview} onClose={() => setStartOpen(false)} />
+        <RunStartDialog
+          runId={runId}
+          finalSetup={finalSetupPreview}
+          rosterHasUnpublishedChanges={rosterHasUnpublishedChanges}
+          onClose={() => setStartOpen(false)}
+        />
       ) : null}
       {completeOpen ? (
         <RunCompleteDialog runId={runId} unmarkedCount={unmarkedCount} onClose={() => setCompleteOpen(false)} />

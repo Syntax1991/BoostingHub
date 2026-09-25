@@ -877,6 +877,83 @@ export const signupService = {
       message: `${user.name} withdrew a signup for ${signup.run.title}.`,
     });
   },
+
+  /**
+   * Raid Lead "Add Player": another User's Characters evaluated with exactly
+   * the self-signup eligibility rules (active, weekly availability, cross-Run
+   * reservation, Booster Access for the Run difficulty, class roles). Only
+   * the signup window is not required — a Raid Lead fills a published roster
+   * after signups closed. Callers must already have authorized the Run.
+   */
+  async listManagedBoosterOptions(run: LoadedRun, userId: string) {
+    const characters = await characterRepository.listByUserId(userId);
+    const enriched = await withSignupEligibilityContext(characters, run.id, run.scheduledStartAt, run.difficulty);
+    const { eligible, ineligible } = evaluateBoosterOptions(enriched, toEligibilityRun(run));
+    const signups = await signupRepository.listByRunAndUser(run.id, userId);
+    const withdrawnCharacterIds = new Set(
+      signups
+        .filter((signup) => signup.participationType === "BOOSTER" && signup.status === "WITHDRAWN")
+        .map((signup) => signup.character?.id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    return {
+      eligible: eligible.filter((option) => !withdrawnCharacterIds.has(option.characterId)),
+      ineligible: [
+        ...ineligible.map((item) => ({ characterId: item.characterId, characterName: item.characterName, realm: item.realm, message: item.message })),
+        ...eligible
+          .filter((option) => withdrawnCharacterIds.has(option.characterId))
+          .map((option) => ({
+            characterId: option.characterId,
+            characterName: option.characterName,
+            realm: option.realm,
+            message: "Withdrew from this run — they need to sign up again.",
+          })),
+      ],
+    };
+  },
+
+  /**
+   * Raid Lead "Add Player": read-only validation of the Character to roster —
+   * ownership, then exactly the self-signup eligibility rules (see
+   * listManagedBoosterOptions) and the requested role. Reports the User's
+   * existing BOOSTER offer for that Character; a WITHDRAWN one is refused
+   * (never revived on the player's behalf). Writes nothing: the signup and the
+   * draft slot are written together by rosterRepository.addManagedBoosterAtomic.
+   */
+  async validateManagedBoosterCandidate(input: {
+    run: LoadedRun;
+    userId: string;
+    characterId: string;
+    role: CharacterRole;
+  }): Promise<{ characterName: string; characterRealm: string; existingSignupId: string | null }> {
+    const { run } = input;
+    const character = await characterRepository.findOwnedById(input.userId, input.characterId);
+    if (!character) {
+      throw new DomainError("CHARACTER_NOT_OWNED", "That character does not belong to that player.");
+    }
+    const [enriched] = await withSignupEligibilityContext([character], run.id, run.scheduledStartAt, run.difficulty);
+    const { eligible, ineligible } = evaluateBoosterOptions([enriched], toEligibilityRun(run));
+    const option = eligible.find((item) => item.characterId === character.id);
+    if (!option) {
+      throw boosterRejection(ineligible[0]);
+    }
+    if (!option.roles.includes(input.role)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_ROLE",
+        `${character.name} cannot be rostered as ${CHARACTER_ROLE_LABELS[input.role]}.`,
+      );
+    }
+    const existing = (await signupRepository.listByRunAndUser(run.id, input.userId)).find(
+      (signup) => signup.participationType === "BOOSTER" && signup.character?.id === character.id,
+    );
+    if (existing?.status === "WITHDRAWN") {
+      throw new DomainError(
+        "SIGNUP_WITHDRAWN",
+        `${character.name} was withdrawn from this run. The player needs to sign up again.`,
+      );
+    }
+    return { characterName: character.name, characterRealm: character.realm, existingSignupId: existing?.id ?? null };
+  },
 };
 
 async function loadSignupContext(userId: string, runId: string, characterId: string) {

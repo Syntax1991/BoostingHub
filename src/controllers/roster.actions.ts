@@ -5,6 +5,9 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { rosterService } from "@/services/roster.service";
 import {
   publishRosterSchema,
+  rosterAddPlayerSchema,
+  rosterManualAddOptionsSchema,
+  rosterPlayerSearchSchema,
   rosterRunSchema,
   rosterVersionSchema,
   saveExternalBoostersSchema,
@@ -67,6 +70,46 @@ export async function publishRosterAction(input: unknown): Promise<ActionResult>
     const parsed = publishRosterSchema.parse(input);
     await rosterService.publishRoster(user, parsed);
     return { ok: true, message: "Roster published." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+type RosterPlayerMatches = Awaited<ReturnType<typeof rosterService.searchPlayers>>;
+type RosterManualAddOptions = Awaited<ReturnType<typeof rosterService.getManualAddOptions>>;
+
+export async function searchRosterPlayersAction(
+  input: unknown,
+): Promise<ActionResult & { data: RosterPlayerMatches | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterPlayerSearchSchema.parse(input);
+    const data = await rosterService.searchPlayers(user, parsed);
+    return { ok: true, message: `${data.length} player${data.length === 1 ? "" : "s"} found.`, data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
+  }
+}
+
+export async function getRosterManualAddOptionsAction(
+  input: unknown,
+): Promise<ActionResult & { data: RosterManualAddOptions | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterManualAddOptionsSchema.parse(input);
+    const data = await rosterService.getManualAddOptions(user, parsed);
+    return { ok: true, message: "Characters loaded.", data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
+  }
+}
+
+export async function addRosterPlayerAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterAddPlayerSchema.parse(input);
+    await rosterService.addRegisteredParticipant(user, parsed);
+    return { ok: true, message: "Player added to the roster draft." };
   } catch (error) {
     return mapActionError(error);
   }
