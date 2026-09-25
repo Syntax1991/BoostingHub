@@ -20,6 +20,7 @@ import { handleGuideCommand } from "@/discord-bot/commands/guide";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 import { isTicketCustomId } from "@/discord-bot/tickets/ticket-custom-ids";
+import { retryPendingTicketDeletes } from "@/discord-bot/tickets/ticket-close";
 import { createTicketDiscordPort } from "@/discord-bot/tickets/ticket-discord-port";
 import { handleTicketInteraction } from "@/discord-bot/tickets/ticket-interactions";
 import { syncSupportPanel } from "@/discord-bot/tickets/ticket-panel";
@@ -44,6 +45,9 @@ export function createBotClient(env: BotEnv): Client {
       syncSupportPanel(tickets)
         .then((result) => console.log(`[discord-bot] ticket panel: ${result}`))
         .catch((error) => console.error("[discord-bot] ticket panel sync failed", error));
+      retryPendingTicketDeletes(tickets)
+        .then((closed) => closed > 0 && console.log(`[discord-bot] finished ${closed} pending ticket close(s)`))
+        .catch((error) => console.error("[discord-bot] pending ticket delete retry failed", error));
     } else {
       console.log("[discord-bot] ticket system disabled (no DISCORD_TICKET_* configured)");
     }
