@@ -38,7 +38,7 @@ Self-service `requestAccess` is disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`
 
 ## Why qualification is separate from account role
 
-Account roles (`USER`, `RAID_LEAD`, `ADMIN`) are platform permissions.
+Account roles (`USER`, `RAID_LEAD`, `ADMIN`, `OWNER`) are platform permissions; OWNER has every Admin permission, including Booster Access review.
 
 Run participation (`BOOSTER`, `LOOTBUDDY`) is per-run.
 
