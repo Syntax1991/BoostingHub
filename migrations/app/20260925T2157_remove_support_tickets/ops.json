@@ -1,0 +1,76 @@
+[
+  {
+    "id": "dropTable.discord_ticket_panel",
+    "label": "Drop table \"discord_ticket_panel\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "discord_ticket_panel"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"discord_ticket_panel\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"discord_ticket_panel\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop table \"discord_ticket_panel\"",
+        "sql": "DROP TABLE \"public\".\"discord_ticket_panel\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"discord_ticket_panel\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"discord_ticket_panel\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropTable.support_ticket",
+    "label": "Drop table \"support_ticket\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"support_ticket\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop table \"support_ticket\"",
+        "sql": "DROP TABLE \"public\".\"support_ticket\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"support_ticket\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ]
+  }
+]

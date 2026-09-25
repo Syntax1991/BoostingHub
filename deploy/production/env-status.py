@@ -53,15 +53,6 @@ GROUPS = {
         ("DISCORD_SYNC_INTERVAL_MS", "public"),
         ("DISCORD_BOOSTER_TICKET_URL", "public"),
     ],
-    "discord support tickets (optional, all or none)": [
-        ("DISCORD_TICKET_PANEL_CHANNEL_ID", "public"),
-        ("DISCORD_TICKET_CATEGORY_ID", "public"),
-        ("DISCORD_TICKET_ARCHIVE_LOG_CHANNEL_ID", "public"),
-        ("DISCORD_TICKET_ADMIN_ROLE_ID", "public"),
-        ("DISCORD_TICKET_MODERATOR_ROLE_ID", "public"),
-        ("DISCORD_TICKET_RAID_STAFF_ROLE_ID", "public"),
-        ("DISCORD_TICKET_MYTHIC_PLUS_STAFF_ROLE_ID", "public"),
-    ],
     "integrations (optional)": [
         ("BLIZZARD_CLIENT_ID", "secret"),
         ("BLIZZARD_CLIENT_SECRET", "secret"),
@@ -82,9 +73,6 @@ GROUPS = {
     ],
 }
 REQUIRED_GROUPS = {"web (required)", "discord bot (required)"}
-# Either every key is set or none is — the bot refuses to start otherwise
-# (a partial ticket config could expose private tickets to the wrong roles).
-ALL_OR_NOTHING_GROUPS = {"discord support tickets (optional, all or none)"}
 DEV_FLAGS = {"DEV_AUTH_ENABLED", "DEV_ACCOUNT_BOOTSTRAP_ENABLED"}
 
 
@@ -186,13 +174,6 @@ def main() -> int:
                 problems += 1
                 status += "  <-- must be false in production"
             print(f"  {key}: {status}")
-        if group in ALL_OR_NOTHING_GROUPS:
-            set_count = sum(1 for key, _ in keys if values.get(key) not in (None, ""))
-            if 0 < set_count < len(keys):
-                problems += 1
-                print(f"  PROBLEM: partially configured ({set_count}/{len(keys)} set) - set all or none; the bot will not start")
-            elif set_count == 0:
-                print("  (feature disabled)")
 
     known = {key for keys in GROUPS.values() for key, _ in keys}
     unknown = sorted(set(values) - known)
