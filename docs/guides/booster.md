@@ -41,7 +41,7 @@ Unter **Characters** verwaltest du deine WoW-Chars. Für Booster-Signups brauchs
 
 ### Booster-Zugang (Qualification)
 
-Um dich als **Booster** für eine Difficulty anzumelden, brauchst du eine freigeschaltete **Booster Qualification** (User + Difficulty, z. B. Heroic). Die beantragst du über den Discord-Ticket-Prozess der Community — nicht über ein Self-Service-Formular in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
+Um dich als **Booster** für eine Difficulty anzumelden, brauchst du eine freigeschaltete **Booster Qualification** (User + Difficulty, z. B. Heroic). Die beantragst du über Discord (**Apply via Discord**) — nicht über ein Self-Service-Formular in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
 
 ---
 
@@ -154,6 +154,6 @@ Auf dem Dashboard und unter **My Runs** erkennst du, ob du Selected bist und mit
 
 1. Discord-Login (verknüpft Discord mit BoostingHub)
 2. Character(s) unter **Characters** anlegen
-3. Booster-Zugang für die Difficulty über Discord-Ticket beantragen
+3. Booster-Zugang für die Difficulty über Discord beantragen (**Apply via Discord**)
 4. Anmelden: Website **Runs → Sign up** *oder* Discord-Buttons im Run-Channel
 5. Status prüfen: **My Runs** / `/mysignups`, bei Bedarf Withdraw / **Cancel Signup**

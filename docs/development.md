@@ -21,7 +21,7 @@ npm run dev
 
 `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` (see `.env.example`) are required for Add Character — Class/Item Level come from Blizzard's public Character Profile with no manual fallback. Optional Battle.net *account* linking/import uses the same vars. Seed and Discord login work when they are empty; adding a Character does not.
 
-Optional `DISCORD_BOOSTER_TICKET_URL` is a public Discord channel/ticket link shown when self-service BoosterAccess requests are disabled.
+Optional `DISCORD_BOOSTER_TICKET_URL` is an external Discord link for Booster Access applications, shown as **Apply via Discord** when self-service BoosterAccess requests are disabled.
 
 ## Prisma 8 workflow
 

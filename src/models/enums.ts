@@ -132,16 +132,3 @@ export const UPCOMING_RUN_STATUSES: readonly RunStatus[] = [
 
 /** Signups that still represent an active relationship with a run. */
 export const ACTIVE_SIGNUP_STATUSES: readonly SignupStatus[] = ["PENDING", "SELECTED"];
-
-/** Discord Support ticket categories. */
-export const SUPPORT_TICKET_TYPES = [
-  "ADMIN_SUPPORT",
-  "RAID_SUPPORT",
-  "MYTHIC_PLUS_SUPPORT",
-  "GENERAL_SUPPORT",
-  "REPORT_BOOSTER",
-] as const;
-export type SupportTicketType = (typeof SUPPORT_TICKET_TYPES)[number];
-
-export const SUPPORT_TICKET_STATUSES = ["OPENING", "OPEN", "CLOSING", "CLOSED", "FAILED"] as const;
-export type SupportTicketStatus = (typeof SUPPORT_TICKET_STATUSES)[number];

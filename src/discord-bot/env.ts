@@ -59,61 +59,7 @@ export type BotEnv = {
   apiBaseUrl: string;
   botApiToken: string;
   syncIntervalMs: number;
-  /**
-   * Discord Support ticket system. Null (feature off) when every ticket
-   * variable is unset; startup fails when only some are set — a partial
-   * config could post a panel whose tickets are visible to the wrong roles.
-   */
-  tickets?: BotTicketEnv | null;
 };
-
-export type BotTicketEnv = {
-  panelChannelId: string;
-  /** Category every active ticket channel is created under. */
-  categoryId: string;
-  /** Staff-only channel receiving summary + HTML transcript on close. */
-  archiveLogChannelId: string;
-  adminRoleId: string;
-  moderatorRoleId: string;
-  raidStaffRoleId: string;
-  mythicPlusStaffRoleId: string;
-};
-
-/** The ticket feature's config group — all or nothing. */
-export const TICKET_ENV_KEYS = {
-  panelChannelId: "DISCORD_TICKET_PANEL_CHANNEL_ID",
-  categoryId: "DISCORD_TICKET_CATEGORY_ID",
-  archiveLogChannelId: "DISCORD_TICKET_ARCHIVE_LOG_CHANNEL_ID",
-  adminRoleId: "DISCORD_TICKET_ADMIN_ROLE_ID",
-  moderatorRoleId: "DISCORD_TICKET_MODERATOR_ROLE_ID",
-  raidStaffRoleId: "DISCORD_TICKET_RAID_STAFF_ROLE_ID",
-  mythicPlusStaffRoleId: "DISCORD_TICKET_MYTHIC_PLUS_STAFF_ROLE_ID",
-} as const satisfies Record<keyof BotTicketEnv, string>;
-
-const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
-
-/**
- * Resolves the ticket config group. Error messages name keys only, never
- * values.
- */
-export function loadTicketEnv(env: NodeJS.ProcessEnv): BotTicketEnv | null {
-  const entries = Object.entries(TICKET_ENV_KEYS) as Array<[keyof BotTicketEnv, string]>;
-  const values = entries.map(([field, key]) => [field, key, env[key]?.trim() ?? ""] as const);
-  const configured = values.filter(([, , value]) => value);
-  if (configured.length === 0) return null;
-
-  const missing = values.filter(([, , value]) => !value).map(([, key]) => key);
-  if (missing.length > 0) {
-    throw new Error(
-      `Discord ticket system is partially configured. Set all ticket variables or none. Missing: ${missing.join(", ")}`,
-    );
-  }
-  const invalid = values.filter(([, , value]) => !SNOWFLAKE_PATTERN.test(value)).map(([, key]) => key);
-  if (invalid.length > 0) {
-    throw new Error(`Discord ticket variable(s) must be Discord ids (17–20 digits): ${invalid.join(", ")}`);
-  }
-  return Object.fromEntries(values.map(([field, , value]) => [field, value])) as BotTicketEnv;
-}
 
 const REQUIRED_VARS = [
   "DISCORD_BOT_TOKEN",
@@ -165,6 +111,5 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     apiBaseUrl: env.BOOSTINGHUB_API_BASE_URL!.replace(/\/$/, ""),
     botApiToken: env.BOOSTINGHUB_BOT_API_TOKEN!,
     syncIntervalMs: Number(env.DISCORD_SYNC_INTERVAL_MS ?? 5_000),
-    tickets: loadTicketEnv(env),
   };
 }

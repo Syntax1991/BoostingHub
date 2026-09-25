@@ -18,7 +18,7 @@ Examples: `Simon + HEROIC`, `Aelira + MYTHIC`.
 
 It does **not** depend on Character, WoW Class, specialization, Character Role, Item Level, or Account Role.
 
-Self-service `requestAccess` is disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). Character pages show a Discord ticket CTA when `DISCORD_BOOSTER_TICKET_URL` is set.
+Self-service `requestAccess` is disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). Character pages show an **Apply via Discord** CTA (an external Discord destination; BoostingHub runs no ticket system) when `DISCORD_BOOSTER_TICKET_URL` is set.
 
 ## Two persistence models
 
@@ -49,7 +49,7 @@ Run participation (`BOOSTER`, `LOOTBUDDY`) is per-run.
 Current onboarding:
 
 ```text
-User → Discord ticket → staff review → ADMIN grant (User + Difficulty)
+User → Apply via Discord → staff review → ADMIN grant (User + Difficulty)
 ```
 
 Grant UI fields: User, Difficulty, Notes (optional). No Character / Class / Role / Item Level / Spec.
