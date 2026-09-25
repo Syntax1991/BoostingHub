@@ -299,6 +299,7 @@ export const attendanceRepository = {
         hasUnpublishedRosterChanges({
           publishedAt: lockedRoster.publishedAt,
           version: lockedRoster.version,
+          runChangedSinceAck: lockedRoster.runChangedSinceAck,
           draft: lockedRoster.selections,
           signups: runSignups.map((row) => ({
             id: asString(row.id),

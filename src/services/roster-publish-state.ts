@@ -20,6 +20,8 @@ export type PublishStateDraftSelection = {
  * never re-published would silently be left out.
  *
  * - Nothing published yet → false (there is no published roster to differ from).
+ * - Published and a roster-relevant Run setting changed since the roster was
+ *   last accepted (RunRoster.runChangedSinceAck) → true, whatever the draft.
  * - Version 1 with an empty draft while a published selection exists → false:
  *   the draft was simply never seeded (see needsPublishSeed), not changed.
  * - Draft rows of WITHDRAWN signups are ignored, exactly as Publish ignores them.
@@ -30,10 +32,13 @@ export type PublishStateDraftSelection = {
 export function hasUnpublishedRosterChanges(input: {
   publishedAt: string | null;
   version: number;
+  /** RunRoster.runChangedSinceAck — difficulty/content/schedule/loot/composition changed since Publish/Update. */
+  runChangedSinceAck: boolean;
   draft: readonly PublishStateDraftSelection[];
   signups: readonly PublishStateSignup[];
 }): boolean {
   if (!input.publishedAt) return false;
+  if (input.runChangedSinceAck) return true;
 
   const signupsById = new Map(input.signups.map((signup) => [signup.id, signup]));
   const draft = new Map<string, CharacterRole | null>();

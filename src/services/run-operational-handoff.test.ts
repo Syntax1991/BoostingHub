@@ -9,7 +9,6 @@ function caps(status: Parameters<typeof getRunLifecycleCapabilities>[0]["status"
   return getRunLifecycleCapabilities({
     status,
     signupsOpen: status === "OPEN" || status === "ROSTERING",
-    hasSignupHistory: status !== "DRAFT",
     actorIsAdmin,
     archivedAt: null,
   });

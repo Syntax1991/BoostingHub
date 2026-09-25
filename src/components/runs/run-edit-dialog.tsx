@@ -182,9 +182,7 @@ export function RunEditDialog({
           Edit Run
         </h2>
         <p className="mt-1 text-xs text-muted">
-          {capabilities.canEditIdentity
-            ? "Product and difficulty can still be changed because no signup history exists."
-            : "Product and difficulty are locked after signup history exists."}
+          Run details can be changed until the run starts.
         </p>
       </div>
       <form className="space-y-3 px-4 py-4" onSubmit={submit}>
@@ -247,11 +245,7 @@ export function RunEditDialog({
                 aria-label="Product"
                 value={contentPreset}
                 disabled={!capabilities.canEditIdentity}
-                title={
-                  !capabilities.canEditIdentity
-                    ? "Product cannot change after signup history exists."
-                    : undefined
-                }
+                title={!capabilities.canEditIdentity ? "The run has started — details are locked." : undefined}
                 onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
                 className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -292,7 +286,7 @@ export function RunEditDialog({
             aria-label="Difficulty"
             value={difficulty}
             disabled={!capabilities.canEditIdentity}
-            title={!capabilities.canEditIdentity ? "Difficulty cannot change after signup history exists." : undefined}
+            title={!capabilities.canEditIdentity ? "The run has started — details are locked." : undefined}
             onChange={(event) => selectDifficulty(event.target.value as RaidDifficulty)}
             className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
           >

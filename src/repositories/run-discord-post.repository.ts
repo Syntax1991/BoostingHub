@@ -15,6 +15,8 @@ export type RunDiscordPostRecord = {
   rosterMessageId: string | null;
   rosterPostedAt: string | null;
   lastRosterVersion: number | null;
+  /** RunRoster.postRevision the bot last fulfilled with a NEW roster message; null = none yet (treated as 0). */
+  lastRosterPostRevision: number | null;
   startChannelId: string | null;
   startMessageId: string | null;
   startPostedAt: string | null;
@@ -54,6 +56,7 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     rosterMessageId: asStringOrNull(row.rosterMessageId),
     rosterPostedAt: asStringOrNull(row.rosterPostedAt),
     lastRosterVersion: asNumberOrNull(row.lastRosterVersion),
+    lastRosterPostRevision: asNumberOrNull(row.lastRosterPostRevision),
     startChannelId: asStringOrNull(row.startChannelId),
     startMessageId: asStringOrNull(row.startMessageId),
     startPostedAt: asStringOrNull(row.startPostedAt),
@@ -137,17 +140,24 @@ export const runDiscordPostRepository = {
     });
   },
 
+  /**
+   * The current roster message (edited or newly sent). `lastRosterPostRevision`
+   * is given only when the bot fulfilled an explicit Publish (a NEW message);
+   * refreshes and missing-message recovery leave it unchanged.
+   */
   async recordRosterPost(input: {
     runId: string;
     rosterChannelId: string;
     rosterMessageId: string;
     lastRosterVersion: number;
+    lastRosterPostRevision?: number;
   }): Promise<void> {
     await upsert(input.runId, {
       rosterChannelId: input.rosterChannelId,
       rosterMessageId: input.rosterMessageId,
       rosterPostedAt: new Date().toISOString(),
       lastRosterVersion: input.lastRosterVersion,
+      ...(input.lastRosterPostRevision !== undefined ? { lastRosterPostRevision: input.lastRosterPostRevision } : {}),
     });
   },
 

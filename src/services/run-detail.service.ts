@@ -134,12 +134,10 @@ export const runDetailService = {
     const activeSignups = run.signups.filter((signup) => signup.status !== "WITHDRAWN");
     const selectedCount = run.signups.filter((signup) => signup.status === "SELECTED").length;
     const activeOwn = viewerSignups.filter((signup) => signup.status !== "WITHDRAWN");
-    const hasSignupHistory = run.signups.length > 0;
     const capabilities = manage
       ? getRunLifecycleCapabilities({
           status: run.status,
           signupsOpen: run.signupsOpen,
-          hasSignupHistory,
           actorIsAdmin: hasAdminAccess(user.accountRole),
         })
       : emptyRunCapabilities();
@@ -220,7 +218,6 @@ export const runDetailService = {
     }
 
     let editor: {
-      hasSignupHistory: boolean;
       canAssignRaidLead: boolean;
       contentPresets: Array<{ key: RunContentPresetKey; displayName: string }>;
       contentPreset: RunContentPresetKey | "CUSTOM";
@@ -260,7 +257,6 @@ export const runDetailService = {
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName }];
       editor = {
-        hasSignupHistory,
         canAssignRaidLead: capabilities.canReassignRaidLead,
         contentPresets: listCreateRunContentPresets(),
         contentPreset: product === "CUSTOM" ? "CUSTOM" : product,

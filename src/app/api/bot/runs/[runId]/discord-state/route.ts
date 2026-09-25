@@ -20,7 +20,13 @@ export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
     messageId: z.string().min(1).max(64),
     classEmojiFingerprint: z.string().max(4000).optional(),
   }),
-  z.object({ kind: z.literal("roster"), channelId: z.string().min(1).max(64), messageId: z.string().min(1).max(64) }),
+  z.object({
+    kind: z.literal("roster"),
+    channelId: z.string().min(1).max(64),
+    messageId: z.string().min(1).max(64),
+    /** Present when this message fulfils an explicit Publish Roster (a NEW post). */
+    postRevision: z.number().int().min(1).optional(),
+  }),
   z.object({
     kind: z.literal("start"),
     channelId: z.string().min(1).max(64),
@@ -97,6 +103,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         runId,
         channelId: runDiscordStateUpdate.channelId,
         messageId: runDiscordStateUpdate.messageId,
+        postRevision: runDiscordStateUpdate.postRevision,
       });
     } else if (runDiscordStateUpdate.kind === "start") {
       await discordSyncService.recordStartPost({

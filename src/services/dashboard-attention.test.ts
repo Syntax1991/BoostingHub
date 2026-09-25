@@ -174,7 +174,6 @@ describe("projectDashboardOperations", () => {
     const realCaps = getRunLifecycleCapabilities({
       status,
       signupsOpen: false,
-      hasSignupHistory: true,
       actorIsAdmin: Boolean(extras.canMarkPaid),
       archivedAt: null,
     });

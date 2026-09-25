@@ -107,6 +107,16 @@ afterAll(async () => {
   await cleanupAll();
 });
 
+/** Reschedule path of the pre-start Run edit: Run fields + RUN_RESCHEDULED in one transaction. */
+function updateWithAnnouncement(
+  runId: string,
+  fields: Parameters<typeof runRepository.updatePreStartAtomic>[1],
+  announcement: NonNullable<Parameters<typeof runRepository.updatePreStartAtomic>[2]>["announcement"],
+  hooks: Parameters<typeof runRepository.updatePreStartAtomic>[3],
+) {
+  return runRepository.updatePreStartAtomic(runId, fields, { announcement }, hooks);
+}
+
 describe("lifecycle announcement atomicity", () => {
   it("successful cancel persists CANCELLED and RUN_CANCELLED announcement together", async () => {
     const runId = await openRun(futureIso());
@@ -196,7 +206,7 @@ describe("lifecycle announcement atomicity", () => {
     const nextStart = futureIso(21);
 
     await expect(
-      runRepository.updateFieldsWithDiscordAnnouncement(
+      updateWithAnnouncement(
         runId,
         {
           scheduledStartAt: nextStart,
@@ -233,7 +243,7 @@ describe("lifecycle announcement atomicity", () => {
     const nextStart = futureIso(22);
 
     await expect(
-      runRepository.updateFieldsWithDiscordAnnouncement(
+      updateWithAnnouncement(
         runId,
         {
           scheduledStartAt: nextStart,

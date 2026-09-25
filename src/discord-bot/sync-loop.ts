@@ -852,19 +852,29 @@ async function syncRosterPost(
   const { channelId } = resolved;
 
   const embed = buildRosterEmbed(data, { classIndicators, roleIndicators });
+  const explicitPost = item.mode === "POST" && typeof item.postRevision === "number";
 
-  if (item.existingMessageId) {
+  // Save / Update (REFRESH): edit the CURRENT roster message in place. Only an
+  // explicit Publish (POST) skips this and always sends a new message — the
+  // previous one stays in the channel and is no longer kept in sync.
+  if (!explicitPost && item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });
     if (edited) {
       await api.recordDiscordState(item.runId, { kind: "roster", channelId, messageId: item.existingMessageId });
       return;
     }
+    // The current message is gone (deleted in Discord) — fall through and re-send (recovery).
   }
 
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isTextBased() || !("send" in channel)) return;
   const message = await channel.send({ embeds: [embed] });
-  await api.recordDiscordState(item.runId, { kind: "roster", channelId: message.channelId, messageId: message.id });
+  await api.recordDiscordState(item.runId, {
+    kind: "roster",
+    channelId: message.channelId,
+    messageId: message.id,
+    ...(explicitPost ? { postRevision: item.postRevision as number } : {}),
+  });
 }
 
 async function syncStartPost(

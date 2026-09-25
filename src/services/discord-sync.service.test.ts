@@ -635,9 +635,11 @@ describe("discordSyncService.getRosterEmbedData", () => {
 
   it("reports roster sync work, clears it after recording, and reopens it on republish", async () => {
     let work = await discordSyncService.listSyncWork();
-    expect(work.roster.some((item) => item.runId === runId && item.existingMessageId === null)).toBe(true);
+    const first = work.roster.find((item) => item.runId === runId && item.existingMessageId === null);
+    // The first Publish is an explicit post intent: POST, fulfilling postRevision 1.
+    expect(first).toMatchObject({ mode: "POST", postRevision: 1 });
 
-    await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1" });
+    await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1", postRevision: 1 });
     work = await discordSyncService.listSyncWork();
     expect(work.roster.some((item) => item.runId === runId)).toBe(false);
 
@@ -645,7 +647,12 @@ describe("discordSyncService.getRosterEmbedData", () => {
     await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
 
     work = await discordSyncService.listSyncWork();
-    expect(work.roster.some((item) => item.runId === runId && item.existingMessageId === "roster-msg-1")).toBe(true);
+    // Republishing never posts again: the current message is refreshed in place.
+    expect(work.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+      postRevision: null,
+    });
   });
 });
 
@@ -1128,7 +1135,7 @@ title: "Historical archive+raid-change fixture",
     expect(settled.signups.some((entry) => entry.runId === comboRunId)).toBe(false);
   });
 
-  it("documents the roster invariant: once a roster is published, the service layer refuses the identity/planning edits that would otherwise change RosterEmbedData content", async () => {
+  it("a PUBLISHED Run stays editable; roster-relevant edits mark the roster changed and reach the roster post only via Update (version bump)", async () => {
     // Historical-raid fixture, same reasoning as raidEditRunId above.
     const publishedRunId = await runRepository.create({
 title: "Historical roster-invariant fixture",
@@ -1179,33 +1186,26 @@ title: "Historical roster-invariant fixture",
 
     const published = await runRepository.findById(publishedRunId);
     expect(published?.status).toBe("PUBLISHED");
+    const versionBefore = (await rosterService.getRosterManagementView(lead, publishedRunId)).roster.version;
 
-    await expect(
-      runService.updateRun(
-        lead,
-        venomousUpdateInput(publishedRunId, published!, {
-          scheduledStartAt: published!.scheduledStartAt,
-          notes: null,
-          desiredTankCount: 1,
-          desiredHealerCount: 0,
-          desiredDpsCount: 0,
-        }),
-      ),
-    ).rejects.toThrow();
+    await runService.updateRun(
+      lead,
+      contentLegacyUpdateInput(publishedRunId, published!, {
+        lootType: "VIP",
+        scheduledStartAt: published!.scheduledStartAt,
+        notes: null,
+        desiredTankCount: 1,
+        desiredHealerCount: 0,
+        desiredDpsCount: 0,
+      }),
+    );
 
-    await expect(
-      runService.updateRun(
-        lead,
-        contentLegacyUpdateInput(publishedRunId, published!, {
-          lootType: "VIP",
-          scheduledStartAt: published!.scheduledStartAt,
-          notes: null,
-          desiredTankCount: 1,
-          desiredHealerCount: 0,
-          desiredDpsCount: 0,
-        }),
-      ),
-    ).rejects.toThrow();
+    const after = await rosterService.getRosterManagementView(lead, publishedRunId);
+    expect((await runRepository.findById(publishedRunId))?.status).toBe("PUBLISHED");
+    expect(after.roster.runChangedSinceAck).toBe(true);
+    expect(after.roster.hasUnpublishedChanges).toBe(true);
+    // No version bump from the edit itself → the roster post is not refreshed until Update Roster.
+    expect(after.roster.version).toBe(versionBefore);
   });
 });
 

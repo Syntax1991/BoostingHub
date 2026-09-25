@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   prepareRosterEditAction,
   publishRosterAction,
+  repostRosterAction,
   saveRosterDraftAction,
+  updateRosterAction,
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
-import { AddPlayerDialog } from "@/components/manage/add-player-dialog";
+import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
+import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
+import { resolveRosterActions } from "@/components/manage/roster-actions";
 import {
   ClassBadge,
   ClassIcon,
@@ -141,7 +145,9 @@ function RosterBuilderEditor({
   const [perfFilter, setPerfFilter] = useState<WclPerfFilter>("ALL");
   const [perfSort, setPerfSort] = useState<WclPerfSort>("DEFAULT");
   const [acknowledge, setAcknowledge] = useState(false);
-  const [addPlayerOpen, setAddPlayerOpen] = useState(false);
+  const [addBoosterOpen, setAddBoosterOpen] = useState(false);
+  /** Which confirmation the roster dialog shows: first Publish, Update, or an explicit repost. */
+  const [dialogMode, setDialogMode] = useState<"publish" | "update" | "repost">("publish");
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
@@ -150,6 +156,11 @@ function RosterBuilderEditor({
   const externalBoosters = data.roster.externalBoosters;
 
   const isDirty = selectionKey(stagedSelections) !== selectionKey(savedSelections);
+  // Tell the Run header's Add Booster button about unsaved local edits.
+  useEffect(() => {
+    setRosterHasUnsavedEdits(data.run.id, isDirty);
+  }, [data.run.id, isDirty]);
+  useEffect(() => () => setRosterHasUnsavedEdits(data.run.id, false), [data.run.id]);
   const unsavedChangeCount = useMemo(() => {
     let count = 0;
     for (const [id, role] of stagedSelections) {
@@ -397,15 +408,37 @@ function RosterBuilderEditor({
     });
   }
 
-  function publish() {
+  function openDialog(mode: "publish" | "update" | "repost") {
+    setDialogMode(mode);
+    setAcknowledge(false);
+    dialogRef.current?.showModal();
+  }
+
+  /**
+   * Publish (first) accepts the saved draft and posts the first roster message;
+   * Update accepts the CURRENT selection in one step and edits the current
+   * message; repost only asks the bot to post a NEW message.
+   */
+  function confirmDialog() {
     setError(null);
     setErrorCode(null);
+    const acknowledgeWarnings = acknowledge || liveValidation.warnings.length === 0;
     startTransition(async () => {
-      const result = await publishRosterAction({
-        runId: data.run.id,
-        version: data.roster.version,
-        acknowledgeWarnings: acknowledge || liveValidation.warnings.length === 0,
-      });
+      const result =
+        dialogMode === "update"
+          ? await updateRosterAction({
+              runId: data.run.id,
+              version: data.roster.version,
+              selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
+              acknowledgeWarnings,
+            })
+          : dialogMode === "repost"
+            ? await repostRosterAction({
+                runId: data.run.id,
+                version: data.roster.version,
+                postRevision: data.roster.postRevision,
+              })
+            : await publishRosterAction({ runId: data.run.id, version: data.roster.version, acknowledgeWarnings });
       if (!result.ok) {
         setError(result.message);
         setErrorCode(result.code);
@@ -419,9 +452,18 @@ function RosterBuilderEditor({
   const editing = data.roster.canEdit && !data.roster.needsPublishSeed;
   const togglesLocked = pending;
   const isPublished = Boolean(data.roster.publishedAt);
-  const publishLabel = isPublished ? "Update Roster" : "Publish Roster";
-  // An already published roster only needs Update Roster once the saved draft differs.
-  const nothingToPublish = isPublished && !data.roster.hasUnpublishedChanges;
+  // Published: local or saved changes (or changed Run settings) need Update
+  // Roster — one action; a clean published roster offers Publish Roster as a
+  // deliberate Discord repost. Never published: Save, then Publish.
+  const actions = resolveRosterActions({
+    canEdit: data.roster.canEdit,
+    runStatus: data.run.status,
+    isPublished,
+    hasLocalEdits: isDirty,
+    hasUnpublishedChanges: data.roster.hasUnpublishedChanges,
+    needsPublishSeed: data.roster.needsPublishSeed,
+  });
+  const canRepost = actions.repost;
 
   return (
     <div className="space-y-4">
@@ -531,21 +573,21 @@ function RosterBuilderEditor({
           title="Boosters"
           description={`${uniqueFilteredBoosters} signup${uniqueFilteredBoosters === 1 ? "" : "s"}`}
           action={
-            editing ? (
+            data.roster.canEdit ? (
               <Button
                 type="button"
                 variant="secondary"
                 disabled={pending || isDirty}
-                onClick={() => setAddPlayerOpen(true)}
+                onClick={() => setAddBoosterOpen(true)}
               >
-                Add Player
+                Add Booster
               </Button>
             ) : null
           }
         />
-        {editing && isDirty ? (
+        {data.roster.canEdit && isDirty ? (
           <p className="border-t border-border px-4 py-2 text-xs text-muted">
-            Save your current roster changes before adding a player.
+            Save your current roster changes before adding a booster.
           </p>
         ) : null}
         <p className="border-t border-border px-4 py-3 text-xs text-muted">
@@ -628,7 +670,7 @@ function RosterBuilderEditor({
             <p className="text-warning">
               Unsaved roster changes
               {unsavedChangeCount > 0 ? ` · ${unsavedChangeCount} change${unsavedChangeCount === 1 ? "" : "s"}` : ""}
-              . Save roster to persist.
+              . {isPublished ? "Update the roster to accept them." : "Save roster to persist."}
             </p>
           ) : null}
           {liveValidation.blockers.length === 0 && liveValidation.warnings.length === 0 ? (
@@ -645,36 +687,61 @@ function RosterBuilderEditor({
             </p>
           ))}
           <div className="flex flex-wrap items-center gap-2 pt-2">
-            {data.roster.needsPublishSeed ? (
+            {actions.seed ? (
               <Button type="button" disabled={pending} onClick={seedPublished}>
                 {pending ? "Loading…" : "Edit Published Roster"}
               </Button>
-            ) : (
-              <>
-                <Button type="button" disabled={pending || !editing || !isDirty} onClick={saveRoster}>
-                  {pending && isDirty ? "Saving…" : "Save Roster"}
-                </Button>
-                {isDirty ? (
-                  <Button type="button" variant="ghost" disabled={pending} onClick={discardChanges}>
-                    Discard changes
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  disabled={pending || isDirty || !data.roster.canEdit || !liveValidation.canPublish || nothingToPublish}
-                  onClick={() => dialogRef.current?.showModal()}
-                >
-                  {publishLabel}
-                </Button>
-              </>
-            )}
+            ) : null}
+            {actions.save ? (
+              <Button type="button" disabled={pending || !editing} onClick={saveRoster}>
+                {pending ? "Saving…" : "Save Roster"}
+              </Button>
+            ) : null}
+            {actions.update ? (
+              <Button
+                type="button"
+                disabled={pending || !data.roster.canEdit || !liveValidation.canPublish}
+                onClick={() => openDialog("update")}
+              >
+                Update Roster
+              </Button>
+            ) : null}
+            {actions.discard ? (
+              <Button type="button" variant="ghost" disabled={pending} onClick={discardChanges}>
+                Discard changes
+              </Button>
+            ) : null}
+            {actions.publish ? (
+              <Button
+                type="button"
+                disabled={pending || !data.roster.canEdit || !liveValidation.canPublish}
+                onClick={() => openDialog("publish")}
+              >
+                Publish Roster
+              </Button>
+            ) : null}
+            {canRepost ? (
+              <Button type="button" variant="secondary" disabled={pending || !data.roster.canEdit} onClick={() => openDialog("repost")}>
+                Publish Roster
+              </Button>
+            ) : null}
           </div>
-          {isDirty && !data.roster.needsPublishSeed ? (
+          {!isPublished && isDirty ? (
             <p className="text-xs text-muted">Save roster changes before publishing.</p>
           ) : null}
-          {!isDirty && data.roster.canEdit && data.roster.hasUnpublishedChanges ? (
+          {data.roster.canEdit && data.roster.runChangedSinceAck ? (
+            <p className="text-xs text-warning">
+              Run details changed since the roster was last published. Update the roster before starting the run.
+            </p>
+          ) : !isDirty && data.roster.canEdit && data.roster.hasUnpublishedChanges ? (
             <p className="text-xs text-warning">
               The saved roster differs from the published one. Update the roster before starting the run.
+            </p>
+          ) : null}
+          {canRepost ? (
+            <p className="text-xs text-muted">
+              Publish Roster posts the roster to Discord again as a new message — Save and Update only refresh the
+              current post.
             </p>
           ) : null}
         </div>
@@ -687,15 +754,24 @@ function RosterBuilderEditor({
       >
         <div className="border-b border-border px-4 py-3">
           <h2 id="publish-title" className="text-base font-semibold" tabIndex={-1}>
-            {isPublished ? "Update published roster" : "Publish roster"}
+            {dialogMode === "update"
+              ? "Update roster"
+              : dialogMode === "repost"
+                ? "Post the roster again"
+                : "Publish roster"}
           </h2>
         </div>
         <div className="space-y-3 px-4 py-4 text-sm">
-          {isPublished ? (
+          {dialogMode === "update" ? (
             <p>
-              Updating replaces the published roster with the saved draft: draft-selected signups become SELECTED,
-              the rest NOT_SELECTED, and the Discord roster post is edited. The run stays PUBLISHED and the roster
-              remains editable until the run starts.
+              Updating accepts the current selection as the published roster: selected signups become SELECTED, the
+              rest NOT_SELECTED, and the current Discord roster post is edited in place (no new post). The run stays
+              PUBLISHED and the roster remains editable until the run starts.
+            </p>
+          ) : dialogMode === "repost" ? (
+            <p>
+              Posts the current roster to Discord as a NEW message. The previous roster message stays in the channel
+              and is no longer kept up to date; later Updates edit the new one. Players are not notified again.
             </p>
           ) : (
             <p>
@@ -712,7 +788,7 @@ function RosterBuilderEditor({
             {liveComposition.boosterTotal} Boosters · {liveComposition.lootbuddies} Lootbuddies ·{" "}
             {liveComposition.total} total selected
           </p>
-          {liveValidation.warnings.length > 0 ? (
+          {dialogMode !== "repost" && liveValidation.warnings.length > 0 ? (
             <div className="space-y-2">
               {liveValidation.warnings.map((issue) => (
                 <p key={issue.message} className="text-warning">
@@ -743,21 +819,27 @@ function RosterBuilderEditor({
             type="button"
             disabled={
               pending ||
-              isDirty ||
-              !liveValidation.canPublish ||
-              (liveValidation.warnings.length > 0 && !acknowledge)
+              (dialogMode === "publish" && isDirty) ||
+              (dialogMode !== "repost" &&
+                (!liveValidation.canPublish || (liveValidation.warnings.length > 0 && !acknowledge)))
             }
-            onClick={publish}
+            onClick={confirmDialog}
           >
-            {pending ? (isPublished ? "Updating…" : "Publishing…") : isPublished ? "Confirm update" : "Confirm publish"}
+            {pending
+              ? "Working…"
+              : dialogMode === "update"
+                ? "Confirm update"
+                : dialogMode === "repost"
+                  ? "Post again"
+                  : "Confirm publish"}
           </Button>
         </div>
       </dialog>
-      {addPlayerOpen ? (
-        <AddPlayerDialog
+      {addBoosterOpen ? (
+        <AddBoosterDialog
           runId={data.run.id}
           rosterVersion={data.roster.version}
-          onClose={() => setAddPlayerOpen(false)}
+          onClose={() => setAddBoosterOpen(false)}
           onAdded={() => router.refresh()}
         />
       ) : null}

@@ -24,11 +24,14 @@ export const ATTENDANCE_NOTE_MAX = 200;
 /** New runs may be a few minutes in the past to avoid brittle clock races. */
 export const RUN_SCHEDULE_PAST_GRACE_MS = 5 * 60_000;
 
-const PLANNING_EDITABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING"];
-const IDENTITY_EDITABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN"];
+/**
+ * Start Run is the freeze point: every manager edit to a Run's configuration
+ * (identity, planning, Raid Lead) is allowed until then — signup history does
+ * not lock anything. IN_PROGRESS / COMPLETED / CANCELLED are immutable.
+ */
+export const PRE_START_RUN_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
 const SIGNUP_WINDOW_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING"];
 const CANCELLABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
-const RAID_LEAD_REASSIGNABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING"];
 /** Archive is administrative state, not a RunStatus — only a terminal Run may be archived. */
 const ARCHIVABLE_STATUSES: readonly RunStatus[] = ["COMPLETED", "CANCELLED"];
 
@@ -144,16 +147,14 @@ export function emptyRunCapabilities(): RunLifecycleCapabilities {
   };
 }
 
-export function canEditPlanningFields(status: RunStatus): boolean {
-  return PLANNING_EDITABLE_STATUSES.includes(status);
+/** The one authoritative "may a manager still change this Run?" predicate. */
+export function canEditRunBeforeStart(status: RunStatus): boolean {
+  return PRE_START_RUN_STATUSES.includes(status);
 }
 
-export function canEditIdentityFields(status: RunStatus, hasSignupHistory: boolean): boolean {
-  return IDENTITY_EDITABLE_STATUSES.includes(status) && !hasSignupHistory;
-}
-
+/** Only an ADMIN reassigns a Run to another Raid Lead, and only before Start. */
 export function canReassignRaidLead(status: RunStatus, actorIsAdmin: boolean): boolean {
-  return actorIsAdmin && RAID_LEAD_REASSIGNABLE_STATUSES.includes(status);
+  return actorIsAdmin && canEditRunBeforeStart(status);
 }
 
 export function canOpenRun(status: RunStatus): boolean {
@@ -205,12 +206,13 @@ export function canDeleteRun(status: RunStatus, actorIsAdmin: boolean): boolean 
 export function getRunLifecycleCapabilities(input: {
   status: RunStatus;
   signupsOpen: boolean;
-  hasSignupHistory: boolean;
   actorIsAdmin: boolean;
   archivedAt?: string | null;
 }): RunLifecycleCapabilities {
-  const identity = canEditIdentityFields(input.status, input.hasSignupHistory);
-  const planning = canEditPlanningFields(input.status);
+  // Identity (content/difficulty) and planning share the one pre-start rule;
+  // both flags stay for the edit form.
+  const identity = canEditRunBeforeStart(input.status);
+  const planning = identity;
   const reassign = canReassignRaidLead(input.status, input.actorIsAdmin);
   const windowToggle = canToggleSignupWindow(input.status);
   const archivedAt = input.archivedAt ?? null;

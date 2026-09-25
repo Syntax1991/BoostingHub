@@ -49,6 +49,8 @@ import {
   type NotificationAssignmentInput,
 } from "@/services/notification-content";
 import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
+import { canEditRunBeforeStart } from "@/services/run-state";
+import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 
 export type RosterCharacterSnapshot = {
   id: string;
@@ -117,6 +119,10 @@ export type RosterRecord = {
   selections: RosterSelection[];
   /** Unregistered boosters the Raid Lead added by hand (see lib/external-booster.ts). */
   externalBoosters: ExternalBooster[];
+  /** A roster-relevant Run setting changed since the roster was last accepted (Publish / Update). */
+  runChangedSinceAck: boolean;
+  /** Latest explicit Publish Roster intent — the bot posts a NEW roster message for each. */
+  postRevision: number;
 };
 
 function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
@@ -219,13 +225,13 @@ function mapRoster(row: Record<string, unknown>): RosterRecord {
     selectedSignupIds: selections.map((selection) => selection.signupId),
     selections,
     externalBoosters: mapExternalBoosters(row.externalBoosters),
+    runChangedSinceAck: row.runChangedSinceAck === true,
+    postRevision: asNumber(row.postRevision, 0),
   };
 }
 
 type TxOrm = typeof orm;
 
-/** Run statuses in which the roster may still change. Start Run (→ IN_PROGRESS) is the lock point. */
-const PRE_START_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 
 const ROSTER_ALREADY_CHANGED_MESSAGE = "This roster changed since you loaded it. Refresh and try again.";
 
@@ -251,7 +257,9 @@ export async function lockRosterInTx(txOrm: TxOrm, rosterId: string): Promise<Ro
 async function assertRunPreStartInTx(txOrm: TxOrm, runId: string): Promise<void> {
   const run = (await txOrm.Run.where({ id: runId }).first()) as Record<string, unknown> | null;
   const status = run ? (asString(run.status) as RunStatus) : null;
-  if (!status || !PRE_START_RUN_STATUSES.includes(status)) {
+  // Start Run (→ IN_PROGRESS) is the lock point; roster writes also need a
+  // non-DRAFT Run, which the services already require before they get here.
+  if (!status || status === "DRAFT" || !canEditRunBeforeStart(status)) {
     throw new DomainError("INVALID_ROSTER_SELECTION", "The roster is locked once the run has started.");
   }
 }
@@ -359,6 +367,105 @@ async function writeDraftSelectionsInTx(
       now,
     });
   }
+}
+
+type PublishSelectionsInput = {
+  runId: string;
+  /** Draft selections being published — each BOOSTER carries its assigned role. */
+  selectedSelections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+  /** Characters behind selectedSelections — re-verified for cross-Run reservation immediately before publish. */
+  selectedCharacterIds: string[];
+  scheduledStartAt: string;
+  notSelectedSignupIds: string[];
+  runStatus: RunStatus;
+  fromStatus: RunStatus;
+  publisherId: string;
+  /** Display title for ROSTER_SELECTED web/DM copy. */
+  runTitle: string;
+};
+
+/** RunSignup row → the shape hasUnpublishedRosterChanges compares. */
+export function publishStateSignup(row: Record<string, unknown>) {
+  return {
+    id: asString(row.id),
+    status: mapSignupStatus(row.status),
+    participationType: mapParticipation(row.participationType),
+    publishedRole: row.publishedRole == null ? null : mapCharacterRole(row.publishedRole),
+  };
+}
+
+/**
+ * Accepts the given selection as the published roster inside an already
+ * locked, version-checked transaction: reservation race check, notifications
+ * for what players were not told yet, SELECTED / NOT_SELECTED + publishedRole,
+ * Run → PUBLISHED on a first publish, one version bump, publishedAt, and the
+ * roster counts as acknowledged again (runChangedSinceAck = false). A FIRST
+ * publish also records one explicit post intent (postRevision + 1) so the bot
+ * posts the first roster message; republishing never adds post intents.
+ */
+async function publishSelectionsInTx(txOrm: TxOrm, mapped: RosterRecord, input: PublishSelectionsInput) {
+  // Race-safety net: the caller already checked cross-Run reservation
+  // before opening this transaction, but another Run could have reserved
+  // one of these Characters in between.
+  if (input.selectedCharacterIds.length > 0) {
+    const conflicts = await queryReservationConflicts(txOrm, {
+      characterIds: input.selectedCharacterIds,
+      excludeRunId: input.runId,
+      scheduledStartAt: input.scheduledStartAt,
+    });
+    if (conflicts.length > 0) {
+      throw new DomainError(
+        "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+        "One or more selected characters were just reserved for another run at the same time. Refresh and try again.",
+      );
+    }
+  }
+
+  const now = new Date().toISOString();
+  const nextVersion = mapped.version + 1;
+  // Before the status writes below: legacy signups without roster
+  // notifications fall back to their current SELECTED status.
+  await notifyRosterSelectionChangesInTx(txOrm, {
+    runId: input.runId,
+    runTitle: input.runTitle,
+    version: nextVersion,
+    selections: input.selectedSelections,
+    now,
+  });
+  for (const selection of input.selectedSelections) {
+    await txOrm.RunSignup.where({ id: selection.signupId }).update({
+      status: "SELECTED",
+      publishedRole: selection.selectedRole,
+    });
+  }
+  for (const signupId of input.notSelectedSignupIds) {
+    await txOrm.RunSignup.where({ id: signupId }).update({
+      status: "NOT_SELECTED",
+      publishedRole: null,
+    });
+  }
+  if (input.fromStatus === "OPEN") {
+    await txOrm.Run.where({ id: input.runId }).update({ status: "ROSTERING" });
+  }
+  if (input.fromStatus === "OPEN" || input.fromStatus === "ROSTERING") {
+    await txOrm.Run.where({ id: input.runId }).update({ status: input.runStatus });
+  }
+  await txOrm.RunRoster.where({ id: mapped.id }).update({
+    state: "PUBLISHED",
+    version: nextVersion,
+    publishedAt: now,
+    publishedById: input.publisherId,
+    runChangedSinceAck: false,
+    ...(mapped.publishedAt ? {} : { postRevision: mapped.postRevision + 1 }),
+    updatedAt: now,
+  });
+  await txOrm.ActivityEvent.create({
+    id: crypto.randomUUID(),
+    userId: input.publisherId,
+    type: mapped.publishedAt ? "ROSTER_UPDATED" : "ROSTER_PUBLISHED",
+    message: mapped.publishedAt ? "Updated a published roster." : "Published a roster.",
+    occurredAt: now,
+  });
 }
 
 export const rosterRepository = {
@@ -547,13 +654,38 @@ export const rosterRepository = {
         await syncOfferedRolesInTx(txOrm, signupId, [input.role], now);
       }
 
-      // Keep every other saved slot except this User's other Booster rows and
-      // slots whose signup has been withdrawn meanwhile (Save Roster omits
-      // those too); then (re)assign this slot.
+      // A published roster whose editable draft was never seeded (legacy /
+      // version 1, empty draft) starts from its live published lineup, in this
+      // same transaction — Add Booster never needs a separate "Edit Published
+      // Roster" step and never drops the published members.
+      let baseSelections: RosterSelection[] = roster.selections;
+      if (roster.publishedAt && roster.version === 1 && roster.selections.length === 0) {
+        const published = (await txOrm.RunSignup.where({ runId: input.runId, status: "SELECTED" })
+          .include("offeredRoles")
+          .all()) as Array<Record<string, unknown>>;
+        baseSelections = published.map((row) => {
+          const offered = mapOfferedRoles(row.offeredRoles);
+          return {
+            signupId: asString(row.id),
+            selectedRole:
+              mapParticipation(row.participationType) !== "BOOSTER"
+                ? null
+                : row.publishedRole != null
+                  ? mapCharacterRole(row.publishedRole)
+                  : offered.length === 1
+                    ? offered[0]!
+                    : null,
+          };
+        });
+      }
+
+      // Keep every other slot except this User's other Booster rows and slots
+      // whose signup has been withdrawn meanwhile (Save Roster omits those
+      // too); then (re)assign this slot.
       const otherUserBoosterIds = new Set(
         userBoosterRows.map((row) => asString(row.id)).filter((id) => id !== signupId),
       );
-      const keptIds = roster.selections
+      const keptIds = baseSelections
         .map((selection) => selection.signupId)
         .filter((id) => id !== signupId && !otherUserBoosterIds.has(id));
       const withdrawnIds = new Set(
@@ -565,7 +697,7 @@ export const rosterRepository = {
               .filter((row) => mapSignupStatus(row.status) === "WITHDRAWN")
               .map((row) => asString(row.id)),
       );
-      const selections: RosterSelection[] = roster.selections.filter(
+      const selections: RosterSelection[] = baseSelections.filter(
         (selection) => keptIds.includes(selection.signupId) && !withdrawnIds.has(selection.signupId),
       );
       selections.push({ signupId, selectedRole: input.role });
@@ -841,22 +973,7 @@ export const rosterRepository = {
    * Publication is one transaction: signup statuses + publishedRole snapshot,
    * run status, and roster metadata. A thrown DomainError rolls the whole write back.
    */
-  async publishAtomic(input: {
-    runId: string;
-    rosterId: string;
-    expectedVersion: number;
-    /** Draft selections being published — each BOOSTER carries its assigned role. */
-    selectedSelections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
-    /** Characters behind selectedSelections — re-verified for cross-Run reservation immediately before publish. */
-    selectedCharacterIds: string[];
-    scheduledStartAt: string;
-    notSelectedSignupIds: string[];
-    runStatus: RunStatus;
-    fromStatus: RunStatus;
-    publisherId: string;
-    /** Display title for ROSTER_SELECTED web/DM copy. */
-    runTitle: string;
-  }) {
+  async publishAtomic(input: PublishSelectionsInput & { rosterId: string; expectedVersion: number }) {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
       const mapped = await lockRosterInTx(txOrm, input.rosterId);
@@ -864,68 +981,95 @@ export const rosterRepository = {
         throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
       }
       await assertRunPreStartInTx(txOrm, input.runId);
-
-      // Race-safety net: the caller already checked cross-Run reservation
-      // before opening this transaction, but another Run could have reserved
-      // one of these Characters in between.
-      if (input.selectedCharacterIds.length > 0) {
-        const conflicts = await queryReservationConflicts(txOrm, {
-          characterIds: input.selectedCharacterIds,
-          excludeRunId: input.runId,
-          scheduledStartAt: input.scheduledStartAt,
-        });
-        if (conflicts.length > 0) {
-          throw new DomainError(
-            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-            "One or more selected characters were just reserved for another run at the same time. Refresh and try again.",
-          );
-        }
-      }
-
-      const now = new Date().toISOString();
-      const nextVersion = mapped.version + 1;
-      // Before the status writes below: legacy signups without roster
-      // notifications fall back to their current SELECTED status.
-      await notifyRosterSelectionChangesInTx(txOrm, {
-        runId: input.runId,
-        runTitle: input.runTitle,
-        version: nextVersion,
-        selections: input.selectedSelections,
-        now,
-      });
-      for (const selection of input.selectedSelections) {
-        await txOrm.RunSignup.where({ id: selection.signupId }).update({
-          status: "SELECTED",
-          publishedRole: selection.selectedRole,
-        });
-      }
-      for (const signupId of input.notSelectedSignupIds) {
-        await txOrm.RunSignup.where({ id: signupId }).update({
-          status: "NOT_SELECTED",
-          publishedRole: null,
-        });
-      }
-      if (input.fromStatus === "OPEN") {
-        await txOrm.Run.where({ id: input.runId }).update({ status: "ROSTERING" });
-      }
-      if (input.fromStatus === "OPEN" || input.fromStatus === "ROSTERING") {
-        await txOrm.Run.where({ id: input.runId }).update({ status: input.runStatus });
-      }
-      await txOrm.RunRoster.where({ id: input.rosterId }).update({
-        state: "PUBLISHED",
-        version: nextVersion,
-        publishedAt: now,
-        publishedById: input.publisherId,
-        updatedAt: now,
-      });
-      await txOrm.ActivityEvent.create({
-        id: crypto.randomUUID(),
-        userId: input.publisherId,
-        type: mapped.publishedAt ? "ROSTER_UPDATED" : "ROSTER_PUBLISHED",
-        message: mapped.publishedAt ? "Updated a published roster." : "Published a roster.",
-        occurredAt: now,
-      });
+      await publishSelectionsInTx(txOrm, mapped, input);
     });
+  },
+
+  /**
+   * Update Roster (already published): the manager's current selection is
+   * saved into the draft AND accepted as the published roster in ONE
+   * transaction — statuses, publishedRole, notifications for actual changes,
+   * runChangedSinceAck cleared, one version bump (so the current Discord
+   * roster message is edited in place). Never a new post. Any failure leaves
+   * the previous published roster, the draft and the dirty state untouched.
+   */
+  async updatePublishedAtomic(
+    input: PublishSelectionsInput & {
+      rosterId: string;
+      expectedVersion: number;
+      draftSelections: RosterSelection[];
+    },
+  ) {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const mapped = await lockRosterInTx(txOrm, input.rosterId);
+      if (mapped.version !== input.expectedVersion) {
+        throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
+      }
+      await assertRunPreStartInTx(txOrm, input.runId);
+      if (!mapped.publishedAt) {
+        throw new DomainError(
+          "INVALID_ROSTER_SELECTION",
+          "Publish the roster first — Update Roster changes a published roster.",
+        );
+      }
+      // Draft write (WITHDRAWN re-check, entry diff) without its own notify —
+      // the publish step below notifies once for the accepted roster.
+      await writeDraftSelectionsInTx(txOrm, mapped, input.draftSelections, {
+        targetRunId: input.runId,
+        scheduledStartAt: input.scheduledStartAt,
+      });
+      await publishSelectionsInTx(txOrm, mapped, input);
+    });
+  },
+
+  /**
+   * Publish Roster on an already published, clean roster: the explicit
+   * "post it to Discord again" intent. Compare-and-set on BOTH the roster
+   * version and postRevision, so a double-submit / retry carrying the same
+   * expected postRevision can advance it only once. Changes nothing else —
+   * no membership, roles, notifications or Discord identity (rosterMessageId
+   * stays; the bot posts a NEW message and then tracks that one).
+   */
+  async requestRepostAtomic(input: {
+    rosterId: string;
+    runId: string;
+    expectedVersion: number;
+    expectedPostRevision: number;
+  }): Promise<{ postRevision: number }> {
+    let postRevision = 0;
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const mapped = await lockRosterInTx(txOrm, input.rosterId);
+      if (mapped.version !== input.expectedVersion || mapped.postRevision !== input.expectedPostRevision) {
+        throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
+      }
+      await assertRunPreStartInTx(txOrm, input.runId);
+      const run = (await txOrm.Run.where({ id: input.runId }).first()) as Record<string, unknown> | null;
+      if (!mapped.publishedAt || asString(run?.status) !== "PUBLISHED") {
+        throw new DomainError("INVALID_ROSTER_SELECTION", "Only a published roster can be posted again.");
+      }
+      const signups = (await txOrm.RunSignup.where({ runId: input.runId })
+        .select("id", "status", "participationType", "publishedRole")
+        .all()) as Array<Record<string, unknown>>;
+      if (
+        hasUnpublishedRosterChanges({
+          publishedAt: mapped.publishedAt,
+          version: mapped.version,
+          runChangedSinceAck: mapped.runChangedSinceAck,
+          draft: mapped.selections,
+          signups: signups.map(publishStateSignup),
+        })
+      ) {
+        throw new DomainError(
+          "ROSTER_UNPUBLISHED_CHANGES",
+          "The roster has unpublished changes. Update the roster before posting it again.",
+        );
+      }
+      postRevision = mapped.postRevision + 1;
+      await txOrm.RunRoster.where({ id: input.rosterId }).update({ postRevision, updatedAt: new Date().toISOString() });
+    });
+    return { postRevision };
   },
 };
 
