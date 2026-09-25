@@ -20,6 +20,11 @@ import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-lo
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
 import type { BoosterQualificationStatus } from "@/models/enums";
+import {
+  BLIZZARD_PROFILE_UNAVAILABLE_HINT,
+  BLIZZARD_PROFILE_UNAVAILABLE_TITLE,
+  BLIZZARD_SYNC_STALE_HINT,
+} from "@/lib/blizzard/sync-state";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
 
@@ -179,6 +184,17 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               <dt className="text-muted">Last synced</dt>
               <dd>{data.lastSyncedAt ? formatDateTime(data.lastSyncedAt) : "Never synced"}</dd>
             </div>
+            {data.blizzardSyncState.kind === "PROFILE_UNAVAILABLE" ? (
+              <div role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                <p className="font-medium text-warning">{BLIZZARD_PROFILE_UNAVAILABLE_TITLE}</p>
+                <p className="mt-1 text-muted">{BLIZZARD_PROFILE_UNAVAILABLE_HINT}</p>
+              </div>
+            ) : data.blizzardSyncState.kind === "STALE" ? (
+              <div role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                <p className="font-medium text-warning">Blizzard sync failing</p>
+                <p className="mt-1 text-muted">{BLIZZARD_SYNC_STALE_HINT}</p>
+              </div>
+            ) : null}
             {!data.blizzardLinked ? (
               <p className="pt-1 text-xs text-muted">
                 Refresh requires Battle.net linking from the Characters page import session.

@@ -138,7 +138,7 @@ It also never changes Weekly Availability, Booster Access / Qualification, signu
 
 ### Partial failure policy
 
-One broken Character (profile unavailable, character deleted server-side, identity/class mismatch, realm transfer, transient Blizzard error) does not fail the job. It is counted in `failed` and the cycle continues with the remaining candidates. On any such failure, the Character's existing `itemLevel` and lockout rows are left untouched — never cleared to `0`/`null`/empty. A failed Character remains stale and is eligible again on the next external scheduler tick.
+One broken Character (profile unavailable, character deleted server-side, identity/class mismatch, realm transfer, transient Blizzard error) does not fail the job. It is counted in `failed` (a Blizzard status/profile 404 additionally in `profileUnavailable` — see [blizzard-integration.md](blizzard-integration.md)) and the cycle continues with the remaining candidates. On any such failure, the Character's existing `itemLevel` and lockout rows are left untouched — never cleared to `0`/`null`/empty. A failed Character remains stale and is eligible again on the next external scheduler tick.
 
 ### Lockout sync failure
 

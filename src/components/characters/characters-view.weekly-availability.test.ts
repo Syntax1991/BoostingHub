@@ -54,6 +54,7 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
     itemLevel: 640,
     isActive: true,
     lastSyncedAt: null,
+    blizzardSyncState: { kind: "NOT_LINKED" as const },
     updatedAt: "2026-09-16T00:00:00.000Z",
     blizzardLinked: false,
     blizzardRealmId: null,

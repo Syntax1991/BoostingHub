@@ -7,6 +7,7 @@ import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.re
 import { refreshLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import type { ScheduledCharacterSyncCandidate } from "@/models/records";
+import { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
 
 /**
  * Orchestrates the one-shot scheduled Blizzard character sync job. The app
@@ -17,8 +18,6 @@ import type { ScheduledCharacterSyncCandidate } from "@/models/records";
  * threshold. See docs/features/scheduled-character-sync.md.
  */
 
-/** Background freshness default: Characters older than this are sync candidates. */
-const DEFAULT_STALE_MINUTES = 120;
 const SCHEDULED_SYNC_CONCURRENCY = 4;
 
 /**
@@ -36,6 +35,8 @@ export type ScheduledCharacterSyncResult = {
   lockoutsVerified: number;
   lockoutsUnavailable: number;
   failed: number;
+  /** Subset of `failed`: Blizzard status/profile 404 — identity unverified, nothing persisted, retried later. */
+  profileUnavailable: number;
   rateLimited: number;
   connectionsUpdated: number;
   durationMs: number;
@@ -49,43 +50,20 @@ function emptyResult(status: ScheduledCharacterSyncResult["status"], durationMs:
     lockoutsVerified: 0,
     lockoutsUnavailable: 0,
     failed: 0,
+    profileUnavailable: 0,
     rateLimited: 0,
     connectionsUpdated: 0,
     durationMs,
   };
 }
 
-/**
- * Resolves the stale threshold from BLIZZARD_SYNC_STALE_MINUTES. Missing env
- * deliberately falls back to the documented default (120). A *present but
- * invalid* value (non-numeric, zero, negative, or fractional) fails loudly
- * instead of silently coercing to a default or permitting a 0-minute
- * busy-loop threshold — a misconfigured production env should be visible,
- * not quietly hammer Blizzard every cycle.
- *
- * This threshold is independent of the external scheduler tick (~15 minutes)
- * and of the manual Refresh cooldown (~60 seconds).
- */
-export function resolveScheduledSyncStaleMs(): number {
-  const raw = process.env.BLIZZARD_SYNC_STALE_MINUTES?.trim();
-  if (!raw) {
-    return DEFAULT_STALE_MINUTES * 60_000;
-  }
-
-  const minutes = Number(raw);
-  if (!Number.isInteger(minutes) || minutes <= 0) {
-    throw new Error(
-      `BLIZZARD_SYNC_STALE_MINUTES must be a positive integer (got "${raw}"). ` +
-        "Unset it to use the default of 120 minutes.",
-    );
-  }
-
-  return minutes * 60_000;
-}
+// Kept importable from here for existing callers/tests; lives in lib so the
+// Characters page can derive sync freshness without importing this service.
+export { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
 
 type CandidateOutcome =
   | { status: "refreshed"; lockoutSynced: boolean; characterId: string }
-  | { status: "failed" }
+  | { status: "failed"; profileUnavailable: boolean }
   | { status: "rate_limited" };
 
 /**
@@ -118,8 +96,12 @@ async function refreshCandidate(
     // Profile unavailable, identity conflict, realm transfer, transient
     // Blizzard error, etc. — one broken Character must not fail the job;
     // refreshLinkedCharacterProfile already guarantees it left the
-    // Character's existing itemLevel/lockouts untouched on failure.
-    return { status: "failed" };
+    // Character's existing itemLevel/lockouts untouched on failure, and
+    // lastSyncedAt unchanged, so it stays a candidate for the next tick.
+    return {
+      status: "failed",
+      profileUnavailable: isDomainError(error) && error.code === "BLIZZARD_PROFILE_UNAVAILABLE",
+    };
   }
 }
 
@@ -220,6 +202,7 @@ export const scheduledCharacterSyncService = {
       let lockoutsVerified = 0;
       let lockoutsUnavailable = 0;
       let failed = 0;
+      let profileUnavailable = 0;
       let rateLimited = 0;
 
       for (const [index, outcome] of outcomes.entries()) {
@@ -233,6 +216,7 @@ export const scheduledCharacterSyncService = {
           rateLimited += 1;
         } else {
           failed += 1;
+          if (outcome.profileUnavailable) profileUnavailable += 1;
         }
       }
 
@@ -248,7 +232,8 @@ export const scheduledCharacterSyncService = {
       console.info(
         `[scheduled-character-sync] candidates=${candidates.length} refreshed=${refreshed} ` +
           `lockoutsVerified=${lockoutsVerified} lockoutsUnavailable=${lockoutsUnavailable} ` +
-          `failed=${failed} rateLimited=${rateLimited} connectionsUpdated=${refreshedConnectionIds.size} ` +
+          `failed=${failed} profileUnavailable=${profileUnavailable} rateLimited=${rateLimited} ` +
+          `connectionsUpdated=${refreshedConnectionIds.size} ` +
           `durationMs=${durationMs}`,
       );
 
@@ -259,6 +244,7 @@ export const scheduledCharacterSyncService = {
         lockoutsVerified,
         lockoutsUnavailable,
         failed,
+        profileUnavailable,
         rateLimited,
         connectionsUpdated: refreshedConnectionIds.size,
         durationMs,

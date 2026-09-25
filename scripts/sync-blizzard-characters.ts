@@ -41,7 +41,7 @@ async function main() {
     `[sync:characters] completed in ${result.durationMs}ms — ` +
       `${result.refreshed}/${result.totalCandidates} refreshed, ` +
       `${result.lockoutsVerified} lockouts verified, ${result.lockoutsUnavailable} lockouts unavailable, ` +
-      `${result.failed} failed, ${result.rateLimited} rate-limited, ` +
+      `${result.failed} failed (${result.profileUnavailable} Blizzard profile unavailable), ${result.rateLimited} rate-limited, ` +
       `${result.connectionsUpdated} connection(s) marked synced.`,
   );
 }

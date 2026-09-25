@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
+import { DomainError, isDomainError } from "@/lib/errors";
+import { mapActionError } from "@/lib/action-result";
 import { orm } from "@/lib/prisma";
 import type { OwnedBlizzardCharacter } from "@/lib/blizzard/types";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
@@ -1080,5 +1081,194 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     });
     expect(oneSpy).not.toHaveBeenCalled();
     expect(manySpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Blizzard profile unavailable (status/profile 404)", () => {
+  const owner = asUser(ids.owner);
+  const notFound = (context: string) =>
+    new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", `Blizzard resource was not found (${context}).`, 404);
+
+  async function importLinked(blizzardId: string, name: string, profile: "ok" | "404") {
+    const owned = ownedCharacter({ id: blizzardId, name });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    if (profile === "ok") {
+      mockEnrichmentSuccess({
+        id: owned.id,
+        name: owned.name,
+        realmId: owned.realmId,
+        wowClass: owned.wowClass,
+        itemLevel: 650,
+        specialization: "Restoration",
+      });
+    } else {
+      // Same as production: import enrichment silently gets a status 404.
+      apiMocks.getCharacterProfileStatus.mockRejectedValue(notFound("character-status"));
+    }
+    const result = await characterBlizzardImportService.importCharacters(owner, session.id, [
+      { blizzardCharacterId: owned.id, specialization: "Restoration" },
+    ]);
+    createdCharacterIds.push(...result.importedCharacterIds);
+    return { owned, characterId: result.importedCharacterIds[0]! };
+  }
+
+  function venomousEncounters(): BlizzardCharacterRaidEncounters {
+    const reset = getRegionalWeeklyReset("EU");
+    const catalog = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
+    return {
+      raids: [
+        {
+          instanceId: String(catalog.blizzardInstanceId),
+          instanceName: catalog.name,
+          difficulties: [
+            {
+              difficulty: "HEROIC",
+              progressCompleted: 8,
+              progressTotal: 8,
+              encounters: catalog.bosses.map((boss) => ({
+                encounterId: String(boss.blizzardEncounterIds[0]),
+                encounterName: boss.name,
+                completedCount: 1,
+                lastKillTimestampMs: reset.start.getTime() + 3_600_000,
+              })),
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("A + C: never-synced character — explicit unavailable result, nothing persisted, encounters not used, still retryable", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { characterId } = await importLinked("300090", "Bnasuna", "404");
+    const before = await characterRepository.findById(characterId);
+    expect(before?.lastSyncedAt).toBeNull();
+    expect(before?.itemLevel).toBeNull();
+
+    apiMocks.getCharacterProfileStatus.mockRejectedValue(notFound("character-status"));
+    // The raid endpoint would answer — it must not be used as a fallback.
+    apiMocks.getCharacterRaidEncounters.mockResolvedValue(venomousEncounters());
+
+    const error = await characterBlizzardSyncService.refreshCharacter(owner, characterId).catch((caught) => caught);
+    expect(isDomainError(error) && error.code).toBe("BLIZZARD_PROFILE_UNAVAILABLE");
+    expect(error.message).toMatch(/^Blizzard profile unavailable\./);
+    expect(error.message).toMatch(/Log into the character once, log out, then refresh again later/);
+    expect(error.message).not.toMatch(/deleted/i);
+
+    const after = await characterRepository.findById(characterId);
+    expect(after?.lastSyncedAt).toBeNull();
+    expect(after?.itemLevel).toBeNull();
+    expect(after?.isActive).toBe(true);
+    expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
+    expect(apiMocks.getCharacterRaidEncounters).not.toHaveBeenCalled();
+    expect(await orm.CharacterRaidLockout.where({ characterId }).all()).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /profile unavailable: region=EU realm=twisting-nether name=bnasuna endpoint=character-status http=404/,
+      ),
+    );
+
+    // Still a scheduler candidate right away (lastSyncedAt stays null).
+    const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore: new Date().toISOString() });
+    expect(candidates.some((candidate) => candidate.character.id === characterId)).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("B: previously synced character — item level, lockouts and success timestamp are preserved on a profile 404", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { characterId } = await importLinked("300091", "Bnlastgood", "ok");
+    const lastGood = new Date(Date.now() - 120_000).toISOString();
+    await orm.Character.where({ id: characterId }).update({ lastSyncedAt: lastGood });
+    const reset = getRegionalWeeklyReset("EU");
+    const nowIso = new Date().toISOString();
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      resetIdentifier: reset.resetIdentifier,
+      bossesDefeated: 5,
+      isComplete: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    // Status is fine, the profile summary 404s — same outcome.
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "300091", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockRejectedValue(notFound("character-summary"));
+    apiMocks.getCharacterRaidEncounters.mockResolvedValue(venomousEncounters());
+
+    await expect(characterBlizzardSyncService.refreshCharacter(owner, characterId)).rejects.toMatchObject({
+      code: "BLIZZARD_PROFILE_UNAVAILABLE",
+    });
+
+    const after = await characterRepository.findById(characterId);
+    expect(after?.itemLevel).toBe(650);
+    expect(new Date(after!.lastSyncedAt!).getTime()).toBe(new Date(lastGood).getTime());
+    const lockouts = await orm.CharacterRaidLockout.where({ characterId }).all();
+    expect(lockouts).toHaveLength(1);
+    expect(Number(lockouts[0]!.bossesDefeated)).toBe(5);
+    expect(apiMocks.getCharacterRaidEncounters).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/endpoint=character-summary http=404/));
+    warn.mockRestore();
+  });
+
+  it("D: recovers — a later successful profile resumes the normal profile + lockout sync", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { owned, characterId } = await importLinked("300092", "Bnrecover", "404");
+
+    apiMocks.getCharacterProfileStatus.mockRejectedValue(notFound("character-status"));
+    await expect(characterBlizzardSyncService.refreshCharacter(owner, characterId)).rejects.toMatchObject({
+      code: "BLIZZARD_PROFILE_UNAVAILABLE",
+    });
+
+    mockEnrichmentSuccess({
+      id: owned.id,
+      name: owned.name,
+      realmId: owned.realmId,
+      wowClass: owned.wowClass,
+      itemLevel: 702,
+    });
+    apiMocks.getCharacterRaidEncounters.mockResolvedValue(venomousEncounters());
+    const refreshed = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+
+    expect(refreshed.itemLevel).toBe(702);
+    expect(refreshed.lastSyncedAt).toBeTruthy();
+    const heroic = (await orm.CharacterRaidLockout.where({ characterId }).all()).find(
+      (row) => String(row.raidId) === VENOMOUS_ABYSS_RAID_ID && String(row.difficulty) === "HEROIC",
+    );
+    expect(Number(heroic?.bossesDefeated)).toBe(8);
+    warn.mockRestore();
+  });
+
+  it("E: the manual Refresh action gets a typed, user-facing result (not a generic error)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { characterId } = await importLinked("300093", "Bnmanualfail", "404");
+    apiMocks.getCharacterProfileStatus.mockRejectedValue(notFound("character-status"));
+
+    const error = await characterBlizzardSyncService.refreshCharacter(owner, characterId).catch((caught) => caught);
+    expect(mapActionError(error)).toEqual({
+      ok: false,
+      code: "BLIZZARD_PROFILE_UNAVAILABLE",
+      message: expect.stringMatching(/^Blizzard profile unavailable\./),
+    });
+    warn.mockRestore();
+  });
+
+  it.each([
+    ["300094", "Bnratelimit", new DomainError("BATTLENET_RATE_LIMITED", "Battle.net rate limit reached.", 429), "BATTLENET_RATE_LIMITED"],
+    ["300095", "Bnoutage", new DomainError("BATTLENET_API_UNAVAILABLE", "Battle.net API unavailable (character-status).", 503), "BLIZZARD_SYNC_FAILED"],
+    ["300096", "Bntimeout", new DomainError("BATTLENET_API_UNAVAILABLE", "Battle.net request timed out (character-status).", 503), "BLIZZARD_SYNC_FAILED"],
+    ["300097", "Bnauthfail", new DomainError("BATTLENET_AUTH_FAILED", "Battle.net authorization failed (character-status).", 401), "BLIZZARD_SYNC_FAILED"],
+  ])("G: %s/%s keeps its existing semantics", async (blizzardId, name, thrown, expectedCode) => {
+    const { characterId } = await importLinked(blizzardId, name, "404");
+    apiMocks.getCharacterProfileStatus.mockRejectedValue(thrown);
+    await expect(characterBlizzardSyncService.refreshCharacter(owner, characterId)).rejects.toMatchObject({
+      code: expectedCode,
+    });
+    expect((await characterRepository.findById(characterId))?.lastSyncedAt).toBeNull();
   });
 });

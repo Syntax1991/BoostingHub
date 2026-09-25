@@ -117,6 +117,20 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
   }
 }
 
+/** User-facing copy for a Blizzard profile that cannot be verified right now. */
+export const BLIZZARD_PROFILE_UNAVAILABLE_MESSAGE =
+  "Blizzard profile unavailable. The character exists in your Battle.net import, but Blizzard's profile API " +
+  "is not currently publishing its profile. Log into the character once, log out, then refresh again later.";
+
+/**
+ * Blizzard status/profile could not verify this character (404, or status
+ * is_valid=false). Not a deletion, not a successful zero-data sync: the
+ * Character stays active, keeps its last known good data, and is retried.
+ */
+function profileUnavailableError(): DomainError {
+  return new DomainError("BLIZZARD_PROFILE_UNAVAILABLE", BLIZZARD_PROFILE_UNAVAILABLE_MESSAGE, 404);
+}
+
 /**
  * Reusable lower-level refresh: profile fetch/validate/apply plus current-raid
  * lockout sync, shared by manual refresh (refreshCharacter,
@@ -140,21 +154,20 @@ export async function refreshLinkedCharacterProfile(
   const autoLinkWarcraftLogs = options.autoLinkWarcraftLogs !== false;
 
   let summary;
+  const realmSlug = realmSlugFromDisplayName(character.realm);
+  // Which authoritative identity request is in flight — for the 404 diagnostic.
+  let endpoint: "character-status" | "character-summary" = "character-status";
   try {
-    const realmSlug = realmSlugFromDisplayName(character.realm);
     const status = await blizzardApiClient.getCharacterProfileStatus(
       character.region,
       realmSlug,
       character.name,
     );
     if (!status.isValid) {
-      throw new DomainError(
-        "BLIZZARD_PROFILE_UNAVAILABLE",
-        "Blizzard reports this character profile as unavailable.",
-        502,
-      );
+      throw profileUnavailableError();
     }
 
+    endpoint = "character-summary";
     summary = await blizzardApiClient.getCharacterProfileSummary(
       character.region,
       realmSlug,
@@ -162,8 +175,20 @@ export async function refreshLinkedCharacterProfile(
     );
   } catch (error) {
     if (isDomainError(error)) {
+      // 404 on the status/profile endpoints means Blizzard is not publishing a
+      // profile for this realm/name right now (profile propagation lag, rename,
+      // transfer or deletion all look the same). Identity cannot be verified,
+      // so nothing is written — not even raid lockouts from the encounters
+      // endpoint, which may still answer. lastSyncedAt is left untouched so
+      // the scheduler keeps retrying on its normal cadence.
+      if (error.code === "BLIZZARD_CHARACTER_NOT_FOUND") {
+        console.warn(
+          `[blizzard-sync] profile unavailable: region=${character.region} realm=${realmSlug} ` +
+            `name=${character.normalizedName} endpoint=${endpoint} http=404 — nothing persisted`,
+        );
+        throw profileUnavailableError();
+      }
       if (
-        error.code === "BLIZZARD_CHARACTER_NOT_FOUND" ||
         error.code === "BLIZZARD_PROFILE_UNAVAILABLE" ||
         error.code === "BATTLENET_RATE_LIMITED" ||
         error.code === "BATTLENET_NOT_CONFIGURED"
