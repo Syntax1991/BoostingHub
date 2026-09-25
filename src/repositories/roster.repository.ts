@@ -874,7 +874,8 @@ async function notifyRosterSelectionChangesInTx(
   // A player holds at most one booster slot. A booster signup that leaves while
   // another booster signup of the same player joins is a character swap: the
   // player gets one "Roster Update" for the new character, and the old one's
-  // removal is only recorded (read, no DM) to keep this state.
+  // removal is only recorded (hidden from the user, read, no DM) to keep this
+  // state. This read deliberately includes those hidden rows.
   const boosterUsersLeaving = new Set(
     [...statusBySignupId.keys()]
       .filter((signupId) => isLeaving(signupId) && signupById.get(signupId)?.participationType === "BOOSTER")
@@ -988,7 +989,11 @@ async function createRosterRemovedNotificationInTx(
     version: number;
     now: string;
     signupId: string;
-    /** Record only: no Discord DM and already read (a character swap, not a removal). */
+    /**
+     * Record only (a character swap, not a removal): hidden from the user
+     * (visibleInApp = false), no Discord DM, already read. Kept so later
+     * saves/publishes know this signup was already taken out.
+     */
     silent?: boolean;
   },
 ): Promise<void> {
@@ -1036,6 +1041,7 @@ async function createRosterRemovedNotificationInTx(
     discordUserId: input.silent ? null : discordDmDelivery.discordUserId,
     discordDeliverAfter: input.silent ? null : discordDmDelivery.discordDeliverAfter,
     readAt: input.silent ? input.now : null,
+    visibleInApp: !input.silent,
     createdAt: input.now,
   });
 }

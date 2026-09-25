@@ -307,6 +307,9 @@ model UserNotification {
   /// When set, bot delivery lane must wait until this UTC instant (Quiet Hours snapshot).
   /// Null means immediately eligible. Never re-evaluated from live Settings.
   discordDeliverAfter   TimestamptzString?
+  /// false = internal notification-state row (e.g. the old character's removal in a
+  /// booster character swap). Kept for roster notification state, never shown to the user.
+  visibleInApp          Boolean               @default(true)
   createdAt             TimestamptzString     @default(now())
   updatedAt             temporal.updatedAtString()
 

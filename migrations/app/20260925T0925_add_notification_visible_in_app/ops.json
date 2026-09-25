@@ -1,0 +1,73 @@
+[
+  {
+    "id": "column.public.user_notification.visibleInApp",
+    "label": "Add column \"visibleInApp\" to \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "visibleInApp",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"visibleInApp\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_notification",
+          "visibleInApp"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"visibleInApp\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD COLUMN \"visibleInApp\" bool DEFAULT true NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"visibleInApp\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_notification",
+          "visibleInApp"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.hide-roster-swap-bookkeeping-removals",
+    "label": "Data transform: hide the silent removal half of booster character swaps",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow backfill (idempotent update)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Mark swap bookkeeping removals as not visible in app",
+        "sql": "UPDATE \"user_notification\" AS r SET \"visibleInApp\" = false WHERE r.\"visibleInApp\" = true AND r.\"type\" = 'ROSTER_REMOVED' AND r.\"sourceKey\" LIKE 'roster-removed:%' AND r.\"discordDeliveryStatus\" = 'SKIPPED' AND r.\"discordUserId\" IS NULL AND r.\"discordDeliverAfter\" IS NULL AND r.\"readAt\" IS NOT NULL AND r.\"readAt\" = r.\"createdAt\" AND EXISTS ( SELECT 1 FROM \"user_notification\" s WHERE s.\"type\" = 'ROSTER_SELECTED' AND s.\"sourceKey\" LIKE 'roster-swapped:%' AND s.\"userId\" = r.\"userId\" AND split_part(s.\"sourceKey\", ':', 2) = split_part(r.\"sourceKey\", ':', 2) AND split_part(s.\"sourceKey\", ':', 3) = split_part(r.\"sourceKey\", ':', 3) AND split_part(s.\"sourceKey\", ':', 4) <> split_part(r.\"sourceKey\", ':', 4) )",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "No swap bookkeeping removal is still visible",
+        "sql": "SELECT NOT EXISTS ( SELECT 1 FROM \"user_notification\" AS r WHERE r.\"visibleInApp\" = true AND r.\"type\" = 'ROSTER_REMOVED' AND r.\"sourceKey\" LIKE 'roster-removed:%' AND r.\"discordDeliveryStatus\" = 'SKIPPED' AND r.\"discordUserId\" IS NULL AND r.\"discordDeliverAfter\" IS NULL AND r.\"readAt\" IS NOT NULL AND r.\"readAt\" = r.\"createdAt\" AND EXISTS ( SELECT 1 FROM \"user_notification\" s WHERE s.\"type\" = 'ROSTER_SELECTED' AND s.\"sourceKey\" LIKE 'roster-swapped:%' AND s.\"userId\" = r.\"userId\" AND split_part(s.\"sourceKey\", ':', 2) = split_part(r.\"sourceKey\", ':', 2) AND split_part(s.\"sourceKey\", ':', 3) = split_part(r.\"sourceKey\", ':', 3) AND split_part(s.\"sourceKey\", ':', 4) <> split_part(r.\"sourceKey\", ':', 4) ) ) AS ok",
+        "params": []
+      }
+    ]
+  }
+]
