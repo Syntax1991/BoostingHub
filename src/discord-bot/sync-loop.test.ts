@@ -1,8 +1,12 @@
 import { ChannelType, Collection } from "discord.js";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
+import { clearGuildEmojiCache } from "@/discord-bot/class-emoji-lookup";
+
+// The Guild emoji snapshot cache is process-wide; start every test cold.
+beforeEach(() => clearGuildEmojiCache());
 
 const CATEGORY_ID = "cat-weekly";
 const GUILD_ID = "guild-1";

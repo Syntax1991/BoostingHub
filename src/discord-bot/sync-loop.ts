@@ -41,8 +41,8 @@ import {
 } from "@/discord-bot/embeds/raidboost-announce";
 import { buildSignupButtons, buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import {
-  resolveGuildClassIndicators,
-  resolveGuildRoleIndicators,
+  resolveGuildEmojiIndicators,
+  type GuildClassIndicators,
   fingerprintClassIndicators,
   fingerprintRoleIndicators,
   type GuildRoleIndicators,
@@ -261,8 +261,8 @@ function makePositionSetter(client: Client, guildId: string): PositionSetter {
  * new CURRENT channel could remain below `#next-id` until the next poll.
  */
 export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
-  const classIndicators = await resolveGuildClassIndicators(client, env.discordGuildId);
-  const roleIndicators = await resolveGuildRoleIndicators(client, env.discordGuildId);
+  // One cached Guild emoji snapshot serves both class and role indicators.
+  const { classIndicators, roleIndicators } = await resolveGuildEmojiIndicators(client, env.discordGuildId);
   const classEmojiFingerprint = [
     fingerprintClassIndicators(classIndicators),
     fingerprintRoleIndicators(roleIndicators),
@@ -628,7 +628,7 @@ async function syncSignupPost(
   item: SignupLaneItem,
   data: SignupEmbedData,
   resolvedChannels: Map<string, string>,
-  classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  classIndicators: GuildClassIndicators,
   roleIndicators: GuildRoleIndicators,
   classEmojiFingerprint: string,
 ): Promise<WeekSectionItem | null> {
@@ -844,7 +844,7 @@ async function syncRosterPost(
   item: RosterLaneItem,
   data: RosterEmbedData,
   resolvedChannels: Map<string, string>,
-  classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  classIndicators: GuildClassIndicators,
   roleIndicators: GuildRoleIndicators,
 ): Promise<void> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
@@ -874,7 +874,7 @@ async function syncStartPost(
   item: StartLaneItem,
   data: RunStartEmbedData,
   resolvedChannels: Map<string, string>,
-  classIndicators: Awaited<ReturnType<typeof resolveGuildClassIndicators>>,
+  classIndicators: GuildClassIndicators,
   resolvedVoiceChannels: ResolvedVoiceChannels,
 ): Promise<void> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);

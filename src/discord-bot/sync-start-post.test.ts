@@ -3,10 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
+import { clearGuildEmojiCache } from "@/discord-bot/class-emoji-lookup";
 import { formatFinalSetupLfgLine } from "@/lib/run-start-message";
 import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
 import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
+
+// The Guild emoji snapshot cache is process-wide; start every test cold.
+beforeEach(() => clearGuildEmojiCache());
 
 const CATEGORY_ID = "cat-weekly";
 const GUILD_ID = "guild-1";
