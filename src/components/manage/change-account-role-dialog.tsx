@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { changeAccountRoleAction } from "@/controllers/user-management.actions";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABELS } from "@/lib/labels";
-import { ACCOUNT_ROLES, type AccountRole } from "@/models/enums";
+import { MANAGEABLE_ACCOUNT_ROLES, type AccountRole } from "@/models/enums";
 
 export function ChangeAccountRoleDialog({
   userId,
@@ -25,7 +25,7 @@ export function ChangeAccountRoleDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [nextRole, setNextRole] = useState<AccountRole>(
-    ACCOUNT_ROLES.find((role) => role !== currentRole) ?? currentRole,
+    MANAGEABLE_ACCOUNT_ROLES.find((role) => role !== currentRole) ?? currentRole,
   );
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export function ChangeAccountRoleDialog({
       setOpen(false);
       setConfirming(false);
       setError(null);
-      setNextRole(ACCOUNT_ROLES.find((role) => role !== currentRole) ?? currentRole);
+      setNextRole(MANAGEABLE_ACCOUNT_ROLES.find((role) => role !== currentRole) ?? currentRole);
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
@@ -116,7 +116,8 @@ export function ChangeAccountRoleDialog({
                   aria-label="New account role"
                   className="h-9 w-full rounded-md border border-border bg-surface px-2"
                 >
-                  {ACCOUNT_ROLES.map((role) => (
+                  {/* OWNER is never offered — ownership only comes from the owner bootstrap. */}
+                  {MANAGEABLE_ACCOUNT_ROLES.map((role) => (
                     <option key={role} value={role} disabled={role === currentRole}>
                       {ROLE_LABELS[role]}
                       {role === currentRole ? " (current)" : ""}

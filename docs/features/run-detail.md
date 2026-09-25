@@ -42,7 +42,7 @@ Hiding buttons in CSS is not sufficient.
 
 ### RAID_LEAD
 
-May manage only assigned runs (`user.id === run.raidLeadId` and account role `RAID_LEAD` or `ADMIN`).
+May manage only assigned runs (`user.id === run.raidLeadId` and account role `RAID_LEAD` or above; ADMIN / OWNER manage every run).
 
 A raid lead viewing another lead's Run is a normal viewer: no manager DTO, no roster tools.
 

@@ -15,6 +15,7 @@
     "db:emit": "prisma contract emit",
     "db:migrate": "prisma db migrate --yes",
     "db:seed": "tsx src/prisma/seed.ts",
+    "owner:bootstrap": "tsx scripts/owner-bootstrap.mts",
     "db:verify": "prisma db verify",
     "contract:emit": "prisma contract emit",
     "bot:dev": "tsx watch src/discord-bot/index.ts",

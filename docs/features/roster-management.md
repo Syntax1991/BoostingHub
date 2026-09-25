@@ -14,7 +14,7 @@ Canonical Run URL: `/runs/[runId]`. See [run-detail.md](run-detail.md). Run crea
 | --- | --- |
 | `USER` | None. `/manage` redirects. Service mutations throw `RUN_NOT_MANAGEABLE`. |
 | `RAID_LEAD` | Only runs where `user.id === run.raidLeadId`. |
-| `ADMIN` | Every run. |
+| `ADMIN` / `OWNER` | Every run. |
 
 Account roles are not booster/lootbuddy identities. `BOOSTER` and `LOOTBUDDY` remain signup participation types.
 

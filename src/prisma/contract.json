@@ -151,6 +151,10 @@
               {
                 "name": "ADMIN",
                 "value": "ADMIN"
+              },
+              {
+                "name": "OWNER",
+                "value": "OWNER"
               }
             ]
           },
@@ -11054,8 +11058,8 @@
             "user": {
               "checks": [
                 {
-                  "expression": "\"accountRole\" IN ('USER', 'RAID_LEAD', 'ADMIN')",
-                  "name": "user_accountRole_check_bf325bd2",
+                  "expression": "\"accountRole\" IN ('USER', 'RAID_LEAD', 'ADMIN', 'OWNER')",
+                  "name": "user_accountRole_check_ce88b195",
                   "prefix": "user_accountRole_check"
                 },
                 {
@@ -11268,6 +11272,15 @@
                   "name": "user_defaultCharacterId_idx_b1c87c96",
                   "prefix": "user_defaultCharacterId_idx",
                   "unique": false
+                },
+                {
+                  "columns": [
+                    "accountRole"
+                  ],
+                  "name": "user_single_owner_da579d9c",
+                  "prefix": "user_single_owner",
+                  "unique": true,
+                  "where": "(\"accountRole\" = 'OWNER'::text)"
                 }
               ],
               "primaryKey": {
@@ -11582,7 +11595,8 @@
               "values": [
                 "USER",
                 "RAID_LEAD",
-                "ADMIN"
+                "ADMIN",
+                "OWNER"
               ]
             },
             "AccountStatus": {
@@ -11774,7 +11788,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "af5737a76482ba8a717a13bc9facad3bbca86f5813c46f2cc67573ac736abd9e"
+    "storageHash": "350c9c0e4ac04b7bc7dc972cb8f42137d1aa0591b6c707b42b64d79b91db44e6"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",

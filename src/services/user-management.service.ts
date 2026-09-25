@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   assertCanManageUsers,
+  hasOwnerAccess,
   hasRaidLeadAccess,
   isEligibleRaidLead,
 } from "@/auth/authorization";
@@ -23,6 +24,10 @@ function isAccountRole(value: string): value is AccountRole {
  * Account role administration. BOOSTER is never an account role.
  * Session authorization reloads User.accountRole from the database on each
  * trusted request, so role changes apply without session invalidation.
+ *
+ * OWNER is outside this flow entirely: it is never assignable here and an
+ * OWNER target is never changeable here — not even by the OWNER. Ownership is
+ * only set by the explicit owner bootstrap (scripts/owner-bootstrap.mts).
  */
 export const userManagementService = {
   async listUsers(admin: AuthenticatedUser, filters: AdminUserListFilters = {}) {
@@ -92,14 +97,26 @@ export const userManagementService = {
       throw new DomainError("INVALID_ACCOUNT_ROLE", "That account role is not supported.");
     }
     const nextRole = input.nextRole;
+    if (hasOwnerAccess(nextRole)) {
+      throw new DomainError(
+        "OWNER_ASSIGNMENT_REQUIRES_BOOTSTRAP",
+        "Platform ownership cannot be assigned through role management.",
+      );
+    }
 
     const target = await userRepository.findById(input.targetUserId);
     if (!target) {
       throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
     }
+    if (hasOwnerAccess(target.accountRole)) {
+      throw new DomainError(
+        "OWNER_ROLE_PROTECTED",
+        `${target.name} is the Platform Owner. Ownership cannot be changed through role management.`,
+        403,
+      );
+    }
 
-    const previousRole = target.accountRole;
-    if (previousRole === nextRole) {
+    if (target.accountRole === nextRole) {
       throw new DomainError(
         "ROLE_ALREADY_ASSIGNED",
         `${target.name} already has the ${ROLE_LABELS[nextRole]} role.`,
@@ -107,7 +124,7 @@ export const userManagementService = {
     }
 
     const losingRaidLeadAccess =
-      hasRaidLeadAccess(previousRole) && !hasRaidLeadAccess(nextRole);
+      hasRaidLeadAccess(target.accountRole) && !hasRaidLeadAccess(nextRole);
     if (losingRaidLeadAccess) {
       const blockingRuns = await userRepository.listNonTerminalRunsForRaidLead(target.id);
       if (blockingRuns.length > 0) {
@@ -123,28 +140,12 @@ export const userManagementService = {
       }
     }
 
-    if (previousRole === "ADMIN" && nextRole !== "ADMIN") {
-      const adminCount = await userRepository.countAdmins();
-      if (adminCount <= 1) {
-        throw new DomainError(
-          "LAST_ADMIN_REQUIRED",
-          "The platform must keep at least one Admin account.",
-        );
-      }
-    }
-
-    // Re-check last-admin immediately before persist to reduce concurrent demotion races.
-    if (previousRole === "ADMIN" && nextRole !== "ADMIN") {
-      const adminCount = await userRepository.countAdmins();
-      if (adminCount <= 1) {
-        throw new DomainError(
-          "LAST_ADMIN_REQUIRED",
-          "The platform must keep at least one Admin account.",
-        );
-      }
-    }
-
-    await userRepository.updateAccountRole(target.id, nextRole);
+    // Authoritative checks (OWNER protection, last Admin-level account) are
+    // repeated on the locked row inside the write transaction.
+    const { previousRole } = await userRepository.changeAccountRoleAtomic({
+      targetUserId: target.id,
+      nextRole,
+    });
 
     await activityRepository.create({
       userId: admin.id,

@@ -1,3 +1,5 @@
+import { hasAdminAccess } from "@/auth/authorization";
+import { mapUserRole } from "@/lib/persistence";
 import { db, orm } from "@/lib/prisma";
 import { RAID_DIFFICULTIES } from "@/models/enums";
 
@@ -29,9 +31,12 @@ export const devAccountBootstrapRepository = {
       const user = await txOrm.User.where({ id: userId }).first();
       if (!user) return;
       const userRecord = user as Record<string, unknown>;
-      if (userRecord.accountRole !== "ADMIN" || userRecord.accountStatus !== "ACTIVE") {
+      // Restore Admin authority — an OWNER already has it and must never be
+      // demoted to ADMIN by this dev-only helper.
+      const role = mapUserRole(userRecord.accountRole);
+      if (!hasAdminAccess(role) || userRecord.accountStatus !== "ACTIVE") {
         await txOrm.User.where({ id: userId }).update({
-          accountRole: "ADMIN",
+          accountRole: hasAdminAccess(role) ? role : "ADMIN",
           accountStatus: "ACTIVE",
           updatedAt: new Date().toISOString(),
         });

@@ -20,6 +20,7 @@ export const ROLE_LABELS: Record<AccountRole, string> = {
   USER: "User",
   RAID_LEAD: "Raid Lead",
   ADMIN: "Admin",
+  OWNER: "Platform Owner",
 };
 
 export const CLASS_LABELS: Record<WowClass, string> = {

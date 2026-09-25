@@ -211,6 +211,7 @@ export function AccountRoleBadge({ role }: { role: AccountRole }) {
   return (
     <Badge
       className={cn(
+        role === "OWNER" && "bg-warning/15 text-warning",
         role === "ADMIN" && "bg-accent/15 text-accent",
         role === "RAID_LEAD" && "bg-info/15 text-info",
         role === "USER" && "bg-muted/20 text-muted",

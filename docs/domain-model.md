@@ -6,7 +6,7 @@ Timestamps are stored as `timestamptz` (UTC). Formatting happens in `src/lib/dat
 
 | Concept | Meaning | Examples |
 | --- | --- | --- |
-| Account permission | What the account may do in the app | `USER`, `RAID_LEAD`, `ADMIN` |
+| Account permission | What the account may do in the app | `USER`, `RAID_LEAD`, `ADMIN`, `OWNER` |
 | Booster eligibility | Granular approval to boost a combination | Shaman + Healer + Heroic |
 | Run participation type | How this person is on **this** run | `BOOSTER`, `LOOTBUDDY` |
 | Run status | Lifecycle of the operation | `OPEN`, `ROSTERING` |
@@ -21,7 +21,7 @@ Application account and Better Auth `user` row.
 - `id`, `name` (display name), optional `email`
 - Discord user id, username, avatar (`image`)
 - `accountStatus`: `ACTIVE` \| `DISABLED`
-- `accountRole`: `USER` \| `RAID_LEAD` \| `ADMIN` (ADMIN assigns via user management; never OAuth self-promote)
+- `accountRole`: `USER` \| `RAID_LEAD` \| `ADMIN` \| `OWNER` (hierarchical; ADMIN assigns USER/RAID_LEAD/ADMIN via user management; the single, protected OWNER is only set by `npm run owner:bootstrap`; never OAuth self-promote)
 - timestamps
 
 Email is optional for core behavior. Discord is the primary identity.
