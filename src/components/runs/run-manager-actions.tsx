@@ -11,6 +11,8 @@ import { RunCancelDialog } from "@/components/runs/run-cancel-dialog";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
 import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dialog";
+import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
+import { useRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import type { ExternalBooster } from "@/lib/external-booster";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
 import type { RunDetailView } from "@/services/run-detail.service";
@@ -24,6 +26,7 @@ export function RunManagerActions({
   finalSetupPreview,
   rosterHasUnpublishedChanges = false,
   externalBoosters = null,
+  addBooster = null,
 }: {
   run: RunDetailView["run"];
   capabilities: RunDetailView["capabilities"];
@@ -32,6 +35,8 @@ export function RunManagerActions({
   finalSetupPreview?: FinalSetupInput | null;
   /** Saved roster draft differs from the published roster — Start will be refused server-side. */
   rosterHasUnpublishedChanges?: boolean;
+  /** Set while registered Boosters can be added (OPEN / ROSTERING / PUBLISHED) — opens Add Booster. */
+  addBooster?: { rosterVersion: number } | null;
   /** Set while the roster is editable — opens the External Boosters dialog. */
   externalBoosters?: { boosters: ExternalBooster[]; rosterVersion: number } | null;
 }) {
@@ -39,6 +44,8 @@ export function RunManagerActions({
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  const [addBoosterOpen, setAddBoosterOpen] = useState(false);
+  const rosterHasUnsavedEdits = useRosterHasUnsavedEdits(run.id);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
@@ -58,6 +65,7 @@ export function RunManagerActions({
 
   const hasActions =
     Boolean(externalBoosters) ||
+    Boolean(addBooster) ||
     capabilities.canEdit ||
     capabilities.canOpen ||
     capabilities.canCloseSignups ||
@@ -73,6 +81,11 @@ export function RunManagerActions({
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {addBooster ? (
+          <Button type="button" variant="secondary" disabled={rosterHasUnsavedEdits} onClick={() => setAddBoosterOpen(true)}>
+            Add Booster
+          </Button>
+        ) : null}
         {externalBoosters ? (
           <Button type="button" variant="secondary" onClick={() => setExternalOpen(true)}>
             External Boosters{externalBoosters.boosters.length > 0 ? ` (${externalBoosters.boosters.length})` : ""}
@@ -128,6 +141,9 @@ export function RunManagerActions({
           </Button>
         ) : null}
       </div>
+      {addBooster && rosterHasUnsavedEdits ? (
+        <p className="max-w-sm text-right text-xs text-muted">Save your current roster changes before adding a booster.</p>
+      ) : null}
       {error ? (
         <p role="alert" className="max-w-sm text-right text-xs text-danger">
           {error}
@@ -135,6 +151,14 @@ export function RunManagerActions({
       ) : null}
       {editOpen && editor ? (
         <RunEditDialog run={run} capabilities={capabilities} editor={editor} onClose={() => setEditOpen(false)} />
+      ) : null}
+      {addBoosterOpen && addBooster ? (
+        <AddBoosterDialog
+          runId={runId}
+          rosterVersion={addBooster.rosterVersion}
+          onClose={() => setAddBoosterOpen(false)}
+          onAdded={() => window.location.reload()}
+        />
       ) : null}
       {externalOpen && externalBoosters ? (
         <ExternalBoostersDialog

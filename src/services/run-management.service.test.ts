@@ -330,7 +330,7 @@ describe("open run", () => {
 });
 
 describe("edit run", () => {
-  it("lets DRAFT and OPEN-without-signups change identity, then locks after signup history", async () => {
+  it("lets DRAFT and OPEN change identity, and signup history no longer locks it", async () => {
     const id = await createDraft(lead, { title: "Editable" });
     await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "MYTHIC", lootType: "UNSAVED", scheduledStartAt: futureIso(8), desiredTankCount: 3, desiredHealerCount: 5, desiredDpsCount: 12 });
     let run = await runRepository.findById(id);
@@ -356,12 +356,8 @@ describe("edit run", () => {
     });
     createdSignupIds.push(signupId);
 
-    await expectVenomousUpdateDomainCode(
-      lead,
-      id,
-      { difficulty: "HEROIC", scheduledStartAt: futureIso(10) },
-      "RUN_IDENTITY_LOCKED",
-    );
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "HEROIC", lootType: "UNSAVED", scheduledStartAt: futureIso(10), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
+    expect((await runRepository.findById(id))?.difficulty).toBe("HEROIC");
 
     await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "NORMAL", lootType: "UNSAVED", scheduledStartAt: futureIso(11), desiredTankCount: 1, desiredHealerCount: 2, desiredDpsCount: 8 });
     run = await runRepository.findById(id);
@@ -370,15 +366,14 @@ describe("edit run", () => {
     expect(await runRepository.countSignups(id)).toBe(1);
   });
 
-  it("rejects planning edits after publish and cross-lead mutation", async () => {
+  it("keeps PUBLISHED editable, locks from IN_PROGRESS on, and rejects cross-lead mutation", async () => {
     const id = await createDraft(lead, { title: "Publish lock" });
     await runRepository.updateFields(id, { status: "PUBLISHED", signupsOpen: false });
-    await expectVenomousUpdateDomainCode(
-      lead,
-      id,
-      { scheduledStartAt: futureIso() },
-      "RUN_EDIT_LOCKED",
-    );
+    await updateVenomous(lead, id, { venomousPlannedBossCount: 8, difficulty: "HEROIC", lootType: "UNSAVED", scheduledStartAt: futureIso(12), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 });
+    for (const status of ["IN_PROGRESS", "COMPLETED", "CANCELLED"] as const) {
+      await runRepository.updateFields(id, { status });
+      await expectVenomousUpdateDomainCode(lead, id, { scheduledStartAt: futureIso(13) }, "RUN_EDIT_LOCKED");
+    }
 
     const otherId = await createDraft(otherLead, { title: "Other lead run" });
     await expectVenomousUpdateDomainCode(
@@ -429,7 +424,7 @@ describe("title regeneration on update", () => {
 });
 
 describe("raid lead reassignment", () => {
-  it("blocks RAID_LEAD reassignment and allows ADMIN before publish", async () => {
+  it("blocks RAID_LEAD reassignment and allows ADMIN until Start — PUBLISHED included", async () => {
     const id = await createDraft(lead, { title: "Reassign me" });
     await runService.openRun(lead, id);
     await expectVenomousUpdateDomainCode(
@@ -452,10 +447,17 @@ describe("raid lead reassignment", () => {
     );
 
     await runRepository.updateFields(id, { status: "PUBLISHED" });
+    const publishedRun = await runRepository.findById(id);
+    await runService.updateRun(admin, venomousUpdateInput(id, publishedRun!, { raidLeadId: ids.lead }));
+    expect((await runRepository.findById(id))?.raidLeadId).toBe(ids.lead);
+    // A RAID_LEAD still cannot hand the Run to someone else.
+    await expectVenomousUpdateDomainCode(lead, id, { raidLeadId: ids.otherLead }, "RUN_RAID_LEAD_INVALID");
+
+    await runRepository.updateFields(id, { status: "IN_PROGRESS" });
     await expectVenomousUpdateDomainCode(
       admin,
       id,
-      { scheduledStartAt: futureIso(), raidLeadId: ids.lead },
+      { raidLeadId: ids.otherLead },
       "RUN_EDIT_LOCKED",
     );
   });

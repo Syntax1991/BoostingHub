@@ -83,3 +83,18 @@ export const rosterAddPlayerSchema = z.object({
   characterId: entityIdSchema,
   role: z.enum(CHARACTER_ROLES),
 });
+
+/** Update Roster: accept the manager's current selection as the published roster (one action). */
+export const updateRosterSchema = z.object({
+  runId: entityIdSchema,
+  version: z.number().int().positive(),
+  selections: z.array(rosterSelectionSchema),
+  acknowledgeWarnings: z.boolean(),
+});
+
+/** Publish Roster on a published roster: explicit repost, compare-and-set on version AND postRevision. */
+export const repostRosterSchema = z.object({
+  runId: entityIdSchema,
+  version: z.number().int().positive(),
+  postRevision: z.number().int().min(0),
+});

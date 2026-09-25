@@ -5,6 +5,8 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { rosterService } from "@/services/roster.service";
 import {
   publishRosterSchema,
+  repostRosterSchema,
+  updateRosterSchema,
   rosterAddPlayerSchema,
   rosterManualAddOptionsSchema,
   rosterPlayerSearchSchema,
@@ -110,6 +112,28 @@ export async function addRosterPlayerAction(input: unknown): Promise<ActionResul
     const parsed = rosterAddPlayerSchema.parse(input);
     await rosterService.addRegisteredParticipant(user, parsed);
     return { ok: true, message: "Player added to the roster draft." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function updateRosterAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = updateRosterSchema.parse(input);
+    await rosterService.updateRoster(user, parsed);
+    return { ok: true, message: "Roster updated." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function repostRosterAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = repostRosterSchema.parse(input);
+    await rosterService.repostRoster(user, parsed);
+    return { ok: true, message: "The roster will be posted to Discord again." };
   } catch (error) {
     return mapActionError(error);
   }

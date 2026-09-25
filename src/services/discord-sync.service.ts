@@ -295,6 +295,16 @@ export type RosterSyncWorkItem = {
   existingRunChannelId: string | null;
   desiredChannelName: string;
   targetBucket: DiscordRunChannelTarget;
+  /**
+   * POST: an explicit Publish Roster is pending — send a NEW roster message
+   * (never edit the old one) and record `postRevision` with it.
+   * REFRESH: Save / Update / other roster changes — edit the CURRENT message
+   * in place (a missing message is re-sent, the existing recovery).
+   * Older API payloads omit it → REFRESH.
+   */
+  mode?: "POST" | "REFRESH";
+  /** The RunRoster.postRevision a POST fulfils; null for REFRESH. */
+  postRevision?: number | null;
 };
 
 export type RunStartSyncWorkItem = {
@@ -1148,32 +1158,36 @@ export const discordSyncService = {
       // to legitimately post a roster embed, matching the same rule that
       // blocks a retroactive first signup post for a phase that's over.
       //
-      // Sync detection here is keyed only on `roster.version`, unlike the
-      // signup embed's full content signature above — this is safe, not a
-      // gap: publishing a roster always advances `run.status` to PUBLISHED
-      // (see roster.service.ts publishRoster), and every field rendered in
-      // `RosterEmbedData` (runTitle, raidName, difficulty — see
-      // `getRosterEmbedData` below) is gated by `canEditIdentityFields`
-      // (DRAFT/OPEN only) or `canEditPlanningFields` (DRAFT/OPEN/ROSTERING
-      // only) in run-state.ts, neither of which ever includes PUBLISHED (or
-      // any later status). So none of those fields can legally change for as
-      // long as a published roster (and thus a roster post) exists — the
-      // only way `RosterEmbedData` content changes is a re-publish, which is
-      // exactly what bumps `roster.version`.
+      // Refresh detection is keyed on `roster.version`, not on a content
+      // signature. Run settings stay editable until Start, but every change
+      // the roster embed renders reaches it through a version bump: a
+      // roster-relevant edit marks the published roster "changed since
+      // acknowledged" and Update Roster (which bumps the version) refreshes
+      // the message; a title-only change (Raid Lead reassignment) bumps the
+      // version directly (runRepository.updatePreStartAtomic).
       // Same fallback as the signup lane: the lane must target the channel
       // its gate is based on, so a deleted channel is confirmed (and
       // cleared) rather than skipped without evidence on every poll.
       const dedicatedChannelId = post?.runChannelId ?? post?.signupChannelId ?? null;
+      //
+      // Explicit Publish Roster intents (RunRoster.postRevision) beyond the
+      // last one the bot fulfilled (lastRosterPostRevision, null → 0) mean
+      // "post a NEW message" and win over a refresh. A legacy roster message
+      // (postRevision 0, fulfilled null) is therefore never reposted.
       if (run.roster?.publishedAt && dedicatedChannelId) {
-        if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
-          roster.push({
-            runId: run.id,
-            existingChannelId: post?.rosterChannelId ?? null,
-            existingMessageId: post?.rosterMessageId ?? null,
-            existingRunChannelId: dedicatedChannelId,
-            desiredChannelName: desiredChannelNameFor(run),
-            targetBucket,
-          });
+        const postPending = run.roster.postRevision > (post?.lastRosterPostRevision ?? 0);
+        const base = {
+          runId: run.id,
+          existingChannelId: post?.rosterChannelId ?? null,
+          existingMessageId: post?.rosterMessageId ?? null,
+          existingRunChannelId: dedicatedChannelId,
+          desiredChannelName: desiredChannelNameFor(run),
+          targetBucket,
+        };
+        if (postPending) {
+          roster.push({ ...base, mode: "POST", postRevision: run.roster.postRevision });
+        } else if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
+          roster.push({ ...base, mode: "REFRESH", postRevision: null });
         }
       }
 
@@ -1301,7 +1315,13 @@ export const discordSyncService = {
     });
   },
 
-  async recordRosterPost(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
+  async recordRosterPost(input: {
+    runId: string;
+    channelId: string;
+    messageId: string;
+    /** Set when the bot fulfilled an explicit Publish (sent a NEW message). */
+    postRevision?: number;
+  }): Promise<void> {
     const run = await runRepository.findById(input.runId);
     if (!run?.roster) return;
     await runDiscordPostRepository.recordRosterPost({
@@ -1309,6 +1329,7 @@ export const discordSyncService = {
       rosterChannelId: input.channelId,
       rosterMessageId: input.messageId,
       lastRosterVersion: run.roster.version,
+      ...(input.postRevision !== undefined ? { lastRosterPostRevision: input.postRevision } : {}),
     });
   },
 

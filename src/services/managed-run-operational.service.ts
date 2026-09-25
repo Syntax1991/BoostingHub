@@ -30,7 +30,6 @@ function capabilitiesForManagedRun(
   return getRunLifecycleCapabilities({
     status: run.status,
     signupsOpen: run.signupsOpen,
-    hasSignupHistory: run.signups.length > 0,
     actorIsAdmin: hasAdminAccess(user.accountRole),
     archivedAt: run.archivedAt,
   });

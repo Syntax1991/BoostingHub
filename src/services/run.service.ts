@@ -309,7 +309,6 @@ async function loadManagedRun(user: AuthenticatedUser, runId: string) {
 function capabilitiesFor(
   user: AuthenticatedUser,
   run: { status: RunStatus; signupsOpen: boolean; raidLeadId: string; archivedAt?: string | null },
-  hasSignupHistory: boolean,
 ): RunLifecycleCapabilities {
   if (!canManageRun(user, run)) {
     return emptyRunCapabilities();
@@ -317,7 +316,6 @@ function capabilitiesFor(
   return getRunLifecycleCapabilities({
     status: run.status,
     signupsOpen: run.signupsOpen,
-    hasSignupHistory,
     actorIsAdmin: hasAdminAccess(user.accountRole),
     archivedAt: run.archivedAt,
   });
@@ -673,12 +671,12 @@ export const runService = {
 
   async updateRun(user: AuthenticatedUser, input: UpdateRunInput) {
     const run = await loadManagedRun(user, input.runId);
-    const signupCount = await runRepository.countSignups(run.id);
-    const hasSignupHistory = signupCount > 0;
-    const capabilities = capabilitiesFor(user, run, hasSignupHistory);
+    // Pre-start only (Start Run is the freeze point); signup history never
+    // locks a field. The repository re-checks the status under the roster lock.
+    const capabilities = capabilitiesFor(user, run);
 
     if (!capabilities.canEdit) {
-      throw new DomainError("RUN_EDIT_LOCKED", "This run can no longer be edited.");
+      throw new DomainError("RUN_EDIT_LOCKED", "This run can no longer be edited — it has already started.");
     }
 
     const scheduledStartAt = parseSchedule(input.scheduledStartAt);
@@ -729,29 +727,6 @@ export const runService = {
 
     const identityChanged = contentChanged || input.difficulty !== run.difficulty;
     const leadChanged = Boolean(input.raidLeadId && input.raidLeadId !== run.raidLeadId);
-
-    if (identityChanged && !capabilities.canEditIdentity) {
-      throw new DomainError(
-        "RUN_IDENTITY_LOCKED",
-        hasSignupHistory
-          ? "Raid and difficulty cannot change after a signup has been recorded."
-          : "Raid and difficulty cannot be changed in this run state.",
-      );
-    }
-
-    if (!capabilities.canEditPlanning) {
-      const planningChanged =
-        scheduledStartAt !== run.scheduledStartAt ||
-        nextNotes !== run.notes ||
-        input.lootType !== run.lootType ||
-        input.desiredTankCount !== run.desiredTankCount ||
-        input.desiredHealerCount !== run.desiredHealerCount ||
-        input.desiredDpsCount !== run.desiredDpsCount ||
-        (input.discordRolePing ?? run.discordRolePing) !== run.discordRolePing;
-      if (planningChanged) {
-        throw new DomainError("RUN_EDIT_LOCKED", "Planning fields cannot be edited in this run state.");
-      }
-    }
 
     let raidLeadId = run.raidLeadId;
     let raidLeadName = run.raidLeadName;
@@ -841,22 +816,31 @@ export const runService = {
         }
       : null;
 
-    if (identityChanged) {
-      await runRepository.updateIdentityIfNoSignupHistory(
-        run.id,
-        {
-          ...fields,
-          difficulty,
-          contents: contentChanged ? nextContents : undefined,
-        },
-        rescheduleAnnouncement,
-      );
-    } else if (rescheduleAnnouncement) {
-      await runRepository.updateFieldsWithDiscordAnnouncement(run.id, fields, rescheduleAnnouncement);
-    } else {
-      // Non-content updates must not rewrite RunRaidContent / Bundle rows.
-      await runRepository.updateFields(run.id, fields);
-    }
+    // Roster-relevant: anything roster validation / the Discord roster embed /
+    // Start depend on. A published roster then needs Update Roster before
+    // Start. Notes, the role-ping flag and the Raid Lead are not roster
+    // validation inputs; a Raid Lead change only alters the derived title,
+    // which the current Discord roster message is refreshed for in place.
+    const rosterRelevantChanged =
+      identityChanged ||
+      scheduleChanged ||
+      input.lootType !== run.lootType ||
+      input.desiredTankCount !== run.desiredTankCount ||
+      input.desiredHealerCount !== run.desiredHealerCount ||
+      input.desiredDpsCount !== run.desiredDpsCount;
+    const rosterEffect = rosterRelevantChanged ? "MARK_CHANGED" : title !== run.title ? "REFRESH_EMBED" : "NONE";
+
+    // One atomic pre-start write; content rows are replaced only when they
+    // actually changed, so a planning edit never rewrites Bundle rows.
+    await runRepository.updatePreStartAtomic(
+      run.id,
+      { ...fields, difficulty },
+      {
+        contents: contentChanged ? nextContents : undefined,
+        announcement: rescheduleAnnouncement,
+        rosterEffect,
+      },
+    );
 
     if (scheduleChanged) {
       await runLifecycleNotificationService.notifyRunRescheduled({
@@ -930,7 +914,6 @@ export const runService = {
     if (!getRunLifecycleCapabilities({
       status: run.status,
       signupsOpen: run.signupsOpen,
-      hasSignupHistory: false,
       actorIsAdmin: hasAdminAccess(user.accountRole),
     }).canCancel) {
       throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");

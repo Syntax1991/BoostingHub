@@ -33,6 +33,8 @@ import {
   insertAnnouncementIgnoreDuplicateTx,
   type CreateRunDiscordAnnouncementInput,
 } from "@/repositories/run-discord-announcement.repository";
+import { lockRosterInTx } from "@/repositories/roster.repository";
+import { canEditRunBeforeStart } from "@/services/run-state";
 
 /**
  * Test-only hooks that force a mid-transaction failure for rollback proofs.
@@ -132,6 +134,10 @@ export type RunListRecord = {
     state: string;
     version: number;
     publishedAt: string | null;
+    /** Latest explicit Publish Roster intent (first post + deliberate reposts). */
+    postRevision: number;
+    /** A roster-relevant Run setting changed since the roster was last accepted. */
+    runChangedSinceAck: boolean;
     draftSelectedCount: number;
     selections: RosterSelectionOnRun[];
     /** Unregistered boosters added by hand; saved with the draft, count toward targets. */
@@ -300,6 +306,8 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
           state: asString(roster.state, "DRAFT"),
           version: asNumber(roster.version, 1),
           publishedAt: asStringOrNull(roster.publishedAt),
+          postRevision: asNumber(roster.postRevision, 0),
+          runChangedSinceAck: roster.runChangedSinceAck === true,
           draftSelectedCount: rosterEntries.filter((entry) => asBoolean((entry as Record<string, unknown>).selected, true))
             .length,
           selections: rosterEntries.map((entry) => {
@@ -545,100 +553,72 @@ export const runRepository = {
   },
 
   /**
-   * Non-content Run field update + optional RunDiscordAnnouncement in one transaction.
+   * The one pre-start Run edit write (Edit Run), serialized against Start.
+   * Signup history never blocks it: signups and the roster are left untouched.
+   *
+   * In one transaction: lock the Run's RunRoster row first (the lock order
+   * every roster write and Start use), re-read the Run and refuse unless it is
+   * still pre-start, update the Run fields, replace RunRaidContent when
+   * `contents` is given, insert the optional RUN_RESCHEDULED announcement, and
+   * apply the roster effect:
+   * - "MARK_CHANGED": a roster-relevant setting changed on a published roster —
+   *   RunRoster.runChangedSinceAck = true, so Start waits for Update Roster
+   *   (which then also refreshes the current Discord roster message);
+   * - "REFRESH_EMBED": only rendered-but-not-roster-relevant data changed (the
+   *   derived title after a Raid Lead change) — bump the roster version so the
+   *   current Discord roster message is edited in place;
+   * - "NONE": nothing roster-related changed.
+   * An edit that commits first makes a concurrent Start refuse (unpublished
+   * changes); an edit queued behind a committed Start fails here.
    */
-  async updateFieldsWithDiscordAnnouncement(
+  async updatePreStartAtomic(
     id: string,
-    fields: RunFieldsUpdate,
-    announcement: CreateRunDiscordAnnouncementInput | null,
+    fields: RunFieldsUpdate & { difficulty?: RaidDifficulty },
+    options: {
+      contents?: RunContentWriteSpec[];
+      announcement?: CreateRunDiscordAnnouncementInput | null;
+      rosterEffect?: "NONE" | "MARK_CHANGED" | "REFRESH_EMBED";
+    } = {},
     hooks: LifecycleAnnouncementTxHooks = {},
   ): Promise<void> {
     await db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const rosterLookup = (await txOrm.RunRoster.where({ runId: id }).select("id").first()) as Record<
+        string,
+        unknown
+      > | null;
+      const roster = rosterLookup ? await lockRosterInTx(txOrm, asString(rosterLookup.id)) : null;
+      const current = (await txOrm.Run.where({ id }).first()) as Record<string, unknown> | null;
+      if (!current) {
+        throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+      }
+      if (!canEditRunBeforeStart(mapRunStatus(current.status))) {
+        throw new DomainError("RUN_EDIT_LOCKED", "This run can no longer be edited — it has already started.");
+      }
       const now = new Date().toISOString();
-      await txOrm.Run.where({ id }).update({
-        ...fields,
-        updatedAt: now,
-      });
+      await txOrm.Run.where({ id }).update({ ...fields, updatedAt: now });
+      if (options.contents) {
+        await replaceRaidContentsTx(txOrm, id, options.contents, now);
+      }
       if (hooks.failAfterRunUpdate) {
         throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
       }
-      if (!announcement) return;
-      if (hooks.failAnnouncementInsert) {
-        await insertAnnouncementIgnoreDuplicateTx(txOrm, {
-          ...announcement,
-          runId: "00000000-0000-4000-8000-000000000000",
-        });
-        return;
+      if (options.announcement) {
+        await insertAnnouncementIgnoreDuplicateTx(
+          txOrm,
+          hooks.failAnnouncementInsert
+            ? { ...options.announcement, runId: "00000000-0000-4000-8000-000000000000" }
+            : options.announcement,
+        );
       }
-      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
+      if (roster?.publishedAt && options.rosterEffect === "MARK_CHANGED") {
+        await txOrm.RunRoster.where({ id: roster.id }).update({ runChangedSinceAck: true, updatedAt: now });
+      } else if (roster?.publishedAt && options.rosterEffect === "REFRESH_EMBED") {
+        await txOrm.RunRoster.where({ id: roster.id }).update({ version: roster.version + 1, updatedAt: now });
+      }
     });
   },
 
-  /**
-   * Identity fields (content composition / difficulty) may change only when no
-   * RunSignup row exists, including WITHDRAWN history. When `contents` is
-   * provided, the full RunRaidContent set is replaced atomically with the Run
-   * row update. Optional Discord announcement shares the same transaction.
-   */
-  async updateIdentityIfNoSignupHistory(
-    id: string,
-    fields: {
-      title?: string;
-      difficulty: RaidDifficulty;
-      lootType?: RunLootType;
-      scheduledStartAt?: string;
-      scheduleRevision?: number;
-      raidLeadId?: string;
-      notes?: string | null;
-      desiredTankCount?: number;
-      desiredHealerCount?: number;
-      desiredDpsCount?: number;
-      discordRolePing?: boolean;
-      contents?: RunContentWriteSpec[];
-    },
-    announcement: CreateRunDiscordAnnouncementInput | null = null,
-    hooks: LifecycleAnnouncementTxHooks = {},
-  ) {
-    await db.transaction(async (tx) => {
-      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
-      const before = await txOrm.RunSignup.where({ runId: id }).select("id").all();
-      if (before.length > 0) {
-        throw new DomainError(
-          "RUN_IDENTITY_LOCKED",
-          "Raid and difficulty cannot change after a signup has been recorded.",
-        );
-      }
-      const now = new Date().toISOString();
-      const { contents, ...runFields } = fields;
-      await txOrm.Run.where({ id }).update({
-        ...runFields,
-        updatedAt: now,
-      });
-      if (contents) {
-        await replaceRaidContentsTx(txOrm, id, contents, now);
-      }
-      const after = await txOrm.RunSignup.where({ runId: id }).select("id").all();
-      if (after.length > 0) {
-        throw new DomainError(
-          "RUN_IDENTITY_LOCKED",
-          "Raid and difficulty cannot change after a signup has been recorded.",
-        );
-      }
-      if (hooks.failAfterRunUpdate) {
-        throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
-      }
-      if (!announcement) return;
-      if (hooks.failAnnouncementInsert) {
-        await insertAnnouncementIgnoreDuplicateTx(txOrm, {
-          ...announcement,
-          runId: "00000000-0000-4000-8000-000000000000",
-        });
-        return;
-      }
-      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
-    });
-  },
   async updateStatus(id: string, status: RunStatus) {
     await orm.Run.where({ id }).update({ status, updatedAt: new Date().toISOString() });
   },

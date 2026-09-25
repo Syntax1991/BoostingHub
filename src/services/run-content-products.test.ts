@@ -11,7 +11,6 @@ import {
 } from "@/lib/wow-raid-catalog";
 import { afterAll, beforeAll } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -38,18 +37,6 @@ function asLead(): AuthenticatedUser {
 
 function futureIso(days = 14) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-}
-
-async function expectDomainCode(promise: Promise<unknown>, code: string) {
-  try {
-    await promise;
-    throw new Error(`Expected domain error ${code}`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected domain error ${code}`) {
-      throw error;
-    }
-    expect(isDomainError(error) && error.code).toBe(code);
-  }
 }
 
 describe("run content presets — pure expansion", () => {
@@ -368,7 +355,7 @@ describe("run content products — create / mass-create / edit", () => {
     expect(contents[0]?.plannedBossCount).toBe(8);
   });
 
-  it("freezes content identity after signup history", async () => {
+  it("keeps content identity editable after signup history — the signup rows stay attached", async () => {
     const { id } = await runService.createRun(lead, {
       contentPreset: "VENOMOUS_ABYSS",
       venomousPlannedBossCount: 8,
@@ -395,24 +382,38 @@ describe("run content products — create / mass-create / edit", () => {
       updatedAt: new Date().toISOString(),
     });
 
-    await expectDomainCode(
-      runService.updateRun(lead, {
-        runId: id,
-        contentPreset: "MIDNIGHT_S2_BUNDLE",
-        venomousPlannedBossCount: 8,
-        difficulty: "HEROIC",
-        lootType: "UNSAVED",
-        scheduledStartAt: futureIso(41),
-        desiredTankCount: 2,
-        desiredHealerCount: 4,
-        desiredDpsCount: 14,
-      }),
-      "RUN_IDENTITY_LOCKED",
-    );
+    await runService.updateRun(lead, {
+      runId: id,
+      contentPreset: "MIDNIGHT_S2_BUNDLE",
+      venomousPlannedBossCount: 8,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(41),
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
 
+    // Venomous → Bundle: Tidebound 1/1 + Venomous 8/8, signup history untouched.
     const contents = await runRepository.listRaidContents(id);
-    expect(contents).toHaveLength(1);
-    expect(contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(contents).toHaveLength(2);
+    expect(contents.map((row) => row.raidId)).toContain(VENOMOUS_ABYSS_RAID_ID);
+    expect(await orm.RunSignup.where({ id: signupId }).first()).toBeTruthy();
+
+    // And back: Bundle → Venomous with a different boss count.
+    await runService.updateRun(lead, {
+      runId: id,
+      contentPreset: "VENOMOUS_ABYSS",
+      venomousPlannedBossCount: 6,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      scheduledStartAt: futureIso(41),
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+    });
+    const back = await runRepository.listRaidContents(id);
+    expect(back.map((row) => [row.raidId, row.plannedBossCount])).toEqual([[VENOMOUS_ABYSS_RAID_ID, 6]]);
 
     await orm.RunSignup.where({ id: signupId }).delete();
   });

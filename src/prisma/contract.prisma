@@ -793,6 +793,14 @@ model RunRoster {
   publishedAt   TimestamptzString?
   publishedById String?
   publishedBy   User?       @relation("RosterPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  /// A roster-relevant Run setting (difficulty, content, schedule, loot type,
+  /// composition targets) changed after the roster was last accepted by
+  /// Publish / Update Roster. Start is refused while true.
+  runChangedSinceAck Boolean  @default(false)
+  /// Latest explicit Publish Roster intent (first post and every deliberate
+  /// repost). The bot posts a NEW roster message while this exceeds
+  /// RunDiscordPost.lastRosterPostRevision.
+  postRevision  Int         @default(0)
   createdAt     TimestamptzString @default(now())
   updatedAt     temporal.updatedAtString()
 
@@ -1015,6 +1023,9 @@ model RunDiscordPost {
   rosterPostedAt      TimestamptzString?
   /// RunRoster.version at last successful roster post, to detect republish.
   lastRosterVersion   Int?
+  /// RunRoster.postRevision the bot last fulfilled by sending a NEW roster
+  /// message. Null = no explicit Publish fulfilled yet (treated as 0).
+  lastRosterPostRevision Int?
   /// Operational Run Start roster post (separate from signup + published roster).
   startChannelId      String?
   startMessageId      String?

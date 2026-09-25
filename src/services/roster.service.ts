@@ -304,6 +304,163 @@ function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
 }
 
 /**
+ * Authoritative validation of a roster selection against the CURRENT Run —
+ * difficulty, schedule/reset, content, composition — for Publish and Update:
+ * WITHDRAWN rows excluded, active Character, Booster Access, assigned role
+ * offered, weekly availability and cross-Run reservations (hard blockers),
+ * composition warnings acknowledgeable, one selected Booster per User, legal
+ * signup status transitions. Returns the publish payload; throws on blockers.
+ */
+async function planAuthoritativeRoster(
+  run: NonNullable<Awaited<ReturnType<typeof runRepository.findById>>>,
+  roster: { selectedSignupIds: string[]; externalBoosters: ExternalBooster[] },
+  signups: RosterSignupRow[],
+  selections: Map<string, CharacterRole | null>,
+  acknowledgeWarnings: boolean,
+) {
+  const knownIds = new Set(signups.map((signup) => signup.id));
+  for (const signupId of selections.keys()) {
+    if (!knownIds.has(signupId)) {
+      throw new DomainError("NOT_FOUND", "Signup was not found.", 404);
+    }
+    if (signups.find((signup) => signup.id === signupId)?.status === "WITHDRAWN") {
+      throw new DomainError("SIGNUP_WITHDRAWN", "Withdrawn signups cannot be selected.");
+    }
+  }
+  const inspected = signups.map((signup) => ({
+    ...inspectSignup(signup, run),
+    // The role being accepted comes from the given selection (Update sends the
+    // manager's current roles). A requested role must be one the offer
+    // volunteered; a single-role offer resolves itself; otherwise null, which
+    // validateRosterDraft reports as a missing-role blocker.
+    selectedRole: !selections.has(signup.id)
+      ? signup.selectedRole
+      : signup.participationType !== "BOOSTER"
+        ? null
+        : selections.get(signup.id)
+          ? resolveSelectedRole(signup, selections.get(signup.id))
+          : signup.offeredRoles.length === 1
+            ? signup.offeredRoles[0]!
+            : null,
+    draftSelected: selections.has(signup.id),
+    scheduleConflicts: [] as CharacterScheduleConflict[],
+    runCommitments: [] as CharacterRunCommitment[],
+    wclPerformance: [],
+  }));
+  const selected = inspected.filter(
+    (item) => item.draftSelected && item.status !== "WITHDRAWN",
+  );
+  const validation = validateRosterDraft({
+    runStatus: run.status,
+    selected: selected.map(asMember),
+    targets: {
+      tanks: run.desiredTankCount,
+      healers: run.desiredHealerCount,
+      dps: run.desiredDpsCount,
+    },
+    externalBoosters: roster.externalBoosters,
+  });
+
+  if (!validation.canPublish) {
+    throw new DomainError(
+      "ROSTER_VALIDATION_FAILED",
+      validation.blockers[0]?.message ?? "This roster cannot be published.",
+    );
+  }
+  if (validation.warnings.length > 0 && !acknowledgeWarnings) {
+    throw new DomainError(
+      "ROSTER_VALIDATION_FAILED",
+      "Acknowledge composition warnings before publishing.",
+    );
+  }
+
+  // Cross-Run Character reservation + weekly unavailability for every selected
+  // BOOSTER at publish time. Existing draft selection is preserved even when
+  // conflicted — publish is the hard stop.
+  const selectedCharacters = selected
+    .filter((item) => item.participationType === "BOOSTER" && item.character)
+    .map((item) => ({
+      id: item.character!.id,
+      name: item.character!.name,
+      region: item.character!.region,
+    }));
+  if (selectedCharacters.length > 0) {
+    const conflictsByCharacter = await getScheduleConflictsForCharacters({
+      targetRunId: run.id,
+      scheduledStartAt: run.scheduledStartAt,
+      difficulty: run.difficulty,
+      characters: selectedCharacters,
+    });
+    const conflicted = selected
+      .filter((item) => item.participationType === "BOOSTER" && item.character)
+      .map((item) => ({
+        characterId: item.character!.id,
+        characterLabel: `${item.character!.name}-${item.character!.realm}`,
+        conflicts: conflictsByCharacter.get(item.character!.id) ?? [],
+      }))
+      .filter((row) => row.conflicts.length > 0);
+    assertRosterPublishableForSchedule(conflicted);
+  }
+
+  const notSelectedIds = inspected
+    .filter((item) => item.status !== "WITHDRAWN" && !item.draftSelected)
+    .map((item) => item.id);
+
+  for (const item of selected) {
+    if (item.status !== "SELECTED" && item.status !== "WITHDRAWN") {
+      assertSignupTransition(item.status, "SELECTED");
+    }
+  }
+  for (const item of inspected) {
+    if (item.status !== "WITHDRAWN" && !item.draftSelected && item.status !== "NOT_SELECTED") {
+      assertSignupTransition(item.status, "NOT_SELECTED");
+    }
+  }
+
+  let nextStatus: RunStatus = run.status;
+  if (run.status === "OPEN") {
+    assertRunTransition("OPEN", "ROSTERING");
+    assertRunTransition("ROSTERING", "PUBLISHED");
+    nextStatus = "PUBLISHED";
+  } else if (run.status === "ROSTERING") {
+    assertRunTransition("ROSTERING", "PUBLISHED");
+    nextStatus = "PUBLISHED";
+  }
+
+  const selectedSelections = selected.map((item) => ({
+    signupId: item.id,
+    // LOOTBUDDY slots publish with null publishedRole; BOOSTER slots carry
+    // their assigned role (resolved against the offer by resolveSelectedRole).
+    selectedRole: item.participationType === "BOOSTER" ? item.selectedRole : null,
+  }));
+
+  const boosterByUser = new Map<string, string>();
+  for (const item of selected) {
+    if (item.participationType !== "BOOSTER") continue;
+    const prior = boosterByUser.get(item.userId);
+    if (prior && prior !== item.id) {
+      throw new DomainError(
+        "INVALID_ROSTER_SELECTION",
+        "A user can have at most one selected booster offer. Remove the duplicate before saving.",
+      );
+    }
+    boosterByUser.set(item.userId, item.id);
+  }
+
+  return {
+    validation,
+    publish: {
+      selectedSelections,
+      selectedCharacterIds: selectedCharacters.map((row) => row.id),
+      scheduledStartAt: run.scheduledStartAt,
+      notSelectedSignupIds: notSelectedIds,
+      fromStatus: run.status,
+      runStatus: nextStatus,
+    },
+  };
+}
+
+/**
  * Roster orchestration. Draft selection is persisted on RunRosterEntry and is
  * not RunSignup.status. Publish copies the draft into SELECTED / NOT_SELECTED
  * and snapshots each BOOSTER's draft selectedRole onto RunSignup.publishedRole
@@ -503,10 +660,15 @@ export const rosterService = {
           roster.selectedSignupIds.length === 0 &&
           publishedSelection.length > 0 &&
           roster.version === 1,
-        /** Saved draft differs from the live published roster — Update Roster before Start. */
+        /** A roster-relevant Run setting changed since Publish / Update Roster. */
+        runChangedSinceAck: roster.runChangedSinceAck,
+        /** Latest explicit Publish Roster intent — sent back by Publish (repost) for compare-and-set. */
+        postRevision: roster.postRevision,
+        /** Saved draft or Run settings differ from the accepted roster — Update Roster before Start. */
         hasUnpublishedChanges: hasUnpublishedRosterChanges({
           publishedAt: roster.publishedAt,
           version: roster.version,
+          runChangedSinceAck: roster.runChangedSinceAck,
           draft: roster.selections,
           signups,
         }),
@@ -880,15 +1042,8 @@ export const rosterService = {
     const run = await loadEditableRun(user, input.runId);
     const roster = await rosterRepository.ensure(input.runId);
     await rosterRepository.assertVersion(roster, input.version);
-    const signups = await rosterRepository.listSignups(input.runId);
-    if (
-      roster.publishedAt &&
-      roster.version === 1 &&
-      roster.selectedSignupIds.length === 0 &&
-      signups.some((signup) => signup.status === "SELECTED")
-    ) {
-      throw new DomainError("INVALID_ROSTER_SELECTION", "Edit the published roster first, then add the player.");
-    }
+    // A legacy published roster with an unseeded draft is seeded from its live
+    // lineup inside the same transaction (addManagedBoosterAtomic).
 
     const candidate = await signupService.validateManagedBoosterCandidate({
       run,
@@ -975,6 +1130,15 @@ export const rosterService = {
     return view.validation;
   },
 
+  /**
+   * Publish Roster.
+   * - Never published: the first authoritative publication of the SAVED draft
+   *   (validated against the CURRENT Run), Run → PUBLISHED, and one explicit
+   *   post intent so the bot posts the first Discord roster message.
+   * - Already published (API compatibility): accepts the saved draft like
+   *   Update Roster — no new post intent. The roster UI uses updateRoster /
+   *   repostRoster for published rosters instead.
+   */
   async publishRoster(
     user: AuthenticatedUser,
     input: { runId: string; version: number; acknowledgeWarnings: boolean },
@@ -990,76 +1154,12 @@ export const rosterService = {
 
     const roster = await rosterRepository.ensure(input.runId);
     await rosterRepository.assertVersion(roster, input.version);
-
     const signups = await rosterRepository.listSignups(input.runId);
-    const inspected = signups.map((signup) => ({
-      ...inspectSignup(signup, run),
-      draftSelected: roster.selectedSignupIds.includes(signup.id),
-      scheduleConflicts: [] as CharacterScheduleConflict[],
-      runCommitments: [] as CharacterRunCommitment[],
-      wclPerformance: [],
-    }));
-    const selected = inspected.filter(
-      (item) => item.draftSelected && item.status !== "WITHDRAWN",
-    );
-    const validation = validateRosterDraft({
-      runStatus: run.status,
-      selected: selected.map(asMember),
-      targets: {
-        tanks: run.desiredTankCount,
-        healers: run.desiredHealerCount,
-        dps: run.desiredDpsCount,
-      },
-      externalBoosters: roster.externalBoosters,
-    });
 
-    if (!validation.canPublish) {
-      throw new DomainError(
-        "ROSTER_VALIDATION_FAILED",
-        validation.blockers[0]?.message ?? "This roster cannot be published.",
-      );
-    }
-    if (validation.warnings.length > 0 && !input.acknowledgeWarnings) {
-      throw new DomainError(
-        "ROSTER_VALIDATION_FAILED",
-        "Acknowledge composition warnings before publishing.",
-      );
-    }
-
-    const selectedIds = selected.map((item) => item.id);
-
-    // Cross-Run Character reservation + weekly unavailability for every selected
-    // BOOSTER at publish time. Existing draft selection is preserved even when
-    // conflicted — publish is the hard stop.
-    const selectedCharacters = selected
-      .filter((item) => item.participationType === "BOOSTER" && item.character)
-      .map((item) => ({
-        id: item.character!.id,
-        name: item.character!.name,
-        region: item.character!.region,
-      }));
-    if (selectedCharacters.length > 0) {
-      const conflictsByCharacter = await getScheduleConflictsForCharacters({
-        targetRunId: input.runId,
-        scheduledStartAt: run.scheduledStartAt,
-        difficulty: run.difficulty,
-        characters: selectedCharacters,
-      });
-      const conflicted = selected
-        .filter((item) => item.participationType === "BOOSTER" && item.character)
-        .map((item) => ({
-          characterId: item.character!.id,
-          characterLabel: `${item.character!.name}-${item.character!.realm}`,
-          conflicts: conflictsByCharacter.get(item.character!.id) ?? [],
-        }))
-        .filter((row) => row.conflicts.length > 0);
-      assertRosterPublishableForSchedule(conflicted);
-    }
-
-    const publishedSelection = inspected.filter((item) => item.status === "SELECTED");
+    const publishedSelection = signups.filter((signup) => signup.status === "SELECTED");
     if (
       roster.publishedAt &&
-      selectedIds.length === 0 &&
+      roster.selectedSignupIds.length === 0 &&
       publishedSelection.length > 0 &&
       roster.version === 1
     ) {
@@ -1068,53 +1168,98 @@ export const rosterService = {
         "Seed the draft from the published roster before publishing a replacement.",
       );
     }
-    const notSelectedIds = inspected
-      .filter((item) => item.status !== "WITHDRAWN" && !item.draftSelected)
-      .map((item) => item.id);
 
-    for (const item of selected) {
-      if (item.status !== "SELECTED" && item.status !== "WITHDRAWN") {
-        assertSignupTransition(item.status, "SELECTED");
-      }
-    }
-    for (const item of inspected) {
-      if (item.status !== "WITHDRAWN" && !item.draftSelected && item.status !== "NOT_SELECTED") {
-        assertSignupTransition(item.status, "NOT_SELECTED");
-      }
-    }
-
-    let nextStatus: RunStatus = run.status;
-    if (run.status === "OPEN") {
-      assertRunTransition("OPEN", "ROSTERING");
-      assertRunTransition("ROSTERING", "PUBLISHED");
-      nextStatus = "PUBLISHED";
-    } else if (run.status === "ROSTERING") {
-      assertRunTransition("ROSTERING", "PUBLISHED");
-      nextStatus = "PUBLISHED";
-    }
-
-    const selectedSelections = selected.map((item) => ({
-      signupId: item.id,
-      // LOOTBUDDY slots publish with null publishedRole; BOOSTER slots carry
-      // the draft assignment (already validated by resolveSelectedRole / validateRosterDraft).
-      selectedRole: item.participationType === "BOOSTER" ? item.selectedRole : null,
-    }));
+    const plan = await planAuthoritativeRoster(run, roster, signups, new Map(roster.selections.map((row) => [row.signupId, row.selectedRole])), input.acknowledgeWarnings);
 
     await rosterRepository.publishAtomic({
       runId: run.id,
       rosterId: roster.id,
       expectedVersion: input.version,
-      selectedSelections,
-      selectedCharacterIds: selectedCharacters.map((row) => row.id),
-      scheduledStartAt: run.scheduledStartAt,
-      notSelectedSignupIds: notSelectedIds,
-      fromStatus: run.status,
-      runStatus: nextStatus,
+      ...plan.publish,
       publisherId: user.id,
       runTitle: run.title,
     });
 
-    return validation;
+    return plan.validation;
+  },
+
+  /**
+   * Update Roster — the one action for changing an already published roster:
+   * the manager's current selection (roles included) is validated against the
+   * CURRENT Run (difficulty, schedule, content, composition, access,
+   * availability, reservations), saved into the draft and accepted as the
+   * published roster in ONE transaction. Clears the "Run changed" flag, keeps
+   * the Run PUBLISHED and bumps the version so the CURRENT Discord roster
+   * message is edited in place — it never posts a new one. On any failure the
+   * previous published roster, the draft and the dirty state stay as they were.
+   */
+  async updateRoster(
+    user: AuthenticatedUser,
+    input: {
+      runId: string;
+      version: number;
+      selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+      acknowledgeWarnings: boolean;
+    },
+  ) {
+    const run = await loadEditableRun(user, input.runId);
+    const roster = await rosterRepository.ensure(input.runId);
+    await rosterRepository.assertVersion(roster, input.version);
+    if (!roster.publishedAt || run.status !== "PUBLISHED") {
+      throw new DomainError(
+        "INVALID_ROSTER_SELECTION",
+        "Publish the roster first — Update Roster changes a published roster.",
+      );
+    }
+    const signups = await rosterRepository.listSignups(input.runId);
+    const requested = new Map<string, CharacterRole | null>();
+    for (const selection of input.selections) {
+      if (requested.has(selection.signupId) && requested.get(selection.signupId) !== selection.selectedRole) {
+        throw new DomainError("INVALID_ROSTER_SELECTION", "The same signup was selected twice with different roles.");
+      }
+      requested.set(selection.signupId, selection.selectedRole);
+    }
+
+    const plan = await planAuthoritativeRoster(run, roster, signups, requested, input.acknowledgeWarnings);
+
+    await rosterRepository.updatePublishedAtomic({
+      runId: run.id,
+      rosterId: roster.id,
+      expectedVersion: input.version,
+      draftSelections: plan.publish.selectedSelections,
+      ...plan.publish,
+      publisherId: user.id,
+      runTitle: run.title,
+    });
+    return plan.validation;
+  },
+
+  /**
+   * Publish Roster on an already published, clean roster: explicitly post the
+   * current roster to Discord AGAIN as a NEW message (the old one stays and is
+   * no longer kept in sync). Only records the intent — postRevision + 1 with a
+   * compare-and-set on the expected version AND postRevision — the bot posts.
+   * Never changes membership/roles, never notifies players. A roster with
+   * unpublished changes must be updated first.
+   */
+  async repostRoster(user: AuthenticatedUser, input: { runId: string; version: number; postRevision: number }) {
+    const run = await loadEditableRun(user, input.runId);
+    if (run.status !== "PUBLISHED") {
+      throw new DomainError("INVALID_ROSTER_SELECTION", "Only a published roster can be posted again.");
+    }
+    const roster = await rosterRepository.ensure(input.runId);
+    const result = await rosterRepository.requestRepostAtomic({
+      rosterId: roster.id,
+      runId: run.id,
+      expectedVersion: input.version,
+      expectedPostRevision: input.postRevision,
+    });
+    await activityRepository.create({
+      userId: user.id,
+      type: "ROSTER_POSTED",
+      message: `${user.name} posted the roster of ${run.title} to Discord again.`,
+    });
+    return result;
   },
 };
 

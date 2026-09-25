@@ -523,7 +523,7 @@ describe("published roster replacement and the Start lock", () => {
   it("S. Update Roster edits the existing Discord roster post in place (no second post)", async () => {
     const { runId, cSignup } = await publishedRun();
     await discordSyncService.recordRunChannel({ runId, channelId: "prestart-chan" });
-    await discordSyncService.recordRosterPost({ runId, channelId: "prestart-chan", messageId: "prestart-roster-msg" });
+    await discordSyncService.recordRosterPost({ runId, channelId: "prestart-chan", messageId: "prestart-roster-msg", postRevision: 1 });
     let work = await discordSyncService.listSyncWork();
     expect(work.roster.some((item) => item.runId === runId)).toBe(false);
 

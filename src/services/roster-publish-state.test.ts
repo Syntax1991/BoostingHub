@@ -15,6 +15,7 @@ describe("hasUnpublishedRosterChanges", () => {
   it("is false before anything was published", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: null,
         version: 3,
         draft: [{ signupId: "a", selectedRole: "HEALER" }],
@@ -26,6 +27,7 @@ describe("hasUnpublishedRosterChanges", () => {
   it("is false for a freshly published roster (draft == published, roles included)", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 4,
         draft: [
@@ -40,6 +42,7 @@ describe("hasUnpublishedRosterChanges", () => {
   it("membership: published A, draft A+B → dirty", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 5,
         draft: [
@@ -54,14 +57,17 @@ describe("hasUnpublishedRosterChanges", () => {
   it("membership: published A, draft B (replacement) → dirty; draft empty after seeding → dirty", () => {
     const signups = [booster("a", "SELECTED", "HEALER"), booster("b", "PENDING")];
     expect(
-      hasUnpublishedRosterChanges({ publishedAt: PUBLISHED_AT, version: 5, draft: [{ signupId: "b", selectedRole: "HEALER" }], signups }),
+      hasUnpublishedRosterChanges({
+        runChangedSinceAck: false, publishedAt: PUBLISHED_AT, version: 5, draft: [{ signupId: "b", selectedRole: "HEALER" }], signups }),
     ).toBe(true);
-    expect(hasUnpublishedRosterChanges({ publishedAt: PUBLISHED_AT, version: 5, draft: [], signups })).toBe(true);
+    expect(hasUnpublishedRosterChanges({
+        runChangedSinceAck: false, publishedAt: PUBLISHED_AT, version: 5, draft: [], signups })).toBe(true);
   });
 
   it("role: published A HEALER, draft A DPS → dirty", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 5,
         draft: [{ signupId: "a", selectedRole: "DPS" }],
@@ -73,6 +79,7 @@ describe("hasUnpublishedRosterChanges", () => {
   it("a never-seeded draft (version 1, empty, published selection exists) is clean", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 1,
         draft: [],
@@ -84,6 +91,7 @@ describe("hasUnpublishedRosterChanges", () => {
   it("ignores draft rows of WITHDRAWN signups (Publish ignores them too)", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 6,
         draft: [
@@ -99,6 +107,7 @@ describe("hasUnpublishedRosterChanges", () => {
     // Published A withdrew (no longer SELECTED); the draft row is ignored → published {} vs draft {} → clean.
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 6,
         draft: [{ signupId: "a", selectedRole: "HEALER" }],
@@ -110,6 +119,7 @@ describe("hasUnpublishedRosterChanges", () => {
   it("a legacy published slot without publishedRole matches any draft role", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 6,
         draft: [{ signupId: "a", selectedRole: "TANK" }],
@@ -121,10 +131,34 @@ describe("hasUnpublishedRosterChanges", () => {
   it("lootbuddy slots never compare roles", () => {
     expect(
       hasUnpublishedRosterChanges({
+        runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 6,
         draft: [{ signupId: "l", selectedRole: "DPS" }],
         signups: [lootbuddy("l", "SELECTED")],
+      }),
+    ).toBe(false);
+  });
+
+  it("changed Run settings (runChangedSinceAck) make an otherwise identical published roster dirty", () => {
+    const input = {
+      publishedAt: PUBLISHED_AT,
+      version: 4,
+      draft: [{ signupId: "a", selectedRole: "HEALER" as const }],
+      signups: [booster("a", "SELECTED", "HEALER")],
+    };
+    expect(hasUnpublishedRosterChanges({ ...input, runChangedSinceAck: false })).toBe(false);
+    expect(hasUnpublishedRosterChanges({ ...input, runChangedSinceAck: true })).toBe(true);
+  });
+
+  it("runChangedSinceAck is ignored before the first publish (nothing to acknowledge yet)", () => {
+    expect(
+      hasUnpublishedRosterChanges({
+        runChangedSinceAck: true,
+        publishedAt: null,
+        version: 2,
+        draft: [],
+        signups: [],
       }),
     ).toBe(false);
   });

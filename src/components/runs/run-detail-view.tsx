@@ -49,6 +49,7 @@ export function RunDetailView({
             unmarkedCount={data.attendance.manager?.summary.unmarked ?? 0}
             finalSetupPreview={data.finalSetupPreview}
             rosterHasUnpublishedChanges={Boolean(data.manager?.roster.hasUnpublishedChanges)}
+            addBooster={data.manager?.roster.canEdit ? { rosterVersion: data.manager.roster.version } : null}
             externalBoosters={
               data.manager?.roster.canEdit
                 ? { boosters: data.manager.roster.externalBoosters, rosterVersion: data.manager.roster.version }

@@ -70,11 +70,10 @@ describe("run and signup state machines", () => {
     expect(isSignupWindowOpen("PUBLISHED", true)).toBe(false);
   });
 
-  it("derives lifecycle capabilities from status and signup history", () => {
+  it("derives lifecycle capabilities from status — editable until Start, signup history never locks", () => {
     const draft = getRunLifecycleCapabilities({
       status: "DRAFT",
       signupsOpen: false,
-      hasSignupHistory: false,
       actorIsAdmin: false,
     });
     expect(draft.canOpen).toBe(true);
@@ -85,10 +84,9 @@ describe("run and signup state machines", () => {
     const afterSignup = getRunLifecycleCapabilities({
       status: "OPEN",
       signupsOpen: true,
-      hasSignupHistory: true,
       actorIsAdmin: true,
     });
-    expect(afterSignup.canEditIdentity).toBe(false);
+    expect(afterSignup.canEditIdentity).toBe(true);
     expect(afterSignup.canEditPlanning).toBe(true);
     expect(afterSignup.canReassignRaidLead).toBe(true);
     expect(afterSignup.canCloseSignups).toBe(true);
@@ -96,21 +94,24 @@ describe("run and signup state machines", () => {
     const published = getRunLifecycleCapabilities({
       status: "PUBLISHED",
       signupsOpen: false,
-      hasSignupHistory: true,
       actorIsAdmin: true,
     });
-    expect(published.canEdit).toBe(false);
+    expect(published.canEdit).toBe(true);
+    expect(published.canEditIdentity).toBe(true);
+    expect(published.canEditPlanning).toBe(true);
     expect(published.canCancel).toBe(true);
     expect(published.canStart).toBe(true);
     expect(published.canComplete).toBe(false);
     expect(published.canManageAttendance).toBe(false);
-    expect(published.canReassignRaidLead).toBe(false);
+    expect(published.canReassignRaidLead).toBe(true);
+    expect(
+      getRunLifecycleCapabilities({ status: "PUBLISHED", signupsOpen: false, actorIsAdmin: false }).canReassignRaidLead,
+    ).toBe(false);
     expect(published.canReopenSignups).toBe(false);
 
     const inProgress = getRunLifecycleCapabilities({
       status: "IN_PROGRESS",
       signupsOpen: false,
-      hasSignupHistory: true,
       actorIsAdmin: true,
     });
     expect(inProgress.canStart).toBe(false);
@@ -118,6 +119,12 @@ describe("run and signup state machines", () => {
     expect(inProgress.canComplete).toBe(true);
     expect(inProgress.canCancel).toBe(false);
     expect(inProgress.canEdit).toBe(false);
+    expect(inProgress.canReassignRaidLead).toBe(false);
+    for (const status of ["COMPLETED", "CANCELLED"] as const) {
+      const terminal = getRunLifecycleCapabilities({ status, signupsOpen: false, actorIsAdmin: true });
+      expect(terminal.canEdit).toBe(false);
+      expect(terminal.canReassignRaidLead).toBe(false);
+    }
   });
 });
 

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "column.public.run_discord_post.lastRosterPostRevision",
+    "label": "Add column \"lastRosterPostRevision\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lastRosterPostRevision",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lastRosterPostRevision\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "lastRosterPostRevision"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lastRosterPostRevision\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"lastRosterPostRevision\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lastRosterPostRevision\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "lastRosterPostRevision"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_roster.postRevision",
+    "label": "Add column \"postRevision\" to \"run_roster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "postRevision",
+        "table": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"postRevision\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_roster",
+          "postRevision"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"postRevision\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster\" ADD COLUMN \"postRevision\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"postRevision\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_roster",
+          "postRevision"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_roster.runChangedSinceAck",
+    "label": "Add column \"runChangedSinceAck\" to \"run_roster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "runChangedSinceAck",
+        "table": "run_roster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"runChangedSinceAck\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_roster",
+          "runChangedSinceAck"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"runChangedSinceAck\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster\" ADD COLUMN \"runChangedSinceAck\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"runChangedSinceAck\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_roster",
+          "runChangedSinceAck"
+        ]
+      }
+    ]
+  }
+]

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
 import { syncOnce } from "@/discord-bot/sync-loop";
+import type { RosterEmbedData } from "@/services/discord-sync.service";
 import { clearGuildEmojiCache } from "@/discord-bot/class-emoji-lookup";
 
 // The Guild emoji snapshot cache is process-wide; start every test cold.
@@ -441,6 +442,103 @@ describe("syncOnce — confirmed-deleted Run channel quiescence", () => {
       { kind: "channel-gone", channelId: DEAD },
       { kind: "channel-gone", channelId: DEAD },
     ]);
+  });
+});
+
+describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
+  const RUN = "aaaaaaaa-aaaa-4aaa-8aaa-rrrrrrrrrrr1";
+  const RUN_CHAN = "run-chan-roster";
+  const CURRENT_MSG = "roster-m1";
+  const rosterData: RosterEmbedData = {
+    runId: RUN,
+    runTitle: "Heroic Run",
+    raidName: "The Venomous Abyss",
+    productLabel: "The Venomous Abyss",
+    contentSummary: "The Venomous Abyss 8/8",
+    difficulty: "HEROIC",
+    publishedAt: "2026-09-20T20:00:00.000Z",
+    version: 3,
+    targets: { tanks: 2, healers: 4 },
+    groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
+    totalSelected: 0,
+  };
+
+  /** Run channel whose CURRENT roster message can be fetched + edited (unless `messageGone`). */
+  function setup(item: { mode?: "POST" | "REFRESH"; postRevision?: number | null; existingMessageId: string | null }, messageGone = false) {
+    const { client } = makeDiscordClient(
+      new Map<string, Child>([
+        [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+        [RUN_CHAN, { id: RUN_CHAN, name: "tue-1800-hc-unsaved-lead", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+        [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+      ]),
+    );
+    const edit = vi.fn().mockResolvedValue(undefined);
+    const fetchChannel = client.channels.fetch;
+    client.channels.fetch = vi.fn(async (id: string) => {
+      const channel = await fetchChannel(id);
+      if (id !== RUN_CHAN || !channel) return channel;
+      return {
+        ...channel,
+        messages: {
+          fetch: async (messageId: string) => {
+            if (messageGone || messageId !== CURRENT_MSG) throw new Error("Unknown Message");
+            return { id: messageId, edit };
+          },
+        },
+      };
+    });
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [
+        {
+          runId: RUN,
+          existingChannelId: RUN_CHAN,
+          existingRunChannelId: RUN_CHAN,
+          desiredChannelName: "tue-1800-hc-unsaved-lead",
+          targetBucket: "CURRENT",
+          ...item,
+        },
+      ],
+    });
+    (api.getRosterEmbedData as ReturnType<typeof vi.fn>).mockResolvedValue(rosterData);
+    const send = () => (client.channels.cache.get(RUN_CHAN) as { send: ReturnType<typeof vi.fn> }).send;
+    return { client, api, edit, send };
+  }
+
+  const recorded = (api: BotApiClient) =>
+    (api.recordDiscordState as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1] as Record<string, unknown>);
+
+  it("POST (explicit Publish) sends a NEW message even though a current one exists, and records the fulfilled postRevision", async () => {
+    const { client, api, edit, send } = setup({ mode: "POST", postRevision: 2, existingMessageId: CURRENT_MSG });
+    await syncOnce(client, botEnv(), api);
+    expect(edit).not.toHaveBeenCalled();
+    expect(send()).toHaveBeenCalledTimes(1);
+    expect(recorded(api)).toEqual([
+      { kind: "roster", channelId: RUN_CHAN, messageId: `msg-${RUN_CHAN}-1`, postRevision: 2 },
+    ]);
+  });
+
+  it("REFRESH (Save / Update) edits the current message in place and records no postRevision", async () => {
+    const { client, api, edit, send } = setup({ mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG });
+    await syncOnce(client, botEnv(), api);
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(send()).not.toHaveBeenCalled();
+    expect(recorded(api)).toEqual([{ kind: "roster", channelId: RUN_CHAN, messageId: CURRENT_MSG }]);
+  });
+
+  it("REFRESH whose current message was deleted re-sends it (recovery) without claiming a postRevision", async () => {
+    const { client, api, send } = setup({ mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG }, true);
+    await syncOnce(client, botEnv(), api);
+    expect(send()).toHaveBeenCalledTimes(1);
+    expect(recorded(api)).toEqual([{ kind: "roster", channelId: RUN_CHAN, messageId: `msg-${RUN_CHAN}-1` }]);
+  });
+
+  it("a work item without a mode (older web build) keeps the legacy edit-in-place behaviour", async () => {
+    const { client, api, edit, send } = setup({ existingMessageId: CURRENT_MSG });
+    await syncOnce(client, botEnv(), api);
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(send()).not.toHaveBeenCalled();
   });
 });
 
@@ -1647,6 +1745,8 @@ function makeApi(input: {
     existingRunChannelId: string | null;
     desiredChannelName: string;
     targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+    mode?: "POST" | "REFRESH";
+    postRevision?: number | null;
   }>;
   start?: Array<{
     runId: string;

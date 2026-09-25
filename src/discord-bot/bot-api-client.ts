@@ -111,6 +111,9 @@ export class BotApiClient {
         existingRunChannelId: string | null;
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
+        /** POST = explicit Publish (send a NEW message); REFRESH/absent = edit the current one. */
+        mode?: "POST" | "REFRESH";
+        postRevision?: number | null;
       }>;
       start: Array<{
         runId: string;
@@ -237,7 +240,7 @@ export class BotApiClient {
           messageId: string;
           classEmojiFingerprint?: string;
         }
-      | { kind: "roster"; channelId: string; messageId: string }
+      | { kind: "roster"; channelId: string; messageId: string; postRevision?: number }
       | { kind: "start"; channelId: string; messageId: string; voiceChannelId: string | null }
       | {
           kind: "archive-artifacts";

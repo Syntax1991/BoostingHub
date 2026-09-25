@@ -16,12 +16,14 @@ type ManualAddOptions = NonNullable<Awaited<ReturnType<typeof getRosterManualAdd
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
- * Add Player: rosters a registered player's Character as a normal Booster
- * signup (never an External Booster). Player search and the Character list
- * come from the server, which applies the normal signup eligibility rules;
- * Add to Roster saves the slot into the roster draft in one step.
+ * Add Booster: rosters a registered BoostingHub player's Character as a normal
+ * Booster signup (never an External Booster). Player search and the Character
+ * list come from the server, which applies the normal signup eligibility rules
+ * against the Run's CURRENT difficulty/schedule; Add to Roster saves the slot
+ * into the roster draft in one step (a legacy published roster is seeded in
+ * the same transaction). Used from the Run header and the Roster tab.
  */
-export function AddPlayerDialog({
+export function AddBoosterDialog({
   runId,
   rosterVersion,
   onClose,
@@ -156,11 +158,13 @@ export function AddPlayerDialog({
     >
       <div className="border-b border-border px-4 py-3">
         <h2 id={titleId} className="text-sm font-semibold">
-          Add Player
+          Add Booster
         </h2>
         <p className="mt-1 text-xs text-muted">
-          Add a registered player who did not sign up, e.g. a last-minute replacement. They join the roster draft
-          as a normal Booster — same access, availability and schedule rules as any signup.
+          Add a registered BoostingHub player who did not sign up, e.g. a last-minute replacement: choose the
+          player, one of their eligible characters and the role. They join the roster draft as a normal Booster —
+          same access, availability and schedule rules as any signup. Players without an account go under External
+          Boosters.
         </p>
       </div>
       <div className="space-y-3 px-4 py-4 text-sm">

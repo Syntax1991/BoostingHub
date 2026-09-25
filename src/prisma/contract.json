@@ -3260,6 +3260,13 @@
                   "kind": "scalar"
                 }
               },
+              "lastRosterPostRevision": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "lastRosterVersion": {
                 "nullable": true,
                 "type": {
@@ -3423,6 +3430,9 @@
                 },
                 "id": {
                   "column": "id"
+                },
+                "lastRosterPostRevision": {
+                  "column": "lastRosterPostRevision"
                 },
                 "lastRosterVersion": {
                   "column": "lastRosterVersion"
@@ -4052,6 +4062,13 @@
                   "kind": "scalar"
                 }
               },
+              "postRevision": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "publishedAt": {
                 "nullable": true,
                 "type": {
@@ -4063,6 +4080,13 @@
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runChangedSinceAck": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
                   "kind": "scalar"
                 }
               },
@@ -4171,11 +4195,17 @@
                 "id": {
                   "column": "id"
                 },
+                "postRevision": {
+                  "column": "postRevision"
+                },
                 "publishedAt": {
                   "column": "publishedAt"
                 },
                 "publishedById": {
                   "column": "publishedById"
+                },
+                "runChangedSinceAck": {
+                  "column": "runChangedSinceAck"
                 },
                 "runId": {
                   "column": "runId"
@@ -8854,6 +8884,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "lastRosterPostRevision": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
                 "lastRosterVersion": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
@@ -9546,6 +9581,15 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "postRevision": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "publishedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -9555,6 +9599,15 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "runChangedSinceAck": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
                 },
                 "runId": {
                   "codecId": "pg/text@1",
@@ -11721,7 +11774,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "7047ab4203b0ba0258b8d66343044c9319e1071c6bafb3a4a315a2fef9e458cd"
+    "storageHash": "af5737a76482ba8a717a13bc9facad3bbca86f5813c46f2cc67573ac736abd9e"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",
