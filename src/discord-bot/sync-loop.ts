@@ -19,9 +19,13 @@ import {
 } from "@/discord-bot/voice-channels";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
-import { isDiscordUnknownChannelError, isDiscordCannotDmError } from "@/discord-bot/discord-api-errors";
 import {
-  ARCHIVE_TRANSCRIPT_MESSAGE_CAP,
+  isDiscordCannotDmError,
+  isDiscordPermissionError,
+  isDiscordUnknownChannelError,
+} from "@/discord-bot/discord-api-errors";
+import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
+import {
   buildArchiveServerInfoContent,
   buildArchiveTranscriptFilename,
   buildArchiveTranscriptHtml,
@@ -1131,70 +1135,6 @@ async function tryEditMessage(
   }
 }
 
-function isDiscordPermissionError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code = (error as { code?: unknown }).code;
-  // 50001 Missing Access, 50013 Missing Permissions
-  return code === 50001 || code === 50013 || code === "50001" || code === "50013";
-}
-
-async function fetchMessagesForTranscript(
-  channel: TextChannel,
-  cap = ARCHIVE_TRANSCRIPT_MESSAGE_CAP,
-): Promise<TranscriptMessage[]> {
-  const collected: Array<{
-    id: string;
-    createdTimestamp: number;
-    author: {
-      id: string;
-      displayName?: string | null;
-      username?: string | null;
-      discriminator?: string | null;
-    };
-    content: string;
-    embeds: Array<{ title?: string | null; description?: string | null }>;
-  }> = [];
-  let before: string | undefined;
-
-  while (collected.length < cap) {
-    const limit = Math.min(100, cap - collected.length);
-    const batch = await channel.messages.fetch({ limit, ...(before ? { before } : {}) });
-    if (batch.size === 0) break;
-    for (const message of batch.values()) {
-      collected.push({
-        id: message.id,
-        createdTimestamp: message.createdTimestamp,
-        author: {
-          id: message.author.id,
-          displayName: "displayName" in message.author ? (message.author as { displayName?: string }).displayName : null,
-          username: message.author.username,
-          discriminator: message.author.discriminator,
-        },
-        content: message.content ?? "",
-        embeds: message.embeds.map((embed) => ({
-          title: embed.title ?? null,
-          description: embed.description ?? null,
-        })),
-      });
-    }
-    const oldest = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp)[0];
-    before = oldest?.id;
-    if (batch.size < limit) break;
-  }
-
-  collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-  return collected.slice(0, cap).map((message) => ({
-    id: message.id,
-    createdAt: new Date(message.createdTimestamp).toISOString(),
-    authorDisplayName: message.author.displayName || message.author.username || "Unknown",
-    authorUsername: message.author.username || "unknown",
-    authorDiscriminator: message.author.discriminator || "0",
-    authorId: message.author.id,
-    content: message.content,
-    embeds: message.embeds,
-  }));
-}
-
 /**
  * Channel retirement (app-archive, COMPLETED, or CANCELLED): never moves the
  * Run channel into an archive category. Builds the HTML transcript for website
@@ -1258,7 +1198,7 @@ async function syncArchiveArtifacts(
 
   let messages: TranscriptMessage[];
   try {
-    messages = await fetchMessagesForTranscript(runChannel as TextChannel);
+    messages = (await fetchChannelTranscript(runChannel as TextChannel)).messages;
   } catch (error) {
     if (isDiscordPermissionError(error)) {
       console.warn(
