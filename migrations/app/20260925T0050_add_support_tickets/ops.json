@@ -1,0 +1,365 @@
+[
+  {
+    "id": "table.discord_ticket_panel",
+    "label": "Create table \"discord_ticket_panel\"",
+    "summary": "Creates table \"discord_ticket_panel\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "discord_ticket_panel"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"discord_ticket_panel\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"discord_ticket_panel\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"discord_ticket_panel\"",
+        "sql": "CREATE TABLE \"public\".\"discord_ticket_panel\" (\n  \"channelId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastSignature\" text,\n  \"messageId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"discord_ticket_panel\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"discord_ticket_panel\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.support_ticket",
+    "label": "Create table \"support_ticket\"",
+    "summary": "Creates table \"support_ticket\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"support_ticket\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"support_ticket\"",
+        "sql": "CREATE TABLE \"public\".\"support_ticket\" (\n  \"activeKey\" text,\n  \"archiveMessageId\" text,\n  \"channelId\" text,\n  \"channelName\" text,\n  \"closeLockUntil\" timestamptz,\n  \"closedAt\" timestamptz,\n  \"closedByDiscordUserId\" text,\n  \"closingStartedAt\" timestamptz,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"creatorDiscordUserId\" text NOT NULL,\n  \"creatorDisplayName\" text NOT NULL,\n  \"creatorUserId\" text,\n  \"description\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastError\" text,\n  \"number\" int4 NOT NULL,\n  \"openedAt\" timestamptz,\n  \"reference\" text,\n  \"reportedBoosterLabel\" text,\n  \"reportedDiscordUserId\" text,\n  \"status\" text DEFAULT 'OPENING' NOT NULL,\n  \"subject\" text NOT NULL,\n  \"transcriptFilename\" text,\n  \"transcriptHtml\" text,\n  \"transcriptMessageCount\" int4,\n  \"transcriptTruncated\" bool DEFAULT false NOT NULL,\n  \"type\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"support_ticket_status_check_4cc10313\" CHECK (\"status\" IN ('OPENING', 'OPEN', 'CLOSING', 'CLOSED', 'FAILED')),\n  CONSTRAINT \"support_ticket_type_check_1c44511b\" CHECK (\"type\" IN ('ADMIN_SUPPORT', 'RAID_SUPPORT', 'MYTHIC_PLUS_SUPPORT', 'GENERAL_SUPPORT', 'REPORT_BOOSTER'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"support_ticket\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.support_ticket.support_ticket_number_key",
+    "label": "Add unique constraint on \"support_ticket\" (number)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "support_ticket_number_key",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"support_ticket_number_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_number_key",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"support_ticket_number_key\"",
+        "sql": "ALTER TABLE \"public\".\"support_ticket\" ADD CONSTRAINT \"support_ticket_number_key\" UNIQUE (\"number\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"support_ticket_number_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_number_key",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.support_ticket.support_ticket_activeKey_key",
+    "label": "Add unique constraint on \"support_ticket\" (activeKey)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "support_ticket_activeKey_key",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"support_ticket_activeKey_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_activeKey_key",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"support_ticket_activeKey_key\"",
+        "sql": "ALTER TABLE \"public\".\"support_ticket\" ADD CONSTRAINT \"support_ticket_activeKey_key\" UNIQUE (\"activeKey\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"support_ticket_activeKey_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_activeKey_key",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.support_ticket.support_ticket_channelId_key",
+    "label": "Add unique constraint on \"support_ticket\" (channelId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "support_ticket_channelId_key",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"support_ticket_channelId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_channelId_key",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"support_ticket_channelId_key\"",
+        "sql": "ALTER TABLE \"public\".\"support_ticket\" ADD CONSTRAINT \"support_ticket_channelId_key\" UNIQUE (\"channelId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"support_ticket_channelId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_channelId_key",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.support_ticket.support_ticket_creatorDiscordUserId_idx_f59d8d30",
+    "label": "Create index \"support_ticket_creatorDiscordUserId_idx_f59d8d30\" on \"support_ticket\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "support_ticket_creatorDiscordUserId_idx_f59d8d30",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"support_ticket_creatorDiscordUserId_idx_f59d8d30\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket_creatorDiscordUserId_idx_f59d8d30\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"support_ticket_creatorDiscordUserId_idx_f59d8d30\"",
+        "sql": "CREATE INDEX \"support_ticket_creatorDiscordUserId_idx_f59d8d30\" ON \"public\".\"support_ticket\" (\"creatorDiscordUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"support_ticket_creatorDiscordUserId_idx_f59d8d30\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket_creatorDiscordUserId_idx_f59d8d30\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.support_ticket.support_ticket_creatorUserId_idx_da5f686b",
+    "label": "Create index \"support_ticket_creatorUserId_idx_da5f686b\" on \"support_ticket\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "support_ticket_creatorUserId_idx_da5f686b",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"support_ticket_creatorUserId_idx_da5f686b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket_creatorUserId_idx_da5f686b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"support_ticket_creatorUserId_idx_da5f686b\"",
+        "sql": "CREATE INDEX \"support_ticket_creatorUserId_idx_da5f686b\" ON \"public\".\"support_ticket\" (\"creatorUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"support_ticket_creatorUserId_idx_da5f686b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket_creatorUserId_idx_da5f686b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.support_ticket.support_ticket_status_idx_e98638ab",
+    "label": "Create index \"support_ticket_status_idx_e98638ab\" on \"support_ticket\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "support_ticket_status_idx_e98638ab",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"support_ticket_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"support_ticket_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"support_ticket_status_idx_e98638ab\" ON \"public\".\"support_ticket\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"support_ticket_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"support_ticket_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.support_ticket.support_ticket_creatorUserId_fkey",
+    "label": "Add foreign key \"support_ticket_creatorUserId_fkey\" on \"support_ticket\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "support_ticket_creatorUserId_fkey",
+        "table": "support_ticket"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"support_ticket_creatorUserId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_creatorUserId_fkey",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"support_ticket_creatorUserId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"support_ticket\"\nADD CONSTRAINT \"support_ticket_creatorUserId_fkey\"\nFOREIGN KEY (\"creatorUserId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"support_ticket_creatorUserId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "support_ticket_creatorUserId_fkey",
+          "public",
+          "\"public\".\"support_ticket\""
+        ]
+      }
+    ]
+  }
+]
