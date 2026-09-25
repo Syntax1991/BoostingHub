@@ -1017,7 +1017,22 @@ export const discordSyncService = {
     /** PENDING RunDiscordAnnouncement rows (channel lifecycle), createdAt ASC. */
     runAnnouncements: RunAnnouncementWorkItem[];
   }> {
-    const runs = await runRepository.listManaged();
+    // Only Runs that can still produce Discord work get the full Run load:
+    // first-provisioning / Voice candidates by Run state, plus every Run that
+    // still holds live Discord identity. Fully retired historical Runs are
+    // skipped — they would generate no work below.
+    const [baseRunIds, liveIdentityRunIds, pendingAnnouncements] = await Promise.all([
+      runRepository.listDiscordSyncBaseRunIds(),
+      runDiscordPostRepository.listLiveIdentityRunIds(),
+      runDiscordAnnouncementRepository.listPending(50),
+    ]);
+    const candidateRunIds = [...new Set([...baseRunIds, ...liveIdentityRunIds])];
+    const runs = await runRepository.listManagedByIds(candidateRunIds);
+    // One batched post read serves both the Run lanes and pending announcements.
+    const postsByRunId = await runDiscordPostRepository.listByRunIds([
+      ...candidateRunIds,
+      ...pendingAnnouncements.map((row) => row.runId),
+    ]);
     const channels: ChannelSyncWorkItem[] = [];
     const voiceChannels: DiscordRunVoiceChannelWorkItem[] = [];
     const signups: SignupSyncWorkItem[] = [];
@@ -1026,11 +1041,10 @@ export const discordSyncService = {
     const raidInvites: RaidInviteWorkItem[] = [];
     const classEmojiFingerprint = options.classEmojiFingerprint ?? "";
 
-    const pendingAnnouncements = await runDiscordAnnouncementRepository.listPending(50);
     const pendingAnnouncementRunIds = new Set(pendingAnnouncements.map((row) => row.runId));
 
     for (const run of runs) {
-      const post = await runDiscordPostRepository.findByRunId(run.id);
+      const post = postsByRunId.get(run.id) ?? null;
       const targetBucket = resolveDiscordTarget(run, now);
 
       // Channel reconciliation is fully independent of message state and of
@@ -1192,18 +1206,11 @@ export const discordSyncService = {
 
     const notificationDms = await buildPendingNotificationDms();
 
-    const runChannelByRunId = new Map<string, string | null>();
-    for (const announcement of pendingAnnouncements) {
-      if (!runChannelByRunId.has(announcement.runId)) {
-        const post = await runDiscordPostRepository.findByRunId(announcement.runId);
-        runChannelByRunId.set(announcement.runId, post?.runChannelId ?? null);
-      }
-    }
     const runAnnouncements: RunAnnouncementWorkItem[] = pendingAnnouncements.map((row) => ({
       announcementId: row.id,
       runId: row.runId,
       type: row.type,
-      runChannelId: runChannelByRunId.get(row.runId) ?? null,
+      runChannelId: postsByRunId.get(row.runId)?.runChannelId ?? null,
       previousScheduledStartAt: row.previousScheduledStartAt,
       scheduledStartAt: row.scheduledStartAt,
       productLabel: row.productLabel,

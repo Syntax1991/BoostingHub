@@ -1,4 +1,5 @@
 import { orm } from "@/lib/prisma";
+import { or } from "@prisma/orm-postgres/orm-client";
 import { asNumberOrNull, asString, asStringOrNull } from "@/lib/persistence";
 
 export type RunDiscordPostRecord = {
@@ -75,6 +76,43 @@ export const runDiscordPostRepository = {
   async findByRunId(runId: string): Promise<RunDiscordPostRecord | null> {
     const row = await orm.RunDiscordPost.where({ runId }).first();
     return row ? mapRow(row as Record<string, unknown>) : null;
+  },
+
+  /** One query for many Runs, keyed by runId. Runs without a row are absent. */
+  async listByRunIds(runIds: readonly string[]): Promise<Map<string, RunDiscordPostRecord>> {
+    const uniqueIds = [...new Set(runIds)];
+    const byRunId = new Map<string, RunDiscordPostRecord>();
+    if (uniqueIds.length === 0) return byRunId;
+    const rows = await orm.RunDiscordPost.where((post) => post.runId.in(uniqueIds)).all();
+    for (const row of rows) {
+      const record = mapRow(row as Record<string, unknown>);
+      byRunId.set(record.runId, record);
+    }
+    return byRunId;
+  },
+
+  /**
+   * Run ids whose Discord identity can still produce sync work: a live Run
+   * channel (reconcile/retire), a Voice channel (reconcile/retire-if-empty),
+   * or a signup post identity (updates; the roster and Final Setup lanes also
+   * target the Run channel, falling back to the signup channel). A retired
+   * channel's leftover signup identity stays here until the bot confirms the
+   * channel gone (`clearDeletedChannelIdentity`). Roster/start message markers,
+   * archive transcripts and Raid Invite history alone are history, not work.
+   * Selects runId only — never transcript HTML.
+   */
+  async listLiveIdentityRunIds(): Promise<string[]> {
+    const rows = await orm.RunDiscordPost.where((post) =>
+      or(
+        post.runChannelId.isNotNull(),
+        post.voiceChannelId.isNotNull(),
+        post.signupChannelId.isNotNull(),
+        post.signupMessageId.isNotNull(),
+      ),
+    )
+      .select("runId")
+      .all();
+    return rows.map((row) => asString((row as Record<string, unknown>).runId));
   },
 
   async listAll(): Promise<RunDiscordPostRecord[]> {
