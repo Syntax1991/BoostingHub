@@ -1340,6 +1340,144 @@ describe("syncOnce — Run lifecycle channel announcements", () => {
   });
 });
 
+describe("syncOnce — retired Run channel identity convergence", () => {
+  const RETIRED = "retired-chan";
+  const unknownChannelError = () => Object.assign(new Error("Unknown Channel"), { code: 10003 });
+  const permissionError = (code: number) => Object.assign(new Error(code === 50001 ? "Missing Access" : "Missing Permissions"), { code });
+
+  /**
+   * A retiring Run channel. `artifactsDone` = transcript already recorded, so
+   * only the delete path runs. Reconciliation reads the cached channel; the
+   * retirement path is the first `client.channels.fetch` of it — overrides
+   * target that fetch so each test exercises exactly the branch it names.
+   */
+  function retiredSetup(runId: string, artifactsDone: boolean) {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      [RETIRED, { id: RETIRED, name: "closed-sat-2200-hc-vip-7of9-titan", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId,
+          existingRunChannelId: RETIRED,
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          retireChannel: true,
+          archiveArtifactsNeeded: !artifactsDone,
+          archiveCloseMessageId: artifactsDone ? "close-1" : null,
+          archiveTranscriptMessageId: artifactsDone ? "transcript-1" : null,
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: "lead-1",
+          panelName: "The Venomous Abyss",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+    const channel = client.channels.cache.get(RETIRED) as { delete: ReturnType<typeof vi.fn> };
+    return { client, api, channel };
+  }
+
+  /** From the `nth` fetch of RETIRED on, `client.channels.fetch` resolves via `handler`. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Discord.js Client mock
+  function overrideRetiredFetch(client: any, nth: number, handler: () => Promise<unknown>) {
+    const original = client.channels.fetch.getMockImplementation();
+    let calls = 0;
+    client.channels.fetch.mockImplementation(async (id: string) => {
+      if (id !== RETIRED) return original(id);
+      calls += 1;
+      return calls >= nth ? handler() : original(id);
+    });
+  }
+
+  function stateClears(api: ReturnType<typeof makeApi>, runId: string) {
+    return (api.recordDiscordState as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([id, update]) => id === runId && (update.kind === "clear-channel" || update.kind === "channel-gone"),
+    );
+  }
+
+  it("successful delete of the retired channel records channel-gone for exactly that channel (no clear-channel)", async () => {
+    const { client, api, channel } = retiredSetup("run-retired-ok", true);
+    await syncOnce(client, botEnv(), api);
+    expect(channel.delete).toHaveBeenCalledTimes(1);
+    expect(stateClears(api, "run-retired-ok")).toEqual([["run-retired-ok", { kind: "channel-gone", channelId: RETIRED }]]);
+  });
+
+  it("delete → Unknown Channel: confirmed gone, records channel-gone(exact id)", async () => {
+    const { client, api, channel } = retiredSetup("run-retired-unknown", true);
+    channel.delete.mockRejectedValueOnce(unknownChannelError());
+    await syncOnce(client, botEnv(), api);
+    expect(stateClears(api, "run-retired-unknown")).toEqual([
+      ["run-retired-unknown", { kind: "channel-gone", channelId: RETIRED }],
+    ]);
+  });
+
+  it("delete → Missing Permissions / Missing Access: identity kept, nothing cleared (retried next pass)", async () => {
+    for (const code of [50013, 50001]) {
+      const runId = `run-retired-perm-${code}`;
+      const { client, api, channel } = retiredSetup(runId, true);
+      channel.delete.mockRejectedValueOnce(permissionError(code));
+      await syncOnce(client, botEnv(), api);
+      expect(channel.delete).toHaveBeenCalledTimes(1);
+      expect(stateClears(api, runId)).toEqual([]);
+    }
+  });
+
+  it("delete → other Discord error: identity kept for retry", async () => {
+    const { client, api, channel } = retiredSetup("run-retired-5xx", true);
+    channel.delete.mockRejectedValueOnce(Object.assign(new Error("Service Unavailable"), { status: 503 }));
+    await syncOnce(client, botEnv(), api);
+    expect(stateClears(api, "run-retired-5xx")).toEqual([]);
+  });
+
+  it("delete target resolves but is not deletable: never claimed deleted, identity kept", async () => {
+    const { client, api } = retiredSetup("run-retired-undeletable", true);
+    overrideRetiredFetch(client, 1, async () => ({ id: RETIRED, isTextBased: () => true }));
+    await syncOnce(client, botEnv(), api);
+    expect(stateClears(api, "run-retired-undeletable")).toEqual([]);
+  });
+
+  it("transcript fetch → Unknown Channel: records channel-gone(exact id), posts nothing", async () => {
+    const { client, api, channel } = retiredSetup("run-transcript-unknown", false);
+    overrideRetiredFetch(client, 1, async () => {
+      throw unknownChannelError();
+    });
+    await syncOnce(client, botEnv(), api);
+    expect(stateClears(api, "run-transcript-unknown")).toEqual([
+      ["run-transcript-unknown", { kind: "channel-gone", channelId: RETIRED }],
+    ]);
+    expect(channel.delete).not.toHaveBeenCalled();
+    const logChannel = client.channels.cache.get("archive-log-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(logChannel.send).not.toHaveBeenCalled();
+  });
+
+  it("transcript fetch → Missing Access / Missing Permissions: identity kept, nothing cleared", async () => {
+    for (const code of [50001, 50013]) {
+      const runId = `run-transcript-perm-${code}`;
+      const { client, api, channel } = retiredSetup(runId, false);
+      overrideRetiredFetch(client, 1, async () => {
+        throw permissionError(code);
+      });
+      await syncOnce(client, botEnv(), api);
+      expect(stateClears(api, runId)).toEqual([]);
+      expect(channel.delete).not.toHaveBeenCalled();
+    }
+  });
+
+  it("transcript target exists but is not a usable text channel: identity kept, nothing cleared", async () => {
+    const { client, api, channel } = retiredSetup("run-transcript-nontext", false);
+    overrideRetiredFetch(client, 1, async () => ({ id: RETIRED, isTextBased: () => false }));
+    await syncOnce(client, botEnv(), api);
+    expect(stateClears(api, "run-transcript-nontext")).toEqual([]);
+    expect(channel.delete).not.toHaveBeenCalled();
+  });
+});
+
 describe("syncOnce — app-archive transcript artifacts", () => {
   it("posts Server-Info+HTML and details embed to the archive log channel once", async () => {
     const children = new Map<string, Child>([
@@ -1389,7 +1527,8 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn>; setParent: ReturnType<typeof vi.fn> };
     expect(archivedChannel.setParent).not.toHaveBeenCalled();
     expect(archivedChannel.delete).toHaveBeenCalledTimes(1);
-    expect(api.recordDiscordState).toHaveBeenCalledWith("run-archived", { kind: "clear-channel" });
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-archived", { kind: "channel-gone", channelId: "archive-chan" });
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-archived", { kind: "clear-channel" });
   });
 
   it("persists HTML without re-posting when Discord archive message ids already exist", async () => {
@@ -1434,7 +1573,8 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     });
     const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn> };
     expect(archivedChannel.delete).toHaveBeenCalledTimes(1);
-    expect(api.recordDiscordState).toHaveBeenCalledWith("run-html-backfill", { kind: "clear-channel" });
+    expect(api.recordDiscordState).toHaveBeenCalledWith("run-html-backfill", { kind: "channel-gone", channelId: "archive-chan" });
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-html-backfill", { kind: "clear-channel" });
   });
 
   it("does not post archive artifacts for schedule-based ARCHIVE holding", async () => {
