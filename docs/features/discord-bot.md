@@ -65,7 +65,7 @@ Preferred mode: each Run that becomes signup-available gets its own dedicated Di
 
 **Identity**: `RunDiscordPost.runChannelId` is the only authoritative identity, recorded the instant the channel is created — before any message is posted into it, so a crash between creation and posting can never cause a retry to create a second channel. The channel is **never located by name** afterward, since a rename changes the name but not the id.
 
-**Rename, not replace**: when the desired name changes (schedule/difficulty/raid-lead edit before roster lock), the sync pass calls `channel.setName(...)` on the *same* channel id. A completed/published Run's source fields are no longer editable through normal Run edit rules, so historical channels are never renamed after the fact.
+**Rename, not replace**: when the desired name changes (schedule / difficulty / loot / raid-lead edit — allowed until Start, `PUBLISHED` included), the sync pass calls `channel.setName(...)` on the *same* channel id, and the signup embed is edited in place (no re-announcement). A started / completed Run's fields are no longer editable, so historical channels are never renamed after the fact.
 
 **Channel retirement (not clone)**: when a Run is **COMPLETED**, **CANCELLED**, or **app-archived** (`Run.archivedAt`), the next sync pass posts Ticket-Tool archive artifacts to `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, then **deletes** the dedicated Run channel and records `channel-gone` for it (see *Retired channel identity* below). Weekly rollover for non-retired Runs still moves (never deletes) PAST/FUTURE channels into archive-category holding. A stored `runChannelId` is replaced with a newly created channel **only** when Discord confirms Unknown Channel (10003); Missing Access / rate limits / transient fetch failures keep the stored id and never recreate (avoids duplicate channels on bot restart). Channel reconciliation (name + category) records a confirmed Unknown Channel for a stored Run channel once as `channel-gone`, so a deleted channel stops coming back every poll; a channel that merely does not resolve (wrong type) keeps its stored id.
 
@@ -216,7 +216,20 @@ A **picked** User (on the roster or its saved draft) must give a reason: without
 
 ## Final roster embed
 
-Posted into the **same Run channel** as the signup embed (or the legacy global roster channel) when a roster is first published, and **edited in place** (never reposted) whenever `RunRoster.version` advances on republish. Selected Characters only — never the full offer set. One Run, one channel, both signup and roster information — no separate roster channel per Run in this MVP.
+Posted into the **same Run channel** as the signup embed (or the legacy global roster channel). One Run, one channel, both signup and roster information — no separate roster channel per Run in this MVP. Selected Characters only — never the full offer set.
+
+**Post vs refresh.** The roster lane decides per Run:
+
+| Condition | Mode | Bot action |
+| --- | --- | --- |
+| `RunRoster.postRevision > (RunDiscordPost.lastRosterPostRevision ?? 0)` | `POST` (carries `postRevision`) | sends a **new** message, even if a current one exists, and records it with `{ kind: "roster", messageId, postRevision }` — the new id becomes `rosterMessageId`, `lastRosterPostRevision` is set to the fulfilled revision |
+| otherwise, no message yet or `lastRosterVersion !== RunRoster.version` | `REFRESH` | edits the current `rosterMessageId` in place (Save / Update Roster, External Boosters, Raid Lead title change); if that message was deleted in Discord it is re-sent as recovery, without claiming a post revision |
+
+`postRevision` is advanced only by the first Publish and by an explicit **Publish Roster** repost (compare-and-set, see [roster-management.md](roster-management.md#publication)); Save and Update never advance it, so they never repost. Old roster messages stay in the channel as history and are no longer edited.
+
+**Legacy rows.** Rosters published before this change have `postRevision = 0` and `lastRosterPostRevision = null` (treated as 0): no POST is pending, so their existing message is only refreshed — never automatically reposted. The next explicit Publish Roster requests revision 1.
+
+**Delivery.** Recording is idempotent per revision: after the bot records revision N, later polls see no pending POST, and a double-submitted repost request can only advance the revision once. The bot does not provide exactly-once delivery across crashes: if it crashes after Discord accepted the new message but before the web app recorded it, the next pass sends the message again (at-least-once for that window).
 
 Groups: Tanks, Healers, Melee DPS, Ranged DPS, and Lootbuddies (omitted when empty). Melee/ranged classification comes from `attackTypeForSpecialization` (`src/lib/wow-specializations.ts`) — the one authoritative (class, specialization) → attack-type table, so the bot never re-derives WoW class rules itself. Tank/Healer show a real target from the Run's desired composition counts; **melee/ranged DPS show a bare count with no denominator**, because `Run.desiredDpsCount` is one combined number with no melee/ranged split in the current schema — introducing a fake denominator was deliberately avoided rather than inventing new Run fields for cosmetics.
 

@@ -75,24 +75,26 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 ## Roster lifecycle and lock point
 
 - **Publish Roster** communicates the currently planned lineup. It does **not** freeze it.
-- **`PUBLISHED`** stays editable until Start (UI: "Published · Editable until Start"): select or drop signups, change assigned roles, **Add Player**, edit External Boosters — the Run stays `PUBLISHED`.
-- A saved draft that differs from the live published roster (membership or assigned role; `roster-publish-state.ts` `hasUnpublishedRosterChanges`) shows **Unpublished changes**; the primary action is then **Update Roster** (a republish). A freshly published roster, or a seeded draft identical to it, is clean.
-- **Start Run** (`PUBLISHED → IN_PROGRESS`) is the authoritative freeze. Start is refused while there are unpublished changes ("Roster has unpublished changes. Update the roster before starting the Run.") so a replacement is never silently left out. From `IN_PROGRESS` on the roster editor is read-only and every roster mutation (draft, roles, Add Player, External Boosters, publish) is rejected server-side.
+- **`PUBLISHED`** stays editable until Start (UI: "Published · Editable until Start"): select or drop signups, change assigned roles, **Add Booster**, edit External Boosters, and **Edit Run** — the Run stays `PUBLISHED`.
+- A published roster has **unpublished changes** (`roster-publish-state.ts` `hasUnpublishedRosterChanges`) when the saved draft differs from the live published roster (membership or assigned role) **or** a roster-relevant Run setting changed since it was last acknowledged (`RunRoster.runChangedSinceAck`, see [run-management.md](run-management.md#signup-history-does-not-freeze-the-run)). The primary action is then **Update Roster**. A freshly published roster, or a seeded draft identical to it, is clean.
+- **Start Run** (`PUBLISHED → IN_PROGRESS`) is the authoritative freeze. Start is refused while there are unpublished changes ("Roster has unpublished changes. Update the roster before starting the Run.") so a replacement or a changed Run setting is never silently left unacknowledged. From `IN_PROGRESS` on the roster editor is read-only and every roster mutation (draft, roles, Add Booster, External Boosters, publish, repost) is rejected server-side.
 - **Attendance Replace** (Attendance tab, `IN_PROGRESS` only) is the separate post-start operational substitution — it records a no-show and a replacement, it is not roster editing. See [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
 
-**Concurrency.** Every roster-writing transaction locks the `RunRoster` row first, re-reads its version and re-checks inside the transaction that the Run has not started. Start takes the same lock before it reads the published roster, so a concurrent Save / Update Roster / Add Player either commits first (and is included, or makes Start refuse with unpublished changes) or waits and then fails because the Run is `IN_PROGRESS`.
+**Concurrency.** Every roster-writing transaction locks the `RunRoster` row first, re-reads its version and re-checks inside the transaction that the Run has not started. Start takes the same lock before it reads the published roster, so a concurrent Save / Update Roster / Publish Roster / Add Booster / Run edit either commits first (and is included, or makes Start refuse with unpublished changes) or waits and then fails because the Run is `IN_PROGRESS`.
 
-## Add Player (registered players)
+## Add Booster (registered players)
 
-**Add Player** (Boosters card, managers only, while the roster is editable) adds a **registered** player who did not sign up — typically a last-minute replacement. Flow: search a player (server-side, `ACTIVE` accounts, name or Discord username, max 10 results, only id / name / Discord username exposed) → choose one of their Characters → role → **Add to Roster**.
+**Add Booster** adds a **registered** player who did not sign up — typically a last-minute replacement. It is offered in the Run header (next to **External Boosters** / **Edit Run**) and in the Roster tab's Boosters card, to managers only, while the roster is editable (`OPEN` / `ROSTERING` / `PUBLISHED`). Flow: search a player (server-side, `ACTIVE` accounts, name or Discord username, max 10 results, only id / name / Discord username exposed) → choose one of their Characters → role → **Add to Roster**.
 
 - The player is rostered as a normal **BOOSTER `RunSignup`** — never a `RunExternalBooster` — so My Runs, commitments, reservations, notifications, Discord, Final Setup, attendance and payout treat them like any pick.
-- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass: Character owned and active, Booster Access for the Run difficulty, a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts stay informational.
+- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass, always against the **current** Run (difficulty, schedule, content): Character owned and active, Booster Access for the Run difficulty, a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts stay informational.
 - An existing active offer for that Character is reused (the assigned role is added to its offered roles if missing); otherwise a normal `PENDING` offer is created. A `WITHDRAWN` offer is never revived — the player has to sign up again.
 - Atomic: the signup (reuse / role extension / creation) and the draft slot are written in one transaction with the Save Roster race checks and notifications (`rosterRepository.addManagedBoosterAtomic`). On any failure (version race, reservation race, withdrawal) nothing is left behind.
-- Disabled while the builder has unsaved local edits ("Save your current roster changes before adding a player.") — it is a server mutation and must not overwrite an unsaved draft.
+- Works directly on a legacy published roster whose draft was never seeded (`needsPublishSeed`): the same transaction first seeds the draft from the live published lineup (A, B, C keep their published roles) and then adds the new player (D). No separate "Edit Published Roster" step is needed and no published member is dropped.
+- On a published roster the addition is a saved draft change, so the roster shows unpublished changes; **Update Roster** accepts it and edits the current Discord roster post.
+- Disabled while the builder has unsaved local edits ("Save your current roster changes before adding a booster.") — it is a server mutation and must not overwrite an unsaved draft.
 - Logged as Activity `ROSTER_PLAYER_ADDED`.
-- Scope: registered **Boosters** only. Lootbuddies are added via their own signup or as External lootbuddies.
+- Scope: registered **Boosters** only. Players without an account are added as **External Boosters** (header dialog, below); Lootbuddies are added via their own signup or as External lootbuddies.
 
 ## External boosters
 
@@ -162,15 +164,27 @@ Commitments are derived only — no persisted `safe` / `committed` flags. They d
 
 ## Publication
 
-Explicit **Publish Roster** action (never a checkbox); on an already published roster it is labelled **Update Roster**.
+The Roster tab shows exactly one primary path per state (`resolveRosterActions`, `src/components/manage/roster-actions.ts`):
 
+| State | Actions | Discord |
+| --- | --- | --- |
+| Never published, local edits | **Save Roster** (+ Discard) | nothing — Save never posts |
+| Never published, saved | **Publish Roster** — first authoritative publication | posts the first roster message (`postRevision 0 → 1`) |
+| Published, local edits / saved changes / changed Run settings | **Update Roster** — ONE action: accepts the current selection as the published roster | edits the **current** roster message in place |
+| Published, clean (`PUBLISHED` Run) | **Publish Roster** — explicit repost | sends a **new** roster message |
+
+- **Update Roster** (`rosterService.updateRoster` → `rosterRepository.updatePublishedAtomic`) validates the submitted selection against the current Run, then writes it as the draft and publishes it in one transaction (same row lock / version check / pre-start check as Publish) and clears `runChangedSinceAck`. A refused Update changes nothing. There is no separate Save step on a published roster.
+- **Publish Roster on a published roster** never changes membership, roles, statuses or notifications; it only requests a new Discord post. It is blocked while there are unpublished changes (Update first; `ROSTER_UNPUBLISHED_CHANGES`). The request is a compare-and-set on the expected roster `version` **and** the expected `RunRoster.postRevision` (`rosterRepository.requestRepostAtomic`): exactly one of two double-submitted requests advances `postRevision` to N + 1; the other fails with `ROSTER_ALREADY_CHANGED`. Logged as Activity `ROSTER_POSTED`.
+- Previous roster messages stay in the channel as history and are no longer updated; the newest posted message becomes the current `rosterMessageId`, which later Updates edit.
+
+The first publication, and Update Roster, run in one database transaction:
 In one database transaction:
 
 1. Draft-selected signups → `SELECTED`
 2. Other non-withdrawn candidates → `NOT_SELECTED`
 3. `WITHDRAWN` stays `WITHDRAWN`
 4. Run `OPEN` → `ROSTERING` → `PUBLISHED`, or `ROSTERING` → `PUBLISHED`
-5. Roster `state = PUBLISHED`, `version++`, `publishedAt`, `publishedById`
+5. Roster `state = PUBLISHED`, `version++`, `publishedAt`, `publishedById`, `runChangedSinceAck = false`; the first publication also sets `postRevision = 1` (the first post intent)
 6. Activity `ROSTER_PUBLISHED` (first time) or `ROSTER_UPDATED` (republish)
 7. `ROSTER_SELECTED` / `ROSTER_REMOVED` user notifications only for changes the player has not been told yet (see [user-notifications.md](user-notifications.md)). **Save Roster** already notifies (see below), so publishing a saved roster usually sends nothing new; Discord DM intent is snapshotted from preferences when the notification is created
 
@@ -182,9 +196,9 @@ A published run may still receive **new** `PENDING` signups if `signupsOpen` and
 
 ## Republish
 
-**Edit Published Roster** copies current `SELECTED` signups into the draft when the draft is still empty (`version === 1` and no entries). It does **not** revert signup statuses.
+**Edit Published Roster** copies current `SELECTED` signups into the draft when the draft is still empty (`version === 1` and no entries). It does **not** revert signup statuses. Add Booster performs the same seed itself.
 
-The published roster stays live until a replacement publish succeeds. The lead may add a newly arrived `PENDING` offer, **Add Player** for someone who never signed up, drop someone, and **Update Roster**. The Run stays `PUBLISHED`; Update Roster edits the existing Discord roster post in place and only notifies players about actual changes.
+The published roster stays live until an Update succeeds. The lead may add a newly arrived `PENDING` offer, **Add Booster** for someone who never signed up, drop someone, change roles, and **Update Roster**. The Run stays `PUBLISHED`; Update Roster edits the current Discord roster post in place and only notifies players about actual changes.
 
 `IN_PROGRESS` and `COMPLETED` runs reject draft mutation, publish, and republish. See [run-lifecycle-attendance.md](run-lifecycle-attendance.md).
 

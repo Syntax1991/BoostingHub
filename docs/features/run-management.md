@@ -90,32 +90,32 @@ A run may be `OPEN` or `ROSTERING` with `signupsOpen = false`. Closing the windo
 
 Centralized in `getRunLifecycleCapabilities` (`src/services/run-state.ts`). Views render server flags.
 
-| Status | Raid / difficulty | Schedule / composition / title / notes | Raid lead reassignment |
+| Status | Raid / difficulty / content / bosses | Schedule / loot / composition / notes / role ping | Raid lead reassignment |
 | --- | --- | --- | --- |
 | `DRAFT` | Editable | Editable | ADMIN only |
-| `OPEN` before signup history | Editable | Editable | ADMIN only |
-| `OPEN` / `ROSTERING` after signup history | Locked | Editable | ADMIN only |
-| `PUBLISHED` | Locked | Locked | Locked |
+| `OPEN` (with or without signups) | Editable | Editable | ADMIN only |
+| `ROSTERING` | Editable | Editable | ADMIN only |
+| `PUBLISHED` | Editable | Editable | ADMIN only |
 | `IN_PROGRESS` | Locked | Locked | Locked |
 | `COMPLETED` | Locked | Locked | Locked |
 | `CANCELLED` | Locked | Locked | Locked |
 
-`PUBLISHED` has no generic Edit Run in this feature. Cancellation may still be available.
+The rule is a single predicate, `canEditRunBeforeStart(status)` (`PRE_START_RUN_STATUSES`): a Run is editable until **Start Run**. Edit Run is available in `PUBLISHED` too. Server-side every edit returns `RUN_EDIT_LOCKED` once the Run has started, independent of what the UI showed. `MYTHIC` + `SAVED` stays invalid.
 
-## Signup-history lock
+## Signup history does not freeze the Run
 
-Once any persisted `RunSignup` row exists for the run, including `WITHDRAWN`, raid/content and difficulty stay immutable.
+Existing signups (including `WITHDRAWN`) no longer lock raid / content / difficulty. Changing them keeps every signup, offered role and the saved/published selection; nothing is silently deleted or auto-deselected. Eligibility (Booster Access for the **current** difficulty, lockouts, reservations, schedule conflicts, composition) is recalculated from the current Run state everywhere it is evaluated — roster builder, Update / Publish Roster, Add Booster and Start. Example: a Normal-only Booster selected for a Normal Run stays selected after the Run is changed to Heroic, but the roster shows the Booster Access blocker, Update Roster refuses the invalid lineup and Start is blocked until the lead replaces the player and updates the roster.
 
-Reason: historical signup meaning (BoosterAccess, lockouts, eligibility, player expectation) must not be rewritten.
+**Roster acknowledgement.** When a roster was already published, a roster-relevant edit — difficulty, raid content, planned boss count, schedule, loot type, or desired Tank/Healer/DPS counts — sets `RunRoster.runChangedSinceAck = true` in the same transaction. The published roster then shows "Run details changed since the roster was last published" and counts as having unpublished changes, so Start is refused until **Update Roster** (or the first Publish) acknowledges the change and clears the flag. Notes, the Discord role-ping flag and Raid Lead reassignment do not set it. Before the first publish nothing is set — the first Publish validates the current Run anyway.
 
-The identity update runs in a transaction and re-checks signup count so a concurrent signup cannot slip in between the check and the write.
+**Edit vs Start.** The Run edit transaction (`runRepository.updatePreStartAtomic`) locks the `RunRoster` row first — the same lock order as roster writes and Start — then re-reads the Run and refuses unless it is still pre-start. An edit that commits before Start marks the roster changed (Start then refuses); an edit that waits behind Start fails with `RUN_EDIT_LOCKED` and changes nothing.
 
 ## Raid lead reassignment
 
 - `RAID_LEAD` cannot reassign their run.
-- `ADMIN` may reassign while `DRAFT`, `OPEN`, or `ROSTERING`.
+- `ADMIN` may reassign throughout the pre-start lifecycle: `DRAFT`, `OPEN`, `ROSTERING` and `PUBLISHED`. Locked from `IN_PROGRESS`.
 - Target must be an eligible active `RAID_LEAD` or `ADMIN`.
-- Reassignment changes who may manage the run and is enforced in `RunService`.
+- Reassignment changes who may manage the run and is enforced in `RunService`. It does not mark the roster changed; the roster version is bumped so the current Discord roster post (whose title names the Raid Lead) is refreshed in place.
 
 ## Cancellation
 

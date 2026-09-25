@@ -122,7 +122,7 @@ Advertiser and Dawn gold are tracked on the settlement summary but are **not** p
 
 ### Raid Lead recipient identity
 
-`run.raidLeadId` is the KEEP cut recipient. Raid Lead reassignment is only allowed in `DRAFT` / `OPEN` / `ROSTERING`, so after `COMPLETED` (and after settlement finalization) the Run Raid Lead identity cannot change. Finalization already snapshots `raidLeadName` for display. No extra recipient user-id column is required.
+`run.raidLeadId` is the KEEP cut recipient. Raid Lead reassignment is only allowed before Start (`DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`), so after `COMPLETED` (and after settlement finalization) the Run Raid Lead identity cannot change. Finalization already snapshots `raidLeadName` for display. No extra recipient user-id column is required.
 
 ## Default Attendance Cut mapping
 
