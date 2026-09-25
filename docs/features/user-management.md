@@ -77,7 +77,7 @@ Error: `ROLE_CHANGE_BLOCKED_BY_ACTIVE_RUNS`.
 
 ## Discord Booster Applications
 
-Self-service creation of PENDING legacy `BoosterAccess` is disabled. Character pages show a Discord ticket CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative qualification store.
+Self-service creation of PENDING legacy `BoosterAccess` is disabled. Character pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative qualification store.
 
 See [booster-access-management.md](booster-access-management.md).
 

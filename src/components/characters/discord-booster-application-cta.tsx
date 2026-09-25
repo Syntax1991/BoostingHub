@@ -13,7 +13,7 @@ export function DiscordBoosterApplicationCta({
           rel="noopener noreferrer"
           className="mt-1 inline-block text-sm text-accent hover:underline"
         >
-          Open Discord Ticket
+          Apply via Discord
         </a>
       ) : (
         <p className="mt-1">Contact staff in Discord to apply.</p>

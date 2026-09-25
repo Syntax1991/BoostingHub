@@ -57,7 +57,7 @@ Unter **Characters**:
 2. Oder **Add Character** (Region / Realm / Name + Spec)
 3. **Account Access** und **Availability** prüfen
 
-**Booster-Zugang:** Für Booster-Signups brauchst du eine freigeschaltete Qualification (z. B. Heroic). Beantragung über Discord-Ticket — nicht in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
+**Booster-Zugang:** Für Booster-Signups brauchst du eine freigeschaltete Qualification (z. B. Heroic). Beantragung über Discord (**Apply via Discord**) — nicht in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
 ```
 
 Anhänge: `bo-01-dashboard.png`, `bo-02-characters.png`
@@ -141,7 +141,7 @@ Sign up (Pending)
 ### ✅ Checkliste
 1. Discord-Login (verknüpft Discord mit BoostingHub)
 2. Character(s) anlegen
-3. Booster-Zugang per Discord-Ticket beantragen
+3. Booster-Zugang über Discord beantragen (**Apply via Discord**)
 4. Anmelden: Website **Runs → Sign up** *oder* Discord-Buttons
 5. Status prüfen: **My Runs** / `/mysignups`, ggf. Withdraw / **Cancel Signup**
 ```

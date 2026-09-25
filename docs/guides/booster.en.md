@@ -41,7 +41,7 @@ Manage your WoW characters under **Characters**. To sign up as a booster you nee
 
 ### Booster access (qualification)
 
-To sign up as a **Booster** for a difficulty, you need an approved **Booster Qualification** (user + difficulty, e.g. Heroic). You request it through the community's Discord ticket process — there is no self-service form in the app. Without approval you can still sign up as a **Lootbuddy**.
+To sign up as a **Booster** for a difficulty, you need an approved **Booster Qualification** (user + difficulty, e.g. Heroic). You request it via Discord (**Apply via Discord**) — there is no self-service form in the app. Without approval you can still sign up as a **Lootbuddy**.
 
 ---
 
@@ -154,6 +154,6 @@ The dashboard and **My Runs** show whether you are selected and with which chara
 
 1. Sign in with Discord (links Discord to BoostingHub)
 2. Add character(s) under **Characters**
-3. Request booster access for the difficulty via Discord ticket
+3. Request Booster Access for the difficulty via Discord (**Apply via Discord**)
 4. Sign up: website **Runs → Sign up** *or* the Discord buttons in the run channel
 5. Check your status: **My Runs** / `/mysignups`; withdraw or **Cancel Signup** if needed
