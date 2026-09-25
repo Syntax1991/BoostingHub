@@ -318,38 +318,6 @@ It is off until configured:
 An id that does not resolve to a category is logged by the bot on every pass
 and nothing is created.
 
-## Optional: Discord Support tickets
-
-The bot can host a Support panel with private ticket channels (see
-`docs/features/discord-bot.md` § Support tickets). It is off while every
-`DISCORD_TICKET_*` variable is unset. Configure it as one group — the bot
-refuses to start with only some of them set:
-
-1. In Discord, create (or pick): the panel channel, a dedicated ticket category
-   (not a Run, voice or archive category), and a Staff-only archive log channel.
-   Note the ids of the Admin, Moderator, Raid Staff and M+ Staff roles.
-2. Give the bot, in the ticket category: **View Channel, Manage Channels, Send
-   Messages, Embed Links, Attach Files, Read Message History**; in the archive
-   log: **View Channel, Send Messages, Embed Links, Attach Files**; in the panel
-   channel: **View Channel, Send Messages, Embed Links, Read Message History**.
-   If the Staff roles are not mentionable, also allow **Mention @everyone, @here
-   and All Roles** in the ticket category (the opening ping is still limited to
-   the configured Staff roles). Do not grant Administrator, Manage Roles,
-   Manage Server, Manage Webhooks, Move Members or Speak.
-3. Add all seven `DISCORD_TICKET_*` ids to `/var/www/boostinghub/.env` and check
-   them with `env-status.py` (it flags a partial group as a problem).
-4. Deploy normally (the migration `20260925T0050_add_support_tickets` is
-   applied by the deploy), then restart the bot. On ready it posts the panel
-   once and logs `ticket panel: created`; later restarts log `unchanged` or
-   `edited` and never post a duplicate.
-
-Privacy notes: ticket channels deny `@everyone` explicitly; a reported
-Booster with a known Discord id is explicitly denied, but Discord members with
-the **Administrator** permission bypass channel overwrites. Attachments posted
-in tickets are never downloaded to the VPS — transcripts keep only filenames
-and Discord links. An `ORPHAN TICKET CHANNEL` log line names a channel that
-must be deleted manually.
-
 ## Production smoke checklist
 
 - [ ] `sudo -u boostinghub git -C /var/www/boostinghub rev-parse HEAD` is the expected SHA,
