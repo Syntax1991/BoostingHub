@@ -1,5 +1,6 @@
 import { mapExternalBoosters, type ExternalBooster } from "@/lib/external-booster";
 import { db, orm } from "@/lib/prisma";
+import { and, or } from "@prisma/orm-postgres/orm-client";
 import { DomainError } from "@/lib/errors";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
 import {
@@ -362,6 +363,36 @@ export const runRepository = {
 
   async listManaged(): Promise<RunListRecord[]> {
     const runs = await orm.Run
+      .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
+      .include("raidLead")
+      .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
+      .include("roster", (roster) => roster.include("entries").include("externalBoosters"))
+      .orderBy((run) => run.scheduledStartAt.asc())
+      .all();
+
+    return runs.map((run) => mapRun(run as Record<string, unknown>));
+  },
+
+  /**
+   * Discord sync: ids of Runs that may need Discord work even without any
+   * stored Discord identity — first signup provisioning (OPEN/ROSTERING; the
+   * week gate is applied by the sync itself, so a FUTURE Run is never lost)
+   * and temporary Voice provisioning (unarchived IN_PROGRESS). Ids only.
+   */
+  async listDiscordSyncBaseRunIds(): Promise<string[]> {
+    const rows = await orm.Run.where((run) =>
+      or(run.status.in(["OPEN", "ROSTERING"]), and(run.status.eq("IN_PROGRESS"), run.archivedAt.isNull())),
+    )
+      .select("id")
+      .all();
+    return rows.map((row) => asString((row as Record<string, unknown>).id));
+  },
+
+  /** Same projection and ordering as listManaged, limited to the given Run ids (one query). */
+  async listManagedByIds(ids: readonly string[]): Promise<RunListRecord[]> {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+    const runs = await orm.Run.where((run) => run.id.in(uniqueIds))
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("raidLead")
       .include("signups", (signup) => signup.include("offeredRoles").include("user").include("character"))
