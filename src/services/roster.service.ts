@@ -33,6 +33,10 @@ import {
 import { rosterRepository, type RosterSelection, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import { userRepository } from "@/repositories/user.repository";
+import { characterRepository } from "@/repositories/character.repository";
+import { signupService } from "@/services/signup.service";
+import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
@@ -48,7 +52,24 @@ import {
   type WclPerformanceRaidSegment,
 } from "@/services/character-wcl-performance.service";
 
+/**
+ * The roster stays editable until Start Run: Publish communicates the planned
+ * lineup, Start (PUBLISHED → IN_PROGRESS) freezes the lineup that actually
+ * raids. IN_PROGRESS / COMPLETED / CANCELLED are never editable here.
+ */
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
+
+async function loadEditableRun(user: AuthenticatedUser, runId: string) {
+  const run = await runRepository.findById(runId);
+  if (!run) {
+    throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+  }
+  assertCanManageRun(user, run);
+  if (!EDITABLE_RUN_STATUSES.includes(run.status)) {
+    throw new DomainError("INVALID_ROSTER_SELECTION", "The roster is locked once the run has started.");
+  }
+  return run;
+}
 
 type InspectedSignup = RosterSignupRow & {
   draftSelected: boolean;
@@ -102,6 +123,10 @@ function canonicalBoosters(candidates: InspectedSignup[]): RosterSignupCard[] {
 }
 
 /** Prefer character name; characterless Lootbuddy falls back to Class label. */
+function asPlayerName(player: { name?: unknown }): string {
+  return typeof player.name === "string" && player.name ? player.name : "Unknown player";
+}
+
 function participationLabel(input: {
   character: { name: string; realm: string } | null;
   lootbuddyClass: WowClass | null;
@@ -478,6 +503,13 @@ export const rosterService = {
           roster.selectedSignupIds.length === 0 &&
           publishedSelection.length > 0 &&
           roster.version === 1,
+        /** Saved draft differs from the live published roster — Update Roster before Start. */
+        hasUnpublishedChanges: hasUnpublishedRosterChanges({
+          publishedAt: roster.publishedAt,
+          version: roster.version,
+          draft: roster.selections,
+          signups,
+        }),
       },
       composition,
       raidBuffCoverage,
@@ -798,6 +830,114 @@ export const rosterService = {
         message: `Started rostering ${run.title}.`,
       });
     }
+  },
+
+  /** Add Player picker: bounded search over ACTIVE accounts for a Run the actor manages. */
+  async searchPlayers(user: AuthenticatedUser, input: { runId: string; query: string }) {
+    await loadEditableRun(user, input.runId);
+    return userRepository.searchActivePlayers(input.query, 10);
+  },
+
+  /** Add Player: the chosen player's Characters, split by the normal signup eligibility rules. */
+  async getManualAddOptions(user: AuthenticatedUser, input: { runId: string; userId: string }) {
+    const run = await loadEditableRun(user, input.runId);
+    const player = await userRepository.findById(input.userId);
+    if (!player) {
+      throw new DomainError("NOT_FOUND", "Player was not found.", 404);
+    }
+    const options = await signupService.listManagedBoosterOptions(run, input.userId);
+    return {
+      player: { id: input.userId, name: asPlayerName(player) },
+      eligible: options.eligible.map((option) => ({
+        characterId: option.characterId,
+        characterName: option.characterName,
+        realm: option.realm,
+        wowClass: option.wowClass,
+        specialization: option.specialization,
+        roles: option.roles,
+        defaultRole: option.defaultRole,
+      })),
+      ineligible: options.ineligible,
+    };
+  },
+
+  /**
+   * Add Player: rosters a registered User's Character as a normal BOOSTER
+   * signup — never an External Booster — so commitments, reservations, My
+   * Runs, notifications, Discord, Final Setup, attendance and payout treat it
+   * like any other pick. Eligibility is the self-signup rule set plus the
+   * roster's schedule-conflict check (no Raid Lead bypass). The signup
+   * (reused, role-extended or newly created) and the draft slot are written in
+   * one transaction (rosterRepository.addManagedBoosterAtomic), replacing that
+   * User's other Booster slot — a player holds at most one — with the same
+   * Save Roster notifications. On any failure nothing is left behind. A
+   * PUBLISHED Run stays PUBLISHED; Update Roster publishes the change.
+   */
+  async addRegisteredParticipant(
+    user: AuthenticatedUser,
+    input: { runId: string; version: number; userId: string; characterId: string; role: CharacterRole },
+  ) {
+    const run = await loadEditableRun(user, input.runId);
+    const roster = await rosterRepository.ensure(input.runId);
+    await rosterRepository.assertVersion(roster, input.version);
+    const signups = await rosterRepository.listSignups(input.runId);
+    if (
+      roster.publishedAt &&
+      roster.version === 1 &&
+      roster.selectedSignupIds.length === 0 &&
+      signups.some((signup) => signup.status === "SELECTED")
+    ) {
+      throw new DomainError("INVALID_ROSTER_SELECTION", "Edit the published roster first, then add the player.");
+    }
+
+    const candidate = await signupService.validateManagedBoosterCandidate({
+      run,
+      userId: input.userId,
+      characterId: input.characterId,
+      role: input.role,
+    });
+    const alreadyDraftSelected = candidate.existingSignupId
+      ? roster.selectedSignupIds.includes(candidate.existingSignupId)
+      : false;
+    if (!alreadyDraftSelected) {
+      const character = await characterRepository.findOwnedById(input.userId, input.characterId);
+      if (character) {
+        const scheduleConflicts = await getScheduleConflictsForCharacter({
+          targetRunId: input.runId,
+          scheduledStartAt: run.scheduledStartAt,
+          difficulty: run.difficulty,
+          character: { id: character.id, name: character.name, region: character.region },
+        });
+        assertCharacterSelectableForSchedule(`${character.name}-${character.realm}`, scheduleConflicts);
+      }
+    }
+
+    const result = await rosterRepository.addManagedBoosterAtomic({
+      rosterId: roster.id,
+      expectedVersion: input.version,
+      runId: input.runId,
+      runTitle: run.title,
+      scheduledStartAt: run.scheduledStartAt,
+      userId: input.userId,
+      characterId: input.characterId,
+      role: input.role,
+    });
+
+    if (run.status === "OPEN") {
+      assertRunTransition("OPEN", "ROSTERING");
+      await runRepository.updateStatus(run.id, "ROSTERING");
+      await activityRepository.create({
+        userId: user.id,
+        type: "ROSTERING_STARTED",
+        message: `Started rostering ${run.title}.`,
+      });
+    }
+    await activityRepository.create({
+      userId: user.id,
+      type: "ROSTER_PLAYER_ADDED",
+      message: `${user.name} added ${candidate.characterName} to the roster of ${run.title} as ${CHARACTER_ROLE_LABELS[input.role]}.`,
+    });
+    return result;
   },
 
   async preparePublishedRosterForEditing(user: AuthenticatedUser, input: { runId: string; version: number }) {

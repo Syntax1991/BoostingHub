@@ -32,6 +32,9 @@ The server re-reads authoritative state. Start requires:
 - the caller can manage the Run (`canManageRun`)
 - a published roster exists (`publishedAt`)
 - at least one currently `SELECTED` participant
+- **no unpublished roster changes** — the saved draft must match the published roster (membership and assigned roles); otherwise Start fails with "Roster has unpublished changes. Update the roster before starting the Run." (`ROSTER_UNPUBLISHED_CHANGES`). The Start dialog also warns, but the server check is authoritative.
+
+These checks run inside the Start transaction after it has locked the `RunRoster` row — the same lock every roster write takes first — so the snapshot always equals the published roster at the moment of Start; a concurrent roster write either commits before Start (and is checked) or waits and is rejected once the Run is `IN_PROGRESS`.
 
 Scheduled start time is **not** a blocker. Runs may start early or late.
 
@@ -45,7 +48,7 @@ Once the Run is `IN_PROGRESS` (and after `COMPLETED`):
 
 Attendance is the roster that entered the Run. Later roster edits cannot silently rewrite attendance rows.
 
-`PUBLISHED` roster editing before Start is unchanged.
+`PUBLISHED` roster editing before Start stays allowed (Start is the lock point — see [roster-management.md](roster-management.md#roster-lifecycle-and-lock-point)). Post-start substitutions go through **Replace** below, which records attendance; it does not reopen the roster editor.
 
 ## Attendance Snapshot
 

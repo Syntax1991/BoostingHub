@@ -637,7 +637,7 @@ describe("roster freeze after start", () => {
     );
   });
 
-  it("Start snapshots publishedRole even when the replacement draft role differs", async () => {
+  it("Start refuses an unpublished draft role change; after Update Roster it snapshots the new publishedRole", async () => {
     const runId = await createDraft(lead, { title: "Attendance published role snapshot" });
     await runService.openRun(lead, runId);
     const shamanChar = characters.user;
@@ -685,10 +685,19 @@ describe("roster freeze after start", () => {
     expect(preview.finalSetupPreview?.groups.healers.some((m) => m.participationType === "BOOSTER")).toBe(true);
     expect(preview.finalSetupPreview?.groups.dps.some((m) => m.participationType === "BOOSTER")).toBe(false);
 
+    // Start uses the published roster — a saved but unpublished change is refused, not ignored.
+    view = await rosterService.getRosterManagementView(lead, runId);
+    expect(view.roster.hasUnpublishedChanges).toBe(true);
+    await expectDomainCode(runService.startRun(lead, { runId }), "ROSTER_UNPUBLISHED_CHANGES");
+    expect((await runRepository.findById(runId))?.status).toBe("PUBLISHED");
+    expect(await orm.RunAttendance.where({ runId }).all()).toHaveLength(0);
+
+    await rosterService.publishRoster(lead, { runId, version: view.roster.version, acknowledgeWarnings: true });
+    expect((await rosterService.getRosterManagementView(lead, runId)).roster.hasUnpublishedChanges).toBe(false);
     await runService.startRun(lead, { runId });
     const manager = await attendanceService.getManagerAttendance(lead, runId);
     expect(manager.rows).toHaveLength(1);
-    expect(manager.rows[0]?.selectedRole).toBe("HEALER");
+    expect(manager.rows[0]?.selectedRole).toBe("DPS");
   });
 });
 

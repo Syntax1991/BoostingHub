@@ -8,10 +8,13 @@ import { renderFinalSetupText, type FinalSetupInput } from "@/lib/run-start-mess
 export function RunStartDialog({
   runId,
   finalSetup,
+  rosterHasUnpublishedChanges = false,
   onClose,
 }: {
   runId: string;
   finalSetup?: FinalSetupInput | null;
+  /** Supplemental warning only — the server refuses Start with unpublished roster changes. */
+  rosterHasUnpublishedChanges?: boolean;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -70,6 +73,12 @@ export function RunStartDialog({
         </h2>
       </div>
       <div className="space-y-4 px-4 py-4 text-sm">
+        {rosterHasUnpublishedChanges ? (
+          <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning">
+            Roster has unpublished changes. Update the roster before starting the Run — Start uses the published
+            roster.
+          </p>
+        ) : null}
         {error ? (
           <p id={errorId} role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2">
             {error}
