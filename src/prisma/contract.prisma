@@ -1,11 +1,16 @@
 // Boostting Bot domain contract.
 // Prisma 8 stores enums as text columns with CHECK constraints, not native PG enums.
 
+/// Hierarchical platform permissions: OWNER > ADMIN > RAID_LEAD > USER.
+/// OWNER is the protected platform owner (at most one — see User's partial
+/// unique index); it is only ever set by the explicit owner bootstrap, never
+/// by generic role management.
 enum AccountRole {
   @@type("pg/text@1")
   USER      = "USER"
   RAID_LEAD = "RAID_LEAD"
   ADMIN     = "ADMIN"
+  OWNER     = "OWNER"
 }
 
 enum AccountStatus {
@@ -255,6 +260,9 @@ model User {
   battleNetImportSessions BattleNetImportSession[]
   notifications        UserNotification[]
 
+  /// At most one OWNER, enforced by the database: a partial unique index over
+  /// the OWNER rows only, so two concurrent owner bootstraps cannot both commit.
+  @@index([accountRole], unique: true, where: "(\"accountRole\" = 'OWNER'::text)", name: "user_single_owner")
   @@map("user")
 }
 

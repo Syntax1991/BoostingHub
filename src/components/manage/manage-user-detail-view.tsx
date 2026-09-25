@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { hasOwnerAccess } from "@/auth/authorization";
 import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
@@ -18,7 +19,7 @@ import {
   DifficultyBadge,
   RoleBadge,
 } from "@/components/ui/badges";
-import { ChangeAccountRoleDialog } from "@/components/manage/change-account-role-dialog";
+import { AccountRoleAction } from "@/components/manage/account-role-action";
 import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
 import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
 import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
@@ -114,15 +115,20 @@ export function ManageUserDetailView({ data }: { data: Page }) {
             title="Account role"
             description={`${ROLE_LABELS[user.accountRole]} · platform permissions only.`}
             action={
-              <ChangeAccountRoleDialog
+              <AccountRoleAction
                 userId={user.id}
                 userName={user.name}
-                currentRole={user.accountRole as AccountRole}
+                accountRole={user.accountRole as AccountRole}
               />
             }
           />
           <div className="px-4 py-4">
             <AccountRoleBadge role={user.accountRole} />
+            {hasOwnerAccess(user.accountRole) ? (
+              <p className="mt-3 text-xs text-muted">
+                The Platform Owner has every Admin permission and cannot be changed through role management.
+              </p>
+            ) : null}
             <p className="mt-3 text-xs text-muted">
               BOOSTER / LOOTBUDDY are run participation types, not account roles.
             </p>

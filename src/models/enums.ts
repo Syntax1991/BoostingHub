@@ -3,8 +3,16 @@
  * Persistence CHECK constraints in the Prisma contract must stay in sync with these values.
  */
 
-export const ACCOUNT_ROLES = ["USER", "RAID_LEAD", "ADMIN"] as const;
+/** Every persisted account role (hierarchy: OWNER > ADMIN > RAID_LEAD > USER). */
+export const ACCOUNT_ROLES = ["USER", "RAID_LEAD", "ADMIN", "OWNER"] as const;
 export type AccountRole = (typeof ACCOUNT_ROLES)[number];
+
+/**
+ * Roles the generic "Change role" flow may assign. OWNER is deliberately
+ * absent: ownership is only ever set by the explicit owner bootstrap.
+ */
+export const MANAGEABLE_ACCOUNT_ROLES = ["USER", "RAID_LEAD", "ADMIN"] as const satisfies readonly AccountRole[];
+export type ManageableAccountRole = (typeof MANAGEABLE_ACCOUNT_ROLES)[number];
 
 export const ACCOUNT_STATUSES = ["ACTIVE", "DISABLED"] as const;
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];

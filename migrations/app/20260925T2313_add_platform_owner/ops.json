@@ -1,0 +1,125 @@
+[
+  {
+    "id": "dropCheckConstraint.user.user_accountRole_check_bf325bd2",
+    "label": "Drop check constraint \"user_accountRole_check_bf325bd2\" on \"user\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_accountRole_check_bf325bd2",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_accountRole_check_bf325bd2\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_accountRole_check_bf325bd2",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"user_accountRole_check_bf325bd2\"",
+        "sql": "ALTER TABLE \"public\".\"user\" DROP CONSTRAINT \"user_accountRole_check_bf325bd2\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_accountRole_check_bf325bd2\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_accountRole_check_bf325bd2",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user.user_accountRole_check_ce88b195",
+    "label": "Add check constraint \"user_accountRole_check_ce88b195\" on \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_accountRole_check_ce88b195",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_accountRole_check_ce88b195\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_accountRole_check_ce88b195",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_accountRole_check_ce88b195\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD CONSTRAINT \"user_accountRole_check_ce88b195\" CHECK (\"accountRole\" IN ('USER', 'RAID_LEAD', 'ADMIN', 'OWNER'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_accountRole_check_ce88b195\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_accountRole_check_ce88b195",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user.user_single_owner_da579d9c",
+    "label": "Create index \"user_single_owner_da579d9c\" on \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "user_single_owner_da579d9c",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_single_owner_da579d9c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_single_owner_da579d9c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_single_owner_da579d9c\"",
+        "sql": "CREATE UNIQUE INDEX \"user_single_owner_da579d9c\" ON \"public\".\"user\" (\"accountRole\") WHERE ((\"accountRole\" = 'OWNER'::text))",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_single_owner_da579d9c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_single_owner_da579d9c\""
+        ]
+      }
+    ]
+  }
+]

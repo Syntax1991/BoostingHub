@@ -13,15 +13,21 @@ export type AuthenticatedUser = {
 };
 
 /**
- * Account roles are hierarchical platform permissions.
+ * Account roles are hierarchical platform permissions:
+ * OWNER > ADMIN > RAID_LEAD > USER — each level inherits everything below it.
  * BOOSTER / LOOTBUDDY are run participation types and are intentionally absent here.
+ * Check authority through these helpers, never with a literal role comparison.
  */
-export function hasRaidLeadAccess(role: AccountRole): boolean {
-  return role === "RAID_LEAD" || role === "ADMIN";
+export function hasOwnerAccess(role: AccountRole): boolean {
+  return role === "OWNER";
 }
 
 export function hasAdminAccess(role: AccountRole): boolean {
-  return role === "ADMIN";
+  return role === "ADMIN" || hasOwnerAccess(role);
+}
+
+export function hasRaidLeadAccess(role: AccountRole): boolean {
+  return role === "RAID_LEAD" || hasAdminAccess(role);
 }
 
 /**
@@ -49,7 +55,7 @@ export function canAccessManagement(role: AccountRole): boolean {
   return hasRaidLeadAccess(role);
 }
 
-/** ADMIN-only user directory and account-role administration. */
+/** Admin-level (ADMIN / OWNER) user directory and account-role administration. */
 export function canManageUsers(role: AccountRole): boolean {
   return hasAdminAccess(role);
 }
@@ -100,8 +106,8 @@ export function isManagementNavActive(pathname: string, href: string): boolean {
 }
 
 /**
- * RAID_LEAD may manage only assigned runs. ADMIN may manage every run.
- * Account role still has to be RAID_LEAD or ADMIN — being listed as raidLeadId
+ * RAID_LEAD may manage only assigned runs. ADMIN (and OWNER) may manage every run.
+ * Account role still has to be RAID_LEAD or above — being listed as raidLeadId
  * does not grant a USER roster tools.
  */
 export function canManageRun(

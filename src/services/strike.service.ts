@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { canManageRun, hasAdminAccess } from "@/auth/authorization";
+import { canManageRun, hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { activityRepository } from "@/repositories/activity.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
@@ -113,7 +113,7 @@ export const strikeService = {
       notes?: string | null;
     },
   ): Promise<StrikeRecord> {
-    if (!hasAdminAccess(actor.accountRole) && actor.accountRole !== "RAID_LEAD") {
+    if (!hasRaidLeadAccess(actor.accountRole)) {
       throw new DomainError("STRIKE_NOT_MANAGEABLE", "You cannot create strikes.", 403);
     }
 

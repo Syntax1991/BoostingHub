@@ -1,8 +1,15 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
-import { orm } from "@/lib/prisma";
+import { DomainError } from "@/lib/errors";
+import { ROLE_LABELS } from "@/lib/labels";
+import { db, orm } from "@/lib/prisma";
 import { or } from "@prisma/orm-postgres/orm-client";
 import type { AccountRole, AccountStatus, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
-import type { AuthenticatedUser } from "@/auth/authorization";
+import {
+  hasAdminAccess,
+  hasOwnerAccess,
+  isEligibleRaidLead,
+  type AuthenticatedUser,
+} from "@/auth/authorization";
 import {
   asBoolean,
   asNumber,
@@ -201,18 +208,14 @@ export const userRepository = {
   },
 
   /**
-   * RAID_LEAD and ADMIN accounts that may be assigned as a Run's raid lead.
-   * Ordinary USER accounts are never eligible.
+   * RAID_LEAD, ADMIN and OWNER accounts that may be assigned as a Run's raid
+   * lead. Ordinary USER accounts are never eligible.
    */
   async listEligibleRaidLeads() {
     const users = await orm.User.orderBy((user) => user.name.asc()).all();
     return users
       .map((user) => mapAuthUser(user as Record<string, unknown>))
-      .filter(
-        (user) =>
-          user.accountStatus === "ACTIVE" &&
-          (user.accountRole === "RAID_LEAD" || user.accountRole === "ADMIN"),
-      )
+      .filter((user) => isEligibleRaidLead(user))
       .map((user) => ({
         id: user.id,
         name: user.name,
@@ -226,6 +229,7 @@ export const userRepository = {
       USER: 0,
       RAID_LEAD: 0,
       ADMIN: 0,
+      OWNER: 0,
     };
     for (const row of users) {
       const role = mapUserRole((row as Record<string, unknown>).accountRole);
@@ -234,16 +238,164 @@ export const userRepository = {
     return counts;
   },
 
-  async countAdmins(): Promise<number> {
-    const rows = await orm.User.where({ accountRole: "ADMIN" }).select("id").all();
-    return rows.length;
+  /**
+   * Generic account-role change, validated and written in ONE transaction.
+   *
+   * - OWNER is protected: a target that is (now) OWNER is refused, whoever
+   *   asks, and OWNER is never a valid nextRole here.
+   * - Last admin-level account: when the change removes Admin-level authority
+   *   (ADMIN → RAID_LEAD / USER), every admin-level row (ADMIN or OWNER) plus
+   *   the target is row-locked first (the same bump-updatedAt lock as
+   *   lockRosterInTx), then the remaining ACTIVE admin-level accounts are
+   *   counted. Two concurrent demotions serialize on those locks, so they can
+   *   never both pass and leave the platform without an Admin-level account.
+   *   An OWNER counts as Admin-level authority.
+   */
+  async changeAccountRoleAtomic(input: {
+    targetUserId: string;
+    nextRole: AccountRole;
+  }): Promise<{ name: string; previousRole: AccountRole; accountStatus: AccountStatus }> {
+    if (hasOwnerAccess(input.nextRole)) {
+      throw new DomainError(
+        "OWNER_ASSIGNMENT_REQUIRES_BOOTSTRAP",
+        "Platform ownership cannot be assigned through role management.",
+      );
+    }
+    let result: { name: string; previousRole: AccountRole; accountStatus: AccountStatus } | null = null;
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const now = new Date().toISOString();
+
+      const before = (await txOrm.User.where({ id: input.targetUserId }).first()) as Record<string, unknown> | null;
+      if (!before) {
+        throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
+      }
+      const mayRemoveAdminAccess =
+        hasAdminAccess(mapUserRole(before.accountRole)) && !hasAdminAccess(input.nextRole);
+      if (mayRemoveAdminAccess) {
+        await txOrm.User.where((user) =>
+          or(user.accountRole.in(["ADMIN", "OWNER"]), user.id.eq(input.targetUserId)),
+        ).update({ updatedAt: now });
+      } else {
+        await txOrm.User.where({ id: input.targetUserId }).update({ updatedAt: now });
+      }
+
+      // Fresh read after the lock — decide on this, never on the pre-lock row.
+      const target = (await txOrm.User.where({ id: input.targetUserId }).first()) as Record<string, unknown> | null;
+      if (!target) {
+        throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
+      }
+      const name = asString(target.name);
+      const previousRole = mapUserRole(target.accountRole);
+      if (hasOwnerAccess(previousRole)) {
+        throw new DomainError(
+          "OWNER_ROLE_PROTECTED",
+          `${name} is the Platform Owner. Ownership cannot be changed through role management.`,
+          403,
+        );
+      }
+      if (previousRole === input.nextRole) {
+        throw new DomainError(
+          "ROLE_ALREADY_ASSIGNED",
+          `${name} already has the ${ROLE_LABELS[input.nextRole]} role.`,
+        );
+      }
+      if (hasAdminAccess(previousRole) && !hasAdminAccess(input.nextRole)) {
+        if (!mayRemoveAdminAccess) {
+          // The target gained Admin-level authority after the first read, so
+          // the admin-level rows were not locked — refuse instead of guessing.
+          throw new DomainError("ROLE_ALREADY_ASSIGNED", `${name}'s role changed meanwhile. Reload and try again.`);
+        }
+        const adminLevel = (await txOrm.User.where((user) => user.accountRole.in(["ADMIN", "OWNER"]))
+          .select("id", "accountStatus")
+          .all()) as Array<Record<string, unknown>>;
+        const remaining = adminLevel.filter(
+          (row) => asString(row.id) !== input.targetUserId && mapAccountStatus(row.accountStatus) === "ACTIVE",
+        ).length;
+        if (remaining < 1) {
+          throw new DomainError(
+            "LAST_ADMIN_REQUIRED",
+            "The platform must keep at least one active Admin-level account (Admin or Platform Owner).",
+          );
+        }
+      }
+
+      await txOrm.User.where({ id: input.targetUserId }).update({ accountRole: input.nextRole, updatedAt: now });
+      result = { name, previousRole, accountStatus: mapAccountStatus(target.accountStatus) };
+    });
+    if (!result) throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
+    return result;
   },
 
-  async updateAccountRole(userId: string, accountRole: AccountRole): Promise<void> {
-    await orm.User.where({ id: userId }).update({
-      accountRole,
-      updatedAt: new Date().toISOString(),
-    });
+  /**
+   * One-time platform owner bootstrap (CLI only, never exposed in the web UI).
+   * In one transaction: the target must exist, be ACTIVE and be ADMIN; no
+   * OWNER may exist yet; then the target becomes OWNER and an audit
+   * ActivityEvent (PLATFORM_OWNER_BOOTSTRAPPED) is written.
+   *
+   * Singleton guarantee: the partial unique index `user_single_owner`
+   * (accountRole = 'OWNER') makes a second OWNER impossible at the database
+   * level. Two concurrent bootstraps may both pass the "no owner yet" read,
+   * but the second UPDATE waits on the first's uncommitted index entry and
+   * then fails with a unique violation — reported as OWNER_ALREADY_EXISTS.
+   */
+  async bootstrapOwnerAtomic(targetUserId: string): Promise<{ name: string; previousRole: AccountRole }> {
+    let result: { name: string; previousRole: AccountRole } | null = null;
+    try {
+      await db.transaction(async (tx) => {
+        const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+        const now = new Date().toISOString();
+        await txOrm.User.where({ id: targetUserId }).update({ updatedAt: now });
+        const target = (await txOrm.User.where({ id: targetUserId }).first()) as Record<string, unknown> | null;
+        if (!target) {
+          throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
+        }
+        const name = asString(target.name);
+        const previousRole = mapUserRole(target.accountRole);
+
+        const existingOwner = (await txOrm.User.where({ accountRole: "OWNER" }).select("id").first()) as Record<
+          string,
+          unknown
+        > | null;
+        if (existingOwner) {
+          throw new DomainError(
+            "OWNER_ALREADY_EXISTS",
+            asString(existingOwner.id) === targetUserId
+              ? `${name} is already the Platform Owner.`
+              : "A Platform Owner already exists. Ownership transfer is not supported.",
+          );
+        }
+        if (mapAccountStatus(target.accountStatus) !== "ACTIVE") {
+          throw new DomainError("OWNER_BOOTSTRAP_TARGET_INVALID", `${name} is not an active account.`);
+        }
+        if (previousRole !== "ADMIN") {
+          throw new DomainError(
+            "OWNER_BOOTSTRAP_TARGET_INVALID",
+            `${name} must already be an Admin to become Platform Owner (current role: ${ROLE_LABELS[previousRole]}).`,
+          );
+        }
+
+        await txOrm.User.where({ id: targetUserId }).update({ accountRole: "OWNER", updatedAt: now });
+        await txOrm.ActivityEvent.create({
+          id: crypto.randomUUID(),
+          userId: targetUserId,
+          type: "PLATFORM_OWNER_BOOTSTRAPPED",
+          message: `Platform owner bootstrapped: ${name} (${ROLE_LABELS[previousRole]} → ${ROLE_LABELS.OWNER}). targetUserId=${targetUserId} previousRole=${previousRole} newRole=OWNER`,
+          occurredAt: now,
+        });
+        result = { name, previousRole };
+      });
+    } catch (error) {
+      if (!(error instanceof DomainError) && isSingleOwnerViolation(error)) {
+        throw new DomainError(
+          "OWNER_ALREADY_EXISTS",
+          "A Platform Owner already exists. Ownership transfer is not supported.",
+        );
+      }
+      throw error;
+    }
+    if (!result) throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
+    return result;
   },
 
   async listNonTerminalRunsForRaidLead(raidLeadId: string): Promise<
@@ -457,3 +609,15 @@ export const userRepository = {
     };
   },
 };
+
+/** Postgres unique violation (23505) on the single-owner partial index. */
+function isSingleOwnerViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const record = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (record.code === "23505") return true;
+    if (typeof record.message === "string" && record.message.includes("user_single_owner")) return true;
+    current = record.cause;
+  }
+  return false;
+}

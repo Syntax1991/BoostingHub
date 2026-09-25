@@ -75,7 +75,7 @@ export const managementHubService = {
 
     if (canManageUsers(user.accountRole)) {
       const roleCounts = await userRepository.countByRole();
-      const total = roleCounts.USER + roleCounts.RAID_LEAD + roleCounts.ADMIN;
+      const total = roleCounts.USER + roleCounts.RAID_LEAD + roleCounts.ADMIN + roleCounts.OWNER;
       cards.push({
         id: "users",
         title: "Users",
@@ -86,7 +86,8 @@ export const managementHubService = {
           { label: "Total", value: total },
           { label: "Users", value: roleCounts.USER },
           { label: "Raid leads", value: roleCounts.RAID_LEAD },
-          { label: "Admins", value: roleCounts.ADMIN },
+          // Admin-level accounts: Admins plus the Platform Owner.
+          { label: "Admins", value: roleCounts.ADMIN + roleCounts.OWNER },
         ],
       });
     }
