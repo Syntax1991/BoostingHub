@@ -75,7 +75,7 @@ Preferred mode: each Run that becomes signup-available gets its own dedicated Di
 
 **Rename, not replace**: when the desired name changes (schedule/difficulty/raid-lead edit before roster lock), the sync pass calls `channel.setName(...)` on the *same* channel id. A completed/published Run's source fields are no longer editable through normal Run edit rules, so historical channels are never renamed after the fact.
 
-**Channel retirement (not clone)**: when a Run is **COMPLETED**, **CANCELLED**, or **app-archived** (`Run.archivedAt`), the next sync pass posts Ticket-Tool archive artifacts to `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, then **deletes** the dedicated Run channel and clears `runChannelId`. Weekly rollover for non-retired Runs still moves (never deletes) PAST/FUTURE channels into archive-category holding. A stored `runChannelId` is replaced with a newly created channel **only** when Discord confirms Unknown Channel (10003); Missing Access / rate limits / transient fetch failures keep the stored id and never recreate (avoids duplicate channels on bot restart). Channel reconciliation (name + category) records a confirmed Unknown Channel for a stored Run channel once as `channel-gone`, so a deleted channel stops coming back every poll; a channel that merely does not resolve (wrong type) keeps its stored id.
+**Channel retirement (not clone)**: when a Run is **COMPLETED**, **CANCELLED**, or **app-archived** (`Run.archivedAt`), the next sync pass posts Ticket-Tool archive artifacts to `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`, then **deletes** the dedicated Run channel and records `channel-gone` for it (see *Retired channel identity* below). Weekly rollover for non-retired Runs still moves (never deletes) PAST/FUTURE channels into archive-category holding. A stored `runChannelId` is replaced with a newly created channel **only** when Discord confirms Unknown Channel (10003); Missing Access / rate limits / transient fetch failures keep the stored id and never recreate (avoids duplicate channels on bot restart). Channel reconciliation (name + category) records a confirmed Unknown Channel for a stored Run channel once as `channel-gone`, so a deleted channel stops coming back every poll; a channel that merely does not resolve (wrong type) keeps its stored id.
 
 **Self-healing**: if the stored channel id no longer resolves in Discord (deleted out-of-band), the next sync pass creates a replacement rather than leaving the Run without a home — this is recovery, never the bot deleting anything itself. This self-healing is exclusive to the signup path (gated by `isSignupWindowOpen` + week bucket, same as first-channel provisioning); `channels` reconciliation and the roster path only reuse a channel that already exists — if a Run's channel is missing when only `channels`/roster work would have reached it, that item is skipped with a warning rather than provisioning anything.
 
@@ -116,7 +116,19 @@ Steps 3–4 of the first mechanism, and the whole of the second, are each indepe
    - Message 2: green details embed (Ticket Owner / Ticket Name / Panel Name / Users in transcript) + **Direct Link** button to the attachment
    - Persists the same HTML on `RunDiscordPost` for manager download at `/runs/[runId]/archive-transcript`
    Idempotency: `archiveArtifactsNeeded` until Discord message ids **and** `archiveTranscriptHtml` are recorded. When ids already exist but HTML is missing (legacy rows), the bot rebuilds HTML from the Run channel and records it without re-posting to Discord. When the log channel env is unset, Discord posts are skipped with a warning and the Run channel is left alone until artifacts can be written.
-3. **Deletes** the Run's Discord channel and clears `runChannelId` — only the transcript (log channel + website download) remains. Leftover channels from older deploys are deleted on a later poll once artifacts are already complete.
+3. **Deletes** the Run's Discord channel and records `channel-gone` for that exact channel id — only the transcript (log channel + website download) remains. Leftover channels from older deploys are deleted on a later poll once artifacts are already complete.
+
+**Retired channel identity.** Once a retiring Run channel is confirmed gone, the bot reports `channel-gone {channelId}` — never `clear-channel`:
+
+| Outcome while retiring | State update |
+| --- | --- |
+| Channel deleted by the bot | `channel-gone` (exact id) |
+| Discord says Unknown Channel (delete, or transcript fetch) | `channel-gone` (exact id) |
+| Missing Access / Missing Permissions | none — identity kept, retried next pass (the channel may still exist) |
+| Channel exists but is not a usable/deletable text channel | none — identity kept, logged |
+| Other Discord/API error | none — identity kept, retried next pass |
+
+`channel-gone` runs `clearDeletedChannelIdentity(runId, channelId)`: one compare-and-set UPDATE per group, each requiring the stored id to still equal `channelId` — Run channel; signup channel + message + signature; roster channel + message + version. So it clears everything the deleted channel held (otherwise the Run's signup identity would keep it a zero-work sync candidate forever), never a replacement channel recorded meanwhile, and never a signup post living in a different (shared/legacy) channel. Final Setup markers, Voice identity, archive transcript and Raid Invite history are kept. `clear-channel` (drops only `runChannelId`, unguarded) is no longer used for retirement.
 
 ### Run channel lifecycle announcements
 
