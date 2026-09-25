@@ -6,6 +6,7 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import type { RunStatus } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runService } from "@/services/run.service";
@@ -383,6 +384,117 @@ describe("Discord sync candidate selection", () => {
     ({ work, loaded } = await loadedRunIds(classificationNow));
     expect(loaded.has(runId)).toBe(false);
     expectNoWork(work, runId);
+  });
+});
+
+describe("retired channel identity convergence (channel-gone)", () => {
+  /**
+   * Production shape: a dedicated Run channel A holds the Run channel, signup
+   * post and roster post; the bot's final signup edit happened after archive,
+   * so the stored signup signature is already CURRENT (zero signup work).
+   */
+  async function retiredDedicatedRun(channel: string) {
+    const runId = await createRunAt(nextStart, { status: "OPEN" });
+    await discordSyncService.recordRunChannel({ runId, channelId: channel });
+    await discordSyncService.recordSignupPost({ runId, channelId: channel, messageId: `${channel}-signup` });
+    await orm.Run.where({ id: runId }).update({ status: "CANCELLED", updatedAt: new Date().toISOString() });
+    await runService.archiveRun(lead, runId);
+    // Final continuity edit after archive → the signature matches the retired state.
+    await discordSyncService.recordSignupPost({ runId, channelId: channel, messageId: `${channel}-signup` });
+    const roster = await rosterRepository.ensure(runId);
+    await setPost(runId, {
+      rosterChannelId: channel,
+      rosterMessageId: `${channel}-roster`,
+      lastRosterVersion: roster.version,
+      startChannelId: channel,
+      startMessageId: `${channel}-start`,
+      archiveCloseMessageId: "close",
+      archiveTranscriptMessageId: "transcript",
+      archiveTranscriptHtml: "<html>kept</html>",
+      archiveTranscriptFilename: "transcript.html",
+    });
+    return runId;
+  }
+
+  it("production shape: current signature → zero signup work; channel-gone(A) clears every identity in A and the Run stops being a candidate", async () => {
+    const runId = await retiredDedicatedRun("conv-chan-a");
+    let { work, loaded } = await loadedRunIds(classificationNow);
+    expect(loaded.has(runId)).toBe(true);
+    expect(lanesFor(work, runId).signups).toHaveLength(0); // signature already current
+    expect(lanesFor(work, runId).channels).toMatchObject([{ existingRunChannelId: "conv-chan-a", retireChannel: true }]);
+
+    // What the bot now reports after deleting A (or seeing Unknown Channel).
+    await discordSyncService.recordRunChannelGone({ runId, channelId: "conv-chan-a" });
+
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(post).toMatchObject({
+      runChannelId: null,
+      signupChannelId: null,
+      signupMessageId: null,
+      lastSignupSignature: null,
+      rosterChannelId: null,
+      rosterMessageId: null,
+      lastRosterVersion: null,
+      // History is kept.
+      startChannelId: "conv-chan-a",
+      startMessageId: "conv-chan-a-start",
+      archiveCloseMessageId: "close",
+      archiveTranscriptMessageId: "transcript",
+      archiveTranscriptHtml: "<html>kept</html>",
+      raidInviteSentSignupIds: JSON.stringify(["seed-signup"]),
+    });
+    expect(await runDiscordPostRepository.listLiveIdentityRunIds()).not.toContain(runId);
+    ({ work, loaded } = await loadedRunIds(classificationNow));
+    expect(loaded.has(runId)).toBe(false);
+    expectNoWork(work, runId);
+  });
+
+  it("the old clear-channel outcome is exactly the dangling state: a zero-work candidate forever", async () => {
+    const runId = await retiredDedicatedRun("conv-chan-old");
+    await discordSyncService.clearRunChannel(runId);
+    for (let poll = 0; poll < 2; poll += 1) {
+      const { work, loaded } = await loadedRunIds(classificationNow);
+      expect(loaded.has(runId)).toBe(true);
+      expectNoWork(work, runId);
+    }
+  });
+
+  it("replacement safety: a stale channel-gone(A) never clears the newer channel B", async () => {
+    const runId = await createRunAt(nextStart, { status: "OPEN" });
+    await discordSyncService.recordRunChannel({ runId, channelId: "conv-chan-b" });
+    await discordSyncService.recordSignupPost({ runId, channelId: "conv-chan-b", messageId: "b-signup" });
+    await setPost(runId, { rosterChannelId: "conv-chan-b", rosterMessageId: "b-roster", lastRosterVersion: 1 });
+
+    await discordSyncService.recordRunChannelGone({ runId, channelId: "conv-chan-a" });
+
+    expect(await runDiscordPostRepository.findByRunId(runId)).toMatchObject({
+      runChannelId: "conv-chan-b",
+      signupChannelId: "conv-chan-b",
+      signupMessageId: "b-signup",
+      rosterChannelId: "conv-chan-b",
+      rosterMessageId: "b-roster",
+    });
+  });
+
+  it("shared-channel safety: channel-gone(A) clears the Run channel A but keeps a signup post living in channel B", async () => {
+    const runId = await createRunAt(nextStart, { status: "OPEN" });
+    await setPost(runId, {
+      runChannelId: "conv-chan-a",
+      signupChannelId: "shared-signup-b",
+      signupMessageId: "shared-msg",
+      lastSignupSignature: "sig",
+    });
+
+    await discordSyncService.recordRunChannelGone({ runId, channelId: "conv-chan-a" });
+
+    expect(await runDiscordPostRepository.findByRunId(runId)).toMatchObject({
+      runChannelId: null,
+      signupChannelId: "shared-signup-b",
+      signupMessageId: "shared-msg",
+      lastSignupSignature: "sig",
+    });
+    // Still a candidate: the signup post in B is live identity.
+    expect(await runDiscordPostRepository.listLiveIdentityRunIds()).toContain(runId);
   });
 });
 

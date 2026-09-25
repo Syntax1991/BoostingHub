@@ -1156,7 +1156,10 @@ async function tryEditMessage(
  * (2) green details embed + Direct Link button.
  * When Discord message ids already exist, skips re-send and only persists HTML.
  * After the transcript is safely recorded, deletes the Run's Discord channel
- * and clears `runChannelId` — the lasting record is the transcript alone.
+ * and records `channel-gone` for it, which clears every identity stored for
+ * that exact channel (Run channel, signup and roster posts) — the lasting
+ * record is the transcript alone. Missing access/permission or an unusable
+ * channel keep the stored identity (the channel may still exist) and retry.
  * Schedule-based PAST/FUTURE ARCHIVE holding is unchanged (silent move, no
  * delete) and never enters this path (`retireChannel` is false).
  */
@@ -1191,20 +1194,31 @@ async function syncArchiveArtifacts(
   try {
     runChannel = await client.channels.fetch(runChannelId);
   } catch (error) {
-    if (isDiscordPermissionError(error) || isDiscordUnknownChannelError(error)) {
+    if (isDiscordUnknownChannelError(error)) {
+      // Confirmed gone: drop every identity stored for exactly this channel.
       console.warn(
-        `[discord-bot] cannot fetch run channel ${runChannelId} for archive transcript on run ${item.runId} — clearing stored id`,
+        `[discord-bot] run ${item.runId} channel ${runChannelId} is gone in Discord (Unknown Channel) — recording channel-gone`,
+      );
+      await recordRetiredChannelGone(api, item.runId, runChannelId);
+      return;
+    }
+    if (isDiscordPermissionError(error)) {
+      // The channel may still exist — keep its identity and retry next pass.
+      console.warn(
+        `[discord-bot] cannot read run channel ${runChannelId} for archive transcript on run ${item.runId} (missing access/permission) — keeping stored identity`,
         error,
       );
-      await api.recordDiscordState(item.runId, { kind: "clear-channel" });
       return;
     }
     throw error;
   }
 
   if (!runChannel || !runChannel.isTextBased() || !("messages" in runChannel)) {
-    console.warn(`[discord-bot] run ${item.runId} channel ${runChannelId} is not a text channel — clearing stored id`);
-    await api.recordDiscordState(item.runId, { kind: "clear-channel" });
+    // It exists (or did not resolve) but is not a usable text channel — never
+    // claim it is deleted; keep the identity for an operator to look at.
+    console.warn(
+      `[discord-bot] run ${item.runId} channel ${runChannelId} is not a usable text channel — keeping stored identity`,
+    );
     return;
   }
 
@@ -1370,17 +1384,24 @@ async function deleteArchivedRunChannel(
 ): Promise<void> {
   try {
     const channel = await client.channels.fetch(channelId);
-    if (channel && "delete" in channel && typeof channel.delete === "function") {
-      await channel.delete(`BoostingHub app-archive — transcript retained for run ${runId}`);
+    if (!channel || !("delete" in channel) || typeof channel.delete !== "function") {
+      // Not confirmed deleted — keep the identity rather than orphan a live channel.
+      console.warn(
+        `[discord-bot] archived run channel ${channelId} for run ${runId} cannot be deleted by the bot (not a deletable channel) — keeping stored identity`,
+      );
+      return;
     }
+    await channel.delete(`BoostingHub app-archive — transcript retained for run ${runId}`);
   } catch (error) {
     if (isDiscordUnknownChannelError(error)) {
-      // Already gone — still clear the stored id below.
+      // Already gone — confirmed, so converge the stored identity below.
     } else if (isDiscordPermissionError(error)) {
+      // The channel may still exist: clearing its id would orphan it. Retry next pass.
       console.warn(
-        `[discord-bot] missing permission to delete archived run channel ${channelId} for run ${runId} — clearing stored id anyway`,
+        `[discord-bot] missing permission to delete archived run channel ${channelId} for run ${runId} — keeping stored identity`,
         error,
       );
+      return;
     } else {
       console.error(`[discord-bot] failed to delete archived run channel ${channelId} for run ${runId}`, error);
       // Do not clear the id — retry delete next poll.
@@ -1388,9 +1409,22 @@ async function deleteArchivedRunChannel(
     }
   }
 
+  await recordRetiredChannelGone(api, runId, channelId);
+}
+
+/**
+ * A retired Run channel is confirmed deleted (we deleted it, or Discord says
+ * Unknown Channel). `channel-gone` clears every identity that still points at
+ * exactly this channel id — Run channel, signup post, roster post — with a
+ * compare-and-set per field group, so a replacement channel or a different
+ * (shared) signup channel is never touched. `clear-channel` would drop only
+ * runChannelId and leave the signup/roster identity of the deleted channel
+ * behind forever.
+ */
+async function recordRetiredChannelGone(api: BotApiClient, runId: string, channelId: string): Promise<void> {
   try {
-    await api.recordDiscordState(runId, { kind: "clear-channel" });
+    await api.recordDiscordState(runId, { kind: "channel-gone", channelId });
   } catch (error) {
-    console.error(`[discord-bot] failed to clear runChannelId after deleting channel for run ${runId}`, error);
+    console.error(`[discord-bot] failed to record deleted channel ${channelId} for run ${runId}`, error);
   }
 }
