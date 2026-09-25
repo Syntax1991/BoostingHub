@@ -246,6 +246,18 @@ describe("createGuildEmojiCache", () => {
     expect(discord.fetches(GUILD)).toBe(2);
   });
 
+  it("clear() during an in-flight fetch: its late result is not cached", async () => {
+    const discord = fakeClient({ [GUILD]: EMOJIS });
+    const cache = createGuildEmojiCache();
+    const inFlight = cache.get(discord.client, GUILD);
+    cache.clear();
+    // The earlier awaiter still gets its snapshot…
+    expect((await inFlight).get("shaman")).toBe("<:shaman:123>");
+    // …but the cleared cache starts cold again.
+    await cache.get(discord.client, GUILD);
+    expect(discord.fetches(GUILD)).toBe(2);
+  });
+
   it("duplicate emoji names: the later emoji wins, as before", async () => {
     const discord = fakeClient({ [GUILD]: [fakeEmoji("tank", "1"), fakeEmoji("tank", "2")] });
     const { roleIndicators } = await resolveGuildEmojiIndicators(discord.client, GUILD, createGuildEmojiCache());

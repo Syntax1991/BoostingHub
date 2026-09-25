@@ -98,21 +98,26 @@ export function createGuildEmojiCache(
 
       prune(at, guildId);
       const previous = entry?.snapshot ? { snapshot: entry.snapshot, fetchedAt: entry.fetchedAt } : null;
-      const refresh = fetchGuildEmojiSnapshot(client, guildId).then(
+      // Only the refresh that still owns the entry may write it back: after
+      // clear() (or an eviction) a late result must not resurrect the entry.
+      const ownsEntry = () => entries.get(guildId)?.refresh === refresh;
+      const refresh: Promise<GuildEmojiSnapshot> = fetchGuildEmojiSnapshot(client, guildId).then(
         (snapshot) => {
-          // Re-insert so Map order reflects recency for pruning.
-          entries.delete(guildId);
-          entries.set(guildId, { snapshot, fetchedAt: now(), refresh: null });
+          if (ownsEntry()) {
+            // Re-insert so Map order reflects recency for pruning.
+            entries.delete(guildId);
+            entries.set(guildId, { snapshot, fetchedAt: now(), refresh: null });
+          }
           return snapshot;
         },
         (error: unknown) => {
           if (previous) {
             // Keep the old snapshot and its age: the next call retries.
-            entries.set(guildId, { ...previous, refresh: null });
+            if (ownsEntry()) entries.set(guildId, { ...previous, refresh: null });
             console.warn(`[discord-bot] guild emoji refresh failed for ${guildId} — keeping previous snapshot`, error);
             return previous.snapshot;
           }
-          entries.delete(guildId);
+          if (ownsEntry()) entries.delete(guildId);
           throw error;
         },
       );
