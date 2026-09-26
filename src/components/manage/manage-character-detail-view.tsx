@@ -13,6 +13,7 @@ import {
   SyncHealthBadge,
   Timestamp,
 } from "@/components/manage/character-operations/status";
+import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 
 type Data = Awaited<ReturnType<typeof managementController.getCharacterOperationsPage>>;
 
@@ -46,9 +47,17 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
         title={`${row.name}-${row.realm}`}
         description={`${row.region} · character operations`}
         actions={
-          <Link href="/manage/characters" className="text-sm text-accent hover:underline">
-            All characters
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/manage/characters" className="text-sm text-accent hover:underline">
+              All characters
+            </Link>
+            <DeleteCharacterButton
+              characterId={row.id}
+              characterLabel={`${row.name}-${row.realm}`}
+              mode="admin"
+              redirectTo="/manage/characters"
+            />
+          </div>
         }
       />
       <div className="grid gap-4 lg:grid-cols-2">

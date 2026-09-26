@@ -1,5 +1,6 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
 import { db, orm } from "@/lib/prisma";
+import { DomainError } from "@/lib/errors";
 import {
   asBoolean,
   asNumber,
@@ -384,6 +385,39 @@ export const characterRepository = {
         syncFailureCount: asNumber(row.syncFailureCount, 0) + 1,
         updatedAt: row.updatedAt,
       });
+    });
+  },
+
+  /**
+   * Hard-deletes a Character. Refused (CHARACTER_HAS_OPEN_SIGNUPS) while any
+   * non-withdrawn signup on a not-yet-finished Run still references it — a
+   * PENDING / SELECTED / NOT_SELECTED signup can still be rostered or step in
+   * via Replace and needs its Character. Checked inside the delete transaction.
+   * The schema's FKs do the rest: lockouts, availability, WCL performance
+   * cascade; signups of finished Runs, payout lines, Booster Access and the
+   * default-Character pointer keep their rows with the reference set to null
+   * (payout lines keep their name snapshots).
+   */
+  async deleteGuarded(characterId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const signups = (await txOrm.RunSignup.where({ characterId })
+        .where((signup) => signup.status.neq("WITHDRAWN"))
+        .include("run", (run) => run.select("status"))
+        .select("id", "status")
+        .all()) as Array<{ run?: { status?: string } }>;
+      const open = signups.filter((row) => {
+        const status = row.run?.status;
+        return status !== "COMPLETED" && status !== "CANCELLED";
+      });
+      if (open.length > 0) {
+        throw new DomainError(
+          "CHARACTER_HAS_OPEN_SIGNUPS",
+          `This character is signed up for ${open.length} run${open.length === 1 ? "" : "s"} that ${open.length === 1 ? "is" : "are"} not finished. Withdraw those signups first, or deactivate the character instead.`,
+          409,
+        );
+      }
+      await txOrm.Character.where({ id: characterId }).delete();
     });
   },
 

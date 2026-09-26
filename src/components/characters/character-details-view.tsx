@@ -25,6 +25,7 @@ import {
   BLIZZARD_PROFILE_UNAVAILABLE_TITLE,
   BLIZZARD_SYNC_STALE_HINT,
 } from "@/lib/blizzard/sync-state";
+import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
 
@@ -114,6 +115,12 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             />
             {data.isActive ? <BlizzardRefreshButton characterId={data.id} /> : null}
             <CharacterLifecycleButton characterId={data.id} isActive={data.isActive} />
+            <DeleteCharacterButton
+              characterId={data.id}
+              characterLabel={`${data.name}-${data.realm}`}
+              mode="owner"
+              redirectTo="/characters"
+            />
           </div>
         }
       />

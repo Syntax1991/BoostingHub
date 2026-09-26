@@ -1,4 +1,4 @@
-import { assertCanManageCharacterOperations, type AuthenticatedUser } from "@/auth/authorization";
+import { assertCanManageCharacterOperations, hasOwnerAccess, type AuthenticatedUser } from "@/auth/authorization";
 import { isBlizzardConfigured } from "@/lib/blizzard/config";
 import { classifySyncError, type CharacterSyncTrigger } from "@/lib/blizzard/sync-error";
 import {
@@ -394,6 +394,36 @@ export const characterOperationsService = {
    * ~120s work budget, stop starting work after the first 429, per-Character
    * lock skips, one failure never aborts the batch.
    */
+  /**
+   * Admin hard delete of any Character (same guard as the owner delete:
+   * refused while an unfinished Run has a non-withdrawn signup on it). The
+   * Platform Owner's Characters can only be deleted by the Owner, mirroring
+   * the OWNER_ROLE_PROTECTED rule of role management.
+   */
+  async deleteCharacter(admin: AuthenticatedUser, characterId: string): Promise<{ label: string }> {
+    assertCanManageCharacterOperations(admin);
+    const character = await characterRepository.findById(characterId);
+    if (!character) {
+      throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
+    }
+    const owner = await userRepository.findById(character.userId);
+    if (owner && hasOwnerAccess(owner.accountRole) && !hasOwnerAccess(admin.accountRole) && owner.id !== admin.id) {
+      throw new DomainError(
+        "OWNER_ROLE_PROTECTED",
+        "Characters of the Platform Owner can only be deleted by the Platform Owner.",
+        403,
+      );
+    }
+    const label = characterLabel(character);
+    await characterRepository.deleteGuarded(character.id);
+    await activityRepository.create({
+      userId: admin.id,
+      type: "ADMIN_CHARACTER_DELETED",
+      message: `Deleted ${label} (owner ${owner?.name ?? "unknown"}). targetCharacterId=${character.id}`,
+    });
+    return { label };
+  },
+
   async forceRefreshAll(
     admin: AuthenticatedUser,
     options: { workBudgetMs?: number; concurrency?: number } = {},

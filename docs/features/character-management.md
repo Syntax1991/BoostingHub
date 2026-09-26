@@ -12,7 +12,7 @@ A Character belongs to exactly one User.
 
 All mutations take the owner from the authenticated session. Submitted `userId` is ignored.
 
-Users cannot view details, edit, deactivate, or reactivate another account's characters. ADMIN does not bypass this self-service ownership in this feature.
+Users cannot view details, edit, deactivate, reactivate or delete another account's characters. ADMIN does not bypass this self-service ownership here; admin deletion lives in Character Operations (`/manage/characters/[id]`).
 
 Hidden UI is not authorization. Controllers call `CharacterService`, which loads the row and asserts `character.userId === session.user.id`.
 
@@ -73,9 +73,18 @@ Inactive characters are excluded from **new** BOOSTER signup eligibility. New LO
 
 Deactivating a character that already has future PENDING/SELECTED signups does **not** auto-withdraw those rows. That needs an explicit later lifecycle policy.
 
-## Why no delete
+## Delete
 
-Characters may be referenced by RunSignup, roster entries, BoosterAccess, and CharacterRaidLockout. Deleting them would damage historical integrity. Deactivation is the supported lifecycle.
+The owner (Character details → **Delete**, confirmed) and admins (`/manage/characters/[id]` → **Delete**) can hard-delete a Character (`characterRepository.deleteGuarded`, one transaction):
+
+- **Refused** (`CHARACTER_HAS_OPEN_SIGNUPS`, 409) while any non-withdrawn signup (PENDING / SELECTED / NOT_SELECTED — the last can still step in via Replace) on a Run that is not `COMPLETED` / `CANCELLED` references it. Withdraw those signups first, or deactivate instead.
+- **Cascades** lockouts, availability blocks, weekly unavailability and WCL performance rows.
+- **Keeps history**: signups of finished Runs, payout lines (with their name snapshots), Booster Access (account-level) and the default-Character pointer keep their rows with the Character reference set to null.
+- **Platform Owner protection:** an ADMIN cannot delete the Platform Owner's Characters (`OWNER_ROLE_PROTECTED`); the Owner can.
+- Audited as `CHARACTER_DELETED` (owner) / `ADMIN_CHARACTER_DELETED` (with `targetCharacterId`).
+- A later Battle.net import of the same character imports it as a fresh Character; manual Characters that still exist are linked instead (auto-link on connect / "Link existing").
+
+Deactivation remains the reversible option.
 
 ## Booster access
 

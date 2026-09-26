@@ -41,6 +41,18 @@ async function syncOne(input: unknown, force: boolean): Promise<ActionResult> {
   }
 }
 
+export async function adminDeleteCharacterAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { characterId } = adminCharacterSyncSchema.parse(input);
+    const { label } = await characterOperationsService.deleteCharacter(admin, characterId);
+    revalidateCharacter(characterId);
+    return { ok: true, message: `Deleted ${label}.` };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export async function adminSyncCharacterAction(input: unknown): Promise<ActionResult> {
   return syncOne(input, false);
 }

@@ -408,6 +408,26 @@ export const characterService = {
     });
   },
 
+  /**
+   * Owner hard delete. Refused while an unfinished Run still has a
+   * non-withdrawn signup on it (see characterRepository.deleteGuarded).
+   * A later Battle.net import of the same character simply imports it again.
+   */
+  async deleteCharacter(user: AuthenticatedUser, characterId: string) {
+    const character = await characterRepository.findById(characterId);
+    if (!character) {
+      throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
+    }
+    assertOwned(user, character);
+
+    await characterRepository.deleteGuarded(character.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "CHARACTER_DELETED",
+      message: `Deleted character ${characterLabel(character)}.`,
+    });
+  },
+
   async reactivateCharacter(user: AuthenticatedUser, characterId: string) {
     const character = await characterRepository.findById(characterId);
     if (!character) {
