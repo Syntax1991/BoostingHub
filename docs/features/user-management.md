@@ -29,6 +29,8 @@ Hidden links are not authorization. Controllers still call `requireManagerOrRedi
 
 `isManagementNavActive` treats `/manage` as exact-match only so `/manage/users` does not highlight Overview.
 
+Characters across all users (sync health, linkage, lockouts, admin sync controls) live in [character-operations.md](character-operations.md) (`/manage/characters`).
+
 ## Account Roles
 
 Platform permissions on `User.accountRole`:
