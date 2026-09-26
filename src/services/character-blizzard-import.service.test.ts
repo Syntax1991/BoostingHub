@@ -581,6 +581,43 @@ describe("reconcileBattleNetCharactersForConnection (already-connected accounts,
     expect((await characterRepository.findById(row.id))!.blizzardCharacterId).toBeNull();
   });
 
+  it("exact names only: a renamed / similar roster name is not fuzzy-matched", async () => {
+    const owned = ownedCharacter({ id: "300214", name: "Bnrecname" });
+    const similar = await manual(owner, { name: "Bnrecnamex" });
+    await seedConnectedWithStoredRoster([owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 650 });
+
+    const result = await reconcile();
+
+    expect(result).toMatchObject({ linkedCharacterIds: [], alreadyLinked: 0, skipped: 0 });
+    expect((await characterRepository.findById(similar.id))!.blizzardCharacterId).toBeNull();
+    expect(await ownerCharacterCount()).toBe(1);
+  });
+
+  it("keeps the owner's healer spec + role and the row's weekly availability even when Blizzard's active spec is DPS", async () => {
+    const owned = ownedCharacter({ id: "300215", name: "Bnrecheal" });
+    const row = await manual(owner, { name: owned.name, specialization: "Restoration" });
+    const now = new Date().toISOString();
+    await orm.CharacterWeeklyUnavailability.create({
+      id: crypto.randomUUID(),
+      characterId: row.id,
+      resetIdentifier: "2026-EU-reset",
+      difficulty: "HEROIC",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await seedConnectedWithStoredRoster([owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 663, specialization: "Elemental" });
+
+    const result = await reconcile();
+
+    expect(result.linkedCharacterIds).toEqual([row.id]);
+    const linked = (await characterRepository.findById(row.id))!;
+    expect(linked).toMatchObject({ blizzardCharacterId: owned.id, specialization: "Restoration", primaryRole: "HEALER", userId: ids.owner });
+    expect(await orm.CharacterWeeklyUnavailability.where({ characterId: row.id }).all()).toHaveLength(1);
+    await orm.CharacterWeeklyUnavailability.where({ characterId: row.id }).delete();
+  });
+
   it("reports NO_CONNECTION / NO_SNAPSHOT without touching anything", async () => {
     const owned = ownedCharacter({ id: "300211", name: "Bnrecnone" });
     const row = await manual(owner, { name: owned.name });

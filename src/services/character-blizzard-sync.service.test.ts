@@ -492,6 +492,27 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     expect(row?.lastSyncErrorCode).toBe("IDENTITY_CONFLICT");
   });
 
+  it("NO_CONNECTION: a linked character syncs PUBLIC after disconnect, keeps its ids and still checks them", async () => {
+    const { owned, characterId } = await importLinkedShaman("300035", "Bnnoconn");
+    await orm.BattleNetConnection.where({ userId: ids.owner, region: "EU" }).delete();
+    const cooledDown = { lastSyncedAt: new Date(Date.now() - 120_000).toISOString(), lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString() };
+    await orm.Character.where({ id: characterId }).update(cooledDown);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 671 });
+
+    const refreshed = await characterBlizzardSyncService.refreshCharacter(owner, characterId);
+    expect(refreshed.itemLevel).toBe(671);
+    expect(refreshed.blizzardCharacterId).toBe(owned.id);
+    expect(refreshed.blizzardRealmId).toBe(owned.realmId);
+
+    // The stored id is still checked on the public path: a different character at that name is refused.
+    await orm.Character.where({ id: characterId }).update(cooledDown);
+    mockEnrichmentSuccess({ id: "399035", name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 700 });
+    await expectDomainCode(characterBlizzardSyncService.refreshCharacter(owner, characterId), "BLIZZARD_IDENTITY_CONFLICT");
+    const row = (await characterRepository.findById(characterId))!;
+    expect(row.blizzardCharacterId).toBe(owned.id);
+    expect(row.itemLevel).toBe(671);
+  });
+
   it("safely renames when scoped Blizzard identity still matches", async () => {
     const { owned, characterId } = await importLinkedShaman("300032", "Bnoldname");
 
