@@ -413,6 +413,28 @@ describe("characterBlizzardImportService.autoLinkExistingCharacters", () => {
     expect(Number(row?.itemLevel)).toBe(645);
   });
 
+  it("connect-time linking never lowers a higher known item level (same monotonic rule as sync)", async () => {
+    const owned = ownedCharacter({ id: "300122", name: "Bnautoilvl" });
+    const manual = await characterService.createCharacter(owner, {
+      name: owned.name,
+      realm: owned.realmName,
+      region: owned.region,
+      wowClass: owned.wowClass,
+      specialization: "Elemental",
+      itemLevel: 701,
+    });
+    createdCharacterIds.push(manual.id);
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 671 });
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.linkedCharacterIds).toEqual([manual.id]);
+    const row = await orm.Character.where({ id: manual.id }).first();
+    expect(String(row?.blizzardCharacterId)).toBe(owned.id);
+    expect(Number(row?.itemLevel)).toBe(701);
+  });
+
   it("never links another user's Character with the same name", async () => {
     const owned = ownedCharacter({ id: "300111", name: "Bnautoother" });
     const others = await characterService.createCharacter(asUser(ids.other, "Blizzard Other"), {
@@ -614,6 +636,80 @@ describe("reconcileBattleNetCharactersForConnection (already-connected accounts,
     expect(result.linkedCharacterIds).toEqual([row.id]);
     const linked = (await characterRepository.findById(row.id))!;
     expect(linked).toMatchObject({ blizzardCharacterId: owned.id, specialization: "Restoration", primaryRole: "HEALER", userId: ids.owner });
+    expect(await orm.CharacterWeeklyUnavailability.where({ characterId: row.id }).all()).toHaveLength(1);
+    await orm.CharacterWeeklyUnavailability.where({ characterId: row.id }).delete();
+  });
+
+  it.each([
+    { label: "existing higher", existing: 701, blizzard: 671, expected: 701, id: "300216", name: "Bnrecilvla" },
+    { label: "Blizzard higher", existing: 671, blizzard: 701, expected: 701, id: "300217", name: "Bnrecilvlb" },
+    { label: "existing null", existing: null, blizzard: 701, expected: 701, id: "300218", name: "Bnrecilvlc" },
+  ])("item level on relink follows the sync merge rule: $label", async ({ existing, blizzard, expected, id, name }) => {
+    const owned = ownedCharacter({ id, name });
+    const row = await manual(owner, { name: owned.name });
+    await orm.Character.where({ id: row.id }).update({ itemLevel: existing });
+    await seedConnectedWithStoredRoster([owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: blizzard });
+
+    const result = await reconcile();
+
+    expect(result.linkedCharacterIds).toEqual([row.id]);
+    const linked = (await characterRepository.findById(row.id))!;
+    expect(linked.blizzardCharacterId).toBe(owned.id);
+    expect(linked.itemLevel).toBe(expected);
+  });
+
+  it("keeps a higher item level when Blizzard's is unavailable during relink", async () => {
+    const owned = ownedCharacter({ id: "300219", name: "Bnrecilvlnone" });
+    const row = await manual(owner, { name: owned.name });
+    await orm.Character.where({ id: row.id }).update({ itemLevel: 701 });
+    await seedConnectedWithStoredRoster([owned]);
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: owned.id, isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: owned.id, name: owned.name, realmId: owned.realmId, realmSlug: "twisting-nether", realmName: "Twisting Nether",
+      wowClass: owned.wowClass, equippedItemLevel: null, activeSpecialization: "Elemental",
+    });
+
+    const result = await reconcile();
+
+    expect(result.linkedCharacterIds).toEqual([row.id]);
+    expect((await characterRepository.findById(row.id))!.itemLevel).toBe(701);
+  });
+
+  it("existing higher item level: two runs keep the row, its ids, spec, role, availability and 701", async () => {
+    const owned = ownedCharacter({ id: "300220", name: "Bnrecilvltwice" });
+    const row = await manual(owner, { name: owned.name, specialization: "Restoration" });
+    await orm.Character.where({ id: row.id }).update({ itemLevel: 701 });
+    const now = new Date().toISOString();
+    await orm.CharacterWeeklyUnavailability.create({
+      id: crypto.randomUUID(),
+      characterId: row.id,
+      resetIdentifier: "2026-EU-reset",
+      difficulty: "HEROIC",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await seedConnectedWithStoredRoster([owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 671, specialization: "Elemental" });
+
+    expect((await reconcile()).linkedCharacterIds).toEqual([row.id]);
+    const afterFirst = (await characterRepository.findById(row.id))!;
+    const second = await reconcile();
+
+    expect(second).toMatchObject({ linkedCharacterIds: [], alreadyLinked: 1, skipped: 0, failed: 0 });
+    const afterSecond = (await characterRepository.findById(row.id))!;
+    for (const state of [afterFirst, afterSecond]) {
+      expect(state).toMatchObject({
+        id: row.id,
+        itemLevel: 701,
+        blizzardCharacterId: owned.id,
+        blizzardRealmId: owned.realmId,
+        specialization: "Restoration",
+        primaryRole: "HEALER",
+      });
+    }
+    expect(afterSecond.updatedAt).toBe(afterFirst.updatedAt);
+    expect(await ownerCharacterCount()).toBe(1);
     expect(await orm.CharacterWeeklyUnavailability.where({ characterId: row.id }).all()).toHaveLength(1);
     await orm.CharacterWeeklyUnavailability.where({ characterId: row.id }).delete();
   });

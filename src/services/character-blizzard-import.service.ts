@@ -25,6 +25,7 @@ import {
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
+import { resolveMonotonicItemLevel } from "@/lib/character-item-level";
 import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
@@ -455,15 +456,16 @@ async function applySelectionsForRoster(
       );
     }
 
+    const linkedItemLevel = resolveMonotonicItemLevel(character.itemLevel, item.itemLevel);
     try {
       await characterRepository.applyBlizzardLink(character.id, {
         blizzardCharacterId: item.owned.id,
         blizzardRealmId: item.owned.realmId,
         specialization: item.spec.specialization,
         primaryRole: item.spec.primaryRole,
-        // Omitted (not null) when unavailable this time, so linking never
-        // clears a previously known item level on a transient failure.
-        ...(typeof item.itemLevel === "number" ? { itemLevel: item.itemLevel } : {}),
+        // Same monotonic rule as a normal sync: linking an existing row never
+        // lowers its known item level, and never clears it when unavailable.
+        ...(linkedItemLevel != null ? { itemLevel: linkedItemLevel } : {}),
         lastSyncedAt: item.lastSyncedAt,
       });
     } catch (error) {
