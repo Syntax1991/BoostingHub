@@ -266,6 +266,26 @@ describe("admin delete", () => {
     expect(await characterRepository.findById(character.id)).toBeNull();
   });
 
+  it("the Platform Owner deletes their own Character through the normal owner path", async () => {
+    const character = await createCharacter(platformOwner);
+    await characterService.deleteCharacter(platformOwner, character.id);
+    expect(await characterRepository.findById(character.id)).toBeNull();
+  });
+
+  it("the admin detail projection mirrors the server rule: Owner Characters show a block reason, others do not", async () => {
+    const ownerCharacter = await createCharacter(platformOwner);
+    const userCharacter = await createCharacter(other);
+
+    expect((await characterOperationsService.getDetail(admin, ownerCharacter.id)).deleteBlockedReason).toMatch(/Platform Owner/);
+    expect((await characterOperationsService.getDetail(admin, userCharacter.id)).deleteBlockedReason).toBeNull();
+    expect((await characterOperationsService.getDetail(platformOwner, ownerCharacter.id)).deleteBlockedReason).toBeNull();
+
+    // The UI is not the boundary: a direct ADMIN mutation is still refused.
+    await expectCode(characterOperationsService.deleteCharacter(admin, ownerCharacter.id), "OWNER_ROLE_PROTECTED");
+    await characterOperationsService.deleteCharacter(platformOwner, ownerCharacter.id);
+    await characterOperationsService.deleteCharacter(admin, userCharacter.id);
+  });
+
   it("refuses non-admins", async () => {
     const character = await createCharacter(other);
     const error = await characterOperationsService.deleteCharacter(lead, character.id).catch((caught) => caught);
