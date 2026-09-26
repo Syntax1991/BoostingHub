@@ -51,12 +51,18 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
             <Link href="/manage/characters" className="text-sm text-accent hover:underline">
               All characters
             </Link>
-            <DeleteCharacterButton
-              characterId={row.id}
-              characterLabel={`${row.name}-${row.realm}`}
-              mode="admin"
-              redirectTo="/manage/characters"
-            />
+            {data.deleteBlockedReason ? (
+              <span className="text-xs text-muted" title={data.deleteBlockedReason}>
+                Delete unavailable · Platform Owner
+              </span>
+            ) : (
+              <DeleteCharacterButton
+                characterId={row.id}
+                characterLabel={`${row.name}-${row.realm}`}
+                mode="admin"
+                redirectTo="/manage/characters"
+              />
+            )}
           </div>
         }
       />

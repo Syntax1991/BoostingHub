@@ -300,6 +300,14 @@ async function resolveSyncTarget(characterId: string) {
   return { character, connectionId, owner: { id: owner.id, name: owner.name } };
 }
 
+/** An ADMIN may delete any Character except the Platform Owner's; the Owner may delete any. */
+function canDeleteCharacterOf(
+  admin: AuthenticatedUser,
+  owner: { id: string; accountRole: AuthenticatedUser["accountRole"] } | null,
+): boolean {
+  return !(owner && hasOwnerAccess(owner.accountRole) && !hasOwnerAccess(admin.accountRole) && owner.id !== admin.id);
+}
+
 export const characterOperationsService = {
   async getListPage(admin: AuthenticatedUser, filters: CharacterOperationsFilters, now: Date = new Date()) {
     assertCanManageCharacterOperations(admin);
@@ -334,12 +342,17 @@ export const characterOperationsService = {
       now,
       staleMinutes: resolveSyncHealthStaleMinutes(),
     });
-    const [availabilityById, qualifications] = await Promise.all([
+    const [availabilityById, qualifications, owner] = await Promise.all([
       characterWeeklyAvailabilityService.projectCurrentForCharacters([{ id: character.id, region: character.region }]),
       boosterQualificationRepository.listByUserId(character.userId),
+      userRepository.findById(character.userId),
     ]);
     return {
       row,
+      /** Mirrors deleteCharacter's Platform Owner protection (the server enforces it again). */
+      deleteBlockedReason: canDeleteCharacterOf(admin, owner)
+        ? null
+        : "Characters of the Platform Owner can only be deleted by the Platform Owner.",
       identity: {
         primaryRole: character.primaryRole,
         blizzardCharacterId: character.blizzardCharacterId,
@@ -424,7 +437,7 @@ export const characterOperationsService = {
       throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
     }
     const owner = await userRepository.findById(character.userId);
-    if (owner && hasOwnerAccess(owner.accountRole) && !hasOwnerAccess(admin.accountRole) && owner.id !== admin.id) {
+    if (!canDeleteCharacterOf(admin, owner)) {
       throw new DomainError(
         "OWNER_ROLE_PROTECTED",
         "Characters of the Platform Owner can only be deleted by the Platform Owner.",
