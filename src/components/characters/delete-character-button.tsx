@@ -16,11 +16,15 @@ export function DeleteCharacterButton({
   characterLabel,
   mode,
   redirectTo,
+  compact = false,
 }: {
   characterId: string;
   characterLabel: string;
   mode: "owner" | "admin";
-  redirectTo: string;
+  /** Detail pages leave the deleted Character's page; lists just refresh in place. */
+  redirectTo?: string;
+  /** Row-action size used in the management lists. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -39,7 +43,7 @@ export function DeleteCharacterButton({
         return;
       }
       dialogRef.current?.close();
-      router.push(redirectTo);
+      if (redirectTo) router.push(redirectTo);
       router.refresh();
     });
   }
@@ -52,7 +56,7 @@ export function DeleteCharacterButton({
           setError(null);
           dialogRef.current?.showModal();
         }}
-        className="h-8 rounded-md border border-danger/40 px-2 text-xs text-danger hover:bg-danger/10"
+        className={`${compact ? "h-7" : "h-8"} rounded-md border border-danger/40 px-2 text-xs text-danger hover:bg-danger/10`}
       >
         Delete
       </button>
@@ -64,13 +68,13 @@ export function DeleteCharacterButton({
       >
         <div className="flex flex-col gap-3 p-4">
           <h2 id={titleId} className="text-sm font-semibold">
-            Delete {characterLabel}?
+            Delete {characterLabel} permanently?
           </h2>
-          <p className="text-xs text-muted">
-            This permanently removes the character with its lockouts and availability. Signups of finished runs and
-            payout history stay, without the character link. Not possible while the character is still signed up for
-            an unfinished run. Adding it again later (e.g. via Battle.net import) creates a fresh character.
-          </p>
+          <div className="space-y-1 text-xs text-muted">
+            <p>This permanently removes the Character from BoostingHub, with its lockouts and availability.</p>
+            <p>Historical completed-run records and payout history are preserved.</p>
+            <p>Characters with active run signups cannot be deleted. To keep it, use Deactivate instead.</p>
+          </div>
           {error ? (
             <p id={errorId} role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs">
               {error}
@@ -81,7 +85,7 @@ export function DeleteCharacterButton({
               Cancel
             </Button>
             <Button variant="danger" disabled={pending} onClick={run}>
-              {pending ? "Deleting…" : "Delete character"}
+              {pending ? "Deleting…" : "Delete permanently"}
             </Button>
           </div>
         </div>

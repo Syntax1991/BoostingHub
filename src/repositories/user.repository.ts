@@ -198,6 +198,12 @@ export const userRepository = {
     return this.findAuthenticatedById(id);
   },
 
+  /** Ids of every account with this role — small (e.g. the Platform Owner). */
+  async listIdsByRole(role: AccountRole): Promise<string[]> {
+    const rows = await orm.User.where({ accountRole: role }).select("id").all();
+    return rows.map((row) => String((row as Record<string, unknown>).id));
+  },
+
   /** Discord bot identity resolution: the immutable Discord snowflake, never username. */
   async findByDiscordUserId(discordUserId: string): Promise<AuthenticatedUser | null> {
     const user = await orm.User.where({ discordUserId }).first();

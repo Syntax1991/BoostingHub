@@ -59,8 +59,9 @@ export async function adminDeleteCharacterAction(input: unknown): Promise<Action
   try {
     const admin = await requireAdmin();
     const { characterId } = adminCharacterSyncSchema.parse(input);
-    const { label } = await characterOperationsService.deleteCharacter(admin, characterId);
+    const { label, ownerId } = await characterOperationsService.deleteCharacter(admin, characterId);
     revalidateCharacter(characterId);
+    revalidatePath(`/manage/users/${ownerId}`);
     return { ok: true, message: `Deleted ${label}.` };
   } catch (error) {
     return mapActionError(error);
