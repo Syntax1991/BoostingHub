@@ -118,10 +118,37 @@ Real case: a Battle.net-imported character (`Åsúna-Blackmoore`) whose **status
 - The status + profile summary are the authoritative identity check (Blizzard character id, realm id, class, name). A 404 on either — like `is_valid: false` — is classified as `BLIZZARD_PROFILE_UNAVAILABLE` (not "deleted", not a successful zero-data sync).
 - **No raid fallback:** encounters are never requested or persisted when the profile could not be verified. Realm/name paths are not a stable identity (rename, realm transfer, deletion and profile propagation lag all look the same), so raid data is never attached to an unverified identity.
 - **Nothing is written:** item level, name, lockouts and `lastSyncedAt` stay exactly as they were. A previously synced character keeps its last known good data; a never-synced one stays unknown (null), never 0.
-- **Retry:** `lastSyncedAt` only advances on a verified sync, so the scheduler keeps the character a candidate on its normal cadence; manual Refresh can retry subject to the usual 60-second cooldown. One 404 never creates a permanent failure state.
-- **Diagnostics:** the sync logs `[blizzard-sync] profile unavailable: region=… realm=… name=<normalized> endpoint=character-status|character-summary http=404` (no tokens/headers). The scheduled job reports `profileUnavailable=` as a subset of `failed`.
+- **Retry:** `lastSyncedAt` only advances on a verified sync, so the scheduler keeps the character a candidate on its normal cadence; manual Refresh can retry after the 60-second cooldown (which starts at every attempt, failed ones included). One 404 never creates a permanent failure state.
+- **Diagnostics:** the attempt is recorded on the Character (`lastSyncErrorCode = PROFILE_UNAVAILABLE`, see [Sync telemetry](#sync-telemetry)) and logged as one safe structured line without any character identity. The scheduled job reports `profileUnavailable=` as a subset of `failed`.
 - **UI:** manual Refresh shows "Blizzard profile unavailable. … Log into the character once, log out, then refresh again later." The Characters list and details derive the state from existing data (no sync-status column): a linked character never synced ~30 minutes after it was created shows **Blizzard profile unavailable** with that hint; a previously synced character whose last successful sync is older than the stale window + 30 minutes keeps showing its last known data plus **Blizzard sync failing**.
-- Other failures keep their semantics: 429 → `BATTLENET_RATE_LIMITED`; 401/403, 5xx, timeouts, malformed JSON → `BLIZZARD_SYNC_FAILED`.
+- Other failures keep their owner-facing semantics: 429 → `BATTLENET_RATE_LIMITED`; 401/403, 5xx, timeouts, malformed JSON → `BLIZZARD_SYNC_FAILED` (the original code is kept as the error's `cause` so telemetry can still classify it).
+
+## Sync telemetry
+
+Every real Blizzard sync attempt of a linked Character — scheduled sync, owner Refresh, owner regional Refresh All (and the admin paths planned for `/manage/characters`) — goes through **one** entry point, `syncLinkedCharacterProfile` (`character-blizzard-sync.service.ts`). The lower-level profile refresh is module-private, so no path can skip it.
+
+Persisted on `Character` (no sync-history table):
+
+| Field | Meaning |
+| --- | --- |
+| `lastSyncedAt` | Last **successful** sync (unchanged semantics; scheduler freshness uses only this) |
+| `lastSyncAttemptAt` | Start of the latest real attempt, successful or not |
+| `lastSyncErrorAt` | Latest failed attempt; cleared on success |
+| `lastSyncErrorCode` | Safe category of that failure; cleared on success |
+| `syncFailureCount` | Consecutive failures; reset to 0 on success |
+
+- **Attempt:** `lastSyncAttemptAt = now`. Nothing else changes; `Character.updatedAt` ("Updated") is preserved because bookkeeping is not a Character data change.
+- **Success:** `applyBlizzardSync` writes the profile, `lastSyncedAt` and the cleared failure fields in **one** statement.
+- **Failure:** `lastSyncErrorAt = now`, `lastSyncErrorCode = category`, `syncFailureCount + 1`. Name, item level, `lastSyncedAt` and lockouts keep their last known good values. A failing telemetry write is logged and never replaces the real outcome.
+- A verified Battle.net import/link enrichment also sets `lastSyncAttemptAt` (it is a real Blizzard round-trip). Eligibility failures (not linked, no connection) are not attempts and are never recorded.
+
+**Safe categories** (`classifySyncError`, `src/lib/blizzard/sync-error.ts` — the only mapping): `PROFILE_UNAVAILABLE` (404 / `is_valid=false`), `IDENTITY_CONFLICT` (class, Blizzard id or realm/transfer mismatch), `NAME_CONFLICT` (rename collision or unstorable name), `RATE_LIMITED` (429), `UPSTREAM_UNAVAILABLE` (5xx, network, timeout, invalid JSON), `AUTH_OR_CONFIG` (app credentials rejected or Battle.net not configured), `INTERNAL` (anything else). Only the code is stored — never messages, URLs, payloads or tokens (a CHECK constraint limits the column to these values).
+
+**Logging:** each failed attempt writes one JSON line — `{"event":"character_sync_failed"|"character_sync_rate_limited","errorCategory","trigger","region","rateLimited","retryable"}`. It never contains character/owner ids or names, Discord identity, emails, messages, upstream data or credentials; per-Character diagnosis comes from the persisted telemetry.
+
+**Health** (`src/lib/blizzard/sync-health.ts`, pure): linkage (`LINKED` / `NOT_LINKED` / `NO_CONNECTION`) is separate from health, which exists only for `LINKED` Characters with precedence `ERROR` (a failure newer than the last success) > `NEVER_SYNCED` > `STALE` (last success older than `BLIZZARD_SYNC_STALE_MINUTES` + 30 min grace) > `HEALTHY`. Retirement is reported separately. The owner-facing Characters page state uses the same stale primitive.
+
+**Per-Character lock:** each attempt holds a non-blocking PostgreSQL advisory lock `(837463, hashtext(characterId))` (`src/lib/character-sync-lock.ts`) on one dedicated lock session per process (outside the 5-connection pool). A Character already being synced anywhere — web process or scheduled job — is refused (`CHARACTER_SYNC_IN_PROGRESS`, 409) by manual Refresh and skipped by Refresh All and the scheduler, without an attempt. The scheduler's whole-job lock `(837462, 1)` is unchanged.
 
 ## Rename and realm transfer
 
@@ -195,7 +222,7 @@ Signup / roster lockout display uses the Character region's regional reset conta
 - Import/link selections must match the live import session snapshot
 - Character ownership is enforced in services for link and refresh
 - Tokens and secrets are not returned to the client or activity feed
-- Refresh is rate-limited (~60s cooldown per character)
+- Refresh is rate-limited: 60s cooldown per character, measured from the latest attempt (failed attempts included)
 
 ## Routes
 

@@ -129,6 +129,7 @@ Scheduled sync **may** update, per successfully-refreshed Character:
 - `Character.name`, `normalizedName`
 - `Character.itemLevel` (only when Blizzard supplies one — see below)
 - `Character.lastSyncedAt`
+- the sync telemetry fields (`lastSyncAttemptAt`, `lastSyncErrorAt`, `lastSyncErrorCode`, `syncFailureCount`) — for every attempt, successful or failed
 - current-raid `CharacterRaidLockout` rows
 - `BattleNetConnection.lastSuccessfulSyncAt` (grouped — see below)
 
@@ -160,7 +161,7 @@ Successful refreshes are grouped by `BattleNetConnection`. A connection's `lastS
 
 ## Relationship to manual refresh
 
-Manual refresh (`characterBlizzardSyncService.refreshCharacter` / `refreshLinkedCharactersForRegion`) is unchanged: its **60-second** `REFRESH_COOLDOWN_MS` still applies, and "Refresh All" is still available from the Web UI.
+Manual refresh (`characterBlizzardSyncService.refreshCharacter` / `refreshLinkedCharactersForRegion`) keeps its **60-second** `REFRESH_COOLDOWN_MS`, measured from `lastSyncAttemptAt` — the start of the latest attempt, successful or failed — so a failing Character cannot be retried every second. "Refresh All" is still available from the Web UI.
 
 The scheduled job's **120-minute** stale threshold is a completely separate concept from the manual cooldown:
 
@@ -169,7 +170,7 @@ The scheduled job's **120-minute** stale threshold is a completely separate conc
 
 Do not share configuration between these two paths.
 
-Both paths call the same reusable `refreshLinkedCharacterProfile(owner, character, connectionId, options)` function. It takes a minimal `CharacterSyncOwner = { id, name }` context rather than a full `AuthenticatedUser`, because the scheduled job has no logged-in User — it builds this context from the Character's real, persisted owner (via the eager-loaded `User` relation), never a fabricated `ADMIN` user or a bypassed ownership check.
+Both paths call the same `syncLinkedCharacterProfile(owner, character, connectionId, options)` entry point, which owns the per-Character lock and the sync telemetry (see [blizzard-integration.md § Sync telemetry](blizzard-integration.md#sync-telemetry)). The job never selects candidates by `lastSyncAttemptAt` — freshness stays success-based, so a failing Character remains a candidate every tick. A candidate already being synced elsewhere (per-Character lock held) is skipped without an attempt and counted in `skippedInProgress`. It takes a minimal `CharacterSyncOwner = { id, name }` context rather than a full `AuthenticatedUser`, because the scheduled job has no logged-in User — it builds this context from the Character's real, persisted owner (via the eager-loaded `User` relation), never a fabricated `ADMIN` user or a bypassed ownership check.
 
 ## Activity logging
 
