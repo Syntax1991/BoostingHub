@@ -171,6 +171,7 @@ A stale Character whose automatic sync keeps failing is not retried every tick f
 | 10+ | 24h | 1h (capped) | none |
 
 - Persistent, Character-specific problems (deleted / renamed / transferred Character, identity or name conflict) back off progressively. Transient upstream problems are capped at 1h so one outage never parks a Character for a day. `RATE_LIMITED` stays governed by the whole-run 429 stop, and `AUTH_OR_CONFIG` is a system problem (the job fails fast when Battle.net is not configured).
+- The filter runs over the **complete** stale set: the candidate query has no `LIMIT`/ordering/paging, so backed-off rows can never crowd eligible ones out of a window (regression-tested). If a row limit is ever added, backoff must move before it.
 - A backed-off Character is **not attempted**: it counts as `skippedBackoff` (neither refreshed nor failed), its telemetry and error stay as they are, and `--dry-run` reports `inBackoff`.
 - The backoff is scheduler-only. Owner Refresh / Refresh all and admin Sync now / Force refresh / Force refresh all ignore it (the normal 60s manual cooldown still applies; Force still bypasses it).
 - A successful sync resets `syncFailureCount` and `lastSyncErrorCode`, which removes the backoff; normal freshness scheduling resumes. Nothing is deleted, retired, renamed or unlinked.

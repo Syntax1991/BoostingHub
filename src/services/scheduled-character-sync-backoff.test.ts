@@ -293,3 +293,112 @@ describe("admin projection uses the same helper", () => {
     expect(derived.autoRetryAt).toBeNull();
   });
 });
+
+describe("fairness: backoff is applied to the COMPLETE stale set (no bounded window to starve)", () => {
+  const letters = "abcdefghijklmnopqrstuvwxyz";
+  let early: Array<{ id: string; name: string }> = [];
+  let later: Array<{ id: string; name: string }> = [];
+  let retired: { id: string; name: string };
+
+  beforeAll(async () => {
+    const make = async (suffix: string) => {
+      const created = await characterService.createCharacter(owner, {
+        name: `Bf${token}${suffix}`,
+        realm: "Twisting Nether",
+        region: "EU",
+        wowClass: "SHAMAN",
+        specialization: "Restoration",
+        itemLevel: 600,
+      });
+      return { id: created.id, name: created.name };
+    };
+    // 24 backed-off Characters created (and least-recently synced) FIRST, then 8 eligible ones — more than any
+    // plausible page of 20, with the eligible rows "behind" the backed-off ones.
+    for (let i = 0; i < 24; i += 1) early.push(await make(`a${letters[i]}`));
+    for (let i = 0; i < 8; i += 1) later.push(await make(`z${letters[i]}`));
+    retired = await make("rr");
+    await characterRepository.setActive(retired.id, false);
+  });
+
+  afterAll(() => {
+    early = [];
+    later = [];
+  });
+
+  async function stageFairness(laterBackedOff: boolean) {
+    for (const [index, character] of early.entries()) {
+      await orm.Character.where({ id: character.id }).update({
+        lastSyncedAt: ago(96 * HOUR + index * 60_000),
+        lastSyncAttemptAt: ago(30 * 60_000),
+        lastSyncErrorAt: ago(30 * 60_000),
+        lastSyncErrorCode: "PROFILE_UNAVAILABLE",
+        syncFailureCount: 12,
+      });
+    }
+    for (const character of later) {
+      await orm.Character.where({ id: character.id }).update({
+        lastSyncedAt: ago(48 * HOUR),
+        lastSyncAttemptAt: ago(laterBackedOff ? 30 * 60_000 : 48 * HOUR),
+        lastSyncErrorAt: laterBackedOff ? ago(30 * 60_000) : null,
+        lastSyncErrorCode: laterBackedOff ? "PROFILE_UNAVAILABLE" : null,
+        syncFailureCount: laterBackedOff ? 12 : 0,
+      });
+    }
+    await orm.Character.where({ id: retired.id }).update({ lastSyncedAt: ago(96 * HOUR), lastSyncErrorCode: null, syncFailureCount: 0 });
+  }
+
+  const callsFor = (name: string) =>
+    apiMocks.getCharacterProfileStatus.mock.calls.filter((call) => String(call[2]).toLowerCase() === name.toLowerCase()).length;
+
+  it("backed-off early rows never crowd out eligible later rows; each eligible row is attempted exactly once", async () => {
+    await stageFairness(false);
+    apiMocks.getCharacterProfileStatus.mockImplementation(async (_region: string, _realm: string, name: string) => {
+      if (later.some((character) => character.name.toLowerCase() === name.toLowerCase())) return { id: "", isValid: true };
+      throw new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", "not a fairness fixture", 404);
+    });
+    const listSpy = vi.spyOn(characterRepository, "listScheduledSyncCandidates");
+
+    const result = await scheduledCharacterSyncService.runOnce();
+
+    expect(listSpy).toHaveBeenCalledTimes(1); // one query, no paging loop
+    listSpy.mockRestore();
+    for (const character of later) expect(callsFor(character.name)).toBe(1);
+    for (const character of early) expect(callsFor(character.name)).toBe(0);
+    expect(callsFor(retired.name)).toBe(0);
+    expect(result.skippedBackoff).toBeGreaterThanOrEqual(early.length);
+    expect(result.status).toBe("COMPLETED");
+  });
+
+  it("a run where every stale candidate is backed off makes no Blizzard calls and exits cleanly", async () => {
+    await stageFairness(true);
+    // Park every OTHER active Character of the shared test DB as fresh for this run, then restore it.
+    const fixtureIds = new Set([...early, ...later, retired, ...Object.values(fx)].map((character) => character.id));
+    const others = ((await orm.Character.where({ isActive: true }).select("id", "lastSyncedAt").all()) as Array<{
+      id: string;
+      lastSyncedAt: string | null;
+    }>).filter((character) => !fixtureIds.has(character.id));
+    for (const key of ["P", "L"] as const) {
+      await orm.Character.where({ id: fx[key].id }).update({ lastSyncedAt: new Date().toISOString() });
+    }
+    const freshAt = new Date().toISOString();
+    for (const character of others) await orm.Character.where({ id: character.id }).update({ lastSyncedAt: freshAt });
+    try {
+      const result = await scheduledCharacterSyncService.runOnce();
+
+      expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        status: "COMPLETED",
+        totalCandidates: early.length + later.length,
+        skippedBackoff: early.length + later.length,
+        refreshed: 0,
+        failed: 0,
+        rateLimited: 0,
+        skippedInProgress: 0,
+      });
+    } finally {
+      for (const character of others) {
+        await orm.Character.where({ id: character.id }).update({ lastSyncedAt: character.lastSyncedAt });
+      }
+    }
+  });
+});
