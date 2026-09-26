@@ -226,17 +226,16 @@ function RegionRow({
         <div className="flex flex-wrap gap-2">
           {configured ? (
             <>
-              {connected ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={pending}
-                  onClick={refreshAll}
-                  className="h-8 px-2 text-xs"
-                >
-                  {pendingAction === "refresh" ? "Refreshing…" : "Refresh all"}
-                </Button>
-              ) : null}
+              {/* Every active Character syncs; without a connection it syncs from the public API. */}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={refreshAll}
+                className="h-8 px-2 text-xs"
+              >
+                {pendingAction === "refresh" ? "Refreshing…" : "Refresh all"}
+              </Button>
               <a
                 href={connectHref}
                 className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"

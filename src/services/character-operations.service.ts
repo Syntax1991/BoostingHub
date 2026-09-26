@@ -300,6 +300,9 @@ async function resolveSyncTarget(characterId: string) {
   return { character, connectionId, owner: { id: owner.id, name: owner.name } };
 }
 
+export const OWNER_CHARACTER_DELETE_PROTECTED_COPY =
+  "Characters of the Platform Owner can only be deleted by the Platform Owner.";
+
 /** An ADMIN may delete any Character except the Platform Owner's; the Owner may delete any. */
 function canDeleteCharacterOf(
   admin: AuthenticatedUser,
@@ -311,7 +314,10 @@ function canDeleteCharacterOf(
 export const characterOperationsService = {
   async getListPage(admin: AuthenticatedUser, filters: CharacterOperationsFilters, now: Date = new Date()) {
     assertCanManageCharacterOperations(admin);
-    const { characters, connections } = await characterOperationsRepository.listAll();
+    const [{ characters, connections }, platformOwnerIds] = await Promise.all([
+      characterOperationsRepository.listAll(),
+      userRepository.listIdsByRole("OWNER"),
+    ]);
     const staleMinutes = resolveSyncHealthStaleMinutes();
     const all = characters.map((record) =>
       deriveOperationsRow(record, {
@@ -320,7 +326,17 @@ export const characterOperationsService = {
         staleMinutes,
       }),
     );
-    const rows = sortOperationsRows(filterOperationsRows(all, filters), filters.sort);
+    const ownerIds = new Set(platformOwnerIds);
+    // Mirrors deleteCharacter's Platform Owner protection per row (the server enforces it again).
+    const rows = sortOperationsRows(filterOperationsRows(all, filters), filters.sort).map((row) => ({
+      ...row,
+      deleteBlockedReason: canDeleteCharacterOf(
+        admin,
+        ownerIds.has(row.owner.id) ? { id: row.owner.id, accountRole: "OWNER" } : null,
+      )
+        ? null
+        : OWNER_CHARACTER_DELETE_PROTECTED_COPY,
+    }));
     return {
       filters,
       summary: summarizeOperationsRows(all),
@@ -352,7 +368,7 @@ export const characterOperationsService = {
       /** Mirrors deleteCharacter's Platform Owner protection (the server enforces it again). */
       deleteBlockedReason: canDeleteCharacterOf(admin, owner)
         ? null
-        : "Characters of the Platform Owner can only be deleted by the Platform Owner.",
+        : OWNER_CHARACTER_DELETE_PROTECTED_COPY,
       identity: {
         primaryRole: character.primaryRole,
         blizzardCharacterId: character.blizzardCharacterId,
@@ -430,7 +446,7 @@ export const characterOperationsService = {
    * Platform Owner's Characters can only be deleted by the Owner, mirroring
    * the OWNER_ROLE_PROTECTED rule of role management.
    */
-  async deleteCharacter(admin: AuthenticatedUser, characterId: string): Promise<{ label: string }> {
+  async deleteCharacter(admin: AuthenticatedUser, characterId: string): Promise<{ label: string; ownerId: string }> {
     assertCanManageCharacterOperations(admin);
     const character = await characterRepository.findById(characterId);
     if (!character) {
@@ -440,7 +456,7 @@ export const characterOperationsService = {
     if (!canDeleteCharacterOf(admin, owner)) {
       throw new DomainError(
         "OWNER_ROLE_PROTECTED",
-        "Characters of the Platform Owner can only be deleted by the Platform Owner.",
+        OWNER_CHARACTER_DELETE_PROTECTED_COPY,
         403,
       );
     }
@@ -451,7 +467,7 @@ export const characterOperationsService = {
       type: "ADMIN_CHARACTER_DELETED",
       message: `Deleted ${label} (owner ${owner?.name ?? "unknown"}). targetCharacterId=${character.id}`,
     });
-    return { label };
+    return { label, ownerId: character.userId };
   },
 
   /**

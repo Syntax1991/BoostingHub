@@ -87,11 +87,11 @@ Entry: `/characters` when Blizzard env vars are configured.
 
 Import creates the Character with Blizzard ids. Link only stamps Blizzard identity (and may update item level when the profile is available). Mixed import/link selections submit in one server action; the service resolves classification server-side from the import session.
 
-Character selection happens in a **modal** on `/characters`. The page itself only shows compact regional Battle.net connection cards (Connect / Reconnect / Import / Disconnect / **Refresh all** when connected). Import opens the dialog when a live import session exists for that region; otherwise Import starts OAuth reconnect to refresh ownership.
+Character selection happens in a **modal** on `/characters`. The page itself only shows compact regional Battle.net connection cards (**Refresh all**, plus Connect / Reconnect / Import / Disconnect). Import opens the dialog when a live import session exists for that region; otherwise Import starts OAuth reconnect to refresh ownership.
 
 The import modal supports presentation-only **Item Level** sorting (header toggle: descending first, then ascending). Unknown item levels sort last in both directions.
 
-**Refresh all** refreshes only the current user's active Blizzard-linked characters in that region, with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt and, when current-raid encounters map successfully, verified current-reset `CharacterRaidLockout` rows. Aggregate messaging distinguishes profiles refreshed, lockouts verified, and lockouts unavailable. It never updates specialization, primaryRole, or BoosterAccess.
+**Refresh all** refreshes every one of the current user's **active** characters in that region — linked ones VERIFIED through the connection, manual / unconnected ones from the public API (no Battle.net connection needed; with one, exact-match links run first) — with bounded concurrency (~4), per-character cooldown skips, and partial-success semantics. It updates item level / safe rename / lastSyncedAt and, when current-raid encounters map successfully, verified current-reset `CharacterRaidLockout` rows. Aggregate messaging distinguishes profiles refreshed, lockouts verified, and lockouts unavailable. It never updates specialization, primaryRole, or BoosterAccess.
 
 Missing or stale (wrong `resetIdentifier` / non-current raid) CharacterRaidLockout rows display as **Unknown** on `/characters` (not "Clear"). A difficulty mode present with zero current-reset kills displays as **0/N**. A tracked difficulty absent from the Blizzard response displays as **?** (unknown), never invented 0/N.
 
@@ -153,7 +153,7 @@ Persisted on `Character` (no sync-history table):
 - **VERIFIED** (`LINKED`: Blizzard ids + the owner's regional connection, ownership proven at import/link): stored ids are checked and the connection's `lastSuccessfulSyncAt` is marked.
 - **PUBLIC** (`NOT_LINKED` manual Characters, or `NO_CONNECTION`): public profile data only — item level and raid lockouts. The class must match; stored ids (if any) are still checked; Blizzard ids are **never stamped** by a public sync, so the real owner can still import/link it later (the auto-link on connect then upgrades it to VERIFIED). Shown as **Public API** on `/manage/characters`.
 
-Manual Refresh, owner Refresh all (all active Characters of the connected region), admin Sync now / Force refresh / Force refresh all and the scheduler all use the same eligibility: active = eligible; only retirement blocks a sync.
+Manual Refresh, owner Refresh all (all active Characters of the region, connected or not), admin Sync now / Force refresh / Force refresh all and the scheduler all use the same eligibility: active = eligible; only retirement blocks a sync.
 
 **Health** (`src/lib/blizzard/sync-health.ts`, pure): linkage (`LINKED` / `NOT_LINKED` / `NO_CONNECTION`) is separate from health, which exists for every active Character with precedence `ERROR` (a failure newer than the last success) > `NEVER_SYNCED` > `STALE` (last success older than `BLIZZARD_SYNC_STALE_MINUTES` + 30 min grace) > `HEALTHY`. Retirement is reported separately. The owner-facing Characters page state uses the same stale primitive.
 

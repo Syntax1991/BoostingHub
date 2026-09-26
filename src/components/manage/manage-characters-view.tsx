@@ -8,6 +8,7 @@ import { SYNC_INELIGIBLE_COPY, type OperationsRow } from "@/services/character-o
 import { CharacterSyncButtons } from "@/components/manage/character-operations/character-sync-buttons";
 import { ForceRefreshAllButton } from "@/components/manage/character-operations/force-refresh-all-button";
 import { ReconcileLinksButton } from "@/components/manage/character-operations/reconcile-links-button";
+import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 import {
   LinkageBadge,
   LockoutSlotsCompact,
@@ -55,15 +56,35 @@ function ApiCell({ row }: { row: OperationsRow }) {
   );
 }
 
-function Actions({ row }: { row: OperationsRow }) {
+type ListRow = Page["rows"][number];
+
+function Actions({ row }: { row: ListRow }) {
   return (
-    <CharacterSyncButtons
-      characterId={row.id}
-      characterLabel={`${row.name}-${row.realm}`}
-      ineligibleCopy={row.syncIneligibleReason ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason] : null}
-      cooldownRemainingMs={row.cooldownRemainingMs}
-      compact
-    />
+    <div className="flex flex-wrap items-start gap-1.5">
+      <Link
+        href={`/manage/characters/${row.id}`}
+        className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs hover:bg-surface-raised"
+      >
+        Open
+      </Link>
+      <CharacterSyncButtons
+        characterId={row.id}
+        characterLabel={`${row.name}-${row.realm}`}
+        ineligibleCopy={row.syncIneligibleReason ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason] : null}
+        cooldownRemainingMs={row.cooldownRemainingMs}
+        compact
+      />
+      {row.deleteBlockedReason ? (
+        <span
+          className="inline-flex h-7 cursor-help items-center text-xs text-muted"
+          title={row.deleteBlockedReason}
+        >
+          Delete protected
+        </span>
+      ) : (
+        <DeleteCharacterButton characterId={row.id} characterLabel={`${row.name}-${row.realm}`} mode="admin" compact />
+      )}
+    </div>
   );
 }
 

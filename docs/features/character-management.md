@@ -12,7 +12,7 @@ A Character belongs to exactly one User.
 
 All mutations take the owner from the authenticated session. Submitted `userId` is ignored.
 
-Users cannot view details, edit, deactivate, reactivate or delete another account's characters. ADMIN does not bypass this self-service ownership here; admin deletion lives in Character Operations (`/manage/characters/[id]`).
+Users cannot view details, edit, deactivate, reactivate or delete another account's characters. ADMIN does not bypass this self-service ownership here; admin deletion lives in Character Operations (`/manage/characters`).
 
 Hidden UI is not authorization. Controllers call `CharacterService`, which loads the row and asserts `character.userId === session.user.id`.
 
@@ -75,7 +75,7 @@ Deactivating a character that already has future PENDING/SELECTED signups does *
 
 ## Delete
 
-The owner (Character details → **Delete**, confirmed) and admins (`/manage/characters/[id]` → **Delete**) can hard-delete a Character (`characterRepository.deleteGuarded`, one transaction):
+The owner (**Delete** in each `/characters` row or on Character details, confirmed) and admins (**Delete** in each `/manage/characters` row — desktop table and mobile card — or on `/manage/characters/[id]`) can hard-delete a Character (`characterRepository.deleteGuarded`, one transaction):
 
 - **Refused** (`CHARACTER_HAS_OPEN_SIGNUPS`, 409) while any non-withdrawn signup (PENDING / SELECTED / NOT_SELECTED — the last can still step in via Replace) on a Run that is not `COMPLETED` / `CANCELLED` references it. Withdraw those signups first, or deactivate instead.
 - **Cascades** lockouts, availability blocks, weekly unavailability and WCL performance rows.

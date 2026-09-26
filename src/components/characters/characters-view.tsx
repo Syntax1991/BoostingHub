@@ -9,6 +9,7 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
+import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 import { BattleNetPanel } from "@/components/characters/battle-net-panel";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
@@ -186,6 +187,11 @@ export function CharactersView({ data }: { data: Page }) {
                           }}
                         />
                         <CharacterLifecycleButton characterId={character.id} isActive={character.isActive} />
+                        <DeleteCharacterButton
+                          characterId={character.id}
+                          characterLabel={`${character.name}-${character.realm}`}
+                          mode="owner"
+                        />
                       </div>
                     </td>
                   </tr>

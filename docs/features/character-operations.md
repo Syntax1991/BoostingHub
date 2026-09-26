@@ -31,7 +31,7 @@ Read-only operations view: identity (realm, region, class, specialization, role,
 
 Eligibility for every sync action: the Character is **active** (retired → disabled with the reason; the server refuses with `CHARACTER_SYNC_NOT_ELIGIBLE`). Linked Characters whose **owner** (resolved server-side — never the acting admin) has a Battle.net connection for the region sync VERIFIED; manual / unconnected ones sync PUBLIC from the public Blizzard API (item level + lockouts, badge **Public API**) — see [blizzard-integration.md](blizzard-integration.md).
 
-- **Delete** (detail page) — confirmed hard delete of any Character, with the owner-delete guard (refused while an unfinished Run has a non-withdrawn signup on it). The Platform Owner's Characters are protected from ADMINs. See [character-management.md](character-management.md#delete).
+- **Delete** (list row actions next to Open / Sync now / Force refresh, desktop and mobile, and the detail page) — confirmed hard delete of any Character, with the owner-delete guard (refused while an unfinished Run has a non-withdrawn signup on it). The Platform Owner's Characters are protected from ADMINs: their rows show **Delete protected** instead of a button, and the server still refuses with `OWNER_ROLE_PROTECTED`. See [character-management.md](character-management.md#delete).
 
 - **Sync now** — the normal 60-second cooldown (measured from the last attempt) applies.
 - **Force refresh** — confirmation required; bypasses only the 60-second cooldown. Identity/class/realm checks, rate-limit handling, telemetry and the per-Character lock stay in force. Still available while the bulk cooldown is active.
