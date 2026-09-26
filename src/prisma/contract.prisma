@@ -13,6 +13,20 @@ enum AccountRole {
   OWNER     = "OWNER"
 }
 
+/// Safe, fixed category of the latest failed Blizzard sync attempt for a
+/// Character. Never a raw upstream message. Eligibility failures (not linked,
+/// no Battle.net connection) are not attempts and are never stored here.
+enum CharacterSyncErrorCode {
+  @@type("pg/text@1")
+  PROFILE_UNAVAILABLE  = "PROFILE_UNAVAILABLE"
+  IDENTITY_CONFLICT    = "IDENTITY_CONFLICT"
+  NAME_CONFLICT        = "NAME_CONFLICT"
+  RATE_LIMITED         = "RATE_LIMITED"
+  UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
+  AUTH_OR_CONFIG       = "AUTH_OR_CONFIG"
+  INTERNAL             = "INTERNAL"
+}
+
 enum AccountStatus {
   @@type("pg/text@1")
   ACTIVE   = "ACTIVE"
@@ -411,7 +425,16 @@ model Character {
   blizzardCharacterId  String?
   blizzardRealmId      String?
   warcraftLogsId       String?
+  /// Last SUCCESSFUL Blizzard profile sync (scheduler freshness is based on this).
   lastSyncedAt         TimestamptzString?
+  /// Start of the latest real sync attempt, successful or not (manual cooldown basis).
+  lastSyncAttemptAt    TimestamptzString?
+  /// Latest failed attempt; cleared on success. ERROR health = newer than lastSyncedAt.
+  lastSyncErrorAt      TimestamptzString?
+  /// Safe category of the latest failure; cleared on success.
+  lastSyncErrorCode    CharacterSyncErrorCode?
+  /// Consecutive failed attempts; reset to 0 on success.
+  syncFailureCount     Int           @default(0)
   createdAt            TimestamptzString @default(now())
   updatedAt            temporal.updatedAtString()
 

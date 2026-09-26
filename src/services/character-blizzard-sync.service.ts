@@ -12,6 +12,8 @@ import {
 } from "@/lib/blizzard/character-domain";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { withCharacterSyncLock } from "@/lib/character-sync-lock";
+import { classifySyncError, logCharacterSyncFailure, type CharacterSyncTrigger } from "@/lib/blizzard/sync-error";
 import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
@@ -29,15 +31,25 @@ import { characterWarcraftLogsService } from "@/services/character-warcraft-logs
  * along with a successful profile refresh. Import/link orchestration for
  * new candidates lives in character-blizzard-import.service.ts. The
  * scheduled background sync (scheduled-character-sync.service.ts) reuses
- * refreshLinkedCharacterProfile directly rather than duplicating this logic.
+ * syncLinkedCharacterProfile rather than duplicating this logic.
  *
  * After Blizzard profile apply, equipped item level may be raised from
  * Raider.IO when that source reports a higher value (soft-fail). Spec and
  * primaryRole remain BoostingHub-owned and are never overwritten here.
  */
 
+/**
+ * Manual refresh cooldown, measured from the start of the latest real attempt
+ * (lastSyncAttemptAt) — successful or failed — so a failing Character cannot
+ * be hammered. Scheduler freshness is separate and stays success-based.
+ */
 const REFRESH_COOLDOWN_MS = 60_000;
 const REFRESH_ALL_CONCURRENCY = 4;
+
+function isInManualCooldown(character: { lastSyncAttemptAt: string | null }): boolean {
+  if (!character.lastSyncAttemptAt) return false;
+  return Date.now() - new Date(character.lastSyncAttemptAt).getTime() < REFRESH_COOLDOWN_MS;
+}
 
 /**
  * Minimal owner context a refresh actually needs: whose identity-conflict
@@ -132,13 +144,12 @@ function profileUnavailableError(): DomainError {
 }
 
 /**
- * Reusable lower-level refresh: profile fetch/validate/apply plus current-raid
- * lockout sync, shared by manual refresh (refreshCharacter,
- * refreshLinkedCharactersForRegion) and the scheduled background job. Never
- * touches specialization/primaryRole — those are Character metadata a
- * Blizzard sync must not overwrite.
+ * Lower-level refresh: profile fetch/validate/apply plus current-raid lockout
+ * sync. Never touches specialization/primaryRole — those are Character
+ * metadata a Blizzard sync must not overwrite. Module-private: every real
+ * attempt goes through syncLinkedCharacterProfile (lock + telemetry).
  */
-export async function refreshLinkedCharacterProfile(
+async function refreshLinkedCharacterProfile(
   owner: CharacterSyncOwner,
   character: SyncableCharacter,
   connectionId: string,
@@ -155,8 +166,6 @@ export async function refreshLinkedCharacterProfile(
 
   let summary;
   const realmSlug = realmSlugFromDisplayName(character.realm);
-  // Which authoritative identity request is in flight — for the 404 diagnostic.
-  let endpoint: "character-status" | "character-summary" = "character-status";
   try {
     const status = await blizzardApiClient.getCharacterProfileStatus(
       character.region,
@@ -167,7 +176,6 @@ export async function refreshLinkedCharacterProfile(
       throw profileUnavailableError();
     }
 
-    endpoint = "character-summary";
     summary = await blizzardApiClient.getCharacterProfileSummary(
       character.region,
       realmSlug,
@@ -180,12 +188,9 @@ export async function refreshLinkedCharacterProfile(
       // transfer or deletion all look the same). Identity cannot be verified,
       // so nothing is written — not even raid lockouts from the encounters
       // endpoint, which may still answer. lastSyncedAt is left untouched so
-      // the scheduler keeps retrying on its normal cadence.
+      // the scheduler keeps retrying on its normal cadence. (Logged safely by
+      // syncLinkedCharacterProfile — no character identity in logs.)
       if (error.code === "BLIZZARD_CHARACTER_NOT_FOUND") {
-        console.warn(
-          `[blizzard-sync] profile unavailable: region=${character.region} realm=${realmSlug} ` +
-            `name=${character.normalizedName} endpoint=${endpoint} http=404 — nothing persisted`,
-        );
         throw profileUnavailableError();
       }
       if (
@@ -195,13 +200,15 @@ export async function refreshLinkedCharacterProfile(
       ) {
         throw error;
       }
-      throw new DomainError(
-        "BLIZZARD_SYNC_FAILED",
-        "Could not refresh character from Blizzard.",
-        502,
-      );
+      // Owner-facing copy stays generic; the original code is kept as cause
+      // so telemetry can classify it (e.g. UPSTREAM_UNAVAILABLE vs AUTH_OR_CONFIG).
+      throw new DomainError("BLIZZARD_SYNC_FAILED", "Could not refresh character from Blizzard.", 502, {
+        cause: error,
+      });
     }
-    throw new DomainError("BLIZZARD_SYNC_FAILED", "Could not refresh character from Blizzard.", 502);
+    throw new DomainError("BLIZZARD_SYNC_FAILED", "Could not refresh character from Blizzard.", 502, {
+      cause: error,
+    });
   }
 
   if (summary.wowClass && summary.wowClass !== character.wowClass) {
@@ -279,6 +286,8 @@ export async function refreshLinkedCharacterProfile(
       throw new DomainError(
         "CHARACTER_ALREADY_EXISTS",
         "Cannot rename: identity conflict after Blizzard refresh.",
+        400,
+        { cause: error },
       );
     }
     throw error;
@@ -313,6 +322,63 @@ export async function refreshLinkedCharacterProfile(
   return { lockoutSynced };
 }
 
+export type LinkedCharacterSyncOptions = {
+  updateConnectionSync?: boolean;
+  writeActivity?: boolean;
+  /** Default true for single refresh; bulk callers disable and batch afterward. */
+  autoLinkWarcraftLogs?: boolean;
+  trigger: CharacterSyncTrigger;
+};
+
+/**
+ * THE entry point for a real Blizzard sync attempt of a linked Character —
+ * scheduled sync, owner manual refresh, owner regional Refresh All (and the
+ * PR 2 admin paths). It owns concurrency and telemetry:
+ *
+ * 1. Per-Character advisory lock (non-blocking): if the Character is already
+ *    being synced anywhere, throws CHARACTER_SYNC_IN_PROGRESS without making
+ *    an attempt.
+ * 2. Attempt: lastSyncAttemptAt = now (lastSyncedAt untouched).
+ * 3. Success: applyBlizzardSync sets lastSyncedAt and clears the failure
+ *    telemetry in the same statement.
+ * 4. Failure: lastSyncErrorAt = now, lastSyncErrorCode = safe category,
+ *    syncFailureCount += 1; last known good data stays; a safe structured
+ *    log line (no identity) is written; the original error is rethrown.
+ *    A failing telemetry write never replaces the real sync outcome.
+ */
+export async function syncLinkedCharacterProfile(
+  owner: CharacterSyncOwner,
+  character: SyncableCharacter,
+  connectionId: string,
+  options: LinkedCharacterSyncOptions,
+): Promise<{ lockoutSynced: boolean }> {
+  const outcome = await withCharacterSyncLock(character.id, async () => {
+    await characterRepository.recordSyncAttempt(character.id, new Date().toISOString());
+    try {
+      return await refreshLinkedCharacterProfile(owner, character, connectionId, options);
+    } catch (error) {
+      const code = classifySyncError(error);
+      logCharacterSyncFailure({ category: code, trigger: options.trigger, region: character.region });
+      try {
+        await characterRepository.recordSyncFailure(character.id, { code, failedAt: new Date().toISOString() });
+      } catch {
+        console.error(
+          JSON.stringify({ event: "character_sync_telemetry_write_failed", trigger: options.trigger, region: character.region }),
+        );
+      }
+      throw error;
+    }
+  });
+  if (!outcome.acquired) {
+    throw new DomainError(
+      "CHARACTER_SYNC_IN_PROGRESS",
+      "This character is already being refreshed. Try again in a moment.",
+      409,
+    );
+  }
+  return outcome.value;
+}
+
 export const characterBlizzardSyncService = {
   async refreshCharacter(user: AuthenticatedUser, characterId: string) {
     const character = await characterRepository.findById(characterId);
@@ -341,18 +407,15 @@ export const characterBlizzardSyncService = {
       );
     }
 
-    if (character.lastSyncedAt) {
-      const elapsed = Date.now() - new Date(character.lastSyncedAt).getTime();
-      if (elapsed < REFRESH_COOLDOWN_MS) {
-        throw new DomainError(
-          "BLIZZARD_REFRESH_COOLDOWN",
-          "Wait at least 60 seconds between Blizzard refreshes.",
-          429,
-        );
-      }
+    if (isInManualCooldown(character)) {
+      throw new DomainError(
+        "BLIZZARD_REFRESH_COOLDOWN",
+        "Wait at least 60 seconds between Blizzard refreshes.",
+        429,
+      );
     }
 
-    await refreshLinkedCharacterProfile(toSyncOwner(user), character, connection.id);
+    await syncLinkedCharacterProfile(toSyncOwner(user), character, connection.id, { trigger: "OWNER_MANUAL" });
 
     const updated = await characterRepository.findById(character.id);
     if (!updated) {
@@ -406,18 +469,16 @@ export const characterBlizzardSyncService = {
     const syncOwner = toSyncOwner(user);
     const refreshedCharacterIds: string[] = [];
     const results = await mapWithConcurrency(eligible, REFRESH_ALL_CONCURRENCY, async (character) => {
-      if (character.lastSyncedAt) {
-        const elapsed = Date.now() - new Date(character.lastSyncedAt).getTime();
-        if (elapsed < REFRESH_COOLDOWN_MS) {
-          return { status: "skipped" as const, lockoutSynced: false, characterId: character.id };
-        }
+      if (isInManualCooldown(character)) {
+        return { status: "skipped" as const, lockoutSynced: false, characterId: character.id };
       }
 
       try {
-        const result = await refreshLinkedCharacterProfile(syncOwner, character, connection.id, {
+        const result = await syncLinkedCharacterProfile(syncOwner, character, connection.id, {
           updateConnectionSync: false,
           writeActivity: false,
           autoLinkWarcraftLogs: false,
+          trigger: "OWNER_REGION_BULK",
         });
         return {
           status: "refreshed" as const,
@@ -425,7 +486,10 @@ export const characterBlizzardSyncService = {
           characterId: character.id,
         };
       } catch (error) {
-        if (isDomainError(error) && error.code === "BLIZZARD_REFRESH_COOLDOWN") {
+        if (
+          isDomainError(error) &&
+          (error.code === "BLIZZARD_REFRESH_COOLDOWN" || error.code === "CHARACTER_SYNC_IN_PROGRESS")
+        ) {
           return { status: "skipped" as const, lockoutSynced: false, characterId: character.id };
         }
         return { status: "failed" as const, lockoutSynced: false, characterId: character.id };

@@ -253,6 +253,30 @@ afterEach(async () => {
   createdCharacterIds.length = 0;
 });
 
+
+/** The only failure log: structured, category + trigger + region, never identity or message. */
+function expectSafeFailureLog(
+  warn: { mock: { calls: unknown[][] } },
+  category: string,
+  trigger: string,
+  forbidden: string[],
+) {
+  const lines = warn.mock.calls.map((call) => String(call[0]));
+  const structured = lines.map((line) => {
+    try {
+      return JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  });
+  expect(structured).toContainEqual(
+    expect.objectContaining({ event: "character_sync_failed", errorCategory: category, trigger, region: "EU" }),
+  );
+  for (const line of lines) {
+    for (const value of forbidden) expect(line).not.toContain(value);
+  }
+}
+
 describe("characterBlizzardSyncService.refreshCharacter", () => {
   const owner = asUser(ids.owner);
 
@@ -280,6 +304,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     // Clear cooldown from import sync.
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     mockEnrichmentSuccess({
@@ -304,6 +329,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     await orm.Character.where({ id: characterId }).update({
       itemLevel: 272,
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     mockEnrichmentSuccess({
@@ -335,6 +361,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     await orm.Character.where({ id: characterId }).update({
       itemLevel: 320,
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     mockEnrichmentSuccess({
@@ -354,6 +381,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
     raiderIoMocks.getCharacterEquippedItemLevel.mockResolvedValue({
       status: "TEMPORARY_FAILURE",
@@ -369,6 +397,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     await orm.Character.where({ id: characterId }).update({
       itemLevel: 312,
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     mockEnrichmentSuccess({
@@ -392,6 +421,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: owned.id, isValid: true });
@@ -453,6 +483,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     mockEnrichmentSuccess({
@@ -476,6 +507,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const { owned, characterId } = await importLinkedShaman("300033", "Bnlockout");
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     const reset = getRegionalWeeklyReset("EU");
@@ -565,6 +597,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     const { owned, characterId } = await importLinkedShaman("300035", "Bnmultilock");
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     const reset = getRegionalWeeklyReset("EU");
@@ -672,6 +705,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
 
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
     mockEnrichmentSuccess({
       id: owned.id,
@@ -762,12 +796,14 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
 
     await orm.Character.where({ id: euId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
       specialization: "Restoration",
       primaryRole: "HEALER",
       itemLevel: 640,
     });
     await orm.Character.where({ id: usId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
       itemLevel: 641,
     });
 
@@ -838,10 +874,12 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
 
     await orm.Character.where({ id: coolId }).update({
       lastSyncedAt: new Date().toISOString(),
+      lastSyncAttemptAt: new Date().toISOString(),
       itemLevel: 650,
     });
     await orm.Character.where({ id: hotId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
       itemLevel: 651,
     });
 
@@ -920,6 +958,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     const { owned, characterId } = await importLinkedShaman("300301", "BnwcLone");
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
       warcraftLogsId: null,
     });
 
@@ -948,6 +987,7 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     const { owned, characterId } = await importLinkedShaman("300302", "BnwcLhave");
     await orm.Character.where({ id: characterId }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
       warcraftLogsId: "999001",
     });
 
@@ -1001,9 +1041,11 @@ describe("Blizzard refresh × Warcraft Logs enrichment", () => {
     const idB = importB.importedCharacterIds[0]!;
     await orm.Character.where({ id: idA }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
     await orm.Character.where({ id: idB }).update({
       lastSyncedAt: new Date(Date.now() - 120_000).toISOString(),
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
     });
 
     apiMocks.getCharacterProfileStatus.mockImplementation(async (_region, _realm, name) => {
@@ -1163,11 +1205,7 @@ describe("Blizzard profile unavailable (status/profile 404)", () => {
     expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
     expect(apiMocks.getCharacterRaidEncounters).not.toHaveBeenCalled();
     expect(await orm.CharacterRaidLockout.where({ characterId }).all()).toHaveLength(0);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /profile unavailable: region=EU realm=twisting-nether name=bnasuna endpoint=character-status http=404/,
-      ),
-    );
+    expectSafeFailureLog(warn, "PROFILE_UNAVAILABLE", "OWNER_MANUAL", ["bnasuna", "Bnasuna", characterId, owner.id]);
 
     // Still a scheduler candidate right away (lastSyncedAt stays null).
     const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore: new Date().toISOString() });
@@ -1180,7 +1218,7 @@ describe("Blizzard profile unavailable (status/profile 404)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { characterId } = await importLinked("300091", "Bnlastgood", "ok");
     const lastGood = new Date(Date.now() - 120_000).toISOString();
-    await orm.Character.where({ id: characterId }).update({ lastSyncedAt: lastGood });
+    await orm.Character.where({ id: characterId }).update({ lastSyncedAt: lastGood, lastSyncAttemptAt: lastGood });
     const reset = getRegionalWeeklyReset("EU");
     const nowIso = new Date().toISOString();
     await orm.CharacterRaidLockout.create({
@@ -1211,7 +1249,7 @@ describe("Blizzard profile unavailable (status/profile 404)", () => {
     expect(lockouts).toHaveLength(1);
     expect(Number(lockouts[0]!.bossesDefeated)).toBe(5);
     expect(apiMocks.getCharacterRaidEncounters).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/endpoint=character-summary http=404/));
+    expectSafeFailureLog(warn, "PROFILE_UNAVAILABLE", "OWNER_MANUAL", ["bnlastgood", "Bnlastgood", characterId, owner.id]);
     warn.mockRestore();
   });
 
@@ -1225,6 +1263,10 @@ describe("Blizzard profile unavailable (status/profile 404)", () => {
       code: "BLIZZARD_PROFILE_UNAVAILABLE",
     });
 
+    // The failed attempt started the 60s manual cooldown — move it into the past.
+    await orm.Character.where({ id: characterId }).update({
+      lastSyncAttemptAt: new Date(Date.now() - 120_000).toISOString(),
+    });
     mockEnrichmentSuccess({
       id: owned.id,
       name: owned.name,

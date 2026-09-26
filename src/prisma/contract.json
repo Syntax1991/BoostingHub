@@ -255,6 +255,39 @@
               }
             ]
           },
+          "CharacterSyncErrorCode": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PROFILE_UNAVAILABLE",
+                "value": "PROFILE_UNAVAILABLE"
+              },
+              {
+                "name": "IDENTITY_CONFLICT",
+                "value": "IDENTITY_CONFLICT"
+              },
+              {
+                "name": "NAME_CONFLICT",
+                "value": "NAME_CONFLICT"
+              },
+              {
+                "name": "RATE_LIMITED",
+                "value": "RATE_LIMITED"
+              },
+              {
+                "name": "UPSTREAM_UNAVAILABLE",
+                "value": "UPSTREAM_UNAVAILABLE"
+              },
+              {
+                "name": "AUTH_OR_CONFIG",
+                "value": "AUTH_OR_CONFIG"
+              },
+              {
+                "name": "INTERNAL",
+                "value": "INTERNAL"
+              }
+            ]
+          },
           "DiscordDeliveryStatus": {
             "codecId": "pg/text@1",
             "members": [
@@ -1506,6 +1539,33 @@
                   "kind": "scalar"
                 }
               },
+              "lastSyncAttemptAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastSyncErrorAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastSyncErrorCode": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterSyncErrorCode",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "lastSyncedAt": {
                 "nullable": true,
                 "type": {
@@ -1571,6 +1631,13 @@
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "syncFailureCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
@@ -1766,6 +1833,15 @@
                 "itemLevel": {
                   "column": "itemLevel"
                 },
+                "lastSyncAttemptAt": {
+                  "column": "lastSyncAttemptAt"
+                },
+                "lastSyncErrorAt": {
+                  "column": "lastSyncErrorAt"
+                },
+                "lastSyncErrorCode": {
+                  "column": "lastSyncErrorCode"
+                },
                 "lastSyncedAt": {
                   "column": "lastSyncedAt"
                 },
@@ -1789,6 +1865,9 @@
                 },
                 "specialization": {
                   "column": "specialization"
+                },
+                "syncFailureCount": {
+                  "column": "syncFailureCount"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -7550,6 +7629,11 @@
             "character": {
               "checks": [
                 {
+                  "expression": "\"lastSyncErrorCode\" IN ('PROFILE_UNAVAILABLE', 'IDENTITY_CONFLICT', 'NAME_CONFLICT', 'RATE_LIMITED', 'UPSTREAM_UNAVAILABLE', 'AUTH_OR_CONFIG', 'INTERNAL')",
+                  "name": "character_lastSyncErrorCode_check_d5a4a203",
+                  "prefix": "character_lastSyncErrorCode_check"
+                },
+                {
                   "expression": "\"primaryRole\" IN ('TANK', 'HEALER', 'DPS')",
                   "name": "character_primaryRole_check_1fa7067b",
                   "prefix": "character_primaryRole_check"
@@ -7604,6 +7688,27 @@
                   "nativeType": "int4",
                   "nullable": true
                 },
+                "lastSyncAttemptAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "lastSyncErrorAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "lastSyncErrorCode": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterSyncErrorCode",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
                 "lastSyncedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -7655,6 +7760,15 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "syncFailureCount": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
                 },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -11642,6 +11756,18 @@
                 "DPS"
               ]
             },
+            "CharacterSyncErrorCode": {
+              "kind": "valueSet",
+              "values": [
+                "PROFILE_UNAVAILABLE",
+                "IDENTITY_CONFLICT",
+                "NAME_CONFLICT",
+                "RATE_LIMITED",
+                "UPSTREAM_UNAVAILABLE",
+                "AUTH_OR_CONFIG",
+                "INTERNAL"
+              ]
+            },
             "DiscordDeliveryStatus": {
               "kind": "valueSet",
               "values": [
@@ -11788,7 +11914,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "350c9c0e4ac04b7bc7dc972cb8f42137d1aa0591b6c707b42b64d79b91db44e6"
+    "storageHash": "d79acc109f9c4760100a1e605dd78641f11076780b8850d5d682aad52eca8554"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",

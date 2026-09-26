@@ -14,6 +14,21 @@ export type AccountRole = (typeof ACCOUNT_ROLES)[number];
 export const MANAGEABLE_ACCOUNT_ROLES = ["USER", "RAID_LEAD", "ADMIN"] as const satisfies readonly AccountRole[];
 export type ManageableAccountRole = (typeof MANAGEABLE_ACCOUNT_ROLES)[number];
 
+/**
+ * Safe persisted category of a Character's latest failed Blizzard sync attempt
+ * (Character.lastSyncErrorCode). Never raw upstream text.
+ */
+export const CHARACTER_SYNC_ERROR_CODES = [
+  "PROFILE_UNAVAILABLE",
+  "IDENTITY_CONFLICT",
+  "NAME_CONFLICT",
+  "RATE_LIMITED",
+  "UPSTREAM_UNAVAILABLE",
+  "AUTH_OR_CONFIG",
+  "INTERNAL",
+] as const;
+export type CharacterSyncErrorCode = (typeof CHARACTER_SYNC_ERROR_CODES)[number];
+
 export const ACCOUNT_STATUSES = ["ACTIVE", "DISABLED"] as const;
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 

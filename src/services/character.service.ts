@@ -22,7 +22,7 @@ import { characterWarcraftLogsService } from "@/services/character-warcraft-logs
 import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { lockoutService } from "@/services/lockout.service";
 import { deriveBlizzardSyncState } from "@/lib/blizzard/sync-state";
-import { DEFAULT_STALE_MINUTES, resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
+import { resolveSyncHealthStaleMinutes } from "@/lib/blizzard/sync-health";
 
 /**
  * Low-level, already-resolved creation input. Not reachable from any
@@ -107,12 +107,8 @@ function blizzardSyncStateFor(character: {
   lastSyncedAt: string | null;
   createdAt: string;
 }) {
-  let staleMinutes = DEFAULT_STALE_MINUTES;
-  try {
-    staleMinutes = resolveScheduledSyncStaleMs() / 60_000;
-  } catch {
-    // A misconfigured env fails the scheduler loudly; the page just uses the default.
-  }
+  // A misconfigured env fails the scheduler loudly; the page just uses the default.
+  const staleMinutes = resolveSyncHealthStaleMinutes();
   return deriveBlizzardSyncState(
     {
       blizzardLinked: Boolean(character.blizzardCharacterId),

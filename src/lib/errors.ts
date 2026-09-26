@@ -93,6 +93,7 @@ export const DOMAIN_ERROR_CODES = [
   "BLIZZARD_PROFILE_UNAVAILABLE",
   "BLIZZARD_SYNC_FAILED",
   "BLIZZARD_REFRESH_COOLDOWN",
+  "CHARACTER_SYNC_IN_PROGRESS",
   "BLIZZARD_LEVEL_TOO_LOW",
   "USER_MANAGEMENT_FORBIDDEN",
   "USER_NOT_FOUND",
@@ -128,8 +129,13 @@ export class DomainError extends Error {
   readonly code: DomainErrorCode;
   readonly status: number;
 
-  constructor(code: DomainErrorCode, message: string, status = 400) {
-    super(message);
+  /**
+   * `options.cause` keeps an underlying (domain) error attached when a caller
+   * folds it into a broader user-facing error — e.g. so sync telemetry can
+   * still classify the original Blizzard failure. Never shown to users.
+   */
+  constructor(code: DomainErrorCode, message: string, status = 400, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = "DomainError";
     this.code = code;
     this.status = status;

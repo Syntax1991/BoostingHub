@@ -1,3 +1,5 @@
+import { BLIZZARD_SYNC_RETRY_GRACE_MINUTES, isSuccessfulSyncStale } from "@/lib/blizzard/sync-health";
+
 /**
  * User-facing Blizzard sync state for a Character, derived from what is
  * already persisted (no sync-status column):
@@ -20,8 +22,9 @@ export type BlizzardSyncState =
   /** Previously synced; recent syncs keep failing. The last known good data is still shown. */
   | { kind: "STALE"; lastSyncedAt: string };
 
-/** Time the scheduler (≈15-minute ticks) gets to retry before a missing/old sync counts as failing. */
-export const BLIZZARD_SYNC_RETRY_GRACE_MINUTES = 30;
+// The grace constant and the stale primitive live in sync-health.ts — one
+// definition of "stale" for the owner page and the operations views.
+export { BLIZZARD_SYNC_RETRY_GRACE_MINUTES } from "@/lib/blizzard/sync-health";
 
 export function deriveBlizzardSyncState(
   character: { blizzardLinked: boolean; isActive: boolean; lastSyncedAt: string | null; createdAt: string | null },
@@ -39,8 +42,7 @@ export function deriveBlizzardSyncState(
       : { kind: "AWAITING_FIRST_SYNC" };
   }
 
-  const ageMs = nowMs - new Date(character.lastSyncedAt).getTime();
-  if (character.isActive && ageMs > options.staleMinutes * 60_000 + graceMs) {
+  if (character.isActive && isSuccessfulSyncStale(character.lastSyncedAt, options)) {
     return { kind: "STALE", lastSyncedAt: character.lastSyncedAt };
   }
   return { kind: "SYNCED", lastSyncedAt: character.lastSyncedAt };

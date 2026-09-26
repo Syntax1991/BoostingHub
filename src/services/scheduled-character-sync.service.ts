@@ -4,7 +4,7 @@ import { mapWithConcurrency } from "@/lib/concurrency";
 import { characterRepository } from "@/repositories/character.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
-import { refreshLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
+import { syncLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import type { ScheduledCharacterSyncCandidate } from "@/models/records";
 import { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
@@ -38,6 +38,8 @@ export type ScheduledCharacterSyncResult = {
   /** Subset of `failed`: Blizzard status/profile 404 — identity unverified, nothing persisted, retried later. */
   profileUnavailable: number;
   rateLimited: number;
+  /** Candidates already being synced by another context (per-Character lock held) — no attempt made. */
+  skippedInProgress: number;
   connectionsUpdated: number;
   durationMs: number;
 };
@@ -52,6 +54,7 @@ function emptyResult(status: ScheduledCharacterSyncResult["status"], durationMs:
     failed: 0,
     profileUnavailable: 0,
     rateLimited: 0,
+    skippedInProgress: 0,
     connectionsUpdated: 0,
     durationMs,
   };
@@ -64,7 +67,8 @@ export { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
 type CandidateOutcome =
   | { status: "refreshed"; lockoutSynced: boolean; characterId: string }
   | { status: "failed"; profileUnavailable: boolean }
-  | { status: "rate_limited" };
+  | { status: "rate_limited" }
+  | { status: "skipped_in_progress" };
 
 /**
  * Refreshes one candidate, respecting a shared "stop dispatching" flag so
@@ -81,11 +85,11 @@ async function refreshCandidate(
   }
 
   try {
-    const result = await refreshLinkedCharacterProfile(
+    const result = await syncLinkedCharacterProfile(
       candidate.owner,
       candidate.character,
       candidate.connection.id,
-      { updateConnectionSync: false, writeActivity: false, autoLinkWarcraftLogs: false },
+      { updateConnectionSync: false, writeActivity: false, autoLinkWarcraftLogs: false, trigger: "SCHEDULED" },
     );
     return { status: "refreshed", lockoutSynced: result.lockoutSynced, characterId: candidate.character.id };
   } catch (error) {
@@ -93,9 +97,14 @@ async function refreshCandidate(
       rateLimitedRef.current = true;
       return { status: "rate_limited" };
     }
+    // Already being synced elsewhere (owner refresh / another context): no
+    // attempt was made — skip it; it stays a candidate for the next tick.
+    if (isDomainError(error) && error.code === "CHARACTER_SYNC_IN_PROGRESS") {
+      return { status: "skipped_in_progress" };
+    }
     // Profile unavailable, identity conflict, realm transfer, transient
     // Blizzard error, etc. — one broken Character must not fail the job;
-    // refreshLinkedCharacterProfile already guarantees it left the
+    // syncLinkedCharacterProfile already guarantees it left the
     // Character's existing itemLevel/lockouts untouched on failure, and
     // lastSyncedAt unchanged, so it stays a candidate for the next tick.
     return {
@@ -204,6 +213,7 @@ export const scheduledCharacterSyncService = {
       let failed = 0;
       let profileUnavailable = 0;
       let rateLimited = 0;
+      let skippedInProgress = 0;
 
       for (const [index, outcome] of outcomes.entries()) {
         if (outcome.status === "refreshed") {
@@ -214,6 +224,8 @@ export const scheduledCharacterSyncService = {
           refreshedCharacterIds.push(outcome.characterId);
         } else if (outcome.status === "rate_limited") {
           rateLimited += 1;
+        } else if (outcome.status === "skipped_in_progress") {
+          skippedInProgress += 1;
         } else {
           failed += 1;
           if (outcome.profileUnavailable) profileUnavailable += 1;
@@ -233,6 +245,7 @@ export const scheduledCharacterSyncService = {
         `[scheduled-character-sync] candidates=${candidates.length} refreshed=${refreshed} ` +
           `lockoutsVerified=${lockoutsVerified} lockoutsUnavailable=${lockoutsUnavailable} ` +
           `failed=${failed} profileUnavailable=${profileUnavailable} rateLimited=${rateLimited} ` +
+          `skippedInProgress=${skippedInProgress} ` +
           `connectionsUpdated=${refreshedConnectionIds.size} ` +
           `durationMs=${durationMs}`,
       );
@@ -246,6 +259,7 @@ export const scheduledCharacterSyncService = {
         failed,
         profileUnavailable,
         rateLimited,
+        skippedInProgress,
         connectionsUpdated: refreshedConnectionIds.size,
         durationMs,
       };

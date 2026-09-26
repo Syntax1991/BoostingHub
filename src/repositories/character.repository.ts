@@ -1,5 +1,5 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
-import { orm } from "@/lib/prisma";
+import { db, orm } from "@/lib/prisma";
 import {
   asBoolean,
   asNumber,
@@ -10,9 +10,10 @@ import {
   mapDifficulty,
   mapRegion,
   mapWowClass,
+  mapCharacterSyncErrorCode,
 } from "@/lib/persistence";
 import type { BoosterQualificationRecord, ScheduledCharacterSyncCandidate } from "@/models/records";
-import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
+import type { CharacterRole, CharacterSyncErrorCode, WowClass, WowRegion } from "@/models/enums";
 import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 
 export type CharacterPageRecord = {
@@ -29,7 +30,15 @@ export type CharacterPageRecord = {
   /** Blizzard-authoritative equipped item level. Null when Blizzard has not supplied one. */
   itemLevel: number | null;
   isActive: boolean;
+  /** Last successful Blizzard sync. */
   lastSyncedAt: string | null;
+  /** Start of the latest real sync attempt (manual cooldown basis). */
+  lastSyncAttemptAt: string | null;
+  /** Latest failed attempt; null after a success. */
+  lastSyncErrorAt: string | null;
+  lastSyncErrorCode: CharacterSyncErrorCode | null;
+  /** Consecutive failed attempts. */
+  syncFailureCount: number;
   blizzardCharacterId: string | null;
   blizzardRealmId: string | null;
   warcraftLogsId: string | null;
@@ -115,6 +124,10 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     itemLevel: asNumberOrNull(character.itemLevel),
     isActive: asBoolean(character.isActive, true),
     lastSyncedAt: asStringOrNull(character.lastSyncedAt),
+    lastSyncAttemptAt: asStringOrNull(character.lastSyncAttemptAt),
+    lastSyncErrorAt: asStringOrNull(character.lastSyncErrorAt),
+    lastSyncErrorCode: mapCharacterSyncErrorCode(character.lastSyncErrorCode),
+    syncFailureCount: asNumber(character.syncFailureCount, 0),
     blizzardCharacterId: asStringOrNull(character.blizzardCharacterId),
     blizzardRealmId: asStringOrNull(character.blizzardRealmId),
     warcraftLogsId: asStringOrNull(character.warcraftLogsId),
@@ -274,6 +287,9 @@ export const characterRepository = {
       blizzardCharacterId: input.blizzardCharacterId ?? null,
       blizzardRealmId: input.blizzardRealmId ?? null,
       lastSyncedAt: input.lastSyncedAt ?? null,
+      // A verified import enrichment is a real Blizzard round-trip: it also
+      // starts the manual refresh cooldown (lastSyncAttemptAt).
+      lastSyncAttemptAt: input.lastSyncedAt ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -306,17 +322,68 @@ export const characterRepository = {
       ...(input.primaryRole ? { primaryRole: input.primaryRole } : {}),
       ...(typeof input.itemLevel === "number" ? { itemLevel: Math.floor(input.itemLevel) } : {}),
       ...(input.lastSyncedAt !== undefined ? { lastSyncedAt: input.lastSyncedAt } : {}),
+      // A verified link enrichment also starts the manual refresh cooldown.
+      ...(input.lastSyncedAt ? { lastSyncAttemptAt: input.lastSyncedAt } : {}),
       updatedAt: new Date().toISOString(),
     });
   },
 
+  /**
+   * The success commit point of a Blizzard sync. Also clears the failure
+   * telemetry in the SAME statement, so a verified profile and "no active
+   * error" can never be persisted apart.
+   */
   async applyBlizzardSync(characterId: string, input: CharacterBlizzardSyncInput): Promise<void> {
     await orm.Character.where({ id: characterId }).update({
       name: input.name,
       normalizedName: input.normalizedName,
       ...(typeof input.itemLevel === "number" ? { itemLevel: Math.floor(input.itemLevel) } : {}),
       lastSyncedAt: input.lastSyncedAt,
+      lastSyncErrorAt: null,
+      lastSyncErrorCode: null,
+      syncFailureCount: 0,
       updatedAt: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Telemetry: a real sync attempt starts. Only lastSyncAttemptAt changes —
+   * never lastSyncedAt — and Character.updatedAt (shown as "Updated") keeps
+   * its value because bookkeeping is not a Character data change.
+   */
+  async recordSyncAttempt(characterId: string, attemptedAt: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const row = (await txOrm.Character.where({ id: characterId }).select("updatedAt").first()) as
+        | { updatedAt: string }
+        | null;
+      if (!row) return;
+      await txOrm.Character.where({ id: characterId }).update({
+        lastSyncAttemptAt: attemptedAt,
+        updatedAt: row.updatedAt,
+      });
+    });
+  },
+
+  /**
+   * Telemetry: the attempt failed. lastSyncedAt and every Character data
+   * field stay untouched (last known good data remains). Callers hold the
+   * Character's sync lock, so the read-then-increment cannot race another
+   * attempt of the same Character.
+   */
+  async recordSyncFailure(characterId: string, input: { code: CharacterSyncErrorCode; failedAt: string }): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: typeof orm }).public ?? (tx.orm as unknown as typeof orm)) as typeof orm;
+      const row = (await txOrm.Character.where({ id: characterId }).select("syncFailureCount", "updatedAt").first()) as
+        | { syncFailureCount: unknown; updatedAt: string }
+        | null;
+      if (!row) return;
+      await txOrm.Character.where({ id: characterId }).update({
+        lastSyncErrorAt: input.failedAt,
+        lastSyncErrorCode: input.code,
+        syncFailureCount: asNumber(row.syncFailureCount, 0) + 1,
+        updatedAt: row.updatedAt,
+      });
     });
   },
 
