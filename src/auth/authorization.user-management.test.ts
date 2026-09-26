@@ -8,13 +8,14 @@ import {
 describe("management navigation and user-management gates", () => {
   it("exposes ADMIN manage modules including users and booster access", () => {
     const items = getManagementNavItems("ADMIN");
-    expect(items.map((item) => item.module)).toEqual(["overview", "runs", "templates", "booster-access", "users"]);
+    expect(items.map((item) => item.module)).toEqual(["overview", "runs", "templates", "booster-access", "users", "characters"]);
     expect(items.map((item) => item.href)).toEqual([
       "/manage",
       "/manage/runs",
       "/manage/templates",
       "/manage/booster-access",
       "/manage/users",
+      "/manage/characters",
     ]);
   });
 

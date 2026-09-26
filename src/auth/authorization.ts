@@ -70,10 +70,21 @@ export function assertCanManageUsers(user: AuthenticatedUser): void {
   }
 }
 
+/** Admin-level (ADMIN / OWNER) Character Operations: all-character view and admin sync controls. */
+export function canManageCharacterOperations(role: AccountRole): boolean {
+  return hasAdminAccess(role);
+}
+
+export function assertCanManageCharacterOperations(user: AuthenticatedUser): void {
+  if (!canManageCharacterOperations(user.accountRole)) {
+    throw new DomainError("NOT_AUTHORIZED", "Admin permission is required for character operations.", 403);
+  }
+}
+
 export type ManagementNavItem = {
   href: string;
   label: string;
-  module: "overview" | "runs" | "templates" | "booster-access" | "users";
+  module: "overview" | "runs" | "templates" | "booster-access" | "users" | "characters";
 };
 
 /**
@@ -93,6 +104,7 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
       { href: "/manage/templates", label: "Templates", module: "templates" },
       { href: "/manage/booster-access", label: "Booster Access", module: "booster-access" },
       { href: "/manage/users", label: "Users", module: "users" },
+      { href: "/manage/characters", label: "Characters", module: "characters" },
     );
   }
   return items;

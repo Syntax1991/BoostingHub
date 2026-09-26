@@ -1,5 +1,8 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
+import { characterOperationsService } from "@/services/character-operations.service";
+import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 import {
+  canManageCharacterOperations,
   canManageUsers,
   canReviewBoosterAccess,
   getManagementNavItems,
@@ -11,7 +14,7 @@ import { userRepository } from "@/repositories/user.repository";
 import { listManagedRunOperationalHandoffs } from "@/services/managed-run-operational.service";
 
 export type ManagementOverviewCard = {
-  id: "runs" | "booster-access" | "users";
+  id: "runs" | "booster-access" | "users" | "characters";
   title: string;
   description: string;
   href: string;
@@ -88,6 +91,23 @@ export const managementHubService = {
           { label: "Raid leads", value: roleCounts.RAID_LEAD },
           // Admin-level accounts: Admins plus the Platform Owner.
           { label: "Admins", value: roleCounts.ADMIN + roleCounts.OWNER },
+        ],
+      });
+    }
+
+    if (canManageCharacterOperations(user.accountRole)) {
+      const { summary } = await characterOperationsService.getListPage(user, parseCharacterOperationsFilters({}));
+      cards.push({
+        id: "characters",
+        title: "Characters",
+        description: "All characters, Blizzard sync health, lockouts, and admin sync controls.",
+        href: "/manage/characters",
+        cta: "Manage Characters",
+        metrics: [
+          { label: "Active", value: summary.active },
+          { label: "Sync errors", value: summary.errors },
+          { label: "Stale", value: summary.stale },
+          { label: "No connection", value: summary.noConnection },
         ],
       });
     }

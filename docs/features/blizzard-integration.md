@@ -125,7 +125,7 @@ Real case: a Battle.net-imported character (`Åsúna-Blackmoore`) whose **status
 
 ## Sync telemetry
 
-Every real Blizzard sync attempt of a linked Character — scheduled sync, owner Refresh, owner regional Refresh All (and the admin paths planned for `/manage/characters`) — goes through **one** entry point, `syncLinkedCharacterProfile` (`character-blizzard-sync.service.ts`). The lower-level profile refresh is module-private, so no path can skip it.
+Every real Blizzard sync attempt of a linked Character — scheduled sync, owner Refresh, owner regional Refresh All, and the admin Sync now / Force refresh / Force refresh all in [`/manage/characters`](character-operations.md) — goes through **one** entry point, `syncLinkedCharacterProfile` (`character-blizzard-sync.service.ts`). The lower-level profile refresh is module-private, so no path can skip it.
 
 Persisted on `Character` (no sync-history table):
 
