@@ -10,6 +10,11 @@ import { raidRepository } from "@/repositories/raid.repository";
 import { characterOperationsService } from "@/services/character-operations.service";
 import { characterService } from "@/services/character.service";
 import { runService } from "@/services/run.service";
+import { attendanceRepository } from "@/repositories/attendance.repository";
+import { attendanceService } from "@/services/attendance.service";
+import { payoutService } from "@/services/payout.service";
+import { rosterService } from "@/services/roster.service";
+import { runDetailService } from "@/services/run-detail.service";
 
 const token = Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 5).padEnd(5, "x");
 const userIds: string[] = [];
@@ -58,7 +63,7 @@ async function createCharacter(owner: AuthenticatedUser) {
   });
 }
 
-async function signup(runId: string, userId: string, characterId: string, status: "PENDING" | "WITHDRAWN" | "SELECTED") {
+async function signup(runId: string, userId: string, characterId: string, status: "PENDING" | "WITHDRAWN" | "SELECTED" | "NOT_SELECTED") {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await orm.RunSignup.create({
@@ -113,12 +118,23 @@ beforeAll(async () => {
   other = await createUser("USER");
   lead = await createUser("RAID_LEAD");
   admin = await createUser("ADMIN");
-  platformOwner = await createUser("OWNER");
+  // Only one OWNER may exist: reuse it when present (never deleted here), else create one.
+  const existingOwner = (await orm.User.where({ accountRole: "OWNER" }).select("id").first()) as { id: string } | null;
+  platformOwner = existingOwner ? asUser(existingOwner.id, "OWNER") : await createUser("OWNER");
 });
 
 afterAll(async () => {
   for (const runId of runIds) {
+    // Payout lines / attendance reference signups with RESTRICT: settlement (cascades lines) first.
+    await orm.RunSettlement.where({ runId }).deleteAll();
+    await orm.RunAttendance.where({ runId }).deleteAll();
+    const roster = (await orm.RunRoster.where({ runId }).first()) as { id: string } | null;
+    if (roster) {
+      await orm.RunRosterEntry.where({ rosterId: roster.id }).deleteAll();
+      await orm.RunRoster.where({ id: roster.id }).delete();
+    }
     for (const row of await orm.RunSignup.where({ runId }).select("id").all()) {
+      await orm.RunSignupRole.where({ signupId: (row as { id: string }).id }).deleteAll();
       await orm.RunSignup.where({ id: (row as { id: string }).id }).delete();
     }
     await orm.Run.where({ id: runId }).delete();
@@ -127,6 +143,8 @@ afterAll(async () => {
     for (const row of await orm.Character.where({ userId }).select("id").all()) {
       await orm.Character.where({ id: (row as { id: string }).id }).delete();
     }
+    await orm.BoosterQualification.where({ userId }).deleteAll();
+    await orm.UserNotification.where({ userId }).deleteAll();
     for (const row of await orm.ActivityEvent.where({ userId }).select("id").all()) {
       await orm.ActivityEvent.where({ id: (row as { id: string }).id }).delete();
     }
@@ -199,6 +217,14 @@ describe("owner delete", () => {
     expect(await characterRepository.findById(character.id)).toBeNull();
   });
 
+  it.each(["SELECTED", "NOT_SELECTED"] as const)("an open-run %s signup also blocks (Replace can still pick it)", async (status) => {
+    const character = await createCharacter(owner);
+    const runId = await createRun(lead, "OPEN");
+    await signup(runId, owner.id, character.id, status);
+    await expectCode(characterService.deleteCharacter(owner, character.id), "CHARACTER_HAS_OPEN_SIGNUPS");
+    expect(await characterRepository.findById(character.id)).not.toBeNull();
+  });
+
   it("keeps finished-run history: the signup stays, its character link is cleared", async () => {
     const character = await createCharacter(owner);
     const runId = await createRun(lead, "COMPLETED");
@@ -245,5 +271,171 @@ describe("admin delete", () => {
     const error = await characterOperationsService.deleteCharacter(lead, character.id).catch((caught) => caught);
     expect(isDomainError(error)).toBe(true);
     expect(await characterRepository.findById(character.id)).not.toBeNull();
+  });
+});
+
+describe("delete after completed-run history (settlement / payout preservation)", () => {
+  async function qualify(userId: string) {
+    const now = new Date().toISOString();
+    await orm.BoosterQualification.create({
+      id: crypto.randomUUID(),
+      userId,
+      difficulty: "HEROIC",
+      status: "APPROVED",
+      notes: "Delete history test",
+      grantedAt: now,
+      grantedById: admin.id,
+      revokedAt: null,
+      revokedById: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  /** Real lifecycle: signup → roster publish → start → attendance → complete → prepare + finalize payout. */
+  async function completedRunWithSettlement(booster: AuthenticatedUser, characterId: string) {
+    const created = await runService.createRun(
+      lead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        scheduledStartAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+      }),
+    );
+    runIds.push(created.id);
+    await runService.openRun(lead, created.id);
+    const signupId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await orm.RunSignup.create({
+      id: signupId,
+      runId: created.id,
+      userId: booster.id,
+      characterId,
+      participationType: "BOOSTER",
+      isBackup: false,
+      status: "PENDING",
+      publishedRole: null,
+      lootbuddyMode: null,
+      lootbuddyVerification: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role: "DPS", createdAt: now });
+    const view = await rosterService.getRosterManagementView(lead, created.id);
+    await rosterService.setDraftSelection(lead, { runId: created.id, signupId, selected: true, version: view.roster.version });
+    const ready = await rosterService.getRosterManagementView(lead, created.id);
+    await rosterService.publishRoster(lead, { runId: created.id, version: ready.roster.version, acknowledgeWarnings: true });
+    await runService.startRun(lead, { runId: created.id });
+    const [attendance] = await attendanceRepository.listByRunId(created.id);
+    await attendanceService.setStatus(lead, { attendanceId: attendance!.id, status: "PRESENT" });
+    await runService.completeRun(lead, created.id);
+    const settlement = await payoutService.prepareSettlement(lead, created.id, { totalGold: 1_000_000, raidLeadCutMode: "SHARE" });
+    await payoutService.finalizeSettlement(lead, settlement.id);
+    return { runId: created.id, signupId, attendanceId: attendance!.id, settlementId: settlement.id };
+  }
+
+  it("deletes the Character but keeps user, signup, attendance, settlement and payout snapshots intact and renderable", async () => {
+    const booster = await createUser("USER");
+    await qualify(booster.id);
+    const character = await createCharacter(booster);
+    const history = await completedRunWithSettlement(booster, character.id);
+
+    const payoutBefore = (await orm.RunPayoutEntry.where({ settlementId: history.settlementId }).first()) as Record<string, unknown>;
+    expect(payoutBefore.characterId).toBe(character.id);
+    expect(Number(payoutBefore.amountGold)).toBeGreaterThan(0);
+
+    await characterService.deleteCharacter(booster, character.id);
+
+    // Character gone, user stays.
+    expect(await characterRepository.findById(character.id)).toBeNull();
+    expect(await orm.User.where({ id: booster.id }).first()).not.toBeNull();
+
+    // Completed signup + attendance remain; the Character link is cleared.
+    const signupRow = (await orm.RunSignup.where({ id: history.signupId }).first()) as Record<string, unknown> | null;
+    expect(signupRow).not.toBeNull();
+    expect(signupRow!.characterId).toBeNull();
+    expect(signupRow!.status).toBe("SELECTED");
+    expect(await orm.RunAttendance.where({ id: history.attendanceId }).first()).not.toBeNull();
+
+    // Settlement and payout line remain with snapshots and amounts untouched.
+    const settlementRow = (await orm.RunSettlement.where({ id: history.settlementId }).first()) as Record<string, unknown> | null;
+    expect(settlementRow?.status).toBe("FINALIZED");
+    const payoutAfter = (await orm.RunPayoutEntry.where({ settlementId: history.settlementId }).first()) as Record<string, unknown>;
+    expect(payoutAfter.characterId).toBeNull();
+    for (const field of ["characterName", "characterRealm", "userDisplayName", "shareUnits", "amountGold", "attendanceStatus", "participationType"]) {
+      expect(payoutAfter[field]).toEqual(payoutBefore[field]);
+    }
+
+    // Historical projections still render without the Character relation.
+    const payoutView = await payoutService.getPayoutView(lead, history.runId);
+    expect(payoutView.manager?.status).toBe("FINALIZED");
+    expect(payoutView.manager?.entries[0]?.characterName).toBe(character.name);
+    expect(payoutView.manager?.entries[0]?.amountGold).toBe(Number(payoutBefore.amountGold));
+    const ownView = await payoutService.getPayoutView(booster, history.runId);
+    expect(ownView.own[0]?.characterName).toBe(character.name);
+    const managerAttendance = await attendanceService.getManagerAttendance(lead, history.runId);
+    expect(JSON.stringify(managerAttendance)).toContain(booster.name);
+    expect(await attendanceService.getOwnAttendance(booster, history.runId)).toHaveLength(1);
+    const detail = await runDetailService.getRunDetail(lead, history.runId);
+    expect(detail.run.status).toBe("COMPLETED");
+    const boosterDetail = await runDetailService.getRunDetail(booster, history.runId);
+    expect(boosterDetail.payout.own[0]?.amountGold).toBe(Number(payoutBefore.amountGold));
+  }, 60_000);
+
+  it("relations: availability blocks + WCL data cascade; legacy Booster Access and account qualification stay", async () => {
+    const character = await createCharacter(owner);
+    const now = new Date().toISOString();
+    await orm.CharacterAvailabilityBlock.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      startsAt: now,
+      endsAt: new Date(Date.now() + 3_600_000).toISOString(),
+      reason: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await orm.CharacterWclPerformance.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      zoneId: 1,
+      encounterId: 0,
+      difficulty: 4,
+      metricKey: "dps",
+      bestPct: 90,
+      avgPct: 80,
+      fetchedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const accessId = crypto.randomUUID();
+    await orm.BoosterAccess.create({
+      id: accessId,
+      userId: owner.id,
+      characterId: character.id,
+      wowClass: "MAGE",
+      role: "DPS",
+      difficulty: "MYTHIC",
+      status: "APPROVED",
+      approvedAt: now,
+      approvedById: null,
+      reviewedAt: null,
+      reviewedById: null,
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await characterService.deleteCharacter(owner, character.id);
+
+    expect(await orm.CharacterAvailabilityBlock.where({ characterId: character.id }).all()).toHaveLength(0);
+    expect(await orm.CharacterWclPerformance.where({ characterId: character.id }).all()).toHaveLength(0);
+    const access = (await orm.BoosterAccess.where({ id: accessId }).first()) as Record<string, unknown> | null;
+    expect(access).not.toBeNull();
+    expect(access!.characterId).toBeNull();
+    expect(access!.userId).toBe(owner.id);
+    await orm.BoosterAccess.where({ id: accessId }).delete();
   });
 });
