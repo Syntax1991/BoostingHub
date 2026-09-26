@@ -41,6 +41,7 @@ export const characterController = {
     battlenet?: string | string[];
     region?: string | string[];
     code?: string | string[];
+    linked?: string | string[];
   } = {}) {
     const user = await requireUserOrRedirect("/characters");
     const page = await characterService.getCharacterPage(user);
@@ -83,6 +84,7 @@ export const characterController = {
         status: firstParam(searchParams.battlenet),
         region: firstParam(searchParams.region),
         code: firstParam(searchParams.code),
+        linked: Math.max(0, Number.parseInt(firstParam(searchParams.linked) ?? "", 10) || 0),
         importSessionId,
       },
     };

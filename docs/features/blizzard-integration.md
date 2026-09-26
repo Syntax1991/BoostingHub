@@ -76,12 +76,14 @@ Entry: `/characters` when Blizzard env vars are configured.
 
 1. Owner chooses region and starts connect → `GET /api/integrations/battlenet/connect?region=EU|US`
 2. Battle.net OAuth completes → `GET /api/integrations/battlenet/callback`
-3. Connection upserted; import session opened; redirect back to `/characters` with session id
+3. Connection upserted; import session opened; existing manual Characters that match the account exactly are **auto-linked** (see below); redirect back to `/characters` with session id and linked count
 4. Service resolves each owned row to a candidate status:
    - `import` — create a new Character
    - `link` — attach Blizzard ids to an existing same-owner name/realm/region/class match
    - `already_linked` — already on this account
    - `conflict` — owned by another account, class mismatch, or already linked elsewhere
+
+**Auto-link on connect:** every owned candidate classified `link` (same owner, name, realm, region and class, level ≥ 90, not linked elsewhere) is linked right after the callback through the same `applySelections` path, keeping the Character's own specialization. Ownership is proven by the OAuth account profile; nothing is imported and other users' Characters are never touched. Best-effort per Character — a failure never fails the connection and the row stays available in the import dialog. Once linked, the Character syncs (item level, raid lockouts) like any imported one. Owners whose manual Characters predate their connection simply reconnect once.
 
 Import creates the Character with Blizzard ids. Link only stamps Blizzard identity (and may update item level when the profile is available). Mixed import/link selections submit in one server action; the service resolves classification server-side from the import session.
 
@@ -140,13 +142,20 @@ Persisted on `Character` (no sync-history table):
 - **Attempt:** `lastSyncAttemptAt = now`. Nothing else changes; `Character.updatedAt` ("Updated") is preserved because bookkeeping is not a Character data change.
 - **Success:** `applyBlizzardSync` writes the profile, `lastSyncedAt` and the cleared failure fields in **one** statement.
 - **Failure:** `lastSyncErrorAt = now`, `lastSyncErrorCode = category`, `syncFailureCount + 1`. Name, item level, `lastSyncedAt` and lockouts keep their last known good values. A failing telemetry write is logged and never replaces the real outcome.
-- A verified Battle.net import/link enrichment also sets `lastSyncAttemptAt` (it is a real Blizzard round-trip). Eligibility failures (not linked, no connection) are not attempts and are never recorded.
+- A verified Battle.net import/link enrichment also sets `lastSyncAttemptAt` (it is a real Blizzard round-trip). Eligibility failures (retired) are not attempts and are never recorded.
 
 **Safe categories** (`classifySyncError`, `src/lib/blizzard/sync-error.ts` — the only mapping): `PROFILE_UNAVAILABLE` (404 / `is_valid=false`), `IDENTITY_CONFLICT` (class, Blizzard id or realm/transfer mismatch), `NAME_CONFLICT` (rename collision or unstorable name), `RATE_LIMITED` (429), `UPSTREAM_UNAVAILABLE` (5xx, network, timeout, invalid JSON), `AUTH_OR_CONFIG` (app credentials rejected or Battle.net not configured), `INTERNAL` (anything else). Only the code is stored — never messages, URLs, payloads or tokens (a CHECK constraint limits the column to these values).
 
 **Logging:** each failed attempt writes one JSON line — `{"event":"character_sync_failed"|"character_sync_rate_limited","errorCategory","trigger","region","rateLimited","retryable"}`. It never contains character/owner ids or names, Discord identity, emails, messages, upstream data or credentials; per-Character diagnosis comes from the persisted telemetry.
 
-**Health** (`src/lib/blizzard/sync-health.ts`, pure): linkage (`LINKED` / `NOT_LINKED` / `NO_CONNECTION`) is separate from health, which exists only for `LINKED` Characters with precedence `ERROR` (a failure newer than the last success) > `NEVER_SYNCED` > `STALE` (last success older than `BLIZZARD_SYNC_STALE_MINUTES` + 30 min grace) > `HEALTHY`. Retirement is reported separately. The owner-facing Characters page state uses the same stale primitive.
+**Sync modes.** Every active Character is synced — Blizzard is always read by realm + name with the client-credentials token:
+
+- **VERIFIED** (`LINKED`: Blizzard ids + the owner's regional connection, ownership proven at import/link): stored ids are checked and the connection's `lastSuccessfulSyncAt` is marked.
+- **PUBLIC** (`NOT_LINKED` manual Characters, or `NO_CONNECTION`): public profile data only — item level and raid lockouts. The class must match; stored ids (if any) are still checked; Blizzard ids are **never stamped** by a public sync, so the real owner can still import/link it later (the auto-link on connect then upgrades it to VERIFIED). Shown as **Public API** on `/manage/characters`.
+
+Manual Refresh, owner Refresh all (all active Characters of the connected region), admin Sync now / Force refresh / Force refresh all and the scheduler all use the same eligibility: active = eligible; only retirement blocks a sync.
+
+**Health** (`src/lib/blizzard/sync-health.ts`, pure): linkage (`LINKED` / `NOT_LINKED` / `NO_CONNECTION`) is separate from health, which exists for every active Character with precedence `ERROR` (a failure newer than the last success) > `NEVER_SYNCED` > `STALE` (last success older than `BLIZZARD_SYNC_STALE_MINUTES` + 30 min grace) > `HEALTHY`. Retirement is reported separately. The owner-facing Characters page state uses the same stale primitive.
 
 **Per-Character lock:** each attempt holds a non-blocking PostgreSQL advisory lock `(837463, hashtext(characterId))` (`src/lib/character-sync-lock.ts`) on one dedicated lock session per process (outside the 5-connection pool). A Character already being synced anywhere — web process or scheduled job — is refused (`CHARACTER_SYNC_IN_PROGRESS`, 409) by manual Refresh and skipped by Refresh All and the scheduler, without an attempt. The scheduler's whole-job lock `(837462, 1)` is unchanged.
 
@@ -229,7 +238,7 @@ Signup / roster lockout display uses the Character region's regional reset conta
 | Route | Role |
 | --- | --- |
 | `GET /api/integrations/battlenet/connect?region=EU\|US` | Start regional OAuth; set state cookie; redirect to Battle.net |
-| `GET /api/integrations/battlenet/callback` | Validate state, exchange code, upsert connection, open import session, clear cookie |
+| `GET /api/integrations/battlenet/callback` | Validate state, exchange code, upsert connection, open import session, auto-link exact manual matches, clear cookie |
 
 Server actions under `blizzard.actions.ts` handle disconnect, import, link, refresh, and loading import candidates.
 

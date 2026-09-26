@@ -1,4 +1,4 @@
-import { assertCanManageCharacterOperations, type AuthenticatedUser } from "@/auth/authorization";
+import { assertCanManageCharacterOperations, hasOwnerAccess, type AuthenticatedUser } from "@/auth/authorization";
 import { isBlizzardConfigured } from "@/lib/blizzard/config";
 import { classifySyncError, type CharacterSyncTrigger } from "@/lib/blizzard/sync-error";
 import {
@@ -31,7 +31,12 @@ import { characterRepository } from "@/repositories/character.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { manualCooldownRemainingMs, syncLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
+import {
+  manualCooldownRemainingMs,
+  syncLinkedCharacterProfile,
+  verifiedConnectionId,
+} from "@/services/character-blizzard-sync.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { SCHEDULED_CHARACTER_SYNC_LOCK_KEY } from "@/services/scheduled-character-sync.service";
@@ -54,12 +59,27 @@ export const BULK_FORCE_REFRESH_COOLDOWN_MS = 10 * 60_000;
 export const BULK_FORCE_REFRESH_STARTED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_STARTED";
 export const BULK_FORCE_REFRESH_COMPLETED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_COMPLETED";
 
-export type SyncIneligibleReason = "RETIRED" | "NOT_LINKED" | "NO_CONNECTION";
+/** Only retirement blocks a sync: unlinked / unconnected Characters sync PUBLIC. */
+export type SyncIneligibleReason = "RETIRED";
+
+/** Admin link backfill over existing Battle.net connections. */
+export const RECONCILE_LINKS_CONCURRENCY = 2;
+export type ReconcileLinksResult = {
+  connections: number;
+  reconciled: number;
+  /** Connections without a stored OAuth roster (need one Import / reconnect). */
+  noSnapshot: number;
+  linked: number;
+  alreadyLinked: number;
+  skipped: number;
+  failed: number;
+  /** Connections whose reconciliation threw — isolated, the rest continue. */
+  connectionErrors: number;
+  durationMs: number;
+};
 
 export const SYNC_INELIGIBLE_COPY: Record<SyncIneligibleReason, string> = {
   RETIRED: "Retired characters are not synced.",
-  NOT_LINKED: "Character is not linked to Battle.net.",
-  NO_CONNECTION: "Owner has no Battle.net connection for this region.",
 };
 
 export type OperationsRow = {
@@ -81,7 +101,7 @@ export type OperationsRow = {
   syncFailureCount: number;
   retired: boolean;
   linkage: CharacterLinkageState;
-  /** Only for active LINKED Characters; null otherwise (retired / not linked / no connection). */
+  /** Every active Character (VERIFIED or PUBLIC sync); null only when retired. */
   health: CharacterSyncHealth | null;
   lockoutSlots: RaidLockoutSlot[];
   /** Null when admin sync is allowed; otherwise why not (drives disabled buttons + server refusal). */
@@ -119,14 +139,8 @@ function lockoutRows(record: OperationsCharacterRecord): LockoutDisplayRow[] {
   }));
 }
 
-export function syncIneligibleReason(input: {
-  isActive: boolean;
-  linkage: CharacterLinkageState;
-}): SyncIneligibleReason | null {
-  if (!input.isActive) return "RETIRED";
-  if (input.linkage === "NOT_LINKED") return "NOT_LINKED";
-  if (input.linkage === "NO_CONNECTION") return "NO_CONNECTION";
-  return null;
+export function syncIneligibleReason(input: { isActive: boolean }): SyncIneligibleReason | null {
+  return input.isActive ? null : "RETIRED";
 }
 
 /** The one row derivation used by the table, filters, sorting and summary. */
@@ -157,7 +171,7 @@ export function deriveOperationsRow(
     linkage: status.linkage,
     health,
     lockoutSlots: projectCurrentRaidLockoutSlots(lockoutRows(record), currentRaidDescriptors()),
-    syncIneligibleReason: syncIneligibleReason({ isActive: record.isActive, linkage: status.linkage }),
+    syncIneligibleReason: syncIneligibleReason({ isActive: record.isActive }),
     cooldownRemainingMs: manualCooldownRemainingMs(record, context.now.getTime()),
   };
 }
@@ -184,8 +198,8 @@ function matchesText(value: string, query: string): boolean {
 }
 
 /**
- * Deterministic, combinable filters. A health filter matches only active
- * LINKED Characters (retired / not linked / no connection have no health).
+ * Deterministic, combinable filters. A health filter matches active
+ * Characters only (retired ones have no health).
  */
 export function filterOperationsRows(rows: OperationsRow[], filters: CharacterOperationsFilters): OperationsRow[] {
   const query = filters.query?.trim();
@@ -210,24 +224,18 @@ export function filterOperationsRows(rows: OperationsRow[], filters: CharacterOp
   });
 }
 
-/**
- * Operations-oriented health order: problems first. Rows without health
- * (no connection, not linked, retired) follow in that fixed order.
- */
+/** Operations-oriented health order: problems first; retired (no health) last. */
 const HEALTH_SORT_RANK: Record<string, number> = {
   ERROR: 0,
   STALE: 1,
   NEVER_SYNCED: 2,
   HEALTHY: 3,
-  NO_CONNECTION: 4,
-  NOT_LINKED: 5,
-  RETIRED: 6,
+  RETIRED: 4,
 };
 
 function healthSortKey(row: OperationsRow): number {
-  if (row.retired) return HEALTH_SORT_RANK.RETIRED!;
-  if (row.health) return HEALTH_SORT_RANK[row.health]!;
-  return HEALTH_SORT_RANK[row.linkage]!;
+  if (row.retired || !row.health) return HEALTH_SORT_RANK.RETIRED!;
+  return HEALTH_SORT_RANK[row.health]!;
 }
 
 const collator = new Intl.Collator("en-US", { sensitivity: "base" });
@@ -277,21 +285,27 @@ async function resolveSyncTarget(characterId: string) {
   if (!character) {
     throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
   }
-  const hasIds = Boolean(character.blizzardCharacterId && character.blizzardRealmId);
-  // The connection is always the CHARACTER OWNER's — never the acting admin's.
-  const connection = hasIds
-    ? await battleNetConnectionRepository.findByUserAndRegion(character.userId, character.region)
-    : null;
-  const linkage: CharacterLinkageState = !hasIds ? "NOT_LINKED" : connection ? "LINKED" : "NO_CONNECTION";
-  const reason = syncIneligibleReason({ isActive: character.isActive, linkage });
-  if (reason || !connection) {
-    throw new DomainError("CHARACTER_SYNC_NOT_ELIGIBLE", SYNC_INELIGIBLE_COPY[reason ?? "NO_CONNECTION"], 400);
+  const reason = syncIneligibleReason({ isActive: character.isActive });
+  if (reason) {
+    throw new DomainError("CHARACTER_SYNC_NOT_ELIGIBLE", SYNC_INELIGIBLE_COPY[reason], 400);
   }
+  // The connection is always the CHARACTER OWNER's — never the acting admin's.
+  // Linked + connected → VERIFIED sync; otherwise PUBLIC (connectionId null).
+  const ownerConnection = await battleNetConnectionRepository.findByUserAndRegion(character.userId, character.region);
+  const connectionId = verifiedConnectionId(character, ownerConnection);
   const owner = await userRepository.findById(character.userId);
   if (!owner) {
     throw new DomainError("USER_NOT_FOUND", "Character owner was not found.", 404);
   }
-  return { character, connection, owner: { id: owner.id, name: owner.name } };
+  return { character, connectionId, owner: { id: owner.id, name: owner.name } };
+}
+
+/** An ADMIN may delete any Character except the Platform Owner's; the Owner may delete any. */
+function canDeleteCharacterOf(
+  admin: AuthenticatedUser,
+  owner: { id: string; accountRole: AuthenticatedUser["accountRole"] } | null,
+): boolean {
+  return !(owner && hasOwnerAccess(owner.accountRole) && !hasOwnerAccess(admin.accountRole) && owner.id !== admin.id);
 }
 
 export const characterOperationsService = {
@@ -328,12 +342,17 @@ export const characterOperationsService = {
       now,
       staleMinutes: resolveSyncHealthStaleMinutes(),
     });
-    const [availabilityById, qualifications] = await Promise.all([
+    const [availabilityById, qualifications, owner] = await Promise.all([
       characterWeeklyAvailabilityService.projectCurrentForCharacters([{ id: character.id, region: character.region }]),
       boosterQualificationRepository.listByUserId(character.userId),
+      userRepository.findById(character.userId),
     ]);
     return {
       row,
+      /** Mirrors deleteCharacter's Platform Owner protection (the server enforces it again). */
+      deleteBlockedReason: canDeleteCharacterOf(admin, owner)
+        ? null
+        : "Characters of the Platform Owner can only be deleted by the Platform Owner.",
       identity: {
         primaryRole: character.primaryRole,
         blizzardCharacterId: character.blizzardCharacterId,
@@ -359,7 +378,7 @@ export const characterOperationsService = {
     input: { characterId: string; force: boolean },
   ): Promise<AdminSyncOutcome> {
     assertCanManageCharacterOperations(admin);
-    const { character, connection, owner } = await resolveSyncTarget(input.characterId);
+    const { character, connectionId, owner } = await resolveSyncTarget(input.characterId);
     const remaining = manualCooldownRemainingMs(character);
     if (!input.force && remaining > 0) {
       throw new DomainError(
@@ -373,7 +392,7 @@ export const characterOperationsService = {
     const verb = input.force ? "Force refreshed" : "Synced";
     const label = characterLabel(character);
     try {
-      const result = await syncLinkedCharacterProfile(owner, character, connection.id, {
+      const result = await syncLinkedCharacterProfile(owner, character, connectionId, {
         trigger,
         writeActivity: false,
       });
@@ -396,8 +415,8 @@ export const characterOperationsService = {
   },
 
   /**
-   * "Force refresh all": every eligible Character (active + Blizzard ids +
-   * owner's regional connection — the scheduler's own eligibility, resolved
+   * "Force refresh all": every eligible Character (every active Character,
+   * VERIFIED or PUBLIC — the scheduler's own eligibility, resolved
    * server-side now), bypassing freshness. Runs synchronously under the SAME
    * whole-job advisory lock as the scheduler, so the two never overlap; a
    * durable 10-minute cooldown (latest STARTED ActivityEvent, checked and
@@ -405,6 +424,92 @@ export const characterOperationsService = {
    * ~120s work budget, stop starting work after the first 429, per-Character
    * lock skips, one failure never aborts the batch.
    */
+  /**
+   * Admin hard delete of any Character (same guard as the owner delete:
+   * refused while an unfinished Run has a non-withdrawn signup on it). The
+   * Platform Owner's Characters can only be deleted by the Owner, mirroring
+   * the OWNER_ROLE_PROTECTED rule of role management.
+   */
+  async deleteCharacter(admin: AuthenticatedUser, characterId: string): Promise<{ label: string }> {
+    assertCanManageCharacterOperations(admin);
+    const character = await characterRepository.findById(characterId);
+    if (!character) {
+      throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
+    }
+    const owner = await userRepository.findById(character.userId);
+    if (!canDeleteCharacterOf(admin, owner)) {
+      throw new DomainError(
+        "OWNER_ROLE_PROTECTED",
+        "Characters of the Platform Owner can only be deleted by the Platform Owner.",
+        403,
+      );
+    }
+    const label = characterLabel(character);
+    await characterRepository.deleteGuarded(character.id);
+    await activityRepository.create({
+      userId: admin.id,
+      type: "ADMIN_CHARACTER_DELETED",
+      message: `Deleted ${label} (owner ${owner?.name ?? "unknown"}). targetCharacterId=${character.id}`,
+    });
+    return { label };
+  },
+
+  /**
+   * One-off / on-demand link backfill: runs the exact-match reconciliation
+   * (characterBlizzardImportService.reconcileBattleNetCharactersForConnection)
+   * for every existing Battle.net connection — bounded concurrency, failures
+   * isolated per connection. Only links existing exact matches; never imports,
+   * never unlinks, never touches users without a connection. Idempotent.
+   */
+  async reconcileBattleNetLinks(admin: AuthenticatedUser): Promise<ReconcileLinksResult> {
+    assertCanManageCharacterOperations(admin);
+    if (!isBlizzardConfigured()) {
+      throw new DomainError("BATTLENET_NOT_CONFIGURED", "Battle.net integration is not configured.", 503);
+    }
+    const start = Date.now();
+    const connections = await battleNetConnectionRepository.listAll();
+    const outcomes = await mapWithConcurrency(connections, RECONCILE_LINKS_CONCURRENCY, async (connection) => {
+      try {
+        return await characterBlizzardImportService.reconcileBattleNetCharactersForConnection(
+          connection.userId,
+          connection.region,
+        );
+      } catch {
+        return null;
+      }
+    });
+    const result: ReconcileLinksResult = {
+      connections: connections.length,
+      reconciled: 0,
+      noSnapshot: 0,
+      linked: 0,
+      alreadyLinked: 0,
+      skipped: 0,
+      failed: 0,
+      connectionErrors: 0,
+      durationMs: 0,
+    };
+    for (const outcome of outcomes) {
+      if (!outcome) {
+        result.connectionErrors += 1;
+        continue;
+      }
+      if (outcome.status === "NO_SNAPSHOT") result.noSnapshot += 1;
+      if (outcome.status === "RECONCILED") result.reconciled += 1;
+      result.linked += outcome.linkedCharacterIds.length;
+      result.alreadyLinked += outcome.alreadyLinked;
+      result.skipped += outcome.skipped;
+      result.failed += outcome.failed;
+    }
+    result.durationMs = Date.now() - start;
+    await activityRepository.create({
+      userId: admin.id,
+      type: "ADMIN_BATTLENET_LINKS_RECONCILED",
+      message: `Reconciled Battle.net links for ${result.connections} connections: ${result.linked} linked, ${result.alreadyLinked} already linked, ${result.skipped} skipped, ${result.failed} failed, ${result.noSnapshot} without roster, ${result.connectionErrors} errors.`,
+    });
+    return result;
+  },
+
   async forceRefreshAll(
     admin: AuthenticatedUser,
     options: { workBudgetMs?: number; concurrency?: number } = {},
@@ -448,7 +553,7 @@ export const characterOperationsService = {
 
       const rateLimited = { current: false };
       type Outcome =
-        | { kind: "succeeded"; connectionId: string; characterId: string }
+        | { kind: "succeeded"; connectionId: string | null; characterId: string }
         | { kind: "failed"; category: CharacterSyncErrorCode }
         | { kind: "skipped"; reason: BulkSkipReason };
       const outcomes = await mapWithConcurrency(
@@ -458,13 +563,14 @@ export const characterOperationsService = {
           if (rateLimited.current) return { kind: "skipped", reason: "RATE_LIMITED" };
           if (Date.now() > deadline) return { kind: "skipped", reason: "TIME_BUDGET" };
           try {
-            await syncLinkedCharacterProfile(candidate.owner, candidate.character, candidate.connection.id, {
+            const connectionId = candidate.connection?.id ?? null;
+            await syncLinkedCharacterProfile(candidate.owner, candidate.character, connectionId, {
               updateConnectionSync: false,
               writeActivity: false,
               autoLinkWarcraftLogs: false,
               trigger: "ADMIN_BULK_FORCE",
             });
-            return { kind: "succeeded", connectionId: candidate.connection.id, characterId: candidate.character.id };
+            return { kind: "succeeded", connectionId, characterId: candidate.character.id };
           } catch (error) {
             if (isDomainError(error) && error.code === "CHARACTER_SYNC_IN_PROGRESS") {
               return { kind: "skipped", reason: "ALREADY_SYNCING" };
@@ -495,7 +601,7 @@ export const characterOperationsService = {
         if (outcome.kind === "succeeded") {
           result.attempted += 1;
           result.succeeded += 1;
-          succeededConnectionIds.add(outcome.connectionId);
+          if (outcome.connectionId) succeededConnectionIds.add(outcome.connectionId);
           succeededCharacterIds.push(outcome.characterId);
         } else if (outcome.kind === "failed") {
           result.attempted += 1;

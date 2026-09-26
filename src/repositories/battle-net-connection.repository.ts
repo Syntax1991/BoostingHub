@@ -31,6 +31,15 @@ function mapConnection(row: Record<string, unknown>): BattleNetConnectionRecord 
 }
 
 export const battleNetConnectionRepository = {
+  /** Every connection (user + region) — bounded by the number of connected accounts. */
+  async listAll(): Promise<Array<{ userId: string; region: WowRegion }>> {
+    const rows = await orm.BattleNetConnection.select("userId", "region").all();
+    return rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return { userId: String(record.userId), region: record.region === "US" ? "US" : "EU" };
+    });
+  },
+
   async listByUserId(userId: string): Promise<BattleNetConnectionRecord[]> {
     const rows = await orm.BattleNetConnection
       .where({ userId })

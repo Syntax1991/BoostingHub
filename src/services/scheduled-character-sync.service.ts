@@ -88,7 +88,7 @@ async function refreshCandidate(
     const result = await syncLinkedCharacterProfile(
       candidate.owner,
       candidate.character,
-      candidate.connection.id,
+      candidate.connection?.id ?? null,
       { updateConnectionSync: false, writeActivity: false, autoLinkWarcraftLogs: false, trigger: "SCHEDULED" },
     );
     return { status: "refreshed", lockoutSynced: result.lockoutSynced, characterId: candidate.character.id };
@@ -152,7 +152,7 @@ export const scheduledCharacterSyncService = {
         status: "COMPLETED",
         totalCandidates: candidates.length,
         distinctUsers: new Set(candidates.map((candidate) => candidate.owner.id)).size,
-        distinctConnections: new Set(candidates.map((candidate) => candidate.connection.id)).size,
+        distinctConnections: new Set(candidates.flatMap((candidate) => (candidate.connection ? [candidate.connection.id] : []))).size,
         byRegion,
       };
     } finally {
@@ -220,7 +220,8 @@ export const scheduledCharacterSyncService = {
           refreshed += 1;
           if (outcome.lockoutSynced) lockoutsVerified += 1;
           else lockoutsUnavailable += 1;
-          refreshedConnectionIds.add(candidates[index]!.connection.id);
+          const connection = candidates[index]!.connection;
+          if (connection) refreshedConnectionIds.add(connection.id);
           refreshedCharacterIds.push(outcome.characterId);
         } else if (outcome.status === "rate_limited") {
           rateLimited += 1;

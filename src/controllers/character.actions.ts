@@ -85,6 +85,18 @@ export async function deactivateCharacterAction(input: unknown): Promise<ActionR
   }
 }
 
+export async function deleteCharacterAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = characterIdSchema.parse(input);
+    await characterService.deleteCharacter(user, parsed.characterId);
+    revalidateCharacterSurfaces(parsed.characterId);
+    return { ok: true, message: "Character deleted." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export async function reactivateCharacterAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();

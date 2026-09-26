@@ -7,6 +7,7 @@ import type { managementController } from "@/controllers/app.controller";
 import { SYNC_INELIGIBLE_COPY, type OperationsRow } from "@/services/character-operations.service";
 import { CharacterSyncButtons } from "@/components/manage/character-operations/character-sync-buttons";
 import { ForceRefreshAllButton } from "@/components/manage/character-operations/force-refresh-all-button";
+import { ReconcileLinksButton } from "@/components/manage/character-operations/reconcile-links-button";
 import {
   LinkageBadge,
   LockoutSlotsCompact,
@@ -76,10 +77,11 @@ export function ManageCharactersView({ data }: { data: Page }) {
         title="Characters"
         description="All characters with Blizzard sync health, linkage and current lockouts."
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link href="/manage" className="text-sm text-accent hover:underline">
               Management
             </Link>
+            <ReconcileLinksButton />
             <ForceRefreshAllButton eligibleCount={bulkEligibleCount} />
           </div>
         }
@@ -93,15 +95,15 @@ export function ManageCharactersView({ data }: { data: Page }) {
         <SummaryStat label="Never synced" value={summary.neverSynced} tone="info" href={healthHref("NEVER_SYNCED")} />
         <SummaryStat label="Blizzard linked" value={summary.linked} href="/manage/characters?status=active&linkage=LINKED" />
         <SummaryStat
-          label="No connection"
-          value={summary.noConnection}
-          tone="warning"
-          href="/manage/characters?status=active&linkage=NO_CONNECTION"
+          label="Public API (manual)"
+          value={summary.notLinked}
+          tone="info"
+          href="/manage/characters?status=active&linkage=NOT_LINKED"
         />
       </div>
       <p className="-mt-2 mb-4 text-xs text-muted">
-        Counts cover active characters; retired characters never count as problems. No connection = linked to
-        Blizzard, but the owner has no Battle.net connection for that region, so it is never synced.
+        Counts cover active characters; retired characters never count as problems. Public API = manually added (or no
+        owner Battle.net connection): item level and lockouts sync from the public Blizzard API, ownership unverified.
       </p>
 
       <Card className="mb-4">
@@ -161,8 +163,8 @@ export function ManageCharactersView({ data }: { data: Page }) {
             <select name="linkage" defaultValue={filters.linkage ?? ""} aria-label="Filter by Blizzard linkage" className={selectClass}>
               <option value="">All</option>
               <option value="LINKED">Linked</option>
-              <option value="NOT_LINKED">Not linked</option>
-              <option value="NO_CONNECTION">No connection</option>
+              <option value="NOT_LINKED">Public API (manual)</option>
+              <option value="NO_CONNECTION">Public API (no connection)</option>
             </select>
           </label>
           <label className="text-xs">
@@ -192,7 +194,7 @@ export function ManageCharactersView({ data }: { data: Page }) {
           </Link>
         </form>
         <p className="border-t border-border px-4 py-2 text-xs text-muted">
-          {rows.length} of {summary.total} characters. A health filter shows active linked characters only.
+          {rows.length} of {summary.total} characters. A health filter shows active characters only.
         </p>
       </Card>
 

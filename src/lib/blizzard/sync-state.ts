@@ -13,11 +13,10 @@ import { BLIZZARD_SYNC_RETRY_GRACE_MINUTES, isSuccessfulSyncStale } from "@/lib/
  *   "Blizzard profile unavailable".
  */
 export type BlizzardSyncState =
-  | { kind: "NOT_LINKED" }
   | { kind: "SYNCED"; lastSyncedAt: string }
-  /** Linked recently; the first verified sync has not had a chance to run yet. */
+  /** No sync attempt yet (or too recent to judge) — every active Character is synced, linked or not. */
   | { kind: "AWAITING_FIRST_SYNC" }
-  /** Linked but never verified, after the scheduler has had time to retry — no profile/lockout data exists. */
+  /** Attempted but never verified, after the scheduler has had time to retry — no profile/lockout data exists. */
   | { kind: "PROFILE_UNAVAILABLE" }
   /** Previously synced; recent syncs keep failing. The last known good data is still shown. */
   | { kind: "STALE"; lastSyncedAt: string };
@@ -27,15 +26,21 @@ export type BlizzardSyncState =
 export { BLIZZARD_SYNC_RETRY_GRACE_MINUTES } from "@/lib/blizzard/sync-health";
 
 export function deriveBlizzardSyncState(
-  character: { blizzardLinked: boolean; isActive: boolean; lastSyncedAt: string | null; createdAt: string | null },
+  character: {
+    isActive: boolean;
+    lastSyncedAt: string | null;
+    lastSyncAttemptAt: string | null;
+    createdAt: string | null;
+  },
   options: { now: Date; staleMinutes: number },
 ): BlizzardSyncState {
-  if (!character.blizzardLinked) return { kind: "NOT_LINKED" };
   const nowMs = options.now.getTime();
   const graceMs = BLIZZARD_SYNC_RETRY_GRACE_MINUTES * 60_000;
 
   if (!character.lastSyncedAt) {
     // Inactive Characters are not scheduled, so there were no retries to fail.
+    // No attempt yet (e.g. a manual Character before its first public sync) is not a failure.
+    if (!character.lastSyncAttemptAt) return { kind: "AWAITING_FIRST_SYNC" };
     const createdMs = character.createdAt ? new Date(character.createdAt).getTime() : nowMs;
     return character.isActive && nowMs - createdMs > graceMs
       ? { kind: "PROFILE_UNAVAILABLE" }
@@ -50,7 +55,7 @@ export function deriveBlizzardSyncState(
 
 export const BLIZZARD_PROFILE_UNAVAILABLE_TITLE = "Blizzard profile unavailable";
 export const BLIZZARD_PROFILE_UNAVAILABLE_HINT =
-  "The character exists in your Battle.net import, but Blizzard's profile API is not currently publishing its " +
-  "profile. Log into the character once, log out, then refresh again later.";
+  "Blizzard's profile API is not currently publishing this character's profile. Check the name and realm, log " +
+  "into the character once, log out, then refresh again later.";
 export const BLIZZARD_SYNC_STALE_HINT =
   "Recent Blizzard syncs for this character have failed. Showing the last known item level and lockouts.";

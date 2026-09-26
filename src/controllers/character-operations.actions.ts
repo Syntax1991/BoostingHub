@@ -6,6 +6,7 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import {
   characterOperationsService,
   type BulkForceRefreshResult,
+  type ReconcileLinksResult,
 } from "@/services/character-operations.service";
 import { adminCharacterSyncSchema } from "@/validators/character-operations";
 
@@ -36,6 +37,31 @@ async function syncOne(input: unknown, force: boolean): Promise<ActionResult> {
       };
     }
     return { ok: false, code: "CHARACTER_SYNC_FAILED", message: `Sync failed: ${outcome.errorLabel}.` };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function adminReconcileBattleNetLinksAction(): Promise<
+  { ok: true; result: ReconcileLinksResult } | { ok: false; code: string; message: string }
+> {
+  try {
+    const admin = await requireAdmin();
+    const result = await characterOperationsService.reconcileBattleNetLinks(admin);
+    revalidateCharacter();
+    return { ok: true, result };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function adminDeleteCharacterAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { characterId } = adminCharacterSyncSchema.parse(input);
+    const { label } = await characterOperationsService.deleteCharacter(admin, characterId);
+    revalidateCharacter(characterId);
+    return { ok: true, message: `Deleted ${label}.` };
   } catch (error) {
     return mapActionError(error);
   }

@@ -112,8 +112,8 @@ export function ForceRefreshAllButton({ eligibleCount }: { eligibleCount: number
                 <li>This bypasses the normal freshness rules for every eligible character.</li>
                 <li>It can generate significant Blizzard API traffic (4 at a time, stops on rate limits).</li>
                 <li>
-                  Only active characters linked to Battle.net whose owner has a connection for that region run — retired,
-                  not-linked and no-connection characters are skipped.
+                  Every active character runs — linked ones verified via the owner&apos;s Battle.net connection, manual
+                  ones from the public Blizzard API. Retired characters are skipped.
                 </li>
                 <li>Can run at most once every 10 minutes and never alongside the scheduled sync.</li>
               </ul>

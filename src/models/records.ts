@@ -96,15 +96,16 @@ export type ScheduledCharacterSyncCandidate = {
     normalizedRealm: string;
     wowClass: WowClass;
     itemLevel: number | null;
-    blizzardCharacterId: string;
-    blizzardRealmId: string;
+    blizzardCharacterId: string | null;
+    blizzardRealmId: string | null;
     lastSyncedAt: string | null;
   };
+  /** The owner's regional connection when the Character is VERIFIED-linked; null → PUBLIC sync. */
   connection: {
     id: string;
     userId: string;
     region: WowRegion;
-  };
+  } | null;
   owner: {
     id: string;
     name: string;

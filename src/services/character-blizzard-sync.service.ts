@@ -24,6 +24,7 @@ import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { resolveMonotonicItemLevel, toStoredItemLevel } from "@/lib/character-item-level";
 import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-io-ilvl";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 
 /**
  * Owns refreshing already Blizzard-linked characters: single refresh,
@@ -36,6 +37,16 @@ import { characterWarcraftLogsService } from "@/services/character-warcraft-logs
  * After Blizzard profile apply, equipped item level may be raised from
  * Raider.IO when that source reports a higher value (soft-fail). Spec and
  * primaryRole remain BoostingHub-owned and are never overwritten here.
+ *
+ * Two sync modes share one pipeline (Blizzard is always read by realm + name
+ * with the app's client-credentials token):
+ * - VERIFIED: Blizzard ids + the owner's regional Battle.net connection
+ *   (ownership proven at import/link). Ids are checked and the connection's
+ *   lastSuccessfulSyncAt is marked.
+ * - PUBLIC: manual Characters (no ids) or ids without an owner connection.
+ *   Public profile data only — item level and raid lockouts. The class must
+ *   still match; stored ids (if any) are still checked; Blizzard ids are never
+ *   stamped, so a later Battle.net import can still link it to its real owner.
  */
 
 /**
@@ -73,6 +84,14 @@ export type CharacterSyncOwner = {
 
 function toSyncOwner(user: AuthenticatedUser): CharacterSyncOwner {
   return { id: user.id, name: user.name };
+}
+
+/** Connection id for a VERIFIED sync; null for a PUBLIC sync (see module comment). */
+export function verifiedConnectionId(
+  character: { blizzardCharacterId: string | null; blizzardRealmId: string | null },
+  connection: { id: string } | null | undefined,
+): string | null {
+  return character.blizzardCharacterId && character.blizzardRealmId && connection ? connection.id : null;
 }
 
 export type SyncableCharacter = {
@@ -160,7 +179,7 @@ function profileUnavailableError(): DomainError {
 async function refreshLinkedCharacterProfile(
   owner: CharacterSyncOwner,
   character: SyncableCharacter,
-  connectionId: string,
+  connectionId: string | null,
   options: {
     updateConnectionSync?: boolean;
     writeActivity?: boolean;
@@ -226,14 +245,15 @@ async function refreshLinkedCharacterProfile(
     );
   }
 
-  if (summary.id && summary.id !== character.blizzardCharacterId) {
+  // Stored ids are always checked; a PUBLIC sync of a manual Character has none.
+  if (character.blizzardCharacterId && summary.id && summary.id !== character.blizzardCharacterId) {
     throw new DomainError(
       "BLIZZARD_IDENTITY_CONFLICT",
       "Blizzard character id no longer matches the linked identity.",
     );
   }
 
-  if (summary.realmId && summary.realmId !== character.blizzardRealmId) {
+  if (character.blizzardRealmId && summary.realmId && summary.realmId !== character.blizzardRealmId) {
     throw new DomainError(
       "BLIZZARD_IDENTITY_CONFLICT",
       "Realm transfer detected. Automatic transfer handling is not supported.",
@@ -308,7 +328,7 @@ async function refreshLinkedCharacterProfile(
     region: character.region,
   });
 
-  if (updateConnectionSync) {
+  if (updateConnectionSync && connectionId) {
     await battleNetConnectionRepository.markSuccessfulSync(connectionId, syncedAt);
   }
   if (writeActivity) {
@@ -339,7 +359,8 @@ export type LinkedCharacterSyncOptions = {
 };
 
 /**
- * THE entry point for a real Blizzard sync attempt of a linked Character —
+ * THE entry point for a real Blizzard sync attempt of a Character (VERIFIED
+ * with a connection id, PUBLIC with null) —
  * scheduled sync, owner manual refresh, owner regional Refresh All (and the
  * PR 2 admin paths). It owns concurrency and telemetry:
  *
@@ -357,7 +378,7 @@ export type LinkedCharacterSyncOptions = {
 export async function syncLinkedCharacterProfile(
   owner: CharacterSyncOwner,
   character: SyncableCharacter,
-  connectionId: string,
+  connectionId: string | null,
   options: LinkedCharacterSyncOptions,
 ): Promise<{ lockoutSynced: boolean }> {
   const outcome = await withCharacterSyncLock(character.id, async () => {
@@ -394,26 +415,15 @@ export const characterBlizzardSyncService = {
       throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
     }
     assertCharacterOwned(user, character);
-
-    if (!character.blizzardCharacterId || !character.blizzardRealmId) {
-      throw new DomainError(
-        "BLIZZARD_CHARACTER_NOT_FOUND",
-        "Character is not linked to Battle.net.",
-        400,
-      );
+    if (!character.isActive) {
+      throw new DomainError("CHARACTER_INACTIVE", "Reactivate this character before refreshing.", 400);
     }
 
+    // Linked + connected → VERIFIED; otherwise a PUBLIC sync (no ownership proof needed).
     const connection = await battleNetConnectionRepository.findByUserAndRegion(
       user.id,
       character.region,
     );
-    if (!connection) {
-      throw new DomainError(
-        "BATTLENET_NOT_CONNECTED",
-        `Connect Battle.net (${character.region}) before refreshing.`,
-        400,
-      );
-    }
 
     if (isInManualCooldown(character)) {
       throw new DomainError(
@@ -423,7 +433,9 @@ export const characterBlizzardSyncService = {
       );
     }
 
-    await syncLinkedCharacterProfile(toSyncOwner(user), character, connection.id, { trigger: "OWNER_MANUAL" });
+    await syncLinkedCharacterProfile(toSyncOwner(user), character, verifiedConnectionId(character, connection), {
+      trigger: "OWNER_MANUAL",
+    });
 
     const updated = await characterRepository.findById(character.id);
     if (!updated) {
@@ -433,7 +445,8 @@ export const characterBlizzardSyncService = {
   },
 
   /**
-   * Bulk-refresh active Blizzard-linked characters for one owned regional connection.
+   * Bulk-refresh every active character of one connected region (linked ones
+   * VERIFIED, manual ones PUBLIC).
    * Partial success is kept; cooldown skips do not fail the batch.
    */
   async refreshLinkedCharactersForRegion(user: AuthenticatedUser, regionInput: string) {
@@ -451,17 +464,27 @@ export const characterBlizzardSyncService = {
       );
     }
 
+    // First link existing manual Characters that exactly match this connection's
+    // roster (no reconnect needed). Best-effort: never blocks the refresh.
+    let linked = 0;
+    try {
+      const reconciled = await characterBlizzardImportService.reconcileBattleNetCharactersForConnection(user.id, region);
+      linked = reconciled.linkedCharacterIds.length;
+    } catch (error) {
+      if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+    }
+
     const all = await characterRepository.listByUserId(user.id);
     const eligible = all.filter(
       (character) =>
         character.userId === user.id &&
         character.region === region &&
-        character.isActive &&
-        Boolean(character.blizzardCharacterId) &&
-        Boolean(character.blizzardRealmId),
+        character.isActive,
     );
 
     const outcome = {
+      /** Existing manual Characters newly linked by the reconciliation pass. */
+      linked,
       total: eligible.length,
       refreshed: 0,
       lockoutsVerified: 0,
@@ -482,7 +505,7 @@ export const characterBlizzardSyncService = {
       }
 
       try {
-        const result = await syncLinkedCharacterProfile(syncOwner, character, connection.id, {
+        const result = await syncLinkedCharacterProfile(syncOwner, character, verifiedConnectionId(character, connection), {
           updateConnectionSync: false,
           writeActivity: false,
           autoLinkWarcraftLogs: false,

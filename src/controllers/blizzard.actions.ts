@@ -106,15 +106,16 @@ export async function refreshAllBattleNetCharactersAction(input: unknown): Promi
       parsed.region,
     );
     revalidateCharacterSurfaces();
+    const linkedNote = result.linked > 0 ? ` Linked ${result.linked} existing character(s) to Battle.net.` : "";
     if (result.total === 0) {
       return {
         ok: true,
-        message: `No active linked ${parsed.region} characters to refresh.`,
+        message: `No active ${parsed.region} characters to refresh.${linkedNote}`,
       };
     }
     return {
       ok: true,
-      message: `Refresh all (${parsed.region}): ${result.refreshed} profiles, ${result.lockoutsVerified} lockouts verified, ${result.lockoutsUnavailable} lockouts unavailable, ${result.skipped} skipped, ${result.failed} failed.`,
+      message: `Refresh all (${parsed.region}):${linkedNote} ${result.refreshed} profiles, ${result.lockoutsVerified} lockouts verified, ${result.lockoutsUnavailable} lockouts unavailable, ${result.skipped} skipped, ${result.failed} failed.`,
     };
   } catch (error) {
     return mapActionError(error);

@@ -58,18 +58,24 @@ describe("deriveCharacterSyncHealth — precedence ERROR > NEVER_SYNCED > STALE 
 describe("deriveCharacterSyncStatus — linkage, health and retirement stay separate", () => {
   const linked = { blizzardCharacterId: "1", blizzardRealmId: "2" };
 
-  it("health only for LINKED Characters", () => {
+  it("health for every Character — manual / unconnected ones sync PUBLIC", () => {
     const base = { isActive: true, lastSyncedAt: null, lastSyncErrorAt: null };
     expect(deriveCharacterSyncStatus({ ...base, blizzardCharacterId: null, blizzardRealmId: null }, { ...policy, ownerHasRegionConnection: true })).toEqual({
       retired: false,
       linkage: "NOT_LINKED",
-      health: null,
+      health: "NEVER_SYNCED",
     });
     expect(deriveCharacterSyncStatus({ ...base, ...linked }, { ...policy, ownerHasRegionConnection: false })).toEqual({
       retired: false,
       linkage: "NO_CONNECTION",
-      health: null,
+      health: "NEVER_SYNCED",
     });
+    expect(
+      deriveCharacterSyncStatus(
+        { ...base, blizzardCharacterId: null, blizzardRealmId: null, lastSyncedAt: minutesAgo(5) },
+        { ...policy, ownerHasRegionConnection: false },
+      ).health,
+    ).toBe("HEALTHY");
     expect(deriveCharacterSyncStatus({ ...base, ...linked }, { ...policy, ownerHasRegionConnection: true }).health).toBe("NEVER_SYNCED");
   });
 
@@ -89,7 +95,7 @@ describe("one stale definition", () => {
   it("the owner-facing sync state uses the same primitive and boundary", () => {
     const boundary = 120 + BLIZZARD_SYNC_RETRY_GRACE_MINUTES;
     const owner = (lastSyncedAt: string) =>
-      deriveBlizzardSyncState({ blizzardLinked: true, isActive: true, lastSyncedAt, createdAt: minutesAgo(100_000) }, policy).kind;
+      deriveBlizzardSyncState({ isActive: true, lastSyncedAt, lastSyncAttemptAt: lastSyncedAt, createdAt: minutesAgo(100_000) }, policy).kind;
     expect(owner(minutesAgo(boundary))).toBe("SYNCED");
     expect(owner(minutesAgo(boundary + 1))).toBe("STALE");
     expect(isSuccessfulSyncStale(minutesAgo(boundary), policy)).toBe(false);

@@ -7,6 +7,7 @@ import {
   consumeBattleNetOAuthState,
 } from "@/lib/blizzard/oauth-state";
 import { battleNetService } from "@/services/battle-net.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 
 function appOrigin(request: NextRequest): string {
   // Prefer configured public origin; fall back to request host with localhost preference.
@@ -40,7 +41,8 @@ function clearStateCookie(response: NextResponse) {
 
 /**
  * GET /api/integrations/battlenet/callback
- * Completes Battle.net OAuth, upserts the regional connection, and opens an import session.
+ * Completes Battle.net OAuth, upserts the regional connection, opens an import session and
+ * links the user's existing manual Characters that match the account exactly.
  * User OAuth tokens are never persisted.
  */
 export async function GET(request: NextRequest) {
@@ -82,10 +84,20 @@ export async function GET(request: NextRequest) {
       region: state.region,
     });
 
+    // Best-effort: a failed auto-link never fails the connection; the import dialog still offers it.
+    let linked = 0;
+    try {
+      const autoLink = await characterBlizzardImportService.autoLinkExistingCharacters(user, result.importSessionId);
+      linked = autoLink.linkedCharacterIds.length;
+    } catch (error) {
+      if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+    }
+
     response = redirectCharacters(request, {
       battlenet: "connected",
       region: result.region,
       importSession: result.importSessionId,
+      ...(linked > 0 ? { linked: String(linked) } : {}),
     });
     clearStateCookie(response);
     return response;

@@ -25,7 +25,7 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 
 ## Limitations
 
-- Character create/edit/deactivate/reactivate is implemented for the owning user
+- Character create/edit/deactivate/reactivate/delete is implemented for the owning user (admins can also delete via Character Operations)
 - Optional Battle.net connect/import/link and Refresh for linked characters when configured
 - Run create/edit/open/signup-window/cancel/start/complete, attendance, and completed-run payouts are implemented
 - Profile gold/wallet panels stay reserved; run payouts live on `/runs/[runId]`

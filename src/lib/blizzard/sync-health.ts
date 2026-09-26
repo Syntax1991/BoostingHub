@@ -5,8 +5,9 @@ import { DEFAULT_STALE_MINUTES, resolveScheduledSyncStaleMs } from "@/lib/blizza
  * /manage/characters), kept as pure functions over persisted telemetry.
  *
  * Two separate concepts:
- * - LINKAGE: can this Character be synced at all? (not an attempt outcome)
- * - HEALTH: outcome of the real sync attempts — only meaningful when LINKED.
+ * - LINKAGE: how ownership is established (not an attempt outcome). LINKED
+ *   syncs VERIFIED; NOT_LINKED / NO_CONNECTION sync PUBLIC by realm + name.
+ * - HEALTH: outcome of the real sync attempts — for every active Character.
  * Retirement is reported separately so retired Characters render "Retired"
  * instead of raising stale/error alerts.
  */
@@ -17,9 +18,9 @@ export const BLIZZARD_SYNC_RETRY_GRACE_MINUTES = 30;
 export type CharacterLinkageState =
   /** Blizzard ids present and the owner has a Battle.net connection for the Character's region. */
   | "LINKED"
-  /** No Blizzard ids — a manual Character; never synced. */
+  /** No Blizzard ids — a manual Character; synced PUBLIC (unverified ownership). */
   | "NOT_LINKED"
-  /** Blizzard ids present but the owner has no connection for that region — not eligible, never synced. */
+  /** Blizzard ids present but the owner has no connection for that region — synced PUBLIC. */
   | "NO_CONNECTION";
 
 export type CharacterSyncHealth = "ERROR" | "NEVER_SYNCED" | "STALE" | "HEALTHY";
@@ -70,8 +71,8 @@ export type CharacterSyncStatus = {
   /** Retired Characters are not scheduled; views show "Retired", summaries skip them. */
   retired: boolean;
   linkage: CharacterLinkageState;
-  /** Null unless LINKED. */
-  health: CharacterSyncHealth | null;
+  /** Health of the latest sync attempts (VERIFIED or PUBLIC); retirement is reported separately. */
+  health: CharacterSyncHealth;
 };
 
 export function deriveCharacterSyncStatus(
@@ -88,7 +89,7 @@ export function deriveCharacterSyncStatus(
   return {
     retired: !character.isActive,
     linkage,
-    health: linkage === "LINKED" ? deriveCharacterSyncHealth(character, context) : null,
+    health: deriveCharacterSyncHealth(character, context),
   };
 }
 

@@ -102,18 +102,18 @@ async function assertIdentityAvailable(input: {
 
 /** Characters-page sync state (never synced / failing / fine), derived from lastSyncedAt — see sync-state.ts. */
 function blizzardSyncStateFor(character: {
-  blizzardCharacterId: string | null;
   isActive: boolean;
   lastSyncedAt: string | null;
+  lastSyncAttemptAt: string | null;
   createdAt: string;
 }) {
   // A misconfigured env fails the scheduler loudly; the page just uses the default.
   const staleMinutes = resolveSyncHealthStaleMinutes();
   return deriveBlizzardSyncState(
     {
-      blizzardLinked: Boolean(character.blizzardCharacterId),
       isActive: character.isActive,
       lastSyncedAt: character.lastSyncedAt,
+      lastSyncAttemptAt: character.lastSyncAttemptAt,
       createdAt: character.createdAt,
     },
     { now: new Date(), staleMinutes },
@@ -405,6 +405,26 @@ export const characterService = {
       userId: user.id,
       type: "CHARACTER_DEACTIVATED",
       message: `Deactivated character ${characterLabel(character)}.`,
+    });
+  },
+
+  /**
+   * Owner hard delete. Refused while an unfinished Run still has a
+   * non-withdrawn signup on it (see characterRepository.deleteGuarded).
+   * A later Battle.net import of the same character simply imports it again.
+   */
+  async deleteCharacter(user: AuthenticatedUser, characterId: string) {
+    const character = await characterRepository.findById(characterId);
+    if (!character) {
+      throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
+    }
+    assertOwned(user, character);
+
+    await characterRepository.deleteGuarded(character.id);
+    await activityRepository.create({
+      userId: user.id,
+      type: "CHARACTER_DELETED",
+      message: `Deleted character ${characterLabel(character)}.`,
     });
   },
 

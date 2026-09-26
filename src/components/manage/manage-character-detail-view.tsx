@@ -13,6 +13,7 @@ import {
   SyncHealthBadge,
   Timestamp,
 } from "@/components/manage/character-operations/status";
+import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 
 type Data = Awaited<ReturnType<typeof managementController.getCharacterOperationsPage>>;
 
@@ -46,9 +47,23 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
         title={`${row.name}-${row.realm}`}
         description={`${row.region} · character operations`}
         actions={
-          <Link href="/manage/characters" className="text-sm text-accent hover:underline">
-            All characters
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/manage/characters" className="text-sm text-accent hover:underline">
+              All characters
+            </Link>
+            {data.deleteBlockedReason ? (
+              <span className="text-xs text-muted" title={data.deleteBlockedReason}>
+                Delete unavailable · Platform Owner
+              </span>
+            ) : (
+              <DeleteCharacterButton
+                characterId={row.id}
+                characterLabel={`${row.name}-${row.realm}`}
+                mode="admin"
+                redirectTo="/manage/characters"
+              />
+            )}
+          </div>
         }
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -120,9 +135,10 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
             <Field label="Blizzard character id">{identity.blizzardCharacterId ?? "—"}</Field>
             <Field label="Blizzard realm id">{identity.blizzardRealmId ?? "—"}</Field>
           </dl>
-          {row.linkage === "NO_CONNECTION" ? (
-            <p className="border-t border-border px-4 py-2 text-xs text-warning">
-              Owner has no Battle.net connection for this region — the character is excluded from scheduled syncs.
+          {row.linkage !== "LINKED" ? (
+            <p className="border-t border-border px-4 py-2 text-xs text-muted">
+              Synced from the public Blizzard API (item level + raid lockouts). Ownership is not verified via Battle.net;
+              connecting Battle.net and importing links it automatically.
             </p>
           ) : null}
         </Card>
