@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { db } from "@/lib/prisma";
+import { closeCharacterSyncLockSession } from "@/lib/character-sync-lock";
 import { isDomainError } from "@/lib/errors";
 import { scheduledCharacterSyncService } from "@/services/scheduled-character-sync.service";
 
@@ -42,6 +43,7 @@ async function main() {
       `${result.refreshed}/${result.totalCandidates} refreshed, ` +
       `${result.lockoutsVerified} lockouts verified, ${result.lockoutsUnavailable} lockouts unavailable, ` +
       `${result.failed} failed (${result.profileUnavailable} Blizzard profile unavailable), ${result.rateLimited} rate-limited, ` +
+      `${result.skippedInProgress} skipped (already syncing), ` +
       `${result.connectionsUpdated} connection(s) marked synced.`,
   );
 }
@@ -56,5 +58,6 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
+    await closeCharacterSyncLockSession();
     await db.close();
   });

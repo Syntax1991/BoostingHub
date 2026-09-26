@@ -31,6 +31,16 @@ if (!databaseUrl) {
 const connectionString = databaseUrl;
 const useSsl = connectionString.includes("sslmode=");
 
+/**
+ * Same resolved target (incl. the test-database guard) for the rare dedicated
+ * connection that must live outside the pool — e.g. the advisory-lock session
+ * in character-sync-lock.ts.
+ */
+export const pgConnectionConfig = {
+  connectionString,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+} as const;
+
 const globalForPg = globalThis as unknown as { pgPool?: Pool };
 
 function createPool() {

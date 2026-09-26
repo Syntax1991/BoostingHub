@@ -1,0 +1,212 @@
+[
+  {
+    "id": "column.public.character.lastSyncAttemptAt",
+    "label": "Add column \"lastSyncAttemptAt\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lastSyncAttemptAt",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lastSyncAttemptAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "lastSyncAttemptAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lastSyncAttemptAt\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"lastSyncAttemptAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lastSyncAttemptAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "lastSyncAttemptAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.character.lastSyncErrorAt",
+    "label": "Add column \"lastSyncErrorAt\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lastSyncErrorAt",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lastSyncErrorAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "lastSyncErrorAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lastSyncErrorAt\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"lastSyncErrorAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lastSyncErrorAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "lastSyncErrorAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.character.lastSyncErrorCode",
+    "label": "Add column \"lastSyncErrorCode\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lastSyncErrorCode",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lastSyncErrorCode\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "lastSyncErrorCode"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lastSyncErrorCode\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"lastSyncErrorCode\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lastSyncErrorCode\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "lastSyncErrorCode"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.character.syncFailureCount",
+    "label": "Add column \"syncFailureCount\" to \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "syncFailureCount",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"syncFailureCount\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "syncFailureCount"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"syncFailureCount\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD COLUMN \"syncFailureCount\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"syncFailureCount\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "character",
+          "syncFailureCount"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.character.character_lastSyncErrorCode_check_d5a4a203",
+    "label": "Add check constraint \"character_lastSyncErrorCode_check_d5a4a203\" on \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "character_lastSyncErrorCode_check_d5a4a203",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_lastSyncErrorCode_check_d5a4a203\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_lastSyncErrorCode_check_d5a4a203",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"character_lastSyncErrorCode_check_d5a4a203\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD CONSTRAINT \"character_lastSyncErrorCode_check_d5a4a203\" CHECK (\"lastSyncErrorCode\" IN ('PROFILE_UNAVAILABLE', 'IDENTITY_CONFLICT', 'NAME_CONFLICT', 'RATE_LIMITED', 'UPSTREAM_UNAVAILABLE', 'AUTH_OR_CONFIG', 'INTERNAL'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_lastSyncErrorCode_check_d5a4a203\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_lastSyncErrorCode_check_d5a4a203",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  }
+]

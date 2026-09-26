@@ -1,4 +1,5 @@
 import {
+  CHARACTER_SYNC_ERROR_CODES,
   ACCOUNT_ROLES,
   ACCOUNT_STATUSES,
   BOOSTER_ACCESS_STATUSES,
@@ -19,6 +20,7 @@ import {
   WOW_CLASSES,
   WOW_REGIONS,
   type AccountRole,
+  type CharacterSyncErrorCode,
   type AccountStatus,
   type AttendanceStatus,
   type BoosterAccessStatus,
@@ -63,6 +65,12 @@ function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallbac
   return typeof value === "string" && (allowed as readonly string[]).includes(value)
     ? (value as T)
     : fallback;
+}
+
+/** Null for no error; an unknown stored value degrades to INTERNAL, never raw text. */
+export function mapCharacterSyncErrorCode(value: unknown): CharacterSyncErrorCode | null {
+  if (value == null) return null;
+  return asEnum(value, CHARACTER_SYNC_ERROR_CODES, "INTERNAL");
 }
 
 export function mapUserRole(value: unknown): AccountRole {

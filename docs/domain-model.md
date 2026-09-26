@@ -49,6 +49,7 @@ Belongs to one user. Operators add characters via Blizzard lookup (Add Character
 - optional scoped Blizzard identity: `blizzardCharacterId` + `blizzardRealmId` with `region`; unique on `(region, blizzardRealmId, blizzardCharacterId)` when set
 - optional Warcraft Logs identifier (unused until later integration)
 - `lastSyncedAt` set after a successful Blizzard profile sync
+- sync telemetry: `lastSyncAttemptAt`, `lastSyncErrorAt`, `lastSyncErrorCode` (safe fixed category), `syncFailureCount` — see [blizzard-integration.md § Sync telemetry](features/blizzard-integration.md#sync-telemetry)
 
 Class is immutable after creation. Specialization from Blizzard is import-time prefill only; afterward it stays BoostingHub-owned. `primaryRole` is derived from specialization; signup role must still be valid for the class. Disconnecting Battle.net does not delete Characters. See [character-management.md](features/character-management.md) and [blizzard-integration.md](features/blizzard-integration.md).
 
