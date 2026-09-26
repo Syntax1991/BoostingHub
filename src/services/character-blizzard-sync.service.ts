@@ -12,6 +12,7 @@ import {
 } from "@/lib/blizzard/character-domain";
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { isBlizzardConfigured } from "@/lib/blizzard/config";
 import { withCharacterSyncLock } from "@/lib/character-sync-lock";
 import { classifySyncError, logCharacterSyncFailure, type CharacterSyncTrigger } from "@/lib/blizzard/sync-error";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -445,8 +446,10 @@ export const characterBlizzardSyncService = {
   },
 
   /**
-   * Bulk-refresh every active character of one connected region (linked ones
-   * VERIFIED, manual ones PUBLIC).
+   * Bulk-refresh every ACTIVE character of the owner in one region. Being
+   * active decides WHETHER a Character syncs; the owner's Battle.net connection
+   * only decides HOW (linked + connected → VERIFIED, otherwise PUBLIC), so the
+   * owner needs no connection. With a connection, exact-match links run first.
    * Partial success is kept; cooldown skips do not fail the batch.
    */
   async refreshLinkedCharactersForRegion(user: AuthenticatedUser, regionInput: string) {
@@ -455,23 +458,22 @@ export const characterBlizzardSyncService = {
       throw new DomainError("VALIDATION_FAILED", "Region must be EU or US.");
     }
 
-    const connection = await battleNetConnectionRepository.findByUserAndRegion(user.id, region);
-    if (!connection) {
-      throw new DomainError(
-        "BATTLENET_NOT_CONNECTED",
-        `Connect Battle.net (${region}) before refreshing.`,
-        400,
-      );
+    if (!isBlizzardConfigured()) {
+      throw new DomainError("BATTLENET_NOT_CONFIGURED", "Battle.net integration is not configured.", 503);
     }
 
-    // First link existing manual Characters that exactly match this connection's
-    // roster (no reconnect needed). Best-effort: never blocks the refresh.
+    const connection = await battleNetConnectionRepository.findByUserAndRegion(user.id, region);
+
+    // With a connection, first link existing manual Characters that exactly match
+    // its roster (no reconnect needed). Best-effort: never blocks the refresh.
     let linked = 0;
-    try {
-      const reconciled = await characterBlizzardImportService.reconcileBattleNetCharactersForConnection(user.id, region);
-      linked = reconciled.linkedCharacterIds.length;
-    } catch (error) {
-      if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+    if (connection) {
+      try {
+        const reconciled = await characterBlizzardImportService.reconcileBattleNetCharactersForConnection(user.id, region);
+        linked = reconciled.linkedCharacterIds.length;
+      } catch (error) {
+        if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+      }
     }
 
     const all = await characterRepository.listByUserId(user.id);
@@ -538,10 +540,9 @@ export const characterBlizzardSyncService = {
     }
 
     if (outcome.refreshed > 0) {
-      await battleNetConnectionRepository.markSuccessfulSync(
-        connection.id,
-        new Date().toISOString(),
-      );
+      if (connection) {
+        await battleNetConnectionRepository.markSuccessfulSync(connection.id, new Date().toISOString());
+      }
       await activityRepository.create({
         userId: user.id,
         type: "BATTLENET_CHARACTERS_REFRESHED",
