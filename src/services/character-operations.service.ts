@@ -36,6 +36,7 @@ import {
   syncLinkedCharacterProfile,
   verifiedConnectionId,
 } from "@/services/character-blizzard-sync.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { SCHEDULED_CHARACTER_SYNC_LOCK_KEY } from "@/services/scheduled-character-sync.service";
@@ -60,6 +61,22 @@ export const BULK_FORCE_REFRESH_COMPLETED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_
 
 /** Only retirement blocks a sync: unlinked / unconnected Characters sync PUBLIC. */
 export type SyncIneligibleReason = "RETIRED";
+
+/** Admin link backfill over existing Battle.net connections. */
+export const RECONCILE_LINKS_CONCURRENCY = 2;
+export type ReconcileLinksResult = {
+  connections: number;
+  reconciled: number;
+  /** Connections without a stored OAuth roster (need one Import / reconnect). */
+  noSnapshot: number;
+  linked: number;
+  alreadyLinked: number;
+  skipped: number;
+  failed: number;
+  /** Connections whose reconciliation threw — isolated, the rest continue. */
+  connectionErrors: number;
+  durationMs: number;
+};
 
 export const SYNC_INELIGIBLE_COPY: Record<SyncIneligibleReason, string> = {
   RETIRED: "Retired characters are not synced.",
@@ -422,6 +439,62 @@ export const characterOperationsService = {
       message: `Deleted ${label} (owner ${owner?.name ?? "unknown"}). targetCharacterId=${character.id}`,
     });
     return { label };
+  },
+
+  /**
+   * One-off / on-demand link backfill: runs the exact-match reconciliation
+   * (characterBlizzardImportService.reconcileBattleNetCharactersForConnection)
+   * for every existing Battle.net connection — bounded concurrency, failures
+   * isolated per connection. Only links existing exact matches; never imports,
+   * never unlinks, never touches users without a connection. Idempotent.
+   */
+  async reconcileBattleNetLinks(admin: AuthenticatedUser): Promise<ReconcileLinksResult> {
+    assertCanManageCharacterOperations(admin);
+    if (!isBlizzardConfigured()) {
+      throw new DomainError("BATTLENET_NOT_CONFIGURED", "Battle.net integration is not configured.", 503);
+    }
+    const start = Date.now();
+    const connections = await battleNetConnectionRepository.listAll();
+    const outcomes = await mapWithConcurrency(connections, RECONCILE_LINKS_CONCURRENCY, async (connection) => {
+      try {
+        return await characterBlizzardImportService.reconcileBattleNetCharactersForConnection(
+          connection.userId,
+          connection.region,
+        );
+      } catch {
+        return null;
+      }
+    });
+    const result: ReconcileLinksResult = {
+      connections: connections.length,
+      reconciled: 0,
+      noSnapshot: 0,
+      linked: 0,
+      alreadyLinked: 0,
+      skipped: 0,
+      failed: 0,
+      connectionErrors: 0,
+      durationMs: 0,
+    };
+    for (const outcome of outcomes) {
+      if (!outcome) {
+        result.connectionErrors += 1;
+        continue;
+      }
+      if (outcome.status === "NO_SNAPSHOT") result.noSnapshot += 1;
+      if (outcome.status === "RECONCILED") result.reconciled += 1;
+      result.linked += outcome.linkedCharacterIds.length;
+      result.alreadyLinked += outcome.alreadyLinked;
+      result.skipped += outcome.skipped;
+      result.failed += outcome.failed;
+    }
+    result.durationMs = Date.now() - start;
+    await activityRepository.create({
+      userId: admin.id,
+      type: "ADMIN_BATTLENET_LINKS_RECONCILED",
+      message: `Reconciled Battle.net links for ${result.connections} connections: ${result.linked} linked, ${result.alreadyLinked} already linked, ${result.skipped} skipped, ${result.failed} failed, ${result.noSnapshot} without roster, ${result.connectionErrors} errors.`,
+    });
+    return result;
   },
 
   async forceRefreshAll(

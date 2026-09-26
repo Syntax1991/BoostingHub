@@ -25,11 +25,13 @@ import {
 import { blizzardApiClient } from "@/integrations/blizzard/blizzard-api-client";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
-import type { CharacterRole, WowClass } from "@/models/enums";
+import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { battleNetService } from "@/services/battle-net.service";
+import { battleNetImportSessionRepository } from "@/repositories/battle-net-import-session.repository";
+import { userRepository } from "@/repositories/user.repository";
 
 /**
  * Owns the Add-Character public lookup and the Battle.net import/link flow:
@@ -295,6 +297,303 @@ async function resolveCandidate(
   };
 }
 
+/**
+ * Applies a mixed import/link selection against an OAuth-proven roster — a
+ * live import session, or the stored roster snapshot during reconciliation.
+ * External Blizzard profile reads happen before persistence so missing
+ * specialization / item level fails the batch without partial creates.
+ */
+async function applySelectionsForRoster(
+  user: AuthenticatedUser,
+  session: { region: WowRegion; characters: OwnedBlizzardCharacter[] },
+  selections: ImportCharacterSelection[],
+) {
+  if (selections.length === 0) {
+    throw new DomainError("VALIDATION_FAILED", "Select at least one character.");
+  }
+
+  type PlannedImport = {
+    kind: "import";
+    owned: OwnedBlizzardCharacter;
+    selection: ImportCharacterSelection;
+  };
+  type PlannedLink = {
+    kind: "link";
+    owned: OwnedBlizzardCharacter;
+    characterId: string;
+    selection: ImportCharacterSelection;
+  };
+
+  const planned: Array<PlannedImport | PlannedLink> = [];
+
+  for (const selection of selections) {
+    const owned = findOwnedInSession(session.characters, selection.blizzardCharacterId);
+    assertImportCharacterLevel(owned.level, `${owned.name}`);
+    const candidate = await resolveCandidate(user, owned);
+
+    if (candidate.status === "import") {
+      planned.push({ kind: "import", owned, selection });
+      continue;
+    }
+
+    if (candidate.status === "link" && candidate.characterId) {
+      planned.push({
+        kind: "link",
+        owned,
+        characterId: candidate.characterId,
+        selection,
+      });
+      continue;
+    }
+
+    if (candidate.status === "level_too_low") {
+      throw new DomainError(
+        "BLIZZARD_LEVEL_TOO_LOW",
+        candidate.conflictReason ??
+          `${owned.name} cannot be imported because level ${MIN_IMPORT_CHARACTER_LEVEL} is required.`,
+      );
+    }
+
+    throw new DomainError(
+      candidate.status === "conflict" ? "BLIZZARD_IDENTITY_CONFLICT" : "VALIDATION_FAILED",
+      candidate.conflictReason ??
+        `Character ${owned.name} cannot be imported or linked (status: ${candidate.status}).`,
+    );
+  }
+
+  type ReadyRow = {
+    kind: "import" | "link";
+    owned: OwnedBlizzardCharacter;
+    characterId?: string;
+    identity: ReturnType<typeof prepareImportedIdentity>;
+    enrichment: Awaited<ReturnType<typeof enrichProfileBestEffort>>;
+    spec: { specialization: string; primaryRole: CharacterRole };
+    /** Blizzard-authoritative; null when Blizzard did not supply one. No manual fallback. */
+    itemLevel: number | null;
+    lastSyncedAt: string | null;
+  };
+
+  const ready: ReadyRow[] = [];
+
+  for (const item of planned) {
+    const identity = prepareImportedIdentity(item.owned);
+    const label = `${identity.name}-${identity.realm}`;
+    const specializationRaw = item.selection.specialization?.trim() ?? "";
+    if (!specializationRaw) {
+      throw new DomainError(
+        "INVALID_SPECIALIZATION",
+        `Choose a specialization for ${label}.`,
+      );
+    }
+    const spec = resolveClassSpecialization(item.owned.wowClass, specializationRaw);
+    const enrichment = await enrichProfileBestEffort(item.owned);
+
+    const itemLevel = typeof enrichment.itemLevel === "number" ? enrichment.itemLevel : null;
+    const lastSyncedAt = enrichment.synced ? new Date().toISOString() : null;
+
+    ready.push({
+      kind: item.kind,
+      owned: item.owned,
+      characterId: item.kind === "link" ? item.characterId : undefined,
+      identity,
+      enrichment,
+      spec,
+      itemLevel,
+      lastSyncedAt,
+    });
+  }
+
+  const importedCharacterIds: string[] = [];
+  const linkedCharacterIds: string[] = [];
+
+  for (const item of ready) {
+    if (item.kind !== "import") continue;
+    try {
+      const created = await characterRepository.create({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        ...item.identity,
+        wowClass: item.owned.wowClass,
+        specialization: item.spec.specialization,
+        primaryRole: item.spec.primaryRole,
+        itemLevel: item.itemLevel,
+        isActive: true,
+        blizzardCharacterId: item.owned.id,
+        blizzardRealmId: item.owned.realmId,
+        lastSyncedAt: item.lastSyncedAt,
+      });
+      importedCharacterIds.push(created.id);
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        throw new DomainError(
+          "BLIZZARD_IDENTITY_CONFLICT",
+          "That Blizzard character conflicts with an existing BoostingHub character.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  for (const item of ready) {
+    if (item.kind !== "link" || !item.characterId) continue;
+    const character = await characterRepository.findById(item.characterId);
+    if (!character) {
+      throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
+    }
+    assertCharacterOwned(user, character);
+
+    if (character.region !== item.owned.region) {
+      throw new DomainError(
+        "BLIZZARD_REGION_MISMATCH",
+        "Character region does not match the Battle.net connection region.",
+      );
+    }
+    if (character.wowClass !== item.owned.wowClass) {
+      throw new DomainError(
+        "BLIZZARD_IDENTITY_CONFLICT",
+        "Class mismatch between BoostingHub character and Blizzard identity.",
+      );
+    }
+
+    try {
+      await characterRepository.applyBlizzardLink(character.id, {
+        blizzardCharacterId: item.owned.id,
+        blizzardRealmId: item.owned.realmId,
+        specialization: item.spec.specialization,
+        primaryRole: item.spec.primaryRole,
+        // Omitted (not null) when unavailable this time, so linking never
+        // clears a previously known item level on a transient failure.
+        ...(typeof item.itemLevel === "number" ? { itemLevel: item.itemLevel } : {}),
+        lastSyncedAt: item.lastSyncedAt,
+      });
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        throw new DomainError(
+          "BLIZZARD_IDENTITY_CONFLICT",
+          "That Blizzard character is already linked elsewhere.",
+        );
+      }
+      throw error;
+    }
+
+    linkedCharacterIds.push(character.id);
+  }
+
+  const connection = await battleNetConnectionRepository.findByUserAndRegion(
+    user.id,
+    session.region,
+  );
+  if (connection && (importedCharacterIds.length > 0 || linkedCharacterIds.length > 0)) {
+    await battleNetConnectionRepository.markSuccessfulSync(
+      connection.id,
+      new Date().toISOString(),
+    );
+  }
+
+  if (importedCharacterIds.length > 0) {
+    await activityRepository.create({
+      userId: user.id,
+      type: "BATTLENET_CHARACTERS_IMPORTED",
+      message: `Imported ${importedCharacterIds.length} character(s) from Battle.net (${session.region}).`,
+    });
+  }
+  if (linkedCharacterIds.length > 0) {
+    await activityRepository.create({
+      userId: user.id,
+      type: "BATTLENET_CHARACTER_LINKED",
+      message: `Linked ${linkedCharacterIds.length} character(s) to Battle.net (${session.region}).`,
+    });
+  }
+
+  // Optional WCL enrichment AFTER authoritative import/link + audit bookkeeping.
+  await characterWarcraftLogsService.tryAutoLinkManyIfMissing([
+    ...importedCharacterIds,
+    ...linkedCharacterIds,
+  ]);
+
+  return { importedCharacterIds, linkedCharacterIds };
+}
+
+export type ExactMatchLinkResult = {
+  linkedCharacterIds: string[];
+  /** Roster entries already linked to one of the owner's Characters (no change). */
+  alreadyLinked: number;
+  /** Same-owner name/realm matches refused by the safety rules, or whose live identity no longer matches. */
+  skipped: number;
+  failed: number;
+};
+
+/**
+ * THE exact-match auto-link pass (connect callback + reconciliation). Every
+ * roster entry is classified by resolveCandidate — the same authoritative
+ * rules as the import dialog: same owner, region, realm and name, same class,
+ * level >= 90, BoostingHub row not linked to another identity, Blizzard
+ * identity not linked to another Character. Only "link" candidates are
+ * written, one at a time through applySelectionsForRoster, keeping the
+ * owner's specialization. Nothing is imported; no fuzzy matching.
+ *
+ * verifyLiveIdentity (stored snapshots): the public profile for the roster
+ * entry's realm + name must still report the same Blizzard character id,
+ * realm id and class before linking — a rename, transfer or re-created
+ * character is skipped.
+ */
+async function linkExactMatchesFromRoster(
+  user: AuthenticatedUser,
+  roster: { region: WowRegion; characters: OwnedBlizzardCharacter[] },
+  options: { verifyLiveIdentity: boolean },
+): Promise<ExactMatchLinkResult> {
+  const result: ExactMatchLinkResult = { linkedCharacterIds: [], alreadyLinked: 0, skipped: 0, failed: 0 };
+
+  for (const owned of roster.characters) {
+    if (!meetsImportCharacterLevel(owned.level)) continue;
+    const candidate = await resolveCandidate(user, owned);
+    if (candidate.status === "already_linked") {
+      result.alreadyLinked += 1;
+      continue;
+    }
+    if (candidate.status === "conflict" && candidate.characterId) {
+      // A same-owner row exists but the rules refuse the link (class / identity).
+      result.skipped += 1;
+      continue;
+    }
+    if (candidate.status !== "link" || !candidate.characterId) continue;
+
+    const existing = await characterRepository.findById(candidate.characterId);
+    const specialization = existing?.specialization?.trim();
+    if (!specialization) {
+      result.failed += 1;
+      continue;
+    }
+    try {
+      if (options.verifyLiveIdentity) {
+        const summary = await blizzardApiClient.getCharacterProfileSummary(roster.region, owned.realmSlug, owned.name);
+        const sameIdentity =
+          summary.id === owned.id &&
+          (!summary.realmId || summary.realmId === owned.realmId) &&
+          (!summary.wowClass || summary.wowClass === owned.wowClass);
+        if (!sameIdentity) {
+          result.skipped += 1;
+          continue;
+        }
+      }
+      const applied = await applySelectionsForRoster(user, roster, [{ blizzardCharacterId: owned.id, specialization }]);
+      result.linkedCharacterIds.push(...applied.linkedCharacterIds);
+    } catch (error) {
+      if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+      result.failed += 1;
+      console.warn(
+        JSON.stringify({
+          event: "battlenet_auto_link_failed",
+          region: roster.region,
+          errorCode: isDomainError(error) ? error.code : "INTERNAL",
+        }),
+      );
+    }
+  }
+
+  return result;
+}
+
 export const characterBlizzardImportService = {
   lookupPublicCharacterProfile,
 
@@ -353,210 +652,7 @@ export const characterBlizzardImportService = {
     selections: ImportCharacterSelection[],
   ) {
     const session = await requireLiveImportSession(user, sessionId);
-    if (selections.length === 0) {
-      throw new DomainError("VALIDATION_FAILED", "Select at least one character.");
-    }
-
-    type PlannedImport = {
-      kind: "import";
-      owned: OwnedBlizzardCharacter;
-      selection: ImportCharacterSelection;
-    };
-    type PlannedLink = {
-      kind: "link";
-      owned: OwnedBlizzardCharacter;
-      characterId: string;
-      selection: ImportCharacterSelection;
-    };
-
-    const planned: Array<PlannedImport | PlannedLink> = [];
-
-    for (const selection of selections) {
-      const owned = findOwnedInSession(session.characters, selection.blizzardCharacterId);
-      assertImportCharacterLevel(owned.level, `${owned.name}`);
-      const candidate = await resolveCandidate(user, owned);
-
-      if (candidate.status === "import") {
-        planned.push({ kind: "import", owned, selection });
-        continue;
-      }
-
-      if (candidate.status === "link" && candidate.characterId) {
-        planned.push({
-          kind: "link",
-          owned,
-          characterId: candidate.characterId,
-          selection,
-        });
-        continue;
-      }
-
-      if (candidate.status === "level_too_low") {
-        throw new DomainError(
-          "BLIZZARD_LEVEL_TOO_LOW",
-          candidate.conflictReason ??
-            `${owned.name} cannot be imported because level ${MIN_IMPORT_CHARACTER_LEVEL} is required.`,
-        );
-      }
-
-      throw new DomainError(
-        candidate.status === "conflict" ? "BLIZZARD_IDENTITY_CONFLICT" : "VALIDATION_FAILED",
-        candidate.conflictReason ??
-          `Character ${owned.name} cannot be imported or linked (status: ${candidate.status}).`,
-      );
-    }
-
-    type ReadyRow = {
-      kind: "import" | "link";
-      owned: OwnedBlizzardCharacter;
-      characterId?: string;
-      identity: ReturnType<typeof prepareImportedIdentity>;
-      enrichment: Awaited<ReturnType<typeof enrichProfileBestEffort>>;
-      spec: { specialization: string; primaryRole: CharacterRole };
-      /** Blizzard-authoritative; null when Blizzard did not supply one. No manual fallback. */
-      itemLevel: number | null;
-      lastSyncedAt: string | null;
-    };
-
-    const ready: ReadyRow[] = [];
-
-    for (const item of planned) {
-      const identity = prepareImportedIdentity(item.owned);
-      const label = `${identity.name}-${identity.realm}`;
-      const specializationRaw = item.selection.specialization?.trim() ?? "";
-      if (!specializationRaw) {
-        throw new DomainError(
-          "INVALID_SPECIALIZATION",
-          `Choose a specialization for ${label}.`,
-        );
-      }
-      const spec = resolveClassSpecialization(item.owned.wowClass, specializationRaw);
-      const enrichment = await enrichProfileBestEffort(item.owned);
-
-      const itemLevel = typeof enrichment.itemLevel === "number" ? enrichment.itemLevel : null;
-      const lastSyncedAt = enrichment.synced ? new Date().toISOString() : null;
-
-      ready.push({
-        kind: item.kind,
-        owned: item.owned,
-        characterId: item.kind === "link" ? item.characterId : undefined,
-        identity,
-        enrichment,
-        spec,
-        itemLevel,
-        lastSyncedAt,
-      });
-    }
-
-    const importedCharacterIds: string[] = [];
-    const linkedCharacterIds: string[] = [];
-
-    for (const item of ready) {
-      if (item.kind !== "import") continue;
-      try {
-        const created = await characterRepository.create({
-          id: crypto.randomUUID(),
-          userId: user.id,
-          ...item.identity,
-          wowClass: item.owned.wowClass,
-          specialization: item.spec.specialization,
-          primaryRole: item.spec.primaryRole,
-          itemLevel: item.itemLevel,
-          isActive: true,
-          blizzardCharacterId: item.owned.id,
-          blizzardRealmId: item.owned.realmId,
-          lastSyncedAt: item.lastSyncedAt,
-        });
-        importedCharacterIds.push(created.id);
-      } catch (error) {
-        if (isUniqueConstraintViolation(error)) {
-          throw new DomainError(
-            "BLIZZARD_IDENTITY_CONFLICT",
-            "That Blizzard character conflicts with an existing BoostingHub character.",
-          );
-        }
-        throw error;
-      }
-    }
-
-    for (const item of ready) {
-      if (item.kind !== "link" || !item.characterId) continue;
-      const character = await characterRepository.findById(item.characterId);
-      if (!character) {
-        throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
-      }
-      assertCharacterOwned(user, character);
-
-      if (character.region !== item.owned.region) {
-        throw new DomainError(
-          "BLIZZARD_REGION_MISMATCH",
-          "Character region does not match the Battle.net connection region.",
-        );
-      }
-      if (character.wowClass !== item.owned.wowClass) {
-        throw new DomainError(
-          "BLIZZARD_IDENTITY_CONFLICT",
-          "Class mismatch between BoostingHub character and Blizzard identity.",
-        );
-      }
-
-      try {
-        await characterRepository.applyBlizzardLink(character.id, {
-          blizzardCharacterId: item.owned.id,
-          blizzardRealmId: item.owned.realmId,
-          specialization: item.spec.specialization,
-          primaryRole: item.spec.primaryRole,
-          // Omitted (not null) when unavailable this time, so linking never
-          // clears a previously known item level on a transient failure.
-          ...(typeof item.itemLevel === "number" ? { itemLevel: item.itemLevel } : {}),
-          lastSyncedAt: item.lastSyncedAt,
-        });
-      } catch (error) {
-        if (isUniqueConstraintViolation(error)) {
-          throw new DomainError(
-            "BLIZZARD_IDENTITY_CONFLICT",
-            "That Blizzard character is already linked elsewhere.",
-          );
-        }
-        throw error;
-      }
-
-      linkedCharacterIds.push(character.id);
-    }
-
-    const connection = await battleNetConnectionRepository.findByUserAndRegion(
-      user.id,
-      session.region,
-    );
-    if (connection && (importedCharacterIds.length > 0 || linkedCharacterIds.length > 0)) {
-      await battleNetConnectionRepository.markSuccessfulSync(
-        connection.id,
-        new Date().toISOString(),
-      );
-    }
-
-    if (importedCharacterIds.length > 0) {
-      await activityRepository.create({
-        userId: user.id,
-        type: "BATTLENET_CHARACTERS_IMPORTED",
-        message: `Imported ${importedCharacterIds.length} character(s) from Battle.net (${session.region}).`,
-      });
-    }
-    if (linkedCharacterIds.length > 0) {
-      await activityRepository.create({
-        userId: user.id,
-        type: "BATTLENET_CHARACTER_LINKED",
-        message: `Linked ${linkedCharacterIds.length} character(s) to Battle.net (${session.region}).`,
-      });
-    }
-
-    // Optional WCL enrichment AFTER authoritative import/link + audit bookkeeping.
-    await characterWarcraftLogsService.tryAutoLinkManyIfMissing([
-      ...importedCharacterIds,
-      ...linkedCharacterIds,
-    ]);
-
-    return { importedCharacterIds, linkedCharacterIds };
+    return applySelectionsForRoster(user, session, selections);
   },
 
   /**
@@ -568,39 +664,33 @@ export const characterBlizzardImportService = {
    * the manual pick. Nothing is imported. Best-effort per Character: one that
    * fails stays manual and remains available in the import dialog.
    */
-  async autoLinkExistingCharacters(user: AuthenticatedUser, sessionId: string) {
+  async autoLinkExistingCharacters(user: AuthenticatedUser, sessionId: string): Promise<ExactMatchLinkResult> {
     const session = await requireLiveImportSession(user, sessionId);
-    const linkedCharacterIds: string[] = [];
-    let failed = 0;
+    // Fresh OAuth roster: ownership and identity were just proven.
+    return linkExactMatchesFromRoster(user, session, { verifyLiveIdentity: false });
+  },
 
-    for (const owned of session.characters) {
-      if (!meetsImportCharacterLevel(owned.level)) continue;
-      const candidate = await resolveCandidate(user, owned);
-      if (candidate.status !== "link" || !candidate.characterId) continue;
-      const existing = await characterRepository.findById(candidate.characterId);
-      const specialization = existing?.specialization?.trim();
-      if (!specialization) {
-        failed += 1;
-        continue;
-      }
-      try {
-        const result = await this.applySelections(user, sessionId, [
-          { blizzardCharacterId: owned.id, specialization },
-        ]);
-        linkedCharacterIds.push(...result.linkedCharacterIds);
-      } catch (error) {
-        failed += 1;
-        console.warn(
-          JSON.stringify({
-            event: "battlenet_auto_link_failed",
-            region: session.region,
-            errorCode: isDomainError(error) ? error.code : "INTERNAL",
-          }),
-        );
-      }
-    }
-
-    return { linkedCharacterIds, failed };
+  /**
+   * Link reconciliation for an ALREADY-connected account — no disconnect /
+   * reconnect / new OAuth round. User OAuth tokens are never persisted, so the
+   * account roster cannot be re-enumerated; instead the connection's latest
+   * stored OAuth roster snapshot is the ownership evidence and every candidate
+   * is re-verified live (same Blizzard id, realm id and class) before the
+   * shared exact-match pass links it. Idempotent: already-linked entries are
+   * counted, never changed. Unknown Blizzard characters are never imported.
+   */
+  async reconcileBattleNetCharactersForConnection(
+    userId: string,
+    region: WowRegion,
+  ): Promise<{ status: "RECONCILED" | "NO_CONNECTION" | "NO_SNAPSHOT" } & ExactMatchLinkResult> {
+    const empty = { linkedCharacterIds: [], alreadyLinked: 0, skipped: 0, failed: 0 };
+    const connection = await battleNetConnectionRepository.findByUserAndRegion(userId, region);
+    const user = connection ? await userRepository.findAuthenticatedById(userId) : null;
+    if (!connection || !user) return { status: "NO_CONNECTION", ...empty };
+    const snapshot = await battleNetImportSessionRepository.findLatestRosterSnapshot(userId, region);
+    if (!snapshot || snapshot.characters.length === 0) return { status: "NO_SNAPSHOT", ...empty };
+    const result = await linkExactMatchesFromRoster(user, snapshot, { verifyLiveIdentity: true });
+    return { status: "RECONCILED", ...result };
   },
 
   async importCharacters(

@@ -24,6 +24,7 @@ import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { resolveMonotonicItemLevel, toStoredItemLevel } from "@/lib/character-item-level";
 import { resolveRaiderIoItemLevelEnrichment } from "@/services/character-raider-io-ilvl";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
+import { characterBlizzardImportService } from "@/services/character-blizzard-import.service";
 
 /**
  * Owns refreshing already Blizzard-linked characters: single refresh,
@@ -463,6 +464,16 @@ export const characterBlizzardSyncService = {
       );
     }
 
+    // First link existing manual Characters that exactly match this connection's
+    // roster (no reconnect needed). Best-effort: never blocks the refresh.
+    let linked = 0;
+    try {
+      const reconciled = await characterBlizzardImportService.reconcileBattleNetCharactersForConnection(user.id, region);
+      linked = reconciled.linkedCharacterIds.length;
+    } catch (error) {
+      if (isDomainError(error) && error.code === "BATTLENET_NOT_CONFIGURED") throw error;
+    }
+
     const all = await characterRepository.listByUserId(user.id);
     const eligible = all.filter(
       (character) =>
@@ -472,6 +483,8 @@ export const characterBlizzardSyncService = {
     );
 
     const outcome = {
+      /** Existing manual Characters newly linked by the reconciliation pass. */
+      linked,
       total: eligible.length,
       refreshed: 0,
       lockoutsVerified: 0,

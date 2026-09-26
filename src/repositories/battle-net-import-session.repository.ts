@@ -61,6 +61,20 @@ export const battleNetImportSessionRepository = {
     return live[0] ?? null;
   },
 
+  /**
+   * The most recent OAuth-proven roster snapshot for a connection, regardless
+   * of expiry/consumption (snapshots are only deleted on disconnect). Used by
+   * link reconciliation for already-connected accounts, which re-verifies each
+   * candidate's identity live before linking.
+   */
+  async findLatestRosterSnapshot(userId: string, region: WowRegion): Promise<BattleNetImportSessionRecord | null> {
+    const rows = await orm.BattleNetImportSession.where({ userId, region }).all();
+    const sessions = rows
+      .map((row) => mapSession(row as Record<string, unknown>))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return sessions[0] ?? null;
+  },
+
   async create(input: {
     userId: string;
     region: WowRegion;

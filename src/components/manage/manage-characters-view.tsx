@@ -7,6 +7,7 @@ import type { managementController } from "@/controllers/app.controller";
 import { SYNC_INELIGIBLE_COPY, type OperationsRow } from "@/services/character-operations.service";
 import { CharacterSyncButtons } from "@/components/manage/character-operations/character-sync-buttons";
 import { ForceRefreshAllButton } from "@/components/manage/character-operations/force-refresh-all-button";
+import { ReconcileLinksButton } from "@/components/manage/character-operations/reconcile-links-button";
 import {
   LinkageBadge,
   LockoutSlotsCompact,
@@ -76,10 +77,11 @@ export function ManageCharactersView({ data }: { data: Page }) {
         title="Characters"
         description="All characters with Blizzard sync health, linkage and current lockouts."
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link href="/manage" className="text-sm text-accent hover:underline">
               Management
             </Link>
+            <ReconcileLinksButton />
             <ForceRefreshAllButton eligibleCount={bulkEligibleCount} />
           </div>
         }

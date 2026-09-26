@@ -541,6 +541,48 @@ describe("admin Sync now / Force refresh", () => {
     },
   );
 
+  it("PUBLIC sync of a manual character keeps telemetry, the normal cooldown and the per-Character lock", async () => {
+    const character = await createCharacter(ownerA, "Pubtel", { linked: false });
+    mockBlizzardSuccess();
+
+    expect((await characterOperationsService.syncCharacter(admin, { characterId: character.id, force: false })).status).toBe("SUCCEEDED");
+    const synced = (await characterRepository.findById(character.id))!;
+    expect(synced.lastSyncAttemptAt).toBeTruthy();
+    expect(synced.lastSyncedAt).toBeTruthy();
+    expect(synced.blizzardCharacterId).toBeNull();
+
+    await expect(characterOperationsService.syncCharacter(admin, { characterId: character.id, force: false })).rejects.toMatchObject({
+      code: "BLIZZARD_REFRESH_COOLDOWN",
+    });
+
+    const held = await tryAcquireCharacterSyncLock(character.id);
+    try {
+      await expect(characterOperationsService.syncCharacter(admin, { characterId: character.id, force: true })).rejects.toMatchObject({
+        code: "CHARACTER_SYNC_IN_PROGRESS",
+      });
+    } finally {
+      await releaseCharacterSyncLock(held!);
+    }
+
+    apiMocks.getCharacterProfileStatus.mockRejectedValue(new DomainError("BATTLENET_API_UNAVAILABLE", "x", 503));
+    const failed = await characterOperationsService.syncCharacter(admin, { characterId: character.id, force: true });
+    expect(failed).toMatchObject({ status: "FAILED", errorCategory: "UPSTREAM_UNAVAILABLE" });
+    const afterFailure = (await characterRepository.findById(character.id))!;
+    expect(afterFailure.lastSyncErrorCode).toBe("UPSTREAM_UNAVAILABLE");
+    expect(afterFailure.syncFailureCount).toBe(1);
+    expect(afterFailure.blizzardCharacterId).toBeNull();
+  });
+
+  it("a linked character still syncs VERIFIED and marks the owner's connection", async () => {
+    mockBlizzardSuccess();
+    const before = await battleNetConnectionRepository.findByUserAndRegion(ownerA, "EU");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect((await characterOperationsService.syncCharacter(admin, { characterId: fx.never!.id, force: true })).status).toBe("SUCCEEDED");
+    const after = await battleNetConnectionRepository.findByUserAndRegion(ownerA, "EU");
+    expect(after?.lastSuccessfulSyncAt).toBeTruthy();
+    expect(after?.lastSuccessfulSyncAt).not.toBe(before?.lastSuccessfulSyncAt);
+  });
+
   it("a PUBLIC sync still rejects a class mismatch", async () => {
     mockBlizzardSuccess();
     apiMocks.getCharacterProfileSummary.mockImplementation(async (_region: WowRegion, _slug: string, name: string) => ({
