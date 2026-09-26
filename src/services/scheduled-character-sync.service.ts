@@ -8,6 +8,7 @@ import { syncLinkedCharacterProfile } from "@/services/character-blizzard-sync.s
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import type { ScheduledCharacterSyncCandidate } from "@/models/records";
 import { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
+import { isInSchedulerBackoff } from "@/lib/blizzard/sync-backoff";
 
 /**
  * Orchestrates the one-shot scheduled Blizzard character sync job. The app
@@ -40,6 +41,8 @@ export type ScheduledCharacterSyncResult = {
   rateLimited: number;
   /** Candidates already being synced by another context (per-Character lock held) — no attempt made. */
   skippedInProgress: number;
+  /** Stale candidates deliberately not attempted: repeated failures, still inside their backoff window. */
+  skippedBackoff: number;
   connectionsUpdated: number;
   durationMs: number;
 };
@@ -55,6 +58,7 @@ function emptyResult(status: ScheduledCharacterSyncResult["status"], durationMs:
     profileUnavailable: 0,
     rateLimited: 0,
     skippedInProgress: 0,
+    skippedBackoff: 0,
     connectionsUpdated: 0,
     durationMs,
   };
@@ -117,6 +121,8 @@ async function refreshCandidate(
 export type ScheduledCharacterSyncDryRunResult = {
   status: "COMPLETED" | "SKIPPED_ALREADY_RUNNING";
   totalCandidates: number;
+  /** Subset of totalCandidates a real run would skip (failure backoff). */
+  inBackoff: number;
   distinctUsers: number;
   distinctConnections: number;
   byRegion: Record<string, number>;
@@ -135,7 +141,7 @@ export const scheduledCharacterSyncService = {
       SCHEDULED_CHARACTER_SYNC_LOCK_KEY.objectId,
     );
     if (!handle) {
-      return { status: "SKIPPED_ALREADY_RUNNING", totalCandidates: 0, distinctUsers: 0, distinctConnections: 0, byRegion: {} };
+      return { status: "SKIPPED_ALREADY_RUNNING", totalCandidates: 0, inBackoff: 0, distinctUsers: 0, distinctConnections: 0, byRegion: {} };
     }
 
     try {
@@ -148,9 +154,11 @@ export const scheduledCharacterSyncService = {
         byRegion[candidate.character.region] = (byRegion[candidate.character.region] ?? 0) + 1;
       }
 
+      const now = new Date();
       return {
         status: "COMPLETED",
         totalCandidates: candidates.length,
+        inBackoff: candidates.filter((candidate) => isInSchedulerBackoff(candidate.character, now)).length,
         distinctUsers: new Set(candidates.map((candidate) => candidate.owner.id)).size,
         distinctConnections: new Set(candidates.flatMap((candidate) => (candidate.connection ? [candidate.connection.id] : []))).size,
         byRegion,
@@ -181,10 +189,19 @@ export const scheduledCharacterSyncService = {
     try {
       const staleMs = resolveScheduledSyncStaleMs();
       const staleBefore = new Date(Date.now() - staleMs).toISOString();
-      const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
+      const stale = await characterRepository.listScheduledSyncCandidates({ staleBefore });
+      // Scheduler-only failure backoff: repeatedly failing Characters wait
+      // (1h / 6h / 24h) before the next automatic attempt. Not attempted, so
+      // neither refreshed nor failed. Manual and admin syncs ignore this.
+      const now = new Date();
+      const candidates = stale.filter((candidate) => !isInSchedulerBackoff(candidate.character, now));
+      const skippedBackoff = stale.length - candidates.length;
 
       if (candidates.length === 0) {
-        return { ...emptyResult("COMPLETED", Date.now() - start), totalCandidates: 0 };
+        if (skippedBackoff > 0) {
+          console.info(`[scheduled-character-sync] candidates=${stale.length} refreshed=0 skippedBackoff=${skippedBackoff}`);
+        }
+        return { ...emptyResult("COMPLETED", Date.now() - start), totalCandidates: stale.length, skippedBackoff };
       }
 
       // A configuration problem (missing Blizzard credentials) is an
@@ -243,17 +260,17 @@ export const scheduledCharacterSyncService = {
 
       const durationMs = Date.now() - start;
       console.info(
-        `[scheduled-character-sync] candidates=${candidates.length} refreshed=${refreshed} ` +
+        `[scheduled-character-sync] candidates=${stale.length} refreshed=${refreshed} ` +
           `lockoutsVerified=${lockoutsVerified} lockoutsUnavailable=${lockoutsUnavailable} ` +
           `failed=${failed} profileUnavailable=${profileUnavailable} rateLimited=${rateLimited} ` +
-          `skippedInProgress=${skippedInProgress} ` +
+          `skippedInProgress=${skippedInProgress} skippedBackoff=${skippedBackoff} ` +
           `connectionsUpdated=${refreshedConnectionIds.size} ` +
           `durationMs=${durationMs}`,
       );
 
       return {
         status: "COMPLETED",
-        totalCandidates: candidates.length,
+        totalCandidates: stale.length,
         refreshed,
         lockoutsVerified,
         lockoutsUnavailable,
@@ -261,6 +278,7 @@ export const scheduledCharacterSyncService = {
         profileUnavailable,
         rateLimited,
         skippedInProgress,
+        skippedBackoff,
         connectionsUpdated: refreshedConnectionIds.size,
         durationMs,
       };

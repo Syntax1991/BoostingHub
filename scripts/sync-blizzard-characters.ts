@@ -25,7 +25,7 @@ async function main() {
       return;
     }
     console.info(
-      `[sync:characters] dry run: ${result.totalCandidates} candidate(s) across ` +
+      `[sync:characters] dry run: ${result.totalCandidates} candidate(s) (${result.inBackoff} in failure backoff) across ` +
         `${result.distinctUsers} user(s) and ${result.distinctConnections} connection(s). ` +
         `By region: ${JSON.stringify(result.byRegion)}`,
     );
@@ -43,7 +43,7 @@ async function main() {
       `${result.refreshed}/${result.totalCandidates} refreshed, ` +
       `${result.lockoutsVerified} lockouts verified, ${result.lockoutsUnavailable} lockouts unavailable, ` +
       `${result.failed} failed (${result.profileUnavailable} Blizzard profile unavailable), ${result.rateLimited} rate-limited, ` +
-      `${result.skippedInProgress} skipped (already syncing), ` +
+      `${result.skippedInProgress} skipped (already syncing), ${result.skippedBackoff} skipped (failure backoff), ` +
       `${result.connectionsUpdated} connection(s) marked synced.`,
   );
 }

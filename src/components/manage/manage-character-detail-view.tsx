@@ -3,6 +3,7 @@ import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge, DifficultyBadge } from "@/components/ui/badges";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { formatDateTime } from "@/lib/datetime";
+import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
 import type { RaidDifficulty } from "@/models/enums";
 import type { managementController } from "@/controllers/app.controller";
 import { SYNC_INELIGIBLE_COPY } from "@/services/character-operations.service";
@@ -114,6 +115,20 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
               {row.lastSyncErrorLabel ? <span className="text-danger">{row.lastSyncErrorLabel}</span> : "—"}
             </Field>
             <Field label="Consecutive failures">{row.syncFailureCount}</Field>
+            <Field label="Automatic retry">
+              {row.retired ? (
+                "—"
+              ) : row.autoRetryAt ? (
+                <span title="Scheduler failure backoff. Sync now and Force refresh still work.">
+                  In {formatRetryIn(row.autoRetryInMs)}{" "}
+                  <span className="text-xs text-muted">({formatDateTime(row.autoRetryAt)})</span>
+                </span>
+              ) : row.lastSyncErrorCode ? (
+                "Eligible now"
+              ) : (
+                "—"
+              )}
+            </Field>
           </dl>
         </Card>
 

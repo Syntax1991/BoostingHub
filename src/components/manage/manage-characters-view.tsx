@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassIcon } from "@/components/ui/badges";
 import { CLASS_COLORS, CLASS_LABELS } from "@/lib/labels";
+import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
+import { formatDateTime } from "@/lib/datetime";
 import { WOW_CLASSES, WOW_REGIONS } from "@/models/enums";
 import type { managementController } from "@/controllers/app.controller";
 import { SYNC_INELIGIBLE_COPY, type OperationsRow } from "@/services/character-operations.service";
@@ -50,6 +52,11 @@ function ApiCell({ row }: { row: OperationsRow }) {
         <span className="text-xs text-danger">
           {row.lastSyncErrorLabel}
           {row.syncFailureCount > 1 ? ` ×${row.syncFailureCount}` : ""}
+        </span>
+      ) : null}
+      {row.autoRetryAt ? (
+        <span className="text-xs text-muted" title={`Automatic sync paused until ${formatDateTime(row.autoRetryAt)}. Sync now still works.`}>
+          Auto retry in {formatRetryIn(row.autoRetryInMs)}
         </span>
       ) : null}
     </div>

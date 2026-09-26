@@ -1,6 +1,7 @@
 import { assertCanManageCharacterOperations, hasOwnerAccess, type AuthenticatedUser } from "@/auth/authorization";
 import { isBlizzardConfigured } from "@/lib/blizzard/config";
 import { classifySyncError, type CharacterSyncTrigger } from "@/lib/blizzard/sync-error";
+import { resolveCharacterSyncRetryAt } from "@/lib/blizzard/sync-backoff";
 import {
   deriveCharacterSyncStatus,
   resolveSyncHealthStaleMinutes,
@@ -108,6 +109,12 @@ export type OperationsRow = {
   syncIneligibleReason: SyncIneligibleReason | null;
   /** Normal "Sync now" cooldown left (Force refresh ignores it). */
   cooldownRemainingMs: number;
+  /**
+   * Scheduler-only failure backoff (lib/blizzard/sync-backoff.ts): the next
+   * automatic retry while it is delayed, else null. Manual syncs ignore it.
+   */
+  autoRetryAt: string | null;
+  autoRetryInMs: number;
 };
 
 export type OperationsSummary = {
@@ -151,6 +158,8 @@ export function deriveOperationsRow(
   const status = deriveCharacterSyncStatus(record, context);
   // Retired Characters show "Retired" — they are not scheduled, so no health.
   const health = status.retired ? null : status.health;
+  const retryAt = status.retired ? null : resolveCharacterSyncRetryAt(record);
+  const autoRetryInMs = retryAt ? Math.max(0, retryAt.getTime() - context.now.getTime()) : 0;
   return {
     id: record.id,
     name: record.name,
@@ -173,6 +182,8 @@ export function deriveOperationsRow(
     lockoutSlots: projectCurrentRaidLockoutSlots(lockoutRows(record), currentRaidDescriptors()),
     syncIneligibleReason: syncIneligibleReason({ isActive: record.isActive }),
     cooldownRemainingMs: manualCooldownRemainingMs(record, context.now.getTime()),
+    autoRetryAt: autoRetryInMs > 0 && retryAt ? retryAt.toISOString() : null,
+    autoRetryInMs,
   };
 }
 
