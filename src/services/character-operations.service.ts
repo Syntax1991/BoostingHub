@@ -31,7 +31,11 @@ import { characterRepository } from "@/repositories/character.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { boosterQualificationService } from "@/services/booster-qualification.service";
-import { manualCooldownRemainingMs, syncLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
+import {
+  manualCooldownRemainingMs,
+  syncLinkedCharacterProfile,
+  verifiedConnectionId,
+} from "@/services/character-blizzard-sync.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { SCHEDULED_CHARACTER_SYNC_LOCK_KEY } from "@/services/scheduled-character-sync.service";
@@ -54,12 +58,11 @@ export const BULK_FORCE_REFRESH_COOLDOWN_MS = 10 * 60_000;
 export const BULK_FORCE_REFRESH_STARTED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_STARTED";
 export const BULK_FORCE_REFRESH_COMPLETED_EVENT = "CHARACTER_BULK_FORCE_REFRESH_COMPLETED";
 
-export type SyncIneligibleReason = "RETIRED" | "NOT_LINKED" | "NO_CONNECTION";
+/** Only retirement blocks a sync: unlinked / unconnected Characters sync PUBLIC. */
+export type SyncIneligibleReason = "RETIRED";
 
 export const SYNC_INELIGIBLE_COPY: Record<SyncIneligibleReason, string> = {
   RETIRED: "Retired characters are not synced.",
-  NOT_LINKED: "Character is not linked to Battle.net.",
-  NO_CONNECTION: "Owner has no Battle.net connection for this region.",
 };
 
 export type OperationsRow = {
@@ -81,7 +84,7 @@ export type OperationsRow = {
   syncFailureCount: number;
   retired: boolean;
   linkage: CharacterLinkageState;
-  /** Only for active LINKED Characters; null otherwise (retired / not linked / no connection). */
+  /** Every active Character (VERIFIED or PUBLIC sync); null only when retired. */
   health: CharacterSyncHealth | null;
   lockoutSlots: RaidLockoutSlot[];
   /** Null when admin sync is allowed; otherwise why not (drives disabled buttons + server refusal). */
@@ -119,14 +122,8 @@ function lockoutRows(record: OperationsCharacterRecord): LockoutDisplayRow[] {
   }));
 }
 
-export function syncIneligibleReason(input: {
-  isActive: boolean;
-  linkage: CharacterLinkageState;
-}): SyncIneligibleReason | null {
-  if (!input.isActive) return "RETIRED";
-  if (input.linkage === "NOT_LINKED") return "NOT_LINKED";
-  if (input.linkage === "NO_CONNECTION") return "NO_CONNECTION";
-  return null;
+export function syncIneligibleReason(input: { isActive: boolean }): SyncIneligibleReason | null {
+  return input.isActive ? null : "RETIRED";
 }
 
 /** The one row derivation used by the table, filters, sorting and summary. */
@@ -157,7 +154,7 @@ export function deriveOperationsRow(
     linkage: status.linkage,
     health,
     lockoutSlots: projectCurrentRaidLockoutSlots(lockoutRows(record), currentRaidDescriptors()),
-    syncIneligibleReason: syncIneligibleReason({ isActive: record.isActive, linkage: status.linkage }),
+    syncIneligibleReason: syncIneligibleReason({ isActive: record.isActive }),
     cooldownRemainingMs: manualCooldownRemainingMs(record, context.now.getTime()),
   };
 }
@@ -184,8 +181,8 @@ function matchesText(value: string, query: string): boolean {
 }
 
 /**
- * Deterministic, combinable filters. A health filter matches only active
- * LINKED Characters (retired / not linked / no connection have no health).
+ * Deterministic, combinable filters. A health filter matches active
+ * Characters only (retired ones have no health).
  */
 export function filterOperationsRows(rows: OperationsRow[], filters: CharacterOperationsFilters): OperationsRow[] {
   const query = filters.query?.trim();
@@ -210,24 +207,18 @@ export function filterOperationsRows(rows: OperationsRow[], filters: CharacterOp
   });
 }
 
-/**
- * Operations-oriented health order: problems first. Rows without health
- * (no connection, not linked, retired) follow in that fixed order.
- */
+/** Operations-oriented health order: problems first; retired (no health) last. */
 const HEALTH_SORT_RANK: Record<string, number> = {
   ERROR: 0,
   STALE: 1,
   NEVER_SYNCED: 2,
   HEALTHY: 3,
-  NO_CONNECTION: 4,
-  NOT_LINKED: 5,
-  RETIRED: 6,
+  RETIRED: 4,
 };
 
 function healthSortKey(row: OperationsRow): number {
-  if (row.retired) return HEALTH_SORT_RANK.RETIRED!;
-  if (row.health) return HEALTH_SORT_RANK[row.health]!;
-  return HEALTH_SORT_RANK[row.linkage]!;
+  if (row.retired || !row.health) return HEALTH_SORT_RANK.RETIRED!;
+  return HEALTH_SORT_RANK[row.health]!;
 }
 
 const collator = new Intl.Collator("en-US", { sensitivity: "base" });
@@ -277,21 +268,19 @@ async function resolveSyncTarget(characterId: string) {
   if (!character) {
     throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
   }
-  const hasIds = Boolean(character.blizzardCharacterId && character.blizzardRealmId);
-  // The connection is always the CHARACTER OWNER's — never the acting admin's.
-  const connection = hasIds
-    ? await battleNetConnectionRepository.findByUserAndRegion(character.userId, character.region)
-    : null;
-  const linkage: CharacterLinkageState = !hasIds ? "NOT_LINKED" : connection ? "LINKED" : "NO_CONNECTION";
-  const reason = syncIneligibleReason({ isActive: character.isActive, linkage });
-  if (reason || !connection) {
-    throw new DomainError("CHARACTER_SYNC_NOT_ELIGIBLE", SYNC_INELIGIBLE_COPY[reason ?? "NO_CONNECTION"], 400);
+  const reason = syncIneligibleReason({ isActive: character.isActive });
+  if (reason) {
+    throw new DomainError("CHARACTER_SYNC_NOT_ELIGIBLE", SYNC_INELIGIBLE_COPY[reason], 400);
   }
+  // The connection is always the CHARACTER OWNER's — never the acting admin's.
+  // Linked + connected → VERIFIED sync; otherwise PUBLIC (connectionId null).
+  const ownerConnection = await battleNetConnectionRepository.findByUserAndRegion(character.userId, character.region);
+  const connectionId = verifiedConnectionId(character, ownerConnection);
   const owner = await userRepository.findById(character.userId);
   if (!owner) {
     throw new DomainError("USER_NOT_FOUND", "Character owner was not found.", 404);
   }
-  return { character, connection, owner: { id: owner.id, name: owner.name } };
+  return { character, connectionId, owner: { id: owner.id, name: owner.name } };
 }
 
 export const characterOperationsService = {
@@ -359,7 +348,7 @@ export const characterOperationsService = {
     input: { characterId: string; force: boolean },
   ): Promise<AdminSyncOutcome> {
     assertCanManageCharacterOperations(admin);
-    const { character, connection, owner } = await resolveSyncTarget(input.characterId);
+    const { character, connectionId, owner } = await resolveSyncTarget(input.characterId);
     const remaining = manualCooldownRemainingMs(character);
     if (!input.force && remaining > 0) {
       throw new DomainError(
@@ -373,7 +362,7 @@ export const characterOperationsService = {
     const verb = input.force ? "Force refreshed" : "Synced";
     const label = characterLabel(character);
     try {
-      const result = await syncLinkedCharacterProfile(owner, character, connection.id, {
+      const result = await syncLinkedCharacterProfile(owner, character, connectionId, {
         trigger,
         writeActivity: false,
       });
@@ -396,8 +385,8 @@ export const characterOperationsService = {
   },
 
   /**
-   * "Force refresh all": every eligible Character (active + Blizzard ids +
-   * owner's regional connection — the scheduler's own eligibility, resolved
+   * "Force refresh all": every eligible Character (every active Character,
+   * VERIFIED or PUBLIC — the scheduler's own eligibility, resolved
    * server-side now), bypassing freshness. Runs synchronously under the SAME
    * whole-job advisory lock as the scheduler, so the two never overlap; a
    * durable 10-minute cooldown (latest STARTED ActivityEvent, checked and
@@ -448,7 +437,7 @@ export const characterOperationsService = {
 
       const rateLimited = { current: false };
       type Outcome =
-        | { kind: "succeeded"; connectionId: string; characterId: string }
+        | { kind: "succeeded"; connectionId: string | null; characterId: string }
         | { kind: "failed"; category: CharacterSyncErrorCode }
         | { kind: "skipped"; reason: BulkSkipReason };
       const outcomes = await mapWithConcurrency(
@@ -458,13 +447,14 @@ export const characterOperationsService = {
           if (rateLimited.current) return { kind: "skipped", reason: "RATE_LIMITED" };
           if (Date.now() > deadline) return { kind: "skipped", reason: "TIME_BUDGET" };
           try {
-            await syncLinkedCharacterProfile(candidate.owner, candidate.character, candidate.connection.id, {
+            const connectionId = candidate.connection?.id ?? null;
+            await syncLinkedCharacterProfile(candidate.owner, candidate.character, connectionId, {
               updateConnectionSync: false,
               writeActivity: false,
               autoLinkWarcraftLogs: false,
               trigger: "ADMIN_BULK_FORCE",
             });
-            return { kind: "succeeded", connectionId: candidate.connection.id, characterId: candidate.character.id };
+            return { kind: "succeeded", connectionId, characterId: candidate.character.id };
           } catch (error) {
             if (isDomainError(error) && error.code === "CHARACTER_SYNC_IN_PROGRESS") {
               return { kind: "skipped", reason: "ALREADY_SYNCING" };
@@ -495,7 +485,7 @@ export const characterOperationsService = {
         if (outcome.kind === "succeeded") {
           result.attempted += 1;
           result.succeeded += 1;
-          succeededConnectionIds.add(outcome.connectionId);
+          if (outcome.connectionId) succeededConnectionIds.add(outcome.connectionId);
           succeededCharacterIds.push(outcome.characterId);
         } else if (outcome.kind === "failed") {
           result.attempted += 1;

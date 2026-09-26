@@ -19,8 +19,8 @@ const HEALTH_COPY: Record<CharacterSyncHealth, { label: string; className: strin
 
 const LINKAGE_COPY: Record<CharacterLinkageState, { label: string; className: string }> = {
   LINKED: { label: "Linked", className: "bg-success/10 text-success" },
-  NOT_LINKED: { label: "Not linked", className: "bg-muted/20 text-muted" },
-  NO_CONNECTION: { label: "No connection", className: "bg-warning/15 text-warning" },
+  NOT_LINKED: { label: "Public API", className: "bg-info/15 text-info" },
+  NO_CONNECTION: { label: "Public API", className: "bg-info/15 text-info" },
 };
 
 export function SyncHealthBadge({ health, retired }: { health: CharacterSyncHealth | null; retired: boolean }) {
@@ -35,9 +35,11 @@ export function LinkageBadge({ linkage }: { linkage: CharacterLinkageState }) {
   return (
     <span
       title={
-        linkage === "NO_CONNECTION"
-          ? "Owner has no Battle.net connection for this region — not synced by the scheduler."
-          : undefined
+        linkage === "NOT_LINKED"
+          ? "Manually added — synced from the public Blizzard API (item level + lockouts). Ownership not verified via Battle.net."
+          : linkage === "NO_CONNECTION"
+            ? "Owner has no Battle.net connection for this region — synced from the public Blizzard API, ownership not re-verified."
+            : "Linked via the owner's Battle.net login (verified ownership)."
       }
     >
       <Badge className={copy.className}>{copy.label}</Badge>

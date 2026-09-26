@@ -142,13 +142,20 @@ Persisted on `Character` (no sync-history table):
 - **Attempt:** `lastSyncAttemptAt = now`. Nothing else changes; `Character.updatedAt` ("Updated") is preserved because bookkeeping is not a Character data change.
 - **Success:** `applyBlizzardSync` writes the profile, `lastSyncedAt` and the cleared failure fields in **one** statement.
 - **Failure:** `lastSyncErrorAt = now`, `lastSyncErrorCode = category`, `syncFailureCount + 1`. Name, item level, `lastSyncedAt` and lockouts keep their last known good values. A failing telemetry write is logged and never replaces the real outcome.
-- A verified Battle.net import/link enrichment also sets `lastSyncAttemptAt` (it is a real Blizzard round-trip). Eligibility failures (not linked, no connection) are not attempts and are never recorded.
+- A verified Battle.net import/link enrichment also sets `lastSyncAttemptAt` (it is a real Blizzard round-trip). Eligibility failures (retired) are not attempts and are never recorded.
 
 **Safe categories** (`classifySyncError`, `src/lib/blizzard/sync-error.ts` — the only mapping): `PROFILE_UNAVAILABLE` (404 / `is_valid=false`), `IDENTITY_CONFLICT` (class, Blizzard id or realm/transfer mismatch), `NAME_CONFLICT` (rename collision or unstorable name), `RATE_LIMITED` (429), `UPSTREAM_UNAVAILABLE` (5xx, network, timeout, invalid JSON), `AUTH_OR_CONFIG` (app credentials rejected or Battle.net not configured), `INTERNAL` (anything else). Only the code is stored — never messages, URLs, payloads or tokens (a CHECK constraint limits the column to these values).
 
 **Logging:** each failed attempt writes one JSON line — `{"event":"character_sync_failed"|"character_sync_rate_limited","errorCategory","trigger","region","rateLimited","retryable"}`. It never contains character/owner ids or names, Discord identity, emails, messages, upstream data or credentials; per-Character diagnosis comes from the persisted telemetry.
 
-**Health** (`src/lib/blizzard/sync-health.ts`, pure): linkage (`LINKED` / `NOT_LINKED` / `NO_CONNECTION`) is separate from health, which exists only for `LINKED` Characters with precedence `ERROR` (a failure newer than the last success) > `NEVER_SYNCED` > `STALE` (last success older than `BLIZZARD_SYNC_STALE_MINUTES` + 30 min grace) > `HEALTHY`. Retirement is reported separately. The owner-facing Characters page state uses the same stale primitive.
+**Sync modes.** Every active Character is synced — Blizzard is always read by realm + name with the client-credentials token:
+
+- **VERIFIED** (`LINKED`: Blizzard ids + the owner's regional connection, ownership proven at import/link): stored ids are checked and the connection's `lastSuccessfulSyncAt` is marked.
+- **PUBLIC** (`NOT_LINKED` manual Characters, or `NO_CONNECTION`): public profile data only — item level and raid lockouts. The class must match; stored ids (if any) are still checked; Blizzard ids are **never stamped** by a public sync, so the real owner can still import/link it later (the auto-link on connect then upgrades it to VERIFIED). Shown as **Public API** on `/manage/characters`.
+
+Manual Refresh, owner Refresh all (all active Characters of the connected region), admin Sync now / Force refresh / Force refresh all and the scheduler all use the same eligibility: active = eligible; only retirement blocks a sync.
+
+**Health** (`src/lib/blizzard/sync-health.ts`, pure): linkage (`LINKED` / `NOT_LINKED` / `NO_CONNECTION`) is separate from health, which exists for every active Character with precedence `ERROR` (a failure newer than the last success) > `NEVER_SYNCED` > `STALE` (last success older than `BLIZZARD_SYNC_STALE_MINUTES` + 30 min grace) > `HEALTHY`. Retirement is reported separately. The owner-facing Characters page state uses the same stale primitive.
 
 **Per-Character lock:** each attempt holds a non-blocking PostgreSQL advisory lock `(837463, hashtext(characterId))` (`src/lib/character-sync-lock.ts`) on one dedicated lock session per process (outside the 5-connection pool). A Character already being synced anywhere — web process or scheduled job — is refused (`CHARACTER_SYNC_IN_PROGRESS`, 409) by manual Refresh and skipped by Refresh All and the scheduler, without an attempt. The scheduler's whole-job lock `(837462, 1)` is unchanged.
 

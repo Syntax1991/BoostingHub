@@ -120,9 +120,10 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
             <Field label="Blizzard character id">{identity.blizzardCharacterId ?? "—"}</Field>
             <Field label="Blizzard realm id">{identity.blizzardRealmId ?? "—"}</Field>
           </dl>
-          {row.linkage === "NO_CONNECTION" ? (
-            <p className="border-t border-border px-4 py-2 text-xs text-warning">
-              Owner has no Battle.net connection for this region — the character is excluded from scheduled syncs.
+          {row.linkage !== "LINKED" ? (
+            <p className="border-t border-border px-4 py-2 text-xs text-muted">
+              Synced from the public Blizzard API (item level + raid lockouts). Ownership is not verified via Battle.net;
+              connecting Battle.net and importing links it automatically.
             </p>
           ) : null}
         </Card>

@@ -268,36 +268,45 @@ describe("characterRepository.listScheduledSyncCandidates", () => {
     expect(candidates.some((c) => c.character.id === character.id)).toBe(false);
   });
 
-  it("E: a character missing blizzardCharacterId is skipped", async () => {
+  it("E: a character missing blizzardCharacterId is a PUBLIC candidate (no connection used)", async () => {
     const userId = await createUser("Owner E");
     await createConnection(userId, "EU");
     const character = await createCharacter({ userId, name: "Scnobzid", lastSyncedAt: old, blizzardCharacterId: null });
 
     const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
-    expect(candidates.some((c) => c.character.id === character.id)).toBe(false);
+    expect(candidates.find((c) => c.character.id === character.id)?.connection).toBeNull();
   });
 
-  it("F: a character missing blizzardRealmId is skipped", async () => {
+  it("F: a character missing blizzardRealmId is a PUBLIC candidate (no connection used)", async () => {
     const userId = await createUser("Owner F");
     await createConnection(userId, "EU");
     const character = await createCharacter({ userId, name: "Scnorealmid", lastSyncedAt: old, blizzardRealmId: null });
 
     const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
-    expect(candidates.some((c) => c.character.id === character.id)).toBe(false);
+    expect(candidates.find((c) => c.character.id === character.id)?.connection).toBeNull();
   });
 
-  it("G: a character whose owner has no BattleNetConnection at all is skipped", async () => {
+  it("G: a linked character whose owner has no BattleNetConnection is a PUBLIC candidate", async () => {
     const userId = await createUser("Owner G");
     const character = await createCharacter({ userId, name: "Scnoconn", lastSyncedAt: old });
 
     const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
-    expect(candidates.some((c) => c.character.id === character.id)).toBe(false);
+    expect(candidates.find((c) => c.character.id === character.id)?.connection).toBeNull();
   });
 
-  it("H: an EU character whose owner only has a US connection is skipped", async () => {
+  it("H: an EU character whose owner only has a US connection syncs PUBLIC, never through the US connection", async () => {
     const userId = await createUser("Owner H");
     await createConnection(userId, "US");
     const character = await createCharacter({ userId, name: "Sceuonly", region: "EU", lastSyncedAt: old });
+
+    const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
+    expect(candidates.find((c) => c.character.id === character.id)?.connection).toBeNull();
+  });
+
+  it("I: a retired manual character is never a candidate", async () => {
+    const userId = await createUser("Owner I");
+    const character = await createCharacter({ userId, name: "Scretired", lastSyncedAt: old, blizzardCharacterId: null });
+    await characterRepository.setActive(character.id, false);
 
     const candidates = await characterRepository.listScheduledSyncCandidates({ staleBefore });
     expect(candidates.some((c) => c.character.id === character.id)).toBe(false);

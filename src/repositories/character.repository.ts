@@ -425,10 +425,9 @@ export const characterRepository = {
   async listScheduledSyncCandidates(input: {
     staleBefore: string;
   }): Promise<ScheduledCharacterSyncCandidate[]> {
+    // Every active Character: linked ones sync VERIFIED, manual ones PUBLIC.
     const linked = await orm.Character
       .where({ isActive: true })
-      .where((character) => character.blizzardCharacterId.isNotNull())
-      .where((character) => character.blizzardRealmId.isNotNull())
       .include("user")
       .all();
 
@@ -475,8 +474,11 @@ export const characterRepository = {
       const record = row as Record<string, unknown>;
       const userId = asString(record.userId);
       const region = mapRegion(record.region);
-      const connection = connectionByUserRegion.get(`${userId}:${region}`);
-      if (!connection) continue;
+      const blizzardCharacterId = asStringOrNull(record.blizzardCharacterId);
+      const blizzardRealmId = asStringOrNull(record.blizzardRealmId);
+      // Only a linked Character syncs VERIFIED through its owner's connection.
+      const connection =
+        blizzardCharacterId && blizzardRealmId ? (connectionByUserRegion.get(`${userId}:${region}`) ?? null) : null;
 
       const user = (record.user ?? {}) as Record<string, unknown>;
       candidates.push({
@@ -490,8 +492,8 @@ export const characterRepository = {
           normalizedRealm: asString(record.normalizedRealm),
           wowClass: mapWowClass(record.wowClass),
           itemLevel: asNumberOrNull(record.itemLevel),
-          blizzardCharacterId: asString(record.blizzardCharacterId),
-          blizzardRealmId: asString(record.blizzardRealmId),
+          blizzardCharacterId,
+          blizzardRealmId,
           lastSyncedAt: asStringOrNull(record.lastSyncedAt),
         },
         connection,

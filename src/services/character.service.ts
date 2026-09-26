@@ -102,18 +102,18 @@ async function assertIdentityAvailable(input: {
 
 /** Characters-page sync state (never synced / failing / fine), derived from lastSyncedAt — see sync-state.ts. */
 function blizzardSyncStateFor(character: {
-  blizzardCharacterId: string | null;
   isActive: boolean;
   lastSyncedAt: string | null;
+  lastSyncAttemptAt: string | null;
   createdAt: string;
 }) {
   // A misconfigured env fails the scheduler loudly; the page just uses the default.
   const staleMinutes = resolveSyncHealthStaleMinutes();
   return deriveBlizzardSyncState(
     {
-      blizzardLinked: Boolean(character.blizzardCharacterId),
       isActive: character.isActive,
       lastSyncedAt: character.lastSyncedAt,
+      lastSyncAttemptAt: character.lastSyncAttemptAt,
       createdAt: character.createdAt,
     },
     { now: new Date(), staleMinutes },

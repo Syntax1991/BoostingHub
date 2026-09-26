@@ -453,7 +453,7 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
     );
   });
 
-  it("rejects refresh for an unlinked character", async () => {
+  it("refreshes a manual character PUBLIC — no Battle.net connection needed, no Blizzard ids stamped", async () => {
     const manual = await characterService.createCharacter(owner, {
       name: "Bnmanual",
       realm: "Twisting Nether",
@@ -463,19 +463,33 @@ describe("characterBlizzardSyncService.refreshCharacter", () => {
       itemLevel: 600,
     });
     createdCharacterIds.push(manual.id);
+    mockEnrichmentSuccess({ id: "300099", name: "Bnmanual", realmId: "1301", wowClass: "SHAMAN", itemLevel: 655 });
 
-    await battleNetConnectionRepository.upsert({
-      userId: ids.owner,
+    const updated = await characterBlizzardSyncService.refreshCharacter(owner, manual.id);
+
+    expect(updated.itemLevel).toBe(655);
+    expect(updated.lastSyncedAt).toBeTruthy();
+    expect(updated.blizzardCharacterId).toBeNull();
+    expect(updated.blizzardRealmId).toBeNull();
+    expect(apiMocks.getCharacterRaidEncounters).toHaveBeenCalled();
+  });
+
+  it("a PUBLIC refresh rejects a class mismatch and keeps the last known data", async () => {
+    const manual = await characterService.createCharacter(owner, {
+      name: "Bnmanualtwo",
+      realm: "Twisting Nether",
       region: "EU",
-      battleNetAccountId: "acct-manual",
-      battleTag: "Tag#EU",
-      scope: "wow.profile openid",
+      wowClass: "SHAMAN",
+      specialization: "Restoration",
+      itemLevel: 600,
     });
+    createdCharacterIds.push(manual.id);
+    mockEnrichmentSuccess({ id: "300098", name: "Bnmanualtwo", realmId: "1301", wowClass: "MAGE", itemLevel: 700 });
 
-    await expectDomainCode(
-      characterBlizzardSyncService.refreshCharacter(owner, manual.id),
-      "BLIZZARD_CHARACTER_NOT_FOUND",
-    );
+    await expectDomainCode(characterBlizzardSyncService.refreshCharacter(owner, manual.id), "BLIZZARD_IDENTITY_CONFLICT");
+    const row = await characterRepository.findById(manual.id);
+    expect(row?.itemLevel).toBe(600);
+    expect(row?.lastSyncErrorCode).toBe("IDENTITY_CONFLICT");
   });
 
   it("safely renames when scoped Blizzard identity still matches", async () => {
@@ -734,7 +748,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
   const owner = asUser(ids.owner);
   const other = asUser(ids.other, "Blizzard Other");
 
-  it("refreshes only active linked characters in the requested region", async () => {
+  it("refreshes every active character in the requested region (linked VERIFIED, manual PUBLIC)", async () => {
     const euOwned = ownedCharacter({ id: "300070", name: "Bnrefeu" });
     const euSession = await seedConnectionAndSession(ids.owner, "EU", [euOwned]);
     mockEnrichmentSuccess({
@@ -816,9 +830,16 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
       specialization: "Elemental",
     });
 
+    const euSummary = await apiMocks.getCharacterProfileSummary();
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region: string, _slug: string, name: string) =>
+      name === "Bnmanual"
+        ? { ...euSummary, id: "300777", name: "Bnmanual", wowClass: "MAGE", equippedItemLevel: 612 }
+        : euSummary,
+    );
+
     const result = await characterBlizzardSyncService.refreshLinkedCharactersForRegion(owner, "EU");
-    expect(result.total).toBe(1);
-    expect(result.refreshed).toBe(1);
+    expect(result.total).toBe(2);
+    expect(result.refreshed).toBe(2);
     expect(result.failed).toBe(0);
     expect(result.lockoutsVerified).toBeGreaterThanOrEqual(0);
 
@@ -833,7 +854,7 @@ describe("characterBlizzardSyncService.refreshLinkedCharactersForRegion", () => 
 
     const manualRow = await orm.Character.where({ id: manual.id }).first();
     expect(manualRow?.blizzardCharacterId).toBeNull();
-    expect(Number(manualRow?.itemLevel)).toBe(500);
+    expect(Number(manualRow?.itemLevel)).toBe(612);
 
     const inactiveRow = await orm.Character.where({ id: inactiveId }).first();
     expect(Number(inactiveRow?.itemLevel)).toBe(642);

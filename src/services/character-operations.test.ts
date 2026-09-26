@@ -186,7 +186,8 @@ beforeAll(async () => {
   });
   fx.never = await createCharacter(ownerA, "Never");
   fx.noconn = await createCharacter(ownerB, "Noconn");
-  fx.notlinked = await createCharacter(ownerA, "Notlinked", { linked: false });
+  // Label kept short: fixtures bypass name validation (max 16 chars) and PUBLIC syncs re-validate the name.
+  fx.notlinked = await createCharacter(ownerA, "Manual", { linked: false });
   fx.retired = await createCharacter(ownerA, "Retired", { active: false, lastSyncedAt: minutesAgo(10_000) });
 });
 
@@ -287,8 +288,9 @@ describe("admin list read model", () => {
       syncFailureCount: 2,
     });
     expect(byId.get(fx.never!.id)).toMatchObject({ linkage: "LINKED", health: "NEVER_SYNCED" });
-    expect(byId.get(fx.noconn!.id)).toMatchObject({ linkage: "NO_CONNECTION", health: null, syncIneligibleReason: "NO_CONNECTION" });
-    expect(byId.get(fx.notlinked!.id)).toMatchObject({ linkage: "NOT_LINKED", health: null, syncIneligibleReason: "NOT_LINKED" });
+    // Unlinked / unconnected Characters sync PUBLIC: they have health and are eligible.
+    expect(byId.get(fx.noconn!.id)).toMatchObject({ linkage: "NO_CONNECTION", health: "NEVER_SYNCED", syncIneligibleReason: null });
+    expect(byId.get(fx.notlinked!.id)).toMatchObject({ linkage: "NOT_LINKED", health: "NEVER_SYNCED", syncIneligibleReason: null });
     expect(byId.get(fx.retired!.id)).toMatchObject({ retired: true, health: null, syncIneligibleReason: "RETIRED" });
     // Bulk eligibility shown on the page matches the row derivation.
     expect(page.bulkEligibleCount).toBe(page.rows.filter((row) => row.syncIneligibleReason === null).length);
@@ -331,7 +333,7 @@ describe("admin list read model", () => {
     const html = renderToStaticMarkup(createElement(ManageCharactersView, { data: page }));
     expect(html).toContain("Blizzard API unavailable");
     expect(html).not.toContain("UPSTREAM_UNAVAILABLE");
-    expect(html).toContain("No connection");
+    expect(html).toContain("Public API");
   });
 });
 
@@ -385,7 +387,8 @@ describe("summary", () => {
       healthy: 1,
       stale: 1,
       errors: 1,
-      neverSynced: 1,
+      // Delta (linked), Echo (no connection) and Foxtrot (manual) — all never synced.
+      neverSynced: 3,
       linked: 4,
       noConnection: 1,
       notLinked: 1,
@@ -445,8 +448,8 @@ describe("sorting (stable, deterministic)", () => {
     expect(order("last_success")).toEqual(["1", "3", "2", "7", "4", "5", "6"]);
   });
 
-  it("health: problems first (ERROR, STALE, NEVER_SYNCED, HEALTHY), then NO_CONNECTION, NOT_LINKED, retired", () => {
-    expect(order("health")).toEqual(["3", "2", "4", "1", "5", "6", "7"]);
+  it("health: problems first (ERROR, STALE, NEVER_SYNCED, HEALTHY) for every linkage, retired last", () => {
+    expect(order("health")).toEqual(["3", "2", "4", "5", "6", "1", "7"]);
   });
 });
 
@@ -510,8 +513,6 @@ describe("admin Sync now / Force refresh", () => {
 
   it.each([
     ["retired", "RETIRED", "Retired characters are not synced."],
-    ["notlinked", "NOT_LINKED", "Character is not linked to Battle.net."],
-    ["noconn", "NO_CONNECTION", "Owner has no Battle.net connection for this region."],
   ] as const)("%s is not eligible for Sync now or Force refresh", async (key, _reason, copy) => {
     mockBlizzardSuccess();
     for (const force of [false, true]) {
@@ -522,6 +523,40 @@ describe("admin Sync now / Force refresh", () => {
       expect(error.message).toBe(copy);
     }
     expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["notlinked", "noconn"] as const)(
+    "%s syncs PUBLIC: item level + lockouts from the public API, no Blizzard ids stamped",
+    async (key) => {
+      mockBlizzardSuccess();
+      const before = (await characterRepository.findById(fx[key]!.id))!;
+      const outcome = await characterOperationsService.syncCharacter(admin, { characterId: fx[key]!.id, force: true });
+      expect(outcome.status).toBe("SUCCEEDED");
+      const after = (await characterRepository.findById(fx[key]!.id))!;
+      expect(after.lastSyncedAt).toBeTruthy();
+      expect(after.itemLevel).toBe(610);
+      expect(after.blizzardCharacterId).toBe(before.blizzardCharacterId);
+      expect(after.blizzardRealmId).toBe(before.blizzardRealmId);
+      expect(apiMocks.getCharacterRaidEncounters).toHaveBeenCalled();
+    },
+  );
+
+  it("a PUBLIC sync still rejects a class mismatch", async () => {
+    mockBlizzardSuccess();
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region: WowRegion, _slug: string, name: string) => ({
+      id: "999",
+      name,
+      realmId: "1",
+      wowClass: "WARRIOR",
+      equippedItemLevel: 700,
+      activeSpecialization: "Arms",
+    }));
+    const before = (await characterRepository.findById(fx.notlinked!.id))!;
+    const outcome = await characterOperationsService.syncCharacter(admin, { characterId: fx.notlinked!.id, force: true });
+    expect(outcome).toMatchObject({ status: "FAILED", errorCategory: "IDENTITY_CONFLICT" });
+    const after = (await characterRepository.findById(fx.notlinked!.id))!;
+    expect(after.itemLevel).toBe(before.itemLevel);
+    expect(after.blizzardCharacterId).toBeNull();
   });
 
   it("the per-Character lock is kept: an already-syncing Character is refused for both modes", async () => {
@@ -559,19 +594,16 @@ describe("admin Sync now / Force refresh", () => {
 /* -------------------------------------------------------- bulk force refresh */
 
 describe("Force refresh all", () => {
-  it("runs exactly the eligible population (active + ids + owner connection) and excludes retired / not linked / no connection", async () => {
+  it("runs exactly the eligible population (every active Character, VERIFIED or PUBLIC) and excludes retired", async () => {
     mockBlizzardSuccess();
     const page = await characterOperationsService.getListPage(admin, parseCharacterOperationsFilters({}));
     const result = await characterOperationsService.forceRefreshAll(admin);
     expect(result.eligible).toBe(page.bulkEligibleCount);
     expect(result.succeeded + result.failed + result.skipped).toBe(result.eligible);
-    for (const key of ["healthy", "stale", "error", "never"] as const) {
+    for (const key of ["healthy", "stale", "error", "never", "notlinked", "noconn"] as const) {
       expect((await characterRepository.findById(fx[key]!.id))!.lastSyncAttemptAt).toBeTruthy();
     }
-    for (const key of ["retired", "notlinked", "noconn"] as const) {
-      const row = (await characterRepository.findById(fx[key]!.id))!;
-      expect(row.lastSyncAttemptAt).toBeNull();
-    }
+    expect((await characterRepository.findById(fx.retired!.id))!.lastSyncAttemptAt).toBeNull();
     const completed = (await orm.ActivityEvent.where({ userId: adminId, type: BULK_FORCE_REFRESH_COMPLETED_EVENT }).all()) as unknown[];
     expect(completed.length).toBeGreaterThan(0);
   });
@@ -669,7 +701,7 @@ describe("Force refresh all", () => {
     expect(["CHARACTER_SYNC_ALREADY_RUNNING", "CHARACTER_BULK_REFRESH_COOLDOWN"]).toContain(rejected[0]!.reason.code);
   });
 
-  it("enforces the 10-minute bulk cooldown from acceptance; single Force refresh stays available", async () => {
+  it("enforces the 10-minute bulk cooldown from acceptance; single Force refresh stays available", { timeout: 30_000 }, async () => {
     mockBlizzardSuccess();
     await characterOperationsService.forceRefreshAll(admin);
     await expect(characterOperationsService.forceRefreshAll(admin)).rejects.toMatchObject({

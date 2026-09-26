@@ -86,7 +86,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         description={
           data.blizzardLinked
             ? `${data.realm} · ${REGION_LABELS[data.region]} · Battle.net linked.`
-            : `${data.realm} · ${REGION_LABELS[data.region]} · Class and Item Level from Blizzard.`
+            : `${data.realm} · ${REGION_LABELS[data.region]} · Synced from the public Blizzard API.`
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -112,7 +112,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                 itemLevel: data.itemLevel,
               }}
             />
-            {data.blizzardLinked ? <BlizzardRefreshButton characterId={data.id} /> : null}
+            {data.isActive ? <BlizzardRefreshButton characterId={data.id} /> : null}
             <CharacterLifecycleButton characterId={data.id} isActive={data.isActive} />
           </div>
         }
@@ -168,7 +168,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             description={
               data.blizzardLinked
                 ? "Linked to Battle.net. Use Refresh to pull the latest Blizzard profile."
-                : "Connect Battle.net on the Characters page and link this character to enable Blizzard refresh."
+                : "Synced from the public Blizzard API (item level + raid lockouts). Connect Battle.net on the Characters page to link it to your account."
             }
           />
           <dl className="space-y-2 px-4 py-4 text-sm">
@@ -197,7 +197,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             ) : null}
             {!data.blizzardLinked ? (
               <p className="pt-1 text-xs text-muted">
-                Refresh requires Battle.net linking from the Characters page import session.
+                Not linked to Battle.net yet — connecting Battle.net links it automatically when it is on your account.
               </p>
             ) : null}
           </dl>
