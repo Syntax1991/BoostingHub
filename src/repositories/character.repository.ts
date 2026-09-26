@@ -529,6 +529,9 @@ export const characterRepository = {
           blizzardCharacterId,
           blizzardRealmId,
           lastSyncedAt: asStringOrNull(record.lastSyncedAt),
+          lastSyncAttemptAt: asStringOrNull(record.lastSyncAttemptAt),
+          lastSyncErrorCode: mapCharacterSyncErrorCode(record.lastSyncErrorCode),
+          syncFailureCount: asNumber(record.syncFailureCount, 0),
         },
         connection,
         owner: {

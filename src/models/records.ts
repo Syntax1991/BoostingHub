@@ -2,6 +2,7 @@ import type {
   BoosterAccessStatus,
   BoosterQualificationStatus,
   CharacterRole,
+  CharacterSyncErrorCode,
   RaidDifficulty,
   WowClass,
   WowRegion,
@@ -99,6 +100,10 @@ export type ScheduledCharacterSyncCandidate = {
     blizzardCharacterId: string | null;
     blizzardRealmId: string | null;
     lastSyncedAt: string | null;
+    /** Failure telemetry for the scheduler-only backoff (lib/blizzard/sync-backoff.ts). */
+    lastSyncAttemptAt: string | null;
+    lastSyncErrorCode: CharacterSyncErrorCode | null;
+    syncFailureCount: number;
   };
   /** The owner's regional connection when the Character is VERIFIED-linked; null → PUBLIC sync. */
   connection: {

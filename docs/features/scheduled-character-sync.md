@@ -159,6 +159,23 @@ If Battle.net credentials are globally missing (`BATTLENET_NOT_CONFIGURED`) and 
 
 Successful refreshes are grouped by `BattleNetConnection`. A connection's `lastSuccessfulSyncAt` is marked **once per cycle** if at least one of its Characters refreshed successfully — never once per Character, and never at all if every Character for that connection failed.
 
+## Failure backoff (scheduler only)
+
+A stale Character whose automatic sync keeps failing is not retried every tick forever. After candidate selection, `runOnce` drops Characters still inside their backoff window (`src/lib/blizzard/sync-backoff.ts`, `resolveCharacterSyncRetryAt`), measured from `lastSyncAttemptAt` and driven by `syncFailureCount` + `lastSyncErrorCode`:
+
+| Consecutive failures | PROFILE_UNAVAILABLE / IDENTITY_CONFLICT / NAME_CONFLICT | UPSTREAM_UNAVAILABLE / INTERNAL | RATE_LIMITED / AUTH_OR_CONFIG |
+| --- | --- | --- | --- |
+| 0–2 | none | none | none |
+| 3–5 | 1h | 1h | none |
+| 6–9 | 6h | 1h (capped) | none |
+| 10+ | 24h | 1h (capped) | none |
+
+- Persistent, Character-specific problems (deleted / renamed / transferred Character, identity or name conflict) back off progressively. Transient upstream problems are capped at 1h so one outage never parks a Character for a day. `RATE_LIMITED` stays governed by the whole-run 429 stop, and `AUTH_OR_CONFIG` is a system problem (the job fails fast when Battle.net is not configured).
+- A backed-off Character is **not attempted**: it counts as `skippedBackoff` (neither refreshed nor failed), its telemetry and error stay as they are, and `--dry-run` reports `inBackoff`.
+- The backoff is scheduler-only. Owner Refresh / Refresh all and admin Sync now / Force refresh / Force refresh all ignore it (the normal 60s manual cooldown still applies; Force still bypasses it).
+- A successful sync resets `syncFailureCount` and `lastSyncErrorCode`, which removes the backoff; normal freshness scheduling resumes. Nothing is deleted, retired, renamed or unlinked.
+- `/manage/characters` shows "Auto retry in …" on backed-off rows; the detail page shows the exact automatic retry time (same helper).
+
 ## Relationship to manual refresh
 
 Manual refresh (`characterBlizzardSyncService.refreshCharacter` / `refreshLinkedCharactersForRegion`) keeps its **60-second** `REFRESH_COOLDOWN_MS`, measured from `lastSyncAttemptAt` — the start of the latest attempt, successful or failed — so a failing Character cannot be retried every second. "Refresh All" is still available from the Web UI.
