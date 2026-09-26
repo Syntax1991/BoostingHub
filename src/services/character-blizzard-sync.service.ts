@@ -43,12 +43,20 @@ import { characterWarcraftLogsService } from "@/services/character-warcraft-logs
  * (lastSyncAttemptAt) — successful or failed — so a failing Character cannot
  * be hammered. Scheduler freshness is separate and stays success-based.
  */
-const REFRESH_COOLDOWN_MS = 60_000;
+export const REFRESH_COOLDOWN_MS = 60_000;
 const REFRESH_ALL_CONCURRENCY = 4;
 
-function isInManualCooldown(character: { lastSyncAttemptAt: string | null }): boolean {
-  if (!character.lastSyncAttemptAt) return false;
-  return Date.now() - new Date(character.lastSyncAttemptAt).getTime() < REFRESH_COOLDOWN_MS;
+/** Milliseconds left of the normal manual cooldown (0 = a normal refresh is allowed). */
+export function manualCooldownRemainingMs(
+  character: { lastSyncAttemptAt: string | null },
+  now: number = Date.now(),
+): number {
+  if (!character.lastSyncAttemptAt) return 0;
+  return Math.max(0, REFRESH_COOLDOWN_MS - (now - new Date(character.lastSyncAttemptAt).getTime()));
+}
+
+export function isInManualCooldown(character: { lastSyncAttemptAt: string | null }): boolean {
+  return manualCooldownRemainingMs(character) > 0;
 }
 
 /**

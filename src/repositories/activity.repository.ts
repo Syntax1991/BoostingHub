@@ -22,6 +22,15 @@ export const activityRepository = {
     });
   },
 
+  /** Most recent event of one type (e.g. the bulk force-refresh cooldown marker). */
+  async findLatestByType(type: string): Promise<{ id: string; occurredAt: string } | null> {
+    const row = (await orm.ActivityEvent.where({ type })
+      .orderBy((event) => event.occurredAt.desc())
+      .select("id", "occurredAt")
+      .first()) as Record<string, unknown> | null;
+    return row ? { id: asString(row.id), occurredAt: asString(row.occurredAt) } : null;
+  },
+
   async create(input: { userId: string; type: string; message: string }) {
     await orm.ActivityEvent.create({
       id: crypto.randomUUID(),

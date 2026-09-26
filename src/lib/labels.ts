@@ -1,4 +1,5 @@
 import type {
+  CharacterSyncErrorCode,
   AccountRole,
   AttendanceStatus,
   BoosterAccessStatus,
@@ -21,6 +22,17 @@ export const ROLE_LABELS: Record<AccountRole, string> = {
   RAID_LEAD: "Raid Lead",
   ADMIN: "Admin",
   OWNER: "Platform Owner",
+};
+
+/** Admin-facing copy for the safe persisted sync error categories (never the raw enum as primary UI). */
+export const CHARACTER_SYNC_ERROR_LABELS: Record<CharacterSyncErrorCode, string> = {
+  PROFILE_UNAVAILABLE: "Profile unavailable",
+  IDENTITY_CONFLICT: "Character identity conflict",
+  NAME_CONFLICT: "Character name conflict",
+  RATE_LIMITED: "Blizzard rate limited",
+  UPSTREAM_UNAVAILABLE: "Blizzard API unavailable",
+  AUTH_OR_CONFIG: "Blizzard authentication/configuration error",
+  INTERNAL: "Internal sync error",
 };
 
 export const CLASS_LABELS: Record<WowClass, string> = {

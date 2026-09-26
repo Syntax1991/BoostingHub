@@ -22,6 +22,8 @@ import { userManagementService } from "@/services/user-management.service";
 import { userRepository } from "@/repositories/user.repository";
 import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
 import { parseAdminUserFilters } from "@/validators/user-management";
+import { characterOperationsService } from "@/services/character-operations.service";
+import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 import { isDomainError } from "@/lib/errors";
 import { runCreatePath } from "@/lib/run-routes";
 
@@ -282,5 +284,15 @@ export const managementController = {
   async getUserDetailPage(userId: string) {
     const user = await requireAdminOrRedirect("/manage/users");
     return userManagementService.getUserDetail(user, userId);
+  },
+
+  async getCharactersPage(searchParams: Record<string, string | string[] | undefined> = {}) {
+    const user = await requireAdminOrRedirect("/manage/characters");
+    return characterOperationsService.getListPage(user, parseCharacterOperationsFilters(searchParams));
+  },
+
+  async getCharacterOperationsPage(characterId: string) {
+    const user = await requireAdminOrRedirect("/manage/characters");
+    return characterOperationsService.getDetail(user, characterId);
   },
 };

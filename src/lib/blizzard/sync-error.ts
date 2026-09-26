@@ -46,8 +46,14 @@ export function isRetryableSyncError(category: CharacterSyncErrorCode): boolean 
   return category === "RATE_LIMITED" || category === "UPSTREAM_UNAVAILABLE" || category === "PROFILE_UNAVAILABLE";
 }
 
-/** Where a real sync attempt came from. PR 2 adds the admin triggers. */
-export type CharacterSyncTrigger = "SCHEDULED" | "OWNER_MANUAL" | "OWNER_REGION_BULK";
+/** Where a real sync attempt came from. */
+export type CharacterSyncTrigger =
+  | "SCHEDULED"
+  | "OWNER_MANUAL"
+  | "OWNER_REGION_BULK"
+  | "ADMIN_SYNC"
+  | "ADMIN_FORCE"
+  | "ADMIN_BULK_FORCE";
 
 /**
  * Safe structured failure log. Deliberately carries NO character/owner

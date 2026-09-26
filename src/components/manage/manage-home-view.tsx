@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CalendarDays,
   ShieldCheck,
+  Swords,
   Users,
 } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
@@ -11,6 +12,7 @@ const ICONS = {
   runs: CalendarDays,
   "booster-access": ShieldCheck,
   users: Users,
+  characters: Swords,
 } as const;
 
 export function ManageHomeView({ cards }: { cards: ManagementOverviewCard[] }) {

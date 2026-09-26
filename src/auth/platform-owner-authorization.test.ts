@@ -60,6 +60,7 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
       "templates",
       "booster-access",
       "users",
+      "characters",
     ]);
     // Any Run, not only assigned ones — like ADMIN.
     expect(canManageRun(actor("owner", "OWNER"), { raidLeadId: "someone-else" })).toBe(true);
