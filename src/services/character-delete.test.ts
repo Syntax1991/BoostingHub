@@ -159,6 +159,27 @@ describe("owner delete", () => {
     expect(events.length).toBeGreaterThan(0);
   });
 
+  it("FKs: weekly unavailability cascades; the owner's default-Character pointer is cleared, the user stays", async () => {
+    const character = await createCharacter(owner);
+    const now = new Date().toISOString();
+    await orm.CharacterWeeklyUnavailability.create({
+      id: crypto.randomUUID(),
+      characterId: character.id,
+      resetIdentifier: getRegionalWeeklyReset("EU").resetIdentifier,
+      difficulty: "HEROIC",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await orm.User.where({ id: owner.id }).update({ defaultCharacterId: character.id });
+
+    await characterService.deleteCharacter(owner, character.id);
+
+    expect(await orm.CharacterWeeklyUnavailability.where({ characterId: character.id }).all()).toHaveLength(0);
+    const user = (await orm.User.where({ id: owner.id }).first()) as { defaultCharacterId: string | null } | null;
+    expect(user).not.toBeNull();
+    expect(user!.defaultCharacterId).toBeNull();
+  });
+
   it("never deletes someone else's character", async () => {
     const character = await createCharacter(other);
     await expectCode(characterService.deleteCharacter(owner, character.id), "CHARACTER_NOT_OWNED");
