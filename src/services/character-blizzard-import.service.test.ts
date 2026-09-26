@@ -383,6 +383,34 @@ describe("characterBlizzardImportService.autoLinkExistingCharacters", () => {
     expect(owned).toHaveLength(3);
   });
 
+  it("links a manual Character that was already synced from the public API (no ids stamped by public sync)", async () => {
+    const owned = ownedCharacter({ id: "300121", name: "Bnautopublic" });
+    const manual = await characterService.createCharacter(owner, {
+      name: owned.name,
+      realm: owned.realmName,
+      region: owned.region,
+      wowClass: owned.wowClass,
+      specialization: "Elemental",
+      itemLevel: 600,
+    });
+    createdCharacterIds.push(manual.id);
+    // State after PUBLIC syncs: fresh data, still no Blizzard identity.
+    await orm.Character.where({ id: manual.id }).update({
+      lastSyncedAt: new Date().toISOString(),
+      lastSyncAttemptAt: new Date().toISOString(),
+      itemLevel: 640,
+    });
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+    mockEnrichmentSuccess({ id: owned.id, name: owned.name, realmId: owned.realmId, wowClass: owned.wowClass, itemLevel: 645 });
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.linkedCharacterIds).toEqual([manual.id]);
+    const row = await orm.Character.where({ id: manual.id }).first();
+    expect(String(row?.blizzardCharacterId)).toBe(owned.id);
+    expect(Number(row?.itemLevel)).toBe(645);
+  });
+
   it("never links another user's Character with the same name", async () => {
     const owned = ownedCharacter({ id: "300111", name: "Bnautoother" });
     const others = await characterService.createCharacter(asUser(ids.other, "Blizzard Other"), {
