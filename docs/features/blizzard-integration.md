@@ -76,12 +76,14 @@ Entry: `/characters` when Blizzard env vars are configured.
 
 1. Owner chooses region and starts connect → `GET /api/integrations/battlenet/connect?region=EU|US`
 2. Battle.net OAuth completes → `GET /api/integrations/battlenet/callback`
-3. Connection upserted; import session opened; redirect back to `/characters` with session id
+3. Connection upserted; import session opened; existing manual Characters that match the account exactly are **auto-linked** (see below); redirect back to `/characters` with session id and linked count
 4. Service resolves each owned row to a candidate status:
    - `import` — create a new Character
    - `link` — attach Blizzard ids to an existing same-owner name/realm/region/class match
    - `already_linked` — already on this account
    - `conflict` — owned by another account, class mismatch, or already linked elsewhere
+
+**Auto-link on connect:** every owned candidate classified `link` (same owner, name, realm, region and class, level ≥ 90, not linked elsewhere) is linked right after the callback through the same `applySelections` path, keeping the Character's own specialization. Ownership is proven by the OAuth account profile; nothing is imported and other users' Characters are never touched. Best-effort per Character — a failure never fails the connection and the row stays available in the import dialog. Once linked, the Character syncs (item level, raid lockouts) like any imported one. Owners whose manual Characters predate their connection simply reconnect once.
 
 Import creates the Character with Blizzard ids. Link only stamps Blizzard identity (and may update item level when the profile is available). Mixed import/link selections submit in one server action; the service resolves classification server-side from the import session.
 
@@ -229,7 +231,7 @@ Signup / roster lockout display uses the Character region's regional reset conta
 | Route | Role |
 | --- | --- |
 | `GET /api/integrations/battlenet/connect?region=EU\|US` | Start regional OAuth; set state cookie; redirect to Battle.net |
-| `GET /api/integrations/battlenet/callback` | Validate state, exchange code, upsert connection, open import session, clear cookie |
+| `GET /api/integrations/battlenet/callback` | Validate state, exchange code, upsert connection, open import session, auto-link exact manual matches, clear cookie |
 
 Server actions under `blizzard.actions.ts` handle disconnect, import, link, refresh, and loading import candidates.
 

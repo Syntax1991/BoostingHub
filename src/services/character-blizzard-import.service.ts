@@ -559,6 +559,50 @@ export const characterBlizzardImportService = {
     return { importedCharacterIds, linkedCharacterIds };
   },
 
+  /**
+   * Links the owner's existing manual Characters that match this session's
+   * Battle.net account exactly — candidate status "link": same owner, name,
+   * realm and region, same class, not linked to another Blizzard identity.
+   * Ownership is proven by the OAuth account profile the session was built
+   * from, so this is the same link the import dialog offers, applied without
+   * the manual pick. Nothing is imported. Best-effort per Character: one that
+   * fails stays manual and remains available in the import dialog.
+   */
+  async autoLinkExistingCharacters(user: AuthenticatedUser, sessionId: string) {
+    const session = await requireLiveImportSession(user, sessionId);
+    const linkedCharacterIds: string[] = [];
+    let failed = 0;
+
+    for (const owned of session.characters) {
+      if (!meetsImportCharacterLevel(owned.level)) continue;
+      const candidate = await resolveCandidate(user, owned);
+      if (candidate.status !== "link" || !candidate.characterId) continue;
+      const existing = await characterRepository.findById(candidate.characterId);
+      const specialization = existing?.specialization?.trim();
+      if (!specialization) {
+        failed += 1;
+        continue;
+      }
+      try {
+        const result = await this.applySelections(user, sessionId, [
+          { blizzardCharacterId: owned.id, specialization },
+        ]);
+        linkedCharacterIds.push(...result.linkedCharacterIds);
+      } catch (error) {
+        failed += 1;
+        console.warn(
+          JSON.stringify({
+            event: "battlenet_auto_link_failed",
+            region: session.region,
+            errorCode: isDomainError(error) ? error.code : "INTERNAL",
+          }),
+        );
+      }
+    }
+
+    return { linkedCharacterIds, failed };
+  },
+
   async importCharacters(
     user: AuthenticatedUser,
     sessionId: string,

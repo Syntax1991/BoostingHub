@@ -330,6 +330,80 @@ describe("characterBlizzardImportService.linkCharacter", () => {
   });
 });
 
+describe("characterBlizzardImportService.autoLinkExistingCharacters", () => {
+  const owner = asUser(ids.owner);
+
+  it("links exact manual matches on connect, imports nothing, and skips class mismatches", async () => {
+    const match = ownedCharacter({ id: "300101", name: "Bnautoone" });
+    const mismatch = ownedCharacter({ id: "300102", name: "Bnautotwo", wowClass: "MAGE" });
+    const notOnSite = ownedCharacter({ id: "300103", name: "Bnautothree" });
+    const lowLevel = ownedCharacter({ id: "300104", name: "Bnautofour", level: 20 });
+    const manualMatch = await characterService.createCharacter(owner, {
+      name: match.name,
+      realm: match.realmName,
+      region: match.region,
+      wowClass: match.wowClass,
+      specialization: "Elemental",
+      itemLevel: 600,
+    });
+    const manualMismatch = await characterService.createCharacter(owner, {
+      name: mismatch.name,
+      realm: mismatch.realmName,
+      region: mismatch.region,
+      wowClass: "SHAMAN",
+      specialization: "Restoration",
+      itemLevel: 600,
+    });
+    const manualLow = await characterService.createCharacter(owner, {
+      name: lowLevel.name,
+      realm: lowLevel.realmName,
+      region: lowLevel.region,
+      wowClass: lowLevel.wowClass,
+      specialization: "Elemental",
+      itemLevel: 600,
+    });
+    createdCharacterIds.push(manualMatch.id, manualMismatch.id, manualLow.id);
+    const session = await seedConnectionAndSession(ids.owner, "EU", [match, mismatch, notOnSite, lowLevel]);
+    mockEnrichmentSuccess({ id: match.id, name: match.name, realmId: match.realmId, wowClass: match.wowClass, itemLevel: 661, specialization: "Enhancement" });
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.linkedCharacterIds).toEqual([manualMatch.id]);
+    const linked = await orm.Character.where({ id: manualMatch.id }).first();
+    expect(String(linked?.blizzardCharacterId)).toBe(match.id);
+    expect(String(linked?.blizzardRealmId)).toBe(match.realmId);
+    // The owner's chosen specialization is kept; Blizzard supplies item level.
+    expect(String(linked?.specialization)).toBe("Elemental");
+    expect(Number(linked?.itemLevel)).toBe(661);
+    for (const id of [manualMismatch.id, manualLow.id]) {
+      const untouched = await orm.Character.where({ id }).first();
+      expect(untouched?.blizzardCharacterId ?? null).toBeNull();
+    }
+    const owned = await orm.Character.where({ userId: ids.owner }).all();
+    expect(owned).toHaveLength(3);
+  });
+
+  it("never links another user's Character with the same name", async () => {
+    const owned = ownedCharacter({ id: "300111", name: "Bnautoother" });
+    const others = await characterService.createCharacter(asUser(ids.other, "Blizzard Other"), {
+      name: owned.name,
+      realm: owned.realmName,
+      region: owned.region,
+      wowClass: owned.wowClass,
+      specialization: "Elemental",
+      itemLevel: 600,
+    });
+    createdCharacterIds.push(others.id);
+    const session = await seedConnectionAndSession(ids.owner, "EU", [owned]);
+
+    const result = await characterBlizzardImportService.autoLinkExistingCharacters(owner, session.id);
+
+    expect(result.linkedCharacterIds).toEqual([]);
+    const row = await orm.Character.where({ id: others.id }).first();
+    expect(row?.blizzardCharacterId ?? null).toBeNull();
+  });
+});
+
 describe("characterBlizzardImportService.importCharacters", () => {
   const owner = asUser(ids.owner);
   const other = asUser(ids.other, "Blizzard Other");

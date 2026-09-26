@@ -25,11 +25,14 @@ function flashMessage(flash: BattleNetFlash): { tone: "success" | "danger"; text
       flash.region && flash.region in REGION_LABELS
         ? REGION_LABELS[flash.region as WowRegion]
         : flash.region;
+    const connected = region ? `Battle.net connected (${region}).` : "Battle.net connected.";
+    const linked =
+      flash.linked > 0
+        ? ` Linked ${flash.linked} existing character${flash.linked === 1 ? "" : "s"} automatically.`
+        : "";
     return {
       tone: "success",
-      text: region
-        ? `Battle.net connected (${region}). Use Import to choose characters.`
-        : "Battle.net connected. Use Import to choose characters.",
+      text: `${connected}${linked} Use Import to choose further characters.`,
     };
   }
   if (flash.status === "error") {
