@@ -36,7 +36,7 @@ export function LoginView({
       </div>
       <PageHeader
         title="Sign in"
-        description="Discord is the production identity. Development login exists only when DEV_AUTH_ENABLED=true and NODE_ENV is not production."
+        description="Sign in with Discord to continue."
       />
       <div className="grid gap-4">
         <Card>
