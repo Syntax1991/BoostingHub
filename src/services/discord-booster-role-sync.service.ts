@@ -50,4 +50,3 @@ export async function syncDiscordBoosterRole(
     console.error("[discord-booster-role-sync] login-time Booster sync failed:", error);
   }
 }
-

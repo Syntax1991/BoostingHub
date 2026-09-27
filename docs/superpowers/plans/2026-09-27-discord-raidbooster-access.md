@@ -81,4 +81,3 @@
 - [ ] **Step 3: Document and expose `DISCORD_BOOSTER_ROLE_ID`, login-time additive behavior, and the no-auto-revoke rule.**
 - [ ] **Step 4: Run the environment-status test and focused application tests.**
 - [ ] **Step 5: Commit** documentation and operator configuration.
-

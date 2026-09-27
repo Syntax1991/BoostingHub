@@ -22,4 +22,3 @@ Grant the existing account-level Booster capability automatically when a signing
 - No change to signup, roster, authorization, Lootbuddy, or account-role rules.
 - No background synchronization; login is the synchronization seam.
 - Discord bot token, guild ID, and booster role ID remain server-only environment configuration.
-
