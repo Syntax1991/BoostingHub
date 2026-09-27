@@ -18,12 +18,12 @@ export function CharacterScheduleCommitmentsSection({
   return (
     <Card>
       <CardHeader
-        title="BoostingHub commitments"
+        title="Manawyrm Hub commitments"
         description="Upcoming Runs that reserve this Character (draft-selected or published SELECTED). Pending-only offers do not reserve and are not listed here."
       />
       {commitments.length === 0 ? (
         <EmptyState
-          title="No upcoming BoostingHub reservations"
+          title="No upcoming Manawyrm Hub reservations"
           description="This Character is not draft-selected or published SELECTED on any upcoming Run."
         />
       ) : (

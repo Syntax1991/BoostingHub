@@ -161,7 +161,7 @@ export function AddBoosterDialog({
           Add Booster
         </h2>
         <p className="mt-1 text-xs text-muted">
-          Add a registered BoostingHub player who did not sign up, e.g. a last-minute replacement: choose the
+          Add a registered Manawyrm Hub player who did not sign up, e.g. a last-minute replacement: choose the
           player, one of their eligible characters and the role. They join the roster draft as a normal Booster —
           same access, availability and schedule rules as any signup. Players without an account go under External
           Boosters.

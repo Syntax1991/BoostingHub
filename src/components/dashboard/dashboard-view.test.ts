@@ -54,7 +54,7 @@ describe("DashboardView", () => {
                 scheduledStartAt: "2026-10-10T20:00:00.000Z",
                 characterName: "Synlight",
                 publishedRole: "HEALER",
-                messages: ["Another BoostingHub Run: Other Run at Fri 10/10/2026 21:00"],
+                messages: ["Another Manawyrm Hub Run: Other Run at Fri 10/10/2026 21:00"],
               },
             ],
             nextSelectedRun: {
@@ -82,7 +82,7 @@ describe("DashboardView", () => {
                       conflictingRunId: "run-other",
                       conflictingRunTitle: "Other Run",
                       conflictingScheduledStartAt: "2026-10-10T19:00:00.000Z",
-                      message: "Another BoostingHub Run: Other Run at Fri 10/10/2026 21:00",
+                      message: "Another Manawyrm Hub Run: Other Run at Fri 10/10/2026 21:00",
                     },
                   ],
                 },

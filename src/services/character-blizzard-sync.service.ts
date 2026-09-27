@@ -242,7 +242,7 @@ async function refreshLinkedCharacterProfile(
   if (summary.wowClass && summary.wowClass !== character.wowClass) {
     throw new DomainError(
       "BLIZZARD_IDENTITY_CONFLICT",
-      "Blizzard class no longer matches this BoostingHub character.",
+      "Blizzard class no longer matches this Manawyrm Hub character.",
     );
   }
 
@@ -265,7 +265,7 @@ async function refreshLinkedCharacterProfile(
   if (!isValidCharacterName(nextName)) {
     throw new DomainError(
       "INVALID_CHARACTER_NAME",
-      "Blizzard returned a character name that BoostingHub cannot store.",
+      "Blizzard returned a character name that Manawyrm Hub cannot store.",
     );
   }
 

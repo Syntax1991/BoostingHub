@@ -1336,7 +1336,7 @@ async function syncArchiveArtifacts(
     .addFields(
       { name: "Ticket Owner", value: ticketOwner, inline: true },
       { name: "Ticket Name", value: channelName.slice(0, 256) || "—", inline: true },
-      { name: "Panel Name", value: (item.panelName || "BoostingHub Run").slice(0, 256), inline: true },
+      { name: "Panel Name", value: (item.panelName || "Manawyrm Hub Run").slice(0, 256), inline: true },
       { name: "Direct Transcript", value: attachmentUrl ? "Use Button" : "Attachment unavailable", inline: false },
       { name: "Users in transcript", value: usersBlock.slice(0, 1024), inline: false },
     );
@@ -1401,7 +1401,7 @@ async function deleteArchivedRunChannel(
       );
       return;
     }
-    await channel.delete(`BoostingHub app-archive — transcript retained for run ${runId}`);
+    await channel.delete(`Manawyrm Hub app-archive — transcript retained for run ${runId}`);
   } catch (error) {
     if (isDiscordUnknownChannelError(error)) {
       // Already gone — confirmed, so converge the stored identity below.

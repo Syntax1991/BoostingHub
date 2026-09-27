@@ -18,7 +18,7 @@ export const ownerBootstrapService = {
   async bootstrap(input: { userId: string }) {
     const userId = input.userId.trim();
     if (!UUID_PATTERN.test(userId)) {
-      throw new DomainError("OWNER_BOOTSTRAP_TARGET_INVALID", "Pass the exact BoostingHub User id (a UUID).");
+      throw new DomainError("OWNER_BOOTSTRAP_TARGET_INVALID", "Pass the exact Manawyrm Hub User id (a UUID).");
     }
     const { name, previousRole } = await userRepository.bootstrapOwnerAtomic(userId);
     return { userId, name, previousRole, nextRole: "OWNER" as const };

@@ -71,7 +71,7 @@ export function DeleteCharacterButton({
             Delete {characterLabel} permanently?
           </h2>
           <div className="space-y-1 text-xs text-muted">
-            <p>This permanently removes the Character from BoostingHub, with its lockouts and availability.</p>
+            <p>This permanently removes the Character from Manawyrm Hub, with its lockouts and availability.</p>
             <p>Historical completed-run records and payout history are preserved.</p>
             <p>Characters with active run signups cannot be deleted. To keep it, use Deactivate instead.</p>
           </div>

@@ -41,7 +41,7 @@ export function formatRunReservationConflictMessage(input: {
   runTitle: string;
   scheduledStartAt: string;
 }): string {
-  return `Another BoostingHub Run: ${input.runTitle} at ${formatDateTime(input.scheduledStartAt)}`;
+  return `Another Manawyrm Hub Run: ${input.runTitle} at ${formatDateTime(input.scheduledStartAt)}`;
 }
 
 export function formatWeeklyUnavailableConflictMessage(input: {

@@ -12,7 +12,8 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { APP_BRAND_MARK, APP_BRAND_NAME, APP_BRAND_TAGLINE } from "@/lib/branding";
+import { APP_BRAND_NAME, APP_BRAND_TAGLINE } from "@/lib/branding";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import type { AccountRole } from "@/models/enums";
 import {
   canAccessManagement,
@@ -61,9 +62,7 @@ export function AppShell({
     <div className="flex min-h-screen bg-background">
       <aside className="hidden w-60 shrink-0 border-r border-border bg-surface md:flex md:flex-col">
         <div className="flex items-center gap-2 border-b border-border px-4 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 font-mono text-sm font-bold text-accent">
-            {APP_BRAND_MARK}
-          </div>
+          <BrandLogo size={32} />
           <div>
             <p className="text-sm font-semibold">{APP_BRAND_NAME}</p>
             <p className="text-[11px] text-muted">{APP_BRAND_TAGLINE}</p>
@@ -128,6 +127,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-[70px] items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
           <div className="flex items-center gap-3 md:hidden">
+            <BrandLogo size={28} />
             <p className="text-sm font-semibold">{APP_BRAND_NAME}</p>
             {showManage ? (
               <Link href="/manage" className="text-xs uppercase tracking-wide text-accent">

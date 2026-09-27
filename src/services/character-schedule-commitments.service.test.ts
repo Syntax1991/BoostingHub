@@ -239,7 +239,7 @@ describe("CharacterScheduleCommitmentsSection", () => {
     const empty = renderToStaticMarkup(
       createElement(CharacterScheduleCommitmentsSection, { commitments: [] }),
     );
-    expect(empty).toContain("No upcoming BoostingHub reservations");
+    expect(empty).toContain("No upcoming Manawyrm Hub reservations");
 
     const withConflict = renderToStaticMarkup(
       createElement(CharacterScheduleCommitmentsSection, {
@@ -262,7 +262,7 @@ describe("CharacterScheduleCommitmentsSection", () => {
                 conflictingRunId: "r2",
                 conflictingRunTitle: "Other Run",
                 conflictingScheduledStartAt: "2026-09-17T20:00:00.000Z",
-                message: "Another BoostingHub Run: Other Run at Wed 17/09/2026 22:00",
+                message: "Another Manawyrm Hub Run: Other Run at Wed 17/09/2026 22:00",
               },
             ],
           },
@@ -271,7 +271,7 @@ describe("CharacterScheduleCommitmentsSection", () => {
     );
     expect(withConflict).toContain("Thu 21:00 HC Unsaved 8/8 Lead");
     expect(withConflict).toContain("Draft selected");
-    expect(withConflict).toContain("Another BoostingHub Run");
+    expect(withConflict).toContain("Another Manawyrm Hub Run");
     expect(withConflict).toContain(`/runs/r1`);
   });
 });

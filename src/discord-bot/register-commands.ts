@@ -13,7 +13,7 @@ async function main() {
     new SlashCommandBuilder().setName("mysignups").setDescription("Show your current signups, grouped by Run."),
     new SlashCommandBuilder()
       .setName("guide")
-      .setDescription("Get a link to a BoostingHub guide.")
+      .setDescription("Get a link to a Manawyrm Hub guide.")
       .addSubcommand((sub) => sub.setName("booster").setDescription("Link to the Booster Guide."))
       .addSubcommand((sub) => sub.setName("raidlead").setDescription("Link to the Raid Lead Guide.")),
   ];

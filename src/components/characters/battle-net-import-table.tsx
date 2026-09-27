@@ -74,7 +74,7 @@ function ImportTableRow({
         ) : null}
         {row.status === "level_too_low" ? (
           <p className="mt-1 text-xs text-muted">
-            Discovered by Battle.net, but BoostingHub requires level {MIN_IMPORT_CHARACTER_LEVEL}+.
+            Discovered by Battle.net, but Manawyrm Hub requires level {MIN_IMPORT_CHARACTER_LEVEL}+.
           </p>
         ) : null}
       </td>

@@ -73,7 +73,7 @@ describe("projectPersonalDashboardAttention", () => {
               conflictingRunId: "run-other",
               conflictingRunTitle: "Other Run",
               conflictingScheduledStartAt: "2026-10-10T19:00:00.000Z",
-              message: "Another BoostingHub Run: Other Run at Fri 10/10/2026 21:00",
+              message: "Another Manawyrm Hub Run: Other Run at Fri 10/10/2026 21:00",
             },
           ],
         }),

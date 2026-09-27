@@ -33,7 +33,7 @@ export function SettingsView({ data }: { data: SettingsPage }) {
     <div>
       <PageHeader
         title="Settings"
-        description="Manage your BoostingHub preferences."
+        description="Manage your Manawyrm Hub preferences."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <NotificationSettingsCard
