@@ -1,20 +1,24 @@
 # Discord-Posts: Anleitungen
 
-Zum manuellen Posten in Discord (Forum/Channel). Jede **Nachricht** ist unter 2000 Zeichen.
-Hänge die genannten Screenshots an die jeweilige Nachricht an (Dateien unter `docs/guides/screenshots/`).
+Die Guides stehen in eigenen, normalen Discord-Channels — ohne Threads, ohne Forum-Posts und ohne „Back to menu“.
+Gepostet werden die englischen Guides per SSH auf dem Server mit den Skripten (siehe **Posten per SSH** unten).
+Die deutschen Texte hier sind die Vorlage/Referenz. Jede **Nachricht** ist unter 2000 Zeichen; die genannten
+Screenshots liegen unter `docs/guides/screenshots/`.
 
 App: https://manawyrm-boosting.com
 
 ---
 
-## Forum / Channel-Struktur (Empfehlung)
+## Channel-Struktur
 
-Zwei Threads oder zwei gepinnte Posts:
+Ein normaler Channel pro Guide; die Nachrichten stehen direkt im Channel:
 
-1. `📘 Anleitung — Booster`
-2. `📗 Anleitung — Raidlead`
+| Guide | Channel | Skript | `/guide` |
+| --- | --- | --- | --- |
+| 📘 Booster | `1552712971543650425` | `scripts/post-booster-guide.mts` | `/guide booster` |
+| 📗 Raidlead | `1553768153572708514` | `scripts/post-raidlead-guide.mts` | `/guide raidlead` |
 
-Oder ein Thread mit zwei klar getrennten Abschnitten.
+Die IDs stehen an einer Stelle: `src/discord-bot/guide-channels.ts` (genutzt von `/guide` und als Standardziel der Skripte).
 
 ---
 
@@ -263,10 +267,27 @@ Anhänge: `rl-08-start-run.png`, `rl-07-attendance.png`
 
 ---
 
-## Posting-Tipp
+## Posten per SSH
 
-1. Forum-Post / Thread anlegen
-2. Nachrichten der Reihe nach posten
-3. Screenshots an die passende Nachricht anhängen
-4. Thread pinnen
-5. Optional: Link in Willkommens- / Booster-Channel
+Gepostet wird auf dem Produktionsserver mit dem Produktions-Bot. Der Server-Checkout muss den gewünschten
+Skript-Stand haben (also nach dem Deploy). Die Skripte posten die Texte aus dem Skript selbst plus die Screenshots
+aus `docs/guides/screenshots/`.
+
+```bash
+ssh root@manawyrm-boosting.com
+cd /var/www/boostinghub
+
+# Probelauf: zeigt nur die Nachrichten (Länge, Anhänge), sendet nichts
+sudo -u boostinghub npx tsx --env-file=.env scripts/post-booster-guide.mts
+
+# wirklich posten (Standardziel: der Booster-Guide-Channel; anderes Ziel mit --channel=<id>)
+sudo -u boostinghub npx tsx --env-file=.env scripts/post-booster-guide.mts --post
+```
+
+Für den Raidlead-Guide dasselbe mit `scripts/post-raidlead-guide.mts`.
+
+- Ohne `--post` ist es immer ein Probelauf.
+- `--post` sendet **neue** Nachrichten. Die Skripte aktualisieren oder entdoppeln einen schon geposteten Guide
+  **nicht** — ein zweiter Lauf postet den Guide ein zweites Mal. Vorher die alten Nachrichten löschen oder,
+  für kleine Textänderungen, die bestehenden Nachrichten bearbeiten statt neu zu posten.
+- Es gibt keinen „Back to menu“-Button und keine Threads.
