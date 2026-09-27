@@ -14,14 +14,15 @@ async function main() {
     new SlashCommandBuilder()
       .setName("guide")
       .setDescription("Get a link to a BoostingHub guide.")
-      .addSubcommand((sub) => sub.setName("booster").setDescription("Link to the Booster Guide.")),
+      .addSubcommand((sub) => sub.setName("booster").setDescription("Link to the Booster Guide."))
+      .addSubcommand((sub) => sub.setName("raidlead").setDescription("Link to the Raid Lead Guide.")),
   ];
 
   const rest = new REST().setToken(env.discordBotToken);
   await rest.put(Routes.applicationGuildCommands(env.discordApplicationId, env.discordGuildId), {
     body: commands.map((command) => command.toJSON()),
   });
-  console.log("[discord-bot] registered guild slash commands: /mysignups, /guide booster");
+  console.log("[discord-bot] registered guild slash commands: /mysignups, /guide booster, /guide raidlead");
 }
 
 main().catch((error) => {
