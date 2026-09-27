@@ -18,7 +18,7 @@ const USER_IDS = {
 const fetchMock = vi.fn();
 
 function discordIdFor(userId: string): string {
-  const suffix = Object.values(USER_IDS).indexOf(userId) + 1;
+  const suffix = Object.values(USER_IDS).findIndex((value) => value === userId) + 1;
   return `88000000000000000${suffix}`;
 }
 
