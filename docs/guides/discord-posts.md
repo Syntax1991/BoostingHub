@@ -3,7 +3,7 @@
 Zum manuellen Posten in Discord (Forum/Channel). Jede **Nachricht** ist unter 2000 Zeichen.
 Hänge die genannten Screenshots an die jeweilige Nachricht an (Dateien unter `docs/guides/screenshots/`).
 
-App: https://phoenix-star.de
+App: https://manawyrm-boosting.com
 
 ---
 
@@ -27,7 +27,7 @@ Oder ein Thread mit zwei klar getrennten Abschnitten.
 
 Kurzer Einstieg in **BoostingHub**: anmelden, Characters anlegen, für Runs anmelden und Status unter **My Runs** verfolgen.
 
-App: https://phoenix-star.de
+App: https://manawyrm-boosting.com
 
 **Wichtig:** Deine Account-Rolle ist meist **USER**.
 **BOOSTER** und **LOOTBUDDY** sind keine Account-Rollen, sondern **Teilnahmearten pro Run**.
@@ -161,7 +161,7 @@ BoostingHub als **RAID_LEAD**: Run anlegen, Signups öffnen, Roster, Start, Atte
 
 Du verwaltest nur **deine** Runs. Admins können alle Runs sehen.
 
-App: https://phoenix-star.de
+App: https://manawyrm-boosting.com
 
 ### 1. Anmelden
 **Continue with Discord** → oben rechts **RAID LEAD**, Sidebar **Manage**.

@@ -1,6 +1,6 @@
 # Production operations (Linux VPS)
 
-The runbook for the live BoostingHub production host at **https://phoenix-star.de**.
+The runbook for the live BoostingHub production host at **https://manawyrm-boosting.com**.
 It documents the stack as it actually runs. It deliberately introduces **no**
 Docker stack and **no** second reverse proxy: Plesk/Apache and host
 PostgreSQL own those concerns.
@@ -91,7 +91,7 @@ Safety contract, in order:
 11. `npm run db:migrate` (never `migrate reset`). A failure aborts before any restart.
 12. Restart `boostinghub-web.service`, then `boostinghub-discord-bot.service`.
 13. Both must be `active`.
-14. `https://phoenix-star.de/` must answer HTTP 200 (with a short startup retry window).
+14. `https://manawyrm-boosting.com/` must answer HTTP 200 (with a short startup retry window).
 
 Timers are not touched. Git operations and npm run as `boostinghub`.
 
@@ -157,9 +157,9 @@ absolute paths.
    then check `systemctl show -p Result --value boostinghub-backup.service` is `success`.
 8. In Plesk, point the domain's reverse proxy at `http://127.0.0.1:3000` and issue
    the TLS certificate there. Do not add a second proxy.
-9. Set `BETTER_AUTH_URL=https://phoenix-star.de` and register the provider callbacks:
-   - Discord OAuth: `https://phoenix-star.de/api/auth/callback/discord`
-   - Battle.net: `https://phoenix-star.de/api/integrations/battlenet/callback`
+9. Set `BETTER_AUTH_URL=https://manawyrm-boosting.com` and register the provider callbacks:
+   - Discord OAuth: `https://manawyrm-boosting.com/api/auth/callback/discord`
+   - Battle.net: `https://manawyrm-boosting.com/api/integrations/battlenet/callback`
 10. Register slash commands (again whenever the command list changes):
 
     ```bash
@@ -322,7 +322,7 @@ and nothing is created.
 
 - [ ] `sudo -u boostinghub git -C /var/www/boostinghub rev-parse HEAD` is the expected SHA,
       and `git status --porcelain --untracked-files=no` is empty
-- [ ] `https://phoenix-star.de/` returns 200 and shows Discord sign-in
+- [ ] `https://manawyrm-boosting.com/` returns 200 and shows Discord sign-in
 - [ ] Signed out, `/dashboard`, `/settings`, `/notifications`, `/profile`,
       `/manage/runs` return 307 to `/?next=<same path>`
 - [ ] Discord sign-in completes with no redirect loop; a returning login maps to the same user
@@ -353,7 +353,7 @@ systemctl start boostinghub-character-sync.service     # one-shot sync now
 python3 /var/www/boostinghub/deploy/production/env-status.py
 ls -lh /var/backups/boostinghub
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
-curl -sS -o /dev/null -w '%{http_code}\n' https://phoenix-star.de/
+curl -sS -o /dev/null -w '%{http_code}\n' https://manawyrm-boosting.com/
 ```
 
 ## Security checklist
