@@ -6,7 +6,7 @@ set -euo pipefail
 APP_DIR=/var/www/boostinghub
 APP_USER=boostinghub
 BRANCH="${1:-main}"
-SITE_URL=https://phoenix-star.de/
+SITE_URL=https://manawyrm-boosting.com/
 WEB_UNIT=boostinghub-web.service
 BOT_UNIT=boostinghub-discord-bot.service
 BACKUP_UNIT=boostinghub-backup.service

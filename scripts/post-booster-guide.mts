@@ -19,7 +19,7 @@ import { resolve } from "node:path";
 const ROOT = resolve(import.meta.dirname, "..");
 const SCREENSHOTS = resolve(ROOT, "docs/guides/screenshots");
 const API = "https://discord.com/api/v10";
-const APP_URL = "https://phoenix-star.de";
+const APP_URL = "https://manawyrm-boosting.com";
 
 const BACK_EMOJI = { id: "1289594271640453161", name: "Left_Arrow_Green", animated: true };
 
