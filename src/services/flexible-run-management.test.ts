@@ -67,21 +67,9 @@ async function createTestUser(id: string, name: string, role: AuthenticatedUser[
   });
 }
 
-/** Account-level qualification — one row per User, not scoped by difficulty. */
-async function approve(userId: string, status: "APPROVED" | "REVOKED" = "APPROVED") {
-  const now = new Date().toISOString();
-  await orm.BoosterQualification.create({
-    id: crypto.randomUUID(),
-    userId,
-    status,
-    notes: "fx",
-    grantedAt: now,
-    grantedById: null,
-    revokedAt: status === "REVOKED" ? now : null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+/** Account-level Booster role — on the User, not scoped by difficulty. */
+async function approve(userId: string, isBooster = true) {
+  await orm.User.where({ id: userId }).update({ isBooster });
 }
 
 let seq = 0;
@@ -265,7 +253,6 @@ async function cleanupAll() {
   for (const userId of allUserIds) {
     await wipe(() => orm.UserNotification.where({ userId }).deleteAll());
     await wipe(() => orm.ActivityEvent.where({ userId }).deleteAll());
-    await wipe(() => orm.BoosterQualification.where({ userId }).deleteAll());
     await wipe(() => orm.Character.where({ userId }).deleteAll());
     await wipe(() => orm.User.where({ id: userId }).deleteAll());
   }
@@ -290,7 +277,7 @@ beforeAll(async () => {
   for (const userId of [ids.a, ids.b, ids.c, ids.heroicHealer, ids.revocable]) {
     await approve(userId);
   }
-  await approve(ids.notApproved, "REVOKED");
+  await approve(ids.notApproved, false);
   aChar = await createCharacter(ids.a, "PRIEST");
   bChar = await createCharacter(ids.b, "PRIEST");
   cChar = await createCharacter(ids.c, "PALADIN");
@@ -408,23 +395,18 @@ describe("NORMAL → HEROIC on a published roster", () => {
 
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { difficulty: "HEROIC" }));
 
-    // Booster qualification is account-level: the difficulty change alone keeps every booster approved.
+    // The Booster role is account-level: the difficulty change alone keeps every booster approved.
     let current = await view(runId);
     expect(current.boosters.find((row) => row.id === tankSignup)).toMatchObject({ boosterApproved: true });
     expect(current.boosters.find((row) => row.id === normalSignup)).toMatchObject({ boosterApproved: true });
 
-    // Revoking the healer's qualification is what now makes the lineup invalid.
-    const revocable = await orm.BoosterQualification.where({ userId: ids.revocable }).first();
-    await orm.BoosterQualification.where({ id: revocable!.id }).update({
-      status: "REVOKED",
-      revokedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    // Revoking the healer's Booster role is what now makes the lineup invalid.
+    await orm.User.where({ id: ids.revocable }).update({ isBooster: false });
 
     current = await view(runId);
     const normalRow = current.boosters.find((row) => row.id === normalSignup)!;
     expect(normalRow).toMatchObject({ status: "SELECTED", draftSelected: true, boosterApproved: false });
-    expect(normalRow.issue).toBe("Booster access is no longer approved.");
+    expect(normalRow.issue).toBe("Owner no longer has the Booster role.");
     expect(current.roster.runChangedSinceAck).toBe(true);
     expect(current.roster.hasUnpublishedChanges).toBe(true);
     await expect(runService.startRun(lead, { runId })).rejects.toMatchObject({ code: "ROSTER_UNPUBLISHED_CHANGES" });

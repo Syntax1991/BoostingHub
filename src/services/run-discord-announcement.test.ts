@@ -29,7 +29,6 @@ const ids = {
 
 const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
-const createdAccessIds: string[] = [];
 
 let scheduleSlot = 0;
 function futureIso(days = 14) {
@@ -111,26 +110,7 @@ async function createCharacter(input: {
 }
 
 async function approveAccess(userId: string) {
-  const existing = await orm.BoosterQualification.where({ userId }).first();
-  if (existing) {
-    createdAccessIds.push(String((existing as { id: string }).id));
-    return;
-  }
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  createdAccessIds.push(id);
-  await orm.BoosterQualification.create({
-    id,
-    userId,
-    status: "APPROVED",
-    notes: "announce lifecycle",
-    grantedAt: now,
-    grantedById: ids.admin,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await orm.User.where({ id: userId }).update({ isBooster: true });
 }
 
 async function cleanupAll() {
@@ -156,18 +136,7 @@ async function cleanupAll() {
       // gone
     }
   }
-  for (const accessId of createdAccessIds.splice(0)) {
-    try {
-      await orm.BoosterQualification.where({ id: accessId }).delete();
-    } catch {
-      // gone
-    }
-  }
   for (const userId of Object.values(ids)) {
-    const quals = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of quals) {
-      await orm.BoosterQualification.where({ id: (row as { id: string }).id }).delete();
-    }
     const notes = await orm.UserNotification.where({ userId }).select("id").all();
     for (const row of notes) {
       await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();

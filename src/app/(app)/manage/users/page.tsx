@@ -7,7 +7,7 @@ export default async function ManageUsersPage({
   searchParams: Promise<{
     query?: string | string[];
     role?: string | string[];
-    access?: string | string[];
+    boostingRole?: string | string[];
     sort?: string | string[];
   }>;
 }) {

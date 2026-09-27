@@ -881,7 +881,7 @@ export const signupService = {
   /**
    * Raid Lead "Add Player": another User's Characters evaluated with exactly
    * the self-signup eligibility rules (active, weekly availability, cross-Run
-   * reservation, Booster Access for the Run difficulty, class roles). Only
+   * reservation, the owner's Booster role (any difficulty), class roles). Only
    * the signup window is not required — a Raid Lead fills a published roster
    * after signups closed. Callers must already have authorized the Run.
    */
@@ -992,7 +992,7 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
       `${ineligible?.characterName ?? "That character"} is marked unavailable for this difficulty this reset.`,
     );
   }
-  return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required to sign up as a booster.");
+  return new DomainError("BOOSTER_ACCESS_REQUIRED", "The Booster role is required to sign up as a booster.");
 }
 
 async function persistSignup(input: Parameters<typeof signupRepository.create>[0]) {

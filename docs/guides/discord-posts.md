@@ -30,7 +30,7 @@ Kurzer Einstieg in **BoostingHub**: anmelden, Characters anlegen, für Runs anme
 App: https://phoenix-star.de
 
 **Wichtig:** Deine Account-Rolle ist meist **USER**.
-**BOOSTER** und **LOOTBUDDY** sind keine Account-Rollen, sondern **Teilnahmearten pro Run**.
+**Booster** und **Lootbuddy** sind keine Account-Rollen, sondern **Boosting-Rollen** auf deinem Account (vergibt ein Admin).
 
 ### 1. Anmelden
 Öffne BoostingHub → **Continue with Discord**.
@@ -57,7 +57,7 @@ Unter **Characters**:
 2. Oder **Add Character** (Region / Realm / Name + Spec)
 3. **Account Access** und **Availability** prüfen
 
-**Booster-Zugang:** Für Booster-Signups brauchst du eine freigeschaltete Booster-Qualification auf deinem Account (gilt für alle Difficulties). Beantragung über Discord (**Apply via Discord**) — nicht in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
+**Booster-Rolle:** Für Booster-Signups braucht dein Account die Booster-Rolle (gilt für alle Difficulties). Beantragung über Discord (**Apply via Discord**) — nicht in der App. Ohne sie kannst du dich weiterhin als **Lootbuddy** anmelden.
 ```
 
 Anhänge: `bo-01-dashboard.png`, `bo-02-characters.png`
@@ -141,7 +141,7 @@ Sign up (Pending)
 ### ✅ Checkliste
 1. Discord-Login (verknüpft Discord mit BoostingHub)
 2. Character(s) anlegen
-3. Booster-Zugang über Discord beantragen (**Apply via Discord**)
+3. Booster-Rolle über Discord beantragen (**Apply via Discord**)
 4. Anmelden: Website **Runs → Sign up** *oder* Discord-Buttons
 5. Status prüfen: **My Runs** / `/mysignups`, ggf. Withdraw / **Cancel Signup**
 ```

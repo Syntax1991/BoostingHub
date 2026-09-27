@@ -2,7 +2,7 @@
 
 Kurzer Einstieg in BoostingHub: anmelden, Characters anlegen, für Runs anmelden und den Status unter **My Runs** verfolgen.
 
-> **Wichtig:** Dein Account-Rolle ist meist **USER**. **BOOSTER** und **LOOTBUDDY** sind keine Account-Rollen, sondern **Teilnahmearten pro Run**.
+> **Wichtig:** Deine Account-Rolle ist meist **USER**. **Booster** und **Lootbuddy** sind keine Account-Rollen, sondern **Boosting-Rollen** auf deinem Account, die ein Admin separat vergibt. Pro Run wählst du weiterhin, wie du dich anmeldest (Booster oder Lootbuddy).
 
 ---
 
@@ -39,9 +39,9 @@ Unter **Characters** verwaltest du deine WoW-Chars. Für Booster-Signups brauchs
 
 ![Characters-Seite](./screenshots/bo-02-characters.png)
 
-### Booster-Zugang (Qualification)
+### Booster-Rolle
 
-Um dich als **Booster** anzumelden, brauchst du eine freigeschaltete **Booster Qualification** auf deinem Account. Sie ist eine einzige Freigabe für deinen Account und gilt für Normal-, Heroic- und Mythic-Runs gleichermaßen. Die beantragst du über Discord (**Apply via Discord**) — nicht über ein Self-Service-Formular in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
+Um dich als **Booster** anzumelden, braucht dein Account die **Booster-Rolle**. Sie gehört zu deinem Account (nicht zu einem Character) und gilt für Normal-, Heroic- und Mythic-Runs gleichermaßen. Du bewirbst dich über Discord (**Apply via Discord**) — nicht über ein Self-Service-Formular in der App. Ohne sie kannst du dich weiterhin als **Lootbuddy** anmelden. Deine Rollen siehst du im **Profil** und oben unter **Characters**.
 
 ---
 
@@ -101,7 +101,7 @@ Jeder offene Run hat einen eigenen Discord-Channel mit **Signup-Embed** und Butt
 2. Character(s) auswählen → **Next**.
 3. Pro Character angebotene Rollen setzen → **Confirm**.
 
-Ohne freigeschaltete Booster-Qualification oder ohne eligible Characters bricht der Flow mit einer Meldung ab.
+Ohne Booster-Rolle oder ohne eligible Characters bricht der Flow mit einer Meldung ab.
 
 ### Lootbuddy (Button Sign as Lootbuddy)
 
@@ -154,6 +154,6 @@ Auf dem Dashboard und unter **My Runs** erkennst du, ob du Selected bist und mit
 
 1. Discord-Login (verknüpft Discord mit BoostingHub)
 2. Character(s) unter **Characters** anlegen
-3. Booster-Zugang für die Difficulty über Discord beantragen (**Apply via Discord**)
+3. Booster-Rolle über Discord beantragen (**Apply via Discord**)
 4. Anmelden: Website **Runs → Sign up** *oder* Discord-Buttons im Run-Channel
 5. Status prüfen: **My Runs** / `/mysignups`, bei Bedarf Withdraw / **Cancel Signup**

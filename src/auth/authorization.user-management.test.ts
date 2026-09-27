@@ -6,14 +6,14 @@ import {
 } from "@/auth/authorization";
 
 describe("management navigation and user-management gates", () => {
-  it("exposes ADMIN manage modules including users and booster access", () => {
+  it("exposes ADMIN manage modules including users and boosting roles", () => {
     const items = getManagementNavItems("ADMIN");
-    expect(items.map((item) => item.module)).toEqual(["overview", "runs", "templates", "booster-access", "users", "characters"]);
+    expect(items.map((item) => item.module)).toEqual(["overview", "runs", "templates", "boosting-roles", "users", "characters"]);
     expect(items.map((item) => item.href)).toEqual([
       "/manage",
       "/manage/runs",
       "/manage/templates",
-      "/manage/booster-access",
+      "/manage/boosting-roles",
       "/manage/users",
       "/manage/characters",
     ]);
@@ -23,7 +23,7 @@ describe("management navigation and user-management gates", () => {
     const items = getManagementNavItems("RAID_LEAD");
     expect(items.map((item) => item.module)).toEqual(["overview", "runs"]);
     expect(items.some((item) => item.module === "users")).toBe(false);
-    expect(items.some((item) => item.module === "booster-access")).toBe(false);
+    expect(items.some((item) => item.module === "boosting-roles")).toBe(false);
   });
 
   it("returns no manage nav for USER", () => {

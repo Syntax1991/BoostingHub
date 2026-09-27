@@ -79,20 +79,20 @@ The owner (**Delete** in each `/characters` row or on Character details, confirm
 
 - **Refused** (`CHARACTER_HAS_OPEN_SIGNUPS`, 409) while any non-withdrawn signup (PENDING / SELECTED / NOT_SELECTED — the last can still step in via Replace) on a Run that is not `COMPLETED` / `CANCELLED` references it. Withdraw those signups first, or deactivate instead.
 - **Cascades** lockouts, availability blocks, weekly unavailability and WCL performance rows.
-- **Keeps history**: signups of finished Runs, payout lines (with their name snapshots), Booster Access (account-level) and the default-Character pointer keep their rows with the Character reference set to null.
+- **Keeps history**: signups of finished Runs, payout lines (with their name snapshots), historical Booster Access requests and the default-Character pointer keep their rows with the Character reference set to null.
 - **Platform Owner protection:** an ADMIN cannot delete the Platform Owner's Characters (`OWNER_ROLE_PROTECTED`); the Owner can.
 - Audited as `CHARACTER_DELETED` (owner) / `ADMIN_CHARACTER_DELETED` (with `targetCharacterId`).
 - A later Battle.net import of the same character imports it as a fresh Character; manual Characters that still exist are linked instead (auto-link on connect / "Link existing").
 
 Deactivation remains the reversible option.
 
-## Booster access
+## Booster role
 
-Character list/detail show the owner's **account-level** Booster qualification as one state (Approved / Revoked / Not approved) — no difficulty chips. The qualification is owned by the User account (one per User, not scoped by raid difficulty), not by the Character row.
+The Booster role is a **User** capability (`User.isBooster`, not scoped by raid difficulty), never stored on a Character. `/characters` shows the account's Boosting Roles once above the table (not per Character); Character detail has a compact **Booster signups** note explaining that the account's Booster role covers every difficulty. Neither shows difficulty chips.
 
-Owners may open a request from a Character page; the Character supplies class/role context only. ADMIN review lives in [booster-access-management.md](booster-access-management.md).
+When the account is not a Booster, the pages show the **Apply via Discord** CTA; ADMIN grants the role — see [boosting-roles.md](boosting-roles.md).
 
-A newly created or imported character is **not** booster-eligible merely because it exists or is linked to Battle.net. It immediately reuses any existing matching account approval.
+A newly created or imported character is **not** booster-eligible merely because it exists or is linked to Battle.net; it is eligible once its owner holds the Booster role (and the other signup rules pass).
 
 ## Lockouts
 

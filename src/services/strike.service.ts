@@ -91,7 +91,7 @@ function toManagerRow(row: StrikeRecord) {
 
 /**
  * Disciplinary history against a User. BoostingHub owns Users, Characters,
- * Booster Qualifications, Runs, Signups, Rosters, and this Strike history.
+ * Boosting Roles, Runs, Signups, Rosters, and this Strike history.
  * Attendance and payout/financial handling are an external, operational
  * concern (Dawn Boosting) and are intentionally not coupled here — nothing
  * in this service reads or writes Attendance. Every Strike is an explicit

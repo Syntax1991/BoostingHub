@@ -141,7 +141,7 @@ where appropriate. Personal DMs also prefer native timestamps.
 
 ## Default Character
 
-Preference only. Never bypasses Booster Access, qualifications, difficulty,
+Preference only. Never bypasses the Booster role, difficulty,
 weekly availability, lockouts, cross-run reservations, role validity, or active
 state. Existing active signup state wins over the preference. Never auto-submits.
 

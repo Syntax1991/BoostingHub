@@ -4,7 +4,7 @@ import { isDevAuthEnabled, isProductionRuntime } from "@/auth/dev-auth";
 import { formatDate, formatRelative, formatTime, fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { canTransitionRun, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { canTransitionSignup, canSelfWithdrawSignup } from "@/services/signup-state";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
 
 describe("account authorization", () => {
@@ -129,15 +129,11 @@ describe("run and signup state machines", () => {
 });
 
 describe("booster access", () => {
-  it("is one account-level approval, not scoped by difficulty", () => {
-    expect(boosterQualificationService.isApprovedBooster({ status: "APPROVED" })).toBe(true);
-    expect(boosterQualificationService.isApprovedBooster({ status: "REVOKED" })).toBe(false);
-    expect(boosterQualificationService.isApprovedBooster(null)).toBe(false);
-    expect(boosterQualificationService.summarize({ status: "APPROVED" })).toEqual({
-      status: "APPROVED",
-      approved: true,
-    });
-    expect(boosterQualificationService.summarize(null)).toEqual({ status: "NONE", approved: false });
+  it("is the account-level Booster role, not scoped by difficulty", () => {
+    expect(isApprovedBooster({ isBooster: true })).toBe(true);
+    expect(isApprovedBooster({ isBooster: false })).toBe(false);
+    expect(isApprovedBooster(null)).toBe(false);
+    expect(isApprovedBooster(undefined)).toBe(false);
   });
 });
 

@@ -69,7 +69,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
     else if (table === "Strike") await orm.Strike.where({ id }).delete();
-    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
   } catch {
     // Already gone.
   }
@@ -180,10 +179,6 @@ beforeAll(async () => {
     for (const row of strikes) {
       await deleteIfPresent("Strike", (row as { id: string }).id);
     }
-    const quals = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of quals) {
-      await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
-    }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
       await deleteIfPresent("Character", (row as { id: string }).id);
@@ -221,10 +216,6 @@ afterAll(async () => {
   }
   for (const id of createdStrikeIds) {
     await deleteIfPresent("Strike", id);
-  }
-  const quals = await orm.BoosterQualification.where({ userId: ids.target }).select("id").all();
-  for (const row of quals) {
-    await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);

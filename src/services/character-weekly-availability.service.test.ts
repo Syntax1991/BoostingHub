@@ -216,17 +216,12 @@ describe("characterWeeklyAvailabilityService", () => {
       "CHARACTER_UNAVAILABLE",
     );
 
-    // Ensure Kael is an approved booster so the non-matching difficulty path is not
-    // blocked by Booster Access — only weekly availability should gate Heroic.
-    const { boosterQualificationService } = await import("@/services/booster-qualification.service");
+    // Ensure Kael holds the Booster role so the non-matching difficulty path is not
+    // blocked by Booster access — only weekly availability should gate Heroic.
+    const { boostingRoleService } = await import("@/services/boosting-role.service");
     const admin = asUser("44444444-4444-4444-8444-444444444444", "Aelira Softstep", "ADMIN");
-    try {
-      await boosterQualificationService.grant(admin, { userId: ids.kael });
-    } catch (error) {
-      if (!(isDomainError(error) && error.code === "BOOSTER_ACCESS_ALREADY_APPROVED")) {
-        throw error;
-      }
-    }
+    // Granting a role the User already holds is a no-op.
+    await boostingRoleService.setRole(admin, { userId: ids.kael, role: "BOOSTER", enabled: true });
 
     const mythicRun = await runService.createRun(
       thorne,
@@ -379,7 +374,7 @@ describe("signup eligibility weekly unavailable", () => {
           specialization: "Restoration",
           isActive: true,
           warcraftLogsId: null,
-          boosterQualification: { status: "APPROVED" },
+          ownerIsBooster: true,
           lockouts: [],
           reservationConflict: null,
           weeklyUnavailable: true,

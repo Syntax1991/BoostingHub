@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Give ADMIN operators a management hub for browsing accounts, inspecting characters and booster qualifications, and assigning platform account roles (`USER`, `RAID_LEAD`, `ADMIN`). Role changes are server-owned and audited.
+Give ADMIN operators a management hub for browsing accounts, inspecting characters, managing Boosting Roles, and assigning platform account roles (`USER`, `RAID_LEAD`, `ADMIN`). Role changes are server-owned and audited.
 
-This feature does **not** turn BOOSTER into an account role. Booster eligibility is `BoosterQualification` (one account-level approval per User, not scoped by raid difficulty).
+This feature does **not** turn Booster or Lootbuddy into account roles. They are Boosting Roles on the User (`isBooster`, `isLootbuddy`), independent of the account role and of each other; Booster is not scoped by raid difficulty. See [boosting-roles.md](boosting-roles.md).
 
 ## Management Hub
 
 `/manage` is the operations overview for RAID_LEAD and ADMIN.
 
 - RAID_LEAD sees run metrics and the Runs entry point.
-- ADMIN additionally sees Booster Access and Users cards with compact counts.
+- ADMIN additionally sees Boosting Roles and Users cards with compact counts.
 
 Metrics are prepared by `managementHubService`. Views render cards only; they do not query Prisma.
 
@@ -23,7 +23,7 @@ Metrics are prepared by `managementHubService`. Views render cards only; they do
 | --- | --- |
 | USER | none (no Manage entry) |
 | RAID_LEAD | Overview, Runs |
-| ADMIN | Overview, Runs, Booster Access, Users |
+| ADMIN | Overview, Runs, Boosting Roles, Users |
 
 Hidden links are not authorization. Controllers still call `requireManagerOrRedirect`, `requireAdmin`, and service asserts.
 
@@ -39,7 +39,7 @@ Platform permissions on `User.accountRole`:
 | --- | --- |
 | `USER` | Standard operator: characters, signups, own profile |
 | `RAID_LEAD` | Create/manage assigned runs; manage hub for runs |
-| `ADMIN` | All raid-lead powers plus booster access review, grants, and user administration |
+| `ADMIN` | All raid-lead powers plus Boosting Role grants/revokes, legacy request review, and user administration |
 | `OWNER` | The protected Platform Owner: every Admin permission, and nobody can change it through role management |
 
 Hierarchy: `OWNER` > `ADMIN` > `RAID_LEAD` > `USER` — each level inherits everything below it. Authority is always checked through `hasOwnerAccess` / `hasAdminAccess` / `hasRaidLeadAccess` (`src/auth/authorization.ts`), never with a literal role comparison, so an OWNER can use every Admin feature (users, Booster Access, Templates, every Run, Raid Lead eligibility).
@@ -80,7 +80,7 @@ Route: `/manage/users/[userId]`.
 
 Shows identity, account role/status, characters, the account-level booster state (Grant when not approved, Revoke when approved), disciplinary Strike history (Add/Revoke), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
 
-Strikes are a separate concept from account role, qualifications, and audit — see [user-strikes.md](user-strikes.md).
+Strikes are a separate concept from account role, Boosting Roles, and audit — see [user-strikes.md](user-strikes.md).
 
 ## Role Administration
 
@@ -110,33 +110,32 @@ Error: `ROLE_CHANGE_BLOCKED_BY_ACTIVE_RUNS`.
 
 ## Discord Booster Applications
 
-Self-service creation of PENDING legacy `BoosterAccess` is disabled. Character pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative qualification store.
+Self-service creation of PENDING legacy `BoosterAccess` is disabled. Character pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. Review happens in Discord; BoostingHub remains the authoritative store of Boosting Roles.
 
-See [booster-access-management.md](booster-access-management.md).
+See [boosting-roles.md](boosting-roles.md).
 
-## BoosterQualification vs Account Role
+## Boosting Roles vs Account Role
 
 | Concern | Store | Who mutates |
 | --- | --- | --- |
 | Platform permission | `User.accountRole` | ADMIN / OWNER via user management; OWNER only via the owner bootstrap |
-| Boost qualification | `BoosterQualification` (one per user) | ADMIN via grant/revoke (and legacy approve bridge) |
+| Boosting Roles | `User.isBooster`, `User.isLootbuddy` | ADMIN / OWNER via explicit grant/revoke (legacy approve also grants Booster) |
 
-A USER may be an approved booster without becoming RAID_LEAD. Role changes do not create or revoke qualifications.
+A USER may be a Booster without becoming RAID_LEAD, and an ADMIN is not a Booster unless granted. Account role changes never touch Boosting Roles, and Boosting Role changes never touch the account role.
 
-## ADMIN Direct Grant
+## Managing Boosting Roles
 
-After Discord review, ADMIN grants with `boosterQualificationService.grant({ userId, notes? })` — no difficulty.
+After Discord review, ADMIN / OWNER grant or revoke each role on the User detail page (**Boosting roles** card) or on `/manage/boosting-roles` — `boostingRoleService.setRole(admin, { userId, role, enabled, reason? })`, no difficulty.
 
-`/manage/booster-access` defaults to **Qualifications** (one state per User). **Legacy Requests · N** lists only unresolved historical PENDING Class/Role/Difficulty applications. Approving a legacy row approves the User's account-level qualification and resolves every PENDING request of that User (their recorded difficulty is kept as history).
+- Booster and Lootbuddy are toggled independently; all four combinations are valid
+- Setting a role to its current state is a no-op
+- No Character, class, role, specialization or item level is involved
+- May target USER, RAID_LEAD, ADMIN, OWNER, or the acting admin (no automatic ADMIN bypass)
+- Audited as `BOOSTER_GRANTED` / `BOOSTER_REVOKED` / `LOOTBUDDY_GRANTED` / `LOOTBUDDY_REVOKED` (with a `targetUserId` marker, shown in the target's audit trail)
 
-- Creates APPROVED when no qualification exists
-- Reactivates REVOKED on the same per-user row
-- Duplicate APPROVED → already-approved error
-- Character / Class / Role are not grant fields
-- Does not require Character, specialization, or item level
-- May target USER, RAID_LEAD, ADMIN, or the acting ADMIN (no automatic ADMIN bypass)
+`/manage/boosting-roles` **Legacy Requests · N** lists only unresolved historical PENDING Class/Role/Difficulty applications. Approving one grants the User the Booster role and resolves every PENDING request of that User (their recorded difficulty is kept as history).
 
-RAID_LEAD cannot grant.
+RAID_LEAD and USER cannot grant or revoke Boosting Roles.
 
 ## Session Role Freshness
 

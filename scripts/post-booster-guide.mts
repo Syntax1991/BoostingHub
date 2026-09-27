@@ -45,7 +45,7 @@ A quick introduction to **BoostingHub**: sign in, add characters, sign up for ru
 App: ${APP_URL}
 
 **Important:** Your account role is usually **USER**.
-**BOOSTER** and **LOOTBUDDY** are not account roles — they are **participation types per run**.
+**Booster** and **Lootbuddy** are not account roles — they are **Boosting Roles** on your account, granted by an admin.
 
 ### 1. Sign in
 Open BoostingHub → **Continue with Discord**.
@@ -66,7 +66,7 @@ Under **Characters**:
 2. Or use **Add Character** (region / realm / name + spec)
 3. Check **Account Access** and **Availability**
 
-**Booster access:** To sign up as a booster you need an approved qualification (e.g. Heroic). Request Booster Access via Discord — not in the app. Without approval you can still sign up as a **Lootbuddy**.`,
+**Booster role:** To sign up as a booster your account needs the Booster role (valid for every difficulty). Apply via Discord — not in the app. Without it you can still sign up as a **Lootbuddy**.`,
     files: ["bo-01-dashboard.png", "bo-02-characters.png"],
   },
   {
@@ -132,7 +132,7 @@ Sign up (Pending)
 ### ✅ Checklist
 1. Sign in with Discord (links Discord to BoostingHub)
 2. Add character(s)
-3. Request Booster Access via Discord
+3. Apply for the Booster role via Discord
 4. Sign up: website **Runs → Sign up** *or* Discord buttons
 5. Check status: **My Runs** / \`/mysignups\`; withdraw / **Cancel Signup** if needed`,
     files: ["bo-05-my-runs.png"],

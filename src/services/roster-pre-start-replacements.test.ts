@@ -75,19 +75,7 @@ async function createTestUser(
 }
 
 async function approveHeroic(userId: string) {
-  const now = new Date().toISOString();
-  await orm.BoosterQualification.create({
-    id: crypto.randomUUID(),
-    userId,
-    status: "APPROVED",
-    notes: "pre-start test",
-    grantedAt: now,
-    grantedById: null,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await orm.User.where({ id: userId }).update({ isBooster: true });
 }
 
 let characterSeq = 0;
@@ -230,7 +218,6 @@ async function cleanupAll() {
     await orm.UserNotification.where({ userId }).delete().catch(() => {});
     await orm.ActivityEvent.where({ userId }).delete().catch(() => {});
     await orm.CharacterWeeklyUnavailability.where((row) => row.characterId.in(characterIds)).delete().catch(() => {});
-    await orm.BoosterQualification.where({ userId }).delete().catch(() => {});
     await orm.Character.where({ userId }).delete().catch(() => {});
     await orm.User.where({ id: userId }).delete().catch(() => {});
   }

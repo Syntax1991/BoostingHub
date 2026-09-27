@@ -16,7 +16,6 @@ const ids = {
 
 const createdCharacterIds: string[] = [];
 const createdSignupIds: string[] = [];
-const createdAccessIds: string[] = [];
 
 function asUser(
   id: string,
@@ -58,7 +57,7 @@ async function createTestUser(id: string, name: string) {
 }
 
 async function deleteIfPresent(
-  table: "User" | "Character" | "RunSignup" | "BoosterAccess" | "BoosterQualification",
+  table: "User" | "Character" | "RunSignup" | "BoosterAccess",
   id: string,
 ) {
   try {
@@ -72,10 +71,6 @@ async function deleteIfPresent(
     }
     if (table === "RunSignup") {
       await orm.RunSignup.where({ id }).delete();
-      return;
-    }
-    if (table === "BoosterQualification") {
-      await orm.BoosterQualification.where({ id }).delete();
       return;
     }
     await orm.BoosterAccess.where({ id }).delete();
@@ -92,13 +87,7 @@ async function cleanupGeneratedRows() {
   for (const row of ownerSignups) {
     await deleteIfPresent("RunSignup", String(row.id));
   }
-  for (const id of createdAccessIds) {
-    await deleteIfPresent("BoosterQualification", id);
-  }
-  const ownerQualifications = await orm.BoosterQualification.where({ userId: ids.owner }).all();
-  for (const row of ownerQualifications) {
-    await deleteIfPresent("BoosterQualification", String(row.id));
-  }
+  await orm.User.where({ id: ids.owner }).update({ isBooster: false });
   const ownerAccess = await orm.BoosterAccess.where({ userId: ids.owner }).all();
   for (const row of ownerAccess) {
     await deleteIfPresent("BoosterAccess", String(row.id));
@@ -425,21 +414,7 @@ describe("characterService lifecycle and signup eligibility", () => {
       "BOOSTER_ACCESS_REQUIRED",
     );
 
-    const qualificationId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await orm.BoosterQualification.create({
-      id: qualificationId,
-      userId: ids.owner,
-      status: "APPROVED",
-      notes: "Test grant",
-      grantedAt: now,
-      grantedById: ids.admin,
-      revokedAt: null,
-      revokedById: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    createdAccessIds.push(qualificationId);
+    await orm.User.where({ id: ids.owner }).update({ isBooster: true });
 
     const withAccess = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(
@@ -461,9 +436,9 @@ describe("characterService lifecycle and signup eligibility", () => {
     const historical = await signupRepository.findById(signup.id);
     expect(historical?.status).toBe("PENDING");
 
-    // Deactivating a Character never touches the account-level qualification.
-    const qualification = await orm.BoosterQualification.where({ userId: ids.owner }).first();
-    expect(qualification?.status).toBe("APPROVED");
+    // Deactivating a Character never touches the owner's account-level Booster role.
+    const owned = await orm.User.where({ id: ids.owner }).select("isBooster").first();
+    expect(owned?.isBooster).toBe(true);
 
     const inactiveOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(inactiveOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);

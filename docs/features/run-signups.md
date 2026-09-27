@@ -64,7 +64,7 @@ Updating one side never clears the other. Removing one Lootbuddy does not affect
 ## User flow (Web)
 
 1. Open `/runs` or `/runs/[runId]` → **Sign up**.
-2. **Booster** section (optional): select Characters + roles. Requires owned active Characters and an approved account-level BoosterQualification (any run difficulty).
+2. **Booster** section (optional): select Characters + roles. Requires owned active Characters and the account-level Booster role (`User.isBooster`, any run difficulty).
 3. **Lootbuddies** section (optional, independent): add N entries with Class + Mode. No Character selector. Zero-character Users may still sign as Lootbuddy.
 4. Save each section separately (`setCharacterOffers` / `setLootbuddies`).
 5. Review on `/my-runs` or the Run detail Signups tab — both participation types can appear for the same Run.
@@ -86,8 +86,8 @@ If a signup is already draft-selected with `selectedRole = X` and the Booster re
 
 ## Participation types
 
-- `BOOSTER` — Character-backed. Needs an approved account-level `BoosterQualification` (not scoped by run difficulty), plus character/lockout/reservation rules.
-- `LOOTBUDDY` — Class + Mode. Does **not** require a Character for new signups. Does **not** require BoosterQualification.
+- `BOOSTER` — Character-backed. Needs the owner's Booster role (`User.isBooster`, not scoped by run difficulty), plus character/lockout/reservation rules.
+- `LOOTBUDDY` — Class + Mode. Does **not** require a Character for new signups. Does **not** require the Booster role, and is not gated by the Lootbuddy role (`User.isLootbuddy` is management/display only).
 
 ## Booster signup eligibility
 
@@ -95,7 +95,7 @@ Required: run, user (server session), character, role, `isBackup`, status `PENDI
 
 1. Character belongs to the current user
 2. Character is active
-3. The User's account-level BoosterQualification is APPROVED (valid for every run difficulty)
+3. The User holds the Booster role (`User.isBooster`, valid for every run difficulty)
 4. Offered role is valid for the character's class
 5. Progress lockouts are informational only (never a hard blocker at signup). Target reset is the Character region's regional WoW reset window containing `Run.scheduledStartAt` (`lockoutService.getResetIdentifierForRun`). Verified `0/x` is Unsaved; missing row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
 6. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
@@ -175,7 +175,7 @@ Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only.
 - Model: `RunSignup` (`lootbuddyClass` optional; `characterId` nullable)
 - Discord: `src/discord-bot/*` via `/api/bot/*` — see [discord-bot.md](discord-bot.md)
 
-Requesting and reviewing access: [booster-access-management.md](booster-access-management.md).
+Granting and revoking the Booster role: [boosting-roles.md](boosting-roles.md).
 
 ## Deferred
 

@@ -4,7 +4,7 @@ import { isDomainError } from "@/lib/errors";
 import { db, orm } from "@/lib/prisma";
 import type { AccountRole, AccountStatus } from "@/models/enums";
 import { userRepository } from "@/repositories/user.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { boostingRoleService } from "@/services/boosting-role.service";
 import { ownerBootstrapService } from "@/services/owner-bootstrap.service";
 import { runTemplateService } from "@/services/run-template.service";
 import { userManagementService } from "@/services/user-management.service";
@@ -383,12 +383,16 @@ describe("owner bootstrap", () => {
 });
 
 describe("OWNER keeps every Admin feature", () => {
-  it("user directory, Booster Access, Templates and Raid Lead eligibility", async () => {
+  it("user directory, Boosting Roles, Templates and Raid Lead eligibility", async () => {
     const owner = await bootstrapOwner();
     const users = await userManagementService.listUsers(owner, { role: "OWNER" });
     expect(users.map((row) => row.id)).toEqual([ids.owner]);
     await expect(userManagementService.getUserDetail(owner, ids.adminA)).resolves.toMatchObject({ user: { id: ids.adminA } });
-    await expect(boosterQualificationService.listAdminQualifications(owner)).resolves.toBeInstanceOf(Array);
+    // OWNER manages Boosting Roles like ADMIN; granting an already-held role is a no-op.
+    await boostingRoleService.setRole(owner, { userId: ids.adminA, role: "LOOTBUDDY", enabled: true });
+    await expect(
+      boostingRoleService.setRole(owner, { userId: ids.adminA, role: "LOOTBUDDY", enabled: false }),
+    ).resolves.toMatchObject({ changed: true, roles: { isLootbuddy: false } });
     await expect(runTemplateService.listAll(owner)).resolves.toBeDefined();
     const leads = await userRepository.listEligibleRaidLeads();
     expect(leads.find((lead) => lead.id === ids.owner)).toMatchObject({ accountRole: "OWNER" });

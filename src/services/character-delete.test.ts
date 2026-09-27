@@ -143,7 +143,6 @@ afterAll(async () => {
     for (const row of await orm.Character.where({ userId }).select("id").all()) {
       await orm.Character.where({ id: (row as { id: string }).id }).delete();
     }
-    await orm.BoosterQualification.where({ userId }).deleteAll();
     await orm.UserNotification.where({ userId }).deleteAll();
     for (const row of await orm.ActivityEvent.where({ userId }).select("id").all()) {
       await orm.ActivityEvent.where({ id: (row as { id: string }).id }).delete();
@@ -296,19 +295,7 @@ describe("admin delete", () => {
 
 describe("delete after completed-run history (settlement / payout preservation)", () => {
   async function qualify(userId: string) {
-    const now = new Date().toISOString();
-    await orm.BoosterQualification.create({
-      id: crypto.randomUUID(),
-      userId,
-      status: "APPROVED",
-      notes: "Delete history test",
-      grantedAt: now,
-      grantedById: admin.id,
-      revokedAt: null,
-      revokedById: null,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await orm.User.where({ id: userId }).update({ isBooster: true });
   }
 
   /** Real lifecycle: signup → roster publish → start → attendance → complete → prepare + finalize payout. */

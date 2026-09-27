@@ -3,7 +3,8 @@ import { DomainError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/labels";
 import { db, orm } from "@/lib/prisma";
 import { or } from "@prisma/orm-postgres/orm-client";
-import type { AccountRole, AccountStatus, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
+import type { AccountRole, AccountStatus, BoostingRole, RaidDifficulty, RunStatus, WowRegion } from "@/models/enums";
+import type { BoostingRoles } from "@/models/records";
 import {
   hasAdminAccess,
   hasOwnerAccess,
@@ -15,7 +16,6 @@ import {
   asNumber,
   mapAccountStatus,
   mapDifficulty,
-  mapQualificationStatus,
   mapRegion,
   mapUserRole,
   asString,
@@ -25,7 +25,8 @@ import {
 export type AdminUserListFilters = {
   query?: string;
   role?: AccountRole;
-  hasApprovedAccess?: boolean;
+  /** Boosting Role filter: holds BOOSTER / holds LOOTBUDDY / holds neither. */
+  boostingRole?: BoostingRole | "NONE";
   sort?: "name" | "joined_desc" | "joined_asc" | "role";
 };
 
@@ -39,8 +40,9 @@ export type AdminUserListRow = {
   accountStatus: AccountStatus;
   createdAt: string;
   characterCount: number;
-  /** Account-level booster qualification state (NONE = never granted). */
-  boosterStatus: "APPROVED" | "REVOKED" | "NONE";
+  /** Boosting Roles (operational), independent of accountRole. */
+  isBooster: boolean;
+  isLootbuddy: boolean;
   /** Unresolved legacy in-app requests (historical BoosterAccess). */
   pendingAccessCount: number;
 };
@@ -70,13 +72,6 @@ export type AdminUserCharacterSummary = {
   blizzardLinked: boolean;
   /** All stored lockout rows; current-reset projection happens in the service. */
   lockouts: AdminUserCharacterLockout[];
-};
-
-export type AdminUserAccessSummary = {
-  id: string;
-  status: string;
-  notes: string | null;
-  grantedAt: string | null;
 };
 
 export type AdminUserAuditEvent = {
@@ -125,6 +120,24 @@ function matchesQuery(
     .join(" ")
     .toLocaleLowerCase("en-US");
   return haystack.includes(needle);
+}
+
+/**
+ * Admin audit events written under the ACTOR's userId that carry a
+ * `targetUserId=<id>` marker; the target's audit trail pulls them in by marker.
+ */
+const TARGETED_AUDIT_TYPES: readonly string[] = [
+  "ACCOUNT_ROLE_CHANGED",
+  "BOOSTER_GRANTED",
+  "BOOSTER_REVOKED",
+  "LOOTBUDDY_GRANTED",
+  "LOOTBUDDY_REVOKED",
+];
+
+const BOOSTING_ROLE_COLUMN = { BOOSTER: "isBooster", LOOTBUDDY: "isLootbuddy" } as const;
+
+function mapBoostingRoles(record: Record<string, unknown>): BoostingRoles {
+  return { isBooster: asBoolean(record.isBooster), isLootbuddy: asBoolean(record.isLootbuddy) };
 }
 
 export const userRepository = {
@@ -199,6 +212,32 @@ export const userRepository = {
     return this.findAuthenticatedById(id);
   },
 
+  /** A User's Boosting Roles; null when the User does not exist. */
+  async findBoostingRoles(userId: string): Promise<BoostingRoles | null> {
+    const row = await orm.User.where({ id: userId }).select("isBooster", "isLootbuddy").first();
+    return row ? mapBoostingRoles(row as Record<string, unknown>) : null;
+  },
+
+  /** Boosting Roles for several Users at once; missing Users are absent from the map. */
+  async listBoostingRolesByUserIds(userIds: string[]): Promise<Map<string, BoostingRoles>> {
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return new Map();
+    const rows = await orm.User.where((user) => user.id.in(unique))
+      .select("id", "isBooster", "isLootbuddy")
+      .all();
+    return new Map(
+      rows.map((row) => {
+        const record = row as Record<string, unknown>;
+        return [asString(record.id), mapBoostingRoles(record)];
+      }),
+    );
+  },
+
+  /** Sets one Boosting Role flag. Never touches accountRole. */
+  async setBoostingRole(userId: string, role: BoostingRole, enabled: boolean): Promise<void> {
+    await orm.User.where({ id: userId }).update({ [BOOSTING_ROLE_COLUMN[role]]: enabled });
+  },
+
   /** Ids of every account with this role — small (e.g. the Platform Owner). */
   async listIdsByRole(role: AccountRole): Promise<string[]> {
     const rows = await orm.User.where({ accountRole: role }).select("id").all();
@@ -228,6 +267,19 @@ export const userRepository = {
         name: user.name,
         accountRole: user.accountRole,
       }));
+  },
+
+  /** How many Users hold each Boosting Role (a User may hold both). */
+  async countBoostingRoles(): Promise<{ boosters: number; lootbuddies: number }> {
+    const users = await orm.User.select("isBooster", "isLootbuddy").all();
+    let boosters = 0;
+    let lootbuddies = 0;
+    for (const row of users) {
+      const roles = mapBoostingRoles(row as Record<string, unknown>);
+      if (roles.isBooster) boosters += 1;
+      if (roles.isLootbuddy) lootbuddies += 1;
+    }
+    return { boosters, lootbuddies };
   },
 
   async countByRole(): Promise<Record<AccountRole, number>> {
@@ -425,7 +477,6 @@ export const userRepository = {
     const users = await orm.User.orderBy((user) => user.name.asc()).all();
     const characters = await orm.Character.select("id", "userId").all();
     const accessRows = await orm.BoosterAccess.select("userId", "status").all();
-    const qualificationRows = await orm.BoosterQualification.select("userId", "status").all();
 
     const characterCountByUser = new Map<string, number>();
     for (const row of characters) {
@@ -433,11 +484,6 @@ export const userRepository = {
       characterCountByUser.set(userId, (characterCountByUser.get(userId) ?? 0) + 1);
     }
 
-    const boosterStatusByUser = new Map<string, "APPROVED" | "REVOKED">();
-    for (const row of qualificationRows) {
-      const record = row as Record<string, unknown>;
-      boosterStatusByUser.set(asString(record.userId), mapQualificationStatus(record.status));
-    }
     const pendingByUser = new Map<string, number>();
     for (const row of accessRows) {
       const record = row as Record<string, unknown>;
@@ -459,7 +505,8 @@ export const userRepository = {
         accountStatus: mapAccountStatus(record.accountStatus),
         createdAt: asString(record.createdAt),
         characterCount: characterCountByUser.get(id) ?? 0,
-        boosterStatus: boosterStatusByUser.get(id) ?? "NONE",
+        isBooster: asBoolean(record.isBooster),
+        isLootbuddy: asBoolean(record.isLootbuddy),
         pendingAccessCount: pendingByUser.get(id) ?? 0,
       };
     });
@@ -470,11 +517,14 @@ export const userRepository = {
     if (filters.query?.trim()) {
       rows = rows.filter((row) => matchesQuery(row, filters.query!));
     }
-    if (filters.hasApprovedAccess === true) {
-      rows = rows.filter((row) => row.boosterStatus === "APPROVED");
+    if (filters.boostingRole === "BOOSTER") {
+      rows = rows.filter((row) => row.isBooster);
     }
-    if (filters.hasApprovedAccess === false) {
-      rows = rows.filter((row) => row.boosterStatus !== "APPROVED");
+    if (filters.boostingRole === "LOOTBUDDY") {
+      rows = rows.filter((row) => row.isLootbuddy);
+    }
+    if (filters.boostingRole === "NONE") {
+      rows = rows.filter((row) => !row.isBooster && !row.isLootbuddy);
     }
 
     const sort = filters.sort ?? "name";
@@ -498,8 +548,7 @@ export const userRepository = {
   async findAdminUserDetail(userId: string): Promise<{
     user: AuthenticatedUser & { createdAt: string; updatedAt: string };
     characters: AdminUserCharacterSummary[];
-    /** The account-level booster qualification (null = never granted). */
-    boosterQualification: AdminUserAccessSummary | null;
+    boostingRoles: BoostingRoles;
     audit: AdminUserAuditEvent[];
   } | null> {
     const user = await orm.User.where({ id: userId }).first();
@@ -514,7 +563,6 @@ export const userRepository = {
       .include("lockouts", (lockout) => lockout.include("raid"))
       .orderBy((row) => row.name.asc())
       .all();
-    const qualification = await orm.BoosterQualification.where({ userId }).first();
     const audit = await orm.ActivityEvent
       .where({ userId })
       .include("user")
@@ -524,7 +572,7 @@ export const userRepository = {
 
     // Role-change audits are written under the actor userId; also pull events that mention this user.
     const roleChangeEvents = await orm.ActivityEvent
-      .where({ type: "ACCOUNT_ROLE_CHANGED" })
+      .where((event) => event.type.in([...TARGETED_AUDIT_TYPES]))
       .include("user")
       .orderBy((event) => event.occurredAt.desc())
       .limit(100)
@@ -560,23 +608,13 @@ export const userRepository = {
       };
     });
 
-    const qualificationRecord = qualification ? (qualification as Record<string, unknown>) : null;
-    const boosterQualification: AdminUserAccessSummary | null = qualificationRecord
-      ? {
-          id: asString(qualificationRecord.id),
-          status: asString(qualificationRecord.status),
-          notes: asStringOrNull(qualificationRecord.notes),
-          grantedAt: asStringOrNull(qualificationRecord.grantedAt),
-        }
-      : null;
-
     const targetMarker = `targetUserId=${userId}`;
     const auditMap = new Map<string, AdminUserAuditEvent>();
     for (const row of [...audit, ...roleChangeEvents]) {
       const event = row as Record<string, unknown>;
       const message = asString(event.message);
       const type = asString(event.type);
-      if (type === "ACCOUNT_ROLE_CHANGED" && !message.includes(targetMarker)) {
+      if (TARGETED_AUDIT_TYPES.includes(type) && !message.includes(targetMarker)) {
         continue;
       }
       const actor = event.user ? (event.user as Record<string, unknown>) : null;
@@ -600,7 +638,7 @@ export const userRepository = {
         updatedAt: asString(record.updatedAt),
       },
       characters: characterSummaries,
-      boosterQualification,
+      boostingRoles: mapBoostingRoles(record),
       audit: auditEvents.slice(0, 40),
     };
   },

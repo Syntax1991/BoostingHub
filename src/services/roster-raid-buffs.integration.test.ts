@@ -22,7 +22,6 @@ const ids = {
 
 const createdUserIds = Object.values(ids);
 const createdCharacterIds: string[] = [];
-const createdQualificationIds: string[] = [];
 let runId = "";
 let shamanId = "";
 
@@ -49,7 +48,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
-    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
   } catch {
     // Already gone.
   }
@@ -90,10 +88,6 @@ beforeAll(async () => {
     const playerRuns = await orm.RunSignup.where({ userId }).select("runId").all();
     for (const row of playerRuns) {
       await cleanupRun((row as { runId: string }).runId);
-    }
-    const quals = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of quals) {
-      await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
@@ -141,20 +135,7 @@ beforeAll(async () => {
   shamanId = (shamanRow as { id: string }).id;
   createdCharacterIds.push(shamanId);
 
-  const qualId = crypto.randomUUID();
-  createdQualificationIds.push(qualId);
-  await orm.BoosterQualification.create({
-    id: qualId,
-    userId: ids.player,
-    status: "APPROVED",
-    notes: null,
-    grantedAt: new Date().toISOString(),
-    grantedById: null,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  await orm.User.where({ id: ids.player }).update({ isBooster: true });
 
   const run = await runService.createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }));
   runId = run.id;
@@ -163,7 +144,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (runId) await cleanupRun(runId);
-  for (const id of createdQualificationIds) await deleteIfPresent("BoosterQualification", id);
   for (const id of createdCharacterIds) await deleteIfPresent("Character", id);
   for (const id of createdUserIds) await deleteIfPresent("User", id);
 }, 60_000);

@@ -212,7 +212,6 @@ afterAll(async () => {
     await orm.Character.where({ id }).deleteAll();
   }
   for (const id of createdUserIds) {
-    await orm.BoosterQualification.where({ userId: id }).deleteAll();
     await orm.BattleNetConnection.where({ userId: id }).deleteAll();
     await orm.ActivityEvent.where({ userId: id }).deleteAll();
     await orm.User.where({ id }).deleteAll();
@@ -467,9 +466,8 @@ describe("detail", () => {
     });
     expect(detail.identity).toMatchObject({ primaryRole: "DPS", ownerHasRegionConnection: true });
     expect(detail.weeklyAvailability).toMatchObject({ characterId: fx.error!.id, status: "AVAILABLE" });
-    // One account-level booster state — no per-difficulty cells.
-    expect(detail.boosterAccess).toMatchObject({ status: expect.stringMatching(/^(APPROVED|REVOKED|NONE)$/) });
-    expect(detail.boosterAccess).not.toHaveProperty("difficulties");
+    // The owner's account-level Boosting Roles — no per-difficulty cells.
+    expect(detail.ownerBoostingRoles).toEqual({ isBooster: expect.any(Boolean), isLootbuddy: expect.any(Boolean) });
     expect(detail.row.lockoutSlots).toHaveLength(getCurrentLockoutRaids().length);
     expect(JSON.stringify(detail)).not.toMatch(/message|stack/i);
   });

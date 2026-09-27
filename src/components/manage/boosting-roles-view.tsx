@@ -1,40 +1,38 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
-import {
-  ACCESS_STATUS_LABELS,
-  CHARACTER_ROLE_LABELS,
-  DIFFICULTY_LABELS,
-} from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
 import { CHARACTER_ROLES, RAID_DIFFICULTIES } from "@/models/enums";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
+import { AccountRoleBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { ApproveBoosterAccessButton } from "@/components/manage/approve-booster-access-button";
 import { BoosterAccessReviewDialog } from "@/components/manage/booster-access-review-dialog";
-import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
+import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
 import type { managementController } from "@/controllers/app.controller";
-import type { QualificationStatusFilter } from "@/validators/booster-access-filters";
+import type { BoostingRoleFilter } from "@/validators/boosting-roles";
 
-type Page = Awaited<ReturnType<typeof managementController.getBoosterAccessPage>>;
+type Page = Awaited<ReturnType<typeof managementController.getBoostingRolesPage>>;
 
-const QUALIFICATION_TABS: QualificationStatusFilter[] = ["ALL", "APPROVED", "REVOKED"];
+const ROLE_TABS: Array<{ value: BoostingRoleFilter; label: string }> = [
+  { value: "ALL", label: "All users" },
+  { value: "BOOSTER", label: "Boosters" },
+  { value: "LOOTBUDDY", label: "Lootbuddies" },
+  { value: "NONE", label: "Neither" },
+];
 
-function buildHref(
-  filters: Page["filters"],
-  patch: Partial<{ view: string; status: string }>,
-) {
+function buildHref(filters: Page["filters"], patch: Partial<{ view: string; role: string }>) {
   const href = new URLSearchParams();
   const view = patch.view ?? filters.view;
-  href.set("view", view);
-  if (view === "qualifications") {
-    const status = patch.status ?? (filters.status === "PENDING" ? "ALL" : filters.status);
-    if (status && status !== "PENDING") href.set("status", status);
+  if (view === "legacy") href.set("view", "legacy");
+  if (view === "roles") {
+    const role = patch.role ?? filters.role;
+    if (role !== "ALL") href.set("role", role);
   }
-  // Difficulty/role filter historical legacy requests only — current qualification is account-level.
+  // Difficulty / requested role filter historical requests only — Boosting Roles have no difficulty.
   if (view === "legacy" && filters.difficulty) href.set("difficulty", filters.difficulty);
-  if (view === "legacy" && filters.role) href.set("role", filters.role);
+  if (view === "legacy" && filters.requestedRole) href.set("requestedRole", filters.requestedRole);
   if (filters.query) href.set("query", filters.query);
-  if (filters.userId) href.set("userId", filters.userId);
-  return `/manage/booster-access?${href.toString()}`;
+  const query = href.toString();
+  return query ? `/manage/boosting-roles?${query}` : "/manage/boosting-roles";
 }
 
 function historicalContext(row: Page["legacyRequests"][number]): string | null {
@@ -43,41 +41,49 @@ function historicalContext(row: Page["legacyRequests"][number]): string | null {
   return `Requested via ${row.characterName}${realm}`;
 }
 
-export function BoosterAccessQueueView({ data }: { data: Page }) {
-  const {
-    filters,
-    qualifications,
-    legacyRequests,
-    grantUsers,
-    legacyPendingCount,
-    view,
-  } = data;
-  const isLegacy = view === "legacy";
+function RoleCell({
+  user,
+  role,
+}: {
+  user: Page["users"][number];
+  role: "BOOSTER" | "LOOTBUDDY";
+}) {
+  const enabled = role === "BOOSTER" ? user.isBooster : user.isLootbuddy;
+  return (
+    <div className="flex items-center gap-2">
+      <span className={enabled ? "w-16 text-xs text-success" : "w-16 text-xs text-muted"}>
+        {enabled ? "Enabled" : "Disabled"}
+      </span>
+      <BoostingRoleControl userId={user.id} userName={user.name} role={role} enabled={enabled} />
+    </div>
+  );
+}
+
+export function BoostingRolesView({ data }: { data: Page }) {
+  const { filters, users, legacyRequests, legacyPendingCount, counts } = data;
+  const isLegacy = filters.view === "legacy";
 
   return (
     <div className="min-w-0 overflow-x-hidden">
       <PageHeader
-        title="Booster access"
-        description="Approve users as boosters after Discord review. Approval is account-level and covers every raid difficulty. Resolve historical in-app PENDING rows from Legacy Requests."
+        title="Boosting Roles"
+        description="Grant or revoke the Booster and Lootbuddy roles after Discord review. Each role is independent of the other and of the account role, and Booster covers every raid difficulty."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <GrantBoosterAccessDialog users={grantUsers} defaultUserId={filters.userId} />
-            <Link href="/manage" className="text-sm text-accent hover:underline">
-              Management
-            </Link>
-          </div>
+          <Link href="/manage" className="text-sm text-accent hover:underline">
+            Management
+          </Link>
         }
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          href={buildHref(filters, { view: "qualifications", status: "ALL" })}
+          href={buildHref(filters, { view: "roles", role: "ALL" })}
           className={`rounded-md px-3 py-1.5 text-sm ${
             !isLegacy ? "bg-accent/15 text-accent" : "text-muted hover:bg-surface-raised"
           }`}
           aria-current={!isLegacy ? "page" : undefined}
         >
-          Qualifications
+          Roles · {counts.boosters} Boosters · {counts.lootbuddies} Lootbuddies
         </Link>
         <Link
           href={buildHref(filters, { view: "legacy" })}
@@ -92,22 +98,15 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
 
       {isLegacy ? (
         <p className="mb-4 text-sm text-muted">
-          These applications used the previous character/class/difficulty workflow. Approving one
-          approves the user as a booster for every difficulty.
+          Historical in-app applications from the previous character/class/difficulty workflow. They
+          are history only; approving one grants the account-level Booster role (all difficulties).
         </p>
       ) : null}
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3 px-4 py-3" method="get">
-          <input type="hidden" name="view" value={view} />
-          {!isLegacy ? (
-            <input
-              type="hidden"
-              name="status"
-              value={filters.status === "PENDING" ? "ALL" : filters.status}
-            />
-          ) : null}
-          {filters.userId ? <input type="hidden" name="userId" value={filters.userId} /> : null}
+          {isLegacy ? <input type="hidden" name="view" value="legacy" /> : null}
+          {!isLegacy && filters.role !== "ALL" ? <input type="hidden" name="role" value={filters.role} /> : null}
           {isLegacy ? (
             <label className="text-xs">
               <span className="mb-1 block text-muted">Requested difficulty</span>
@@ -128,11 +127,11 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
           ) : null}
           {isLegacy ? (
             <label className="text-xs">
-              <span className="mb-1 block text-muted">Role</span>
+              <span className="mb-1 block text-muted">Requested role</span>
               <select
-                name="role"
-                defaultValue={filters.role ?? ""}
-                aria-label="Filter by role"
+                name="requestedRole"
+                defaultValue={filters.requestedRole ?? ""}
+                aria-label="Filter by requested role"
                 className="h-9 rounded-md border border-border bg-surface px-2"
               >
                 <option value="">All</option>
@@ -150,7 +149,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
               name="query"
               defaultValue={filters.query ?? ""}
               aria-label="Search user"
-              placeholder="Name"
+              placeholder="Name or Discord"
               className="h-9 w-full rounded-md border border-border bg-surface px-2"
             />
           </label>
@@ -163,21 +162,18 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
         </form>
         {!isLegacy ? (
           <div className="flex flex-wrap gap-1 border-t border-border px-4 py-2">
-            {QUALIFICATION_TABS.map((status) => {
-              const active =
-                status === "ALL"
-                  ? filters.status === "ALL" || filters.status === "PENDING"
-                  : filters.status === status;
+            {ROLE_TABS.map((tab) => {
+              const active = filters.role === tab.value;
               return (
                 <Link
-                  key={status}
-                  href={buildHref(filters, { view: "qualifications", status })}
+                  key={tab.value}
+                  href={buildHref(filters, { view: "roles", role: tab.value })}
                   className={`rounded-md px-2 py-1 text-xs ${
                     active ? "bg-accent/15 text-accent" : "text-muted hover:bg-surface-raised"
                   }`}
                   aria-current={active ? "page" : undefined}
                 >
-                  {status === "ALL" ? "All" : ACCESS_STATUS_LABELS[status]}
+                  {tab.label}
                 </Link>
               );
             })}
@@ -227,7 +223,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             <ApproveBoosterAccessButton accessId={row.id} />
-                            <BoosterAccessReviewDialog accessId={row.id} mode="reject" />
+                            <BoosterAccessReviewDialog accessId={row.id} />
                           </div>
                         </td>
                       </tr>
@@ -248,50 +244,46 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                     <p className="text-xs text-muted">Requested {formatDateTime(row.createdAt)}</p>
                     <div className="flex flex-wrap gap-2 pt-1">
                       <ApproveBoosterAccessButton accessId={row.id} />
-                      <BoosterAccessReviewDialog accessId={row.id} mode="reject" />
+                      <BoosterAccessReviewDialog accessId={row.id} />
                     </div>
                   </li>
                 ))}
               </ul>
             </>
           )
-        ) : qualifications.length === 0 ? (
-          <EmptyState
-            title="No matching boosters."
-            description="Grant booster access after Discord review, or adjust filters."
-          />
+        ) : users.length === 0 ? (
+          <EmptyState title="No matching users." description="Adjust the filters or search." />
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
+                    <th className="px-4 py-2 font-medium">Account role</th>
                     <th className="px-4 py-2 font-medium">Booster</th>
-                    <th className="px-4 py-2 font-medium">Granted by</th>
-                    <th className="px-4 py-2 font-medium">Times</th>
-                    <th className="px-4 py-2 font-medium">Actions</th>
+                    <th className="px-4 py-2 font-medium">Lootbuddy</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {qualifications.map((row) => (
-                    <tr key={row.id} className="border-t border-border align-top">
-                      <td className="px-4 py-3 font-medium">{row.userName}</td>
+                  {users.map((user) => (
+                    <tr key={user.id} className="border-t border-border align-middle">
                       <td className="px-4 py-3">
-                        <AccessBadge status={row.status} />
-                        {row.notes ? <p className="mt-1 max-w-48 text-xs text-muted">{row.notes}</p> : null}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted">{row.grantedByName ?? "—"}</td>
-                      <td className="px-4 py-3 text-xs text-muted">
-                        <div>Created {formatDateTime(row.createdAt)}</div>
-                        <div>Granted {row.grantedAt ? formatDateTime(row.grantedAt) : "—"}</div>
+                        <Link href={`/manage/users/${user.id}`} className="font-medium hover:underline">
+                          {user.name}
+                        </Link>
+                        <div className="text-xs text-muted">
+                          {user.discordUsername ? `@${user.discordUsername}` : "No Discord"}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        {row.status === "APPROVED" ? (
-                          <BoosterAccessReviewDialog qualificationId={row.id} mode="revoke" />
-                        ) : (
-                          <span className="text-xs text-muted">—</span>
-                        )}
+                        <AccountRoleBadge role={user.accountRole} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <RoleCell user={user} role="BOOSTER" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <RoleCell user={user} role="LOOTBUDDY" />
                       </td>
                     </tr>
                   ))}
@@ -299,23 +291,29 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
               </table>
             </div>
             <ul className="divide-y divide-border md:hidden">
-              {qualifications.map((row) => (
-                <li key={row.id} className="space-y-2 px-4 py-3 text-sm">
-                  <div className="font-medium">{row.userName}</div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="text-muted">Booster</span>
-                    <AccessBadge status={row.status} />
-                  </div>
-                  <p className="text-xs text-muted">
-                    Granted {row.grantedAt ? formatDateTime(row.grantedAt) : "—"}
-                    {row.grantedByName ? ` · ${row.grantedByName}` : ""}
-                  </p>
-                  {row.notes ? <p className="text-xs text-muted">{row.notes}</p> : null}
-                  {row.status === "APPROVED" ? (
-                    <div className="pt-1">
-                      <BoosterAccessReviewDialog qualificationId={row.id} mode="revoke" />
+              {users.map((user) => (
+                <li key={user.id} className="space-y-3 px-4 py-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link href={`/manage/users/${user.id}`} className="font-medium hover:underline">
+                        {user.name}
+                      </Link>
+                      <div className="truncate text-xs text-muted">
+                        {user.discordUsername ? `@${user.discordUsername}` : "No Discord"}
+                      </div>
                     </div>
-                  ) : null}
+                    <AccountRoleBadge role={user.accountRole} />
+                  </div>
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted">Booster</span>
+                      <RoleCell user={user} role="BOOSTER" />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted">Lootbuddy</span>
+                      <RoleCell user={user} role="LOOTBUDDY" />
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>

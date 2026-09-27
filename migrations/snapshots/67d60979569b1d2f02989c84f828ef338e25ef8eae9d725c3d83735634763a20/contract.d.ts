@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'6f9b9e6221938aaf72c3b12d03680c371ec3178caa7a6e2cd296cb7b73e0ea74'>;
+  StorageHashBase<'67d60979569b1d2f02989c84f828ef338e25ef8eae9d725c3d83735634763a20'>;
 export type ExecutionHash =
-  ExecutionHashBase<'37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f'>;
+  ExecutionHashBase<'798507c527f03e7e4b4f176c035bb6200b95779e0cef2a336b9c15c654ef757c'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -313,18 +313,6 @@ export type FieldOutputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
-    readonly BoosterQualification: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
-      readonly status: 'APPROVED' | 'REVOKED';
-      readonly grantedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly grantedById: CodecTypes['pg/text@1']['output'] | null;
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['output'] | null;
-      readonly notes: CodecTypes['pg/text@1']['output'] | null;
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
     readonly Character: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
@@ -694,6 +682,8 @@ export type FieldOutputTypes = {
       readonly discordUsername: CodecTypes['pg/text@1']['output'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN' | 'OWNER';
+      readonly isBooster: CodecTypes['pg/bool@1']['output'];
+      readonly isLootbuddy: CodecTypes['pg/bool@1']['output'];
       readonly discordDmEnabled: CodecTypes['pg/bool@1']['output'];
       readonly dmRosterSelectedEnabled: CodecTypes['pg/bool@1']['output'];
       readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['output'];
@@ -817,18 +807,6 @@ export type FieldInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
-    readonly BoosterQualification: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-      readonly status: 'APPROVED' | 'REVOKED';
-      readonly grantedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly grantedById: CodecTypes['pg/text@1']['input'] | null;
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['input'] | null;
-      readonly notes: CodecTypes['pg/text@1']['input'] | null;
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
     readonly Character: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
@@ -1198,6 +1176,8 @@ export type FieldInputTypes = {
       readonly discordUsername: CodecTypes['pg/text@1']['input'] | null;
       readonly accountStatus: 'ACTIVE' | 'DISABLED';
       readonly accountRole: 'USER' | 'RAID_LEAD' | 'ADMIN' | 'OWNER';
+      readonly isBooster: CodecTypes['pg/bool@1']['input'];
+      readonly isLootbuddy: CodecTypes['pg/bool@1']['input'];
       readonly discordDmEnabled: CodecTypes['pg/bool@1']['input'];
       readonly dmRosterSelectedEnabled: CodecTypes['pg/bool@1']['input'];
       readonly dmRaidInviteEnabled: CodecTypes['pg/bool@1']['input'];
@@ -1320,18 +1300,6 @@ export type StorageColumnTypes = {
         | 'SHAMAN'
         | 'WARLOCK'
         | 'WARRIOR';
-    };
-    readonly booster_qualification: {
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly grantedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly grantedById: CodecTypes['pg/text@1']['output'] | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly notes: CodecTypes['pg/text@1']['output'] | null;
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: 'APPROVED' | 'REVOKED';
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
     };
     readonly character: {
       readonly blizzardCharacterId: CodecTypes['pg/text@1']['output'] | null;
@@ -1713,6 +1681,8 @@ export type StorageColumnTypes = {
       readonly emailVerified: CodecTypes['pg/bool@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly image: CodecTypes['pg/text@1']['output'] | null;
+      readonly isBooster: CodecTypes['pg/bool@1']['output'];
+      readonly isLootbuddy: CodecTypes['pg/bool@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly timeZone: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
@@ -1824,18 +1794,6 @@ export type StorageColumnInputTypes = {
         | 'SHAMAN'
         | 'WARLOCK'
         | 'WARRIOR';
-    };
-    readonly booster_qualification: {
-      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly grantedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly grantedById: CodecTypes['pg/text@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly notes: CodecTypes['pg/text@1']['input'] | null;
-      readonly revokedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly revokedById: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: 'APPROVED' | 'REVOKED';
-      readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
     };
     readonly character: {
       readonly blizzardCharacterId: CodecTypes['pg/text@1']['input'] | null;
@@ -2217,6 +2175,8 @@ export type StorageColumnInputTypes = {
       readonly emailVerified: CodecTypes['pg/bool@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly image: CodecTypes['pg/text@1']['input'] | null;
+      readonly isBooster: CodecTypes['pg/bool@1']['input'];
+      readonly isLootbuddy: CodecTypes['pg/bool@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly timeZone: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -2734,121 +2694,6 @@ type ContractBase = Omit<
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'booster_access';
                     readonly columns: readonly ['reviewedById'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
-            };
-            readonly booster_qualification: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly userId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly status: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly grantedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: true;
-                };
-                readonly grantedById: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly revokedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: true;
-                };
-                readonly revokedById: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly notes: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly createdAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: false;
-                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
-                };
-                readonly updatedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                  readonly nullable: false;
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [{ readonly columns: readonly ['userId'] }];
-              indexes: readonly [
-                {
-                  readonly name: 'booster_qualification_status_idx_e98638ab';
-                  readonly prefix: 'booster_qualification_status_idx';
-                  readonly columns: readonly ['status'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'booster_qualification_grantedById_idx_416f9b2b';
-                  readonly prefix: 'booster_qualification_grantedById_idx';
-                  readonly columns: readonly ['grantedById'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'booster_qualification_revokedById_idx_ab374353';
-                  readonly prefix: 'booster_qualification_revokedById_idx';
-                  readonly columns: readonly ['revokedById'];
-                  readonly unique: false;
-                },
-              ];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'booster_qualification';
-                    readonly columns: readonly ['userId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'booster_qualification';
-                    readonly columns: readonly ['grantedById'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'user';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'booster_qualification';
-                    readonly columns: readonly ['revokedById'];
                   };
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
@@ -5461,6 +5306,24 @@ type ContractBase = Omit<
                     readonly value: DefaultLiteralValue<'pg/text@1', 'USER'>;
                   };
                 };
+                readonly isBooster: {
+                  readonly nativeType: 'bool';
+                  readonly codecId: 'pg/bool@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/bool@1', false>;
+                  };
+                };
+                readonly isLootbuddy: {
+                  readonly nativeType: 'bool';
+                  readonly codecId: 'pg/bool@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/bool@1', false>;
+                  };
+                };
                 readonly discordDmEnabled: {
                   readonly nativeType: 'bool';
                   readonly codecId: 'pg/bool@1';
@@ -5837,10 +5700,6 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['PENDING', 'APPROVED', 'REJECTED', 'REVOKED'];
             };
-            readonly BoosterQualificationStatus: {
-              readonly kind: 'valueSet';
-              readonly values: readonly ['APPROVED', 'REVOKED'];
-            };
             readonly CharacterRole: {
               readonly kind: 'valueSet';
               readonly values: readonly ['TANK', 'HEALER', 'DPS'];
@@ -5996,10 +5855,6 @@ type ContractBase = Omit<
     readonly booster_access: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'BoosterAccess';
-    };
-    readonly booster_qualification: {
-      readonly namespace: 'public' & NamespaceId;
-      readonly model: 'BoosterQualification';
     };
     readonly raid: { readonly namespace: 'public' & NamespaceId; readonly model: 'Raid' };
     readonly raid_boss: { readonly namespace: 'public' & NamespaceId; readonly model: 'RaidBoss' };
@@ -6484,104 +6339,6 @@ type ContractBase = Omit<
                 readonly approvedById: { readonly column: 'approvedById' };
                 readonly reviewedAt: { readonly column: 'reviewedAt' };
                 readonly reviewedById: { readonly column: 'reviewedById' };
-                readonly notes: { readonly column: 'notes' };
-                readonly createdAt: { readonly column: 'createdAt' };
-                readonly updatedAt: { readonly column: 'updatedAt' };
-              };
-            };
-          };
-          readonly BoosterQualification: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly userId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly status: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly grantedAt: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly grantedById: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly revokedAt: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly revokedById: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly notes: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly createdAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-              readonly updatedAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-string@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly grantedBy: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['grantedById'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly revokedBy: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['revokedById'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-              readonly user: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['userId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'booster_qualification';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly userId: { readonly column: 'userId' };
-                readonly status: { readonly column: 'status' };
-                readonly grantedAt: { readonly column: 'grantedAt' };
-                readonly grantedById: { readonly column: 'grantedById' };
-                readonly revokedAt: { readonly column: 'revokedAt' };
-                readonly revokedById: { readonly column: 'revokedById' };
                 readonly notes: { readonly column: 'notes' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
@@ -9167,6 +8924,14 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly isBooster: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
+              };
+              readonly isLootbuddy: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
+              };
               readonly discordDmEnabled: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
@@ -9297,17 +9062,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['userId'];
                 };
               };
-              readonly boosterQualification: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'BoosterQualification';
-                };
-                readonly cardinality: '1:1';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['userId'];
-                };
-              };
               readonly characters: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -9361,17 +9115,6 @@ type ContractBase = Omit<
                 readonly on: {
                   readonly localFields: readonly ['id'];
                   readonly targetFields: readonly ['finalizedById'];
-                };
-              };
-              readonly grantedQualifications: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'BoosterQualification';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['grantedById'];
                 };
               };
               readonly ledRuns: {
@@ -9470,17 +9213,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['reviewedById'];
                 };
               };
-              readonly revokedQualifications: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'BoosterQualification';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['revokedById'];
-                };
-              };
               readonly revokedStrikes: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -9561,6 +9293,8 @@ type ContractBase = Omit<
                 readonly discordUsername: { readonly column: 'discordUsername' };
                 readonly accountStatus: { readonly column: 'accountStatus' };
                 readonly accountRole: { readonly column: 'accountRole' };
+                readonly isBooster: { readonly column: 'isBooster' };
+                readonly isLootbuddy: { readonly column: 'isLootbuddy' };
                 readonly discordDmEnabled: { readonly column: 'discordDmEnabled' };
                 readonly dmRosterSelectedEnabled: { readonly column: 'dmRosterSelectedEnabled' };
                 readonly dmRaidInviteEnabled: { readonly column: 'dmRaidInviteEnabled' };
@@ -9851,13 +9585,6 @@ type ContractBase = Omit<
               { readonly name: 'REVOKED'; readonly value: 'REVOKED' },
             ];
           };
-          readonly BoosterQualificationStatus: {
-            readonly codecId: 'pg/text@1';
-            readonly members: readonly [
-              { readonly name: 'APPROVED'; readonly value: 'APPROVED' },
-              { readonly name: 'REVOKED'; readonly value: 'REVOKED' },
-            ];
-          };
           readonly RunStatus: {
             readonly codecId: 'pg/text@1';
             readonly members: readonly [
@@ -10058,23 +9785,6 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'booster_access';
-            readonly column: 'updatedAt';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
-          readonly onUpdate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'booster_qualification';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'booster_qualification';
             readonly column: 'updatedAt';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };

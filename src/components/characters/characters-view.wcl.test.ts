@@ -52,6 +52,8 @@ type CharacterRow = Page["characters"][number];
 function basePage(characters: CharacterRow[]): Page {
   return {
     characters,
+    boostingRoles: { isBooster: true, isLootbuddy: false },
+    discordTicketUrl: null,
     totalCharacters: characters.length,
     activeCharacters: characters.filter((row) => row.isActive).length,
     currentResetByRegion: { EU: "2026-W38", US: "2026-W38" },

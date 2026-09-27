@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { AccessBadge } from "@/components/ui/badges";
+import { BoostingRoleBadges } from "@/components/ui/badges";
 import { hasRaidLeadAccess } from "@/auth/authorization";
 import type { profileService } from "@/services/profile.service";
 
@@ -57,13 +57,16 @@ export function ProfileView({ data }: { data: Profile }) {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Booster access" />
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 text-sm">
-            <span className="font-medium">Booster</span>
-            {data.boosterAccess.status === "NONE" ? (
-              <span className="text-xs text-muted">Not approved</span>
-            ) : (
-              <AccessBadge status={data.boosterAccess.status} />
+          <CardHeader
+            title="Boosting roles"
+            description="What you can take part in as. Separate from your account role."
+          />
+          <div className="flex flex-wrap items-center gap-2 px-4 py-4 text-sm">
+            <BoostingRoleBadges roles={data.boostingRoles} emptyLabel="No boosting role yet" />
+            {data.boostingRoles.isBooster ? null : (
+              <p className="w-full text-xs text-muted">
+                Booster signups need the Booster role — apply through Discord. Lootbuddy signups are open to everyone.
+              </p>
             )}
           </div>
         </Card>

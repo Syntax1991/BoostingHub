@@ -106,22 +106,7 @@ async function createCharacter(input: {
 }
 
 async function approveAccess(userId: string) {
-  const existing = await orm.BoosterQualification.where({ userId }).first();
-  if (existing) return;
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await orm.BoosterQualification.create({
-    id,
-    userId,
-    status: "APPROVED",
-    notes: "notify invite",
-    grantedAt: now,
-    grantedById: ids.admin,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await orm.User.where({ id: userId }).update({ isBooster: true });
 }
 
 async function createSignup(input: {
@@ -207,10 +192,6 @@ async function cleanupAll() {
     const notes = await orm.UserNotification.where({ userId }).select("id").all();
     for (const row of notes) {
       await orm.UserNotification.where({ id: (row as { id: string }).id }).delete();
-    }
-    const access = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of access) {
-      await orm.BoosterQualification.where({ id: (row as { id: string }).id }).delete();
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {

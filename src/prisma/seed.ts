@@ -250,9 +250,6 @@ async function wipe() {
   for (const row of await orm.BoosterAccess.select("id").all()) {
     await orm.BoosterAccess.where({ id: row.id }).delete();
   }
-  for (const row of await orm.BoosterQualification.select("id").all()) {
-    await orm.BoosterQualification.where({ id: row.id }).delete();
-  }
   for (const row of await orm.ActivityEvent.select("id").all()) {
     await orm.ActivityEvent.where({ id: row.id }).delete();
   }
@@ -571,40 +568,15 @@ async function seed() {
     });
   }
 
-  // Collapse APPROVED legacy rows into one account-level qualification per User
-  // (not scoped by difficulty). mira has none (ADMIN does not auto-qualify).
-  const approvedUserIds = new Set<string>();
+  // Boosting Roles live on the User. Users with an APPROVED legacy request and
+  // the filler boosters hold the Booster role (all difficulties). mira has none
+  // (ADMIN does not auto-qualify).
+  const boosterUserIds = new Set<string>(FILLER_BOOSTERS.map((filler) => filler.userId));
   for (const item of access) {
-    if (item.status === "APPROVED") approvedUserIds.add(item.userId);
+    if (item.status === "APPROVED") boosterUserIds.add(item.userId);
   }
-  for (const userId of approvedUserIds) {
-    await orm.BoosterQualification.create({
-      id: crypto.randomUUID(),
-      userId,
-      status: "APPROVED",
-      notes: "Seeded from approved legacy access.",
-      grantedAt: SEED_NOW,
-      grantedById: ids.users.aelira,
-      revokedAt: null,
-      revokedById: null,
-      createdAt: SEED_NOW,
-      updatedAt: SEED_NOW,
-    });
-  }
-
-  for (const filler of FILLER_BOOSTERS) {
-    await orm.BoosterQualification.create({
-      id: crypto.randomUUID(),
-      userId: filler.userId,
-      status: "APPROVED",
-      notes: "Seed filler booster — approved for composition padding.",
-      grantedAt: SEED_NOW,
-      grantedById: ids.users.aelira,
-      revokedAt: null,
-      revokedById: null,
-      createdAt: SEED_NOW,
-      updatedAt: SEED_NOW,
-    });
+  for (const userId of boosterUserIds) {
+    await orm.User.where({ id: userId }).update({ isBooster: true });
   }
 
   await raidRepository.ensureReferenceRaids(SEED_NOW);

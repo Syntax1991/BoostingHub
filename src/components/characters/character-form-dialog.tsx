@@ -265,7 +265,7 @@ export function CharacterFormDialog({
                   <span className="text-muted">Primary role </span>
                   <span className="font-medium">{derivedRole ?? "—"}</span>
                   <span className="mt-1 block text-xs text-muted">
-                    Derived from specialization. Extra booster roles are granted separately through Booster Access.
+                    Derived from specialization. Other class roles can be offered at signup once your account has the Booster role.
                   </span>
                 </p>
               </>

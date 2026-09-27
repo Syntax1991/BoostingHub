@@ -87,7 +87,7 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 **Add Booster** adds a **registered** player who did not sign up — typically a last-minute replacement. It is offered in the Run header (next to **External Boosters** / **Edit Run**) and in the Roster tab's Boosters card, to managers only, while the roster is editable (`OPEN` / `ROSTERING` / `PUBLISHED`). Flow: search a player (server-side, `ACTIVE` accounts, name or Discord username, max 10 results, only id / name / Discord username exposed) → choose one of their Characters → role → **Add to Roster**.
 
 - The player is rostered as a normal **BOOSTER `RunSignup`** — never a `RunExternalBooster` — so My Runs, commitments, reservations, notifications, Discord, Final Setup, attendance and payout treat them like any pick.
-- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass, always against the **current** Run (difficulty, schedule, content): Character owned and active, Booster Access for the Run difficulty, a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts stay informational.
+- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass, always against the **current** Run (difficulty, schedule, content): Character owned and active, the owner's Booster role (any Run difficulty), a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts stay informational.
 - An existing active offer for that Character is reused (the assigned role is added to its offered roles if missing); otherwise a normal `PENDING` offer is created. A `WITHDRAWN` offer is never revived — the player has to sign up again.
 - Atomic: the signup (reuse / role extension / creation) and the draft slot are written in one transaction with the Save Roster race checks and notifications (`rosterRepository.addManagedBoosterAtomic`). On any failure (version race, reservation race, withdrawal) nothing is left behind.
 - Works directly on a legacy published roster whose draft was never seeded (`needsPublishSeed`): the same transaction first seeds the draft from the live published lineup (A, B, C keep their published roles) and then adds the new player (D). No separate "Edit Published Roster" step is needed and no published member is dropped.
@@ -141,7 +141,7 @@ Blockers include:
 - run not in `OPEN` / `ROSTERING` / `PUBLISHED` (including frozen `IN_PROGRESS` / `COMPLETED`)
 - withdrawn selection
 - inactive Character (BOOSTER and legacy Character-backed LOOTBUDDY only — characterless Lootbuddy is not inactive)
-- booster qualification no longer approved (`BoosterQualificationService` — account-level, independent of Run difficulty; revoke is a publish blocker)
+- owner no longer has the Booster role (`User.isBooster` — account-level, independent of Run difficulty; revoke is a publish blocker)
 - two selected **BOOSTER** signups for one user
 
 Raid lockouts remain informational only — never a publish blocker. Matching uses each Character's regional WoW reset containing `Run.scheduledStartAt` (not the Run date's ISO week alone). Verified `0/x` is Unsaved; no row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.

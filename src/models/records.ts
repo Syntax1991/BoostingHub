@@ -1,6 +1,5 @@
 import type {
   BoosterAccessStatus,
-  BoosterQualificationStatus,
   CharacterRole,
   CharacterSyncErrorCode,
   RaidDifficulty,
@@ -27,30 +26,14 @@ export type BoosterAccessRecord = {
 };
 
 /**
- * @deprecated Prefer BoosterQualificationMatch for current eligibility.
- * Kept for legacy request display only.
+ * A User's Boosting Roles — operational participation, independent of
+ * accountRole (authorization). Booster is account-level and never scoped by
+ * raid difficulty. See User.isBooster / User.isLootbuddy.
  */
-export type BoosterAccessMatch = Pick<BoosterAccessRecord, "wowClass" | "role" | "difficulty" | "status">;
-
-/**
- * Authoritative current BoosterQualification: one account-level row per User.
- * Not scoped by raid difficulty — APPROVED means the User may boost any Run.
- */
-export type BoosterQualificationRecord = {
-  id: string;
-  userId: string;
-  status: BoosterQualificationStatus;
-  notes: string | null;
-  grantedAt: string | null;
-  grantedById: string | null;
-  revokedAt: string | null;
-  revokedById: string | null;
-  createdAt: string;
-  updatedAt: string;
+export type BoostingRoles = {
+  isBooster: boolean;
+  isLootbuddy: boolean;
 };
-
-/** Enough for eligibility matching. */
-export type BoosterQualificationMatch = Pick<BoosterQualificationRecord, "status">;
 
 /**
  * A Character already reserved — draft-selected into another Run's roster, or

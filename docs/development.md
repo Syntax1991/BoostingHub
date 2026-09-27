@@ -21,7 +21,7 @@ npm run dev
 
 `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_URI` (see `.env.example`) are required for Add Character — Class/Item Level come from Blizzard's public Character Profile with no manual fallback. Optional Battle.net *account* linking/import uses the same vars. Seed and Discord login work when they are empty; adding a Character does not.
 
-Optional `DISCORD_BOOSTER_TICKET_URL` is an external Discord link for Booster Access applications, shown as **Apply via Discord** when self-service BoosterAccess requests are disabled.
+Optional `DISCORD_BOOSTER_TICKET_URL` is an external Discord link for Booster applications, shown as **Apply via Discord** when self-service BoosterAccess requests are disabled.
 
 ## Prisma 8 workflow
 
@@ -99,14 +99,14 @@ Production must never expose the identity picker. Do not remove the mechanism wh
 
 ## Development account bootstrap
 
-`npm run db:seed` resets `accountRole`/`accountStatus` and Booster qualifications for everyone, including your real Discord account. To avoid re-granting yourself ADMIN by hand after every reseed, set in `.env`:
+`npm run db:seed` resets `accountRole`/`accountStatus` and Boosting Roles for everyone, including your real Discord account. To avoid re-granting yourself ADMIN by hand after every reseed, set in `.env`:
 
 ```bash
 DEV_ACCOUNT_BOOTSTRAP_ENABLED="true"
 DEV_ADMIN_DISCORD_USER_ID="<your real Discord user ID>"
 ```
 
-The next time that Discord account signs in (new or returning session), it is automatically restored to `ADMIN`/`ACTIVE` with an `APPROVED` account-level Booster qualification. Hard-disabled in production regardless of these env vars; a non-matching Discord user is never affected; no Activity is logged for it. See [authentication.md](authentication.md#development-account-bootstrap) for the full behavior.
+The next time that Discord account signs in (new or returning session), it is automatically restored to `ADMIN`/`ACTIVE` with the Booster role (`isBooster`). Hard-disabled in production regardless of these env vars; a non-matching Discord user is never affected; no Activity is logged for it. See [authentication.md](authentication.md#development-account-bootstrap) for the full behavior.
 
 Leave `DEV_ACCOUNT_BOOTSTRAP_ENABLED="false"` unless you specifically need this, and never commit your real Discord user ID.
 
@@ -127,6 +127,6 @@ Requires `BLIZZARD_CLIENT_ID`, `BLIZZARD_CLIENT_SECRET`, and `BLIZZARD_REDIRECT_
 3. Open Details, edit name/realm/region/specialization; confirm Class and Item Level are not editable.
 4. Confirm Dashboard and Profile counts follow `activeCharacters` / `totalCharacters`.
 5. On `/runs`, a new active character can lootbuddy-sign without BoosterAccess and cannot booster-sign until an ADMIN grants matching BoosterAccess.
-6. From character details, open the Discord booster application CTA (when configured); as ADMIN, grant access on `/manage/booster-access` and confirm booster signup becomes available.
+6. From character details, open the Discord booster application CTA (when configured); as ADMIN, grant the Booster role on `/manage/users/[id]` (or `/manage/boosting-roles`) and confirm booster signup becomes available on every difficulty.
 
 The same vars also enable Battle.net account **Connect** on `/characters` and **Refresh** on linked character details — separately optional, ownership-verified, on top of the Add Character lookup above. Git workflow: [git-workflow.md](git-workflow.md).

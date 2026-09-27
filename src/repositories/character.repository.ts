@@ -13,9 +13,9 @@ import {
   mapWowClass,
   mapCharacterSyncErrorCode,
 } from "@/lib/persistence";
-import type { BoosterQualificationRecord, ScheduledCharacterSyncCandidate } from "@/models/records";
+import type { ScheduledCharacterSyncCandidate } from "@/models/records";
 import type { CharacterRole, CharacterSyncErrorCode, WowClass, WowRegion } from "@/models/enums";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
+import { userRepository } from "@/repositories/user.repository";
 
 export type CharacterPageRecord = {
   id: string;
@@ -45,10 +45,8 @@ export type CharacterPageRecord = {
   warcraftLogsId: string | null;
   createdAt: string;
   updatedAt: string;
-  /** @deprecated Empty; prefer boosterQualification. */
-  boosterAccess: [];
-  /** The owner's account-level booster qualification (null = never granted). */
-  boosterQualification: BoosterQualificationRecord | null;
+  /** The owner's Booster role (User.isBooster) — a User capability, never stored on the Character. */
+  ownerIsBooster: boolean;
   lockouts: Array<{
     raidId: string;
     raid: { name: string };
@@ -135,9 +133,8 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     warcraftLogsId: asStringOrNull(character.warcraftLogsId),
     createdAt: asString(character.createdAt),
     updatedAt: asString(character.updatedAt),
-    // The account-level qualification is attached separately — never via Character relation.
-    boosterAccess: [],
-    boosterQualification: null,
+    // The owner's Booster role is attached separately (withOwnerBoosterRole).
+    ownerIsBooster: false,
     lockouts: lockouts.map((row) => {
       const record = row as Record<string, unknown>;
       const raid = (record.raid ?? {}) as Record<string, unknown>;
@@ -155,22 +152,18 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
 }
 
 /**
- * Attach each Character owner's account-level BoosterQualification.
- * Eligibility is per User — not per Character, class, or difficulty.
+ * Attach each Character owner's Booster role (User.isBooster).
+ * Booster eligibility is per User — not per Character, class, or difficulty.
  */
-async function withAccountBoosterQualifications(
-  characters: CharacterPageRecord[],
-): Promise<CharacterPageRecord[]> {
+async function withOwnerBoosterRole(characters: CharacterPageRecord[]): Promise<CharacterPageRecord[]> {
   if (characters.length === 0) return characters;
 
-  const userIds = [...new Set(characters.map((character) => character.userId))];
-  const rows = await boosterQualificationRepository.listByUserIds(userIds);
-  const qualificationByUser = new Map(rows.map((row) => [row.userId, row]));
-
+  const rolesByUser = await userRepository.listBoostingRolesByUserIds(
+    characters.map((character) => character.userId),
+  );
   return characters.map((character) => ({
     ...character,
-    boosterAccess: [],
-    boosterQualification: qualificationByUser.get(character.userId) ?? null,
+    ownerIsBooster: rolesByUser.get(character.userId)?.isBooster ?? false,
   }));
 }
 
@@ -182,7 +175,7 @@ export const characterRepository = {
       .orderBy((character) => character.name.asc())
       .all();
 
-    return withAccountBoosterQualifications(
+    return withOwnerBoosterRole(
       characters.map((character) => mapCharacter(character as Record<string, unknown>)),
     );
   },
@@ -193,7 +186,7 @@ export const characterRepository = {
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
-    const [withAccess] = await withAccountBoosterQualifications([
+    const [withAccess] = await withOwnerBoosterRole([
       mapCharacter(character as Record<string, unknown>),
     ]);
     return withAccess ?? null;
@@ -205,7 +198,7 @@ export const characterRepository = {
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
-    const [withAccess] = await withAccountBoosterQualifications([
+    const [withAccess] = await withOwnerBoosterRole([
       mapCharacter(character as Record<string, unknown>),
     ]);
     return withAccess ?? null;
@@ -228,7 +221,7 @@ export const characterRepository = {
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
-    const [withAccess] = await withAccountBoosterQualifications([
+    const [withAccess] = await withOwnerBoosterRole([
       mapCharacter(character as Record<string, unknown>),
     ]);
     return withAccess ?? null;

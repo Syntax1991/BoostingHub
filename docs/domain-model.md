@@ -7,12 +7,12 @@ Timestamps are stored as `timestamptz` (UTC). Formatting happens in `src/lib/dat
 | Concept | Meaning | Examples |
 | --- | --- | --- |
 | Account permission | What the account may do in the app | `USER`, `RAID_LEAD`, `ADMIN`, `OWNER` |
-| Booster eligibility | Granular approval to boost a combination | Shaman + Healer + Heroic |
+| Boosting Roles | Operational capabilities on the account, independent of each other and of the account role | Booster, Lootbuddy |
 | Run participation type | How this person is on **this** run | `BOOSTER`, `LOOTBUDDY` |
 | Run status | Lifecycle of the operation | `OPEN`, `ROSTERING` |
 | Signup status | Lifecycle of one signup row | `PENDING`, `SELECTED` |
 
-A user is never permanently “the booster” or “the lootbuddy”. The same account can boost Run A and join Run B as a lootbuddy.
+Account role (authorization) and Boosting Roles (operational participation) are separate: a User may hold zero, one or both Boosting Roles whatever the account role. Run participation is still chosen per signup — the same account can boost Run A and join Run B as a lootbuddy.
 
 ## User
 
@@ -53,19 +53,18 @@ Belongs to one user. Operators add characters via Blizzard lookup (Add Character
 
 Class is immutable after creation. Specialization from Blizzard is import-time prefill only; afterward it stays BoostingHub-owned. `primaryRole` is derived from specialization; signup role must still be valid for the class. Disconnecting Battle.net does not delete Characters. See [character-management.md](features/character-management.md) and [blizzard-integration.md](features/blizzard-integration.md).
 
-## BoosterQualification (current)
+## Boosting Roles (on User)
 
-Authoritative **account-level** booster eligibility: one qualification per User, **not scoped by raid difficulty** (deliberate V1 simplification). See [booster-access-management.md](features/booster-access-management.md).
+Two independent booleans on the User, both default `false`, never an `accountRole` and never stored on a Character. See [boosting-roles.md](features/boosting-roles.md).
 
-- unique on `userId`
-- status: `APPROVED` \| `REVOKED` (no row = never granted)
-- granted / revoked metadata and optional notes
-- an approved booster qualifies for Normal, Heroic and Mythic Runs alike; Run difficulty stays a Run / lockout / weekly-availability concept
-- Characters consume the account qualification; they do not own it
+- `isBooster` — approved to sign up and be rostered as a Booster. **Not scoped by raid difficulty**: a Booster qualifies for Normal, Heroic and Mythic Runs alike; Run difficulty stays a Run / lockout / weekly-availability concept. Characters use the owner's role; they do not own it.
+- `isLootbuddy` — recognised Lootbuddy. Management/display only; Lootbuddy signups are not gated by it.
+
+Changed only by ADMIN / OWNER through explicit grant/revoke operations, audited as `BOOSTER_GRANTED` / `BOOSTER_REVOKED` / `LOOTBUDDY_GRANTED` / `LOOTBUDDY_REVOKED`.
 
 ## Legacy BoosterAccess (history)
 
-Preserved historical applications: User + Class + Role + Difficulty (+ optional Character context). Statuses include `PENDING` (legacy queue only). The recorded difficulty is history only — never the runtime eligibility source.
+Preserved historical applications: User + Class + Role + Difficulty (+ optional Character context). Statuses include `PENDING` (legacy queue only). HISTORICAL REQUEST only — the recorded difficulty is history, and no row is ever read for current eligibility (that is `User.isBooster`).
 
 ## Raid / RaidBoss
 

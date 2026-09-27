@@ -4,7 +4,6 @@ import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
 import {
   projectDashboardOperations,
   projectPersonalDashboardAttention,
@@ -45,9 +44,7 @@ export const dashboardService = {
 
     const approvedCharacterIds = new Set(
       characters
-        .filter((character) =>
-          boosterQualificationService.isApprovedBooster(character.boosterQualification),
-        )
+        .filter((character) => character.ownerIsBooster)
         .map((character) => character.id),
     );
 

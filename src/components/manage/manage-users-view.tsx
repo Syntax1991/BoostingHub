@@ -3,16 +3,10 @@ import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/labels";
 import { ACCOUNT_ROLES } from "@/models/enums";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { AccountRoleBadge } from "@/components/ui/badges";
+import { AccountRoleBadge, BoostingRoleBadges } from "@/components/ui/badges";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getUsersPage>>;
-
-function accessSummary(user: Page["users"][number]): string {
-  if (user.boosterStatus === "APPROVED") return "Approved";
-  if (user.boosterStatus === "REVOKED") return "Revoked";
-  return "None";
-}
 
 function UserIdentity({ user }: { user: Page["users"][number] }) {
   return (
@@ -37,14 +31,13 @@ function UserIdentity({ user }: { user: Page["users"][number] }) {
 
 export function ManageUsersView({ data }: { data: Page }) {
   const { filters, users } = data;
-  const accessValue =
-    filters.access === "approved" || filters.access === "none" ? filters.access : "";
+  const boostingRoleValue = filters.boostingRole ?? "";
 
   return (
     <div className="min-w-0 overflow-x-hidden">
       <PageHeader
         title="Users"
-        description="Account directory, roles, and booster access summaries."
+        description="Account directory, account roles, and Boosting Roles."
         actions={
           <Link href="/manage" className="text-sm text-accent hover:underline">
             Management
@@ -64,7 +57,7 @@ export function ManageUsersView({ data }: { data: Page }) {
             />
           </label>
           <label className="text-xs">
-            <span className="mb-1 block text-muted">Role</span>
+            <span className="mb-1 block text-muted">Account role</span>
             <select
               name="role"
               defaultValue={filters.role ?? ""}
@@ -80,16 +73,17 @@ export function ManageUsersView({ data }: { data: Page }) {
             </select>
           </label>
           <label className="text-xs">
-            <span className="mb-1 block text-muted">Access</span>
+            <span className="mb-1 block text-muted">Boosting role</span>
             <select
-              name="access"
-              defaultValue={accessValue}
-              aria-label="Filter by booster access"
+              name="boostingRole"
+              defaultValue={boostingRoleValue}
+              aria-label="Filter by boosting role"
               className="h-9 rounded-md border border-border bg-surface px-2"
             >
               <option value="">Any</option>
-              <option value="approved">Approved</option>
-              <option value="none">Not approved</option>
+              <option value="BOOSTER">Booster</option>
+              <option value="LOOTBUDDY">Lootbuddy</option>
+              <option value="NONE">Neither</option>
             </select>
           </label>
           <label className="text-xs">
@@ -126,7 +120,7 @@ export function ManageUsersView({ data }: { data: Page }) {
                     <th className="px-4 py-2 font-medium">User</th>
                     <th className="px-4 py-2 font-medium">Account role</th>
                     <th className="px-4 py-2 font-medium">Characters</th>
-                    <th className="px-4 py-2 font-medium">Booster access</th>
+                    <th className="px-4 py-2 font-medium">Boosting roles</th>
                     <th className="px-4 py-2 font-medium">Joined</th>
                     <th className="px-4 py-2 font-medium">Actions</th>
                   </tr>
@@ -141,7 +135,9 @@ export function ManageUsersView({ data }: { data: Page }) {
                         <AccountRoleBadge role={user.accountRole} />
                       </td>
                       <td className="px-4 py-3 tabular-nums text-muted">{user.characterCount}</td>
-                      <td className="px-4 py-3 text-muted">{accessSummary(user)}</td>
+                      <td className="px-4 py-3">
+                        <BoostingRoleBadges roles={user} emptyLabel="None" />
+                      </td>
                       <td className="px-4 py-3 text-xs text-muted">{formatDateTime(user.createdAt)}</td>
                       <td className="px-4 py-3">
                         <Link
@@ -180,8 +176,10 @@ export function ManageUsersView({ data }: { data: Page }) {
                       <dd className="mt-0.5 tabular-nums">{user.characterCount}</dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="text-muted">Booster access</dt>
-                      <dd className="mt-0.5">{accessSummary(user)}</dd>
+                      <dt className="text-muted">Boosting roles</dt>
+                      <dd className="mt-0.5">
+                        <BoostingRoleBadges roles={user} emptyLabel="None" />
+                      </dd>
                     </div>
                     <div className="col-span-2">
                       <dt className="text-muted">Joined</dt>

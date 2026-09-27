@@ -2,37 +2,49 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { grantBoosterAccessAction } from "@/controllers/booster-access.actions";
+import { setBoostingRoleAction } from "@/controllers/boosting-role.actions";
 import { Button } from "@/components/ui/button";
-import { BOOSTER_ACCESS_REVIEW_REASON_MAX } from "@/validators/booster-access";
+import type { BoostingRole } from "@/models/enums";
+import { BOOSTING_ROLE_REASON_MAX } from "@/validators/boosting-roles";
 
-type GrantUser = {
-  id: string;
-  name: string;
-  discordUsername: string | null;
+const ROLE_LABEL: Record<BoostingRole, string> = { BOOSTER: "Booster", LOOTBUDDY: "Lootbuddy" };
+
+const EFFECT_COPY: Record<BoostingRole, { grant: string; revoke: string }> = {
+  BOOSTER: {
+    grant: "They can sign up and be rostered as a Booster on Normal, Heroic and Mythic runs (other signup rules still apply).",
+    revoke: "They can no longer sign up or be selected as a Booster. Existing signups and roster history stay.",
+  },
+  LOOTBUDDY: {
+    grant: "Marks them as a recognised Lootbuddy. Lootbuddy signups are not gated by this role.",
+    revoke: "Removes the Lootbuddy role. Lootbuddy signups are not gated by this role.",
+  },
 };
 
-export function GrantBoosterAccessDialog({
-  users,
-  defaultUserId,
+/**
+ * Grant / revoke one Boosting Role on a User (ADMIN / OWNER). Independent of
+ * the account role and of the other Boosting Role.
+ */
+export function BoostingRoleControl({
+  userId,
+  userName,
+  role,
+  enabled,
 }: {
-  users: GrantUser[];
-  defaultUserId?: string;
+  userId: string;
+  userName: string;
+  role: BoostingRole;
+  enabled: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const errorId = useId();
-  const notesId = useId();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const initialUserId =
-    defaultUserId && users.some((user) => user.id === defaultUserId)
-      ? defaultUserId
-      : (users[0]?.id ?? "");
-  const [userId, setUserId] = useState(initialUserId);
-  const [notes, setNotes] = useState("");
+  const [reason, setReason] = useState("");
+  const label = ROLE_LABEL[role];
+  const nextEnabled = !enabled;
 
   useEffect(() => {
     if (!open) return;
@@ -42,12 +54,11 @@ export function GrantBoosterAccessDialog({
     const onClose = () => {
       setOpen(false);
       setError(null);
-      setNotes("");
-      setUserId(initialUserId);
+      setReason("");
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
-  }, [open, initialUserId]);
+  }, [open]);
 
   function close() {
     dialogRef.current?.close();
@@ -57,9 +68,11 @@ export function GrantBoosterAccessDialog({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await grantBoosterAccessAction({
+      const result = await setBoostingRoleAction({
         userId,
-        notes: notes.trim() || undefined,
+        role,
+        enabled: nextEnabled,
+        reason: reason.trim() || undefined,
       });
       if (!result.ok) {
         setError(result.message);
@@ -70,14 +83,17 @@ export function GrantBoosterAccessDialog({
     });
   }
 
-  if (users.length === 0) {
-    return null;
-  }
+  const actionLabel = nextEnabled ? `Grant ${label}` : `Revoke ${label}`;
 
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-        Grant access
+      <Button
+        type="button"
+        variant={nextEnabled ? "primary" : "secondary"}
+        onClick={() => setOpen(true)}
+        aria-label={`${actionLabel} for ${userName}`}
+      >
+        {nextEnabled ? "Grant" : "Revoke"}
       </Button>
       <dialog
         ref={dialogRef}
@@ -92,39 +108,19 @@ export function GrantBoosterAccessDialog({
           }}
         >
           <h2 id={titleId} className="text-sm font-semibold">
-            Grant booster access
+            {actionLabel} — {userName}
           </h2>
           <p className="text-xs text-muted">
-            Approves the account as a booster for every raid difficulty. All valid roles for each
-            character class become available.
+            {nextEnabled ? EFFECT_COPY[role].grant : EFFECT_COPY[role].revoke} The account role is not changed.
           </p>
           <label className="block text-sm">
-            <span className="mb-1 block text-muted">User</span>
-            <select
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
-              aria-label="User"
-              required
-              disabled={users.length === 1}
-              className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:opacity-80"
-            >
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                  {user.discordUsername ? ` (@${user.discordUsername})` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted">Notes (optional)</span>
+            <span className="mb-1 block text-muted">Reason (optional, recorded in the audit log)</span>
             <textarea
-              id={notesId}
-              aria-label="Grant notes"
-              value={notes}
-              maxLength={BOOSTER_ACCESS_REVIEW_REASON_MAX}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={3}
+              aria-label="Reason"
+              value={reason}
+              maxLength={BOOSTING_ROLE_REASON_MAX}
+              onChange={(event) => setReason(event.target.value)}
+              rows={2}
               className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-sm"
             />
           </label>
@@ -138,7 +134,7 @@ export function GrantBoosterAccessDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : "Grant"}
+              {pending ? "Saving…" : actionLabel}
             </Button>
           </div>
         </form>

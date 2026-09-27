@@ -4,7 +4,7 @@ Internal World of Warcraft boosting operations platform for boosters, lootbuddie
 
 Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
 
-This repository is on **main**. Character Management, Booster Access Management, Canonical Run detail, Run Management, and Run lifecycle/attendance are implemented.
+This repository is on **main**. Character Management, Boosting Roles, Canonical Run detail, Run Management, and Run lifecycle/attendance are implemented.
 
 Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
@@ -15,7 +15,7 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Phase 3 — Roster Management — Complete**
 - **Phase 4 — Production Data Transition Foundation — Complete**
 - **Character Management — Complete**
-- **Booster Access Management — Complete**
+- **Boosting Roles (Booster / Lootbuddy) — Complete**
 - **Canonical Run Detail — Complete**
 - **Run Management — Complete**
 - **Run lifecycle and attendance — Complete**
@@ -32,7 +32,7 @@ Phase 4 establishes the GitHub workflow and treats seed data as a fixture, not r
 
 Character Management lets a Discord user add, edit, deactivate, and reactivate owned characters. Add Character resolves Class and Item Level from Blizzard's public Character Profile; the user only picks a specialization. Optional Battle.net account linking (ownership-verified) can import or link the same Character rows and refresh item level when `BLIZZARD_*` is configured.
 
-Booster Access Management lets that user request eligibility from character details and lets an ADMIN approve, reject, or revoke it.
+Boosting Roles: an ADMIN grants or revokes the Booster and Lootbuddy roles on the User after Discord review (Booster covers every raid difficulty); they are independent of the account role.
 
 Canonical Run detail puts every Run at `/runs/[runId]`, with participant data for USER and roster tools for the assigned raid lead or an ADMIN.
 
@@ -79,7 +79,7 @@ Repository / Model / Database
 
 Views never call Prisma. Controllers stay thin. Business rules live in Services.
 
-Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, Battle.net connect/import, booster-access dialogs, run create/edit/cancel/lifecycle actions, attendance table, and payout settlement actions.
+Client interactivity is isolated: `AppShell`, `Button`, Discord sign-in, run filters, the signup dialog, withdraw, roster builder, run detail tabs, character create/edit/lifecycle, Battle.net connect/import, boosting-role controls, run create/edit/cancel/lifecycle actions, attendance table, and payout settlement actions.
 
 See [docs/architecture.md](docs/architecture.md).
 
@@ -189,7 +189,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 | `/manage/runs` | RAID_LEAD or ADMIN (existing-run management) |
 | `/manage/runs/create` | Compatibility redirect to `/runs/create` |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
-| `/manage/booster-access` | ADMIN |
+| `/manage/boosting-roles` | ADMIN |
 | `/manage/users` | ADMIN |
 
 ## Documentation
@@ -203,7 +203,7 @@ See [docs/features/character-management.md](docs/features/character-management.m
 - [Application shell](docs/features/application-shell.md)
 - [Character management](docs/features/character-management.md)
 - [Battle.net integration](docs/features/blizzard-integration.md)
-- [Booster access management](docs/features/booster-access-management.md)
+- [Boosting Roles](docs/features/boosting-roles.md)
 - [User management](docs/features/user-management.md)
 - [Canonical run detail](docs/features/run-detail.md)
 - [Run management](docs/features/run-management.md)

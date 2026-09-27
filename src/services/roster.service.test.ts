@@ -73,29 +73,24 @@ const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
 const aelira = asUser(ids.aelira, "Aelira Nightwatch", "ADMIN");
 const otherLead = asUser(ids.kael, "Kael Stormhowl", "RAID_LEAD");
 
-// Seeded Sylva is an approved booster; booster qualification is account-level (not
+// Seeded Sylva is an approved booster; the Booster role is account-level (not
 // difficulty-scoped), so the "unapproved booster" fixture for the lab Run is a
-// REVOKED qualification, restored afterwards for the rest of the suite.
+// revoked Booster role, restored afterwards for the rest of the suite.
 const SYLVA_USER_ID = "66666666-6666-4666-8666-666666666666";
 
-async function setSylvaQualification(status: "APPROVED" | "REVOKED") {
-  const now = new Date().toISOString();
-  await orm.BoosterQualification.where({ userId: SYLVA_USER_ID }).update({
-    status,
-    revokedAt: status === "REVOKED" ? now : null,
-    updatedAt: now,
-  });
+async function setSylvaBooster(isBooster: boolean) {
+  await orm.User.where({ id: SYLVA_USER_ID }).update({ isBooster });
 }
 
 beforeAll(async () => {
-  await setSylvaQualification("REVOKED");
+  await setSylvaBooster(false);
 });
 
 afterAll(async () => {
   for (const id of lockoutIds) {
     await orm.CharacterRaidLockout.where({ id }).delete();
   }
-  await setSylvaQualification("APPROVED");
+  await setSylvaBooster(true);
 });
 
 describe("rosterService authorization", () => {

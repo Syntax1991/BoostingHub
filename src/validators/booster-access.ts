@@ -23,13 +23,3 @@ export const rejectBoosterAccessSchema = z.object({
   accessId: entityIdSchema,
   reason: reviewReasonSchema,
 });
-
-export const revokeBoosterAccessSchema = z.object({
-  qualificationId: entityIdSchema,
-  reason: reviewReasonSchema,
-});
-
-export const grantBoosterAccessSchema = z.object({
-  userId: entityIdSchema,
-  notes: reviewReasonSchema,
-});

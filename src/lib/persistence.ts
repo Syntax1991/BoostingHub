@@ -3,7 +3,6 @@ import {
   ACCOUNT_ROLES,
   ACCOUNT_STATUSES,
   BOOSTER_ACCESS_STATUSES,
-  BOOSTER_QUALIFICATION_STATUSES,
   CHARACTER_ROLES,
   PARTICIPATION_TYPES,
   RAID_DIFFICULTIES,
@@ -24,7 +23,6 @@ import {
   type AccountStatus,
   type AttendanceStatus,
   type BoosterAccessStatus,
-  type BoosterQualificationStatus,
   type RaidLeadCutMode,
   type SettlementStatus,
   type StrikeStatus,
@@ -103,10 +101,6 @@ export function mapLootType(value: unknown): RunLootType {
 
 export function mapAccessStatus(value: unknown): BoosterAccessStatus {
   return asEnum(value, BOOSTER_ACCESS_STATUSES, "PENDING");
-}
-
-export function mapQualificationStatus(value: unknown): BoosterQualificationStatus {
-  return asEnum(value, BOOSTER_QUALIFICATION_STATUSES, "APPROVED");
 }
 
 export function mapRunStatus(value: unknown): RunStatus {

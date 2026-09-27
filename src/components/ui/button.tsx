@@ -10,6 +10,7 @@ export function Button({
   type = "button",
   variant = "primary",
   onClick,
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   className?: string;
@@ -17,12 +18,14 @@ export function Button({
   type?: "button" | "submit";
   variant?: "primary" | "secondary" | "ghost" | "danger";
   onClick?: () => void;
+  "aria-label"?: string;
 }) {
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
+      aria-label={ariaLabel}
       className={cn(
         "inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         variant === "primary" && "bg-accent text-black hover:bg-[#d8b436]",

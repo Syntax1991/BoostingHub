@@ -1,15 +1,14 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { signupRepository } from "@/repositories/signup.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { userRepository } from "@/repositories/user.repository";
 import { strikeService } from "@/services/strike.service";
 
 export const profileService = {
   async getProfile(user: AuthenticatedUser) {
-    const [characters, qualification, signups, strikes] = await Promise.all([
+    const [characters, boostingRoles, signups, strikes] = await Promise.all([
       characterRepository.listByUserId(user.id),
-      boosterQualificationRepository.findByUserId(user.id),
+      userRepository.findBoostingRoles(user.id),
       signupRepository.listByUserId(user.id),
       strikeService.listOwn(user),
     ]);
@@ -18,7 +17,8 @@ export const profileService = {
       user,
       characterCount: characters.length,
       activeCharacterCount: characters.filter((character) => character.isActive).length,
-      boosterAccess: boosterQualificationService.summarize(qualification),
+      /** Boosting Roles (operational) — independent of the account role. */
+      boostingRoles: boostingRoles ?? { isBooster: false, isLootbuddy: false },
       strikes,
       participation: {
         boosterSignups: signups.filter((signup) => signup.participationType === "BOOSTER").length,

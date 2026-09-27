@@ -15,7 +15,8 @@ import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { settingsRepository } from "@/repositories/settings.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { getDiscordBoosterTicketUrl } from "@/lib/discord-config";
+import { userRepository } from "@/repositories/user.repository";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
@@ -126,7 +127,10 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 
 export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
-    const characters = await characterRepository.listByUserId(user.id);
+    const [characters, boostingRoles] = await Promise.all([
+      characterRepository.listByUserId(user.id),
+      userRepository.findBoostingRoles(user.id),
+    ]);
     const currentRaids = getCurrentLockoutRaids();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const weeklyAvailabilityById = await characterWeeklyAvailabilityService.projectCurrentForCharacters(
@@ -142,10 +146,12 @@ export const characterService = {
         id: raid.id,
         name: raidContentDisplayName(raid.id, raid.name),
       })),
+      /** Account-level Boosting Roles — shown once for the account, not per Character. */
+      boostingRoles: boostingRoles ?? { isBooster: false, isLootbuddy: false },
+      discordTicketUrl: getDiscordBoosterTicketUrl(),
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
       characters: characters.map((character) => {
-        const access = boosterQualificationService.summarize(character.boosterQualification);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
         const lockouts = lockoutService
           .summarize(
@@ -178,7 +184,6 @@ export const characterService = {
           blizzardRealmId: character.blizzardRealmId,
           warcraftLogsLinked: Boolean(character.warcraftLogsId),
           warcraftLogsId: character.warcraftLogsId,
-          boosterAccess: access,
           currentReset,
           lockouts,
           weeklyAvailability: weeklyAvailabilityById.get(character.id) ?? {
@@ -242,8 +247,9 @@ export const characterService = {
       blizzardRealmId: character.blizzardRealmId,
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
       warcraftLogsId: character.warcraftLogsId,
-      boosterQualification: character.boosterQualification,
-      accessPanel: boosterQualificationService.buildAccountAccessPanel(character.boosterQualification),
+      /** The owner's account-level Booster role — explains Booster signup eligibility. */
+      ownerIsBooster: character.ownerIsBooster,
+      discordTicketUrl: getDiscordBoosterTicketUrl(),
       currentReset,
       currentLockoutRaids: currentRaids.map((raid) => ({
         id: raid.id,

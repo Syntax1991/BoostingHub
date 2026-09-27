@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
-import { ClassBadge, DifficultyBadge } from "@/components/ui/badges";
+import { BoostingRoleBadges, ClassBadge, DifficultyBadge } from "@/components/ui/badges";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { formatDateTime } from "@/lib/datetime";
 import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
@@ -39,7 +39,7 @@ function ExactTime({ value }: { value: string | null }) {
 }
 
 export function ManageCharacterDetailView({ data }: { data: Data }) {
-  const { row, identity, weeklyAvailability, boosterAccess, currentReset } = data;
+  const { row, identity, weeklyAvailability, ownerBoostingRoles, currentReset } = data;
   const ineligibleCopy = row.syncIneligibleReason ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason] : null;
 
   return (
@@ -224,16 +224,12 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
 
         <Card>
           <CardHeader
-            title="Booster Access"
-            description="Account-level approval (read-only). Covers every raid difficulty."
+            title="Owner boosting roles"
+            description="Account-level (read-only here; manage on the owner's user page). Booster covers every raid difficulty."
           />
           <dl className="px-4 py-3 text-sm">
-            <Field label="Booster">
-              <span className={boosterAccess.status === "APPROVED" ? "text-success" : "text-muted"}>
-                {boosterAccess.status === "NONE"
-                  ? "Not approved"
-                  : boosterAccess.status.charAt(0) + boosterAccess.status.slice(1).toLowerCase()}
-              </span>
+            <Field label="Roles">
+              <BoostingRoleBadges roles={ownerBoostingRoles} emptyLabel="None" />
             </Field>
           </dl>
         </Card>

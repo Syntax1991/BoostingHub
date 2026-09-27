@@ -14,7 +14,7 @@ import {
   getRunCommitmentsForCharacters,
   projectCharacterRunCommitment,
 } from "@/services/character-run-commitment";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { boostingRoleService } from "@/services/boosting-role.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
@@ -142,8 +142,8 @@ beforeAll(async () => {
   await ensureUser(ids.owner, "CRC Owner", "USER");
   await ensureUser(ids.admin, "CRC Admin", "ADMIN");
   await ensureUser(ids.other, "CRC Other", "USER");
-  await boosterQualificationService.grant(admin, { userId: ids.owner }).catch(() => {});
-  await boosterQualificationService.grant(admin, { userId: ids.other }).catch(() => {});
+  await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
+  await boostingRoleService.setRole(admin, { userId: ids.other, role: "BOOSTER", enabled: true }).catch(() => {});
 });
 
 afterAll(async () => {
@@ -153,8 +153,6 @@ afterAll(async () => {
   for (const id of createdCharacterIds.splice(0)) {
     await orm.Character.where({ id }).delete().catch(() => {});
   }
-  await orm.BoosterQualification.where({ userId: ids.owner }).delete().catch(() => {});
-  await orm.BoosterQualification.where({ userId: ids.other }).delete().catch(() => {});
 });
 
 describe("deriveCharacterRunCommitmentState", () => {

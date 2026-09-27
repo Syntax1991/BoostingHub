@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/errors";
-import type { BoosterQualificationMatch, CharacterRunReservationConflict } from "@/models/records";
+import type { CharacterRunReservationConflict } from "@/models/records";
 import type {
   CharacterRole,
   RaidDifficulty,
@@ -10,7 +10,7 @@ import type {
 } from "@/models/enums";
 import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
 import { projectRunContentLockouts, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen } from "@/services/run-state";
 
@@ -34,8 +34,8 @@ export type EligibilityCharacter = {
   isActive: boolean;
   /** Existing WCL character id when known — informational only for signup UI. */
   warcraftLogsId: string | null;
-  /** The owner's account-level booster qualification (null = never granted). */
-  boosterQualification: BoosterQualificationMatch | null;
+  /** The owner's Booster role (User.isBooster) — account-level, never per difficulty. */
+  ownerIsBooster: boolean;
   lockouts: EligibilityLockout[];
   /**
    * Non-null when this Character is already reserved — draft-selected into
@@ -77,7 +77,7 @@ export type BoosterIneligibilityReason =
 
 export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
-  NO_BOOSTER_ACCESS: "No approved booster access.",
+  NO_BOOSTER_ACCESS: "Your account does not have the Booster role.",
   ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
   CHARACTER_UNAVAILABLE: "Character is marked unavailable for this difficulty this reset.",
 };
@@ -145,9 +145,9 @@ function findContentSaves(
 }
 
 /**
- * Booster options require the owner's account-level BoosterQualification to be
- * APPROVED. It is not scoped by difficulty: an approved booster qualifies for
- * Normal, Heroic and Mythic Runs alike.
+ * Booster options require the owner to hold the Booster role (User.isBooster).
+ * It is not scoped by difficulty: an approved Booster qualifies for Normal,
+ * Heroic and Mythic Runs alike.
  * A Character's specialization determines only the DEFAULT signup role — the
  * User may choose any role the Character's class can actually perform
  * (`rolesForClass`), never restricted to specialization alone. A missing or
@@ -197,7 +197,7 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    // Cross-Run scheduling conflict — independent of booster access, lockouts,
+    // Cross-Run scheduling conflict — independent of the Booster role, lockouts,
     // and role choice (the same Character cannot be reserved on two colliding
     // Runs regardless of which role it would play).
     if (character.reservationConflict) {
@@ -209,7 +209,7 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    if (!boosterQualificationService.isApprovedBooster(character.boosterQualification)) {
+    if (!isApprovedBooster({ isBooster: character.ownerIsBooster })) {
       pushIneligible("NO_BOOSTER_ACCESS");
       continue;
     }

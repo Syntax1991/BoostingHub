@@ -8,7 +8,7 @@ import {
   type ExternalBooster,
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
 import { assertRunTransition, isSignupWindowOpen } from "@/services/run-state";
 import { assertSignupTransition } from "@/services/signup-state";
@@ -223,7 +223,7 @@ function inspectSignup(
   const boosterApproved =
     signup.participationType !== "BOOSTER" || signup.offeredRoles.length === 0 || !character
       ? signup.participationType !== "BOOSTER"
-      : boosterQualificationService.isApprovedBooster(character.boosterQualification);
+      : isApprovedBooster({ isBooster: character.ownerIsBooster });
   // Characterless Lootbuddy has no Character row — "active" is vacuously true.
   // Legacy Character-backed Lootbuddy still respects Character.isActive.
   const characterActive =
@@ -232,7 +232,7 @@ function inspectSignup(
   if (signup.status === "WITHDRAWN") issue = "Withdrawn";
   else if (!characterActive) issue = "Character is inactive.";
   else if (signup.participationType === "BOOSTER" && !boosterApproved) {
-    issue = "Booster access is no longer approved.";
+    issue = "Owner no longer has the Booster role.";
   }
 
   return {
@@ -301,7 +301,7 @@ function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
 /**
  * Authoritative validation of a roster selection against the CURRENT Run —
  * difficulty, schedule/reset, content, composition — for Publish and Update:
- * WITHDRAWN rows excluded, active Character, Booster Access, assigned role
+ * WITHDRAWN rows excluded, active Character, owner Booster role, assigned role
  * offered, weekly availability and cross-Run reservations (hard blockers),
  * composition warnings acknowledgeable, one selected Booster per User, legal
  * signup status transitions. Returns the publish payload; throws on blockers.
@@ -910,7 +910,7 @@ export const rosterService = {
       if (signup.participationType === "BOOSTER" && !inspected.boosterApproved) {
         throw new DomainError(
           "INVALID_ROSTER_SELECTION",
-          inspected.issue ?? "Booster access is no longer approved.",
+          inspected.issue ?? "Owner no longer has the Booster role.",
         );
       }
       selectedRows.push(signup);

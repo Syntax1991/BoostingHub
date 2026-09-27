@@ -78,6 +78,8 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
 function basePage(overrides: Partial<Page> = {}): Page {
   return {
     characters: [baseCharacter()],
+    boostingRoles: { isBooster: false, isLootbuddy: false },
+    discordTicketUrl: null,
     totalCharacters: 1,
     activeCharacters: 1,
     currentResetByRegion: { EU: "2026-W38", US: "2026-W38" },

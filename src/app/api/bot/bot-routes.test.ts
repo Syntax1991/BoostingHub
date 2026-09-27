@@ -23,7 +23,6 @@ const ids = {
 const createdUserIds = Object.values(ids);
 const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
-const createdQualificationIds: string[] = [];
 const TARGET_DISCORD_ID = "999888777666555444";
 
 function req(url: string, init?: { method?: string; headers?: Record<string, string>; body?: unknown }): NextRequest {
@@ -58,7 +57,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
-    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
   } catch {
     // Already gone.
   }
@@ -134,20 +132,7 @@ beforeAll(async () => {
     updatedAt: new Date().toISOString(),
   });
 
-  const qualId = crypto.randomUUID();
-  createdQualificationIds.push(qualId);
-  await orm.BoosterQualification.create({
-    id: qualId,
-    userId: ids.target,
-    status: "APPROVED",
-    notes: null,
-    grantedAt: new Date().toISOString(),
-    grantedById: null,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  await orm.User.where({ id: ids.target }).update({ isBooster: true });
 
   const lead: AuthenticatedUser = {
     id: ids.lead,
@@ -169,9 +154,6 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of createdRunIds) {
     await cleanupRun(id);
-  }
-  for (const id of createdQualificationIds) {
-    await orm.BoosterQualification.where({ id }).delete().catch(() => {});
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);
@@ -356,7 +338,7 @@ describe("bot API domain reuse", () => {
     expect(body.code).toBe("CHARACTER_NOT_OWNED");
   });
 
-  it("enforces the account-level BoosterQualification: approved on any difficulty, refused once revoked", async () => {
+  it("enforces the account-level Booster role: accepted on any difficulty, refused once revoked", async () => {
     const mythicLead: AuthenticatedUser = {
       id: ids.lead,
       name: "Bot Api Lead",
@@ -385,20 +367,18 @@ describe("bot API domain reuse", () => {
         params(mythicRun.id),
       );
 
-    // The target's single approval is not scoped by difficulty — a Mythic Run accepts it.
+    // The target's Booster role is not scoped by difficulty — a Mythic Run accepts it.
     const accepted = await put();
     expect(accepted.status).toBe(200);
 
-    const qualification = await orm.BoosterQualification.where({ userId: ids.target }).first();
-    const now = new Date().toISOString();
-    await orm.BoosterQualification.where({ id: qualification!.id }).update({ status: "REVOKED", revokedAt: now, updatedAt: now });
+    await orm.User.where({ id: ids.target }).update({ isBooster: false });
     try {
       const refused = await put();
       expect(refused.status).toBe(400);
       const body = await refused.json();
       expect(body.code).toBe("BOOSTER_ACCESS_REQUIRED");
     } finally {
-      await orm.BoosterQualification.where({ id: qualification!.id }).update({ status: "APPROVED", revokedAt: null, updatedAt: now });
+      await orm.User.where({ id: ids.target }).update({ isBooster: true });
     }
   });
 
