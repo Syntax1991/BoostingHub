@@ -24,7 +24,9 @@ export type { BoosterAccessMatch, BoosterAccessRecord };
 export type AdminAccessFilters = {
   view?: "qualifications" | "legacy";
   status?: BoosterQualificationStatus | "ALL";
+  /** Legacy view only: filters historical requests by what was requested. */
   difficulty?: RaidDifficulty;
+  /** Legacy view only. */
   role?: CharacterRole;
   query?: string;
   userId?: string;
@@ -76,7 +78,9 @@ function assertRoleForClass(wowClass: WowClass, role: CharacterRole) {
 
 /**
  * Legacy BoosterAccess is historical PENDING/APPROVED/REJECTED/REVOKED Class/Role
- * request history. Current eligibility lives on BoosterQualification (User + Difficulty).
+ * request history; its difficulty records what was requested at the time and is
+ * never read for eligibility. Current eligibility lives on the account-level
+ * BoosterQualification (one per User, not scoped by difficulty).
  *
  * New self-service requests are disabled. Applications are reviewed in Discord;
  * ADMIN grants qualifications directly after external review.
@@ -87,7 +91,7 @@ export const boosterAccessService = {
    */
   async grantAccess(
     admin: AuthenticatedUser,
-    input: { userId: string; difficulty: RaidDifficulty; notes?: string },
+    input: { userId: string; notes?: string },
   ) {
     return boosterQualificationService.grant(admin, input);
   },
@@ -96,10 +100,7 @@ export const boosterAccessService = {
    * Self-service creation of PENDING BoosterAccess is permanently disabled.
    * Historical PENDING rows remain; ADMIN may still review them.
    */
-  async requestAccess(
-    user: AuthenticatedUser,
-    input: { characterId: string; role: CharacterRole; difficulty: RaidDifficulty },
-  ): Promise<never> {
+  async requestAccess(user: AuthenticatedUser, input: { characterId: string }): Promise<never> {
     await loadOwnedCharacter(user, input.characterId);
     throw new DomainError(
       "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
@@ -117,10 +118,8 @@ export const boosterAccessService = {
     assertBoosterAccessTransition(access.status, "APPROVED");
     assertRoleForClass(access.wowClass, access.role);
 
-    const siblings = await boosterAccessRepository.listPendingByUserDifficulty(
-      access.userId,
-      access.difficulty,
-    );
+    // Account-level approval covers every PENDING legacy request of this User.
+    const siblings = await boosterAccessRepository.listPendingByUser(access.userId);
 
     const now = new Date().toISOString();
     for (const sibling of siblings) {
@@ -136,7 +135,6 @@ export const boosterAccessService = {
 
     await boosterQualificationService.ensureApproved(admin, {
       userId: access.userId,
-      difficulty: access.difficulty,
       notes: `Legacy approve bridge for ${accessLabel(access.wowClass, access.role, access.difficulty)}`,
     });
 
@@ -149,7 +147,7 @@ export const boosterAccessService = {
     }
     const siblingNote =
       siblings.length > 1
-        ? ` Resolved ${siblings.length} PENDING ${DIFFICULTY_LABELS[access.difficulty]} requests.`
+        ? ` Resolved ${siblings.length} PENDING requests.`
         : "";
     await activityRepository.create({
       userId: admin.id,
@@ -223,7 +221,6 @@ export const boosterAccessService = {
 
     const qualifications = await boosterQualificationService.listAdminQualifications(admin, {
       status: filters.status,
-      difficulty: filters.difficulty,
       query: filters.query,
       userId: filters.userId,
     });

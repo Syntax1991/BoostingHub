@@ -37,7 +37,7 @@ Run association is proven using **BoostingHub's own signup history** (`RunSignup
 
 ## UI
 
-- `/manage/users/[userId]`: **Strikes** card (between Booster qualifications and Audit) — full detail, Add strike (general, ADMIN), Revoke (ADMIN-only, reason required).
+- `/manage/users/[userId]`: **Strikes** card (between Booster access and Audit) — full detail, Add strike (general, ADMIN), Revoke (ADMIN-only, reason required).
 - `/profile`: read-only Strikes card — own history, no internal notes.
 - Canonical Run detail (`/runs/[runId]`), **Signups tab** (manager view): a per-row **Add strike** action, deriving `runId`/`userId` from BoostingHub's own signup row. This is not on the Attendance tab, and marking any Attendance status never creates a Strike — Attendance belongs to Dawn Boosting, not this feature.
 

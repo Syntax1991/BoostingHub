@@ -45,9 +45,10 @@ export type CharacterPageRecord = {
   warcraftLogsId: string | null;
   createdAt: string;
   updatedAt: string;
-  /** @deprecated Empty; prefer boosterQualifications. */
+  /** @deprecated Empty; prefer boosterQualification. */
   boosterAccess: [];
-  boosterQualifications: BoosterQualificationRecord[];
+  /** The owner's account-level booster qualification (null = never granted). */
+  boosterQualification: BoosterQualificationRecord | null;
   lockouts: Array<{
     raidId: string;
     raid: { name: string };
@@ -134,9 +135,9 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     warcraftLogsId: asStringOrNull(character.warcraftLogsId),
     createdAt: asString(character.createdAt),
     updatedAt: asString(character.updatedAt),
-    // Account-level qualifications are attached separately — never via Character relation.
+    // The account-level qualification is attached separately — never via Character relation.
     boosterAccess: [],
-    boosterQualifications: [],
+    boosterQualification: null,
     lockouts: lockouts.map((row) => {
       const record = row as Record<string, unknown>;
       const raid = (record.raid ?? {}) as Record<string, unknown>;
@@ -154,8 +155,8 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
 }
 
 /**
- * Attach account-level BoosterQualification rows for each Character's owner.
- * Eligibility is User + Difficulty; class filtering no longer applies.
+ * Attach each Character owner's account-level BoosterQualification.
+ * Eligibility is per User — not per Character, class, or difficulty.
  */
 async function withAccountBoosterQualifications(
   characters: CharacterPageRecord[],
@@ -164,17 +165,12 @@ async function withAccountBoosterQualifications(
 
   const userIds = [...new Set(characters.map((character) => character.userId))];
   const rows = await boosterQualificationRepository.listByUserIds(userIds);
-  const qualificationsByUser = new Map<string, BoosterQualificationRecord[]>();
-  for (const row of rows) {
-    const list = qualificationsByUser.get(row.userId) ?? [];
-    list.push(row);
-    qualificationsByUser.set(row.userId, list);
-  }
+  const qualificationByUser = new Map(rows.map((row) => [row.userId, row]));
 
   return characters.map((character) => ({
     ...character,
     boosterAccess: [],
-    boosterQualifications: qualificationsByUser.get(character.userId) ?? [],
+    boosterQualification: qualificationByUser.get(character.userId) ?? null,
   }));
 }
 

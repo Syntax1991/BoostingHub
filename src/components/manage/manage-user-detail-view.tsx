@@ -7,7 +7,6 @@ import type {
   AccountRole,
   BoosterAccessStatus,
   CharacterRole,
-  RaidDifficulty,
   WowClass,
   WowRegion,
 } from "@/models/enums";
@@ -16,10 +15,10 @@ import {
   AccessBadge,
   AccountRoleBadge,
   ClassBadge,
-  DifficultyBadge,
   RoleBadge,
 } from "@/components/ui/badges";
 import { AccountRoleAction } from "@/components/manage/account-role-action";
+import { BoosterAccessReviewDialog } from "@/components/manage/booster-access-review-dialog";
 import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
 import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
 import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
@@ -35,10 +34,6 @@ function asCharacterRole(value: string): CharacterRole {
   return value as CharacterRole;
 }
 
-function asDifficulty(value: string): RaidDifficulty {
-  return value as RaidDifficulty;
-}
-
 function asAccessStatus(value: string): BoosterAccessStatus {
   return value as BoosterAccessStatus;
 }
@@ -48,9 +43,8 @@ function asRegion(value: string): WowRegion {
 }
 
 export function ManageUserDetailView({ data }: { data: Page }) {
-  const { user, characters, access, audit, strikes, currentLockoutRaids } = data;
-  const approved = access.filter((row) => row.status === "APPROVED").length;
-  const revoked = access.filter((row) => row.status === "REVOKED").length;
+  const { user, characters, boosterQualification, audit, strikes, currentLockoutRaids } = data;
+  const boosterApproved = boosterQualification?.status === "APPROVED";
   const activeStrikes = strikes.filter((row) => row.status === "ACTIVE").length;
   const lockoutRaidLabel = currentLockoutRaids?.length
     ? currentLockoutRaids.map((raid) => raid.name).join(" · ")
@@ -187,24 +181,24 @@ export function ManageUserDetailView({ data }: { data: Page }) {
 
         <Card className="lg:col-span-2">
           <CardHeader
-            title="Booster qualifications"
-            description={
-              approved === 0 && revoked === 0
-                ? "No difficulty qualifications."
-                : `${approved} approved${revoked ? ` · ${revoked} revoked` : ""}`
-            }
+            title="Booster access"
+            description="Account-level approval. Applies to every raid difficulty."
             action={
               <div className="flex flex-wrap items-center gap-3">
-                <GrantBoosterAccessDialog
-                  users={[
-                    {
-                      id: user.id,
-                      name: user.name,
-                      discordUsername: user.discordUsername,
-                    },
-                  ]}
-                  defaultUserId={user.id}
-                />
+                {boosterApproved && boosterQualification ? (
+                  <BoosterAccessReviewDialog qualificationId={boosterQualification.id} mode="revoke" />
+                ) : (
+                  <GrantBoosterAccessDialog
+                    users={[
+                      {
+                        id: user.id,
+                        name: user.name,
+                        discordUsername: user.discordUsername,
+                      },
+                    ]}
+                    defaultUserId={user.id}
+                  />
+                )}
                 <Link
                   href={`/manage/booster-access?view=qualifications&userId=${encodeURIComponent(user.id)}`}
                   className="text-sm text-accent hover:underline"
@@ -214,28 +208,26 @@ export function ManageUserDetailView({ data }: { data: Page }) {
               </div>
             }
           />
-          {access.length === 0 ? (
+          {!boosterQualification ? (
             <EmptyState
-              title="No booster access."
-              description="Grant access from the booster access queue."
+              title="Not an approved booster."
+              description="Grant booster access after Discord review."
             />
           ) : (
-            <ul className="divide-y divide-border">
-              {access.map((row) => (
-                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <DifficultyBadge difficulty={asDifficulty(row.difficulty)} />
-                  </div>
-                  <div className="text-right">
-                    <AccessBadge status={asAccessStatus(row.status)} />
-                    {row.grantedAt ? (
-                      <p className="mt-1 text-xs text-muted">{formatDateTime(row.grantedAt)}</p>
-                    ) : null}
-                  </div>
-                  {row.notes ? <p className="w-full text-xs text-muted">{row.notes}</p> : null}
-                </li>
-              ))}
-            </ul>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">Booster</span>
+                <AccessBadge status={asAccessStatus(boosterQualification.status)} />
+              </div>
+              {boosterQualification.grantedAt ? (
+                <p className="text-xs text-muted">
+                  Granted {formatDateTime(boosterQualification.grantedAt)}
+                </p>
+              ) : null}
+              {boosterQualification.notes ? (
+                <p className="w-full text-xs text-muted">{boosterQualification.notes}</p>
+              ) : null}
+            </div>
           )}
         </Card>
 

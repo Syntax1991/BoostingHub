@@ -55,17 +55,17 @@ Class is immutable after creation. Specialization from Blizzard is import-time p
 
 ## BoosterQualification (current)
 
-Authoritative **account-level** eligibility: User + Difficulty only. See [booster-access-management.md](features/booster-access-management.md).
+Authoritative **account-level** booster eligibility: one qualification per User, **not scoped by raid difficulty** (deliberate V1 simplification). See [booster-access-management.md](features/booster-access-management.md).
 
-- unique on `(userId, difficulty)`
-- status: `APPROVED` \| `REVOKED`
+- unique on `userId`
+- status: `APPROVED` \| `REVOKED` (no row = never granted)
 - granted / revoked metadata and optional notes
-- exact difficulty match (no inheritance)
+- an approved booster qualifies for Normal, Heroic and Mythic Runs alike; Run difficulty stays a Run / lockout / weekly-availability concept
 - Characters consume the account qualification; they do not own it
 
 ## Legacy BoosterAccess (history)
 
-Preserved historical applications: User + Class + Role + Difficulty (+ optional Character context). Statuses include `PENDING` (legacy queue only). Not the runtime eligibility source after migration.
+Preserved historical applications: User + Class + Role + Difficulty (+ optional Character context). Statuses include `PENDING` (legacy queue only). The recorded difficulty is history only — never the runtime eligibility source.
 
 ## Raid / RaidBoss
 

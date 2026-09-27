@@ -2,8 +2,8 @@ import type { BoosterQualificationStatus } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 
 /**
- * One BoosterQualification row is reused per user + difficulty.
- * Re-grant from REVOKED → APPROVED. Difficulty never inherits.
+ * One account-level BoosterQualification row is reused per User.
+ * Re-grant moves REVOKED → APPROVED on the same row.
  */
 export const BOOSTER_QUALIFICATION_TRANSITIONS: Record<
   BoosterQualificationStatus,

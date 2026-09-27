@@ -212,26 +212,20 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         <Card>
           <CardHeader
             title="Account booster access"
-            description="Difficulty qualifications on your account. Shared by every character — not owned by this character. Approved difficulty unlocks all valid roles for each class."
+            description="Booster approval on your account. Shared by every character — not owned by this character. Approval covers every raid difficulty and unlocks all valid roles for each class."
             action={<DiscordBoosterApplicationCta discordTicketUrl={panel.discordTicketUrl} />}
           />
-          <ul className="divide-y divide-border">
-            {panel.difficulties.map((cell) => (
-              <li key={cell.difficulty} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                <DifficultyBadge difficulty={cell.difficulty} />
-                <span className="flex items-center gap-2">
-                  {cell.status === "NONE" ? (
-                    <span className="text-xs text-muted">{statusLabel(cell.status)}</span>
-                  ) : (
-                    <AccessBadge status={cell.status} />
-                  )}
-                </span>
-                {cell.notes && cell.status === "REVOKED" ? (
-                  <p className="w-full text-xs text-muted">{cell.notes}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+            <span className="font-medium">Booster</span>
+            {panel.status === "NONE" ? (
+              <span className="text-xs text-muted">{statusLabel(panel.status)}</span>
+            ) : (
+              <AccessBadge status={panel.status} />
+            )}
+            {panel.notes && panel.status === "REVOKED" ? (
+              <p className="w-full text-xs text-muted">{panel.notes}</p>
+            ) : null}
+          </div>
         </Card>
         <Card>
           <CardHeader

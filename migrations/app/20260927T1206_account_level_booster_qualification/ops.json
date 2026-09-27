@@ -1,0 +1,277 @@
+[
+  {
+    "id": "data_migration.collapse-booster-qualification-to-account-level",
+    "label": "Data transform: collapse BoosterQualification to one row per User (APPROVED wins)",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow collapse (idempotent delete)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Delete every qualification row except the per-User keeper",
+        "sql": "DELETE FROM \"booster_qualification\" WHERE \"id\" NOT IN (SELECT DISTINCT ON (\"userId\") \"id\" FROM \"booster_qualification\" ORDER BY \"userId\", (\"status\" = 'APPROVED') DESC, COALESCE(\"revokedAt\", \"grantedAt\", \"updatedAt\") DESC NULLS LAST, \"updatedAt\" DESC, \"id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "At most one qualification row per User",
+        "sql": "SELECT NOT EXISTS ( SELECT 1 FROM \"booster_qualification\" GROUP BY \"userId\" HAVING count(*) > 1 ) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.booster_qualification.booster_qualification_difficulty_check_05ae26c2",
+    "label": "Drop check constraint \"booster_qualification_difficulty_check_05ae26c2\" on \"booster_qualification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "booster_qualification_difficulty_check_05ae26c2",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_qualification_difficulty_check_05ae26c2\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_difficulty_check_05ae26c2",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"booster_qualification_difficulty_check_05ae26c2\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\" DROP CONSTRAINT \"booster_qualification_difficulty_check_05ae26c2\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_qualification_difficulty_check_05ae26c2\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_difficulty_check_05ae26c2",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropIndex.booster_qualification.booster_qualification_difficulty_idx_ab7b4a75",
+    "label": "Drop index \"booster_qualification_difficulty_idx_ab7b4a75\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_difficulty_idx_ab7b4a75",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_difficulty_idx_ab7b4a75\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_difficulty_idx_ab7b4a75\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop index \"booster_qualification_difficulty_idx_ab7b4a75\"",
+        "sql": "DROP INDEX \"public\".\"booster_qualification_difficulty_idx_ab7b4a75\"",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_difficulty_idx_ab7b4a75\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_difficulty_idx_ab7b4a75\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropIndex.booster_qualification.booster_qualification_userId_idx_a489d58a",
+    "label": "Drop index \"booster_qualification_userId_idx_a489d58a\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "booster_qualification_userId_idx_a489d58a",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"booster_qualification_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop index \"booster_qualification_userId_idx_a489d58a\"",
+        "sql": "DROP INDEX \"public\".\"booster_qualification_userId_idx_a489d58a\"",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"booster_qualification_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropConstraint.booster_qualification.booster_qualification_userId_difficulty_key",
+    "label": "Drop constraint \"booster_qualification_userId_difficulty_key\" on \"booster_qualification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "booster_qualification_userId_difficulty_key",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_qualification_userId_difficulty_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_difficulty_key",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop constraint \"booster_qualification_userId_difficulty_key\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\" DROP CONSTRAINT \"booster_qualification_userId_difficulty_key\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_qualification_userId_difficulty_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_difficulty_key",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.booster_qualification.difficulty",
+    "label": "Drop column \"difficulty\" from \"booster_qualification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "difficulty",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"difficulty\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "booster_qualification",
+          "difficulty"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"difficulty\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\" DROP COLUMN \"difficulty\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"difficulty\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "booster_qualification",
+          "difficulty"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.booster_qualification.booster_qualification_userId_key",
+    "label": "Add unique constraint on \"booster_qualification\" (userId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "booster_qualification_userId_key",
+        "table": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_qualification_userId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_key",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"booster_qualification_userId_key\"",
+        "sql": "ALTER TABLE \"public\".\"booster_qualification\" ADD CONSTRAINT \"booster_qualification_userId_key\" UNIQUE (\"userId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_qualification_userId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_qualification_userId_key",
+          "public",
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  }
+]

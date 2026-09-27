@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { DifficultyBadge } from "@/components/ui/badges";
+import { AccessBadge } from "@/components/ui/badges";
 import { hasRaidLeadAccess } from "@/auth/authorization";
 import type { profileService } from "@/services/profile.service";
 
@@ -58,21 +58,13 @@ export function ProfileView({ data }: { data: Profile }) {
         </Card>
         <Card>
           <CardHeader title="Booster access" />
-          <div className="px-4 py-4 text-sm">
-            {data.boosterAccess.approvals.length === 0 ? (
-              <p className="text-muted">No approved booster difficulties.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 text-sm">
+            <span className="font-medium">Booster</span>
+            {data.boosterAccess.status === "NONE" ? (
+              <span className="text-xs text-muted">Not approved</span>
             ) : (
-              <ul className="space-y-2">
-                {data.boosterAccess.approvals.map((approval) => (
-                  <li key={approval.difficulty} className="flex items-center justify-between gap-2">
-                    <DifficultyBadge difficulty={approval.difficulty} />
-                  </li>
-                ))}
-              </ul>
+              <AccessBadge status={data.boosterAccess.status} />
             )}
-            <p className="mt-3 text-xs text-muted">
-              {data.boosterAccess.approvedCount} approved · {data.boosterAccess.revokedCount} revoked
-            </p>
           </div>
         </Card>
         <Card>

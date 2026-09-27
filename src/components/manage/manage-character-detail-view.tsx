@@ -223,15 +223,18 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
         </Card>
 
         <Card>
-          <CardHeader title="Booster Access" description="Account-level qualifications (read-only)." />
+          <CardHeader
+            title="Booster Access"
+            description="Account-level approval (read-only). Covers every raid difficulty."
+          />
           <dl className="px-4 py-3 text-sm">
-            {boosterAccess.difficulties.map((entry) => (
-              <Field key={entry.difficulty} label={entry.difficulty.charAt(0) + entry.difficulty.slice(1).toLowerCase()}>
-                <span className={entry.status === "APPROVED" ? "text-success" : "text-muted"}>
-                  {entry.status === "NONE" ? "None" : entry.status.charAt(0) + entry.status.slice(1).toLowerCase()}
-                </span>
-              </Field>
-            ))}
+            <Field label="Booster">
+              <span className={boosterAccess.status === "APPROVED" ? "text-success" : "text-muted"}>
+                {boosterAccess.status === "NONE"
+                  ? "Not approved"
+                  : boosterAccess.status.charAt(0) + boosterAccess.status.slice(1).toLowerCase()}
+              </span>
+            </Field>
           </dl>
         </Card>
       </div>

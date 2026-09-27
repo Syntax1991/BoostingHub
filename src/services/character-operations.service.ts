@@ -369,9 +369,9 @@ export const characterOperationsService = {
       now,
       staleMinutes: resolveSyncHealthStaleMinutes(),
     });
-    const [availabilityById, qualifications, owner] = await Promise.all([
+    const [availabilityById, qualification, owner] = await Promise.all([
       characterWeeklyAvailabilityService.projectCurrentForCharacters([{ id: character.id, region: character.region }]),
-      boosterQualificationRepository.listByUserId(character.userId),
+      boosterQualificationRepository.findByUserId(character.userId),
       userRepository.findById(character.userId),
     ]);
     return {
@@ -388,7 +388,7 @@ export const characterOperationsService = {
       },
       currentReset: getRegionalWeeklyReset(character.region).resetIdentifier,
       weeklyAvailability: availabilityById.get(character.id) ?? null,
-      boosterAccess: boosterQualificationService.buildAccountAccessPanel(qualifications),
+      boosterAccess: boosterQualificationService.buildAccountAccessPanel(qualification),
     };
   },
 

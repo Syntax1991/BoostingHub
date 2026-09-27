@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
-import { DIFFICULTY_LABELS, REGION_LABELS } from "@/lib/labels";
+import { REGION_LABELS } from "@/lib/labels";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
@@ -116,14 +116,10 @@ export function CharactersView({ data }: { data: Page }) {
                     </td>
                     <td className="px-4 py-3 text-muted">{character.isActive ? "Active" : "Inactive"}</td>
                     <td className="px-4 py-3 text-xs">
-                      {character.boosterAccess.approvals.length === 0 ? (
-                        <span className="text-muted">None approved</span>
+                      {character.boosterAccess.approved ? (
+                        <span className="text-success">Approved</span>
                       ) : (
-                        <ul className="space-y-1">
-                          {character.boosterAccess.approvals.map((approval) => (
-                            <li key={approval.difficulty}>{DIFFICULTY_LABELS[approval.difficulty]}</li>
-                          ))}
-                        </ul>
+                        <span className="text-muted">Not approved</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs">

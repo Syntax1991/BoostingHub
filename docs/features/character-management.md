@@ -88,7 +88,7 @@ Deactivation remains the reversible option.
 
 ## Booster access
 
-Character list/detail show **matching account** BoosterAccess for that Character's class (derived display). Approvals are owned by the User account (`userId + class + role + difficulty`), not by the Character row.
+Character list/detail show the owner's **account-level** Booster qualification as one state (Approved / Revoked / Not approved) — no difficulty chips. The qualification is owned by the User account (one per User, not scoped by raid difficulty), not by the Character row.
 
 Owners may open a request from a Character page; the Character supplies class/role context only. ADMIN review lives in [booster-access-management.md](booster-access-management.md).
 

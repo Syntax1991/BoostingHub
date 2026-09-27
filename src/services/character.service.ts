@@ -145,7 +145,7 @@ export const characterService = {
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
       characters: characters.map((character) => {
-        const access = boosterQualificationService.summarize(character.boosterQualifications);
+        const access = boosterQualificationService.summarize(character.boosterQualification);
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
         const lockouts = lockoutService
           .summarize(
@@ -242,10 +242,8 @@ export const characterService = {
       blizzardRealmId: character.blizzardRealmId,
       warcraftLogsLinked: Boolean(character.warcraftLogsId),
       warcraftLogsId: character.warcraftLogsId,
-      boosterQualifications: character.boosterQualifications,
-      accessPanel: boosterQualificationService.buildAccountAccessPanel(
-        character.boosterQualifications,
-      ),
+      boosterQualification: character.boosterQualification,
+      accessPanel: boosterQualificationService.buildAccountAccessPanel(character.boosterQualification),
       currentReset,
       currentLockoutRaids: currentRaids.map((raid) => ({
         id: raid.id,

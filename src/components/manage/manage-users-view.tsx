@@ -9,10 +9,9 @@ import type { managementController } from "@/controllers/app.controller";
 type Page = Awaited<ReturnType<typeof managementController.getUsersPage>>;
 
 function accessSummary(user: Page["users"][number]): string {
-  const { approvedAccessCount: approved, revokedAccessCount: revoked } = user;
-  if (approved === 0 && revoked === 0) return "None";
-  if (revoked === 0) return `${approved} approved`;
-  return `${approved} approved · ${revoked} revoked`;
+  if (user.boosterStatus === "APPROVED") return "Approved";
+  if (user.boosterStatus === "REVOKED") return "Revoked";
+  return "None";
 }
 
 function UserIdentity({ user }: { user: Page["users"][number] }) {
@@ -90,7 +89,7 @@ export function ManageUsersView({ data }: { data: Page }) {
             >
               <option value="">Any</option>
               <option value="approved">Approved</option>
-              <option value="none">None</option>
+              <option value="none">Not approved</option>
             </select>
           </label>
           <label className="text-xs">

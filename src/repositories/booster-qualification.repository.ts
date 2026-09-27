@@ -2,16 +2,14 @@ import { orm } from "@/lib/prisma";
 import {
   asString,
   asStringOrNull,
-  mapDifficulty,
   mapQualificationStatus,
 } from "@/lib/persistence";
 import type { BoosterQualificationRecord } from "@/models/records";
-import type { BoosterQualificationStatus, RaidDifficulty } from "@/models/enums";
+import type { BoosterQualificationStatus } from "@/models/enums";
 
 export type BoosterQualificationWriteInput = {
   id: string;
   userId: string;
-  difficulty: RaidDifficulty;
   status: BoosterQualificationStatus;
   notes: string | null;
   grantedAt: string | null;
@@ -31,7 +29,6 @@ export type BoosterQualificationPatch = {
 
 export type BoosterQualificationAdminFilters = {
   status?: BoosterQualificationStatus;
-  difficulty?: RaidDifficulty;
   userId?: string;
 };
 
@@ -44,7 +41,6 @@ function mapQualification(row: Record<string, unknown>): BoosterQualificationRec
   return {
     id: asString(row.id),
     userId: asString(row.userId),
-    difficulty: mapDifficulty(row.difficulty),
     status: mapQualificationStatus(row.status),
     notes: asStringOrNull(row.notes),
     grantedAt: asStringOrNull(row.grantedAt),
@@ -67,21 +63,15 @@ function mapAdminRow(row: Record<string, unknown>): BoosterQualificationAdminRec
 }
 
 export const boosterQualificationRepository = {
-  async listByUserId(userId: string): Promise<BoosterQualificationRecord[]> {
-    const rows = await orm.BoosterQualification.where({ userId }).all();
-    return rows.map((row) => mapQualification(row as Record<string, unknown>));
-  },
 
   async findById(id: string): Promise<BoosterQualificationRecord | null> {
     const row = await orm.BoosterQualification.where({ id }).first();
     return row ? mapQualification(row as Record<string, unknown>) : null;
   },
 
-  async findExact(
-    userId: string,
-    difficulty: RaidDifficulty,
-  ): Promise<BoosterQualificationRecord | null> {
-    const row = await orm.BoosterQualification.where({ userId, difficulty }).first();
+  /** The User's single account-level qualification, if one was ever granted. */
+  async findByUserId(userId: string): Promise<BoosterQualificationRecord | null> {
+    const row = await orm.BoosterQualification.where({ userId }).first();
     return row ? mapQualification(row as Record<string, unknown>) : null;
   },
 
@@ -134,9 +124,6 @@ export const boosterQualificationRepository = {
 
     if (filters.status) {
       query = query.where({ status: filters.status });
-    }
-    if (filters.difficulty) {
-      query = query.where({ difficulty: filters.difficulty });
     }
     if (filters.userId) {
       query = query.where({ userId: filters.userId });

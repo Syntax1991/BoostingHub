@@ -1,11 +1,9 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanReviewBoosterAccess } from "@/auth/authorization";
 import type { BoosterQualificationMatch, BoosterQualificationRecord } from "@/models/records";
-import type { BoosterQualificationStatus, RaidDifficulty } from "@/models/enums";
-import { RAID_DIFFICULTIES } from "@/models/enums";
+import type { BoosterQualificationStatus } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { getDiscordBoosterTicketUrl } from "@/lib/discord-config";
-import { DIFFICULTY_LABELS } from "@/lib/labels";
 import { activityRepository } from "@/repositories/activity.repository";
 import {
   boosterQualificationRepository,
@@ -19,22 +17,23 @@ import {
 
 export type { BoosterQualificationMatch, BoosterQualificationRecord };
 
-export type AccountAccessDifficultyCell = {
-  difficulty: RaidDifficulty;
-  status: BoosterQualificationStatus | "NONE";
-  qualificationId: string | null;
-  notes: string | null;
+/** Account-level booster approval state. NONE = never granted. */
+export type BoosterApprovalState = BoosterQualificationStatus | "NONE";
+
+export type BoosterApprovalSummary = {
+  status: BoosterApprovalState;
+  approved: boolean;
 };
 
-export type AccountAccessPanel = {
-  difficulties: AccountAccessDifficultyCell[];
+export type AccountAccessPanel = BoosterApprovalSummary & {
+  qualificationId: string | null;
+  notes: string | null;
   discordTicketUrl: string | null;
   selfRequestDisabled: true;
 };
 
 export type AdminQualificationFilters = {
   status?: BoosterQualificationStatus | "ALL";
-  difficulty?: RaidDifficulty;
   query?: string;
   userId?: string;
 };
@@ -46,38 +45,27 @@ function uniqueViolation(error: unknown): boolean {
 }
 
 /**
- * Authoritative Booster eligibility is User + Difficulty only.
- * Exact match: Heroic never implies Normal or Mythic. ADMIN has no bypass.
+ * Authoritative Booster eligibility is one account-level qualification per User.
+ * It is deliberately NOT scoped by raid difficulty: an APPROVED booster may boost
+ * Normal, Heroic and Mythic Runs alike. ADMIN has no bypass.
  */
 export const boosterQualificationService = {
-  isApprovedFor(records: BoosterQualificationMatch[], difficulty: RaidDifficulty): boolean {
-    return records.some(
-      (record) => isApprovedQualificationStatus(record.status) && record.difficulty === difficulty,
-    );
+  isApprovedBooster(qualification: BoosterQualificationMatch | null | undefined): boolean {
+    return qualification ? isApprovedQualificationStatus(qualification.status) : false;
   },
 
-  summarize(records: BoosterQualificationMatch[]) {
-    const approved = records.filter((record) => record.status === "APPROVED");
+  summarize(qualification: BoosterQualificationMatch | null | undefined): BoosterApprovalSummary {
     return {
-      approvedCount: approved.length,
-      revokedCount: records.filter((record) => record.status === "REVOKED").length,
-      approvals: approved.map((record) => ({
-        difficulty: record.difficulty,
-      })),
+      status: qualification?.status ?? "NONE",
+      approved: this.isApprovedBooster(qualification),
     };
   },
 
-  buildAccountAccessPanel(qualifications: BoosterQualificationRecord[]): AccountAccessPanel {
+  buildAccountAccessPanel(qualification: BoosterQualificationRecord | null): AccountAccessPanel {
     return {
-      difficulties: RAID_DIFFICULTIES.map((difficulty) => {
-        const existing = qualifications.find((record) => record.difficulty === difficulty);
-        return {
-          difficulty,
-          status: existing?.status ?? "NONE",
-          qualificationId: existing?.id ?? null,
-          notes: existing?.notes ?? null,
-        };
-      }),
+      ...this.summarize(qualification),
+      qualificationId: qualification?.id ?? null,
+      notes: qualification?.notes ?? null,
       discordTicketUrl: getDiscordBoosterTicketUrl(),
       selfRequestDisabled: true,
     };
@@ -85,7 +73,7 @@ export const boosterQualificationService = {
 
   async grant(
     admin: AuthenticatedUser,
-    input: { userId: string; difficulty: RaidDifficulty; notes?: string },
+    input: { userId: string; notes?: string },
   ): Promise<BoosterQualificationRecord> {
     assertCanReviewBoosterAccess(admin);
 
@@ -94,24 +82,22 @@ export const boosterQualificationService = {
       throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
     }
 
-    const existing = await boosterQualificationRepository.findExact(input.userId, input.difficulty);
+    const existing = await boosterQualificationRepository.findByUserId(input.userId);
     if (existing?.status === "APPROVED") {
       throw new DomainError(
         "BOOSTER_ACCESS_ALREADY_APPROVED",
-        "That difficulty is already approved.",
+        "This user is already an approved booster.",
       );
     }
 
     const now = new Date().toISOString();
     const notes = input.notes?.trim() || "Reviewed through Discord";
-    const label = DIFFICULTY_LABELS[input.difficulty];
 
     if (!existing) {
       try {
         const created = await boosterQualificationRepository.create({
           id: crypto.randomUUID(),
           userId: input.userId,
-          difficulty: input.difficulty,
           status: "APPROVED",
           notes,
           grantedAt: now,
@@ -122,14 +108,14 @@ export const boosterQualificationService = {
         await activityRepository.create({
           userId: admin.id,
           type: "BOOSTER_ACCESS_GRANTED",
-          message: `Granted ${label} Booster access to ${target.name}.`,
+          message: `Granted Booster access to ${target.name}.`,
         });
         return created;
       } catch (error) {
         if (uniqueViolation(error)) {
           throw new DomainError(
             "BOOSTER_ACCESS_ALREADY_APPROVED",
-            "That difficulty is already approved.",
+            "This user is already an approved booster.",
           );
         }
         throw error;
@@ -148,7 +134,7 @@ export const boosterQualificationService = {
     await activityRepository.create({
       userId: admin.id,
       type: "BOOSTER_ACCESS_GRANTED",
-      message: `Granted ${label} Booster access to ${target.name}.`,
+      message: `Granted Booster access to ${target.name}.`,
     });
     const updated = await boosterQualificationRepository.findById(existing.id);
     if (!updated) {
@@ -181,7 +167,7 @@ export const boosterQualificationService = {
     await activityRepository.create({
       userId: admin.id,
       type: "BOOSTER_ACCESS_REVOKED",
-      message: `Revoked ${DIFFICULTY_LABELS[qualification.difficulty]} Booster access from ${targetName}.`,
+      message: `Revoked Booster access from ${targetName}.`,
     });
     const updated = await boosterQualificationRepository.findById(qualification.id);
     if (!updated) {
@@ -191,15 +177,15 @@ export const boosterQualificationService = {
   },
 
   /**
-   * Legacy approve bridge: ensure an APPROVED qualification exists for the difficulty.
+   * Legacy approve bridge: ensure the User's account-level qualification is APPROVED.
    * No-op when already APPROVED.
    */
   async ensureApproved(
     admin: AuthenticatedUser,
-    input: { userId: string; difficulty: RaidDifficulty; notes?: string },
+    input: { userId: string; notes?: string },
   ): Promise<BoosterQualificationRecord> {
     assertCanReviewBoosterAccess(admin);
-    const existing = await boosterQualificationRepository.findExact(input.userId, input.difficulty);
+    const existing = await boosterQualificationRepository.findByUserId(input.userId);
     if (existing?.status === "APPROVED") {
       return existing;
     }
@@ -219,7 +205,6 @@ export const boosterQualificationService = {
 
     let rows = await boosterQualificationRepository.listAdmin({
       status,
-      difficulty: filters.difficulty,
       userId: filters.userId,
     });
 
@@ -233,7 +218,7 @@ export const boosterQualificationService = {
 };
 
 function matchesAdminQuery(row: AdminQualificationRow, query: string) {
-  const haystack = [row.userName, DIFFICULTY_LABELS[row.difficulty], row.grantedByName, row.notes]
+  const haystack = [row.userName, row.grantedByName, row.notes]
     .filter(Boolean)
     .join(" ")
     .toLocaleLowerCase("en-US");

@@ -259,7 +259,8 @@ export const managementController = {
         query: filters.query,
         userId: filters.userId,
       },
-      grantUsers: grantCandidates.map((row) => ({
+      // Already-approved boosters cannot be granted again; revoke them from the list instead.
+      grantUsers: grantCandidates.filter((row) => row.boosterStatus !== "APPROVED").map((row) => ({
         id: row.id,
         name: row.name,
         discordUsername: row.discordUsername,

@@ -978,12 +978,6 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
   if (reason === "INACTIVE") {
     return new DomainError("CHARACTER_INACTIVE", "That character is inactive.");
   }
-  if (reason === "DIFFICULTY_NOT_APPROVED") {
-    return new DomainError(
-      "BOOSTER_ACCESS_DIFFICULTY_MISMATCH",
-      "This character is not approved for this difficulty.",
-    );
-  }
   if (reason === "ALREADY_SELECTED_OTHER_RUN") {
     return new DomainError(
       "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
@@ -998,7 +992,7 @@ function boosterRejection(ineligible: IneligibleBoosterCharacter | undefined): D
       `${ineligible?.characterName ?? "That character"} is marked unavailable for this difficulty this reset.`,
     );
   }
-  return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required for this combination.");
+  return new DomainError("BOOSTER_ACCESS_REQUIRED", "Approved booster access is required to sign up as a booster.");
 }
 
 async function persistSignup(input: Parameters<typeof signupRepository.create>[0]) {

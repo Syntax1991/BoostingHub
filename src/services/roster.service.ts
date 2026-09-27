@@ -38,7 +38,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupService } from "@/services/signup.service";
 import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
-import { CHARACTER_ROLE_LABELS, CLASS_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, RunStatus, SignupStatus, WowClass } from "@/models/enums";
@@ -223,10 +223,7 @@ function inspectSignup(
   const boosterApproved =
     signup.participationType !== "BOOSTER" || signup.offeredRoles.length === 0 || !character
       ? signup.participationType !== "BOOSTER"
-      : boosterQualificationService.isApprovedFor(
-          character.boosterQualifications,
-          run.difficulty,
-        );
+      : boosterQualificationService.isApprovedBooster(character.boosterQualification);
   // Characterless Lootbuddy has no Character row — "active" is vacuously true.
   // Legacy Character-backed Lootbuddy still respects Character.isActive.
   const characterActive =
@@ -235,9 +232,7 @@ function inspectSignup(
   if (signup.status === "WITHDRAWN") issue = "Withdrawn";
   else if (!characterActive) issue = "Character is inactive.";
   else if (signup.participationType === "BOOSTER" && !boosterApproved) {
-    const roleLabel =
-      signup.offeredRoles.length > 0 ? formatOfferedRoles(signup.offeredRoles).toLowerCase() : "role";
-    issue = `${DIFFICULTY_LABELS[run.difficulty]} ${roleLabel} access is no longer approved`;
+    issue = "Booster access is no longer approved.";
   }
 
   return {

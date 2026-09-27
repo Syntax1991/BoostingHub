@@ -29,7 +29,8 @@ function buildHref(
     const status = patch.status ?? (filters.status === "PENDING" ? "ALL" : filters.status);
     if (status && status !== "PENDING") href.set("status", status);
   }
-  if (filters.difficulty) href.set("difficulty", filters.difficulty);
+  // Difficulty/role filter historical legacy requests only — current qualification is account-level.
+  if (view === "legacy" && filters.difficulty) href.set("difficulty", filters.difficulty);
   if (view === "legacy" && filters.role) href.set("role", filters.role);
   if (filters.query) href.set("query", filters.query);
   if (filters.userId) href.set("userId", filters.userId);
@@ -57,7 +58,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
     <div className="min-w-0 overflow-x-hidden">
       <PageHeader
         title="Booster access"
-        description="Grant account qualifications after Discord review. Resolve historical in-app PENDING rows from Legacy Requests."
+        description="Approve users as boosters after Discord review. Approval is account-level and covers every raid difficulty. Resolve historical in-app PENDING rows from Legacy Requests."
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <GrantBoosterAccessDialog users={grantUsers} defaultUserId={filters.userId} />
@@ -91,8 +92,8 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
 
       {isLegacy ? (
         <p className="mb-4 text-sm text-muted">
-          These applications used the previous character/class workflow. Approving one grants
-          account-wide access for that difficulty.
+          These applications used the previous character/class/difficulty workflow. Approving one
+          approves the user as a booster for every difficulty.
         </p>
       ) : null}
 
@@ -107,22 +108,24 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
             />
           ) : null}
           {filters.userId ? <input type="hidden" name="userId" value={filters.userId} /> : null}
-          <label className="text-xs">
-            <span className="mb-1 block text-muted">Difficulty</span>
-            <select
-              name="difficulty"
-              defaultValue={filters.difficulty ?? ""}
-              aria-label="Filter by difficulty"
-              className="h-9 rounded-md border border-border bg-surface px-2"
-            >
-              <option value="">All</option>
-              {RAID_DIFFICULTIES.map((difficulty) => (
-                <option key={difficulty} value={difficulty}>
-                  {DIFFICULTY_LABELS[difficulty]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isLegacy ? (
+            <label className="text-xs">
+              <span className="mb-1 block text-muted">Requested difficulty</span>
+              <select
+                name="difficulty"
+                defaultValue={filters.difficulty ?? ""}
+                aria-label="Filter by requested difficulty"
+                className="h-9 rounded-md border border-border bg-surface px-2"
+              >
+                <option value="">All</option>
+                {RAID_DIFFICULTIES.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>
+                    {DIFFICULTY_LABELS[difficulty]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           {isLegacy ? (
             <label className="text-xs">
               <span className="mb-1 block text-muted">Role</span>
@@ -198,7 +201,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                       <th className="px-4 py-2 font-medium">User</th>
                       <th className="px-4 py-2 font-medium">Class</th>
                       <th className="px-4 py-2 font-medium">Role</th>
-                      <th className="px-4 py-2 font-medium">Difficulty</th>
+                      <th className="px-4 py-2 font-medium">Requested difficulty</th>
                       <th className="px-4 py-2 font-medium">Requested via</th>
                       <th className="px-4 py-2 font-medium">Requested at</th>
                       <th className="px-4 py-2 font-medium">Actions</th>
@@ -254,8 +257,8 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
           )
         ) : qualifications.length === 0 ? (
           <EmptyState
-            title="No matching qualifications."
-            description="Grant access after Discord review, or adjust filters."
+            title="No matching boosters."
+            description="Grant booster access after Discord review, or adjust filters."
           />
         ) : (
           <>
@@ -264,8 +267,7 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                 <thead className="text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
-                    <th className="px-4 py-2 font-medium">Difficulty</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">Booster</th>
                     <th className="px-4 py-2 font-medium">Granted by</th>
                     <th className="px-4 py-2 font-medium">Times</th>
                     <th className="px-4 py-2 font-medium">Actions</th>
@@ -275,9 +277,6 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
                   {qualifications.map((row) => (
                     <tr key={row.id} className="border-t border-border align-top">
                       <td className="px-4 py-3 font-medium">{row.userName}</td>
-                      <td className="px-4 py-3">
-                        <DifficultyBadge difficulty={row.difficulty} />
-                      </td>
                       <td className="px-4 py-3">
                         <AccessBadge status={row.status} />
                         {row.notes ? <p className="mt-1 max-w-48 text-xs text-muted">{row.notes}</p> : null}
@@ -303,8 +302,8 @@ export function BoosterAccessQueueView({ data }: { data: Page }) {
               {qualifications.map((row) => (
                 <li key={row.id} className="space-y-2 px-4 py-3 text-sm">
                   <div className="font-medium">{row.userName}</div>
-                  <div className="flex flex-wrap gap-2">
-                    <DifficultyBadge difficulty={row.difficulty} />
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted">Booster</span>
                     <AccessBadge status={row.status} />
                   </div>
                   <p className="text-xs text-muted">

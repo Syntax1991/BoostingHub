@@ -1,13 +1,11 @@
 import { z } from "zod";
-import { CHARACTER_ROLES, RAID_DIFFICULTIES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
 
 export const BOOSTER_ACCESS_REVIEW_REASON_MAX = 280;
 
+/** Self-service requests are disabled; the character is only used for the ownership check. */
 export const requestBoosterAccessSchema = z.object({
   characterId: entityIdSchema,
-  role: z.enum(CHARACTER_ROLES),
-  difficulty: z.enum(RAID_DIFFICULTIES),
 });
 
 const reviewReasonSchema = z
@@ -33,6 +31,5 @@ export const revokeBoosterAccessSchema = z.object({
 
 export const grantBoosterAccessSchema = z.object({
   userId: entityIdSchema,
-  difficulty: z.enum(RAID_DIFFICULTIES),
   notes: reviewReasonSchema,
 });

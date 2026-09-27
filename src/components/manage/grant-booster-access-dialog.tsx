@@ -4,8 +4,6 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { grantBoosterAccessAction } from "@/controllers/booster-access.actions";
 import { Button } from "@/components/ui/button";
-import { DIFFICULTY_LABELS } from "@/lib/labels";
-import { RAID_DIFFICULTIES, type RaidDifficulty } from "@/models/enums";
 import { BOOSTER_ACCESS_REVIEW_REASON_MAX } from "@/validators/booster-access";
 
 type GrantUser = {
@@ -34,7 +32,6 @@ export function GrantBoosterAccessDialog({
       ? defaultUserId
       : (users[0]?.id ?? "");
   const [userId, setUserId] = useState(initialUserId);
-  const [difficulty, setDifficulty] = useState<RaidDifficulty>("HEROIC");
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
@@ -47,7 +44,6 @@ export function GrantBoosterAccessDialog({
       setError(null);
       setNotes("");
       setUserId(initialUserId);
-      setDifficulty("HEROIC");
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
@@ -63,7 +59,6 @@ export function GrantBoosterAccessDialog({
     startTransition(async () => {
       const result = await grantBoosterAccessAction({
         userId,
-        difficulty,
         notes: notes.trim() || undefined,
       });
       if (!result.ok) {
@@ -100,8 +95,8 @@ export function GrantBoosterAccessDialog({
             Grant booster access
           </h2>
           <p className="text-xs text-muted">
-            Approves eligibility for the selected difficulty on the account. All valid roles for each
-            character class become available at that difficulty.
+            Approves the account as a booster for every raid difficulty. All valid roles for each
+            character class become available.
           </p>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">User</span>
@@ -117,21 +112,6 @@ export function GrantBoosterAccessDialog({
                 <option key={user.id} value={user.id}>
                   {user.name}
                   {user.discordUsername ? ` (@${user.discordUsername})` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted">Difficulty</span>
-            <select
-              value={difficulty}
-              onChange={(event) => setDifficulty(event.target.value as RaidDifficulty)}
-              aria-label="Difficulty"
-              className="h-9 w-full rounded-md border border-border bg-surface px-2"
-            >
-              {RAID_DIFFICULTIES.map((option) => (
-                <option key={option} value={option}>
-                  {DIFFICULTY_LABELS[option]}
                 </option>
               ))}
             </select>

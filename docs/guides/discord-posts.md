@@ -57,7 +57,7 @@ Unter **Characters**:
 2. Oder **Add Character** (Region / Realm / Name + Spec)
 3. **Account Access** und **Availability** prüfen
 
-**Booster-Zugang:** Für Booster-Signups brauchst du eine freigeschaltete Qualification (z. B. Heroic). Beantragung über Discord (**Apply via Discord**) — nicht in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
+**Booster-Zugang:** Für Booster-Signups brauchst du eine freigeschaltete Booster-Qualification auf deinem Account (gilt für alle Difficulties). Beantragung über Discord (**Apply via Discord**) — nicht in der App. Ohne Freigabe kannst du dich weiterhin als **Lootbuddy** anmelden.
 ```
 
 Anhänge: `bo-01-dashboard.png`, `bo-02-characters.png`

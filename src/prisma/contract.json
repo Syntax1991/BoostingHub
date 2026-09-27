@@ -1325,19 +1325,6 @@
                   "kind": "scalar"
                 }
               },
-              "difficulty": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                },
-                "valueSet": {
-                  "entityKind": "enum",
-                  "entityName": "RaidDifficulty",
-                  "namespaceId": "public",
-                  "plane": "domain"
-                }
-              },
               "grantedAt": {
                 "nullable": true,
                 "type": {
@@ -1459,9 +1446,6 @@
               "fields": {
                 "createdAt": {
                   "column": "createdAt"
-                },
-                "difficulty": {
-                  "column": "difficulty"
                 },
                 "grantedAt": {
                   "column": "grantedAt"
@@ -6044,8 +6028,8 @@
                   "namespace": "public"
                 }
               },
-              "boosterQualifications": {
-                "cardinality": "1:N",
+              "boosterQualification": {
+                "cardinality": "1:1",
                 "on": {
                   "localFields": [
                     "id"
@@ -7434,11 +7418,6 @@
             "booster_qualification": {
               "checks": [
                 {
-                  "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
-                  "name": "booster_qualification_difficulty_check_05ae26c2",
-                  "prefix": "booster_qualification_difficulty_check"
-                },
-                {
                   "expression": "\"status\" IN ('APPROVED', 'REVOKED')",
                   "name": "booster_qualification_status_check_c670181c",
                   "prefix": "booster_qualification_status_check"
@@ -7453,17 +7432,6 @@
                   },
                   "nativeType": "timestamptz",
                   "nullable": false
-                },
-                "difficulty": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false,
-                  "valueSet": {
-                    "entityKind": "valueSet",
-                    "entityName": "RaidDifficulty",
-                    "namespaceId": "public",
-                    "plane": "storage"
-                  }
                 },
                 "grantedAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -7573,14 +7541,6 @@
               "indexes": [
                 {
                   "columns": [
-                    "difficulty"
-                  ],
-                  "name": "booster_qualification_difficulty_idx_ab7b4a75",
-                  "prefix": "booster_qualification_difficulty_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
                     "grantedById"
                   ],
                   "name": "booster_qualification_grantedById_idx_416f9b2b",
@@ -7602,14 +7562,6 @@
                   "name": "booster_qualification_status_idx_e98638ab",
                   "prefix": "booster_qualification_status_idx",
                   "unique": false
-                },
-                {
-                  "columns": [
-                    "userId"
-                  ],
-                  "name": "booster_qualification_userId_idx_a489d58a",
-                  "prefix": "booster_qualification_userId_idx",
-                  "unique": false
                 }
               ],
               "primaryKey": {
@@ -7620,8 +7572,7 @@
               "uniques": [
                 {
                   "columns": [
-                    "userId",
-                    "difficulty"
+                    "userId"
                   ]
                 }
               ]
@@ -11914,7 +11865,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d79acc109f9c4760100a1e605dd78641f11076780b8850d5d682aad52eca8554"
+    "storageHash": "6f9b9e6221938aaf72c3b12d03680c371ec3178caa7a6e2cd296cb7b73e0ea74"
   },
   "execution": {
     "executionHash": "37ff76d384aeb1084eb778bdc9756e18538d2e8d4d31215962a2e9b13979925f",

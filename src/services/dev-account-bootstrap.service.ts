@@ -50,7 +50,7 @@ export async function bootstrapDevelopmentAccountOrThrow(input: DevAccountBootst
 /**
  * Development-only: after a Discord sign-in persists/updates its User row,
  * restores the ONE explicitly-configured account to ADMIN/ACTIVE with
- * APPROVED NORMAL/HEROIC/MYTHIC Booster qualifications. Wired as Better
+ * an APPROVED account-level Booster qualification. Wired as Better
  * Auth's `databaseHooks.session.create.after` (see auth.ts) — fires once per
  * sign-in, covering both a brand-new User (first Discord sign-in after a DB
  * reset) and an existing one whose privileges were wiped, without a separate

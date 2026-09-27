@@ -64,7 +64,8 @@ export type RosterCharacterSnapshot = {
   isActive: boolean;
   /** Informational WCL profile id — never a schedule or eligibility gate. */
   warcraftLogsId: string | null;
-  boosterQualifications: BoosterQualificationMatch[];
+  /** The owner's account-level booster qualification (null = never granted). */
+  boosterQualification: BoosterQualificationMatch | null;
   lockouts: Array<{
     raidId: string;
     difficulty: RaidDifficulty;
@@ -139,7 +140,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     isActive: asBoolean(row.isActive, true),
     warcraftLogsId: asStringOrNull(row.warcraftLogsId),
     // Hydrated from account-level BoosterQualification after signup load.
-    boosterQualifications: [],
+    boosterQualification: null,
     lockouts: lockouts.map((item) => {
       const record = item as Record<string, unknown>;
       return {
@@ -186,12 +187,9 @@ async function withAccountBoosterQualifications(signups: RosterSignupRow[]): Pro
   if (userIds.length === 0) return signups;
 
   const rows = await boosterQualificationRepository.listByUserIds(userIds);
-  const qualificationsByUser = new Map<string, BoosterQualificationMatch[]>();
-  for (const row of rows) {
-    const list = qualificationsByUser.get(row.userId) ?? [];
-    list.push({ difficulty: row.difficulty, status: row.status });
-    qualificationsByUser.set(row.userId, list);
-  }
+  const qualificationByUser = new Map<string, BoosterQualificationMatch>(
+    rows.map((row) => [row.userId, { status: row.status }]),
+  );
 
   return signups.map((signup) => {
     if (!signup.character) return signup;
@@ -199,7 +197,7 @@ async function withAccountBoosterQualifications(signups: RosterSignupRow[]): Pro
       ...signup,
       character: {
         ...signup.character,
-        boosterQualifications: qualificationsByUser.get(signup.userId) ?? [],
+        boosterQualification: qualificationByUser.get(signup.userId) ?? null,
       },
     };
   });

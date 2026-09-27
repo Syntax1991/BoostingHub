@@ -58,7 +58,7 @@ Wired as Better Auth's `databaseHooks.session.create.after` (see `src/auth/auth.
 On a match, it restores:
 
 - `accountRole = ADMIN`, `accountStatus = ACTIVE`
-- An `APPROVED` `BoosterQualification` row for `NORMAL`, `HEROIC`, and `MYTHIC` independently (exact per-difficulty match — the normal product rule that a difficulty never implies another is unchanged)
+- The account-level `BoosterQualification` as `APPROVED` (one row per User; booster qualification is not scoped by raid difficulty)
 
 It is idempotent: an already-correct field is left untouched, including timestamps (`updatedAt`, `grantedAt`, `notes` do not churn on every login), and it never writes an `ActivityEvent` — normal ADMIN grant/revoke through `/manage/booster-access` continues to log Activity exactly as before; this only seeds/restores one development account's own qualifications, with `grantedById = null` to correctly represent a system bootstrap rather than a human admin's action.
 

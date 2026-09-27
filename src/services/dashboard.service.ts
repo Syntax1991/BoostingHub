@@ -46,7 +46,7 @@ export const dashboardService = {
     const approvedCharacterIds = new Set(
       characters
         .filter((character) =>
-          boosterQualificationService.summarize(character.boosterQualifications).approvedCount > 0,
+          boosterQualificationService.isApprovedBooster(character.boosterQualification),
         )
         .map((character) => character.id),
     );

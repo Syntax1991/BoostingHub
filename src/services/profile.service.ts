@@ -7,9 +7,9 @@ import { strikeService } from "@/services/strike.service";
 
 export const profileService = {
   async getProfile(user: AuthenticatedUser) {
-    const [characters, qualifications, signups, strikes] = await Promise.all([
+    const [characters, qualification, signups, strikes] = await Promise.all([
       characterRepository.listByUserId(user.id),
-      boosterQualificationRepository.listByUserId(user.id),
+      boosterQualificationRepository.findByUserId(user.id),
       signupRepository.listByUserId(user.id),
       strikeService.listOwn(user),
     ]);
@@ -18,7 +18,7 @@ export const profileService = {
       user,
       characterCount: characters.length,
       activeCharacterCount: characters.filter((character) => character.isActive).length,
-      boosterAccess: boosterQualificationService.summarize(qualifications),
+      boosterAccess: boosterQualificationService.summarize(qualification),
       strikes,
       participation: {
         boosterSignups: signups.filter((signup) => signup.participationType === "BOOSTER").length,

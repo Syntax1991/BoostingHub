@@ -249,7 +249,7 @@ model User {
   accounts      Account[]
   characters     Character[]
   boosterAccess  BoosterAccess[] @relation("UserBoosterAccess")
-  boosterQualifications BoosterQualification[] @relation("UserBoosterQualification")
+  boosterQualification BoosterQualification? @relation("UserBoosterQualification")
   ledRuns        Run[]           @relation("RunRaidLead")
   signups        RunSignup[]
   ownedRunTemplates    RunTemplate[] @relation("RunTemplateRaidLead")
@@ -546,13 +546,13 @@ model BoosterAccess {
   @@map("booster_access")
 }
 
-/// Authoritative current Booster eligibility: User + Difficulty only.
-/// Exact-match: MYTHIC does not imply HEROIC or NORMAL. One row per pair.
+/// Authoritative current Booster eligibility: one account-level approval per User.
+/// Deliberately not scoped by RaidDifficulty — an APPROVED booster may boost
+/// Normal, Heroic and Mythic Runs. Run difficulty stays a Run concept.
 model BoosterQualification {
   id           String                       @id @default(uuid())
-  userId       String
+  userId       String                       @unique
   user         User                         @relation("UserBoosterQualification", fields: [userId], references: [id], onDelete: Cascade)
-  difficulty   RaidDifficulty
   status       BoosterQualificationStatus
   grantedAt    TimestamptzString?
   grantedById  String?
@@ -564,10 +564,7 @@ model BoosterQualification {
   createdAt    TimestamptzString @default(now())
   updatedAt    temporal.updatedAtString()
 
-  @@unique([userId, difficulty])
-  @@index([userId])
   @@index([status])
-  @@index([difficulty])
   @@map("booster_qualification")
 }
 

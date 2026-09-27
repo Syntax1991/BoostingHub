@@ -106,7 +106,7 @@ DEV_ACCOUNT_BOOTSTRAP_ENABLED="true"
 DEV_ADMIN_DISCORD_USER_ID="<your real Discord user ID>"
 ```
 
-The next time that Discord account signs in (new or returning session), it is automatically restored to `ADMIN`/`ACTIVE` with `APPROVED` `NORMAL`/`HEROIC`/`MYTHIC` Booster qualifications. Hard-disabled in production regardless of these env vars; a non-matching Discord user is never affected; no Activity is logged for it. See [authentication.md](authentication.md#development-account-bootstrap) for the full behavior.
+The next time that Discord account signs in (new or returning session), it is automatically restored to `ADMIN`/`ACTIVE` with an `APPROVED` account-level Booster qualification. Hard-disabled in production regardless of these env vars; a non-matching Discord user is never affected; no Activity is logged for it. See [authentication.md](authentication.md#development-account-bootstrap) for the full behavior.
 
 Leave `DEV_ACCOUNT_BOOTSTRAP_ENABLED="false"` unless you specifically need this, and never commit your real Discord user ID.
 

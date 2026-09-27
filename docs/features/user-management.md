@@ -4,7 +4,7 @@
 
 Give ADMIN operators a management hub for browsing accounts, inspecting characters and booster qualifications, and assigning platform account roles (`USER`, `RAID_LEAD`, `ADMIN`). Role changes are server-owned and audited.
 
-This feature does **not** turn BOOSTER into an account role. Booster eligibility is `BoosterQualification` (User + Difficulty).
+This feature does **not** turn BOOSTER into an account role. Booster eligibility is `BoosterQualification` (one account-level approval per User, not scoped by raid difficulty).
 
 ## Management Hub
 
@@ -72,13 +72,13 @@ On production run it as the app user from the release directory (`cd /var/www/bo
 
 Route: `/manage/users` (ADMIN only).
 
-Lists accounts with role, Discord identity hints, character counts, and difficulty-qualification tallies. Filters/sorts are applied in `userRepository.listAdminUsers` via `userManagementService.listUsers`.
+Lists accounts with role, Discord identity hints, character counts, and the account-level booster state (Approved / Revoked / None). Filters/sorts are applied in `userRepository.listAdminUsers` via `userManagementService.listUsers`.
 
 ## User Detail
 
 Route: `/manage/users/[userId]`.
 
-Shows identity, account role/status, characters, difficulty qualifications (with direct Grant access), disciplinary Strike history (Add/Revoke), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
+Shows identity, account role/status, characters, the account-level booster state (Grant when not approved, Revoke when approved), disciplinary Strike history (Add/Revoke), and recent audit events relevant to that user (including `ACCOUNT_ROLE_CHANGED` events authored by another admin that mention `targetUserId=`).
 
 Strikes are a separate concept from account role, qualifications, and audit — see [user-strikes.md](user-strikes.md).
 
@@ -119,18 +119,18 @@ See [booster-access-management.md](booster-access-management.md).
 | Concern | Store | Who mutates |
 | --- | --- | --- |
 | Platform permission | `User.accountRole` | ADMIN / OWNER via user management; OWNER only via the owner bootstrap |
-| Boost qualification | `BoosterQualification` (user + difficulty) | ADMIN via grant/revoke (and legacy approve bridge) |
+| Boost qualification | `BoosterQualification` (one per user) | ADMIN via grant/revoke (and legacy approve bridge) |
 
-A USER may hold Heroic/Mythic qualifications without becoming RAID_LEAD. Role changes do not create or revoke qualifications.
+A USER may be an approved booster without becoming RAID_LEAD. Role changes do not create or revoke qualifications.
 
 ## ADMIN Direct Grant
 
-After Discord review, ADMIN grants with `boosterQualificationService.grant({ userId, difficulty, notes? })`.
+After Discord review, ADMIN grants with `boosterQualificationService.grant({ userId, notes? })` — no difficulty.
 
-`/manage/booster-access` defaults to **Qualifications** (User + Difficulty). **Legacy Requests · N** lists only unresolved historical PENDING Class/Role applications. Approving a legacy row grants the matching difficulty qualification and resolves same-difficulty PENDING siblings.
+`/manage/booster-access` defaults to **Qualifications** (one state per User). **Legacy Requests · N** lists only unresolved historical PENDING Class/Role/Difficulty applications. Approving a legacy row approves the User's account-level qualification and resolves every PENDING request of that User (their recorded difficulty is kept as history).
 
 - Creates APPROVED when no qualification exists
-- Reactivates REVOKED on the same unique row
+- Reactivates REVOKED on the same per-user row
 - Duplicate APPROVED → already-approved error
 - Character / Class / Role are not grant fields
 - Does not require Character, specialization, or item level

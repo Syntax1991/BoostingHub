@@ -15,6 +15,7 @@ import {
   asNumber,
   mapAccountStatus,
   mapDifficulty,
+  mapQualificationStatus,
   mapRegion,
   mapUserRole,
   asString,
@@ -38,9 +39,10 @@ export type AdminUserListRow = {
   accountStatus: AccountStatus;
   createdAt: string;
   characterCount: number;
-  approvedAccessCount: number;
+  /** Account-level booster qualification state (NONE = never granted). */
+  boosterStatus: "APPROVED" | "REVOKED" | "NONE";
+  /** Unresolved legacy in-app requests (historical BoosterAccess). */
   pendingAccessCount: number;
-  revokedAccessCount: number;
 };
 
 export type AdminUserCharacterLockout = {
@@ -72,7 +74,6 @@ export type AdminUserCharacterSummary = {
 
 export type AdminUserAccessSummary = {
   id: string;
-  difficulty: string;
   status: string;
   notes: string | null;
   grantedAt: string | null;
@@ -432,32 +433,22 @@ export const userRepository = {
       characterCountByUser.set(userId, (characterCountByUser.get(userId) ?? 0) + 1);
     }
 
-    const accessByUser = new Map<
-      string,
-      { approved: number; pending: number; revoked: number }
-    >();
+    const boosterStatusByUser = new Map<string, "APPROVED" | "REVOKED">();
     for (const row of qualificationRows) {
       const record = row as Record<string, unknown>;
-      const userId = asString(record.userId);
-      const status = asString(record.status);
-      const current = accessByUser.get(userId) ?? { approved: 0, pending: 0, revoked: 0 };
-      if (status === "APPROVED") current.approved += 1;
-      if (status === "REVOKED") current.revoked += 1;
-      accessByUser.set(userId, current);
+      boosterStatusByUser.set(asString(record.userId), mapQualificationStatus(record.status));
     }
+    const pendingByUser = new Map<string, number>();
     for (const row of accessRows) {
       const record = row as Record<string, unknown>;
+      if (asString(record.status) !== "PENDING") continue;
       const userId = asString(record.userId);
-      const status = asString(record.status);
-      const current = accessByUser.get(userId) ?? { approved: 0, pending: 0, revoked: 0 };
-      if (status === "PENDING") current.pending += 1;
-      accessByUser.set(userId, current);
+      pendingByUser.set(userId, (pendingByUser.get(userId) ?? 0) + 1);
     }
 
     let rows: AdminUserListRow[] = users.map((user) => {
       const record = user as Record<string, unknown>;
       const id = asString(record.id);
-      const access = accessByUser.get(id) ?? { approved: 0, pending: 0, revoked: 0 };
       return {
         id,
         name: asString(record.name),
@@ -468,9 +459,8 @@ export const userRepository = {
         accountStatus: mapAccountStatus(record.accountStatus),
         createdAt: asString(record.createdAt),
         characterCount: characterCountByUser.get(id) ?? 0,
-        approvedAccessCount: access.approved,
-        pendingAccessCount: access.pending,
-        revokedAccessCount: access.revoked,
+        boosterStatus: boosterStatusByUser.get(id) ?? "NONE",
+        pendingAccessCount: pendingByUser.get(id) ?? 0,
       };
     });
 
@@ -481,10 +471,10 @@ export const userRepository = {
       rows = rows.filter((row) => matchesQuery(row, filters.query!));
     }
     if (filters.hasApprovedAccess === true) {
-      rows = rows.filter((row) => row.approvedAccessCount > 0);
+      rows = rows.filter((row) => row.boosterStatus === "APPROVED");
     }
     if (filters.hasApprovedAccess === false) {
-      rows = rows.filter((row) => row.approvedAccessCount === 0);
+      rows = rows.filter((row) => row.boosterStatus !== "APPROVED");
     }
 
     const sort = filters.sort ?? "name";
@@ -508,7 +498,8 @@ export const userRepository = {
   async findAdminUserDetail(userId: string): Promise<{
     user: AuthenticatedUser & { createdAt: string; updatedAt: string };
     characters: AdminUserCharacterSummary[];
-    access: AdminUserAccessSummary[];
+    /** The account-level booster qualification (null = never granted). */
+    boosterQualification: AdminUserAccessSummary | null;
     audit: AdminUserAuditEvent[];
   } | null> {
     const user = await orm.User.where({ id: userId }).first();
@@ -523,7 +514,7 @@ export const userRepository = {
       .include("lockouts", (lockout) => lockout.include("raid"))
       .orderBy((row) => row.name.asc())
       .all();
-    const access = await orm.BoosterQualification.where({ userId }).orderBy((row) => row.updatedAt.desc()).all();
+    const qualification = await orm.BoosterQualification.where({ userId }).first();
     const audit = await orm.ActivityEvent
       .where({ userId })
       .include("user")
@@ -569,16 +560,15 @@ export const userRepository = {
       };
     });
 
-    const accessSummaries: AdminUserAccessSummary[] = access.map((row) => {
-      const item = row as Record<string, unknown>;
-      return {
-        id: asString(item.id),
-        difficulty: asString(item.difficulty),
-        status: asString(item.status),
-        notes: asStringOrNull(item.notes),
-        grantedAt: asStringOrNull(item.grantedAt),
-      };
-    });
+    const qualificationRecord = qualification ? (qualification as Record<string, unknown>) : null;
+    const boosterQualification: AdminUserAccessSummary | null = qualificationRecord
+      ? {
+          id: asString(qualificationRecord.id),
+          status: asString(qualificationRecord.status),
+          notes: asStringOrNull(qualificationRecord.notes),
+          grantedAt: asStringOrNull(qualificationRecord.grantedAt),
+        }
+      : null;
 
     const targetMarker = `targetUserId=${userId}`;
     const auditMap = new Map<string, AdminUserAuditEvent>();
@@ -610,7 +600,7 @@ export const userRepository = {
         updatedAt: asString(record.updatedAt),
       },
       characters: characterSummaries,
-      access: accessSummaries,
+      boosterQualification,
       audit: auditEvents.slice(0, 40),
     };
   },

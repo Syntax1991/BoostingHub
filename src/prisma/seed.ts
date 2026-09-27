@@ -571,21 +571,16 @@ async function seed() {
     });
   }
 
-  // Collapse APPROVED legacy rows into authoritative User+Difficulty qualifications.
-  // mira has zero; aelira gets HEROIC+MYTHIC only (ADMIN does not auto-get all).
-  const approvedPairs = new Map<string, { userId: string; difficulty: "NORMAL" | "HEROIC" | "MYTHIC" }>();
+  // Collapse APPROVED legacy rows into one account-level qualification per User
+  // (not scoped by difficulty). mira has none (ADMIN does not auto-qualify).
+  const approvedUserIds = new Set<string>();
   for (const item of access) {
-    if (item.status !== "APPROVED") continue;
-    approvedPairs.set(`${item.userId}:${item.difficulty}`, {
-      userId: item.userId,
-      difficulty: item.difficulty,
-    });
+    if (item.status === "APPROVED") approvedUserIds.add(item.userId);
   }
-  for (const pair of approvedPairs.values()) {
+  for (const userId of approvedUserIds) {
     await orm.BoosterQualification.create({
       id: crypto.randomUUID(),
-      userId: pair.userId,
-      difficulty: pair.difficulty,
+      userId,
       status: "APPROVED",
       notes: "Seeded from approved legacy access.",
       grantedAt: SEED_NOW,
@@ -598,21 +593,18 @@ async function seed() {
   }
 
   for (const filler of FILLER_BOOSTERS) {
-    for (const difficulty of ["NORMAL", "HEROIC", "MYTHIC"] as const) {
-      await orm.BoosterQualification.create({
-        id: crypto.randomUUID(),
-        userId: filler.userId,
-        difficulty,
-        status: "APPROVED",
-        notes: "Seed filler booster — approved for composition padding.",
-        grantedAt: SEED_NOW,
-        grantedById: ids.users.aelira,
-        revokedAt: null,
-        revokedById: null,
-        createdAt: SEED_NOW,
-        updatedAt: SEED_NOW,
-      });
-    }
+    await orm.BoosterQualification.create({
+      id: crypto.randomUUID(),
+      userId: filler.userId,
+      status: "APPROVED",
+      notes: "Seed filler booster — approved for composition padding.",
+      grantedAt: SEED_NOW,
+      grantedById: ids.users.aelira,
+      revokedAt: null,
+      revokedById: null,
+      createdAt: SEED_NOW,
+      updatedAt: SEED_NOW,
+    });
   }
 
   await raidRepository.ensureReferenceRaids(SEED_NOW);

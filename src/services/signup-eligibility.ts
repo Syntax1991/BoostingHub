@@ -34,7 +34,8 @@ export type EligibilityCharacter = {
   isActive: boolean;
   /** Existing WCL character id when known — informational only for signup UI. */
   warcraftLogsId: string | null;
-  boosterQualifications: BoosterQualificationMatch[];
+  /** The owner's account-level booster qualification (null = never granted). */
+  boosterQualification: BoosterQualificationMatch | null;
   lockouts: EligibilityLockout[];
   /**
    * Non-null when this Character is already reserved — draft-selected into
@@ -71,14 +72,12 @@ export type EligibilityRun = {
 export type BoosterIneligibilityReason =
   | "INACTIVE"
   | "NO_BOOSTER_ACCESS"
-  | "DIFFICULTY_NOT_APPROVED"
   | "ALREADY_SELECTED_OTHER_RUN"
   | "CHARACTER_UNAVAILABLE";
 
 export const BOOSTER_INELIGIBILITY_MESSAGES: Record<BoosterIneligibilityReason, string> = {
   INACTIVE: "Character is inactive.",
   NO_BOOSTER_ACCESS: "No approved booster access.",
-  DIFFICULTY_NOT_APPROVED: "Not approved for this difficulty.",
   ALREADY_SELECTED_OTHER_RUN: "Already selected for another run.",
   CHARACTER_UNAVAILABLE: "Character is marked unavailable for this difficulty this reset.",
 };
@@ -146,13 +145,15 @@ function findContentSaves(
 }
 
 /**
- * Booster options require an APPROVED BoosterQualification for the run difficulty.
+ * Booster options require the owner's account-level BoosterQualification to be
+ * APPROVED. It is not scoped by difficulty: an approved booster qualifies for
+ * Normal, Heroic and Mythic Runs alike.
  * A Character's specialization determines only the DEFAULT signup role — the
  * User may choose any role the Character's class can actually perform
  * (`rolesForClass`), never restricted to specialization alone. A missing or
  * unrecognized specialization does not block an otherwise-eligible Character;
  * it just means no default is offered (`defaultRole: null`) and the User must
- * choose explicitly. Heroic approval never implies Mythic. Raid save/lockout
+ * choose explicitly. Raid save/lockout
  * status is informational only (`contentSaves`) — a saved Character remains fully
  * eligible; the Raid Lead decides operationally whether to use it.
  */
@@ -208,16 +209,8 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    const approvedForRun = boosterQualificationService.isApprovedFor(
-      character.boosterQualifications,
-      run.difficulty,
-    );
-
-    if (!approvedForRun) {
-      const approvedOtherDifficulty = character.boosterQualifications.some(
-        (record) => record.status === "APPROVED" && record.difficulty !== run.difficulty,
-      );
-      pushIneligible(approvedOtherDifficulty ? "DIFFICULTY_NOT_APPROVED" : "NO_BOOSTER_ACCESS");
+    if (!boosterQualificationService.isApprovedBooster(character.boosterQualification)) {
+      pushIneligible("NO_BOOSTER_ACCESS");
       continue;
     }
 
