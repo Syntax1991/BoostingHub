@@ -60,6 +60,22 @@
       "model": "RunAttendance",
       "namespace": "public"
     },
+    "run_consumable_audit": {
+      "model": "RunConsumableAudit",
+      "namespace": "public"
+    },
+    "run_consumable_audit_fight": {
+      "model": "RunConsumableAuditFight",
+      "namespace": "public"
+    },
+    "run_consumable_audit_observation": {
+      "model": "RunConsumableAuditObservation",
+      "namespace": "public"
+    },
+    "run_consumable_audit_player": {
+      "model": "RunConsumableAuditPlayer",
+      "namespace": "public"
+    },
     "run_discord_announcement": {
       "model": "RunDiscordAnnouncement",
       "namespace": "public"
@@ -108,6 +124,14 @@
       "model": "RunTemplate",
       "namespace": "public"
     },
+    "run_warcraft_logs_fight": {
+      "model": "RunWarcraftLogsFight",
+      "namespace": "public"
+    },
+    "run_warcraft_logs_report": {
+      "model": "RunWarcraftLogsReport",
+      "namespace": "public"
+    },
     "session": {
       "model": "Session",
       "namespace": "public"
@@ -126,6 +150,10 @@
     },
     "verification": {
       "model": "Verification",
+      "namespace": "public"
+    },
+    "warcraft_logs_report": {
+      "model": "WarcraftLogsReport",
       "namespace": "public"
     }
   },
@@ -268,6 +296,69 @@
               {
                 "name": "INTERNAL",
                 "value": "INTERNAL"
+              }
+            ]
+          },
+          "ConsumableAuditFailure": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "NOT_CONFIGURED",
+                "value": "NOT_CONFIGURED"
+              },
+              {
+                "name": "REPORT_NOT_FOUND",
+                "value": "REPORT_NOT_FOUND"
+              },
+              {
+                "name": "NO_RELEVANT_FIGHTS",
+                "value": "NO_RELEVANT_FIGHTS"
+              },
+              {
+                "name": "WCL_UNAVAILABLE",
+                "value": "WCL_UNAVAILABLE"
+              }
+            ]
+          },
+          "ConsumableAuditMatch": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "MATCHED",
+                "value": "MATCHED"
+              },
+              {
+                "name": "NOT_IN_LOG",
+                "value": "NOT_IN_LOG"
+              },
+              {
+                "name": "NO_CHARACTER_IDENTITY",
+                "value": "NO_CHARACTER_IDENTITY"
+              }
+            ]
+          },
+          "ConsumableObservationKind": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "COMBATANT",
+                "value": "COMBATANT"
+              },
+              {
+                "name": "PARTICIPANT",
+                "value": "PARTICIPANT"
+              },
+              {
+                "name": "AURA",
+                "value": "AURA"
+              },
+              {
+                "name": "CAST",
+                "value": "CAST"
+              },
+              {
+                "name": "DEATH",
+                "value": "DEATH"
               }
             ]
           },
@@ -518,6 +609,49 @@
               {
                 "name": "REVOKED",
                 "value": "REVOKED"
+              }
+            ]
+          },
+          "WarcraftLogsFightDecision": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "AUTO",
+                "value": "AUTO"
+              },
+              {
+                "name": "MANUAL",
+                "value": "MANUAL"
+              }
+            ]
+          },
+          "WarcraftLogsFightStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "ASSIGNED",
+                "value": "ASSIGNED"
+              },
+              {
+                "name": "NEEDS_REVIEW",
+                "value": "NEEDS_REVIEW"
+              },
+              {
+                "name": "IGNORED",
+                "value": "IGNORED"
+              }
+            ]
+          },
+          "WarcraftLogsReportSource": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "MANUAL",
+                "value": "MANUAL"
+              },
+              {
+                "name": "DISCORD_BOT",
+                "value": "DISCORD_BOT"
               }
             ]
           },
@@ -2380,6 +2514,13 @@
                   "kind": "scalar"
                 }
               },
+              "completedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -2542,6 +2683,21 @@
                   "namespace": "public"
                 }
               },
+              "consumableAudit": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAudit",
+                  "namespace": "public"
+                }
+              },
               "contents": {
                 "cardinality": "1:N",
                 "on": {
@@ -2691,6 +2847,36 @@
                   "model": "Strike",
                   "namespace": "public"
                 }
+              },
+              "warcraftLogsFights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsFight",
+                  "namespace": "public"
+                }
+              },
+              "warcraftLogsReports": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsReport",
+                  "namespace": "public"
+                }
               }
             },
             "storage": {
@@ -2700,6 +2886,9 @@
                 },
                 "archivedById": {
                   "column": "archivedById"
+                },
+                "completedAt": {
+                  "column": "completedAt"
                 },
                 "createdAt": {
                   "column": "createdAt"
@@ -2827,6 +3016,21 @@
               }
             },
             "relations": {
+              "consumableAuditPlayers": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "attendanceId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditPlayer",
+                  "namespace": "public"
+                }
+              },
               "markedBy": {
                 "cardinality": "N:1",
                 "on": {
@@ -2920,6 +3124,699 @@
               },
               "namespaceId": "public",
               "table": "run_attendance"
+            }
+          },
+          "RunConsumableAudit": {
+            "fields": {
+              "analyzedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "analyzedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "autoAnalyzed": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "autoAttempts": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastAttemptAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastFailure": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ConsumableAuditFailure",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "analyzedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "analyzedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "fights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "auditId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditFight",
+                  "namespace": "public"
+                }
+              },
+              "players": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "auditId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditPlayer",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "analyzedAt": {
+                  "column": "analyzedAt"
+                },
+                "analyzedById": {
+                  "column": "analyzedById"
+                },
+                "autoAnalyzed": {
+                  "column": "autoAnalyzed"
+                },
+                "autoAttempts": {
+                  "column": "autoAttempts"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastAttemptAt": {
+                  "column": "lastAttemptAt"
+                },
+                "lastFailure": {
+                  "column": "lastFailure"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_consumable_audit"
+            }
+          },
+          "RunConsumableAuditFight": {
+            "fields": {
+              "auditId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "difficulty": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "encounterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "encounterName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "endMs": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "healthstoneUseSeen": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "kill": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidContentId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reportCode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startMs": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "warlockPresent": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "wclFightId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "audit": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "auditId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAudit",
+                  "namespace": "public"
+                }
+              },
+              "observations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "fightId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditObservation",
+                  "namespace": "public"
+                }
+              },
+              "raidContent": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidContentId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRaidContent",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "auditId": {
+                  "column": "auditId"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "encounterId": {
+                  "column": "encounterId"
+                },
+                "encounterName": {
+                  "column": "encounterName"
+                },
+                "endMs": {
+                  "column": "endMs"
+                },
+                "healthstoneUseSeen": {
+                  "column": "healthstoneUseSeen"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "kill": {
+                  "column": "kill"
+                },
+                "raidContentId": {
+                  "column": "raidContentId"
+                },
+                "reportCode": {
+                  "column": "reportCode"
+                },
+                "startMs": {
+                  "column": "startMs"
+                },
+                "warlockPresent": {
+                  "column": "warlockPresent"
+                },
+                "wclFightId": {
+                  "column": "wclFightId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_consumable_audit_fight"
+            }
+          },
+          "RunConsumableAuditObservation": {
+            "fields": {
+              "atMs": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "category": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "fightId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "kind": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ConsumableObservationKind",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "playerId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "spellId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "fight": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "fightId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditFight",
+                  "namespace": "public"
+                }
+              },
+              "player": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "playerId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditPlayer",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "atMs": {
+                  "column": "atMs"
+                },
+                "category": {
+                  "column": "category"
+                },
+                "fightId": {
+                  "column": "fightId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "kind": {
+                  "column": "kind"
+                },
+                "playerId": {
+                  "column": "playerId"
+                },
+                "spellId": {
+                  "column": "spellId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_consumable_audit_observation"
+            }
+          },
+          "RunConsumableAuditPlayer": {
+            "fields": {
+              "attendanceId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "auditId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "characterName": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "characterRealm": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "displayName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "externalBoosterId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "matchStatus": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ConsumableAuditMatch",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "role": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CharacterRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "sortOrder": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "wclActorId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "wowClass": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowClass",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              }
+            },
+            "relations": {
+              "attendance": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "attendanceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
+              "audit": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "auditId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAudit",
+                  "namespace": "public"
+                }
+              },
+              "externalBooster": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "externalBoosterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunExternalBooster",
+                  "namespace": "public"
+                }
+              },
+              "observations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "playerId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditObservation",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "attendanceId": {
+                  "column": "attendanceId"
+                },
+                "auditId": {
+                  "column": "auditId"
+                },
+                "characterName": {
+                  "column": "characterName"
+                },
+                "characterRealm": {
+                  "column": "characterRealm"
+                },
+                "displayName": {
+                  "column": "displayName"
+                },
+                "externalBoosterId": {
+                  "column": "externalBoosterId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "matchStatus": {
+                  "column": "matchStatus"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "sortOrder": {
+                  "column": "sortOrder"
+                },
+                "wclActorId": {
+                  "column": "wclActorId"
+                },
+                "wowClass": {
+                  "column": "wowClass"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_consumable_audit_player"
             }
           },
           "RunDiscordAnnouncement": {
@@ -3286,6 +4183,13 @@
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
+              },
+              "warcraftLogsScanCursor": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {
@@ -3384,6 +4288,9 @@
                 },
                 "voiceChannelId": {
                   "column": "voiceChannelId"
+                },
+                "warcraftLogsScanCursor": {
+                  "column": "warcraftLogsScanCursor"
                 }
               },
               "namespaceId": "public",
@@ -3468,6 +4375,21 @@
               }
             },
             "relations": {
+              "consumableAuditPlayers": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "externalBoosterId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditPlayer",
+                  "namespace": "public"
+                }
+              },
               "roster": {
                 "cardinality": "N:1",
                 "on": {
@@ -3887,6 +4809,21 @@
               }
             },
             "relations": {
+              "consumableAuditFights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidContentId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditFight",
+                  "namespace": "public"
+                }
+              },
               "raid": {
                 "cardinality": "N:1",
                 "on": {
@@ -3914,6 +4851,21 @@
                 },
                 "to": {
                   "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "warcraftLogsFights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidContentId"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsFight",
                   "namespace": "public"
                 }
               }
@@ -5286,6 +6238,503 @@
               "table": "run_template"
             }
           },
+          "RunWarcraftLogsFight": {
+            "fields": {
+              "associationId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "decidedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "decision": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WarcraftLogsFightDecision",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "difficulty": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "encounterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "encounterName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "endAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "endMs": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "kill": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidContentId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reasons": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reportId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "rosterMatched": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "rosterSize": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "startMs": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WarcraftLogsFightStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "wclFightId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "association": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "associationId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsReport",
+                  "namespace": "public"
+                }
+              },
+              "decidedBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "decidedById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "raidContent": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidContentId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunRaidContent",
+                  "namespace": "public"
+                }
+              },
+              "report": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "reportId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "WarcraftLogsReport",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "associationId": {
+                  "column": "associationId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "decidedById": {
+                  "column": "decidedById"
+                },
+                "decision": {
+                  "column": "decision"
+                },
+                "difficulty": {
+                  "column": "difficulty"
+                },
+                "encounterId": {
+                  "column": "encounterId"
+                },
+                "encounterName": {
+                  "column": "encounterName"
+                },
+                "endAt": {
+                  "column": "endAt"
+                },
+                "endMs": {
+                  "column": "endMs"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "kill": {
+                  "column": "kill"
+                },
+                "raidContentId": {
+                  "column": "raidContentId"
+                },
+                "reasons": {
+                  "column": "reasons"
+                },
+                "reportId": {
+                  "column": "reportId"
+                },
+                "rosterMatched": {
+                  "column": "rosterMatched"
+                },
+                "rosterSize": {
+                  "column": "rosterSize"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "startAt": {
+                  "column": "startAt"
+                },
+                "startMs": {
+                  "column": "startMs"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "wclFightId": {
+                  "column": "wclFightId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_warcraft_logs_fight"
+            }
+          },
+          "RunWarcraftLogsReport": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordAuthorId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "discordMessageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastScannedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "reportId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "source": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WarcraftLogsReportSource",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "createdBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "createdById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "fights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "associationId"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsFight",
+                  "namespace": "public"
+                }
+              },
+              "report": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "reportId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "WarcraftLogsReport",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdById": {
+                  "column": "createdById"
+                },
+                "discordAuthorId": {
+                  "column": "discordAuthorId"
+                },
+                "discordMessageId": {
+                  "column": "discordMessageId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastScannedAt": {
+                  "column": "lastScannedAt"
+                },
+                "reportId": {
+                  "column": "reportId"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "source": {
+                  "column": "source"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_warcraft_logs_report"
+            }
+          },
           "Session": {
             "fields": {
               "createdAt": {
@@ -5812,6 +7261,21 @@
                   "namespace": "public"
                 }
               },
+              "analyzedConsumableAudits": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "analyzedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAudit",
+                  "namespace": "public"
+                }
+              },
               "approvedAccess": {
                 "cardinality": "1:N",
                 "on": {
@@ -5824,6 +7288,21 @@
                 },
                 "to": {
                   "model": "BoosterAccess",
+                  "namespace": "public"
+                }
+              },
+              "attachedWarcraftLogsReports": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "createdById"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsReport",
                   "namespace": "public"
                 }
               },
@@ -5914,6 +7393,21 @@
                 },
                 "to": {
                   "model": "Strike",
+                  "namespace": "public"
+                }
+              },
+              "decidedWarcraftLogsFights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "decidedById"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsFight",
                   "namespace": "public"
                 }
               },
@@ -6553,6 +8047,148 @@
               },
               "namespaceId": "public",
               "table": "verification"
+            }
+          },
+          "WarcraftLogsReport": {
+            "fields": {
+              "code": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "endAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "fetchedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "metadataJson": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "regionSlug": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "title": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "fights": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "reportId"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsFight",
+                  "namespace": "public"
+                }
+              },
+              "runs": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "reportId"
+                  ]
+                },
+                "to": {
+                  "model": "RunWarcraftLogsReport",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "code": {
+                  "column": "code"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "endAt": {
+                  "column": "endAt"
+                },
+                "fetchedAt": {
+                  "column": "fetchedAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "metadataJson": {
+                  "column": "metadataJson"
+                },
+                "regionSlug": {
+                  "column": "regionSlug"
+                },
+                "startAt": {
+                  "column": "startAt"
+                },
+                "title": {
+                  "column": "title"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "warcraft_logs_report"
             }
           }
         }
@@ -8021,6 +9657,11 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "completedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -8382,6 +10023,576 @@
                 }
               ]
             },
+            "run_consumable_audit": {
+              "checks": [
+                {
+                  "expression": "\"lastFailure\" IN ('NOT_CONFIGURED', 'REPORT_NOT_FOUND', 'NO_RELEVANT_FIGHTS', 'WCL_UNAVAILABLE')",
+                  "name": "run_consumable_audit_lastFailure_check_314da778",
+                  "prefix": "run_consumable_audit_lastFailure_check"
+                }
+              ],
+              "columns": {
+                "analyzedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "analyzedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "autoAnalyzed": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "autoAttempts": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "lastAttemptAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "lastFailure": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ConsumableAuditFailure",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "analyzedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "analyzedById"
+                  ],
+                  "name": "run_consumable_audit_analyzedById_idx_5971943a",
+                  "prefix": "run_consumable_audit_analyzedById_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId"
+                  ]
+                }
+              ]
+            },
+            "run_consumable_audit_fight": {
+              "columns": {
+                "auditId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "difficulty": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "encounterId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "encounterName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "endMs": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "healthstoneUseSeen": {
+                  "codecId": "pg/bool@1",
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "kill": {
+                  "codecId": "pg/bool@1",
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "raidContentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "reportCode": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startMs": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "warlockPresent": {
+                  "codecId": "pg/bool@1",
+                  "nativeType": "bool",
+                  "nullable": true
+                },
+                "wclFightId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "auditId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "raidContentId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_raid_content"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "auditId"
+                  ],
+                  "name": "run_consumable_audit_fight_auditId_idx_424ad2e6",
+                  "prefix": "run_consumable_audit_fight_auditId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidContentId"
+                  ],
+                  "name": "run_consumable_audit_fight_raidContentId_idx_ecf49528",
+                  "prefix": "run_consumable_audit_fight_raidContentId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "auditId",
+                    "reportCode",
+                    "wclFightId"
+                  ]
+                }
+              ]
+            },
+            "run_consumable_audit_observation": {
+              "checks": [
+                {
+                  "expression": "\"kind\" IN ('COMBATANT', 'PARTICIPANT', 'AURA', 'CAST', 'DEATH')",
+                  "name": "run_consumable_audit_observation_kind_check_3b54a688",
+                  "prefix": "run_consumable_audit_observation_kind_check"
+                }
+              ],
+              "columns": {
+                "atMs": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "category": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "fightId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "kind": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ConsumableObservationKind",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "playerId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "spellId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "playerId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_observation"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_player"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "fightId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_observation"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_fight"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "fightId"
+                  ],
+                  "name": "run_consumable_audit_observation_fightId_idx_16bc93bc",
+                  "prefix": "run_consumable_audit_observation_fightId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "playerId"
+                  ],
+                  "name": "run_consumable_audit_observation_playerId_idx_710cf1aa",
+                  "prefix": "run_consumable_audit_observation_playerId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "run_consumable_audit_player": {
+              "checks": [
+                {
+                  "expression": "\"matchStatus\" IN ('MATCHED', 'NOT_IN_LOG', 'NO_CHARACTER_IDENTITY')",
+                  "name": "run_consumable_audit_player_matchStatus_check_696e4faa",
+                  "prefix": "run_consumable_audit_player_matchStatus_check"
+                },
+                {
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
+                  "name": "run_consumable_audit_player_role_check_b1616ae6",
+                  "prefix": "run_consumable_audit_player_role_check"
+                },
+                {
+                  "expression": "\"wowClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR')",
+                  "name": "run_consumable_audit_player_wowClass_check_8876c2a5",
+                  "prefix": "run_consumable_audit_player_wowClass_check"
+                }
+              ],
+              "columns": {
+                "attendanceId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "auditId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "characterName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "characterRealm": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "displayName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "externalBoosterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "matchStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ConsumableAuditMatch",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CharacterRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "sortOrder": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "wclActorId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "wowClass": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowClass",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "auditId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_player"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "attendanceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_player"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_attendance"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "externalBoosterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_player"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_external_booster"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "attendanceId"
+                  ],
+                  "name": "run_consumable_audit_player_attendanceId_idx_b259ff3f",
+                  "prefix": "run_consumable_audit_player_attendanceId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "auditId"
+                  ],
+                  "name": "run_consumable_audit_player_auditId_idx_424ad2e6",
+                  "prefix": "run_consumable_audit_player_auditId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "externalBoosterId"
+                  ],
+                  "name": "run_consumable_audit_player_externalBoosterId_idx_7e719f2c",
+                  "prefix": "run_consumable_audit_player_externalBoosterId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "run_discord_announcement": {
               "checks": [
                 {
@@ -8692,6 +10903,11 @@
                   "nullable": false
                 },
                 "voiceChannelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "warcraftLogsScanCursor": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
@@ -10484,6 +12700,468 @@
               },
               "uniques": []
             },
+            "run_warcraft_logs_fight": {
+              "checks": [
+                {
+                  "expression": "\"decision\" IN ('AUTO', 'MANUAL')",
+                  "name": "run_warcraft_logs_fight_decision_check_74dec442",
+                  "prefix": "run_warcraft_logs_fight_decision_check"
+                },
+                {
+                  "expression": "\"status\" IN ('ASSIGNED', 'NEEDS_REVIEW', 'IGNORED')",
+                  "name": "run_warcraft_logs_fight_status_check_5ab4ac22",
+                  "prefix": "run_warcraft_logs_fight_status_check"
+                }
+              ],
+              "columns": {
+                "associationId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "decidedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "decision": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WarcraftLogsFightDecision",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "difficulty": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "encounterId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "encounterName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "endAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "endMs": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "kill": {
+                  "codecId": "pg/bool@1",
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "raidContentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "reasons": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "reportId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "rosterMatched": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "rosterSize": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "startMs": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WarcraftLogsFightStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "wclFightId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "associationId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_report"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "reportId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "warcraft_logs_report"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "raidContentId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_raid_content"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "decidedById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_fight"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "associationId"
+                  ],
+                  "name": "run_warcraft_logs_fight_associationId_idx_54f3505c",
+                  "prefix": "run_warcraft_logs_fight_associationId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "decidedById"
+                  ],
+                  "name": "run_warcraft_logs_fight_decidedById_idx_8194d55f",
+                  "prefix": "run_warcraft_logs_fight_decidedById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidContentId"
+                  ],
+                  "name": "run_warcraft_logs_fight_raidContentId_idx_ecf49528",
+                  "prefix": "run_warcraft_logs_fight_raidContentId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "reportId"
+                  ],
+                  "name": "run_warcraft_logs_fight_reportId_idx_d163019e",
+                  "prefix": "run_warcraft_logs_fight_reportId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "run_warcraft_logs_fight_runId_idx_a6016437",
+                  "prefix": "run_warcraft_logs_fight_runId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "reportId",
+                    "wclFightId"
+                  ],
+                  "name": "run_wcl_fight_assigned_once_0a75a9c0",
+                  "prefix": "run_wcl_fight_assigned_once",
+                  "unique": true,
+                  "where": "(\"status\" = 'ASSIGNED'::text)"
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId",
+                    "reportId",
+                    "wclFightId"
+                  ]
+                }
+              ]
+            },
+            "run_warcraft_logs_report": {
+              "checks": [
+                {
+                  "expression": "\"source\" IN ('MANUAL', 'DISCORD_BOT')",
+                  "name": "run_warcraft_logs_report_source_check_fe9f0840",
+                  "prefix": "run_warcraft_logs_report_source_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "discordAuthorId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "discordMessageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "lastScannedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "reportId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "source": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "MANUAL"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WarcraftLogsReportSource",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_report"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "reportId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_report"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "warcraft_logs_report"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "createdById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_warcraft_logs_report"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "createdById"
+                  ],
+                  "name": "run_warcraft_logs_report_createdById_idx_8bf640ed",
+                  "prefix": "run_warcraft_logs_report_createdById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "reportId"
+                  ],
+                  "name": "run_warcraft_logs_report_reportId_idx_d163019e",
+                  "prefix": "run_warcraft_logs_report_reportId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "run_warcraft_logs_report_runId_idx_a6016437",
+                  "prefix": "run_warcraft_logs_report_runId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId",
+                    "reportId"
+                  ]
+                }
+              ]
+            },
             "session": {
               "columns": {
                 "createdAt": {
@@ -11318,6 +13996,78 @@
                 ]
               },
               "uniques": []
+            },
+            "warcraft_logs_report": {
+              "columns": {
+                "code": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "endAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "fetchedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "metadataJson": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "regionSlug": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "startAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "title": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "code"
+                  ]
+                }
+              ]
             }
           },
           "valueSet": {
@@ -11376,6 +14126,33 @@
                 "UPSTREAM_UNAVAILABLE",
                 "AUTH_OR_CONFIG",
                 "INTERNAL"
+              ]
+            },
+            "ConsumableAuditFailure": {
+              "kind": "valueSet",
+              "values": [
+                "NOT_CONFIGURED",
+                "REPORT_NOT_FOUND",
+                "NO_RELEVANT_FIGHTS",
+                "WCL_UNAVAILABLE"
+              ]
+            },
+            "ConsumableAuditMatch": {
+              "kind": "valueSet",
+              "values": [
+                "MATCHED",
+                "NOT_IN_LOG",
+                "NO_CHARACTER_IDENTITY"
+              ]
+            },
+            "ConsumableObservationKind": {
+              "kind": "valueSet",
+              "values": [
+                "COMBATANT",
+                "PARTICIPANT",
+                "AURA",
+                "CAST",
+                "DEATH"
               ]
             },
             "DiscordDeliveryStatus": {
@@ -11493,6 +14270,28 @@
                 "REVOKED"
               ]
             },
+            "WarcraftLogsFightDecision": {
+              "kind": "valueSet",
+              "values": [
+                "AUTO",
+                "MANUAL"
+              ]
+            },
+            "WarcraftLogsFightStatus": {
+              "kind": "valueSet",
+              "values": [
+                "ASSIGNED",
+                "NEEDS_REVIEW",
+                "IGNORED"
+              ]
+            },
+            "WarcraftLogsReportSource": {
+              "kind": "valueSet",
+              "values": [
+                "MANUAL",
+                "DISCORD_BOT"
+              ]
+            },
             "WowClass": {
               "kind": "valueSet",
               "values": [
@@ -11524,10 +14323,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e1ac07b6a810888d26608cd1f136488065c3f2f75ba486dc7385fb932159ca95"
+    "storageHash": "22c611f573d8594a7107a4a231cbd5bdbc95c4a616eb7257e605b1fa1c067a26"
   },
   "execution": {
-    "executionHash": "798507c527f03e7e4b4f176c035bb6200b95779e0cef2a336b9c15c654ef757c",
+    "executionHash": "52b548fdbad6fde2903d8abf8fb3c6573b571aa93d27f14bc7b2412a948e29cf",
     "mutations": {
       "defaults": [
         {
@@ -11857,6 +14656,65 @@
           "ref": {
             "column": "id",
             "namespace": "public",
+            "table": "run_consumable_audit"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_consumable_audit"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_consumable_audit_fight"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_consumable_audit_observation"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_consumable_audit_player"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
             "table": "run_discord_announcement"
           }
         },
@@ -12139,6 +14997,58 @@
           "ref": {
             "column": "id",
             "namespace": "public",
+            "table": "run_warcraft_logs_fight"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_warcraft_logs_fight"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_warcraft_logs_report"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "run_warcraft_logs_report"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
             "table": "session"
           }
         },
@@ -12259,6 +15169,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "verification"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "warcraft_logs_report"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "warcraft_logs_report"
           }
         }
       ]

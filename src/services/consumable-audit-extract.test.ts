@@ -1,0 +1,235 @@
+import { describe, expect, it } from "vitest";
+import type {
+  WarcraftLogsConsumableEvents,
+  WarcraftLogsReportMetadata,
+} from "@/integrations/warcraft-logs/warcraft-logs-api-client";
+import {
+  CONSUMABLE_PRE_PULL_WINDOW_MS,
+  attributeCastsToFights,
+  extractConsumableAudit,
+  matchParticipantActors,
+  realmKey,
+  mergeExtractedAudits,
+  type ConsumableAuditParticipant,
+} from "@/services/consumable-audit-extract";
+
+const ULATEK = 3492; // Venomous Abyss
+const NYMRISSA = 3379; // Tidebound Grotto
+
+function report(overrides: Partial<WarcraftLogsReportMetadata> = {}): WarcraftLogsReportMetadata {
+  return {
+    code: "AbCdEfGhIjKlMnOp",
+    title: "Heroic VA",
+    startTime: 1_790_000_000_000,
+    endTime: 1_790_010_000_000,
+    regionSlug: "EU",
+    fights: [
+      { id: 1, encounterId: NYMRISSA, name: "Nymrissa Wavecaller", startTime: 10_000, endTime: 300_000, kill: true, difficulty: 4, friendlyPlayers: [1, 2, 3] },
+      { id: 4, encounterId: ULATEK, name: "Ula'tek", startTime: 400_000, endTime: 700_000, kill: false, difficulty: 4, friendlyPlayers: [1, 2, 3] },
+      { id: 5, encounterId: ULATEK, name: "Ula'tek", startTime: 800_000, endTime: 1_200_000, kill: true, difficulty: 4, friendlyPlayers: [1, 2] },
+    ],
+    actors: [
+      { id: 1, name: "Synlight", server: "Blackhand", subType: "Priest" },
+      { id: 2, name: "Synblast", server: "Twisting Nether", subType: "Mage" },
+      { id: 3, name: "Lockie", server: "Blackhand", subType: "Warlock" },
+    ],
+    rankedCharacters: [],
+    ...overrides,
+  };
+}
+
+function attended(
+  name: string,
+  realm: string,
+  extra: Partial<Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>> = {},
+): ConsumableAuditParticipant {
+  return {
+    source: "ATTENDANCE",
+    attendanceId: `att-${name}`,
+    displayName: `${name} user`,
+    characterName: name,
+    characterRealm: realm,
+    characterRegion: "EU",
+    warcraftLogsId: null,
+    wowClass: "PRIEST",
+    role: "HEALER",
+    ...extra,
+  };
+}
+
+/** The Run's ASSIGNED fights (fight → Run association happens before extraction). */
+const assignedFights = report().fights.map((fight) => ({
+  ...fight,
+  raidContentId: fight.encounterId === NYMRISSA ? "content-tide" : "content-va",
+}));
+
+describe("matchParticipantActors", () => {
+  it("matches a known actor by name + realm, case/space/accent-insensitive", () => {
+    expect(matchParticipantActors(attended("SYNLIGHT", "blackhand"), report())).toEqual({
+      matchStatus: "MATCHED",
+      actorIds: [1],
+    });
+    expect(matchParticipantActors(attended("Synblast", "twisting-nether"), report())).toEqual({
+      matchStatus: "MATCHED",
+      actorIds: [2],
+    });
+    expect(realmKey("Aggra (Português)")).toBe(realmKey("aggra-portugues"));
+  });
+
+  it("never matches by name alone — same name on another realm is not in the log", () => {
+    expect(matchParticipantActors(attended("Synlight", "Frostmourne"), report()).matchStatus).toBe("NOT_IN_LOG");
+  });
+
+  it("reports a missing actor as NOT_IN_LOG", () => {
+    expect(matchParticipantActors(attended("Nobody", "Blackhand"), report())).toEqual({
+      matchStatus: "NOT_IN_LOG",
+      actorIds: [],
+    });
+  });
+
+  it("rejects a character from another region", () => {
+    expect(
+      matchParticipantActors(attended("Synlight", "Blackhand", { characterRegion: "US" }), report()).matchStatus,
+    ).toBe("NOT_IN_LOG");
+  });
+
+  it("prefers the stored warcraftLogsId via ranked characters (survives renames)", () => {
+    const renamed = attended("OldName", "Blackhand", { warcraftLogsId: "555" });
+    const withRanked = report({
+      rankedCharacters: [{ id: "555", canonicalId: "555", name: "Synlight", serverSlug: "blackhand" }],
+    });
+    expect(matchParticipantActors(renamed, withRanked)).toEqual({ matchStatus: "MATCHED", actorIds: [1] });
+    expect(matchParticipantActors(renamed, report()).matchStatus).toBe("NOT_IN_LOG");
+  });
+
+  it("never matches an external booster (Discord name only)", () => {
+    const external: ConsumableAuditParticipant = {
+      source: "EXTERNAL",
+      externalBoosterId: "ext-1",
+      displayName: "Synlight",
+      wowClass: "PRIEST",
+      role: "HEALER",
+    };
+    expect(matchParticipantActors(external, report())).toEqual({
+      matchStatus: "NO_CHARACTER_IDENTITY",
+      actorIds: [],
+    });
+  });
+});
+
+describe("attributeCastsToFights", () => {
+  it("attributes in-fight and pre-pull casts, and drops trash/between-pull casts", () => {
+    const fights = [
+      { id: 1, startTime: 10_000, endTime: 300_000 },
+      { id: 2, startTime: 400_000, endTime: 700_000 },
+    ];
+    const casts = [
+      { fight: 1, timestamp: 20_000, sourceId: 1, abilityId: 1 },
+      { fight: null, timestamp: 400_000 - CONSUMABLE_PRE_PULL_WINDOW_MS + 1, sourceId: 1, abilityId: 1 },
+      { fight: null, timestamp: 350_000, sourceId: 1, abilityId: 1 },
+      { fight: 7, timestamp: 900_000, sourceId: 1, abilityId: 1 },
+    ];
+    expect(attributeCastsToFights(casts, fights).map((cast) => [cast.timestamp, cast.fight])).toEqual([
+      [20_000, 1],
+      [400_000 - CONSUMABLE_PRE_PULL_WINDOW_MS + 1, 2],
+    ]);
+  });
+});
+
+describe("extractConsumableAudit", () => {
+  const events: WarcraftLogsConsumableEvents = {
+    combatants: [
+      { fight: 1, timestamp: 10_000, sourceId: 1, auraIds: [1235108, 465] },
+      { fight: 4, timestamp: 400_000, sourceId: 1, auraIds: [465] },
+      { fight: 5, timestamp: 800_000, sourceId: 3, auraIds: [] },
+    ],
+    casts: [
+      { fight: 1, timestamp: 12_000, sourceId: 1, abilityId: 1236648 }, // Lightfused Mana Potion
+      { fight: null, timestamp: 798_000, sourceId: 1, abilityId: 1236994 }, // pre-pull Recklessness
+      { fight: 4, timestamp: 600_000, sourceId: 3, abilityId: 6262 }, // Lockie's Healthstone
+      { fight: 4, timestamp: 610_000, sourceId: 1, abilityId: 99999 }, // not in catalog
+    ],
+    deaths: [
+      { fight: 4, timestamp: 650_000, targetId: 1 },
+      { fight: 5, timestamp: 900_000, targetId: 1 },
+    ],
+  };
+
+  const extracted = extractConsumableAudit({
+    report: report(),
+    fights: assignedFights,
+    events,
+    participants: [
+      attended("Synlight", "Blackhand"),
+      attended("Nobody", "Blackhand"),
+      { source: "EXTERNAL", externalBoosterId: "ext-1", displayName: "helper", wowClass: "MAGE", role: "DPS" },
+    ],
+  });
+
+  it("records fight-level Warlock presence and Healthstone evidence", () => {
+    expect(extracted.fights.map((fight) => [fight.wclFightId, fight.warlockPresent, fight.healthstoneUseSeen])).toEqual([
+      [1, true, false],
+      [4, true, true],
+      [5, true, false], // not in friendlyPlayers, but a Warlock CombatantInfo snapshot exists
+    ]);
+  });
+
+  it("stores normalized facts per matched player, per fight", () => {
+    const synlight = extracted.players[0]!;
+    expect(synlight.matchStatus).toBe("MATCHED");
+    expect(synlight.wclActorId).toBe(1);
+    const facts = synlight.observations.map((row) => [row.wclFightId, row.kind, row.category, row.atMs]);
+    expect(facts).toEqual([
+      [1, "COMBATANT", null, 10_000],
+      [1, "AURA", "FLASK", 10_000],
+      [1, "CAST", "MANA_POTION", 12_000],
+      [4, "COMBATANT", null, 400_000],
+      [4, "DEATH", null, 650_000],
+      [5, "CAST", "DAMAGE_POTION", 798_000],
+      [5, "PARTICIPANT", null, 800_000],
+      [5, "DEATH", null, 900_000],
+    ]);
+  });
+
+  it("keeps unmatched and external players with no facts", () => {
+    expect(extracted.players[1]).toMatchObject({ matchStatus: "NOT_IN_LOG", observations: [] });
+    expect(extracted.players[2]).toMatchObject({
+      matchStatus: "NO_CHARACTER_IDENTITY",
+      externalBoosterId: "ext-1",
+      characterName: null,
+      observations: [],
+    });
+  });
+});
+
+describe("report identity on facts", () => {
+  const participants: ConsumableAuditParticipant[] = [attended("Synlight", "Blackhand"), attended("Nobody", "Blackhand")];
+  const one = extractConsumableAudit({
+    report: report(),
+    fights: assignedFights.slice(0, 1),
+    events: { casts: [], deaths: [{ fight: 1, timestamp: 50_000, targetId: 1 }], combatants: [] },
+    participants,
+  });
+  const other = extractConsumableAudit({
+    report: report({ code: "ZyXwVuTsRqPoNmLk", actors: [{ id: 9, name: "Nobody", server: "Blackhand", subType: "Mage" }] }),
+    fights: [{ ...assignedFights[0]!, friendlyPlayers: [9] }],
+    events: { casts: [], deaths: [{ fight: 1, timestamp: 60_000, targetId: 9 }], combatants: [] },
+    participants,
+  });
+
+  it("stamps every fight and fact with its report code (fight ids repeat across reports)", () => {
+    expect(one.fights[0]).toMatchObject({ reportCode: "AbCdEfGhIjKlMnOp", wclFightId: 1 });
+    expect(one.players[0]!.observations.every((row) => row.reportCode === "AbCdEfGhIjKlMnOp")).toBe(true);
+  });
+
+  it("merges per-report extractions for one Run without mixing fights", () => {
+    const merged = mergeExtractedAudits([one, other]);
+    expect(merged.fights.map((row) => `${row.reportCode}#${row.wclFightId}`)).toEqual([
+      "AbCdEfGhIjKlMnOp#1",
+      "ZyXwVuTsRqPoNmLk#1",
+    ]);
+    expect(merged.players[0]!.matchStatus).toBe("MATCHED");
+    expect(merged.players[1]).toMatchObject({ matchStatus: "MATCHED", wclActorId: 9 });
+    expect(merged.players[1]!.observations.map((row) => row.reportCode)).toEqual(["ZyXwVuTsRqPoNmLk", "ZyXwVuTsRqPoNmLk"]);
+  });
+});

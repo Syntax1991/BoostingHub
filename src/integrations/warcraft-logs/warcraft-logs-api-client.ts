@@ -9,6 +9,8 @@ import {
 import type { WowRegion } from "@/models/enums";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+/** Report event pages (CombatantInfo carries gear/talents) are much larger than profile lookups. */
+const REPORT_REQUEST_TIMEOUT_MS = 45_000;
 const CLIENT_TOKEN_SKEW_MS = 60_000;
 
 type CachedClientToken = {
@@ -60,6 +62,9 @@ type GraphqlResponse = {
   data?: {
     characterData?: {
       character?: Record<string, unknown> | null;
+    } | null;
+    reportData?: {
+      report?: Record<string, unknown> | null;
     } | null;
   } | null;
   errors?: Array<{ message?: string }>;
@@ -148,12 +153,17 @@ export function warcraftLogsServerSlugFromRealm(realm: string): string {
   return realmSlugFromDisplayName(realm);
 }
 
-async function fetchJson(url: string, init: RequestInit, context: string): Promise<unknown> {
+async function fetchJson(
+  url: string,
+  init: RequestInit,
+  context: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(url, {
       ...init,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new Error(`Warcraft Logs request failed (${context}).`);
@@ -299,6 +309,7 @@ async function postGraphql(
   query: string,
   variables: Record<string, unknown>,
   context: string,
+  timeoutMs?: number,
 ): Promise<GraphqlResponse> {
   const payload = await fetchJson(
     warcraftLogsGraphqlUrl(),
@@ -311,8 +322,261 @@ async function postGraphql(
       body: JSON.stringify({ query, variables }),
     },
     context,
+    timeoutMs,
   );
   return payload as GraphqlResponse;
+}
+
+export type WarcraftLogsReportFight = {
+  id: number;
+  encounterId: number;
+  name: string;
+  /** Report-relative milliseconds. */
+  startTime: number;
+  endTime: number;
+  kill: boolean;
+  /** 3 Normal, 4 Heroic, 5 Mythic; null when WCL omits it. */
+  difficulty: number | null;
+  /** Report actor ids of friendly players; null when WCL omits the list. */
+  friendlyPlayers: number[] | null;
+};
+
+export type WarcraftLogsReportActor = {
+  id: number;
+  name: string;
+  server: string | null;
+  /** Class name as WCL spells it, e.g. "Warlock", "DeathKnight". */
+  subType: string | null;
+};
+
+export type WarcraftLogsRankedCharacter = {
+  id: string;
+  canonicalId: string;
+  name: string;
+  serverSlug: string | null;
+};
+
+export type WarcraftLogsReportMetadata = {
+  code: string;
+  title: string | null;
+  /** Epoch milliseconds. */
+  startTime: number;
+  endTime: number;
+  /** Uppercase WCL region slug ("EU", "US"), null when absent. */
+  regionSlug: string | null;
+  fights: WarcraftLogsReportFight[];
+  actors: WarcraftLogsReportActor[];
+  rankedCharacters: WarcraftLogsRankedCharacter[];
+};
+
+export type WarcraftLogsReportMetadataResult =
+  | { status: "SUCCESS"; report: WarcraftLogsReportMetadata }
+  | { status: "NOT_FOUND" }
+  | { status: "NOT_CONFIGURED" }
+  | { status: "TEMPORARY_FAILURE"; message: string };
+
+/** Minimal projection of one WCL event — everything else is dropped on receipt. */
+/** `fight` is null for a cast outside any fight (e.g. a pre-pull potion). */
+export type WarcraftLogsCastEvent = { fight: number | null; timestamp: number; sourceId: number; abilityId: number };
+export type WarcraftLogsDeathEvent = { fight: number; timestamp: number; targetId: number };
+/** CombatantInfo snapshot at pull, reduced to the aura ability ids. */
+export type WarcraftLogsCombatantSnapshot = {
+  fight: number;
+  timestamp: number;
+  sourceId: number;
+  auraIds: number[];
+};
+
+export type WarcraftLogsConsumableEvents = {
+  casts: WarcraftLogsCastEvent[];
+  deaths: WarcraftLogsDeathEvent[];
+  combatants: WarcraftLogsCombatantSnapshot[];
+};
+
+export type WarcraftLogsConsumableEventsResult =
+  | { status: "SUCCESS"; events: WarcraftLogsConsumableEvents }
+  | { status: "NOT_FOUND" }
+  | { status: "NOT_CONFIGURED" }
+  | { status: "TEMPORARY_FAILURE"; message: string };
+
+const REPORT_METADATA_QUERY = `
+query ReportMetadata($code: String!) {
+  reportData {
+    report(code: $code) {
+      code
+      title
+      startTime
+      endTime
+      region { slug }
+      fights(killType: Encounters) {
+        id
+        encounterID
+        name
+        startTime
+        endTime
+        kill
+        difficulty
+        friendlyPlayers
+      }
+      masterData {
+        actors(type: "Player") { id name server subType }
+      }
+      rankedCharacters { id canonicalID name server { slug } }
+    }
+  }
+}
+`.trim();
+
+type EventStream = "casts" | "deaths" | "combatants";
+
+/** Hard ceiling per stream — a boss-only report never needs this many pages. */
+const MAX_EVENT_PAGES_PER_STREAM = 25;
+const EVENTS_PAGE_LIMIT = 10_000;
+
+function eventStreamSelection(stream: EventStream, castFilter: string): string {
+  const common = `fightIDs: $fightIds, startTime: $${stream}Start, endTime: $endTime, limit: ${EVENTS_PAGE_LIMIT}`;
+  switch (stream) {
+    case "casts":
+      // Time-window only (no fightIDs) so pre-pull uses just before a pull are
+      // included; the catalog filter keeps this stream small.
+      return `casts: events(dataType: Casts, hostilityType: Friendlies, startTime: $castsStart, endTime: $endTime, limit: ${EVENTS_PAGE_LIMIT}, filterExpression: "${castFilter}") { data nextPageTimestamp }`;
+    case "deaths":
+      return `deaths: events(dataType: Deaths, hostilityType: Friendlies, ${common}) { data nextPageTimestamp }`;
+    case "combatants":
+      return `combatants: events(dataType: CombatantInfo, ${common}) { data nextPageTimestamp }`;
+  }
+}
+
+/**
+ * One GraphQL request fetching every still-pending event stream as aliases.
+ * The first request covers all three streams; follow-ups only re-request the
+ * streams that returned a `nextPageTimestamp`.
+ */
+export function buildConsumableEventsQuery(streams: EventStream[], castSpellIds: number[]): string {
+  const castFilter = `ability.id in (${castSpellIds.map((id) => Math.trunc(id)).join(", ")})`;
+  // GraphQL rejects declared-but-unused variables, so $fightIds is only
+  // declared when a fight-scoped stream is still being paged.
+  const vars = [
+    "$code: String!",
+    "$endTime: Float!",
+    ...(streams.some((stream) => stream !== "casts") ? ["$fightIds: [Int]!"] : []),
+    ...streams.map((stream) => `$${stream}Start: Float!`),
+  ].join(", ");
+  return `
+query ReportConsumableEvents(${vars}) {
+  reportData {
+    report(code: $code) {
+      ${streams.map((stream) => eventStreamSelection(stream, castFilter)).join("\n      ")}
+    }
+  }
+}
+`.trim();
+}
+
+function asInt(value: unknown): number | null {
+  const parsed = asFiniteNumber(value);
+  return parsed == null ? null : Math.trunc(parsed);
+}
+
+export function mapReportMetadata(raw: Record<string, unknown>): WarcraftLogsReportMetadata | null {
+  const code = asString(raw.code);
+  const startTime = asFiniteNumber(raw.startTime);
+  const endTime = asFiniteNumber(raw.endTime);
+  if (!code || startTime == null || endTime == null) return null;
+
+  const fights: WarcraftLogsReportFight[] = [];
+  for (const row of Array.isArray(raw.fights) ? raw.fights : []) {
+    const fight = asRecord(row);
+    const id = asInt(fight?.id);
+    const encounterId = asInt(fight?.encounterID);
+    const start = asInt(fight?.startTime);
+    const end = asInt(fight?.endTime);
+    if (!fight || id == null || encounterId == null || encounterId <= 0 || start == null || end == null) continue;
+    fights.push({
+      id,
+      encounterId,
+      name: asString(fight.name) ?? `Encounter ${encounterId}`,
+      startTime: start,
+      endTime: end,
+      kill: fight.kill === true,
+      difficulty: asInt(fight.difficulty),
+      friendlyPlayers: Array.isArray(fight.friendlyPlayers)
+        ? fight.friendlyPlayers.map(asInt).filter((value): value is number => value != null)
+        : null,
+    });
+  }
+
+  const masterData = asRecord(raw.masterData);
+  const actors: WarcraftLogsReportActor[] = [];
+  for (const row of Array.isArray(masterData?.actors) ? masterData.actors : []) {
+    const actor = asRecord(row);
+    const id = asInt(actor?.id);
+    const name = asString(actor?.name);
+    if (!actor || id == null || !name) continue;
+    actors.push({ id, name, server: asString(actor.server), subType: asString(actor.subType) });
+  }
+
+  const rankedCharacters: WarcraftLogsRankedCharacter[] = [];
+  for (const row of Array.isArray(raw.rankedCharacters) ? raw.rankedCharacters : []) {
+    const character = asRecord(row);
+    const id = asString(character?.id);
+    const name = asString(character?.name);
+    if (!character || !id || !name) continue;
+    rankedCharacters.push({
+      id,
+      canonicalId: asString(character.canonicalID) ?? id,
+      name,
+      serverSlug: asString(asRecord(character.server)?.slug),
+    });
+  }
+
+  return {
+    code,
+    title: asString(raw.title),
+    startTime,
+    endTime,
+    regionSlug: asString(asRecord(raw.region)?.slug)?.toUpperCase() ?? null,
+    fights,
+    actors,
+    rankedCharacters,
+  };
+}
+
+function mapEventPage(stream: EventStream, rows: unknown[], into: WarcraftLogsConsumableEvents): void {
+  for (const row of rows) {
+    const event = asRecord(row);
+    const fight = asInt(event?.fight);
+    const timestamp = asInt(event?.timestamp);
+    if (!event || timestamp == null) continue;
+    if (stream === "casts") {
+      const sourceId = asInt(event.sourceID);
+      const abilityId = asInt(event.abilityGameID);
+      // "begincast" precedes a cast-time use; only the completed cast counts.
+      if (event.type !== "cast" || sourceId == null || abilityId == null) continue;
+      into.casts.push({ fight, timestamp, sourceId, abilityId });
+    } else if (stream === "deaths") {
+      const targetId = asInt(event.targetID);
+      if (event.type !== "death" || fight == null || targetId == null) continue;
+      into.deaths.push({ fight, timestamp, targetId });
+    } else {
+      const sourceId = asInt(event.sourceID);
+      if (event.type !== "combatantinfo" || fight == null || sourceId == null) continue;
+      const auraIds = (Array.isArray(event.auras) ? event.auras : [])
+        .map((aura) => asInt(asRecord(aura)?.ability))
+        .filter((value): value is number => value != null);
+      into.combatants.push({ fight, timestamp, sourceId, auraIds });
+    }
+  }
+}
+
+function graphqlErrorMessage(root: GraphqlResponse): string | null {
+  if (!Array.isArray(root.errors) || root.errors.length === 0) return null;
+  return root.errors.map((row) => row.message).filter(Boolean).join("; ") || "GraphQL error";
+}
+
+/** WCL answers a private/unknown report code with an error and a null report. */
+function isMissingReportError(message: string): boolean {
+  return /does not exist|private|not found|permission/i.test(message);
 }
 
 export const warcraftLogsApiClient = {
@@ -450,6 +714,124 @@ export const warcraftLogsApiClient = {
         return { status: "NOT_FOUND" };
       }
       return { status: "SUCCESS", rankings };
+    } catch (error) {
+      return {
+        status: "TEMPORARY_FAILURE",
+        message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
+      };
+    }
+  },
+  /**
+   * Report header, boss fights (kills and wipes), player actors and ranked
+   * characters in ONE request. Never throws for business outcomes.
+   */
+  async fetchReportMetadata(code: string): Promise<WarcraftLogsReportMetadataResult> {
+    if (!isWarcraftLogsConfigured()) {
+      return { status: "NOT_CONFIGURED" };
+    }
+    try {
+      const accessToken = await getAccessToken();
+      const root = await postGraphql(
+        accessToken,
+        REPORT_METADATA_QUERY,
+        { code },
+        "graphql-report-metadata",
+        REPORT_REQUEST_TIMEOUT_MS,
+      );
+      const reportRaw = root.data?.reportData?.report ?? null;
+      const errorMessage = graphqlErrorMessage(root);
+      if (!reportRaw) {
+        if (!errorMessage || isMissingReportError(errorMessage)) return { status: "NOT_FOUND" };
+        return { status: "TEMPORARY_FAILURE", message: errorMessage };
+      }
+      if (errorMessage) {
+        return { status: "TEMPORARY_FAILURE", message: errorMessage };
+      }
+      const report = mapReportMetadata(reportRaw);
+      if (!report) {
+        return { status: "TEMPORARY_FAILURE", message: "Warcraft Logs report payload was malformed." };
+      }
+      return { status: "SUCCESS", report };
+    } catch (error) {
+      return {
+        status: "TEMPORARY_FAILURE",
+        message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
+      };
+    }
+  },
+
+  /**
+   * Casts (filtered server-side to `castSpellIds`), friendly deaths and
+   * CombatantInfo snapshots for the given fights. All three streams share one
+   * request; only a stream with more pages triggers a follow-up request.
+   * Never one request per player or per death.
+   */
+  async fetchReportConsumableEvents(input: {
+    code: string;
+    fightIds: number[];
+    /** Report-relative ms covering every requested fight. */
+    startTime: number;
+    endTime: number;
+    castSpellIds: number[];
+    /** Casts are fetched from this long before `startTime` (pre-pull uses). */
+    castLeadMs?: number;
+  }): Promise<WarcraftLogsConsumableEventsResult> {
+    if (!isWarcraftLogsConfigured()) {
+      return { status: "NOT_CONFIGURED" };
+    }
+    const events: WarcraftLogsConsumableEvents = { casts: [], deaths: [], combatants: [] };
+    if (input.fightIds.length === 0 || input.castSpellIds.length === 0) {
+      return { status: "SUCCESS", events };
+    }
+
+    const cursor: Partial<Record<EventStream, number>> = {
+      casts: Math.max(0, input.startTime - (input.castLeadMs ?? 0)),
+      deaths: input.startTime,
+      combatants: input.startTime,
+    };
+    const pages: Record<EventStream, number> = { casts: 0, deaths: 0, combatants: 0 };
+
+    try {
+      const accessToken = await getAccessToken();
+      while (Object.keys(cursor).length > 0) {
+        const streams = Object.keys(cursor) as EventStream[];
+        const variables: Record<string, unknown> = { code: input.code, endTime: input.endTime };
+        if (streams.some((stream) => stream !== "casts")) variables.fightIds = input.fightIds;
+        for (const stream of streams) variables[`${stream}Start`] = cursor[stream];
+
+        const root = await postGraphql(
+          accessToken,
+          buildConsumableEventsQuery(streams, input.castSpellIds),
+          variables,
+          "graphql-report-events",
+          REPORT_REQUEST_TIMEOUT_MS,
+        );
+        const reportRaw = root.data?.reportData?.report ?? null;
+        const errorMessage = graphqlErrorMessage(root);
+        if (!reportRaw) {
+          if (!errorMessage || isMissingReportError(errorMessage)) return { status: "NOT_FOUND" };
+          return { status: "TEMPORARY_FAILURE", message: errorMessage };
+        }
+        if (errorMessage) {
+          return { status: "TEMPORARY_FAILURE", message: errorMessage };
+        }
+
+        for (const stream of streams) {
+          const page = asRecord(reportRaw[stream]);
+          mapEventPage(stream, Array.isArray(page?.data) ? page.data : [], events);
+          pages[stream] += 1;
+          const next = asFiniteNumber(page?.nextPageTimestamp);
+          if (next != null && next > (cursor[stream] ?? 0) && next < input.endTime) {
+            if (pages[stream] >= MAX_EVENT_PAGES_PER_STREAM) {
+              return { status: "TEMPORARY_FAILURE", message: "Warcraft Logs report is too large to analyze." };
+            }
+            cursor[stream] = next;
+          } else {
+            delete cursor[stream];
+          }
+        }
+      }
+      return { status: "SUCCESS", events };
     } catch (error) {
       return {
         status: "TEMPORARY_FAILURE",

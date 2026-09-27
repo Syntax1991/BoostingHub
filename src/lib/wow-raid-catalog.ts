@@ -14,6 +14,12 @@ export type WowRaidCatalogBoss = {
   sortOrder: number;
   /** Blizzard journal encounter id(s). Preferred lockout match key. */
   blizzardEncounterIds: readonly number[];
+  /**
+   * Warcraft Logs encounter id(s) (`ReportFight.encounterID`). Verified via WCL
+   * `worldData.zone(id).encounters` (zone 44 Manaforge Omega, zone 53 Venomous
+   * Abyss). Attaches logged fights to the Run content they belong to.
+   */
+  warcraftLogsEncounterIds?: readonly number[];
 };
 
 export type WowRaidCatalogEntry = {
@@ -76,48 +82,56 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
         name: "Plexus Sentinel",
         sortOrder: 1,
         blizzardEncounterIds: [2684],
+        warcraftLogsEncounterIds: [3129],
       },
       {
         id: "ab000002-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "Loom'ithar",
         sortOrder: 2,
         blizzardEncounterIds: [2686],
+        warcraftLogsEncounterIds: [3131],
       },
       {
         id: "ab000003-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "Soulbinder Naazindhri",
         sortOrder: 3,
         blizzardEncounterIds: [2685],
+        warcraftLogsEncounterIds: [3130],
       },
       {
         id: "ab000004-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "Forgeweaver Araz",
         sortOrder: 4,
         blizzardEncounterIds: [2687],
+        warcraftLogsEncounterIds: [3132],
       },
       {
         id: "ab000005-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "The Soul Hunters",
         sortOrder: 5,
         blizzardEncounterIds: [2688],
+        warcraftLogsEncounterIds: [3122],
       },
       {
         id: "ab000006-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "Fractillus",
         sortOrder: 6,
         blizzardEncounterIds: [2747],
+        warcraftLogsEncounterIds: [3133],
       },
       {
         id: "ab000007-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "Nexus-King Salhadaar",
         sortOrder: 7,
         blizzardEncounterIds: [2690],
+        warcraftLogsEncounterIds: [3134],
       },
       {
         id: "ab000008-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name: "Dimensius, the All-Devouring",
         sortOrder: 8,
         blizzardEncounterIds: [2691],
+        warcraftLogsEncounterIds: [3135],
       },
     ],
   },
@@ -136,48 +150,56 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
         name: "Nek'zali the Soulcoiler",
         sortOrder: 1,
         blizzardEncounterIds: [2888],
+        warcraftLogsEncounterIds: [3470],
       },
       {
         id: "bb000002-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "Entombed Sentinels",
         sortOrder: 2,
         blizzardEncounterIds: [2874],
+        warcraftLogsEncounterIds: [3445],
       },
       {
         id: "bb000003-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "The Lost Explorers",
         sortOrder: 3,
         blizzardEncounterIds: [2894],
+        warcraftLogsEncounterIds: [3497],
       },
       {
         id: "bb000004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "Vashnik the Malignant",
         sortOrder: 4,
         blizzardEncounterIds: [2882],
+        warcraftLogsEncounterIds: [3455],
       },
       {
         id: "bb000005-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "Sszorak",
         sortOrder: 5,
         blizzardEncounterIds: [2871],
+        warcraftLogsEncounterIds: [3420],
       },
       {
         id: "bb000006-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "The Twin Fangs",
         sortOrder: 6,
         blizzardEncounterIds: [2887],
+        warcraftLogsEncounterIds: [3421],
       },
       {
         id: "bb000007-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "The Coiled Altar",
         sortOrder: 7,
         blizzardEncounterIds: [2883],
+        warcraftLogsEncounterIds: [3429],
       },
       {
         id: "bb000008-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         name: "Ula'tek",
         sortOrder: 8,
         blizzardEncounterIds: [2895],
+        warcraftLogsEncounterIds: [3492],
       },
     ],
   },
@@ -200,6 +222,7 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
         sortOrder: 1,
         // Verified Battle.net journal encounter id on instance 1317.
         blizzardEncounterIds: [2849],
+        warcraftLogsEncounterIds: [3379],
       },
     ],
   },

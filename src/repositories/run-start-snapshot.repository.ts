@@ -21,6 +21,15 @@ function mapRow(row: Record<string, unknown>): RunStartSnapshotRecord {
 }
 
 export const runStartSnapshotRepository = {
+  /** runId → startedAt for the given Runs (one query). */
+  async startedAtByRunIds(runIds: readonly string[]): Promise<Map<string, string>> {
+    if (runIds.length === 0) return new Map();
+    const rows = (await orm.RunStartSnapshot.where((row) => row.runId.in([...runIds]))
+      .select("runId", "startedAt")
+      .all()) as Array<{ runId: string; startedAt: string }>;
+    return new Map(rows.map((row) => [row.runId, row.startedAt]));
+  },
+
   async findByRunId(runId: string): Promise<RunStartSnapshotRecord | null> {
     const row = await orm.RunStartSnapshot.where({ runId }).include("startedBy").first();
     return row ? mapRow(row as Record<string, unknown>) : null;

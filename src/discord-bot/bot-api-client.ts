@@ -91,6 +91,10 @@ export class BotApiClient {
         raidLeadName: string;
         raidLeadDiscordUserId: string | null;
         panelName: string;
+        /** Scan this channel for trusted log-bot Warcraft Logs links (optional on the wire). */
+        scanWarcraftLogs?: boolean;
+        /** Read every message after this id (durable scan cursor / Run start). */
+        warcraftLogsScanCursor?: string | null;
       }>;
       signups: Array<{
         runId: string;
@@ -212,6 +216,8 @@ export class BotApiClient {
         difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
         lootType: "SAVED" | "UNSAVED" | "VIP";
       }>;
+      /** Discord ids of trusted Warcraft Logs log bots (absent/empty = auto-attach off). */
+      warcraftLogsReportAuthorIds?: string[];
     }>("/api/bot/discord/sync", {
       headers: classEmojiFingerprint
         ? { "x-class-emoji-fingerprint": classEmojiFingerprint }
@@ -233,6 +239,7 @@ export class BotApiClient {
       | { kind: "channel"; channelId: string }
       | { kind: "clear-channel" }
       | { kind: "channel-gone"; channelId: string }
+      | { kind: "wcl-scan-cursor"; channelId: string; messageId: string }
       | { kind: "voice-channel" | "clear-voice-channel"; channelId: string }
       | {
           kind: "signup";
@@ -312,5 +319,24 @@ export class BotApiClient {
 
   getMySignups(discordUserId: string) {
     return this.request<unknown>("/api/bot/my-signups", { discordUserId });
+  }
+
+  /**
+   * A trusted log bot posted a Warcraft Logs report link in this Run's
+   * channel. The API re-checks author, channel and Run status; idempotent.
+   */
+  attachWarcraftLogsReport(
+    runId: string,
+    input: { reportCode: string; channelId: string; messageId: string; authorId: string },
+  ) {
+    return this.request<{ status: "ATTACHED" | "ALREADY_ATTACHED" | "FAILED"; failure?: string; retryable?: boolean }>(
+      `/api/bot/runs/${runId}/warcraft-logs`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  }
+
+  /** One bounded pass of the automatic post-completion Consumables Audit. */
+  runWarcraftLogsAutoAudit() {
+    return this.request<unknown>("/api/bot/warcraft-logs/auto-audit", { method: "POST" });
   }
 }

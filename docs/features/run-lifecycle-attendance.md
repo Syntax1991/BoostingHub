@@ -128,6 +128,8 @@ A Run cannot complete while any attendance row is `UNMARKED`.
 
 The check is transactional. The domain error is `ATTENDANCE_INCOMPLETE` and includes how many unmarked rows remain.
 
+Completion records `Run.completedAt`. Together with `RunStartSnapshot.startedAt` it is the Run's active window, which the Consumables Audit uses to tell which Warcraft Logs fights belong to this Run (see [run-consumables-audit.md](run-consumables-audit.md)).
+
 UI copy: “Mark attendance for all rostered participants before completing the run.”
 
 React is not the enforcement boundary.

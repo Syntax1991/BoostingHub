@@ -27,6 +27,7 @@ import { rosterService, type RosterManagementView } from "@/services/roster.serv
 import { signupService } from "@/services/signup.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
+import { runConsumableAuditService } from "@/services/run-consumable-audit.service";
 
 /** Hand-added unregistered booster: renders as `@name <class>` in the Final Setup. */
 function externalFinalSetupParticipant(booster: ExternalBooster): FinalSetupParticipant {
@@ -176,6 +177,9 @@ export const runDetailService = {
     const managerAttendance = manage ? await attendanceService.getManagerAttendance(user, runId) : null;
     const payout = await payoutService.getPayoutView(user, runId);
     const startSnapshot = manage ? await runStartSnapshotRepository.findByRunId(runId) : null;
+    // ADMIN / the Run's RAID_LEAD only, COMPLETED Runs only. Everyone else gets
+    // null without the audit tables ever being read. Database-only: never a WCL call.
+    const consumables = await runConsumableAuditService.getAuditViewForRunDetail(user, run);
     let archiveTranscript: { filename: string; downloadHref: string } | null = null;
     if (manage) {
       const discordPost = await runDiscordPostRepository.findByRunId(runId);
@@ -308,6 +312,7 @@ export const runDetailService = {
         manager: managerAttendance,
       },
       payout,
+      consumables,
     };
   },
 };

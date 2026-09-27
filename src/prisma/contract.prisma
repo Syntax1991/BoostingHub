@@ -269,6 +269,9 @@ model User {
   battleNetConnections BattleNetConnection[]
   battleNetImportSessions BattleNetImportSession[]
   notifications        UserNotification[]
+  analyzedConsumableAudits RunConsumableAudit[] @relation("ConsumableAuditAnalyzer")
+  attachedWarcraftLogsReports RunWarcraftLogsReport[] @relation("WarcraftLogsReportAttacher")
+  decidedWarcraftLogsFights   RunWarcraftLogsFight[]  @relation("WarcraftLogsFightDecider")
 
   /// At most one OWNER, enforced by the database: a partial unique index over
   /// the OWNER rows only, so two concurrent owner bootstraps cannot both commit.
@@ -614,6 +617,9 @@ model Run {
   /// When true, first Discord channel provision pings Tank/Healer/DPS roles.
   discordRolePing    Boolean        @default(true)
   signupsOpen        Boolean        @default(false)
+  /// Set when the Run transitions IN_PROGRESS → COMPLETED. Null for Runs
+  /// completed before this existed (their end time is unknown).
+  completedAt        TimestamptzString?
   archivedAt         TimestamptzString?
   archivedById       String?
   archivedBy         User?          @relation("RunArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
@@ -630,6 +636,9 @@ model Run {
   discordPost   RunDiscordPost?
   notifications UserNotification[]
   discordAnnouncements RunDiscordAnnouncement[]
+  consumableAudit RunConsumableAudit?
+  warcraftLogsReports RunWarcraftLogsReport[]
+  warcraftLogsFights  RunWarcraftLogsFight[]
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -650,6 +659,9 @@ model RunRaidContent {
   /// 1 <= plannedBossCount <= this content Raid's RaidBoss count.
   plannedBossCount Int
   createdAt        TimestamptzString @default(now())
+
+  consumableAuditFights RunConsumableAuditFight[]
+  warcraftLogsFights    RunWarcraftLogsFight[]
 
   @@unique([runId, raidId])
   @@unique([runId, sortOrder])
@@ -827,6 +839,7 @@ model RunAttendance {
   updatedAt     temporal.updatedAtString()
 
   payoutEntry RunPayoutEntry?
+  consumableAuditPlayers RunConsumableAuditPlayer[]
 
   @@index([runId])
   @@index([status])
@@ -851,6 +864,8 @@ model RunExternalBooster {
   role              CharacterRole?
   createdAt         TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
+
+  consumableAuditPlayers RunConsumableAuditPlayer[]
 
   @@index([rosterId])
   @@map("run_external_booster")
@@ -1057,6 +1072,10 @@ model RunDiscordPost {
   /// JSON array of RunSignup ids that already received an Apex-style Raid Invite DM
   /// (sent after Start Run, not on roster publish).
   raidInviteSentSignupIds    String?
+  /// Newest Run-channel message id the Warcraft Logs link scan has fully
+  /// processed (Discord snowflake). Only ever moves forward; null = not
+  /// scanned yet (the first scan starts from the Run start time).
+  warcraftLogsScanCursor     String?
   createdAt           TimestamptzString @default(now())
   updatedAt           temporal.updatedAtString()
 
@@ -1089,4 +1108,275 @@ model RunDiscordAnnouncement {
   @@map("run_discord_announcement")
 }
 
+/// Why the latest Consumables Audit analysis attempt produced no new snapshot.
+/// Safe fixed categories only — never a raw Warcraft Logs error message.
+enum ConsumableAuditFailure {
+  @@type("pg/text@1")
+  NOT_CONFIGURED     = "NOT_CONFIGURED"
+  REPORT_NOT_FOUND   = "REPORT_NOT_FOUND"
+  NO_RELEVANT_FIGHTS = "NO_RELEVANT_FIGHTS"
+  WCL_UNAVAILABLE    = "WCL_UNAVAILABLE"
+}
 
+/// How a Run participant was resolved to a Warcraft Logs report actor.
+enum ConsumableAuditMatch {
+  @@type("pg/text@1")
+  /// Character identity (warcraftLogsId or name + realm + region) found in the report.
+  MATCHED               = "MATCHED"
+  /// Character identity known, but no such player actor in the report.
+  NOT_IN_LOG            = "NOT_IN_LOG"
+  /// No character identity to match safely (e.g. external booster: Discord name only).
+  NO_CHARACTER_IDENTITY = "NO_CHARACTER_IDENTITY"
+}
+
+/// One normalized Warcraft Logs fact about one player in one fight.
+enum ConsumableObservationKind {
+  @@type("pg/text@1")
+  /// CombatantInfo snapshot at pull exists — auras at pull are known.
+  COMBATANT   = "COMBATANT"
+  /// In the fight (friendlyPlayers) without a CombatantInfo snapshot — auras unknown.
+  PARTICIPANT = "PARTICIPANT"
+  /// Catalog aura active at pull (e.g. FLASK).
+  AURA        = "AURA"
+  /// Catalog consumable cast (potion, Healthstone).
+  CAST        = "CAST"
+  DEATH       = "DEATH"
+}
+
+/// Post-run Consumables Audit snapshot for one Run (ADMIN / assigned RAID_LEAD
+/// only — see docs/features/run-consumables-audit.md). Built ONLY from the
+/// fights ASSIGNED to this Run (RunWarcraftLogsFight), never a whole report.
+/// Stores normalized WCL facts; PASS/WARNING/N/A policy is evaluated at read
+/// time so rule changes never require re-fetching Warcraft Logs. Children are
+/// replaced atomically on every successful analysis; a failed attempt keeps
+/// the previous snapshot.
+model RunConsumableAudit {
+  id            String                  @id @default(uuid())
+  runId         String                  @unique
+  run           Run                     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  /// Latest SUCCESSFUL analysis. Null until the first success.
+  analyzedAt    TimestamptzString?
+  analyzedById  String?
+  analyzedBy    User?                   @relation("ConsumableAuditAnalyzer", fields: [analyzedById], references: [id], onDelete: SetNull)
+  /// Latest attempt, successful or not (refresh cooldown basis).
+  lastAttemptAt TimestamptzString
+  /// Null when the latest attempt succeeded.
+  lastFailure   ConsumableAuditFailure?
+  /// Automatic (post-completion) attempts so far — capped by the auto-audit job.
+  autoAttempts  Int                     @default(0)
+  /// The latest successful analysis ran automatically (no acting user).
+  autoAnalyzed  Boolean                 @default(false)
+  createdAt     TimestamptzString       @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  fights  RunConsumableAuditFight[]
+  players RunConsumableAuditPlayer[]
+
+  @@map("run_consumable_audit")
+}
+
+/// One Warcraft Logs boss fight (kill or wipe) included in a Consumables Audit.
+model RunConsumableAuditFight {
+  id             String             @id @default(uuid())
+  auditId        String
+  audit          RunConsumableAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  /// Warcraft Logs report the fight came from (a Run may use several reports).
+  reportCode     String
+  /// Report-local WCL fight id.
+  wclFightId     Int
+  /// WCL encounter id (wow-raid-catalog warcraftLogsEncounterIds).
+  encounterId    Int
+  encounterName  String
+  kill           Boolean
+  /// WCL difficulty (3 Normal, 4 Heroic, 5 Mythic); null when not reported.
+  difficulty     Int?
+  /// Report-relative milliseconds.
+  startMs        Int
+  endMs          Int
+  /// The Run content this encounter belongs to, when the catalog maps it.
+  raidContentId  String?
+  raidContent    RunRaidContent?    @relation(fields: [raidContentId], references: [id], onDelete: SetNull)
+  /// A Warlock actor took part in this fight. Null when WCL did not report the
+  /// fight participants (Healthstone applicability then rests on healthstoneUseSeen).
+  warlockPresent     Boolean?
+  /// Any friendly player (audited or not) used a Healthstone in this fight —
+  /// direct proof Healthstones existed.
+  healthstoneUseSeen Boolean
+
+  observations RunConsumableAuditObservation[]
+
+  @@unique([auditId, reportCode, wclFightId])
+  @@index([auditId])
+  @@map("run_consumable_audit_fight")
+}
+
+/// One audited Run booster (attended BOOSTER roster participant or external
+/// booster) and how it resolved to a WCL actor. Display fields are snapshots.
+model RunConsumableAuditPlayer {
+  id                String               @id @default(uuid())
+  auditId           String
+  audit             RunConsumableAudit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  attendanceId      String?
+  attendance        RunAttendance?       @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  externalBoosterId String?
+  externalBooster   RunExternalBooster?  @relation(fields: [externalBoosterId], references: [id], onDelete: SetNull)
+  displayName       String
+  characterName     String?
+  characterRealm    String?
+  wowClass          WowClass?
+  role              CharacterRole?
+  matchStatus       ConsumableAuditMatch
+  /// Report-local WCL actor id when MATCHED.
+  wclActorId        Int?
+  sortOrder         Int
+
+  observations RunConsumableAuditObservation[]
+
+  @@index([auditId])
+  @@map("run_consumable_audit_player")
+}
+
+/// Normalized WCL fact: a player's presence, aura at pull, consumable cast or
+/// death in one fight. `category` is a consumable-catalog category (text, so
+/// future checks such as food or runes need no enum migration).
+model RunConsumableAuditObservation {
+  id       String                    @id @default(uuid())
+  playerId String
+  player   RunConsumableAuditPlayer  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fightId  String
+  fight    RunConsumableAuditFight   @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  kind     ConsumableObservationKind
+  category String?
+  spellId  Int?
+  /// Report-relative milliseconds.
+  atMs     Int
+
+  @@index([playerId])
+  @@index([fightId])
+  @@map("run_consumable_audit_observation")
+}
+
+/// Where a Warcraft Logs fight stands for one Run.
+enum WarcraftLogsFightStatus {
+  @@type("pg/text@1")
+  /// Part of this Run — the only fights the Consumables Audit reads.
+  ASSIGNED     = "ASSIGNED"
+  /// Evidence is ambiguous (overlapping Run windows, unknown Run end, low
+  /// roster overlap). Never audited until a manager decides.
+  NEEDS_REVIEW = "NEEDS_REVIEW"
+  /// In the Run's time window but not part of it (other content, another Run).
+  IGNORED      = "IGNORED"
+}
+
+/// How a report got linked to a Run.
+enum WarcraftLogsReportSource {
+  @@type("pg/text@1")
+  /// Pasted by an ADMIN / the Run's RAID_LEAD.
+  MANUAL      = "MANUAL"
+  /// Posted by a trusted log bot (DISCORD_WCL_REPORT_AUTHOR_IDS) in the Run's own Discord channel.
+  DISCORD_BOT = "DISCORD_BOT"
+}
+
+/// Who decided a fight's status. MANUAL decisions survive re-scans.
+enum WarcraftLogsFightDecision {
+  @@type("pg/text@1")
+  AUTO   = "AUTO"
+  MANUAL = "MANUAL"
+}
+
+/// A Warcraft Logs report — a shared external resource. One report may hold
+/// several consecutive BoostingHub Runs; which fight belongs to which Run lives
+/// in RunWarcraftLogsFight, never here.
+model WarcraftLogsReport {
+  id           String            @id @default(uuid())
+  /// WCL report code (the `/reports/<code>` path segment).
+  code         String            @unique
+  title        String?
+  /// Absolute wall-clock bounds. WCL fight times are relative to startAt.
+  startAt      TimestamptzString
+  endAt        TimestamptzString
+  /// Uppercase WCL region slug ("EU", "US").
+  regionSlug   String?
+  /// Cached report metadata (boss fights, player actors, ranked characters) as
+  /// JSON, reused by every Run attached to this report until the next re-scan.
+  metadataJson String
+  fetchedAt    TimestamptzString
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  runs   RunWarcraftLogsReport[]
+  fights RunWarcraftLogsFight[]
+
+  @@map("warcraft_logs_report")
+}
+
+/// A Run uses a Warcraft Logs report (1 report → many Runs, 1 Run → many reports).
+model RunWarcraftLogsReport {
+  id            String             @id @default(uuid())
+  runId         String
+  run           Run                @relation(fields: [runId], references: [id], onDelete: Cascade)
+  reportId      String
+  report        WarcraftLogsReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  /// Null for system attachments (DISCORD_BOT).
+  createdById   String?
+  createdBy     User?              @relation("WarcraftLogsReportAttacher", fields: [createdById], references: [id], onDelete: SetNull)
+  source           WarcraftLogsReportSource @default(MANUAL)
+  /// The Discord message the report link was read from (DISCORD_BOT only).
+  discordMessageId String?
+  /// The trusted Discord author (log bot / webhook) that posted it (DISCORD_BOT only).
+  discordAuthorId  String?
+  /// Latest fight assignment scan for this Run. Null until first scanned (a
+  /// report attached by the log bot while the Run is still IN_PROGRESS).
+  lastScannedAt TimestamptzString?
+  createdAt     TimestamptzString  @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  fights RunWarcraftLogsFight[]
+
+  @@unique([runId, reportId])
+  @@index([reportId])
+  @@map("run_warcraft_logs_report")
+}
+
+/// One report fight considered for one Run, with its assignment status and the
+/// evidence behind it. A (report, fight) pair is ASSIGNED to at most one Run —
+/// enforced by the partial unique index below; moving it is a reassignment.
+model RunWarcraftLogsFight {
+  id             String                    @id @default(uuid())
+  associationId  String
+  association    RunWarcraftLogsReport     @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  runId          String
+  run            Run                       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  reportId       String
+  report         WarcraftLogsReport        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  wclFightId     Int
+  encounterId    Int
+  encounterName  String
+  kill           Boolean
+  difficulty     Int?
+  /// Report-relative milliseconds (as WCL reports them).
+  startMs        Int
+  endMs          Int
+  /// Absolute wall-clock time: report.startAt + startMs / endMs.
+  startAt        TimestamptzString
+  endAt          TimestamptzString
+  raidContentId  String?
+  raidContent    RunRaidContent?           @relation(fields: [raidContentId], references: [id], onDelete: SetNull)
+  status         WarcraftLogsFightStatus
+  decision       WarcraftLogsFightDecision
+  /// JSON array of evidence codes (e.g. TIME_MATCH, MULTIPLE_RUN_WINDOWS).
+  reasons        String
+  /// Run roster members found among the fight's players / Run roster members
+  /// with a character identity. Null when not computable.
+  rosterMatched  Int?
+  rosterSize     Int?
+  decidedById    String?
+  decidedBy      User?                     @relation("WarcraftLogsFightDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  createdAt      TimestamptzString         @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@unique([runId, reportId, wclFightId])
+  @@index([associationId])
+  @@index([reportId, wclFightId], unique: true, where: "(\"status\" = 'ASSIGNED'::text)", name: "run_wcl_fight_assigned_once")
+  @@map("run_warcraft_logs_fight")
+}

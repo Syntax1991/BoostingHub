@@ -43,3 +43,21 @@ export function toWarcraftLogsServerRegion(region: WowRegion): "EU" | "US" | nul
   if (region === "US") return "US";
   return null;
 }
+
+/**
+ * Discord user ids (bots/webhooks such as "PhoenixStar Logs") whose report
+ * links in a Run's own Discord channel are attached automatically. Empty =
+ * the feature is off. Comma/space separated snowflakes; anything else ignored.
+ */
+export function trustedWarcraftLogsReportAuthorIds(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  return [
+    ...new Set(
+      (env.DISCORD_WCL_REPORT_AUTHOR_IDS ?? "")
+        .split(/[\s,]+/)
+        .map((value) => value.trim())
+        .filter((value) => /^\d{15,25}$/.test(value)),
+    ),
+  ];
+}

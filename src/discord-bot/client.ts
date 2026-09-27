@@ -19,6 +19,7 @@ import {
 import { handleGuideCommand } from "@/discord-bot/commands/guide";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
+import { startWarcraftLogsAutoAuditLoop } from "@/discord-bot/warcraft-logs-links";
 
 /**
  * Wires the gateway client to the pure embed/interaction modules. This file
@@ -32,6 +33,7 @@ export function createBotClient(env: BotEnv): Client {
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[discord-bot] logged in as ${readyClient.user.tag}`);
     startSyncLoop(client, env, api);
+    startWarcraftLogsAutoAuditLoop(api);
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {

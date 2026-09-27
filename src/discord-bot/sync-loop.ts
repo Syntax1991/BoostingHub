@@ -27,6 +27,11 @@ import {
 } from "@/discord-bot/discord-api-errors";
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
 import {
+  createReportScanState,
+  scanRunChannelsForReports,
+  type ScannableMessage,
+} from "@/discord-bot/warcraft-logs-links";
+import {
   buildArchiveServerInfoContent,
   buildArchiveTranscriptFilename,
   buildArchiveTranscriptHtml,
@@ -73,6 +78,9 @@ import {
 import type { RosterEmbedData, RunStartEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
 
 type SyncWork = Awaited<ReturnType<BotApiClient["listSyncWork"]>>;
+
+/** Warcraft Logs link scan throttle / final-scan bookkeeping (per process; the cursor itself is durable). */
+const warcraftLogsScanState = createReportScanState();
 type ChannelLaneItem = SyncWork["channels"][number];
 type SignupLaneItem = SyncWork["signups"][number];
 type RosterLaneItem = SyncWork["roster"][number];
@@ -290,6 +298,32 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
   // voice channel created now.
   const resolvedVoiceChannels = await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? []);
 
+  // Trusted log-bot Warcraft Logs links in running / just-completed Run
+  // channels: every message after the durable per-channel cursor, oldest →
+  // newest. A retiring channel is scanned to its end first; if that cannot
+  // finish, its deletion waits (bounded) so no report link is lost.
+  let deferRetirement = new Set<string>();
+  try {
+    deferRetirement = await scanRunChannelsForReports({
+      items: work.channels.map((item) => ({
+        runId: item.runId,
+        channelId: resolvedChannels.get(item.runId) ?? item.existingRunChannelId,
+        scanWarcraftLogs: item.scanWarcraftLogs,
+        retireChannel: item.retireChannel,
+        warcraftLogsScanCursor: item.warcraftLogsScanCursor ?? null,
+      })),
+      trustedAuthorIds: work.warcraftLogsReportAuthorIds ?? [],
+      fetchPage: (channelId, options) => fetchScannableMessagePage(client, channelId, options),
+      attach: (runId, input) => api.attachWarcraftLogsReport(runId, input),
+      saveCursor: async (runId, channelId, messageId) => {
+        await api.recordDiscordState(runId, { kind: "wcl-scan-cursor", channelId, messageId });
+      },
+      state: warcraftLogsScanState,
+    });
+  } catch (error) {
+    console.error("[discord-bot] Warcraft Logs link scan failed", error);
+  }
+
   // Lifecycle channel announcements must post before retirement transcript/delete
   // so CANCELLED messages appear in the final transcript.
   if ((work.runAnnouncements ?? []).length > 0) {
@@ -307,6 +341,10 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
 
   for (const item of work.channels) {
     if (!item.retireChannel) continue;
+    if (deferRetirement.has(item.runId)) {
+      console.warn(`[discord-bot] holding back retirement of run ${item.runId}: final Warcraft Logs link scan not finished`);
+      continue;
+    }
     try {
       await syncArchiveArtifacts(client, env, api, item, resolvedChannels);
     } catch (error) {
@@ -1454,4 +1492,37 @@ async function recordRetiredChannelGone(api: BotApiClient, runId: string, channe
   } catch (error) {
     console.error(`[discord-bot] failed to record deleted channel ${channelId} for run ${runId}`, error);
   }
+}
+
+/**
+ * One page of Run channel history as plain data for the Warcraft Logs link
+ * scan: the newest page, or the page right after `after` (REST history read —
+ * same access as the archive transcript; `cache: false` so every page is a
+ * real read).
+ */
+async function fetchScannableMessagePage(
+  client: Client,
+  channelId: string,
+  options: { after?: string; limit: number },
+): Promise<ScannableMessage[]> {
+  const channel = client.channels.cache.get(channelId) ?? (await client.channels.fetch(channelId));
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) return [];
+  const batch = await (channel as TextChannel).messages.fetch({
+    limit: options.limit,
+    ...(options.after ? { after: options.after } : {}),
+    cache: false,
+  });
+  return [...batch.values()]
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+    .map((message) => ({
+      id: message.id,
+      authorId: message.author.id,
+      content: message.content ?? "",
+      embeds: message.embeds.map((embed) => ({
+        title: embed.title,
+        description: embed.description,
+        url: embed.url,
+        fields: embed.fields.map((field) => ({ name: field.name, value: field.value })),
+      })),
+    }));
 }
