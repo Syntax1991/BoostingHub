@@ -117,6 +117,9 @@ absolute paths.
    `chmod 600`), then check it without printing secrets:
    `python3 /var/www/boostinghub/deploy/production/env-status.py`
    Production must have `DEV_AUTH_ENABLED=false` and `DEV_ACCOUNT_BOOTSTRAP_ENABLED=false`.
+   To grant Booster access from the Discord `raidbooster` role on sign-in, set
+   `DISCORD_BOOSTER_ROLE_ID=1527022823103791104`; the existing bot token and guild ID
+   are used for the member lookup. This grant is additive and never auto-revokes access.
 4. Install, validate and build as `boostinghub`, from the app directory:
 
    ```bash
@@ -331,6 +334,8 @@ and nothing is created.
 - [ ] Signed out, `/dashboard`, `/settings`, `/notifications`, `/profile`,
       `/manage/runs` return 307 to `/?next=<same path>`
 - [ ] Discord sign-in completes with no redirect loop; a returning login maps to the same user
+- [ ] A member with Discord role `1527022823103791104` receives Booster on sign-in;
+      manual Booster grants remain enabled and role absence does not revoke them
 - [ ] `/profile` renders, including Active Sessions (no raw tokens)
 - [ ] `/characters` loads (availability, lockouts, WCL, Battle.net)
 - [ ] `/runs`, `/my-runs` and `/manage/runs` (for authorized roles) load

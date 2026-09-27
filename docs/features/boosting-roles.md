@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Let an ADMIN (or the OWNER) grant and revoke a User's **Boosting Roles** after Discord review.
+Let an ADMIN (or the OWNER) grant and revoke a User's **Boosting Roles** after Discord review. A configured Discord guild role may also grant Booster automatically when the User signs in.
 
 ## Account role vs Boosting Roles
 
@@ -43,7 +43,9 @@ Signup options and roster revalidation read the signup owner's `isBooster` only 
 
 ## Managing the roles
 
-Only ADMIN / OWNER (`canManageBoostingRoles`) may change Boosting Roles, and only through the explicit operation `boostingRoleService.setRole(admin, { userId, role: "BOOSTER" | "LOOTBUDDY", enabled, reason? })` (server action `setBoostingRoleAction`). The raw booleans are never accepted by a generic User update. Setting a role to the state it already has is a no-op (no write, no audit event).
+ADMIN / OWNER (`canManageBoostingRoles`) retain the manual controls through the explicit operation `boostingRoleService.setRole(admin, { userId, role: "BOOSTER" | "LOOTBUDDY", enabled, reason? })` (server action `setBoostingRoleAction`). The raw booleans are never accepted by a generic User update. Setting a role to the state it already has is a no-op (no write, no audit event).
+
+Additionally, when `DISCORD_BOOSTER_ROLE_ID` is configured alongside the bot token and guild ID, a Discord sign-in grants Booster if the persisted Discord member holds that role. This is additive only: role absence, removal, member lookup failure, or incomplete configuration never revokes a manual grant. A manual revoke remains effective until the next sign-in while the User still holds the configured Discord role. The automatic grant does not affect Lootbuddy or the account role and does not write a human-admin `ActivityEvent`.
 
 Surfaces:
 
@@ -57,7 +59,7 @@ Audit: every change writes an `ActivityEvent` under the acting admin — `BOOSTE
 Onboarding:
 
 ```text
-User → Apply via Discord → staff review → ADMIN grants the Booster role
+User → Apply via Discord → staff review → ADMIN grants Booster manually or staff assigns the configured Discord role → next Discord sign-in grants Booster
 ```
 
 Self-service in-app requests stay disabled (`BOOSTER_ACCESS_SELF_REQUEST_DISABLED`). User-facing pages show an **Apply via Discord** CTA when `DISCORD_BOOSTER_TICKET_URL` is set. A User may receive the Booster role with zero Characters.
@@ -97,4 +99,4 @@ Never shown: `Booster · Normal / Heroic / Mythic` — the Booster role has no d
 
 ## Out of scope here
 
-Discord bot automation, mass signup, Strikes, Deducts, Lootbuddy eligibility or payout rules, difficulty-specific booster permissions.
+Automatic revocation from Discord, mass signup, Strikes, Deducts, Lootbuddy eligibility or payout rules, difficulty-specific booster permissions.
