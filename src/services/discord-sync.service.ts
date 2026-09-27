@@ -1164,7 +1164,10 @@ export const discordSyncService = {
       // roster-relevant edit marks the published roster "changed since
       // acknowledged" and Update Roster (which bumps the version) refreshes
       // the message; a title-only change (Raid Lead reassignment) bumps the
-      // version directly (runRepository.updatePreStartAtomic).
+      // version directly (runRepository.updatePreStartAtomic). Guild emoji
+      // changes are the one render input outside the roster: the bot's
+      // class/role emoji fingerprint differing from the one the message was
+      // rendered with also refreshes it (null = older post → refreshed once).
       // Same fallback as the signup lane: the lane must target the channel
       // its gate is based on, so a deleted channel is confirmed (and
       // cleared) rather than skipped without evidence on every poll.
@@ -1186,7 +1189,11 @@ export const discordSyncService = {
         };
         if (postPending) {
           roster.push({ ...base, mode: "POST", postRevision: run.roster.postRevision });
-        } else if (!post?.rosterMessageId || post.lastRosterVersion !== run.roster.version) {
+        } else if (
+          !post?.rosterMessageId ||
+          post.lastRosterVersion !== run.roster.version ||
+          (classEmojiFingerprint !== "" && post.lastRosterEmojiFingerprint !== classEmojiFingerprint)
+        ) {
           roster.push({ ...base, mode: "REFRESH", postRevision: null });
         }
       }
@@ -1321,6 +1328,8 @@ export const discordSyncService = {
     messageId: string;
     /** Set when the bot fulfilled an explicit Publish (sent a NEW message). */
     postRevision?: number;
+    /** Guild class/role emoji fingerprint the message was rendered with. */
+    classEmojiFingerprint?: string;
   }): Promise<void> {
     const run = await runRepository.findById(input.runId);
     if (!run?.roster) return;
@@ -1330,6 +1339,7 @@ export const discordSyncService = {
       rosterMessageId: input.messageId,
       lastRosterVersion: run.roster.version,
       ...(input.postRevision !== undefined ? { lastRosterPostRevision: input.postRevision } : {}),
+      ...(input.classEmojiFingerprint !== undefined ? { lastRosterEmojiFingerprint: input.classEmojiFingerprint } : {}),
     });
   },
 

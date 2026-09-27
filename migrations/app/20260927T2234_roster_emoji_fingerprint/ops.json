@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.run_discord_post.lastRosterEmojiFingerprint",
+    "label": "Add column \"lastRosterEmojiFingerprint\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "lastRosterEmojiFingerprint",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"lastRosterEmojiFingerprint\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "lastRosterEmojiFingerprint"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"lastRosterEmojiFingerprint\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"lastRosterEmojiFingerprint\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"lastRosterEmojiFingerprint\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "lastRosterEmojiFingerprint"
+        ]
+      }
+    ]
+  }
+]

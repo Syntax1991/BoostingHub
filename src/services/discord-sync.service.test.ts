@@ -636,6 +636,51 @@ describe("discordSyncService.getRosterEmbedData", () => {
       postRevision: null,
     });
   });
+
+  it("refreshes the posted roster in place when the Guild emoji fingerprint changes", async () => {
+    const now = new Date();
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-a",
+    });
+    const rosterWork = async (classEmojiFingerprint?: string) =>
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint })).roster.find((item) => item.runId === runId);
+
+    // Same emojis the message was rendered with, or no fingerprint at all: nothing to do.
+    expect(await rosterWork("emoji-a")).toBeUndefined();
+    expect(await rosterWork()).toBeUndefined();
+
+    // New/renamed Guild emojis: edit the current message, never post a new one.
+    expect(await rosterWork("emoji-b")).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+      postRevision: null,
+    });
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-b",
+    });
+    expect(await rosterWork("emoji-b")).toBeUndefined();
+  });
+
+  it("a record without a fingerprint keeps the stored one; a legacy null fingerprint refreshes once", async () => {
+    const now = new Date();
+    await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1" });
+    expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe("emoji-b");
+
+    // Posts made before this column existed carry null.
+    await orm.RunDiscordPost.where({ runId }).update({ lastRosterEmojiFingerprint: null });
+    const work = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(work.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+    });
+  });
 });
 
 describe("discordSyncService — per-Run channel provisioning", () => {

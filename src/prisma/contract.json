@@ -3147,6 +3147,13 @@
                   "kind": "scalar"
                 }
               },
+              "lastRosterEmojiFingerprint": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "lastRosterPostRevision": {
                 "nullable": true,
                 "type": {
@@ -3317,6 +3324,9 @@
                 },
                 "id": {
                   "column": "id"
+                },
+                "lastRosterEmojiFingerprint": {
+                  "column": "lastRosterEmojiFingerprint"
                 },
                 "lastRosterPostRevision": {
                   "column": "lastRosterPostRevision"
@@ -8586,6 +8596,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "lastRosterEmojiFingerprint": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "lastRosterPostRevision": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
@@ -11509,7 +11524,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "67d60979569b1d2f02989c84f828ef338e25ef8eae9d725c3d83735634763a20"
+    "storageHash": "e1ac07b6a810888d26608cd1f136488065c3f2f75ba486dc7385fb932159ca95"
   },
   "execution": {
     "executionHash": "798507c527f03e7e4b4f176c035bb6200b95779e0cef2a336b9c15c654ef757c",

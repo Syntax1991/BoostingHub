@@ -203,7 +203,7 @@ Disciplinary history record against a **User** (never a Character). Optional `ru
 
 ## RunDiscordPost
 
-Presentation-only Discord message identity for one Run — never a second source of truth for Run/Signup/Roster data. One row per Run (`runId` unique): the signup embed's channel/message id and a cheap signature to detect drift, and the roster embed's channel/message id and last-posted `RunRoster.version`. Lets the bot edit its own prior message instead of reposting, and survives a bot restart. See [discord-bot.md](features/discord-bot.md).
+Presentation-only Discord message identity for one Run — never a second source of truth for Run/Signup/Roster data. One row per Run (`runId` unique): the signup embed's channel/message id and a cheap signature to detect drift, and the roster embed's channel/message id, last-posted `RunRoster.version` and the Guild emoji fingerprint it was rendered with. Lets the bot edit its own prior message instead of reposting, and survives a bot restart. See [discord-bot.md](features/discord-bot.md).
 
 ## ActivityEvent
 
