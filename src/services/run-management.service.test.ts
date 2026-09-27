@@ -574,7 +574,6 @@ describe("opened run signup integration", () => {
     await orm.BoosterQualification.create({
       id: ids.access,
       userId: ids.user,
-      difficulty: "HEROIC",
       status: "APPROVED",
       notes: "Run management test grant",
       grantedAt: now,

@@ -300,7 +300,6 @@ describe("delete after completed-run history (settlement / payout preservation)"
     await orm.BoosterQualification.create({
       id: crypto.randomUUID(),
       userId,
-      difficulty: "HEROIC",
       status: "APPROVED",
       notes: "Delete history test",
       grantedAt: now,

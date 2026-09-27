@@ -79,7 +79,6 @@ async function approveHeroic(userId: string) {
   await orm.BoosterQualification.create({
     id: crypto.randomUUID(),
     userId,
-    difficulty: "HEROIC",
     status: "APPROVED",
     notes: "pre-start test",
     grantedAt: now,

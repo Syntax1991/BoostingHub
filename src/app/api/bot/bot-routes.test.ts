@@ -139,7 +139,6 @@ beforeAll(async () => {
   await orm.BoosterQualification.create({
     id: qualId,
     userId: ids.target,
-    difficulty: "HEROIC",
     status: "APPROVED",
     notes: null,
     grantedAt: new Date().toISOString(),
@@ -357,7 +356,7 @@ describe("bot API domain reuse", () => {
     expect(body.code).toBe("CHARACTER_NOT_OWNED");
   });
 
-  it("preserves BoosterQualification enforcement (exact difficulty)", async () => {
+  it("enforces the account-level BoosterQualification: approved on any difficulty, refused once revoked", async () => {
     const mythicLead: AuthenticatedUser = {
       id: ids.lead,
       name: "Bot Api Lead",
@@ -372,21 +371,35 @@ describe("bot API domain reuse", () => {
     createdRunIds.push(mythicRun.id);
     await runService.openRun(mythicLead, mythicRun.id);
 
-    const res = await signupPut(
-      req(`/api/bot/runs/${mythicRun.id}/signup`, {
-        method: "PUT",
-        headers: {
-          authorization: `Bearer ${TOKEN}`,
-          "x-discord-user-id": TARGET_DISCORD_ID,
-          "content-type": "application/json",
-        },
-        body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }] },
-      }),
-      params(mythicRun.id),
-    );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.code).toBe("BOOSTER_ACCESS_DIFFICULTY_MISMATCH");
+    const put = () =>
+      signupPut(
+        req(`/api/bot/runs/${mythicRun.id}/signup`, {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            "x-discord-user-id": TARGET_DISCORD_ID,
+            "content-type": "application/json",
+          },
+          body: { participationType: "BOOSTER", offers: [{ characterId: targetCharacterId, offeredRoles: ["DPS"] }] },
+        }),
+        params(mythicRun.id),
+      );
+
+    // The target's single approval is not scoped by difficulty — a Mythic Run accepts it.
+    const accepted = await put();
+    expect(accepted.status).toBe(200);
+
+    const qualification = await orm.BoosterQualification.where({ userId: ids.target }).first();
+    const now = new Date().toISOString();
+    await orm.BoosterQualification.where({ id: qualification!.id }).update({ status: "REVOKED", revokedAt: now, updatedAt: now });
+    try {
+      const refused = await put();
+      expect(refused.status).toBe(400);
+      const body = await refused.json();
+      expect(body.code).toBe("BOOSTER_ACCESS_REQUIRED");
+    } finally {
+      await orm.BoosterQualification.where({ id: qualification!.id }).update({ status: "APPROVED", revokedAt: null, updatedAt: now });
+    }
   });
 
   it("preserves the signup window check", async () => {

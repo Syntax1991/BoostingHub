@@ -125,44 +125,68 @@ describe("boosterQualificationService", () => {
   const adminWithoutAccess = asUser(ids.adminUser, "Admin Without Access", "ADMIN");
   const owner = asUser(ids.owner, "Qual Owner");
 
-  it("grants without requiring a character", async () => {
+  it("grants one account-level approval without a character or difficulty", async () => {
     const granted = await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "HEROIC",
       notes: "Ticket #9",
     });
     expect(granted.status).toBe("APPROVED");
-    expect(granted.difficulty).toBe("HEROIC");
+    expect(granted).not.toHaveProperty("difficulty");
     expect(granted.grantedById).toBe(ids.admin);
     expect(granted.notes).toBe("Ticket #9");
+    expect(await orm.BoosterQualification.where({ userId: ids.owner }).all()).toHaveLength(1);
   });
 
-  it("reuses the unique user+difficulty row on re-grant after revoke", async () => {
+  it("rejects a second grant for an already-approved booster (no duplicate row)", async () => {
+    await boosterQualificationService.grant(admin, { userId: ids.owner });
+    await expect(boosterQualificationService.grant(admin, { userId: ids.owner })).rejects.toMatchObject({
+      code: "BOOSTER_ACCESS_ALREADY_APPROVED",
+    });
+    expect(await orm.BoosterQualification.where({ userId: ids.owner }).all()).toHaveLength(1);
+  });
+
+  it("enforces one qualification row per User at the database level", async () => {
+    await boosterQualificationService.grant(admin, { userId: ids.owner });
+    const now = new Date().toISOString();
+    await expect(
+      orm.BoosterQualification.create({
+        id: crypto.randomUUID(),
+        userId: ids.owner,
+        status: "REVOKED",
+        notes: null,
+        grantedAt: null,
+        grantedById: null,
+        revokedAt: now,
+        revokedById: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("reuses the single per-user row on re-grant after revoke", async () => {
     const first = await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "MYTHIC",
     });
-    await boosterQualificationService.revoke(admin, first.id, "Break");
+    const revoked = await boosterQualificationService.revoke(admin, first.id, "Break");
+    expect(revoked.status).toBe("REVOKED");
+    expect(boosterQualificationService.isApprovedBooster(revoked)).toBe(false);
     const second = await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "MYTHIC",
     });
     expect(second.id).toBe(first.id);
     expect(second.status).toBe("APPROVED");
     expect(second.revokedAt).toBeNull();
+    expect(await orm.BoosterQualification.where({ userId: ids.owner }).all()).toHaveLength(1);
   });
 
-  it("matches difficulty exactly", () => {
-    const records = [
-      { difficulty: "HEROIC" as const, status: "APPROVED" as const },
-      { difficulty: "NORMAL" as const, status: "REVOKED" as const },
-    ];
-    expect(boosterQualificationService.isApprovedFor(records, "HEROIC")).toBe(true);
-    expect(boosterQualificationService.isApprovedFor(records, "MYTHIC")).toBe(false);
-    expect(boosterQualificationService.isApprovedFor(records, "NORMAL")).toBe(false);
+  it("is approved by status alone — no difficulty argument exists", () => {
+    expect(boosterQualificationService.isApprovedBooster({ status: "APPROVED" })).toBe(true);
+    expect(boosterQualificationService.isApprovedBooster({ status: "REVOKED" })).toBe(false);
+    expect(boosterQualificationService.isApprovedBooster(null)).toBe(false);
   });
 
-  it("bridges legacy approve into a qualification and resolves siblings", async () => {
+  it("bridges legacy approve into the account qualification and resolves every PENDING request of the user", async () => {
     const character = await characterService.createCharacter(owner, {
       name: "Bridgea",
       realm: "Area 52",
@@ -173,19 +197,22 @@ describe("boosterQualificationService", () => {
     });
     const healer = await createPending(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     const tank = await createPending(ids.owner, character.id, "PALADIN", "TANK", "HEROIC");
+    const mythicDps = await createPending(ids.owner, character.id, "PALADIN", "DPS", "MYTHIC");
     await boosterAccessService.approveAccess(admin, healer);
 
-    const healerRow = await orm.BoosterAccess.where({ id: healer }).first();
-    const tankRow = await orm.BoosterAccess.where({ id: tank }).first();
-    expect(String(healerRow?.status)).toBe("APPROVED");
-    expect(String(tankRow?.status)).toBe("APPROVED");
+    for (const id of [healer, tank, mythicDps]) {
+      const row = await orm.BoosterAccess.where({ id }).first();
+      expect(String(row?.status)).toBe("APPROVED");
+      // Historical request difficulty is preserved as-is.
+      expect(["HEROIC", "MYTHIC"]).toContain(String(row?.difficulty));
+    }
 
-    const qualification = await boosterQualificationRepository.findExact(ids.owner, "HEROIC");
+    const qualification = await boosterQualificationRepository.findByUserId(ids.owner);
     expect(qualification?.status).toBe("APPROVED");
+    expect(await orm.BoosterQualification.where({ userId: ids.owner }).all()).toHaveLength(1);
 
     const again = await boosterQualificationService.ensureApproved(admin, {
       userId: ids.owner,
-      difficulty: "HEROIC",
     });
     expect(again.id).toBe(qualification!.id);
   });
@@ -201,44 +228,38 @@ describe("boosterQualificationService", () => {
     });
     const pending = await createPending(ids.owner, character.id, "WARRIOR", "TANK", "NORMAL");
     await boosterAccessService.rejectAccess(admin, pending, "No.");
-    const quals = await boosterQualificationRepository.listByUserId(ids.owner);
-    expect(quals).toHaveLength(0);
+    expect(await boosterQualificationRepository.findByUserId(ids.owner)).toBeNull();
   });
 
-  it("does not auto-approve ADMIN accounts without a qualification row", () => {
-    expect(boosterQualificationService.isApprovedFor([], "HEROIC")).toBe(false);
-    expect(
-      boosterQualificationService.isApprovedFor(
-        [{ difficulty: "MYTHIC", status: "REVOKED" }],
-        "MYTHIC",
-      ),
-    ).toBe(false);
-    void adminWithoutAccess;
+  it("does not auto-approve ADMIN accounts without a qualification row", async () => {
+    expect(await boosterQualificationRepository.findByUserId(adminWithoutAccess.id)).toBeNull();
+    expect(boosterQualificationService.isApprovedBooster(null)).toBe(false);
   });
 });
 
 describe("boosterQualificationRepository.listByUserIds", () => {
   const admin = asUser(ids.admin, "Aelira Nightwatch", "ADMIN");
 
-  it("batches qualifications for multiple users in one call, grouped correctly per user", async () => {
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" });
-    await boosterQualificationService.grant(admin, { userId: ids.adminUser, difficulty: "MYTHIC" });
+  it("batches the single qualification of multiple users in one call", async () => {
+    await boosterQualificationService.grant(admin, { userId: ids.owner });
+    const other = await boosterQualificationService.grant(admin, { userId: ids.adminUser });
+    await boosterQualificationService.revoke(admin, other.id);
 
     const rows = await boosterQualificationRepository.listByUserIds([ids.owner, ids.adminUser]);
 
     const ownerRows = rows.filter((row) => row.userId === ids.owner);
     const adminUserRows = rows.filter((row) => row.userId === ids.adminUser);
     expect(ownerRows).toHaveLength(1);
-    expect(ownerRows[0]?.difficulty).toBe("HEROIC");
+    expect(ownerRows[0]?.status).toBe("APPROVED");
     expect(adminUserRows).toHaveLength(1);
-    expect(adminUserRows[0]?.difficulty).toBe("MYTHIC");
+    expect(adminUserRows[0]?.status).toBe("REVOKED");
   });
 
   it("de-duplicates repeated user ids and returns [] for an empty input", async () => {
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "NORMAL" });
+    await boosterQualificationService.grant(admin, { userId: ids.owner });
 
     const rows = await boosterQualificationRepository.listByUserIds([ids.owner, ids.owner]);
-    expect(rows.filter((row) => row.difficulty === "NORMAL")).toHaveLength(1);
+    expect(rows).toHaveLength(1);
 
     expect(await boosterQualificationRepository.listByUserIds([])).toEqual([]);
   });

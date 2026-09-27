@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -73,10 +73,29 @@ const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
 const aelira = asUser(ids.aelira, "Aelira Nightwatch", "ADMIN");
 const otherLead = asUser(ids.kael, "Kael Stormhowl", "RAID_LEAD");
 
+// Seeded Sylva is an approved booster; booster qualification is account-level (not
+// difficulty-scoped), so the "unapproved booster" fixture for the lab Run is a
+// REVOKED qualification, restored afterwards for the rest of the suite.
+const SYLVA_USER_ID = "66666666-6666-4666-8666-666666666666";
+
+async function setSylvaQualification(status: "APPROVED" | "REVOKED") {
+  const now = new Date().toISOString();
+  await orm.BoosterQualification.where({ userId: SYLVA_USER_ID }).update({
+    status,
+    revokedAt: status === "REVOKED" ? now : null,
+    updatedAt: now,
+  });
+}
+
+beforeAll(async () => {
+  await setSylvaQualification("REVOKED");
+});
+
 afterAll(async () => {
   for (const id of lockoutIds) {
     await orm.CharacterRaidLockout.where({ id }).delete();
   }
+  await setSylvaQualification("APPROVED");
 });
 
 describe("rosterService authorization", () => {

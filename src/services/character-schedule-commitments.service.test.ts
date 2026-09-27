@@ -123,7 +123,6 @@ describe("characterScheduleCommitmentsService", () => {
   it("lists SELECTED reservations, omits PENDING-only, rejects foreign owners", async () => {
     await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "HEROIC",
     });
 
     const character = await characterService.createCharacter(owner, {
@@ -189,7 +188,6 @@ describe("characterScheduleCommitmentsService", () => {
   it("includes draft-selected reservations and ignores deprecated manual blocks", async () => {
     await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "HEROIC",
     }).catch(() => {});
 
     const character = await characterService.createCharacter(owner, {

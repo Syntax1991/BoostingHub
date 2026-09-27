@@ -101,7 +101,6 @@ async function grantQualification(userId: string) {
   await orm.BoosterQualification.create({
     id,
     userId,
-    difficulty: "HEROIC",
     status: "APPROVED",
     notes: null,
     grantedAt: new Date().toISOString(),

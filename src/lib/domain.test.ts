@@ -129,21 +129,15 @@ describe("run and signup state machines", () => {
 });
 
 describe("booster access", () => {
-  it("does not imply mythic approval from heroic approval", () => {
-    const records = [
-      {
-        difficulty: "HEROIC" as const,
-        status: "APPROVED" as const,
-      },
-      {
-        difficulty: "NORMAL" as const,
-        status: "REVOKED" as const,
-      },
-    ];
-
-    expect(boosterQualificationService.isApprovedFor(records, "HEROIC")).toBe(true);
-    expect(boosterQualificationService.isApprovedFor(records, "MYTHIC")).toBe(false);
-    expect(boosterQualificationService.isApprovedFor(records, "NORMAL")).toBe(false);
+  it("is one account-level approval, not scoped by difficulty", () => {
+    expect(boosterQualificationService.isApprovedBooster({ status: "APPROVED" })).toBe(true);
+    expect(boosterQualificationService.isApprovedBooster({ status: "REVOKED" })).toBe(false);
+    expect(boosterQualificationService.isApprovedBooster(null)).toBe(false);
+    expect(boosterQualificationService.summarize({ status: "APPROVED" })).toEqual({
+      status: "APPROVED",
+      approved: true,
+    });
+    expect(boosterQualificationService.summarize(null)).toEqual({ status: "NONE", approved: false });
   });
 });
 

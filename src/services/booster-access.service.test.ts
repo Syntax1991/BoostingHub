@@ -17,6 +17,8 @@ const ids = {
   lead: "aaaaaaaa-aaaa-4aaa-8aaa-ba0000000003",
   admin: "44444444-4444-4444-8444-444444444444",
   heroicOpen: "r1111111-1111-4111-8111-111111111111",
+  mythicOpen: "r2222222-2222-4222-8222-222222222222",
+  normalOpen: "r4444444-4444-4444-8444-444444444444",
 };
 
 const createdCharacterIds: string[] = [];
@@ -235,8 +237,6 @@ describe("boosterAccessService request", () => {
     await expectDomainCode(
       boosterAccessService.requestAccess(owner, {
         characterId: character.id,
-        role: "HEALER",
-        difficulty: "HEROIC",
       }),
       "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
     );
@@ -247,8 +247,6 @@ describe("boosterAccessService request", () => {
     await expectDomainCode(
       boosterAccessService.requestAccess(other, {
         characterId: character.id,
-        role: "HEALER",
-        difficulty: "HEROIC",
       }),
       "CHARACTER_NOT_OWNED",
     );
@@ -262,12 +260,11 @@ describe("boosterAccessService grantAccess", () => {
   it("lets ADMIN grant new APPROVED qualification with granter metadata", async () => {
     const granted = await boosterAccessService.grantAccess(admin, {
       userId: ids.owner,
-      difficulty: "HEROIC",
       notes: "Reviewed in Discord ticket #12",
     });
     createdQualificationIds.push(granted.id);
     expect(granted.status).toBe("APPROVED");
-    expect(granted.difficulty).toBe("HEROIC");
+    expect(granted).not.toHaveProperty("difficulty");
     expect(granted.userId).toBe(ids.owner);
     expect(granted.notes).toBe("Reviewed in Discord ticket #12");
     expect(granted.grantedById).toBe(ids.admin);
@@ -277,13 +274,11 @@ describe("boosterAccessService grantAccess", () => {
   it("rejects duplicate APPROVED grants", async () => {
     const first = await boosterAccessService.grantAccess(admin, {
       userId: ids.owner,
-      difficulty: "NORMAL",
     });
     createdQualificationIds.push(first.id);
     await expectDomainCode(
       boosterAccessService.grantAccess(admin, {
         userId: ids.owner,
-        difficulty: "NORMAL",
       }),
       "BOOSTER_ACCESS_ALREADY_APPROVED",
     );
@@ -293,7 +288,6 @@ describe("boosterAccessService grantAccess", () => {
     await expectDomainCode(
       boosterAccessService.grantAccess(lead, {
         userId: ids.owner,
-        difficulty: "HEROIC",
       }),
       "NOT_AUTHORIZED",
     );
@@ -313,7 +307,7 @@ describe("boosterAccessService admin authorization", () => {
     await expectDomainCode(boosterAccessService.approveAccess(lead, pendingId), "NOT_AUTHORIZED");
     await expectDomainCode(boosterAccessService.rejectAccess(lead, pendingId), "NOT_AUTHORIZED");
     await boosterAccessService.approveAccess(admin, pendingId);
-    const qualification = await boosterQualificationRepository.findExact(ids.owner, "NORMAL");
+    const qualification = await boosterQualificationRepository.findByUserId(ids.owner);
     expect(qualification?.status).toBe("APPROVED");
     createdQualificationIds.push(qualification!.id);
     await expectDomainCode(boosterAccessService.revokeAccess(lead, qualification!.id), "NOT_AUTHORIZED");
@@ -335,31 +329,27 @@ describe("boosterAccessService approval and signup", () => {
       status: "APPROVED",
       userId: ids.owner,
     });
-    expect(listed.qualifications.some((row) => row.difficulty === "HEROIC" && row.status === "APPROVED")).toBe(
-      true,
-    );
+    expect(listed.qualifications.map((row) => row.status)).toEqual(["APPROVED"]);
 
-    const options = await signupService.getSignupOptions(owner, ids.heroicOpen);
-    // BoosterAccess approval is difficulty-scoped, not role-scoped — the
-    // Character's specialization only determines the signup DEFAULT role;
-    // the eligible option still exposes every role the class can perform.
-    expect(
-      options.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
-    ).toBe(true);
-
-    const mythicOpen = "r2222222-2222-4222-8222-222222222222";
-    const mythicOptions = await signupService.getSignupOptions(owner, mythicOpen);
-    expect(mythicOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
+    // Approval is account-level — neither role- nor difficulty-scoped. A legacy
+    // request that named HEROIC unlocks Normal, Heroic and Mythic Runs alike; the
+    // Character's specialization only determines the signup DEFAULT role.
+    for (const runId of [ids.normalOpen, ids.heroicOpen, ids.mythicOpen]) {
+      const options = await signupService.getSignupOptions(owner, runId);
+      expect(
+        options.booster.eligible.some((item) => item.characterId === character.id && item.defaultRole === "HEALER"),
+      ).toBe(true);
+      expect(options.booster.ineligible.some((item) => item.characterId === character.id)).toBe(false);
+    }
     await expectDomainCode(
       boosterAccessService.grantAccess(admin, {
         userId: ids.owner,
-        difficulty: "HEROIC",
       }),
       "BOOSTER_ACCESS_ALREADY_APPROVED",
     );
   });
 
-  it("shares account-level difficulty approval across characters and roles", async () => {
+  it("shares account-level approval across characters, roles and difficulties", async () => {
     const first = await createShamanHealer(owner, "Shaa");
     const second = await createShamanHealer(owner, "Shab");
     const dps = await createShamanDps(owner, "Shac");
@@ -397,23 +387,54 @@ describe("boosterAccessService approval and signup", () => {
     expect(afterDeactivate.booster.eligible.some((item) => item.characterId === second.id)).toBe(true);
     expect(afterDeactivate.booster.eligible.some((item) => item.characterId === first.id)).toBe(false);
 
-    const mythicOpen = "r2222222-2222-4222-8222-222222222222";
-    const mythicOptions = await signupService.getSignupOptions(owner, mythicOpen);
-    expect(mythicOptions.booster.eligible.some((item) => item.characterId === second.id)).toBe(false);
+    const mythicOptions = await signupService.getSignupOptions(owner, ids.mythicOpen);
+    expect(mythicOptions.booster.eligible.some((item) => item.characterId === second.id)).toBe(true);
+    const otherMythic = await signupService.getSignupOptions(other, ids.mythicOpen);
+    expect(otherMythic.booster.eligible.some((item) => item.characterId === otherShaman.id)).toBe(false);
   });
 
-  it("resolves all PENDING siblings for the same user and difficulty", async () => {
+  it("never elevates a non-approved user on any difficulty", async () => {
+    const other = asUser(ids.other, "Access Other");
+    const otherShaman = await createShamanHealer(other, "Otherb");
+    for (const runId of [ids.normalOpen, ids.heroicOpen, ids.mythicOpen]) {
+      const options = await signupService.getSignupOptions(other, runId);
+      expect(options.booster.eligible.some((item) => item.characterId === otherShaman.id)).toBe(false);
+      expect(
+        options.booster.ineligible.find((item) => item.characterId === otherShaman.id)?.reason,
+      ).toBe("NO_BOOSTER_ACCESS");
+      await expectDomainCode(
+        signupService.createBoosterSignup(other, {
+          runId,
+          characterId: otherShaman.id,
+          role: "HEALER",
+          isBackup: false,
+        }),
+        "BOOSTER_ACCESS_REQUIRED",
+      );
+    }
+  });
+
+  it("resolves all PENDING siblings of the user, whatever difficulty they requested", async () => {
     const character = await createPaladin(owner);
     const healer = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "MYTHIC");
     const tank = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "MYTHIC");
+    const normalDps = await createPendingAccess(ids.owner, character.id, "PALADIN", "DPS", "NORMAL");
     await boosterAccessService.approveAccess(admin, healer);
 
-    const healerRow = await orm.BoosterAccess.where({ id: healer }).first();
-    const tankRow = await orm.BoosterAccess.where({ id: tank }).first();
-    expect(String(healerRow?.status)).toBe("APPROVED");
-    expect(String(tankRow?.status)).toBe("APPROVED");
-    const qualification = await boosterQualificationRepository.findExact(ids.owner, "MYTHIC");
+    const expected = [
+      [healer, "MYTHIC"],
+      [tank, "MYTHIC"],
+      [normalDps, "NORMAL"],
+    ] as const;
+    for (const [id, difficulty] of expected) {
+      const row = await orm.BoosterAccess.where({ id }).first();
+      expect(String(row?.status)).toBe("APPROVED");
+      // Historical request difficulty is kept as recorded.
+      expect(String(row?.difficulty)).toBe(difficulty);
+    }
+    const qualification = await boosterQualificationRepository.findByUserId(ids.owner);
     expect(qualification?.status).toBe("APPROVED");
+    expect(await orm.BoosterQualification.where({ userId: ids.owner }).all()).toHaveLength(1);
   });
 });
 
@@ -431,7 +452,6 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
     expect(options.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);
     const again = await boosterAccessService.grantAccess(admin, {
       userId: ids.owner,
-      difficulty: "NORMAL",
       notes: "Re-reviewed",
     });
     createdQualificationIds.push(again.id);
@@ -443,7 +463,7 @@ describe("boosterAccessService rejection, revocation, lootbuddy", () => {
     const character = await createPaladin(owner);
     const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     await boosterAccessService.approveAccess(admin, pendingId);
-    const qualification = await boosterQualificationRepository.findExact(ids.owner, "HEROIC");
+    const qualification = await boosterQualificationRepository.findByUserId(ids.owner);
     expect(qualification).toBeTruthy();
 
     const loot = await signupService.setLootbuddies(owner, {
@@ -492,7 +512,6 @@ describe("boosterAccessService qualifications vs legacy requests", () => {
     const pendingId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     const approved = await boosterAccessService.grantAccess(admin, {
       userId: ids.owner,
-      difficulty: "NORMAL",
     });
     createdQualificationIds.push(approved.id);
 
@@ -525,7 +544,7 @@ describe("boosterAccessService qualifications vs legacy requests", () => {
     expect(legacy.legacyRequests.some((row) => row.id === rejectedId)).toBe(false);
   });
 
-  it("removes PENDING from legacy after approve or reject while preserving the row", async () => {
+  it("removes PENDING from legacy after reject or approve while preserving the rows", async () => {
     const character = await createPaladin(owner);
     const approveId = await createPendingAccess(ids.owner, character.id, "PALADIN", "HEALER", "HEROIC");
     const rejectId = await createPendingAccess(ids.owner, character.id, "PALADIN", "TANK", "NORMAL");
@@ -533,32 +552,36 @@ describe("boosterAccessService qualifications vs legacy requests", () => {
       await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" })
     ).legacyPendingCount;
 
-    await boosterAccessService.approveAccess(admin, approveId);
+    await boosterAccessService.rejectAccess(admin, rejectId, "Declined.");
     let legacy = await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" });
-    expect(legacy.legacyRequests.some((row) => row.id === approveId)).toBe(false);
+    expect(legacy.legacyRequests.some((row) => row.id === rejectId)).toBe(false);
     expect(legacy.legacyPendingCount).toBe(beforeCount - 1);
+
+    await boosterAccessService.approveAccess(admin, approveId);
+    legacy = await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" });
+    expect(legacy.legacyRequests.some((row) => row.id === approveId)).toBe(false);
+    expect(legacy.legacyPendingCount).toBe(beforeCount - 2);
 
     const preservedApproved = await orm.BoosterAccess.where({ id: approveId }).first();
     expect(String(preservedApproved?.status)).toBe("APPROVED");
-
-    await boosterAccessService.rejectAccess(admin, rejectId, "Declined.");
-    legacy = await boosterAccessService.listAdminAccessRequests(admin, { view: "legacy" });
-    expect(legacy.legacyRequests.some((row) => row.id === rejectId)).toBe(false);
-    expect(legacy.legacyPendingCount).toBe(beforeCount - 2);
+    // A reviewed (REJECTED) historical row is not rewritten by a later account approval.
+    const preservedRejected = await orm.BoosterAccess.where({ id: rejectId }).first();
+    expect(String(preservedRejected?.status)).toBe("REJECTED");
+    expect(String(preservedRejected?.difficulty)).toBe("NORMAL");
 
     const qualifications = await boosterAccessService.listAdminAccessRequests(admin, {
       view: "qualifications",
       status: "ALL",
       userId: ids.owner,
     });
-    expect(qualifications.qualifications.some((row) => row.difficulty === "HEROIC")).toBe(true);
-    expect(qualifications.qualifications.some((row) => row.difficulty === "NORMAL")).toBe(false);
+    // The approve created exactly one account-level row; the reject created none.
+    expect(qualifications.qualifications).toHaveLength(1);
+    expect(qualifications.qualifications[0]?.status).toBe("APPROVED");
   });
 
   it("lets ADMIN grant without a Character and still rejects USER self-request", async () => {
     const granted = await boosterAccessService.grantAccess(admin, {
       userId: ids.owner,
-      difficulty: "HEROIC",
     });
     createdQualificationIds.push(granted.id);
     expect(granted.status).toBe("APPROVED");
@@ -568,8 +591,6 @@ describe("boosterAccessService qualifications vs legacy requests", () => {
     await expectDomainCode(
       boosterAccessService.requestAccess(owner, {
         characterId: character.id,
-        role: "HEALER",
-        difficulty: "MYTHIC",
       }),
       "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
     );
@@ -582,12 +603,10 @@ describe("boosterQualificationService helpers used by access flows", () => {
   it("reactivates a REVOKED qualification on re-grant", async () => {
     const granted = await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "MYTHIC",
     });
     await boosterQualificationService.revoke(admin, granted.id, "Break");
     const again = await boosterQualificationService.grant(admin, {
       userId: ids.owner,
-      difficulty: "MYTHIC",
       notes: "Reinstated",
     });
     expect(again.id).toBe(granted.id);

@@ -93,7 +93,7 @@ const baseCharacter = {
   blizzardRealmId: null,
   warcraftLogsLinked: false,
   warcraftLogsId: null,
-  boosterAccess: { approvedCount: 0, pendingCount: 0, revokedCount: 0, approvals: [] },
+  boosterAccess: { status: "NONE" as const, approved: false },
   currentReset: "2026-W38",
   lockouts: [],
   weeklyAvailability: {

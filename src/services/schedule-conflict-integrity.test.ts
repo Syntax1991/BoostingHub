@@ -137,7 +137,7 @@ describe("schedule conflict integrity", () => {
       itemLevel: 640,
     });
     createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
+    await boosterQualificationService.grant(admin, { userId: ids.owner }).catch(() => {});
 
     const run = await createOpenRun(lead, "2026-11-10T18:00:00.000Z", { healers: 1 });
     await signupService.createBoosterSignup(owner, {
@@ -195,7 +195,7 @@ describe("schedule conflict integrity", () => {
       itemLevel: 625,
     });
     createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
+    await boosterQualificationService.grant(admin, { userId: ids.owner }).catch(() => {});
 
     const runA = await createOpenRun(lead, "2026-11-13T17:00:00.000Z", { dps: 1 });
     const runB = await createOpenRun(lead, "2026-11-13T20:00:00.000Z", { dps: 1 });

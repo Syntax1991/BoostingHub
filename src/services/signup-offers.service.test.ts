@@ -175,7 +175,6 @@ beforeAll(async () => {
   await orm.BoosterQualification.create({
     id: qualId,
     userId: ids.target,
-    difficulty: "HEROIC",
     status: "APPROVED",
     notes: null,
     grantedAt: new Date().toISOString(),
@@ -382,14 +381,14 @@ describe("signupService.setCharacterOffers — validation", () => {
     await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
   });
 
-  it("enforces exact-difficulty booster qualification", async () => {
-    await expectDomainCode(
-      signupService.setCharacterOffers(target, {
-        runId: mythicRunId,
-        offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
-      }),
-      "BOOSTER_ACCESS_DIFFICULTY_MISMATCH",
-    );
+  it("accepts the account-level booster qualification on a Mythic run (not difficulty-scoped)", async () => {
+    await signupService.setCharacterOffers(target, {
+      runId: mythicRunId,
+      offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
+    });
+    const offers = await orm.RunSignup.where({ runId: mythicRunId, userId: ids.target, status: "PENDING" }).all();
+    expect(offers).toHaveLength(1);
+    await signupService.setCharacterOffers(target, { runId: mythicRunId, offers: [] });
   });
 
   it("rolls back the whole request when one offered character is invalid (all-or-nothing)", async () => {

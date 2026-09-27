@@ -29,8 +29,9 @@ const ids = {
   a: `${P}0000000004`,
   b: `${P}0000000005`,
   c: `${P}0000000006`,
-  normalOnly: `${P}0000000007`,
+  notApproved: `${P}0000000007`,
   heroicHealer: `${P}0000000008`,
+  revocable: `${P}0000000009`,
 };
 const allUserIds = Object.values(ids);
 const CHAN = "fx-run-chan";
@@ -66,17 +67,17 @@ async function createTestUser(id: string, name: string, role: AuthenticatedUser[
   });
 }
 
-async function approve(userId: string, difficulty: RaidDifficulty) {
+/** Account-level qualification — one row per User, not scoped by difficulty. */
+async function approve(userId: string, status: "APPROVED" | "REVOKED" = "APPROVED") {
   const now = new Date().toISOString();
   await orm.BoosterQualification.create({
     id: crypto.randomUUID(),
     userId,
-    difficulty,
-    status: "APPROVED",
+    status,
     notes: "fx",
     grantedAt: now,
     grantedById: null,
-    revokedAt: null,
+    revokedAt: status === "REVOKED" ? now : null,
     revokedById: null,
     createdAt: now,
     updatedAt: now,
@@ -204,7 +205,8 @@ async function currentRosterMessageId(runId: string) {
 let aChar = "";
 let bChar = "";
 let cChar = "";
-let normalChar = "";
+let notApprovedChar = "";
+let revocableChar = "";
 let heroicChar = "";
 
 /** OPEN Run with a Run channel; A (HEALER) + C (TANK) published; first roster message posted. */
@@ -279,21 +281,22 @@ beforeAll(async () => {
     ["a", "Fx A"],
     ["b", "Fx B"],
     ["c", "Fx C"],
-    ["normalOnly", "Fx Normal Only"],
+    ["notApproved", "Fx Not Approved"],
     ["heroicHealer", "Fx Heroic Healer"],
+    ["revocable", "Fx Revocable"],
   ] as const) {
     await createTestUser(ids[key], name);
   }
-  for (const userId of [ids.a, ids.b, ids.c, ids.heroicHealer]) {
-    await approve(userId, "HEROIC");
-    await approve(userId, "NORMAL");
+  for (const userId of [ids.a, ids.b, ids.c, ids.heroicHealer, ids.revocable]) {
+    await approve(userId);
   }
-  await approve(ids.normalOnly, "NORMAL");
+  await approve(ids.notApproved, "REVOKED");
   aChar = await createCharacter(ids.a, "PRIEST");
   bChar = await createCharacter(ids.b, "PRIEST");
   cChar = await createCharacter(ids.c, "PALADIN");
-  normalChar = await createCharacter(ids.normalOnly, "PRIEST");
+  notApprovedChar = await createCharacter(ids.notApproved, "PRIEST");
   heroicChar = await createCharacter(ids.heroicHealer, "PRIEST");
+  revocableChar = await createCharacter(ids.revocable, "PRIEST");
 }, 60_000);
 
 afterEach(async () => {
@@ -391,11 +394,11 @@ describe("roster acknowledgement after Run edits (runChangedSinceAck)", () => {
 });
 
 describe("NORMAL → HEROIC on a published roster", () => {
-  it("keeps signups and the stored lineup, recalculates access, blocks Start and Update until fixed, then Update edits the same message and Start succeeds", async () => {
+  it("keeps signups, lineup and account-level booster approval, recalculates access, blocks Start and Update until a revoked booster is replaced, then Update edits the same message and Start succeeds", async () => {
     const runId = await createOpenRun("NORMAL");
     await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
     const tankSignup = await createSignup(runId, ids.c, cChar, ["TANK"]);
-    const normalSignup = await createSignup(runId, ids.normalOnly, normalChar, ["HEALER"]);
+    const normalSignup = await createSignup(runId, ids.revocable, revocableChar, ["HEALER"]);
     await saveDraft(runId, [
       { signupId: tankSignup, selectedRole: "TANK" },
       { signupId: normalSignup, selectedRole: "HEALER" },
@@ -405,20 +408,34 @@ describe("NORMAL → HEROIC on a published roster", () => {
 
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { difficulty: "HEROIC" }));
 
+    // Booster qualification is account-level: the difficulty change alone keeps every booster approved.
     let current = await view(runId);
+    expect(current.boosters.find((row) => row.id === tankSignup)).toMatchObject({ boosterApproved: true });
+    expect(current.boosters.find((row) => row.id === normalSignup)).toMatchObject({ boosterApproved: true });
+
+    // Revoking the healer's qualification is what now makes the lineup invalid.
+    const revocable = await orm.BoosterQualification.where({ userId: ids.revocable }).first();
+    await orm.BoosterQualification.where({ id: revocable!.id }).update({
+      status: "REVOKED",
+      revokedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    current = await view(runId);
     const normalRow = current.boosters.find((row) => row.id === normalSignup)!;
     expect(normalRow).toMatchObject({ status: "SELECTED", draftSelected: true, boosterApproved: false });
+    expect(normalRow.issue).toBe("Booster access is no longer approved.");
     expect(current.roster.runChangedSinceAck).toBe(true);
     expect(current.roster.hasUnpublishedChanges).toBe(true);
     await expect(runService.startRun(lead, { runId })).rejects.toMatchObject({ code: "ROSTER_UNPUBLISHED_CHANGES" });
 
-    // Update with the Normal-only healer is refused; nothing changes.
+    // Update with the revoked healer is refused; nothing changes.
     await expect(update(runId, await publishedSelections(runId))).rejects.toMatchObject({ code: "ROSTER_VALIDATION_FAILED" });
     current = await view(runId);
     expect(current.roster.runChangedSinceAck).toBe(true);
     expect(current.boosters.find((row) => row.id === normalSignup)?.status).toBe("SELECTED");
 
-    // Replace with a Heroic-approved healer and Update once.
+    // Replace with an approved healer and Update once.
     const heroicSignup = await createSignup(runId, ids.heroicHealer, heroicChar, ["HEALER"]);
     await update(runId, [
       { signupId: tankSignup, selectedRole: "TANK" },
@@ -496,7 +513,7 @@ describe("Save / Update / Publish and the Discord roster message", () => {
   it("Update is atomic: a refused Update leaves the published roster, the draft and the dirty state untouched", async () => {
     const { runId, aSignup, cSignup } = await publishedRunWithPost();
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { lootType: "VIP" }));
-    const normalSignup = await createSignup(runId, ids.normalOnly, normalChar, ["HEALER"]);
+    const normalSignup = await createSignup(runId, ids.notApproved, notApprovedChar, ["HEALER"]);
     const before = await view(runId);
     await expect(
       update(runId, [
@@ -661,7 +678,7 @@ describe("Add Booster", () => {
     expect(await orm.RunRosterEntry.where({ rosterId: roster!.id }).all()).toHaveLength(0);
   });
 
-  it("works in ROSTERING and uses the CURRENT difficulty (Normal-only player refused on a Run changed to Heroic)", async () => {
+  it("works in ROSTERING after a difficulty change: approved boosters stay addable, a non-approved one is refused on any difficulty", async () => {
     const runId = await createOpenRun("NORMAL");
     const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
     await saveDraft(runId, [{ signupId: aSignup, selectedRole: "HEALER" }]);
@@ -672,8 +689,10 @@ describe("Add Booster", () => {
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { difficulty: "HEROIC" }));
     version = (await view(runId)).roster.version;
     await expect(
-      rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.normalOnly, characterId: normalChar, role: "HEALER" }),
-    ).rejects.toMatchObject({ code: "BOOSTER_ACCESS_DIFFICULTY_MISMATCH" });
+      rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.notApproved, characterId: notApprovedChar, role: "HEALER" }),
+    ).rejects.toMatchObject({ code: "BOOSTER_ACCESS_REQUIRED" });
+    await rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" });
+    expect((await view(runId)).boosters.some((row) => row.userId === ids.b && row.boosterApproved)).toBe(true);
   });
 
   it("is refused once the Run has started", async () => {

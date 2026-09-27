@@ -27,11 +27,19 @@ const heroicRun: EligibilityRun = {
   ],
 };
 
+const normalRun: EligibilityRun = {
+  ...heroicRun,
+  id: "run-normal",
+  difficulty: "NORMAL",
+};
+
 const mythicRun: EligibilityRun = {
   ...heroicRun,
   id: "run-mythic",
   difficulty: "MYTHIC",
 };
+
+const RUNS_BY_DIFFICULTY = [normalRun, heroicRun, mythicRun] as const;
 
 function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityCharacter {
   return {
@@ -44,7 +52,7 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
     specialization: "Restoration",
     isActive: true,
     warcraftLogsId: null,
-    boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
+    boosterQualification: { status: "APPROVED" },
     lockouts: [],
     reservationConflict: null,
     weeklyUnavailable: false,
@@ -112,16 +120,32 @@ describe("booster eligibility", () => {
     expect(unrecognized.eligible[0]?.defaultRole).toBeNull();
   });
 
-  it("does not treat heroic approval as mythic eligibility", () => {
-    const result = evaluateBoosterOptions([shaman()], mythicRun);
-    expect(result.eligible).toHaveLength(0);
-    expect(result.ineligible[0]?.reason).toBe("DIFFICULTY_NOT_APPROVED");
+  it.each(RUNS_BY_DIFFICULTY)("an approved booster qualifies for a $difficulty run (account-level, not difficulty-scoped)", (run) => {
+    const result = evaluateBoosterOptions([shaman()], run);
+    expect(result.ineligible).toHaveLength(0);
+    expect(result.eligible.map((option) => option.characterId)).toEqual(["char-1"]);
   });
 
-  it("rejects missing booster access", () => {
-    const result = evaluateBoosterOptions([shaman({ boosterQualifications: [] })], heroicRun);
+  it.each(RUNS_BY_DIFFICULTY)("a never-approved user does not qualify for a $difficulty run", (run) => {
+    const result = evaluateBoosterOptions([shaman({ boosterQualification: null })], run);
     expect(result.eligible).toHaveLength(0);
     expect(result.ineligible[0]?.reason).toBe("NO_BOOSTER_ACCESS");
+  });
+
+  it.each(RUNS_BY_DIFFICULTY)("a revoked booster does not qualify for a $difficulty run", (run) => {
+    const result = evaluateBoosterOptions([shaman({ boosterQualification: { status: "REVOKED" } })], run);
+    expect(result.eligible).toHaveLength(0);
+    expect(result.ineligible[0]?.reason).toBe("NO_BOOSTER_ACCESS");
+  });
+
+  it("never reports a difficulty-specific booster rejection", () => {
+    for (const run of RUNS_BY_DIFFICULTY) {
+      for (const qualification of [null, { status: "REVOKED" as const }]) {
+        const result = evaluateBoosterOptions([shaman({ boosterQualification: qualification })], run);
+        expect(result.ineligible.map((row) => row.reason)).toEqual(["NO_BOOSTER_ACCESS"]);
+        expect(result.ineligible[0]?.message).not.toMatch(/difficulty/i);
+      }
+    }
   });
 
   it("rejects inactive characters", () => {
@@ -136,7 +160,7 @@ describe("booster eligibility", () => {
       name: "Emberlight",
       wowClass: "PALADIN",
       specialization: "Holy",
-      boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
+      boosterQualification: { status: "APPROVED" },
     });
     const result = evaluateBoosterOptions([shaman(), second], heroicRun);
     expect(result.eligible.map((item) => item.characterId).includes("char-1")).toBe(true);
@@ -291,7 +315,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
     const result = evaluateBoosterOptions(
       [
         shaman({
-          boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
+          boosterQualification: { status: "APPROVED" },
           lockouts: [{ raidId: "raid-1", difficulty: "MYTHIC", resetIdentifier: reset, isComplete: true, bossesDefeated: 8 }],
         }),
       ],
@@ -331,15 +355,13 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
         ...overrides,
       });
 
-    expect(evaluateBoosterOptions([saved({ boosterQualifications: [] })], heroicRun).ineligible[0]?.reason).toBe(
+    expect(evaluateBoosterOptions([saved({ boosterQualification: null })], heroicRun).ineligible[0]?.reason).toBe(
       "NO_BOOSTER_ACCESS",
     );
     expect(
-      evaluateBoosterOptions(
-        [saved({ boosterQualifications: [{ difficulty: "MYTHIC", status: "APPROVED" }] })],
-        heroicRun,
-      ).ineligible[0]?.reason,
-    ).toBe("DIFFICULTY_NOT_APPROVED");
+      evaluateBoosterOptions([saved({ boosterQualification: { status: "REVOKED" } })], heroicRun).ineligible[0]
+        ?.reason,
+    ).toBe("NO_BOOSTER_ACCESS");
     expect(
       evaluateBoosterOptions(
         [
@@ -403,7 +425,7 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
             runTitle: "Other Run",
             scheduledStartAt: "2026-01-01T00:00:00.000Z",
           },
-          boosterQualifications: [],
+          boosterQualification: null,
         }),
       ],
       heroicRun,
@@ -418,14 +440,14 @@ describe("raid lockouts are informational, never a Booster eligibility blocker",
             runTitle: "Other Run",
             scheduledStartAt: "2026-01-01T00:00:00.000Z",
           },
-          boosterQualifications: [],
+          boosterQualification: null,
         }),
       ],
       heroicRun,
     );
     expect(reservationWins.ineligible[0]?.reason).toBe("ALREADY_SELECTED_OTHER_RUN");
 
-    const accessOnly = evaluateBoosterOptions([shaman({ boosterQualifications: [] })], heroicRun);
+    const accessOnly = evaluateBoosterOptions([shaman({ boosterQualification: null })], heroicRun);
     expect(accessOnly.ineligible[0]?.reason).toBe("NO_BOOSTER_ACCESS");
   });
 });

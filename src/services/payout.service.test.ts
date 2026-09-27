@@ -122,7 +122,7 @@ async function createCharacter(input: {
 }
 
 async function approveAccess(_characterId: string, userId: string) {
-  const existing = await orm.BoosterQualification.where({ userId, difficulty: "HEROIC" }).first();
+  const existing = await orm.BoosterQualification.where({ userId }).first();
   if (existing) {
     createdAccessIds.push(String((existing as { id: string }).id));
     return;
@@ -133,7 +133,6 @@ async function approveAccess(_characterId: string, userId: string) {
   await orm.BoosterQualification.create({
     id,
     userId,
-    difficulty: "HEROIC",
     status: "APPROVED",
     notes: "Payout test grant",
     grantedAt: now,

@@ -146,7 +146,6 @@ beforeAll(async () => {
   await orm.BoosterQualification.create({
     id: qualId,
     userId: ids.player,
-    difficulty: "HEROIC",
     status: "APPROVED",
     notes: null,
     grantedAt: new Date().toISOString(),

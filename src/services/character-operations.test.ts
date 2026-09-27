@@ -467,7 +467,9 @@ describe("detail", () => {
     });
     expect(detail.identity).toMatchObject({ primaryRole: "DPS", ownerHasRegionConnection: true });
     expect(detail.weeklyAvailability).toMatchObject({ characterId: fx.error!.id, status: "AVAILABLE" });
-    expect(detail.boosterAccess.difficulties.map((entry) => entry.difficulty)).toEqual(["NORMAL", "HEROIC", "MYTHIC"]);
+    // One account-level booster state — no per-difficulty cells.
+    expect(detail.boosterAccess).toMatchObject({ status: expect.stringMatching(/^(APPROVED|REVOKED|NONE)$/) });
+    expect(detail.boosterAccess).not.toHaveProperty("difficulties");
     expect(detail.row.lockoutSlots).toHaveLength(getCurrentLockoutRaids().length);
     expect(JSON.stringify(detail)).not.toMatch(/message|stack/i);
   });

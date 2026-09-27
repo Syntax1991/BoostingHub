@@ -430,7 +430,6 @@ describe("characterService lifecycle and signup eligibility", () => {
     await orm.BoosterQualification.create({
       id: qualificationId,
       userId: ids.owner,
-      difficulty: "HEROIC",
       status: "APPROVED",
       notes: "Test grant",
       grantedAt: now,
@@ -462,14 +461,9 @@ describe("characterService lifecycle and signup eligibility", () => {
     const historical = await signupRepository.findById(signup.id);
     expect(historical?.status).toBe("PENDING");
 
-    const qualifications = await orm.BoosterQualification.where({ userId: ids.owner }).all();
-    expect(
-      qualifications.some(
-        (row) =>
-          (row as { difficulty: string; status: string }).difficulty === "HEROIC" &&
-          (row as { difficulty: string; status: string }).status === "APPROVED",
-      ),
-    ).toBe(true);
+    // Deactivating a Character never touches the account-level qualification.
+    const qualification = await orm.BoosterQualification.where({ userId: ids.owner }).first();
+    expect(qualification?.status).toBe("APPROVED");
 
     const inactiveOptions = await signupService.getSignupOptions(owner, ids.heroicOpen);
     expect(inactiveOptions.booster.eligible.some((item) => item.characterId === character.id)).toBe(false);

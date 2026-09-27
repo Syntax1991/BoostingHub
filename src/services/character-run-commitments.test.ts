@@ -142,8 +142,8 @@ beforeAll(async () => {
   await ensureUser(ids.owner, "CRC Owner", "USER");
   await ensureUser(ids.admin, "CRC Admin", "ADMIN");
   await ensureUser(ids.other, "CRC Other", "USER");
-  await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
-  await boosterQualificationService.grant(admin, { userId: ids.other, difficulty: "HEROIC" }).catch(() => {});
+  await boosterQualificationService.grant(admin, { userId: ids.owner }).catch(() => {});
+  await boosterQualificationService.grant(admin, { userId: ids.other }).catch(() => {});
 });
 
 afterAll(async () => {

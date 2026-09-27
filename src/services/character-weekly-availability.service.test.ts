@@ -216,12 +216,12 @@ describe("characterWeeklyAvailabilityService", () => {
       "CHARACTER_UNAVAILABLE",
     );
 
-    // Ensure Mythic eligibility exists so the non-matching difficulty path is not
+    // Ensure Kael is an approved booster so the non-matching difficulty path is not
     // blocked by Booster Access — only weekly availability should gate Heroic.
     const { boosterQualificationService } = await import("@/services/booster-qualification.service");
     const admin = asUser("44444444-4444-4444-8444-444444444444", "Aelira Softstep", "ADMIN");
     try {
-      await boosterQualificationService.grant(admin, { userId: ids.kael, difficulty: "MYTHIC" });
+      await boosterQualificationService.grant(admin, { userId: ids.kael });
     } catch (error) {
       if (!(isDomainError(error) && error.code === "BOOSTER_ACCESS_ALREADY_APPROVED")) {
         throw error;
@@ -379,7 +379,7 @@ describe("signup eligibility weekly unavailable", () => {
           specialization: "Restoration",
           isActive: true,
           warcraftLogsId: null,
-          boosterQualifications: [{ difficulty: "HEROIC", status: "APPROVED" }],
+          boosterQualification: { status: "APPROVED" },
           lockouts: [],
           reservationConflict: null,
           weeklyUnavailable: true,
