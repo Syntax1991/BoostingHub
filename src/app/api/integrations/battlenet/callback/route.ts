@@ -55,6 +55,10 @@ export async function GET(request: NextRequest) {
     const oauthError = request.nextUrl.searchParams.get("error");
 
     if (oauthError) {
+      console.warn(
+        `[battlenet-callback] Battle.net returned error for user ${user.id}: ${oauthError}` +
+          ` (${request.nextUrl.searchParams.get("error_description") ?? "no description"})`,
+      );
       response = redirectCharacters(request, {
         battlenet: "error",
         code: "BATTLENET_AUTH_FAILED",
@@ -110,6 +114,11 @@ export async function GET(request: NextRequest) {
       return response;
     }
     const code = isDomainError(error) ? error.code : "BATTLENET_AUTH_FAILED";
+    // The redirect only carries the code; log the cause (never tokens) so failures are diagnosable.
+    console.error(
+      `[battlenet-callback] connection failed (${code}):`,
+      isDomainError(error) ? error.message : error,
+    );
     response = redirectCharacters(request, {
       battlenet: "error",
       code,

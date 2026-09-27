@@ -39,7 +39,7 @@ let cachedClientToken: CachedClientToken | null = null;
 
 function mapHttpError(status: number, context: string): never {
   if (status === 401 || status === 403) {
-    throw new DomainError("BATTLENET_AUTH_FAILED", `Battle.net authorization failed (${context}).`, 401);
+    throw new DomainError("BATTLENET_AUTH_FAILED", `Battle.net authorization failed (${context}, HTTP ${status}).`, 401);
   }
   if (status === 404) {
     throw new DomainError("BLIZZARD_CHARACTER_NOT_FOUND", `Blizzard resource was not found (${context}).`, 404);
