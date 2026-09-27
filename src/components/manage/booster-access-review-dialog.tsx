@@ -2,22 +2,12 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  rejectBoosterAccessAction,
-  revokeBoosterAccessAction,
-} from "@/controllers/booster-access.actions";
+import { rejectBoosterAccessAction } from "@/controllers/booster-access.actions";
 import { Button } from "@/components/ui/button";
 import { BOOSTER_ACCESS_REVIEW_REASON_MAX } from "@/validators/booster-access";
 
-export function BoosterAccessReviewDialog({
-  accessId,
-  qualificationId,
-  mode,
-}: {
-  accessId?: string;
-  qualificationId?: string;
-  mode: "reject" | "revoke";
-}) {
+/** Rejects one historical (legacy) PENDING BoosterAccess request. */
+export function BoosterAccessReviewDialog({ accessId }: { accessId: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const reasonId = useId();
@@ -50,16 +40,10 @@ export function BoosterAccessReviewDialog({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result =
-        mode === "reject"
-          ? await rejectBoosterAccessAction({
-              accessId: accessId!,
-              reason: reason.trim() || undefined,
-            })
-          : await revokeBoosterAccessAction({
-              qualificationId: qualificationId!,
-              reason: reason.trim() || undefined,
-            });
+      const result = await rejectBoosterAccessAction({
+        accessId,
+        reason: reason.trim() || undefined,
+      });
       if (!result.ok) {
         setError(result.message);
         return;
@@ -72,7 +56,7 @@ export function BoosterAccessReviewDialog({
   return (
     <>
       <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-        {mode === "reject" ? "Reject" : "Revoke"}
+        Reject
       </Button>
       <dialog
         ref={dialogRef}
@@ -87,12 +71,10 @@ export function BoosterAccessReviewDialog({
           }}
         >
           <h2 id={titleId} className="text-sm font-semibold">
-            {mode === "reject" ? "Reject booster access" : "Revoke booster access"}
+            Reject legacy request
           </h2>
           <p className="text-xs text-muted">
-            {mode === "revoke"
-              ? "The account becomes ineligible for new booster signups at this difficulty. Existing signups and roster history stay."
-              : "Rejected access does not grant booster eligibility."}
+            Rejecting a historical request does not change the user&apos;s Boosting Roles.
           </p>
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Reason (optional, visible to the owner)</span>
@@ -116,7 +98,7 @@ export function BoosterAccessReviewDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : mode === "reject" ? "Reject" : "Revoke"}
+              {pending ? "Saving…" : "Reject"}
             </Button>
           </div>
         </form>

@@ -31,17 +31,28 @@ export function hasRaidLeadAccess(role: AccountRole): boolean {
 }
 
 /**
- * BoosterAccess is a persistent platform qualification, not a per-run roster action.
- * RAID_LEAD may see access on roster tools but cannot globally approve/reject/revoke.
- * A later BOOSTER_ACCESS_MANAGER permission may replace this ADMIN-only gate.
+ * Boosting Roles (User.isBooster / User.isLootbuddy) are persistent account-level
+ * capabilities, not per-run roster actions and never an accountRole.
+ * RAID_LEAD may see them on roster tools but cannot grant or revoke them.
  */
-export function canReviewBoosterAccess(role: AccountRole): boolean {
+export function canManageBoostingRoles(role: AccountRole): boolean {
   return hasAdminAccess(role);
+}
+
+export function assertCanManageBoostingRoles(user: AuthenticatedUser): void {
+  if (!canManageBoostingRoles(user.accountRole)) {
+    throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to manage boosting roles.", 403);
+  }
+}
+
+/** Reviewing historical BoosterAccess requests follows the same ADMIN-level gate. */
+export function canReviewBoosterAccess(role: AccountRole): boolean {
+  return canManageBoostingRoles(role);
 }
 
 export function assertCanReviewBoosterAccess(user: AuthenticatedUser): void {
   if (!canReviewBoosterAccess(user.accountRole)) {
-    throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to review booster access.", 403);
+    throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to review booster requests.", 403);
   }
 }
 
@@ -84,7 +95,7 @@ export function assertCanManageCharacterOperations(user: AuthenticatedUser): voi
 export type ManagementNavItem = {
   href: string;
   label: string;
-  module: "overview" | "runs" | "templates" | "booster-access" | "users" | "characters";
+  module: "overview" | "runs" | "templates" | "boosting-roles" | "users" | "characters";
 };
 
 /**
@@ -102,7 +113,7 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
   if (hasAdminAccess(role)) {
     items.push(
       { href: "/manage/templates", label: "Templates", module: "templates" },
-      { href: "/manage/booster-access", label: "Booster Access", module: "booster-access" },
+      { href: "/manage/boosting-roles", label: "Boosting Roles", module: "boosting-roles" },
       { href: "/manage/users", label: "Users", module: "users" },
       { href: "/manage/characters", label: "Characters", module: "characters" },
     );

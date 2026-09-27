@@ -6,10 +6,8 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { boosterAccessService } from "@/services/booster-access.service";
 import {
   boosterAccessIdSchema,
-  grantBoosterAccessSchema,
   rejectBoosterAccessSchema,
   requestBoosterAccessSchema,
-  revokeBoosterAccessSchema,
 } from "@/validators/booster-access";
 
 function revalidateAccessSurfaces(characterId?: string | null) {
@@ -18,7 +16,7 @@ function revalidateAccessSurfaces(characterId?: string | null) {
   revalidatePath("/profile");
   revalidatePath("/runs");
   revalidatePath("/manage");
-  revalidatePath("/manage/booster-access");
+  revalidatePath("/manage/boosting-roles");
   revalidatePath("/manage/users");
   if (characterId) {
     revalidatePath(`/characters/${characterId}`);
@@ -41,19 +39,6 @@ export async function requestBoosterAccessAction(input: unknown): Promise<Action
   }
 }
 
-export async function grantBoosterAccessAction(input: unknown): Promise<ActionResult> {
-  try {
-    const admin = await requireAdmin();
-    const parsed = grantBoosterAccessSchema.parse(input);
-    await boosterAccessService.grantAccess(admin, parsed);
-    revalidateAccessSurfaces();
-    revalidatePath(`/manage/users/${parsed.userId}`);
-    return { ok: true, message: "Booster access granted." };
-  } catch (error) {
-    return mapActionError(error);
-  }
-}
-
 export async function approveBoosterAccessAction(input: unknown): Promise<ActionResult> {
   try {
     const admin = await requireAdmin();
@@ -61,7 +46,7 @@ export async function approveBoosterAccessAction(input: unknown): Promise<Action
     await boosterAccessService.approveAccess(admin, parsed.accessId);
     revalidateAccessSurfaces();
     revalidatePath("/characters");
-    return { ok: true, message: "Booster access approved." };
+    return { ok: true, message: "Request approved — Booster role granted." };
   } catch (error) {
     return mapActionError(error);
   }
@@ -73,19 +58,7 @@ export async function rejectBoosterAccessAction(input: unknown): Promise<ActionR
     const parsed = rejectBoosterAccessSchema.parse(input);
     await boosterAccessService.rejectAccess(admin, parsed.accessId, parsed.reason);
     revalidateAccessSurfaces();
-    return { ok: true, message: "Booster access rejected." };
-  } catch (error) {
-    return mapActionError(error);
-  }
-}
-
-export async function revokeBoosterAccessAction(input: unknown): Promise<ActionResult> {
-  try {
-    const admin = await requireAdmin();
-    const parsed = revokeBoosterAccessSchema.parse(input);
-    await boosterAccessService.revokeAccess(admin, parsed.qualificationId, parsed.reason);
-    revalidateAccessSurfaces();
-    return { ok: true, message: "Booster access revoked." };
+    return { ok: true, message: "Request rejected." };
   } catch (error) {
     return mapActionError(error);
   }

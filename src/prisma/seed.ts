@@ -250,9 +250,6 @@ async function wipe() {
   for (const row of await orm.BoosterAccess.select("id").all()) {
     await orm.BoosterAccess.where({ id: row.id }).delete();
   }
-  for (const row of await orm.BoosterQualification.select("id").all()) {
-    await orm.BoosterQualification.where({ id: row.id }).delete();
-  }
   for (const row of await orm.ActivityEvent.select("id").all()) {
     await orm.ActivityEvent.where({ id: row.id }).delete();
   }
@@ -571,48 +568,15 @@ async function seed() {
     });
   }
 
-  // Collapse APPROVED legacy rows into authoritative User+Difficulty qualifications.
-  // mira has zero; aelira gets HEROIC+MYTHIC only (ADMIN does not auto-get all).
-  const approvedPairs = new Map<string, { userId: string; difficulty: "NORMAL" | "HEROIC" | "MYTHIC" }>();
+  // Boosting Roles live on the User. Users with an APPROVED legacy request and
+  // the filler boosters hold the Booster role (all difficulties). mira has none
+  // (ADMIN does not auto-qualify).
+  const boosterUserIds = new Set<string>(FILLER_BOOSTERS.map((filler) => filler.userId));
   for (const item of access) {
-    if (item.status !== "APPROVED") continue;
-    approvedPairs.set(`${item.userId}:${item.difficulty}`, {
-      userId: item.userId,
-      difficulty: item.difficulty,
-    });
+    if (item.status === "APPROVED") boosterUserIds.add(item.userId);
   }
-  for (const pair of approvedPairs.values()) {
-    await orm.BoosterQualification.create({
-      id: crypto.randomUUID(),
-      userId: pair.userId,
-      difficulty: pair.difficulty,
-      status: "APPROVED",
-      notes: "Seeded from approved legacy access.",
-      grantedAt: SEED_NOW,
-      grantedById: ids.users.aelira,
-      revokedAt: null,
-      revokedById: null,
-      createdAt: SEED_NOW,
-      updatedAt: SEED_NOW,
-    });
-  }
-
-  for (const filler of FILLER_BOOSTERS) {
-    for (const difficulty of ["NORMAL", "HEROIC", "MYTHIC"] as const) {
-      await orm.BoosterQualification.create({
-        id: crypto.randomUUID(),
-        userId: filler.userId,
-        difficulty,
-        status: "APPROVED",
-        notes: "Seed filler booster — approved for composition padding.",
-        grantedAt: SEED_NOW,
-        grantedById: ids.users.aelira,
-        revokedAt: null,
-        revokedById: null,
-        createdAt: SEED_NOW,
-        updatedAt: SEED_NOW,
-      });
-    }
+  for (const userId of boosterUserIds) {
+    await orm.User.where({ id: userId }).update({ isBooster: true });
   }
 
   await raidRepository.ensureReferenceRaids(SEED_NOW);

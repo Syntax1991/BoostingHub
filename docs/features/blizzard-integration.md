@@ -170,7 +170,7 @@ Class mismatch against the stored Character is also refused so eligibility histo
 
 ## BoosterAccess independence
 
-Linking or importing a character does not create, approve, or revoke `BoosterAccess`. Eligibility remains an explicit BoostingHub account-level workflow (`userId + class + role + difficulty`). Matching Characters reuse existing approvals. See [booster-access-management.md](booster-access-management.md).
+Linking or importing a character does not create, approve, or revoke `BoosterAccess` or any Boosting Role. Booster eligibility remains an explicit BoostingHub account-level capability (`User.isBooster`). Matching Characters reuse existing approvals. See [booster-access-management.md](booster-access-management.md).
 
 ## Lockout derivation (Character Raid Encounters)
 

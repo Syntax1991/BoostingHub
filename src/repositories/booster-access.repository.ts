@@ -112,11 +112,8 @@ export const boosterAccessRepository = {
     return row ? mapAccess(row as Record<string, unknown>) : null;
   },
 
-  async listPendingByUserDifficulty(
-    userId: string,
-    difficulty: RaidDifficulty,
-  ): Promise<BoosterAccessRecord[]> {
-    const rows = await orm.BoosterAccess.where({ userId, difficulty, status: "PENDING" }).all();
+  async listPendingByUser(userId: string): Promise<BoosterAccessRecord[]> {
+    const rows = await orm.BoosterAccess.where({ userId, status: "PENDING" }).all();
     return rows.map((row) => mapAccess(row as Record<string, unknown>));
   },
 

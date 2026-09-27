@@ -4,9 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
-import { DIFFICULTY_LABELS, REGION_LABELS } from "@/lib/labels";
+import { REGION_LABELS } from "@/lib/labels";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { ClassBadge, RoleBadge } from "@/components/ui/badges";
+import { BoostingRoleBadges, ClassBadge, RoleBadge } from "@/components/ui/badges";
+import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
@@ -54,6 +55,23 @@ export function CharactersView({ data }: { data: Page }) {
       />
       <BattleNetPanel battleNet={data.battleNet} battleNetFlash={data.battleNetFlash} />
 
+      <Card className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="font-medium">Your boosting roles</span>
+            <BoostingRoleBadges roles={data.boostingRoles} emptyLabel="None yet" />
+            <span className="text-xs text-muted">
+              {data.boostingRoles.isBooster
+                ? "Account-level — every eligible character can sign up as a Booster on any difficulty."
+                : "Booster signups need the Booster role on your account. Lootbuddy signups are open to everyone."}
+            </span>
+          </div>
+          {data.boostingRoles.isBooster ? null : (
+            <DiscordBoosterApplicationCta discordTicketUrl={data.discordTicketUrl} />
+          )}
+        </div>
+      </Card>
+
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <FilterButton label="Active" value="active" current={filter} onSelect={setFilter} />
         <FilterButton label="Inactive" value="inactive" current={filter} onSelect={setFilter} />
@@ -83,7 +101,6 @@ export function CharactersView({ data }: { data: Page }) {
                   <th className="px-4 py-2 font-medium">Role</th>
                   <th className="px-4 py-2 font-medium">iLvl</th>
                   <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Account access</th>
                   <th className="px-4 py-2 font-medium">
                     Lockouts
                     {data.currentLockoutRaids?.length
@@ -115,17 +132,6 @@ export function CharactersView({ data }: { data: Page }) {
                       {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"}
                     </td>
                     <td className="px-4 py-3 text-muted">{character.isActive ? "Active" : "Inactive"}</td>
-                    <td className="px-4 py-3 text-xs">
-                      {character.boosterAccess.approvals.length === 0 ? (
-                        <span className="text-muted">None approved</span>
-                      ) : (
-                        <ul className="space-y-1">
-                          {character.boosterAccess.approvals.map((approval) => (
-                            <li key={approval.difficulty}>{DIFFICULTY_LABELS[approval.difficulty]}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </td>
                     <td className="px-4 py-3 text-xs">
                       {formatCompactMultiRaidLockoutProgress(
                         character.lockouts,

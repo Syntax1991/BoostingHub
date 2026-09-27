@@ -1,6 +1,6 @@
 /**
  * Derived Character schedule-integrity conflicts for a target Run start.
- * Scheduling only — never inactive, booster access, lockouts, or raid-save state.
+ * Scheduling only — never inactive, Booster role, lockouts, or raid-save state.
  * Not persisted; recomputed from BoostingHub Run reservations and weekly unavailability.
  */
 

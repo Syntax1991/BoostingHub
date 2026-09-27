@@ -8,10 +8,6 @@ import { userRepository } from "@/repositories/user.repository";
 
 export type DevAccountBootstrapInput = { userId: string };
 
-function uniqueViolation(error: unknown): boolean {
-  return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);
-}
-
 /**
  * Core bootstrap logic — throws on misconfiguration instead of silently
  * doing nothing, so a broken dev setup fails loudly. `bootstrapDevelopmentAccount`
@@ -39,18 +35,13 @@ export async function bootstrapDevelopmentAccountOrThrow(input: DevAccountBootst
     return;
   }
 
-  try {
-    await devAccountBootstrapRepository.restoreDevAdminAccount(input.userId);
-  } catch (error) {
-    if (!uniqueViolation(error)) throw error;
-    await devAccountBootstrapRepository.restoreDevAdminAccount(input.userId);
-  }
+  await devAccountBootstrapRepository.restoreDevAdminAccount(input.userId);
 }
 
 /**
  * Development-only: after a Discord sign-in persists/updates its User row,
  * restores the ONE explicitly-configured account to ADMIN/ACTIVE with
- * APPROVED NORMAL/HEROIC/MYTHIC Booster qualifications. Wired as Better
+ * the Booster role (User.isBooster). Wired as Better
  * Auth's `databaseHooks.session.create.after` (see auth.ts) — fires once per
  * sign-in, covering both a brand-new User (first Discord sign-in after a DB
  * reset) and an existing one whose privileges were wiped, without a separate

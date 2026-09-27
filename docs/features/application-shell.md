@@ -9,19 +9,19 @@ Give authenticated operators a persistent dark operations UI for the Phase 1 rou
 1. Sign in at `/` with Discord or a development identity.
 2. Land on `/dashboard`. The dashboard's **Recent Activity** (community-wide operational events) is shown to raid leads and admins only; regular users never receive those events.
 3. Move between Runs, My Runs, Characters, Profile. Open a Run from those lists at `/runs/[runId]`.
-4. Raid leads and admins also see Manage, with a role-based sub-nav (Overview / Runs; ADMIN also Booster Access / Users).
+4. Raid leads and admins also see Manage, with a role-based sub-nav (Overview / Runs; ADMIN also Templates / Boosting Roles / Users / Characters).
 
 ## Permissions
 
 - All app routes: authenticated `ACTIVE` user
 - `/manage*`: `RAID_LEAD` or `ADMIN`, enforced in controllers
-- `/manage/booster-access`, `/manage/users`: `ADMIN` only
+- `/manage/boosting-roles` (old `/manage/booster-access` redirects), `/manage/users`: `ADMIN` only
 
 ## Models / services / controllers
 
 - Models: User, Character, BattleNetConnection, BattleNetImportSession, BoosterAccess, Raid, Run, RunSignup, CharacterRaidLockout, RunRoster, RunAttendance, RunSettlement, RunPayoutEntry, ActivityEvent
-- Services: dashboard, run (including create/lifecycle), run detail, signup, character, battle-net, character-blizzard, profile, lockout, booster access, management hub, user management, roster, attendance, payout
-- Controllers: `dashboard.controller`, `app.controller`, `run.actions`, `blizzard.actions`, `booster-access.actions`, `user-management.actions`, `auth.controller`, `auth.actions`
+- Services: dashboard, run (including create/lifecycle), run detail, signup, character, battle-net, character-blizzard, profile, lockout, booster access (legacy requests), boosting roles, management hub, user management, roster, attendance, payout
+- Controllers: `dashboard.controller`, `app.controller`, `run.actions`, `blizzard.actions`, `booster-access.actions`, `boosting-role.actions`, `user-management.actions`, `auth.controller`, `auth.actions`
 
 ## Limitations
 

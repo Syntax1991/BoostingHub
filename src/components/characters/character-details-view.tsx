@@ -7,7 +7,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { REGION_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { AccessBadge, ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
+import { ClassBadge, DifficultyBadge, RoleBadge } from "@/components/ui/badges";
 import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { CharacterLifecycleButton } from "@/components/characters/character-lifecycle-button";
 import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
@@ -19,7 +19,6 @@ import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-logs-button";
 import { refreshBlizzardCharacterAction } from "@/controllers/blizzard.actions";
 import type { characterService } from "@/services/character.service";
-import type { BoosterQualificationStatus } from "@/models/enums";
 import {
   BLIZZARD_PROFILE_UNAVAILABLE_HINT,
   BLIZZARD_PROFILE_UNAVAILABLE_TITLE,
@@ -28,12 +27,6 @@ import {
 import { DeleteCharacterButton } from "@/components/characters/delete-character-button";
 
 type Details = Awaited<ReturnType<typeof characterService.getCharacterDetails>>;
-
-function statusLabel(status: BoosterQualificationStatus | "NONE") {
-  if (status === "NONE") return "Not granted";
-  if (status === "APPROVED") return "Approved";
-  return "Revoked";
-}
 
 function BlizzardRefreshButton({ characterId }: { characterId: string }) {
   const router = useRouter();
@@ -75,7 +68,6 @@ function BlizzardRefreshButton({ characterId }: { characterId: string }) {
 }
 
 export function CharacterDetailsView({ data }: { data: Details }) {
-  const panel = data.accessPanel;
   const lockoutSlots = projectCurrentRaidLockoutSlots(
     data.lockouts,
     data.currentLockoutRaids ?? [],
@@ -211,27 +203,22 @@ export function CharacterDetailsView({ data }: { data: Details }) {
         </Card>
         <Card>
           <CardHeader
-            title="Account booster access"
-            description="Difficulty qualifications on your account. Shared by every character — not owned by this character. Approved difficulty unlocks all valid roles for each class."
-            action={<DiscordBoosterApplicationCta discordTicketUrl={panel.discordTicketUrl} />}
+            title="Booster signups"
+            description="The Booster role belongs to your account, not to this character. It covers every raid difficulty and unlocks all valid roles for this class."
+            action={
+              data.ownerIsBooster ? null : (
+                <DiscordBoosterApplicationCta discordTicketUrl={data.discordTicketUrl} />
+              )
+            }
           />
-          <ul className="divide-y divide-border">
-            {panel.difficulties.map((cell) => (
-              <li key={cell.difficulty} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                <DifficultyBadge difficulty={cell.difficulty} />
-                <span className="flex items-center gap-2">
-                  {cell.status === "NONE" ? (
-                    <span className="text-xs text-muted">{statusLabel(cell.status)}</span>
-                  ) : (
-                    <AccessBadge status={cell.status} />
-                  )}
-                </span>
-                {cell.notes && cell.status === "REVOKED" ? (
-                  <p className="w-full text-xs text-muted">{cell.notes}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+            <span className="font-medium">Booster role</span>
+            {data.ownerIsBooster ? (
+              <span className="text-xs text-success">Enabled — this character can sign up as a Booster</span>
+            ) : (
+              <span className="text-xs text-muted">Not granted — Lootbuddy signups remain open</span>
+            )}
+          </div>
         </Card>
         <Card>
           <CardHeader

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/labels";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { DifficultyBadge } from "@/components/ui/badges";
+import { BoostingRoleBadges } from "@/components/ui/badges";
 import { hasRaidLeadAccess } from "@/auth/authorization";
 import type { profileService } from "@/services/profile.service";
 
@@ -57,22 +57,17 @@ export function ProfileView({ data }: { data: Profile }) {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Booster access" />
-          <div className="px-4 py-4 text-sm">
-            {data.boosterAccess.approvals.length === 0 ? (
-              <p className="text-muted">No approved booster difficulties.</p>
-            ) : (
-              <ul className="space-y-2">
-                {data.boosterAccess.approvals.map((approval) => (
-                  <li key={approval.difficulty} className="flex items-center justify-between gap-2">
-                    <DifficultyBadge difficulty={approval.difficulty} />
-                  </li>
-                ))}
-              </ul>
+          <CardHeader
+            title="Boosting roles"
+            description="What you can take part in as. Separate from your account role."
+          />
+          <div className="flex flex-wrap items-center gap-2 px-4 py-4 text-sm">
+            <BoostingRoleBadges roles={data.boostingRoles} emptyLabel="No boosting role yet" />
+            {data.boostingRoles.isBooster ? null : (
+              <p className="w-full text-xs text-muted">
+                Booster signups need the Booster role — apply through Discord. Lootbuddy signups are open to everyone.
+              </p>
             )}
-            <p className="mt-3 text-xs text-muted">
-              {data.boosterAccess.approvedCount} approved · {data.boosterAccess.revokedCount} revoked
-            </p>
           </div>
         </Card>
         <Card>

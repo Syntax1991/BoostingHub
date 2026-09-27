@@ -3,24 +3,11 @@ import { hasOwnerAccess } from "@/auth/authorization";
 import { formatDateTime } from "@/lib/datetime";
 import { ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
-import type {
-  AccountRole,
-  BoosterAccessStatus,
-  CharacterRole,
-  RaidDifficulty,
-  WowClass,
-  WowRegion,
-} from "@/models/enums";
+import type { AccountRole, BoostingRole, CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import {
-  AccessBadge,
-  AccountRoleBadge,
-  ClassBadge,
-  DifficultyBadge,
-  RoleBadge,
-} from "@/components/ui/badges";
+import { AccountRoleBadge, ClassBadge, RoleBadge } from "@/components/ui/badges";
 import { AccountRoleAction } from "@/components/manage/account-role-action";
-import { GrantBoosterAccessDialog } from "@/components/manage/grant-booster-access-dialog";
+import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
 import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
 import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
 import type { managementController } from "@/controllers/app.controller";
@@ -35,22 +22,26 @@ function asCharacterRole(value: string): CharacterRole {
   return value as CharacterRole;
 }
 
-function asDifficulty(value: string): RaidDifficulty {
-  return value as RaidDifficulty;
-}
-
-function asAccessStatus(value: string): BoosterAccessStatus {
-  return value as BoosterAccessStatus;
-}
-
 function asRegion(value: string): WowRegion {
   return value as WowRegion;
 }
 
 export function ManageUserDetailView({ data }: { data: Page }) {
-  const { user, characters, access, audit, strikes, currentLockoutRaids } = data;
-  const approved = access.filter((row) => row.status === "APPROVED").length;
-  const revoked = access.filter((row) => row.status === "REVOKED").length;
+  const { user, characters, boostingRoles, audit, strikes, currentLockoutRaids } = data;
+  const roleRows: Array<{ role: BoostingRole; label: string; enabled: boolean; description: string }> = [
+    {
+      role: "BOOSTER",
+      label: "Booster",
+      enabled: boostingRoles.isBooster,
+      description: "May sign up and be rostered as a Booster on Normal, Heroic and Mythic runs.",
+    },
+    {
+      role: "LOOTBUDDY",
+      label: "Lootbuddy",
+      enabled: boostingRoles.isLootbuddy,
+      description: "Recognised Lootbuddy. Lootbuddy signups are not gated by this role.",
+    },
+  ];
   const activeStrikes = strikes.filter((row) => row.status === "ACTIVE").length;
   const lockoutRaidLabel = currentLockoutRaids?.length
     ? currentLockoutRaids.map((raid) => raid.name).join(" · ")
@@ -130,9 +121,40 @@ export function ManageUserDetailView({ data }: { data: Page }) {
               </p>
             ) : null}
             <p className="mt-3 text-xs text-muted">
-              BOOSTER / LOOTBUDDY are run participation types, not account roles.
+              Booster and Lootbuddy are Boosting Roles, managed separately — never account roles.
             </p>
           </div>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader
+            title="Boosting roles"
+            description="Operational participation, independent of the account role and of each other. Not scoped by raid difficulty."
+          />
+          <ul className="divide-y divide-border">
+            {roleRows.map((row) => (
+              <li
+                key={row.role}
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 font-medium">
+                    {row.label}
+                    <span className={row.enabled ? "text-xs text-success" : "text-xs text-muted"}>
+                      {row.enabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted">{row.description}</p>
+                </div>
+                <BoostingRoleControl
+                  userId={user.id}
+                  userName={user.name}
+                  role={row.role}
+                  enabled={row.enabled}
+                />
+              </li>
+            ))}
+          </ul>
         </Card>
 
         <Card className="lg:col-span-2">
@@ -179,60 +201,6 @@ export function ManageUserDetailView({ data }: { data: Page }) {
                       currentLockoutRaids ?? [],
                     )}
                   </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Booster qualifications"
-            description={
-              approved === 0 && revoked === 0
-                ? "No difficulty qualifications."
-                : `${approved} approved${revoked ? ` · ${revoked} revoked` : ""}`
-            }
-            action={
-              <div className="flex flex-wrap items-center gap-3">
-                <GrantBoosterAccessDialog
-                  users={[
-                    {
-                      id: user.id,
-                      name: user.name,
-                      discordUsername: user.discordUsername,
-                    },
-                  ]}
-                  defaultUserId={user.id}
-                />
-                <Link
-                  href={`/manage/booster-access?view=qualifications&userId=${encodeURIComponent(user.id)}`}
-                  className="text-sm text-accent hover:underline"
-                >
-                  Open queue
-                </Link>
-              </div>
-            }
-          />
-          {access.length === 0 ? (
-            <EmptyState
-              title="No booster access."
-              description="Grant access from the booster access queue."
-            />
-          ) : (
-            <ul className="divide-y divide-border">
-              {access.map((row) => (
-                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <DifficultyBadge difficulty={asDifficulty(row.difficulty)} />
-                  </div>
-                  <div className="text-right">
-                    <AccessBadge status={asAccessStatus(row.status)} />
-                    {row.grantedAt ? (
-                      <p className="mt-1 text-xs text-muted">{formatDateTime(row.grantedAt)}</p>
-                    ) : null}
-                  </div>
-                  {row.notes ? <p className="w-full text-xs text-muted">{row.notes}</p> : null}
                 </li>
               ))}
             </ul>

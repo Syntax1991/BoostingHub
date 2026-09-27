@@ -6,7 +6,7 @@ import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { boostingRoleService } from "@/services/boosting-role.service";
 import { characterScheduleCommitmentsService } from "@/services/character-schedule-commitments.service";
 import { characterService } from "@/services/character.service";
 import { rosterService } from "@/services/roster.service";
@@ -111,7 +111,6 @@ afterAll(async () => {
   for (const id of createdCharacterIds) {
     await orm.Character.where({ id }).delete().catch(() => {});
   }
-  await orm.BoosterQualification.where({ userId: ids.owner }).delete().catch(() => {});
 });
 
 describe("characterScheduleCommitmentsService", () => {
@@ -121,10 +120,7 @@ describe("characterScheduleCommitmentsService", () => {
   const admin = asUser(ids.admin, "CSC Admin", "ADMIN");
 
   it("lists SELECTED reservations, omits PENDING-only, rejects foreign owners", async () => {
-    await boosterQualificationService.grant(admin, {
-      userId: ids.owner,
-      difficulty: "HEROIC",
-    });
+    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true });
 
     const character = await characterService.createCharacter(owner, {
       name: "Commitstorm",
@@ -187,10 +183,7 @@ describe("characterScheduleCommitmentsService", () => {
   });
 
   it("includes draft-selected reservations and ignores deprecated manual blocks", async () => {
-    await boosterQualificationService.grant(admin, {
-      userId: ids.owner,
-      difficulty: "HEROIC",
-    }).catch(() => {});
+    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
 
     const character = await characterService.createCharacter(owner, {
       name: "Draftstorm",

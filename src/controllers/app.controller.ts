@@ -20,7 +20,7 @@ import { boosterAccessService } from "@/services/booster-access.service";
 import { managementHubService } from "@/services/management-hub.service";
 import { userManagementService } from "@/services/user-management.service";
 import { userRepository } from "@/repositories/user.repository";
-import { parseAdminAccessFilters } from "@/validators/booster-access-filters";
+import { parseBoostingRolesPageFilters } from "@/validators/boosting-roles";
 import { parseAdminUserFilters } from "@/validators/user-management";
 import { characterOperationsService } from "@/services/character-operations.service";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
@@ -227,52 +227,44 @@ export const managementController = {
     };
   },
 
-  async getBoosterAccessPage(searchParams: {
+  async getBoostingRolesPage(searchParams: {
     view?: string | string[];
-    status?: string | string[];
-    difficulty?: string | string[];
     role?: string | string[];
     query?: string | string[];
-    userId?: string | string[];
+    difficulty?: string | string[];
+    requestedRole?: string | string[];
   }) {
-    const user = await requireAdminOrRedirect();
-    const filters = parseAdminAccessFilters(searchParams);
-    const view = filters.view ?? "qualifications";
-    const grantCandidates = await userRepository.listAdminUsers({ sort: "name" });
-    const listed = await boosterAccessService.listAdminAccessRequests(user, {
-      view,
-      status: filters.status,
-      difficulty: filters.difficulty,
-      role: filters.role,
-      query: filters.query,
-      userId: filters.userId,
-    });
-    return {
-      view: listed.view,
-      legacyPendingCount: listed.legacyPendingCount,
-      approvedQualificationCount: listed.approvedQualificationCount,
-      filters: {
-        view: listed.view,
-        status: listed.view === "legacy" ? "PENDING" : (filters.status ?? "ALL"),
+    const user = await requireAdminOrRedirect("/manage/boosting-roles");
+    const filters = parseBoostingRolesPageFilters(searchParams);
+    const [counts, legacy] = await Promise.all([
+      userRepository.countBoostingRoles(),
+      boosterAccessService.listLegacyRequests(user, {
         difficulty: filters.difficulty,
-        role: filters.role,
-        query: filters.query,
-        userId: filters.userId,
-      },
-      grantUsers: grantCandidates.map((row) => ({
-        id: row.id,
-        name: row.name,
-        discordUsername: row.discordUsername,
-      })),
-      qualifications: listed.qualifications,
-      legacyRequests: listed.legacyRequests,
+        role: filters.requestedRole,
+        query: filters.view === "legacy" ? filters.query : undefined,
+      }),
+    ]);
+    const users =
+      filters.view === "roles"
+        ? await userManagementService.listUsers(user, {
+            query: filters.query,
+            boostingRole: filters.role === "ALL" ? undefined : filters.role,
+            sort: "name",
+          })
+        : [];
+    return {
+      filters,
+      counts,
+      users,
+      legacyPendingCount: legacy.pendingCount,
+      legacyRequests: filters.view === "legacy" ? legacy.requests : [],
     };
   },
 
   async getUsersPage(searchParams: {
     query?: string | string[];
     role?: string | string[];
-    access?: string | string[];
+    boostingRole?: string | string[];
     sort?: string | string[];
   } = {}) {
     const user = await requireAdminOrRedirect("/manage/users");

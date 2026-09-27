@@ -30,7 +30,6 @@ const ids = {
 const createdUserIds = Object.values(ids);
 const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
-const createdQualificationIds: string[] = [];
 const createdLockoutIds: string[] = [];
 
 function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
@@ -81,7 +80,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
-    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
     else if (table === "CharacterRaidLockout") await orm.CharacterRaidLockout.where({ id }).delete();
   } catch {
     // Already gone.
@@ -121,10 +119,6 @@ beforeAll(async () => {
     for (const row of runs) {
       await cleanupRun((row as { id: string }).id);
     }
-    const quals = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of quals) {
-      await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
-    }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
       await deleteIfPresent("Character", (row as { id: string }).id);
@@ -154,21 +148,7 @@ beforeAll(async () => {
     updatedAt: new Date().toISOString(),
   });
 
-  const qualId = crypto.randomUUID();
-  createdQualificationIds.push(qualId);
-  await orm.BoosterQualification.create({
-    id: qualId,
-    userId: ids.target,
-    difficulty: "HEROIC",
-    status: "APPROVED",
-    notes: null,
-    grantedAt: new Date().toISOString(),
-    grantedById: null,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  await orm.User.where({ id: ids.target }).update({ isBooster: true });
 }, 60_000);
 
 afterAll(async () => {
@@ -177,9 +157,6 @@ afterAll(async () => {
   }
   for (const id of createdLockoutIds) {
     await deleteIfPresent("CharacterRaidLockout", id);
-  }
-  for (const id of createdQualificationIds) {
-    await deleteIfPresent("BoosterQualification", id);
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);

@@ -6,7 +6,7 @@ import { venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
 import { runRepository } from "@/repositories/run.repository";
 import { characterAvailabilityRepository } from "@/repositories/character-availability.repository";
 import { CROSS_RUN_RESERVATION_MIN_GAP_MS } from "@/repositories/signup.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { boostingRoleService } from "@/services/boosting-role.service";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { lockoutService } from "@/services/lockout.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
@@ -119,7 +119,6 @@ afterAll(async () => {
     await orm.CharacterAvailabilityBlock.where({ characterId: id }).delete().catch(() => {});
     await orm.Character.where({ id }).delete().catch(() => {});
   }
-  await orm.BoosterQualification.where({ userId: ids.owner }).delete().catch(() => {});
 });
 
 describe("schedule conflict integrity", () => {
@@ -137,7 +136,7 @@ describe("schedule conflict integrity", () => {
       itemLevel: 640,
     });
     createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
+    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
 
     const run = await createOpenRun(lead, "2026-11-10T18:00:00.000Z", { healers: 1 });
     await signupService.createBoosterSignup(owner, {
@@ -195,7 +194,7 @@ describe("schedule conflict integrity", () => {
       itemLevel: 625,
     });
     createdCharacterIds.push(character.id);
-    await boosterQualificationService.grant(admin, { userId: ids.owner, difficulty: "HEROIC" }).catch(() => {});
+    await boostingRoleService.setRole(admin, { userId: ids.owner, role: "BOOSTER", enabled: true }).catch(() => {});
 
     const runA = await createOpenRun(lead, "2026-11-13T17:00:00.000Z", { dps: 1 });
     const runB = await createOpenRun(lead, "2026-11-13T20:00:00.000Z", { dps: 1 });

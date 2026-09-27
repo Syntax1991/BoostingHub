@@ -37,7 +37,6 @@ const ids = {
 const createdUserIds = Object.values(ids);
 const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
-const createdQualificationIds: string[] = [];
 
 function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
   return view.boosters;
@@ -96,21 +95,7 @@ function futureIso(days = 2) {
 }
 
 async function grantQualification(userId: string) {
-  const id = crypto.randomUUID();
-  createdQualificationIds.push(id);
-  await orm.BoosterQualification.create({
-    id,
-    userId,
-    difficulty: "HEROIC",
-    status: "APPROVED",
-    notes: null,
-    grantedAt: new Date().toISOString(),
-    grantedById: null,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  await orm.User.where({ id: userId }).update({ isBooster: true });
 }
 
 async function createCharacter(
@@ -283,9 +268,6 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of createdRunIds) {
     await cleanupRun(id);
-  }
-  for (const id of createdQualificationIds) {
-    await orm.BoosterQualification.where({ id }).delete().catch(() => {});
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);

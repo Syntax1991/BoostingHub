@@ -1,6 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanReviewBoosterAccess } from "@/auth/authorization";
-import type { BoosterAccessMatch, BoosterAccessRecord } from "@/models/records";
+import type { BoosterAccessRecord } from "@/models/records";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { CLASS_LABELS, CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS } from "@/lib/labels";
@@ -12,30 +12,16 @@ import {
 } from "@/repositories/booster-access.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { assertBoosterAccessTransition } from "@/services/booster-access-state";
-import {
-  boosterQualificationService,
-  type AdminQualificationRow,
-} from "@/services/booster-qualification.service";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
-import type { BoosterQualificationStatus } from "@/models/enums";
+import { boostingRoleService } from "@/services/boosting-role.service";
 
-export type { BoosterAccessMatch, BoosterAccessRecord };
+export type { BoosterAccessRecord };
 
-export type AdminAccessFilters = {
-  view?: "qualifications" | "legacy";
-  status?: BoosterQualificationStatus | "ALL";
+export type LegacyRequestFilters = {
+  /** Filters historical requests by what was requested at the time. */
   difficulty?: RaidDifficulty;
   role?: CharacterRole;
   query?: string;
   userId?: string;
-};
-
-export type AdminAccessListResult = {
-  view: "qualifications" | "legacy";
-  legacyPendingCount: number;
-  approvedQualificationCount: number;
-  qualifications: AdminQualificationRow[];
-  legacyRequests: BoosterAccessAdminRecord[];
 };
 
 function accessLabel(wowClass: WowClass, role: CharacterRole, difficulty: RaidDifficulty) {
@@ -75,31 +61,20 @@ function assertRoleForClass(wowClass: WowClass, role: CharacterRole) {
 }
 
 /**
- * Legacy BoosterAccess is historical PENDING/APPROVED/REJECTED/REVOKED Class/Role
- * request history. Current eligibility lives on BoosterQualification (User + Difficulty).
+ * HISTORICAL REQUEST vs CURRENT CAPABILITY: BoosterAccess is historical
+ * PENDING/APPROVED/REJECTED/REVOKED Class/Role request history; its difficulty
+ * records what was requested at the time and is never read for eligibility.
+ * The current capability is User.isBooster (see boostingRoleService).
  *
  * New self-service requests are disabled. Applications are reviewed in Discord;
- * ADMIN grants qualifications directly after external review.
+ * ADMIN grants the Booster role directly after external review.
  */
 export const boosterAccessService = {
-  /**
-   * @deprecated Prefer boosterQualificationService.grant
-   */
-  async grantAccess(
-    admin: AuthenticatedUser,
-    input: { userId: string; difficulty: RaidDifficulty; notes?: string },
-  ) {
-    return boosterQualificationService.grant(admin, input);
-  },
-
   /**
    * Self-service creation of PENDING BoosterAccess is permanently disabled.
    * Historical PENDING rows remain; ADMIN may still review them.
    */
-  async requestAccess(
-    user: AuthenticatedUser,
-    input: { characterId: string; role: CharacterRole; difficulty: RaidDifficulty },
-  ): Promise<never> {
+  async requestAccess(user: AuthenticatedUser, input: { characterId: string }): Promise<never> {
     await loadOwnedCharacter(user, input.characterId);
     throw new DomainError(
       "BOOSTER_ACCESS_SELF_REQUEST_DISABLED",
@@ -117,10 +92,8 @@ export const boosterAccessService = {
     assertBoosterAccessTransition(access.status, "APPROVED");
     assertRoleForClass(access.wowClass, access.role);
 
-    const siblings = await boosterAccessRepository.listPendingByUserDifficulty(
-      access.userId,
-      access.difficulty,
-    );
+    // Account-level approval covers every PENDING legacy request of this User.
+    const siblings = await boosterAccessRepository.listPendingByUser(access.userId);
 
     const now = new Date().toISOString();
     for (const sibling of siblings) {
@@ -134,11 +107,9 @@ export const boosterAccessService = {
       });
     }
 
-    await boosterQualificationService.ensureApproved(admin, {
-      userId: access.userId,
-      difficulty: access.difficulty,
-      notes: `Legacy approve bridge for ${accessLabel(access.wowClass, access.role, access.difficulty)}`,
-    });
+    // Approving a historical request grants the account-level Booster role
+    // (a no-op when the User already holds it). Difficulty is not carried over.
+    await boostingRoleService.setRole(admin, { userId: access.userId, role: "BOOSTER", enabled: true });
 
     let activityTarget = accessLabel(access.wowClass, access.role, access.difficulty);
     if (access.characterId) {
@@ -149,7 +120,7 @@ export const boosterAccessService = {
     }
     const siblingNote =
       siblings.length > 1
-        ? ` Resolved ${siblings.length} PENDING ${DIFFICULTY_LABELS[access.difficulty]} requests.`
+        ? ` Resolved ${siblings.length} PENDING requests.`
         : "";
     await activityRepository.create({
       userId: admin.id,
@@ -182,59 +153,26 @@ export const boosterAccessService = {
     });
   },
 
-  /**
-   * Revoke current eligibility via BoosterQualification.
-   */
-  async revokeAccess(admin: AuthenticatedUser, qualificationId: string, reason?: string) {
-    return boosterQualificationService.revoke(admin, qualificationId, reason);
-  },
-
-  async listAdminAccessRequests(
+  /** PENDING historical requests awaiting review (the only ones still actionable). */
+  async listLegacyRequests(
     admin: AuthenticatedUser,
-    filters: AdminAccessFilters = {},
-  ): Promise<AdminAccessListResult> {
+    filters: LegacyRequestFilters = {},
+  ): Promise<{ pendingCount: number; requests: BoosterAccessAdminRecord[] }> {
     assertCanReviewBoosterAccess(admin);
-    const view = filters.view ?? "qualifications";
     const statusCounts = await boosterAccessRepository.countByStatus();
-    const legacyPendingCount = statusCounts.PENDING;
-    const approvedQualificationCount = await boosterQualificationRepository.countApproved();
-
-    if (view === "legacy") {
-      let legacyRequests = await boosterAccessRepository.listAdmin({
-        status: "PENDING",
-        difficulty: filters.difficulty,
-        role: filters.role,
-      });
-      if (filters.userId) {
-        legacyRequests = legacyRequests.filter((row) => row.userId === filters.userId);
-      }
-      const query = filters.query?.trim().toLocaleLowerCase("en-US");
-      if (query) {
-        legacyRequests = legacyRequests.filter((row) => matchesLegacyQuery(row, query));
-      }
-      return {
-        view,
-        legacyPendingCount,
-        approvedQualificationCount,
-        qualifications: [],
-        legacyRequests,
-      };
-    }
-
-    const qualifications = await boosterQualificationService.listAdminQualifications(admin, {
-      status: filters.status,
+    let requests = await boosterAccessRepository.listAdmin({
+      status: "PENDING",
       difficulty: filters.difficulty,
-      query: filters.query,
-      userId: filters.userId,
+      role: filters.role,
     });
-
-    return {
-      view,
-      legacyPendingCount,
-      approvedQualificationCount,
-      qualifications,
-      legacyRequests: [],
-    };
+    if (filters.userId) {
+      requests = requests.filter((row) => row.userId === filters.userId);
+    }
+    const query = filters.query?.trim().toLocaleLowerCase("en-US");
+    if (query) {
+      requests = requests.filter((row) => matchesLegacyQuery(row, query));
+    }
+    return { pendingCount: statusCounts.PENDING, requests };
   },
 };
 

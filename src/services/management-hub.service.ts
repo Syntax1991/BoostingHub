@@ -4,17 +4,16 @@ import { parseCharacterOperationsFilters } from "@/validators/character-operatio
 import {
   canManageCharacterOperations,
   canManageUsers,
-  canReviewBoosterAccess,
+  canManageBoostingRoles,
   getManagementNavItems,
   hasRaidLeadAccess,
 } from "@/auth/authorization";
 import { boosterAccessRepository } from "@/repositories/booster-access.repository";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { listManagedRunOperationalHandoffs } from "@/services/managed-run-operational.service";
 
 export type ManagementOverviewCard = {
-  id: "runs" | "booster-access" | "users" | "characters";
+  id: "runs" | "boosting-roles" | "users" | "characters";
   title: string;
   description: string;
   href: string;
@@ -58,20 +57,21 @@ export const managementHubService = {
       });
     }
 
-    if (canReviewBoosterAccess(user.accountRole)) {
-      const [accessCounts, approvedQualificationCount] = await Promise.all([
+    if (canManageBoostingRoles(user.accountRole)) {
+      const [accessCounts, roleCounts] = await Promise.all([
         boosterAccessRepository.countByStatus(),
-        boosterQualificationRepository.countApproved(),
+        userRepository.countBoostingRoles(),
       ]);
       cards.push({
-        id: "booster-access",
-        title: "Booster Access",
-        description: "Review historical requests and grant qualifications after Discord review.",
-        href: "/manage/booster-access",
-        cta: "Manage Booster Access",
+        id: "boosting-roles",
+        title: "Boosting Roles",
+        description: "Grant or revoke the Booster and Lootbuddy roles after Discord review.",
+        href: "/manage/boosting-roles",
+        cta: "Manage Boosting Roles",
         metrics: [
+          { label: "Boosters", value: roleCounts.boosters },
+          { label: "Lootbuddies", value: roleCounts.lootbuddies },
           { label: "Legacy pending", value: accessCounts.PENDING },
-          { label: "Approved qualifications", value: approvedQualificationCount },
         ],
       });
     }

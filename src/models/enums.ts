@@ -68,9 +68,9 @@ export type RunLootType = (typeof RUN_LOOT_TYPES)[number];
 export const BOOSTER_ACCESS_STATUSES = ["PENDING", "APPROVED", "REJECTED", "REVOKED"] as const;
 export type BoosterAccessStatus = (typeof BOOSTER_ACCESS_STATUSES)[number];
 
-/** Current BoosterQualification statuses. PENDING is legacy-request-only. */
-export const BOOSTER_QUALIFICATION_STATUSES = ["APPROVED", "REVOKED"] as const;
-export type BoosterQualificationStatus = (typeof BOOSTER_QUALIFICATION_STATUSES)[number];
+/** The two independent Boosting Roles a User can hold. Never an accountRole. */
+export const BOOSTING_ROLES = ["BOOSTER", "LOOTBUDDY"] as const;
+export type BoostingRole = (typeof BOOSTING_ROLES)[number];
 
 export const RUN_STATUSES = [
   "DRAFT",

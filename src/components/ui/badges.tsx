@@ -17,7 +17,6 @@ import type {
   AccountRole,
   AttendanceStatus,
   BoosterAccessStatus,
-  BoosterQualificationStatus,
   CharacterRole,
   ParticipationType,
   RaidDifficulty,
@@ -192,7 +191,7 @@ export function SettlementStatusBadge({ status }: { status: SettlementStatus }) 
   );
 }
 
-export function AccessBadge({ status }: { status: BoosterAccessStatus | BoosterQualificationStatus }) {
+export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
   return (
     <Badge
       className={cn(
@@ -202,8 +201,30 @@ export function AccessBadge({ status }: { status: BoosterAccessStatus | BoosterQ
         status === "REVOKED" && "bg-muted/20 text-muted",
       )}
     >
-      {ACCESS_STATUS_LABELS[status as BoosterAccessStatus]}
+      {ACCESS_STATUS_LABELS[status]}
     </Badge>
+  );
+}
+
+/**
+ * Boosting Roles held by a User (account-level, not per Character). Only
+ * enabled roles are shown; `emptyLabel` renders when the User holds neither.
+ */
+export function BoostingRoleBadges({
+  roles,
+  emptyLabel,
+}: {
+  roles: { isBooster: boolean; isLootbuddy: boolean };
+  emptyLabel?: string;
+}) {
+  if (!roles.isBooster && !roles.isLootbuddy) {
+    return emptyLabel ? <span className="text-xs text-muted">{emptyLabel}</span> : null;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {roles.isBooster ? <Badge className="bg-success/15 text-success">Booster</Badge> : null}
+      {roles.isLootbuddy ? <Badge className="bg-info/15 text-info">Lootbuddy</Badge> : null}
+    </span>
   );
 }
 

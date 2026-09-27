@@ -25,7 +25,7 @@ Error categories are shown as readable copy only: Profile unavailable, Character
 
 ## Detail (`/manage/characters/[id]`)
 
-Read-only operations view: identity (realm, region, class, specialization, role, item level, active/retired), owner, Blizzard linkage and connection (and Blizzard ids), sync telemetry (last attempt, last success, health, last error time, category, consecutive failures), the per-raid × difficulty lockout matrix (verified vs Unknown), current Weekly Availability, and a read-only Booster Access summary. No Character editing.
+Read-only operations view: identity (realm, region, class, specialization, role, item level, active/retired), owner, Blizzard linkage and connection (and Blizzard ids), sync telemetry (last attempt, last success, health, last error time, category, consecutive failures), the per-raid × difficulty lockout matrix (verified vs Unknown), current Weekly Availability, and the owner's Boosting Roles (read-only). No Character editing.
 
 ## Actions
 

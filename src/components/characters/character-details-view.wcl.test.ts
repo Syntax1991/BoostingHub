@@ -66,12 +66,8 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     blizzardRealmId: null,
     warcraftLogsLinked: false,
     warcraftLogsId: null,
-    boosterQualifications: [],
-    accessPanel: {
-      difficulties: [],
-      discordTicketUrl: null,
-      selfRequestDisabled: true,
-    },
+    ownerIsBooster: false,
+    discordTicketUrl: null,
     currentReset: "2026-W38",
     currentLockoutRaids: [
       { id: "venomous", name: "The Venomous Abyss" },

@@ -12,7 +12,6 @@ import type {
   WowClass,
   WowRegion,
 } from "@/models/enums";
-import type { BoosterQualificationMatch } from "@/models/records";
 import {
   asBoolean,
   asNumber,
@@ -31,7 +30,7 @@ import {
 } from "@/lib/persistence";
 import { DomainError } from "@/lib/errors";
 import { mapExternalBoosters, type ExternalBooster, type ExternalBoosterInput } from "@/lib/external-booster";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
+import { userRepository } from "@/repositories/user.repository";
 import { mapOfferedRoles, queryReservationConflicts, syncOfferedRolesInTx } from "@/repositories/signup.repository";
 import {
   rosterRemovedSourceKey,
@@ -64,7 +63,8 @@ export type RosterCharacterSnapshot = {
   isActive: boolean;
   /** Informational WCL profile id — never a schedule or eligibility gate. */
   warcraftLogsId: string | null;
-  boosterQualifications: BoosterQualificationMatch[];
+  /** The owner's Booster role (User.isBooster) — account-level, never per difficulty. */
+  ownerIsBooster: boolean;
   lockouts: Array<{
     raidId: string;
     difficulty: RaidDifficulty;
@@ -138,8 +138,8 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     itemLevel: asNumberOrNull(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
     warcraftLogsId: asStringOrNull(row.warcraftLogsId),
-    // Hydrated from account-level BoosterQualification after signup load.
-    boosterQualifications: [],
+    // Hydrated from the owner's User.isBooster after signup load.
+    ownerIsBooster: false,
     lockouts: lockouts.map((item) => {
       const record = item as Record<string, unknown>;
       return {
@@ -181,17 +181,10 @@ function mapSignupRow(row: Record<string, unknown>): RosterSignupRow {
   };
 }
 
-async function withAccountBoosterQualifications(signups: RosterSignupRow[]): Promise<RosterSignupRow[]> {
-  const userIds = [...new Set(signups.map((signup) => signup.userId))];
-  if (userIds.length === 0) return signups;
+async function withOwnerBoosterRole(signups: RosterSignupRow[]): Promise<RosterSignupRow[]> {
+  if (signups.length === 0) return signups;
 
-  const rows = await boosterQualificationRepository.listByUserIds(userIds);
-  const qualificationsByUser = new Map<string, BoosterQualificationMatch[]>();
-  for (const row of rows) {
-    const list = qualificationsByUser.get(row.userId) ?? [];
-    list.push({ difficulty: row.difficulty, status: row.status });
-    qualificationsByUser.set(row.userId, list);
-  }
+  const rolesByUser = await userRepository.listBoostingRolesByUserIds(signups.map((signup) => signup.userId));
 
   return signups.map((signup) => {
     if (!signup.character) return signup;
@@ -199,7 +192,7 @@ async function withAccountBoosterQualifications(signups: RosterSignupRow[]): Pro
       ...signup,
       character: {
         ...signup.character,
-        boosterQualifications: qualificationsByUser.get(signup.userId) ?? [],
+        ownerIsBooster: rolesByUser.get(signup.userId)?.isBooster ?? false,
       },
     };
   });
@@ -518,7 +511,7 @@ export const rosterRepository = {
       .orderBy((signup) => signup.createdAt.asc())
       .all();
     const signups = rows.map((row) => mapSignupRow(row as Record<string, unknown>));
-    return withAccountBoosterQualifications(signups);
+    return withOwnerBoosterRole(signups);
   },
 
   async ensure(runId: string): Promise<RosterRecord> {

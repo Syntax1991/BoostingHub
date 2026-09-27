@@ -52,6 +52,8 @@ type CharacterRow = Page["characters"][number];
 function basePage(characters: CharacterRow[]): Page {
   return {
     characters,
+    boostingRoles: { isBooster: true, isLootbuddy: false },
+    discordTicketUrl: null,
     totalCharacters: characters.length,
     activeCharacters: characters.filter((row) => row.isActive).length,
     currentResetByRegion: { EU: "2026-W38", US: "2026-W38" },
@@ -93,7 +95,7 @@ const baseCharacter = {
   blizzardRealmId: null,
   warcraftLogsLinked: false,
   warcraftLogsId: null,
-  boosterAccess: { approvedCount: 0, pendingCount: 0, revokedCount: 0, approvals: [] },
+  boosterAccess: { status: "NONE" as const, approved: false },
   currentReset: "2026-W38",
   lockouts: [],
   weeklyAvailability: {

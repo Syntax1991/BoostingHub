@@ -84,7 +84,7 @@ export function validateRosterDraft(input: {
     if (item.participationType === "BOOSTER" && !item.boosterApproved) {
       blockers.push({
         code: "BOOSTER_ACCESS_INVALID",
-        message: `${item.characterName} no longer has approved booster access for this role and difficulty.`,
+        message: `${item.characterName}'s owner no longer has the Booster role.`,
         signupId: item.signupId,
       });
     }

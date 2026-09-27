@@ -1,8 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { orm } from "@/lib/prisma";
 import { auth } from "@/auth/auth";
-import { RAID_DIFFICULTIES } from "@/models/enums";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import {
   bootstrapDevelopmentAccount,
   bootstrapDevelopmentAccountOrThrow,
@@ -60,27 +58,10 @@ async function createUser(input: {
   });
 }
 
-async function createQualification(input: {
-  userId: string;
-  difficulty: (typeof RAID_DIFFICULTIES)[number];
-  status: "APPROVED" | "REVOKED";
-  notes?: string | null;
-  grantedById?: string | null;
-}) {
-  const now = new Date().toISOString();
-  await orm.BoosterQualification.create({
-    id: crypto.randomUUID(),
-    userId: input.userId,
-    difficulty: input.difficulty,
-    status: input.status,
-    notes: input.notes ?? "Reviewed through Discord",
-    grantedAt: input.status === "APPROVED" ? now : null,
-    grantedById: input.grantedById ?? null,
-    revokedAt: input.status === "REVOKED" ? now : null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+/** The User's account-level Booster role (User.isBooster). */
+async function isBooster(userId: string): Promise<boolean> {
+  const row = await orm.User.where({ id: userId }).select("isBooster").first();
+  return (row as { isBooster?: boolean } | null)?.isBooster === true;
 }
 
 async function rawUser(id: string) {
@@ -94,10 +75,6 @@ async function activityCountFor(userId: string): Promise<number> {
 
 async function cleanup() {
   for (const userId of ALL_USER_IDS) {
-    const quals = await orm.BoosterQualification.where({ userId }).all();
-    for (const row of quals) {
-      await orm.BoosterQualification.where({ id: (row as Record<string, unknown>).id as string }).delete();
-    }
     const activity = await orm.ActivityEvent.where({ userId }).all();
     for (const row of activity) {
       await orm.ActivityEvent.where({ id: (row as Record<string, unknown>).id as string }).delete();
@@ -159,11 +136,10 @@ beforeAll(async () => {
     accountStatus: "ACTIVE",
   });
   await createUser({ id: USER_IDS.partialHeroicTarget, discordUserId: discordIdFor("partialHeroicTarget") });
-  await createQualification({ userId: USER_IDS.partialHeroicTarget, difficulty: "HEROIC", status: "APPROVED" });
+  await orm.User.where({ id: USER_IDS.partialHeroicTarget }).update({ isBooster: true });
 
+  // A revoked Booster: the flag is simply false again.
   await createUser({ id: USER_IDS.revokedNormalTarget, discordUserId: discordIdFor("revokedNormalTarget") });
-  await createQualification({ userId: USER_IDS.revokedNormalTarget, difficulty: "NORMAL", status: "REVOKED" });
-  await createQualification({ userId: USER_IDS.revokedNormalTarget, difficulty: "HEROIC", status: "APPROVED" });
 
   await createUser({ id: USER_IDS.idempotentTarget, discordUserId: discordIdFor("idempotentTarget") });
   await createUser({ id: USER_IDS.exactSetTarget, discordUserId: discordIdFor("exactSetTarget") });
@@ -177,25 +153,11 @@ beforeAll(async () => {
     accountRole: "ADMIN",
     accountStatus: "ACTIVE",
   });
-  await createQualification({
-    userId: USER_IDS.returningSignInTarget,
-    difficulty: "MYTHIC",
-    status: "APPROVED",
-    notes: "Development account bootstrap",
-  });
-  // Simulate a dev-seed wipe: privileges reset back to defaults, qualification revoked.
+  // Simulate a dev-seed wipe: privileges reset back to defaults, Booster role revoked.
   await orm.User.where({ id: USER_IDS.returningSignInTarget }).update({
     accountRole: "USER",
     accountStatus: "ACTIVE",
-  });
-  const wipedQual = await orm.BoosterQualification.where({
-    userId: USER_IDS.returningSignInTarget,
-    difficulty: "MYTHIC",
-  }).first();
-  await orm.BoosterQualification.where({ id: (wipedQual as Record<string, unknown>).id as string }).update({
-    status: "REVOKED",
-    revokedAt: new Date().toISOString(),
-    revokedById: null,
+    isBooster: false,
   });
 
   await createUser({ id: USER_IDS.noActivityTarget, discordUserId: discordIdFor("noActivityTarget") });
@@ -214,7 +176,7 @@ describe("bootstrapDevelopmentAccount — gating", () => {
     const user = await rawUser(USER_IDS.disabledCase);
     expect(user?.accountRole).toBe("USER");
     expect(user?.accountStatus).toBe("ACTIVE");
-    expect(await boosterQualificationRepository.listByUserId(USER_IDS.disabledCase)).toHaveLength(0);
+    expect(await isBooster(USER_IDS.disabledCase)).toBe(false);
   });
 
   it("CRITICAL: is a hard no-op in production even with matching env and ID", async () => {
@@ -225,7 +187,7 @@ describe("bootstrapDevelopmentAccount — gating", () => {
     const user = await rawUser(USER_IDS.productionCase);
     expect(user?.accountRole).toBe("USER");
     expect(user?.accountStatus).toBe("ACTIVE");
-    expect(await boosterQualificationRepository.listByUserId(USER_IDS.productionCase)).toHaveLength(0);
+    expect(await isBooster(USER_IDS.productionCase)).toBe(false);
   });
 
   it("fails closed with a clear configuration error when enabled but the target ID is blank", async () => {
@@ -243,7 +205,7 @@ describe("bootstrapDevelopmentAccount — gating", () => {
     );
     const user = await rawUser(USER_IDS.missingIdCase);
     expect(user?.accountRole).toBe("USER");
-    expect(await boosterQualificationRepository.listByUserId(USER_IDS.missingIdCase)).toHaveLength(0);
+    expect(await isBooster(USER_IDS.missingIdCase)).toBe(false);
   });
 
   it("leaves a non-matching Discord user completely untouched", async () => {
@@ -254,39 +216,30 @@ describe("bootstrapDevelopmentAccount — gating", () => {
     const user = await rawUser(USER_IDS.nonTarget);
     expect(user?.accountRole).toBe("USER");
     expect(user?.accountStatus).toBe("ACTIVE");
-    expect(await boosterQualificationRepository.listByUserId(USER_IDS.nonTarget)).toHaveLength(0);
+    expect(await isBooster(USER_IDS.nonTarget)).toBe(false);
     expect(await activityCountFor(USER_IDS.nonTarget)).toBe(0);
   });
 });
 
 describe("bootstrapDevelopmentAccount — restoring the target account", () => {
-  it("promotes a default USER/ACTIVE target to ADMIN/ACTIVE with exactly 3 APPROVED qualifications", async () => {
+  it("promotes a default USER/ACTIVE target to ADMIN/ACTIVE with the Booster role", async () => {
     await withEnv(enabledFor("defaultTarget"), () => bootstrapDevelopmentAccount({ userId: USER_IDS.defaultTarget }));
     const user = await rawUser(USER_IDS.defaultTarget);
     expect(user?.accountRole).toBe("ADMIN");
     expect(user?.accountStatus).toBe("ACTIVE");
-
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.defaultTarget);
-    expect(quals).toHaveLength(3);
-    for (const difficulty of RAID_DIFFICULTIES) {
-      const row = quals.find((q) => q.difficulty === difficulty);
-      expect(row?.status).toBe("APPROVED");
-      expect(row?.notes).toBe("Development account bootstrap");
-      expect(row?.grantedById).toBeNull();
-      expect(row?.revokedAt).toBeNull();
-      expect(row?.revokedById).toBeNull();
-    }
+    expect(user?.isBooster).toBe(true);
+    // The Lootbuddy role is independent and never granted by the bootstrap.
+    expect(user?.isLootbuddy).toBe(false);
   });
 
-  it("restores an ADMIN/DISABLED target to ADMIN/ACTIVE with qualifications restored", async () => {
+  it("restores an ADMIN/DISABLED target to ADMIN/ACTIVE with the Booster role", async () => {
     await withEnv(enabledFor("adminDisabledTarget"), () =>
       bootstrapDevelopmentAccount({ userId: USER_IDS.adminDisabledTarget }),
     );
     const user = await rawUser(USER_IDS.adminDisabledTarget);
     expect(user?.accountRole).toBe("ADMIN");
     expect(user?.accountStatus).toBe("ACTIVE");
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.adminDisabledTarget);
-    expect(quals.filter((q) => q.status === "APPROVED")).toHaveLength(3);
+    expect(await isBooster(USER_IDS.adminDisabledTarget)).toBe(true);
   });
 
   it("promotes a RAID_LEAD/ACTIVE target to ADMIN/ACTIVE", async () => {
@@ -298,40 +251,21 @@ describe("bootstrapDevelopmentAccount — restoring the target account", () => {
     expect(user?.accountStatus).toBe("ACTIVE");
   });
 
-  it("approves the missing difficulties without rewriting an already-APPROVED one", async () => {
-    const before = await boosterQualificationRepository.findExact(USER_IDS.partialHeroicTarget, "HEROIC");
+  it("still restores Admin authority for a target that already holds the Booster role", async () => {
     await withEnv(enabledFor("partialHeroicTarget"), () =>
       bootstrapDevelopmentAccount({ userId: USER_IDS.partialHeroicTarget }),
     );
-
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.partialHeroicTarget);
-    expect(quals.filter((q) => q.status === "APPROVED")).toHaveLength(3);
-
-    const after = quals.find((q) => q.difficulty === "HEROIC");
-    expect(after?.id).toBe(before?.id);
-    expect(after?.notes).toBe(before?.notes);
-    expect(after?.grantedAt).toBe(before?.grantedAt);
-    expect(after?.updatedAt).toBe(before?.updatedAt);
+    const user = await rawUser(USER_IDS.partialHeroicTarget);
+    expect(user?.accountRole).toBe("ADMIN");
+    expect(user?.isBooster).toBe(true);
   });
 
-  it("restores a REVOKED difficulty and creates the missing one, without touching an already-APPROVED sibling", async () => {
-    const heroicBefore = await boosterQualificationRepository.findExact(USER_IDS.revokedNormalTarget, "HEROIC");
+  it("re-grants the Booster role to a revoked target", async () => {
+    expect(await isBooster(USER_IDS.revokedNormalTarget)).toBe(false);
     await withEnv(enabledFor("revokedNormalTarget"), () =>
       bootstrapDevelopmentAccount({ userId: USER_IDS.revokedNormalTarget }),
     );
-
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.revokedNormalTarget);
-    expect(quals).toHaveLength(3);
-    expect(quals.every((q) => q.status === "APPROVED")).toBe(true);
-
-    const normal = quals.find((q) => q.difficulty === "NORMAL");
-    expect(normal?.revokedAt).toBeNull();
-    expect(normal?.revokedById).toBeNull();
-    expect(normal?.notes).toBe("Development account bootstrap");
-
-    const heroicAfter = quals.find((q) => q.difficulty === "HEROIC");
-    expect(heroicAfter?.id).toBe(heroicBefore?.id);
-    expect(heroicAfter?.updatedAt).toBe(heroicBefore?.updatedAt);
+    expect(await isBooster(USER_IDS.revokedNormalTarget)).toBe(true);
   });
 
   it("has zero drift across two consecutive calls on an already-fully-correct target", async () => {
@@ -339,33 +273,26 @@ describe("bootstrapDevelopmentAccount — restoring the target account", () => {
       bootstrapDevelopmentAccount({ userId: USER_IDS.idempotentTarget }),
     );
     const userBefore = await rawUser(USER_IDS.idempotentTarget);
-    const qualsBefore = await boosterQualificationRepository.listByUserId(USER_IDS.idempotentTarget);
 
     await withEnv(enabledFor("idempotentTarget"), () =>
       bootstrapDevelopmentAccount({ userId: USER_IDS.idempotentTarget }),
     );
     const userAfter = await rawUser(USER_IDS.idempotentTarget);
-    const qualsAfter = await boosterQualificationRepository.listByUserId(USER_IDS.idempotentTarget);
 
-    expect(userAfter?.updatedAt).toBe(userBefore?.updatedAt);
-    expect(qualsAfter.sort((a, b) => a.difficulty.localeCompare(b.difficulty))).toEqual(
-      qualsBefore.sort((a, b) => a.difficulty.localeCompare(b.difficulty)),
-    );
+    expect(userAfter).toEqual(userBefore);
+    expect(userAfter?.isBooster).toBe(true);
   });
 
-  it("results in exactly one row per difficulty, no duplicates, no inherited difficulties", async () => {
+  it("grants exactly the Booster role and never touches the Lootbuddy role", async () => {
     await withEnv(enabledFor("exactSetTarget"), () =>
       bootstrapDevelopmentAccount({ userId: USER_IDS.exactSetTarget }),
     );
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.exactSetTarget);
-    expect(quals).toHaveLength(3);
-    expect(new Set(quals.map((q) => q.difficulty)).size).toBe(3);
-    for (const difficulty of RAID_DIFFICULTIES) {
-      expect(quals.filter((q) => q.difficulty === difficulty)).toHaveLength(1);
-    }
+    const user = await rawUser(USER_IDS.exactSetTarget);
+    expect(user?.isBooster).toBe(true);
+    expect(user?.isLootbuddy).toBe(false);
   });
 
-  it("resolves two concurrent calls on a never-qualified target to exactly one row per difficulty, no thrown error", async () => {
+  it("resolves two concurrent calls on a never-granted target without a thrown error", async () => {
     await withEnv(enabledFor("concurrentTarget"), () =>
       Promise.all([
         bootstrapDevelopmentAccount({ userId: USER_IDS.concurrentTarget }),
@@ -374,11 +301,7 @@ describe("bootstrapDevelopmentAccount — restoring the target account", () => {
     );
     const user = await rawUser(USER_IDS.concurrentTarget);
     expect(user?.accountRole).toBe("ADMIN");
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.concurrentTarget);
-    expect(quals).toHaveLength(3);
-    for (const difficulty of RAID_DIFFICULTIES) {
-      expect(quals.filter((q) => q.difficulty === difficulty)).toHaveLength(1);
-    }
+    expect(await isBooster(USER_IDS.concurrentTarget)).toBe(true);
     expect(await activityCountFor(USER_IDS.concurrentTarget)).toBe(0);
   });
 
@@ -416,15 +339,11 @@ describe("Better Auth wiring — databaseHooks.session.create.after", () => {
     const target = await rawUser(USER_IDS.authIntegrationTarget);
     expect(target?.accountRole).toBe("ADMIN");
     expect(target?.accountStatus).toBe("ACTIVE");
-    expect(
-      (await boosterQualificationRepository.listByUserId(USER_IDS.authIntegrationTarget)).filter(
-        (q) => q.status === "APPROVED",
-      ),
-    ).toHaveLength(3);
+    expect(await isBooster(USER_IDS.authIntegrationTarget)).toBe(true);
 
     const nonTarget = await rawUser(USER_IDS.authIntegrationNonTarget);
     expect(nonTarget?.accountRole).toBe("USER");
-    expect(await boosterQualificationRepository.listByUserId(USER_IDS.authIntegrationNonTarget)).toHaveLength(0);
+    expect(await isBooster(USER_IDS.authIntegrationNonTarget)).toBe(false);
   });
 
   it("first-sign-in semantics: a brand-new default User is promoted through the same integration boundary", async () => {
@@ -435,11 +354,7 @@ describe("Better Auth wiring — databaseHooks.session.create.after", () => {
     const user = await rawUser(USER_IDS.firstSignInTarget);
     expect(user?.accountRole).toBe("ADMIN");
     expect(user?.accountStatus).toBe("ACTIVE");
-    expect(
-      (await boosterQualificationRepository.listByUserId(USER_IDS.firstSignInTarget)).filter(
-        (q) => q.status === "APPROVED",
-      ),
-    ).toHaveLength(3);
+    expect(await isBooster(USER_IDS.firstSignInTarget)).toBe(true);
   });
 
   it("returning-sign-in semantics: an existing User whose privileges were reset is restored through the same integration boundary (no separate first-login path)", async () => {
@@ -454,10 +369,6 @@ describe("Better Auth wiring — databaseHooks.session.create.after", () => {
     const user = await rawUser(USER_IDS.returningSignInTarget);
     expect(user?.accountRole).toBe("ADMIN");
     expect(user?.accountStatus).toBe("ACTIVE");
-    const mythic = await boosterQualificationRepository.findExact(USER_IDS.returningSignInTarget, "MYTHIC");
-    expect(mythic?.status).toBe("APPROVED");
-    expect(mythic?.revokedAt).toBeNull();
-    const quals = await boosterQualificationRepository.listByUserId(USER_IDS.returningSignInTarget);
-    expect(quals.filter((q) => q.status === "APPROVED")).toHaveLength(3);
+    expect(await isBooster(USER_IDS.returningSignInTarget)).toBe(true);
   });
 });

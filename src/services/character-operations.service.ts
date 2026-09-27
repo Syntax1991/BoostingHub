@@ -22,7 +22,6 @@ import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { CharacterSyncErrorCode, WowClass, WowRegion } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
-import { boosterQualificationRepository } from "@/repositories/booster-qualification.repository";
 import {
   characterOperationsRepository,
   connectionKey,
@@ -31,7 +30,6 @@ import {
 import { characterRepository } from "@/repositories/character.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { userRepository } from "@/repositories/user.repository";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
 import {
   manualCooldownRemainingMs,
   syncLinkedCharacterProfile,
@@ -369,9 +367,9 @@ export const characterOperationsService = {
       now,
       staleMinutes: resolveSyncHealthStaleMinutes(),
     });
-    const [availabilityById, qualifications, owner] = await Promise.all([
+    const [availabilityById, ownerRoles, owner] = await Promise.all([
       characterWeeklyAvailabilityService.projectCurrentForCharacters([{ id: character.id, region: character.region }]),
-      boosterQualificationRepository.listByUserId(character.userId),
+      userRepository.findBoostingRoles(character.userId),
       userRepository.findById(character.userId),
     ]);
     return {
@@ -388,7 +386,8 @@ export const characterOperationsService = {
       },
       currentReset: getRegionalWeeklyReset(character.region).resetIdentifier,
       weeklyAvailability: availabilityById.get(character.id) ?? null,
-      boosterAccess: boosterQualificationService.buildAccountAccessPanel(qualifications),
+      /** The owner's account-level Boosting Roles (never stored on the Character). */
+      ownerBoostingRoles: ownerRoles ?? { isBooster: false, isLootbuddy: false },
     };
   },
 

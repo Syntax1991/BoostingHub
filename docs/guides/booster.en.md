@@ -2,7 +2,7 @@
 
 A quick introduction to BoostingHub: sign in, add characters, sign up for runs and track your status under **My Runs**.
 
-> **Important:** Your account role is usually **USER**. **BOOSTER** and **LOOTBUDDY** are not account roles — they are **participation types per run**.
+> **Important:** Your account role is usually **USER**. **Booster** and **Lootbuddy** are not account roles — they are **Boosting Roles** on your account, granted separately by an admin. On each run you still choose how you sign up (Booster or Lootbuddy).
 
 ---
 
@@ -39,9 +39,9 @@ Manage your WoW characters under **Characters**. To sign up as a booster you nee
 
 ![Characters page](./screenshots/bo-02-characters.png)
 
-### Booster access (qualification)
+### Booster role
 
-To sign up as a **Booster** for a difficulty, you need an approved **Booster Qualification** (user + difficulty, e.g. Heroic). You request it via Discord (**Apply via Discord**) — there is no self-service form in the app. Without approval you can still sign up as a **Lootbuddy**.
+To sign up as a **Booster**, your account needs the **Booster role**. It belongs to your account (not to a character) and applies to Normal, Heroic and Mythic runs alike. You apply via Discord (**Apply via Discord**) — there is no self-service form in the app. Without it you can still sign up as a **Lootbuddy**. Your roles are shown on your **Profile** and at the top of **Characters**.
 
 ---
 
@@ -101,7 +101,7 @@ Every open run has its own Discord channel with a **signup embed** and buttons:
 2. Select character(s) → **Next**.
 3. Set the offered roles per character → **Confirm**.
 
-Without an approved booster qualification or without eligible characters, the flow stops with a message.
+Without the Booster role or without eligible characters, the flow stops with a message.
 
 ### Lootbuddy (Sign as Lootbuddy button)
 
@@ -154,6 +154,6 @@ The dashboard and **My Runs** show whether you are selected and with which chara
 
 1. Sign in with Discord (links Discord to BoostingHub)
 2. Add character(s) under **Characters**
-3. Request Booster Access for the difficulty via Discord (**Apply via Discord**)
+3. Apply for the Booster role via Discord (**Apply via Discord**)
 4. Sign up: website **Runs → Sign up** *or* the Discord buttons in the run channel
 5. Check your status: **My Runs** / `/mysignups`; withdraw or **Cancel Signup** if needed

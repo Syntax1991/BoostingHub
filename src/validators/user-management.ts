@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ACCOUNT_ROLES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
+import { parseBoostingRoleFilter } from "@/validators/boosting-roles";
 
 export const changeAccountRoleSchema = z.object({
   targetUserId: entityIdSchema,
@@ -12,7 +13,7 @@ export type AdminUserListSort = "name" | "joined_desc" | "joined_asc" | "role";
 export function parseAdminUserFilters(searchParams: {
   query?: string | string[];
   role?: string | string[];
-  access?: string | string[];
+  boostingRole?: string | string[];
   sort?: string | string[];
 }) {
   const first = (value: string | string[] | undefined) =>
@@ -25,10 +26,7 @@ export function parseAdminUserFilters(searchParams: {
       ? (roleRaw as (typeof ACCOUNT_ROLES)[number])
       : undefined;
 
-  const accessRaw = first(searchParams.access);
-  let hasApprovedAccess: boolean | undefined;
-  if (accessRaw === "approved") hasApprovedAccess = true;
-  if (accessRaw === "none") hasApprovedAccess = false;
+  const boostingRole = parseBoostingRoleFilter(first(searchParams.boostingRole));
 
   const sortRaw = first(searchParams.sort);
   const sort: AdminUserListSort =
@@ -39,5 +37,5 @@ export function parseAdminUserFilters(searchParams: {
       ? sortRaw
       : "name";
 
-  return { query, role, hasApprovedAccess, sort, access: accessRaw };
+  return { query, role, boostingRole, sort };
 }

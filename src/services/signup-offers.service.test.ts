@@ -20,7 +20,6 @@ const ids = {
 const createdUserIds = Object.values(ids);
 const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
-const createdQualificationIds: string[] = [];
 
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
   return {
@@ -67,7 +66,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
-    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
   } catch {
     // Already gone.
   }
@@ -144,10 +142,6 @@ beforeAll(async () => {
     for (const row of runs) {
       await cleanupRun((row as { id: string }).id);
     }
-    const quals = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of quals) {
-      await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
-    }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
       await deleteIfPresent("Character", (row as { id: string }).id);
@@ -170,21 +164,7 @@ beforeAll(async () => {
   });
   foreignHunter = await createCharacter(ids.otherUser, "Soofferforeign");
 
-  const qualId = crypto.randomUUID();
-  createdQualificationIds.push(qualId);
-  await orm.BoosterQualification.create({
-    id: qualId,
-    userId: ids.target,
-    difficulty: "HEROIC",
-    status: "APPROVED",
-    notes: null,
-    grantedAt: new Date().toISOString(),
-    grantedById: null,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  await orm.User.where({ id: ids.target }).update({ isBooster: true });
 
   mainRunId = await runService
     .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(), desiredTankCount: 2, desiredHealerCount: 4, desiredDpsCount: 14 }))
@@ -202,9 +182,6 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const runId of createdRunIds) {
     await cleanupRun(runId);
-  }
-  for (const id of createdQualificationIds) {
-    await deleteIfPresent("BoosterQualification", id);
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);
@@ -382,14 +359,14 @@ describe("signupService.setCharacterOffers — validation", () => {
     await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
   });
 
-  it("enforces exact-difficulty booster qualification", async () => {
-    await expectDomainCode(
-      signupService.setCharacterOffers(target, {
-        runId: mythicRunId,
-        offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
-      }),
-      "BOOSTER_ACCESS_DIFFICULTY_MISMATCH",
-    );
+  it("accepts the account-level booster qualification on a Mythic run (not difficulty-scoped)", async () => {
+    await signupService.setCharacterOffers(target, {
+      runId: mythicRunId,
+      offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
+    });
+    const offers = await orm.RunSignup.where({ runId: mythicRunId, userId: ids.target, status: "PENDING" }).all();
+    expect(offers).toHaveLength(1);
+    await signupService.setCharacterOffers(target, { runId: mythicRunId, offers: [] });
   });
 
   it("rolls back the whole request when one offered character is invalid (all-or-nothing)", async () => {

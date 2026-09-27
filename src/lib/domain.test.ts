@@ -4,7 +4,7 @@ import { isDevAuthEnabled, isProductionRuntime } from "@/auth/dev-auth";
 import { formatDate, formatRelative, formatTime, fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { canTransitionRun, getRunLifecycleCapabilities, isSignupWindowOpen } from "@/services/run-state";
 import { canTransitionSignup, canSelfWithdrawSignup } from "@/services/signup-state";
-import { boosterQualificationService } from "@/services/booster-qualification.service";
+import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
 
 describe("account authorization", () => {
@@ -129,21 +129,11 @@ describe("run and signup state machines", () => {
 });
 
 describe("booster access", () => {
-  it("does not imply mythic approval from heroic approval", () => {
-    const records = [
-      {
-        difficulty: "HEROIC" as const,
-        status: "APPROVED" as const,
-      },
-      {
-        difficulty: "NORMAL" as const,
-        status: "REVOKED" as const,
-      },
-    ];
-
-    expect(boosterQualificationService.isApprovedFor(records, "HEROIC")).toBe(true);
-    expect(boosterQualificationService.isApprovedFor(records, "MYTHIC")).toBe(false);
-    expect(boosterQualificationService.isApprovedFor(records, "NORMAL")).toBe(false);
+  it("is the account-level Booster role, not scoped by difficulty", () => {
+    expect(isApprovedBooster({ isBooster: true })).toBe(true);
+    expect(isApprovedBooster({ isBooster: false })).toBe(false);
+    expect(isApprovedBooster(null)).toBe(false);
+    expect(isApprovedBooster(undefined)).toBe(false);
   });
 });
 

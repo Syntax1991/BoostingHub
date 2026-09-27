@@ -10,7 +10,7 @@ import type { ManagementOverviewCard } from "@/services/management-hub.service";
 
 const ICONS = {
   runs: CalendarDays,
-  "booster-access": ShieldCheck,
+  "boosting-roles": ShieldCheck,
   users: Users,
   characters: Swords,
 } as const;
@@ -20,7 +20,7 @@ export function ManageHomeView({ cards }: { cards: ManagementOverviewCard[] }) {
     <div>
       <PageHeader
         title="Management"
-        description="Operations hub for runs, booster qualifications, and account administration."
+        description="Operations hub for runs, boosting roles, and account administration."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {

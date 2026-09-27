@@ -27,7 +27,6 @@ const ids = {
 const createdRunIds: string[] = [];
 const createdCharacterIds: string[] = [];
 const createdSignupIds: string[] = [];
-const createdAccessIds: string[] = [];
 
 let scheduleSlot = 0;
 function futureIso(days = 12) {
@@ -109,27 +108,7 @@ async function createCharacter(input: {
 }
 
 async function approveAccess(userId: string) {
-  const existing = await orm.BoosterQualification.where({ userId, difficulty: "HEROIC" }).first();
-  if (existing) {
-    createdAccessIds.push(String((existing as { id: string }).id));
-    return;
-  }
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  createdAccessIds.push(id);
-  await orm.BoosterQualification.create({
-    id,
-    userId,
-    difficulty: "HEROIC",
-    status: "APPROVED",
-    notes: "notify roster",
-    grantedAt: now,
-    grantedById: ids.admin,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await orm.User.where({ id: userId }).update({ isBooster: true });
 }
 
 async function createSignup(input: {
@@ -256,10 +235,6 @@ async function cleanupAll() {
         await orm.RunSignupRole.where({ id: (offer as { id: string }).id }).delete();
       }
       await orm.RunSignup.where({ id: signupId }).delete();
-    }
-    const access = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of access) {
-      await orm.BoosterQualification.where({ id: (row as { id: string }).id }).delete();
     }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {

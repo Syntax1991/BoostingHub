@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -73,10 +73,24 @@ const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
 const aelira = asUser(ids.aelira, "Aelira Nightwatch", "ADMIN");
 const otherLead = asUser(ids.kael, "Kael Stormhowl", "RAID_LEAD");
 
+// Seeded Sylva is an approved booster; the Booster role is account-level (not
+// difficulty-scoped), so the "unapproved booster" fixture for the lab Run is a
+// revoked Booster role, restored afterwards for the rest of the suite.
+const SYLVA_USER_ID = "66666666-6666-4666-8666-666666666666";
+
+async function setSylvaBooster(isBooster: boolean) {
+  await orm.User.where({ id: SYLVA_USER_ID }).update({ isBooster });
+}
+
+beforeAll(async () => {
+  await setSylvaBooster(false);
+});
+
 afterAll(async () => {
   for (const id of lockoutIds) {
     await orm.CharacterRaidLockout.where({ id }).delete();
   }
+  await setSylvaBooster(true);
 });
 
 describe("rosterService authorization", () => {

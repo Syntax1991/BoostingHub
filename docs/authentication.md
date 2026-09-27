@@ -43,7 +43,7 @@ Seeded identities and `DEV_AUTH_PASSWORD` are documented in [development.md](dev
 
 ## Development account bootstrap
 
-`npm run db:seed` wipes `accountRole`/`accountStatus` and Booster qualifications for every user, including your own real Discord-linked developer account. Development account bootstrap exists solely to restore that ONE account automatically after a Discord sign-in, so re-seeding never leaves you locked out of ADMIN screens locally.
+`npm run db:seed` wipes `accountRole`/`accountStatus` and Boosting Roles for every user, including your own real Discord-linked developer account. Development account bootstrap exists solely to restore that ONE account automatically after a Discord sign-in, so re-seeding never leaves you locked out of ADMIN screens locally.
 
 Enabled only when all of the following hold:
 
@@ -58,9 +58,9 @@ Wired as Better Auth's `databaseHooks.session.create.after` (see `src/auth/auth.
 On a match, it restores:
 
 - `accountRole = ADMIN`, `accountStatus = ACTIVE`
-- An `APPROVED` `BoosterQualification` row for `NORMAL`, `HEROIC`, and `MYTHIC` independently (exact per-difficulty match — the normal product rule that a difficulty never implies another is unchanged)
+- The Booster role (`User.isBooster = true`; account-level, not scoped by raid difficulty). The Lootbuddy role is left as is.
 
-It is idempotent: an already-correct field is left untouched, including timestamps (`updatedAt`, `grantedAt`, `notes` do not churn on every login), and it never writes an `ActivityEvent` — normal ADMIN grant/revoke through `/manage/booster-access` continues to log Activity exactly as before; this only seeds/restores one development account's own qualifications, with `grantedById = null` to correctly represent a system bootstrap rather than a human admin's action.
+It is idempotent: an already-correct field is left untouched, including `updatedAt` (no churn on every login), and it never writes an `ActivityEvent` — normal ADMIN grant/revoke through `/manage/users/[id]` or `/manage/boosting-roles` continues to log Activity; this only restores one development account's own roles as a system bootstrap rather than a human admin's action.
 
 There is no UI, no admin endpoint, and no client-visible flag for this — `DEV_ADMIN_DISCORD_USER_ID` is server-only configuration, never exposed to the browser. See [development.md](development.md) for setup and safe local verification.
 

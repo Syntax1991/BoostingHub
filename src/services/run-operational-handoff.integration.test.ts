@@ -25,7 +25,6 @@ const ids = {
 const createdRunIds: string[] = [];
 const createdUserIds = Object.values(ids);
 const createdCharacterIds: string[] = [];
-const createdAccessIds: string[] = [];
 const createdSignupIds: string[] = [];
 
 function asUser(
@@ -73,7 +72,6 @@ async function deleteIfPresent(table: string, id: string) {
     else if (table === "Character") await orm.Character.where({ id }).delete();
     else if (table === "RunSignup") await orm.RunSignup.where({ id }).delete();
     else if (table === "RunSignupRole") await orm.RunSignupRole.where({ id }).delete();
-    else if (table === "BoosterQualification") await orm.BoosterQualification.where({ id }).delete();
     else if (table === "RunAttendance") await orm.RunAttendance.where({ id }).delete();
     else if (table === "RunSettlement") await orm.RunSettlement.where({ id }).delete();
     else if (table === "Run") await orm.Run.where({ id }).delete();
@@ -111,27 +109,7 @@ async function createCharacter(input: {
 }
 
 async function approveAccess(_characterId: string, userId: string) {
-  const existing = await orm.BoosterQualification.where({ userId, difficulty: "HEROIC" }).first();
-  if (existing) {
-    createdAccessIds.push(String((existing as { id: string }).id));
-    return;
-  }
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  createdAccessIds.push(id);
-  await orm.BoosterQualification.create({
-    id,
-    userId,
-    difficulty: "HEROIC",
-    status: "APPROVED",
-    notes: "Handoff test grant",
-    grantedAt: now,
-    grantedById: ids.admin,
-    revokedAt: null,
-    revokedById: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await orm.User.where({ id: userId }).update({ isBooster: true });
 }
 
 async function createSignup(input: {
@@ -252,10 +230,6 @@ beforeAll(async () => {
       }
       await deleteIfPresent("RunSignup", signupId);
     }
-    const access = await orm.BoosterQualification.where({ userId }).select("id").all();
-    for (const row of access) {
-      await deleteIfPresent("BoosterQualification", (row as { id: string }).id);
-    }
     const chars = await orm.Character.where({ userId }).select("id").all();
     for (const row of chars) {
       await deleteIfPresent("Character", (row as { id: string }).id);
@@ -296,9 +270,6 @@ afterAll(async () => {
       await deleteIfPresent("RunSignupRole", (offer as { id: string }).id);
     }
     await deleteIfPresent("RunSignup", id);
-  }
-  for (const id of createdAccessIds) {
-    await deleteIfPresent("BoosterQualification", id);
   }
   for (const id of createdCharacterIds) {
     await deleteIfPresent("Character", id);

@@ -1,0 +1,152 @@
+[
+  {
+    "id": "column.public.user.isBooster",
+    "label": "Add column \"isBooster\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "isBooster",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"isBooster\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "isBooster"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"isBooster\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"isBooster\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"isBooster\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "isBooster"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.isLootbuddy",
+    "label": "Add column \"isLootbuddy\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "isLootbuddy",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"isLootbuddy\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "isLootbuddy"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"isLootbuddy\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"isLootbuddy\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"isLootbuddy\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "isLootbuddy"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.backfill-user-is-booster-from-booster-qualification",
+    "label": "Data transform: User.isBooster = true for every User with an APPROVED BoosterQualification",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Allow backfill (idempotent update)",
+        "sql": "SELECT true AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Mark every User with at least one APPROVED qualification as a Booster",
+        "sql": "UPDATE \"user\" SET \"isBooster\" = true WHERE \"id\" IN (SELECT DISTINCT \"userId\" FROM \"booster_qualification\" WHERE \"status\" = 'APPROVED')",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every User with an APPROVED qualification is a Booster",
+        "sql": "SELECT NOT EXISTS ( SELECT 1 FROM \"user\" WHERE \"isBooster\" = false AND \"id\" IN (SELECT DISTINCT \"userId\" FROM \"booster_qualification\" WHERE \"status\" = 'APPROVED') ) AS ok",
+        "params": []
+      }
+    ]
+  },
+  {
+    "id": "dropTable.booster_qualification",
+    "label": "Drop table \"booster_qualification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "booster_qualification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"booster_qualification\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop table \"booster_qualification\"",
+        "sql": "DROP TABLE \"public\".\"booster_qualification\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"booster_qualification\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"booster_qualification\""
+        ]
+      }
+    ]
+  }
+]
