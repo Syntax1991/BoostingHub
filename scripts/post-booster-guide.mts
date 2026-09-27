@@ -8,11 +8,16 @@
  *   npx tsx --env-file=.env scripts/post-booster-guide.mts --post
  *
  * Options:
- *   --channel=<id>       target channel (default 1552712971543650425)
+ *   --channel=<id>       target channel (default: GUIDE_CHANNEL_IDS.booster, the booster guide channel)
  *   --post               actually send; without it nothing is sent
+ *
+ * --post always sends NEW messages. It never edits or de-duplicates a guide that
+ * is already posted — re-running it posts the guide a second time. To reword an
+ * already-posted guide, edit those messages instead of re-posting.
  */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { GUIDE_CHANNEL_IDS } from "@/discord-bot/guide-channels";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const SCREENSHOTS = resolve(ROOT, "docs/guides/screenshots");
@@ -157,7 +162,7 @@ async function send(token: string, channelId: string, body: object, files: strin
 }
 
 async function main() {
-  const channelId = arg("channel") ?? "1552712971543650425";
+  const channelId = arg("channel") ?? GUIDE_CHANNEL_IDS.booster;
   const post = process.argv.includes("--post");
 
   for (const m of MESSAGES) {

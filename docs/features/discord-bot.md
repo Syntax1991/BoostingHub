@@ -281,9 +281,13 @@ When a Run is `IN_PROGRESS` (after Start Run, with a start snapshot), the bot cr
 - **Create → persist:** a new channel is linked (and treated as the Run's channel) only after `RunDiscordPost.voiceChannelId` is recorded. If recording fails, the bot deletes the just-created channel (best effort) and the next poll retries cleanly; if that delete also fails it logs `ORPHANED VOICE CHANNEL` with the Run and channel id for manual cleanup.
 - **Final Setup link:** the Final Setup post shows `Voice: <#id>` after the participant sections and before the LFG footer, with the same precedence as the Raid Invite (this pass's voice outcome, even when it is null, else the persisted `voiceChannelId`). A channel created in the same pass as the first Final Setup send is linked in that send. The bot records the id it rendered in `RunDiscordPost.lastStartVoiceChannelId`. While the Run is `IN_PROGRESS` and not archived, a mismatch with `voiceChannelId` (voice added, replaced or cleared) makes the existing post stale, and the bot edits it in place without a roster-version bump. Final Setup never provisions voice. The web Start Run preview never shows a Voice line.
 
+## `/guide`
+
+`/guide booster` and `/guide raidlead` reply ephemerally with a link (text + link button) to the guide's plain Discord channel in the current guild — no threads. The channel ids live in `src/discord-bot/guide-channels.ts`, which the posting scripts (`scripts/post-*-guide.mts`, run manually over SSH — see [discord-posts.md](../guides/discord-posts.md)) also use as their default target. Unknown subcommands are ignored.
+
 ## `/mysignups`
 
-The one slash command. Read-only, ephemeral, registered per-guild (`npm run bot:register-commands`). Groups the same flat per-Character rows `signupService.getMyRuns` returns into one line per Run + participation type — "Offered: A, B, C · Selected: B" — matching the Web My Runs presentation. There is no `/signup` command: the Run embed's buttons are the only signup entry point, so Web and Discord never maintain two independent flows.
+Read-only, ephemeral, registered per-guild (`npm run bot:register-commands`). Groups the same flat per-Character rows `signupService.getMyRuns` returns into one line per Run + participation type — "Offered: A, B, C · Selected: B" — matching the Web My Runs presentation. There is no `/signup` command: the Run embed's buttons are the only signup entry point, so Web and Discord never maintain two independent flows.
 
 ## Deployment
 

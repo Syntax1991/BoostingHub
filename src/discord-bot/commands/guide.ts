@@ -1,26 +1,44 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ChatInputCommandInteraction } from "discord.js";
+import { guideChannelUrl, GUIDE_CHANNEL_IDS, type GuideKind } from "@/discord-bot/guide-channels";
 
-/** Forum thread holding the English booster guide (posted by scripts/post-booster-guide.mts). */
-export const BOOSTER_GUIDE_THREAD_ID = "1552698422677737694";
+const GUIDES: Record<GuideKind, { title: string; emoji: string; summary: string }> = {
+  booster: {
+    title: "Booster Guide",
+    emoji: "📘",
+    summary: "sign in, add characters, sign up for runs and track your status",
+  },
+  raidlead: {
+    title: "Raid Lead Guide",
+    emoji: "📗",
+    summary: "create runs, open signups, build and publish rosters, start runs and mark attendance",
+  },
+};
 
-export function guideThreadUrl(guildId: string): string {
-  return `https://discord.com/channels/${guildId}/${BOOSTER_GUIDE_THREAD_ID}`;
+function isGuideKind(value: string): value is GuideKind {
+  return Object.hasOwn(GUIDE_CHANNEL_IDS, value);
 }
 
-export function buildGuideReply(guildId: string) {
-  const url = guideThreadUrl(guildId);
+/** Links to the guide's channel in the given guild. */
+export function buildGuideReply(guildId: string, kind: GuideKind) {
+  const guide = GUIDES[kind];
+  const url = guideChannelUrl(guildId, kind);
   return {
-    content: `📘 **Booster Guide** — sign in, add characters, sign up for runs and track your status: ${url}`,
+    content: `${guide.emoji} **${guide.title}** — ${guide.summary}: ${url}`,
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel("Open Booster Guide").setEmoji("📘").setURL(url),
+        new ButtonBuilder()
+          .setStyle(ButtonStyle.Link)
+          .setLabel(`Open ${guide.title}`)
+          .setEmoji(guide.emoji)
+          .setURL(url),
       ),
     ],
   };
 }
 
 export async function handleGuideCommand(interaction: ChatInputCommandInteraction, guildId: string): Promise<void> {
-  if (interaction.options.getSubcommand() === "booster") {
-    await interaction.reply({ ...buildGuideReply(interaction.guildId ?? guildId), ephemeral: true });
+  const kind = interaction.options.getSubcommand();
+  if (isGuideKind(kind)) {
+    await interaction.reply({ ...buildGuideReply(interaction.guildId ?? guildId, kind), ephemeral: true });
   }
 }
