@@ -240,7 +240,13 @@ export class BotApiClient {
           messageId: string;
           classEmojiFingerprint?: string;
         }
-      | { kind: "roster"; channelId: string; messageId: string; postRevision?: number }
+      | {
+          kind: "roster";
+          channelId: string;
+          messageId: string;
+          postRevision?: number;
+          classEmojiFingerprint?: string;
+        }
       | { kind: "start"; channelId: string; messageId: string; voiceChannelId: string | null }
       | {
           kind: "archive-artifacts";

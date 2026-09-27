@@ -508,6 +508,9 @@ describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
 
   const recorded = (api: BotApiClient) =>
     (api.recordDiscordState as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1] as Record<string, unknown>);
+  /** The Guild emoji fingerprint this pass listed work with — the roster records the same one it rendered with. */
+  const listedFingerprint = (api: BotApiClient) =>
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
 
   it("POST (explicit Publish) sends a NEW message even though a current one exists, and records the fulfilled postRevision", async () => {
     const { client, api, edit, send } = setup({ mode: "POST", postRevision: 2, existingMessageId: CURRENT_MSG });
@@ -515,7 +518,13 @@ describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
     expect(edit).not.toHaveBeenCalled();
     expect(send()).toHaveBeenCalledTimes(1);
     expect(recorded(api)).toEqual([
-      { kind: "roster", channelId: RUN_CHAN, messageId: `msg-${RUN_CHAN}-1`, postRevision: 2 },
+      {
+        kind: "roster",
+        channelId: RUN_CHAN,
+        messageId: `msg-${RUN_CHAN}-1`,
+        postRevision: 2,
+        classEmojiFingerprint: listedFingerprint(api),
+      },
     ]);
   });
 
@@ -524,14 +533,23 @@ describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
     await syncOnce(client, botEnv(), api);
     expect(edit).toHaveBeenCalledTimes(1);
     expect(send()).not.toHaveBeenCalled();
-    expect(recorded(api)).toEqual([{ kind: "roster", channelId: RUN_CHAN, messageId: CURRENT_MSG }]);
+    expect(recorded(api)).toEqual([
+      { kind: "roster", channelId: RUN_CHAN, messageId: CURRENT_MSG, classEmojiFingerprint: listedFingerprint(api) },
+    ]);
   });
 
   it("REFRESH whose current message was deleted re-sends it (recovery) without claiming a postRevision", async () => {
     const { client, api, send } = setup({ mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG }, true);
     await syncOnce(client, botEnv(), api);
     expect(send()).toHaveBeenCalledTimes(1);
-    expect(recorded(api)).toEqual([{ kind: "roster", channelId: RUN_CHAN, messageId: `msg-${RUN_CHAN}-1` }]);
+    expect(recorded(api)).toEqual([
+      {
+        kind: "roster",
+        channelId: RUN_CHAN,
+        messageId: `msg-${RUN_CHAN}-1`,
+        classEmojiFingerprint: listedFingerprint(api),
+      },
+    ]);
   });
 
   it("a work item without a mode (older web build) keeps the legacy edit-in-place behaviour", async () => {

@@ -1028,6 +1028,11 @@ model RunDiscordPost {
   /// RunRoster.postRevision the bot last fulfilled by sending a NEW roster
   /// message. Null = no explicit Publish fulfilled yet (treated as 0).
   lastRosterPostRevision Int?
+  /// Guild emoji fingerprint (class + role emoji ids) the posted roster embed
+  /// was rendered with. Differing from the bot's current fingerprint means
+  /// the roster message is edited in place. Null for posts made before this
+  /// existed (refreshed once on the first pass).
+  lastRosterEmojiFingerprint String?
   /// Operational Run Start roster post (separate from signup + published roster).
   startChannelId      String?
   startMessageId      String?

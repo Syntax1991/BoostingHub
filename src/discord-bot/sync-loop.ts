@@ -347,7 +347,17 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
       try {
         const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
         if (!data) continue;
-        await syncRosterPost(client, env, api, item, data, resolvedChannels, classIndicators, roleIndicators);
+        await syncRosterPost(
+          client,
+          env,
+          api,
+          item,
+          data,
+          resolvedChannels,
+          classIndicators,
+          roleIndicators,
+          classEmojiFingerprint,
+        );
       } catch (error) {
         console.error(`[discord-bot] roster sync failed for run ${item.runId}`, error);
         messagePhaseError ??= error;
@@ -846,6 +856,7 @@ async function syncRosterPost(
   resolvedChannels: Map<string, string>,
   classIndicators: GuildClassIndicators,
   roleIndicators: GuildRoleIndicators,
+  classEmojiFingerprint: string,
 ): Promise<void> {
   const resolved = await resolveRunChannel(client, env, api, item, env.discordRosterChannelId, false, resolvedChannels);
   if (!resolved) return;
@@ -860,7 +871,12 @@ async function syncRosterPost(
   if (!explicitPost && item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });
     if (edited) {
-      await api.recordDiscordState(item.runId, { kind: "roster", channelId, messageId: item.existingMessageId });
+      await api.recordDiscordState(item.runId, {
+        kind: "roster",
+        channelId,
+        messageId: item.existingMessageId,
+        classEmojiFingerprint,
+      });
       return;
     }
     // The current message is gone (deleted in Discord) — fall through and re-send (recovery).
@@ -873,6 +889,7 @@ async function syncRosterPost(
     kind: "roster",
     channelId: message.channelId,
     messageId: message.id,
+    classEmojiFingerprint,
     ...(explicitPost ? { postRevision: item.postRevision as number } : {}),
   });
 }

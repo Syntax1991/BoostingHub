@@ -17,6 +17,8 @@ export type RunDiscordPostRecord = {
   lastRosterVersion: number | null;
   /** RunRoster.postRevision the bot last fulfilled with a NEW roster message; null = none yet (treated as 0). */
   lastRosterPostRevision: number | null;
+  /** Guild emoji fingerprint the roster message was rendered with; null = unknown (older post). */
+  lastRosterEmojiFingerprint: string | null;
   startChannelId: string | null;
   startMessageId: string | null;
   startPostedAt: string | null;
@@ -57,6 +59,7 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     rosterPostedAt: asStringOrNull(row.rosterPostedAt),
     lastRosterVersion: asNumberOrNull(row.lastRosterVersion),
     lastRosterPostRevision: asNumberOrNull(row.lastRosterPostRevision),
+    lastRosterEmojiFingerprint: asStringOrNull(row.lastRosterEmojiFingerprint),
     startChannelId: asStringOrNull(row.startChannelId),
     startMessageId: asStringOrNull(row.startMessageId),
     startPostedAt: asStringOrNull(row.startPostedAt),
@@ -151,6 +154,7 @@ export const runDiscordPostRepository = {
     rosterMessageId: string;
     lastRosterVersion: number;
     lastRosterPostRevision?: number;
+    lastRosterEmojiFingerprint?: string;
   }): Promise<void> {
     await upsert(input.runId, {
       rosterChannelId: input.rosterChannelId,
@@ -158,6 +162,9 @@ export const runDiscordPostRepository = {
       rosterPostedAt: new Date().toISOString(),
       lastRosterVersion: input.lastRosterVersion,
       ...(input.lastRosterPostRevision !== undefined ? { lastRosterPostRevision: input.lastRosterPostRevision } : {}),
+      ...(input.lastRosterEmojiFingerprint !== undefined
+        ? { lastRosterEmojiFingerprint: input.lastRosterEmojiFingerprint }
+        : {}),
     });
   },
 
@@ -283,6 +290,7 @@ export const runDiscordPostRepository = {
       rosterChannelId: null,
       rosterMessageId: null,
       lastRosterVersion: null,
+      lastRosterEmojiFingerprint: null,
       updatedAt,
     });
   },
@@ -328,6 +336,7 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
     rosterMessageId: null,
     rosterPostedAt: null,
     lastRosterVersion: null,
+    lastRosterEmojiFingerprint: null,
     startChannelId: null,
     startMessageId: null,
     startPostedAt: null,
