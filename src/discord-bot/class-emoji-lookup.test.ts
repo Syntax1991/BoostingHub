@@ -258,6 +258,36 @@ describe("createGuildEmojiCache", () => {
     expect(discord.fetches(GUILD)).toBe(2);
   });
 
+  it("matches Guild emoji names case-insensitively and accepts `heal` for healer", async () => {
+    const discord = fakeClient({
+      [GUILD]: [
+        fakeEmoji("Warrior", "1"),
+        fakeEmoji("DK", "2"),
+        fakeEmoji("DH", "3"),
+        fakeEmoji("Tank", "4"),
+        fakeEmoji("Heal", "5"),
+        fakeEmoji("DPS", "6"),
+      ],
+    });
+    const { classIndicators, roleIndicators } = await resolveGuildEmojiIndicators(
+      discord.client,
+      GUILD,
+      createGuildEmojiCache(),
+    );
+    expect(classIndicators).toEqual({
+      WARRIOR: "<:Warrior:1>",
+      DEATH_KNIGHT: "<:DK:2>",
+      DEMON_HUNTER: "<:DH:3>",
+    });
+    expect(roleIndicators).toEqual({ tank: "<:Tank:4>", healer: "<:Heal:5>", dps: "<:DPS:6>" });
+  });
+
+  it("prefers a `healer` emoji over the `heal` alias", async () => {
+    const discord = fakeClient({ [GUILD]: [fakeEmoji("heal", "1"), fakeEmoji("healer", "2")] });
+    const { roleIndicators } = await resolveGuildEmojiIndicators(discord.client, GUILD, createGuildEmojiCache());
+    expect(roleIndicators.healer).toBe("<:healer:2>");
+  });
+
   it("duplicate emoji names: the later emoji wins, as before", async () => {
     const discord = fakeClient({ [GUILD]: [fakeEmoji("tank", "1"), fakeEmoji("tank", "2")] });
     const { roleIndicators } = await resolveGuildEmojiIndicators(discord.client, GUILD, createGuildEmojiCache());

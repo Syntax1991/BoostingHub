@@ -7,19 +7,22 @@ import { WOW_CLASSES } from "@/models/enums";
 export const ROLE_DISCORD_EMOJI_KEYS = ["tank", "healer", "dps", "lootbuddy", "raidlead"] as const;
 export type RoleDiscordEmojiKey = (typeof ROLE_DISCORD_EMOJI_KEYS)[number];
 
-/** Discord Guild custom-emoji names for each logical role key. */
-export const ROLE_DISCORD_EMOJI_NAMES: Record<RoleDiscordEmojiKey, string> = {
-  tank: "tank",
-  healer: "healer",
-  dps: "dps",
-  lootbuddy: "loot",
-  raidlead: "raidlead",
+/**
+ * Discord Guild custom-emoji names for each logical role key, in preference
+ * order. Matching is case-insensitive (see {@link fetchGuildEmojiSnapshot}).
+ */
+export const ROLE_DISCORD_EMOJI_NAMES: Record<RoleDiscordEmojiKey, readonly string[]> = {
+  tank: ["tank"],
+  healer: ["healer", "heal"],
+  dps: ["dps"],
+  lootbuddy: ["loot"],
+  raidlead: ["raidlead"],
 };
 
 export type GuildRoleIndicators = Partial<Record<RoleDiscordEmojiKey, string>>;
 export type GuildClassIndicators = Partial<Record<WowClass, string>>;
 
-/** Guild custom-emoji name → Discord markup (`<:name:id>` / `<a:name:id>`). */
+/** Lower-cased Guild custom-emoji name → Discord markup (`<:Name:id>` / `<a:Name:id>`). */
 export type GuildEmojiSnapshot = ReadonlyMap<string, string>;
 
 /**
@@ -32,7 +35,8 @@ const MAX_CACHED_GUILDS = 8;
 /**
  * One REST fetch of the Guild's emoji collection. `guilds.fetch(id)` is served
  * from the gateway cache; `emojis.fetch()` without an id always hits REST.
- * Later emojis with a duplicate name win, as before.
+ * Names are keyed lower-cased so `:Warrior:` / `:DK:` match `warrior` / `dk`;
+ * later emojis with a duplicate (case-insensitive) name win, as before.
  */
 async function fetchGuildEmojiSnapshot(client: Client, guildId: string): Promise<GuildEmojiSnapshot> {
   const guild = await client.guilds.fetch(guildId);
@@ -41,7 +45,7 @@ async function fetchGuildEmojiSnapshot(client: Client, guildId: string): Promise
   const byName = new Map<string, string>();
   for (const emoji of guild.emojis.cache.values()) {
     if (emoji.name) {
-      byName.set(emoji.name, emoji.toString());
+      byName.set(emoji.name.toLowerCase(), emoji.toString());
     }
   }
   return byName;
@@ -141,14 +145,14 @@ export function buildClassIndicators(snapshot: GuildEmojiSnapshot): GuildClassIn
 }
 
 /**
- * Role emojis (`tank`, `healer`, `dps`, `loot`, `raidlead`) for signup/roster
+ * Role emojis (`tank`, `healer`/`heal`, `dps`, `loot`, `raidlead`) for signup/roster
  * field labels. Logical key `lootbuddy` maps to Guild emoji `loot`. Missing
  * names are omitted so the embed falls back to unicode.
  */
 export function buildRoleIndicators(snapshot: GuildEmojiSnapshot): GuildRoleIndicators {
   const indicators: GuildRoleIndicators = {};
   for (const key of ROLE_DISCORD_EMOJI_KEYS) {
-    const markup = snapshot.get(ROLE_DISCORD_EMOJI_NAMES[key]);
+    const markup = ROLE_DISCORD_EMOJI_NAMES[key].map((name) => snapshot.get(name)).find(Boolean);
     if (markup) indicators[key] = markup;
   }
   return indicators;
