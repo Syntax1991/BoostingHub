@@ -8,6 +8,7 @@ import {
   SESSION_UPDATE_AGE_SECONDS,
 } from "@/auth/session-policy";
 import { bootstrapDevelopmentAccount } from "@/services/dev-account-bootstrap.service";
+import { syncDiscordBoosterRole } from "@/services/discord-booster-role-sync.service";
 
 export { SESSION_EXPIRES_IN_SECONDS, SESSION_UPDATE_AGE_SECONDS };
 
@@ -96,13 +97,16 @@ export const auth = betterAuth({
       generateId: () => crypto.randomUUID(),
     },
   },
-  // Fires once per sign-in (new or returning user) — see
-  // dev-account-bootstrap.service.ts for what this restores and why
-  // session.create is the seam that covers both cases.
+  // Fires once per sign-in (new or returning user). Development bootstrap and
+  // additive Discord Booster-role sync both use the persisted User row, and
+  // both safe wrappers keep authentication available on failure.
   databaseHooks: {
     session: {
       create: {
-        after: (session) => bootstrapDevelopmentAccount({ userId: session.userId }),
+        after: async (session) => {
+          await bootstrapDevelopmentAccount({ userId: session.userId });
+          await syncDiscordBoosterRole({ userId: session.userId });
+        },
       },
     },
   },

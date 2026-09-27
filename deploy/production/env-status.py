@@ -38,6 +38,9 @@ GROUPS = {
         ("DISCORD_GUILD_ID", "public"),
         ("BOOSTINGHUB_API_BASE_URL", "public"),
     ],
+    "discord Booster access (optional)": [
+        ("DISCORD_BOOSTER_ROLE_ID", "public"),
+    ],
     "discord run channels (optional)": [
         ("DISCORD_RUN_CATEGORY_ID", "public"),
         ("DISCORD_RUN_CURRENT_MARKER_CHANNEL_ID", "public"),

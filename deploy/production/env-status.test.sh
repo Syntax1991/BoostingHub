@@ -24,6 +24,7 @@ BOOSTINGHUB_BOT_API_TOKEN=LEAK5
 DISCORD_BOT_TOKEN=LEAK6
 DISCORD_APPLICATION_ID=222222222222222222
 DISCORD_GUILD_ID=333333333333333333
+DISCORD_BOOSTER_ROLE_ID=1527022823103791104
 BOOSTINGHUB_API_BASE_URL=http://127.0.0.1:3000
 DEV_AUTH_PASSWORD=LEAK7
 TEST_DATABASE_URL=postgresql://t:LEAK8@localhost/t
@@ -49,7 +50,7 @@ check "one matching outer quote pair is removed" 'grep -qF "DISCORD_BOOSTER_TICK
 check "a lone trailing quote is kept" "grep -qF 'DISCORD_SYNC_INTERVAL_MS: SET (5000\")' <<<\"\${OUT}\""
 check "mismatched outer quotes are kept" "grep -qF \"BLIZZARD_REDIRECT_URI: SET ('https://phoenix-star.de/cb\\\")\" <<<\"\${OUT}\""
 check "export prefix is accepted" 'grep -qF "DISCORD_RUN_CATEGORY_ID: SET (444444444444444444)" <<<"${OUT}"'
-check "public values are shown" 'grep -qF "BETTER_AUTH_URL: SET (https://phoenix-star.de)" <<<"${OUT}" && grep -qF "DISCORD_GUILD_ID: SET (333333333333333333)" <<<"${OUT}"'
+check "public values are shown" 'grep -qF "BETTER_AUTH_URL: SET (https://phoenix-star.de)" <<<"${OUT}" && grep -qF "DISCORD_GUILD_ID: SET (333333333333333333)" <<<"${OUT}" && grep -qF "DISCORD_BOOSTER_ROLE_ID: SET (1527022823103791104)" <<<"${OUT}"'
 check "secrets show length only" 'grep -qF "DISCORD_BOT_TOKEN: SET (len=5)" <<<"${OUT}"'
 check "missing optional key is MISSING" 'grep -qF "RAIDER_IO_ACCESS_KEY: MISSING" <<<"${OUT}"'
 check "unknown keys are listed by name only" 'grep -qF "UNKNOWN_CUSTOM_KEY" <<<"${OUT}"'

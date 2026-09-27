@@ -18,6 +18,14 @@ Trusted request handlers reload the session user with `userRepository.findAuthen
 
 A new Discord user has no characters, signups, or roster rows. Pages must render empty states instead of assuming seed fixtures.
 
+### Discord Booster role sync
+
+When `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, and `DISCORD_BOOSTER_ROLE_ID` are all set, every completed sign-in checks the persisted user's Discord guild membership. Holding the configured Discord role grants the account-level Booster role (`User.isBooster = true`). The production `raidbooster` role is `1527022823103791104`.
+
+The sync is deliberately additive. A missing Discord member, an absent or later removed Discord role, incomplete configuration, or a Discord API failure never revokes Booster access and never blocks sign-in. ADMIN / OWNER can still grant and revoke Booster manually; if they revoke a user who still holds the configured Discord role, that role grants Booster again on the user's next Discord sign-in.
+
+The lookup uses the server-only bot token and guild ID. It changes neither `accountRole` nor Lootbuddy access and does not create a human-admin audit event.
+
 ## Battle.net (secondary connection)
 
 Battle.net is **not** a login provider. Discord (or a development credential identity) remains the BoostingHub session.
