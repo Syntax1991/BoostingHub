@@ -1,7 +1,6 @@
 /**
- * Post the English booster guide (docs/guides/booster.en.md) into a Discord thread
- * via the bot, split into messages < 2000 chars with screenshots attached,
- * followed by a "Back to menu" link button.
+ * Post the English booster guide (docs/guides/booster.en.md) into a Discord
+ * channel via the bot, split into messages < 2000 chars with screenshots attached.
  *
  * Usage (dry run, prints messages only):
  *   npx tsx --env-file=.env scripts/post-booster-guide.mts
@@ -9,8 +8,7 @@
  *   npx tsx --env-file=.env scripts/post-booster-guide.mts --post
  *
  * Options:
- *   --thread=<id>        target thread (default 1552698422677737694)
- *   --menu-channel=<id>  channel/thread the "Back to menu" button links to (default 1423239170268074055)
+ *   --channel=<id>       target channel (default 1552712971543650425)
  *   --post               actually send; without it nothing is sent
  */
 import { readFile } from "node:fs/promises";
@@ -20,8 +18,6 @@ const ROOT = resolve(import.meta.dirname, "..");
 const SCREENSHOTS = resolve(ROOT, "docs/guides/screenshots");
 const API = "https://discord.com/api/v10";
 const APP_URL = "https://manawyrm-boosting.com";
-
-const BACK_EMOJI = { id: "1289594271640453161", name: "Left_Arrow_Green", animated: true };
 
 function arg(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -139,7 +135,7 @@ Sign up (Pending)
   },
 ];
 
-async function send(token: string, threadId: string, body: object, files: string[]) {
+async function send(token: string, channelId: string, body: object, files: string[]) {
   const form = new FormData();
   const payload = {
     ...body,
@@ -151,7 +147,7 @@ async function send(token: string, threadId: string, body: object, files: string
     const data = await readFile(resolve(SCREENSHOTS, name));
     form.append(`files[${i}]`, new Blob([data], { type: "image/png" }), name);
   }
-  const res = await fetch(`${API}/channels/${threadId}/messages`, {
+  const res = await fetch(`${API}/channels/${channelId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bot ${token}` },
     body: form,
@@ -161,8 +157,7 @@ async function send(token: string, threadId: string, body: object, files: string
 }
 
 async function main() {
-  const threadId = arg("thread") ?? "1552698422677737694";
-  const menuChannelId = arg("menu-channel") ?? "1423239170268074055";
+  const channelId = arg("channel") ?? "1552712971543650425";
   const post = process.argv.includes("--post");
 
   for (const m of MESSAGES) {
@@ -174,32 +169,15 @@ async function main() {
     for (const [i, m] of MESSAGES.entries()) {
       console.log(`\n=== Message ${i + 1} (${m.content.length} chars) files: ${m.files.join(", ") || "-"}\n${m.content}`);
     }
-    console.log(`\n=== Back to menu button → channel ${menuChannelId}`);
-    console.log(`\nDry run. Re-run with --post to send to thread ${threadId}.`);
+    console.log(`\nDry run. Re-run with --post to send to channel ${channelId}.`);
     return;
   }
 
   const token = requireEnv("DISCORD_BOT_TOKEN");
-  const threadRes = await fetch(`${API}/channels/${threadId}`, { headers: { Authorization: `Bot ${token}` } });
-  if (!threadRes.ok) throw new Error(`Cannot read thread ${threadId}: ${threadRes.status} ${await threadRes.text()}`);
-  const { guild_id: guildId } = (await threadRes.json()) as { guild_id: string };
-  const menuUrl = `https://discord.com/channels/${guildId}/${menuChannelId}`;
-
-  const backToMenu = {
-    components: [
-      {
-        type: 1,
-        components: [{ type: 2, style: 5, label: "Back to menu", url: menuUrl, emoji: BACK_EMOJI }],
-      },
-    ],
-  };
-
   for (const [i, m] of MESSAGES.entries()) {
-    const { id } = await send(token, threadId, { content: m.content }, m.files);
+    const { id } = await send(token, channelId, { content: m.content }, m.files);
     console.log(`Posted message ${i + 1}: ${id}`);
   }
-  const { id } = await send(token, threadId, backToMenu, []);
-  console.log(`Posted back-to-menu: ${id}`);
 }
 
 main().catch((err) => {

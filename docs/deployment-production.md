@@ -157,6 +157,11 @@ absolute paths.
    then check `systemctl show -p Result --value boostinghub-backup.service` is `success`.
 8. In Plesk, point the domain's reverse proxy at `http://127.0.0.1:3000` and issue
    the TLS certificate there. Do not add a second proxy.
+   `manawyrm-boosting.com` uses a purchased IONOS/Sectigo wildcard certificate
+   (Plesk name `manawyrm-wildcard`, covers the apex too) — it does **not**
+   auto-renew: upload the renewed certificate in Plesk before it expires
+   (2027-03-26). The retired `phoenix-star.de` only 301-redirects to the new
+   domain until its cancellation takes effect; then remove it from Plesk.
 9. Set `BETTER_AUTH_URL=https://manawyrm-boosting.com` and register the provider callbacks:
    - Discord OAuth: `https://manawyrm-boosting.com/api/auth/callback/discord`
    - Battle.net: `https://manawyrm-boosting.com/api/integrations/battlenet/callback`
