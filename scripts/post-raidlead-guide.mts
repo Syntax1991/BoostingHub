@@ -41,7 +41,7 @@ const MESSAGES: GuideMessage[] = [
   {
     content: `## 📗 Raid Lead Guide
 
-A quick introduction to **BoostingHub** as a **RAID_LEAD**: create runs, open signups, build the roster, start, mark attendance and complete.
+A quick introduction to **Manawyrm Hub** as a **RAID_LEAD**: create runs, open signups, build the roster, start, mark attendance and complete.
 
 App: ${APP_URL}
 

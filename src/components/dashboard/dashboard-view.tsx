@@ -66,7 +66,7 @@ export function DashboardView({ data, timeZone }: { data: DashboardData; timeZon
         <Card className="xl:col-span-2">
           <CardHeader
             title="Your attention"
-            description="Schedule conflicts on selected BoostingHub commitments."
+            description="Schedule conflicts on selected Manawyrm Hub commitments."
             action={
               <Link href="/my-runs" className="text-xs text-accent hover:underline">
                 View My Runs

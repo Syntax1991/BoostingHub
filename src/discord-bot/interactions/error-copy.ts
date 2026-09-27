@@ -17,12 +17,12 @@ const MESSAGES: Record<string, string> = {
   WITHDRAW_REASON_REQUIRED: "You are on the roster — please give the raid lead a reason (at least 3 characters).",
   INVALID_CHARACTER_ROLE: "One of the selected characters can't be offered in that role.",
   VALIDATION_FAILED: "That selection isn't valid — try again.",
-  ACCOUNT_DISABLED: "Your BoostingHub account is disabled.",
+  ACCOUNT_DISABLED: "Your Manawyrm Hub account is disabled.",
 };
 
 export function describeBotApiError(error: unknown): string {
   if (error instanceof BotApiError) {
     return MESSAGES[error.code] ?? error.message;
   }
-  return "Something went wrong talking to BoostingHub. Try again.";
+  return "Something went wrong talking to Manawyrm Hub. Try again.";
 }

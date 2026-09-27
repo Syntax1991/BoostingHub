@@ -47,7 +47,7 @@ export async function resolveActingDiscordUser(discordUserId: string | null): Pr
   }
   const user = await userRepository.findByDiscordUserId(discordUserId);
   if (!user) {
-    throw new DomainError("NOT_FOUND", "No BoostingHub account is linked to this Discord user.", 404);
+    throw new DomainError("NOT_FOUND", "No Manawyrm Hub account is linked to this Discord user.", 404);
   }
   if (user.accountStatus !== "ACTIVE") {
     throw new DomainError("ACCOUNT_DISABLED", "This account is disabled.", 403);

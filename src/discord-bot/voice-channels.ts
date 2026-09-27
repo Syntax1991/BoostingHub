@@ -100,7 +100,7 @@ async function provision(
       recordError,
     );
     try {
-      await created.delete(`BoostingHub could not record this voice channel for run ${item.runId}`);
+      await created.delete(`Manawyrm Hub could not record this voice channel for run ${item.runId}`);
     } catch (deleteError) {
       if (!isDiscordUnknownChannelError(deleteError)) {
         console.error(
@@ -183,7 +183,7 @@ async function retireIfEmpty(
   if (channel.memberCount > 0) return;
 
   try {
-    await channel.delete(`BoostingHub run ${item.runId} ended and its voice channel is empty`);
+    await channel.delete(`Manawyrm Hub run ${item.runId} ended and its voice channel is empty`);
   } catch (error) {
     if (!isDiscordUnknownChannelError(error)) {
       console.warn(`[discord-bot] failed to delete empty voice channel ${channelId} for run ${item.runId} — retrying next poll`, error);

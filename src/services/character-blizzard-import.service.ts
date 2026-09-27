@@ -48,7 +48,7 @@ function prepareImportedIdentity(owned: OwnedBlizzardCharacter) {
   if (!isValidCharacterName(name)) {
     throw new DomainError(
       "INVALID_CHARACTER_NAME",
-      `Blizzard character name "${owned.name}" is not usable in BoostingHub.`,
+      `Blizzard character name "${owned.name}" is not usable in Manawyrm Hub.`,
     );
   }
   if (!isValidRealmName(realm)) {
@@ -179,7 +179,7 @@ async function resolveCandidate(
         level: owned.level,
         status: "conflict",
         characterId: null,
-        conflictReason: "This Blizzard character is already linked to another BoostingHub account.",
+        conflictReason: "This Blizzard character is already linked to another Manawyrm Hub account.",
         suggestedSpecialization: null,
         suggestedItemLevel: null,
       };
@@ -258,7 +258,7 @@ async function resolveCandidate(
         level: owned.level,
         status: "conflict",
         characterId: byName.id,
-        conflictReason: "That BoostingHub character is already linked to a different Blizzard identity.",
+        conflictReason: "That Manawyrm Hub character is already linked to a different Blizzard identity.",
         suggestedSpecialization: null,
         suggestedItemLevel: null,
       };
@@ -428,7 +428,7 @@ async function applySelectionsForRoster(
       if (isUniqueConstraintViolation(error)) {
         throw new DomainError(
           "BLIZZARD_IDENTITY_CONFLICT",
-          "That Blizzard character conflicts with an existing BoostingHub character.",
+          "That Blizzard character conflicts with an existing Manawyrm Hub character.",
         );
       }
       throw error;
@@ -452,7 +452,7 @@ async function applySelectionsForRoster(
     if (character.wowClass !== item.owned.wowClass) {
       throw new DomainError(
         "BLIZZARD_IDENTITY_CONFLICT",
-        "Class mismatch between BoostingHub character and Blizzard identity.",
+        "Class mismatch between Manawyrm Hub character and Blizzard identity.",
       );
     }
 

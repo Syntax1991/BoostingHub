@@ -37,7 +37,7 @@ export function RunChannelSettingsCard({
     <Card>
       <CardHeader
         title="Run Channels"
-        description="Optional short name used only in BoostingHub Discord Run channel names."
+        description="Optional short name used only in Manawyrm Hub Discord Run channel names."
       />
       <div className="space-y-3 px-4 py-4 text-sm">
         {error ? <p className="text-danger">{error}</p> : null}
@@ -45,7 +45,7 @@ export function RunChannelSettingsCard({
         <label className="block">
           <span className="font-medium">Run channel nickname</span>
           <span className="mt-0.5 block text-xs text-muted">
-            Example: mon-2200-hc-vip-9of9-syntax. Leave empty to use your BoostingHub name.
+            Example: mon-2200-hc-vip-9of9-syntax. Leave empty to use your Manawyrm Hub name.
           </span>
           <input
             type="text"

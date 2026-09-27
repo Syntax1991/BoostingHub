@@ -164,7 +164,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
       conflictingRunId: "other",
       conflictingRunTitle: "Other",
       conflictingScheduledStartAt: "2026-10-01T19:00:00.000Z",
-      message: "Another BoostingHub Run: Other at …",
+      message: "Another Manawyrm Hub Run: Other at …",
     };
     vi.spyOn(scheduleConflictService, "getScheduleConflictsForCharacters").mockResolvedValue(
       new Map([["char-s12", [conflict]]]),

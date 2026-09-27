@@ -134,7 +134,7 @@ export function NotificationSettingsCard({
     <Card>
       <CardHeader
         title="Notifications"
-        description="Choose which BoostingHub events should also be sent to you by Discord DM."
+        description="Choose which Manawyrm Hub events should also be sent to you by Discord DM."
       />
       <div className="space-y-4 px-4 py-4 text-sm">
         {error ? <p className="text-danger">{error}</p> : null}
@@ -146,7 +146,7 @@ export function NotificationSettingsCard({
           <span>
             <span className="font-medium">Discord DMs</span>
             <span className="mt-0.5 block text-xs text-muted">
-              Allow BoostingHub to also send enabled notifications to you by Discord DM.
+              Allow Manawyrm Hub to also send enabled notifications to you by Discord DM.
             </span>
           </span>
           <input
@@ -236,7 +236,7 @@ export function NotificationSettingsCard({
           ) : null}
         </div>
 
-        <p className="text-xs text-muted">In-app BoostingHub notifications remain enabled.</p>
+        <p className="text-xs text-muted">In-app Manawyrm Hub notifications remain enabled.</p>
       </div>
     </Card>
   );

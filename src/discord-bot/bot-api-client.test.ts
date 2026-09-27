@@ -78,7 +78,7 @@ describe("BotApiClient", () => {
   });
 
   it("throws BotApiError with the server's code, message, and HTTP status on failure", async () => {
-    mockFetchOnce(404, { ok: false, code: "NOT_FOUND", message: "No BoostingHub account is linked to this Discord user." });
+    mockFetchOnce(404, { ok: false, code: "NOT_FOUND", message: "No Manawyrm Hub account is linked to this Discord user." });
     const client = new BotApiClient({ apiBaseUrl: "https://api.test", botApiToken: "secret-token" });
 
     await expect(client.getSignupOptions("run-1", "unknown")).rejects.toMatchObject({
