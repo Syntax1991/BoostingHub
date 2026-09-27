@@ -128,7 +128,8 @@ export function AppShell({
         <header className="flex min-h-[70px] items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
           <div className="flex items-center gap-3 md:hidden">
             <BrandLogo size={28} />
-            <p className="text-sm font-semibold">{APP_BRAND_NAME}</p>
+            {/* The emblem carries the brand on narrow screens; the name stays for screen readers. */}
+            <p className="sr-only">{APP_BRAND_NAME}</p>
             {showManage ? (
               <Link href="/manage" className="text-xs uppercase tracking-wide text-accent">
                 Manage

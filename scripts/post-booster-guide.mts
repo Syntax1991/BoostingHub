@@ -41,7 +41,7 @@ const MESSAGES: GuideMessage[] = [
   {
     content: `## 📘 Booster Guide
 
-A quick introduction to **BoostingHub**: sign in, add characters, sign up for runs and track your status under **My Runs**.
+A quick introduction to **Manawyrm Hub**: sign in, add characters, sign up for runs and track your status under **My Runs**.
 
 App: ${APP_URL}
 
@@ -49,7 +49,7 @@ App: ${APP_URL}
 **Booster** and **Lootbuddy** are not account roles — they are **Boosting Roles** on your account, granted by an admin.
 
 ### 1. Sign in
-Open BoostingHub → **Continue with Discord**.
+Open Manawyrm Hub → **Continue with Discord**.
 After signing in you land on the **Dashboard**.`,
     files: ["common-01-login.png"],
   },
@@ -96,7 +96,7 @@ Tip: Website and Discord share the same signups — Discord buttons: next messag
   },
   {
     content: `### 5. Signing up via the Discord bot
-Requirement: Discord linked to BoostingHub (sign in with Discord on the website once).
+Requirement: Discord linked to Manawyrm Hub (sign in with Discord on the website once).
 
 Every open run has a channel with a signup embed and buttons:
 
@@ -131,7 +131,7 @@ Sign up (Pending)
 → Start → Attendance → Complete → Payout
 
 ### ✅ Checklist
-1. Sign in with Discord (links Discord to BoostingHub)
+1. Sign in with Discord (links Discord to Manawyrm Hub)
 2. Add character(s)
 3. Apply for the Booster role via Discord
 4. Sign up: website **Runs → Sign up** *or* Discord buttons
