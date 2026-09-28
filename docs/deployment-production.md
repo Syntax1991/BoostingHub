@@ -345,8 +345,16 @@ Enable it on the application the **production** bot uses (check the bot's
 application, never a remembered id):
 
 Discord Developer Portal → *that application* → **Bot** → *Privileged Gateway
-Intents* → **Message Content Intent** → save, then restart the bot. Bots in
-fewer than 100 servers only need this toggle.
+Intents* → **Message Content Intent** → save, then restart the bot.
+
+*Discord policy (separate from what the bot checks):* whether an application may
+use the toggle on its own or must go through Discord's privileged intent review
+is Discord's decision and changes over time. As of 2026-09 Discord requires the
+review — renewed yearly — once more than 10,000 unique users can see the app;
+below that the toggle is self-service. See Discord's
+[Getting Started with Privileged Intent Review](https://docs.discord.com/developers/gateway/getting-started-with-privileged-intent-review).
+The bot never infers access from server or user counts — only from its
+application flags (below).
 
 Check it — the bot logs one line at startup:
 
@@ -354,8 +362,11 @@ Check it — the bot logs one line at startup:
 - `Discord Message Content: UNAVAILABLE (runtime-confirmed …)` + warning — off: user-authored transcript text and automatic Warcraft Logs link detection are incomplete.
 - `Discord Message Content: UNKNOWN (could not be determined)` — the application could not be read; check the portal by hand.
 
-The bot reads this from its application flags (`GET /applications/@me`:
-`GATEWAY_MESSAGE_CONTENT` 1 << 18 or `GATEWAY_MESSAGE_CONTENT_LIMITED` 1 << 19).
+*Technical capability:* the bot reads this from its application flags
+(`GET /applications/@me`). `GATEWAY_MESSAGE_CONTENT` (1 << 18, access granted
+through Discord's review) or `GATEWAY_MESSAGE_CONTENT_LIMITED` (1 << 19, access
+enabled with the Bot page toggle) — either one means Message Content is
+available; neither means it is not.
 
 While it is off:
 

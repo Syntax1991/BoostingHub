@@ -13,8 +13,15 @@
  * requested: REST follows the application's access, and requesting the gateway
  * intent without the portal toggle would make Discord reject the login.
  * The application flags (GET /applications/@me, callable with the bot token)
- * say whether it is on: GATEWAY_MESSAGE_CONTENT (1 << 18, verified apps) or
- * GATEWAY_MESSAGE_CONTENT_LIMITED (1 << 19, apps in < 100 servers).
+ * say whether it is on — this is the technical capability, read at runtime:
+ * - GATEWAY_MESSAGE_CONTENT (1 << 18): Discord reports Message Content access
+ *   granted through its privileged intent review;
+ * - GATEWAY_MESSAGE_CONTENT_LIMITED (1 << 19): Discord reports Message Content
+ *   access enabled with the Bot page toggle, without review.
+ * Either flag means this application currently receives message content, so
+ * both map to AVAILABLE. Which apps need Discord's review (a Discord policy that
+ * changes over time) is deliberately not modeled here — no server or user
+ * counts, no verification status.
  */
 
 export type MessageContentCapability = "AVAILABLE" | "UNAVAILABLE" | "UNKNOWN";
@@ -24,7 +31,9 @@ export type MessageContentCapabilitySource = "APPLICATION_FLAGS" | "OBSERVED" | 
 
 export type MessageContentStatus = { capability: MessageContentCapability; source: MessageContentCapabilitySource };
 
+/** Application flag: Message Content access granted through Discord's review. */
 export const GATEWAY_MESSAGE_CONTENT_FLAG = 1 << 18;
+/** Application flag: Message Content access enabled with the Bot page toggle (no review). */
 export const GATEWAY_MESSAGE_CONTENT_LIMITED_FLAG = 1 << 19;
 
 /** Capability from the application's flags; UNKNOWN when they could not be read. */

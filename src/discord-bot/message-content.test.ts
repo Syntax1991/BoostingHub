@@ -25,7 +25,7 @@ const empty: MessageContentFacts = {
 };
 
 describe("application capability (GET /applications/@me flags)", () => {
-  it("GATEWAY_MESSAGE_CONTENT (1 << 18, verified apps) → AVAILABLE", () => {
+  it("GATEWAY_MESSAGE_CONTENT (1 << 18, access granted through review) → AVAILABLE", () => {
     expect(GATEWAY_MESSAGE_CONTENT_FLAG).toBe(262_144);
     expect(capabilityFromApplicationFlags(GATEWAY_MESSAGE_CONTENT_FLAG | (1 << 23))).toEqual({
       capability: "AVAILABLE",
@@ -33,7 +33,7 @@ describe("application capability (GET /applications/@me flags)", () => {
     });
   });
 
-  it("GATEWAY_MESSAGE_CONTENT_LIMITED (1 << 19, the portal toggle for apps in < 100 servers) → AVAILABLE", () => {
+  it("GATEWAY_MESSAGE_CONTENT_LIMITED (1 << 19, access enabled with the Bot page toggle) → AVAILABLE", () => {
     expect(GATEWAY_MESSAGE_CONTENT_LIMITED_FLAG).toBe(524_288);
     expect(capabilityFromApplicationFlags(GATEWAY_MESSAGE_CONTENT_LIMITED_FLAG).capability).toBe("AVAILABLE");
   });
