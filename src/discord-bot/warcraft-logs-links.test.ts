@@ -4,6 +4,7 @@ import {
   WCL_AUTO_AUDIT_INTERVAL_MS,
   WCL_CHANNEL_SCAN_INTERVAL_MS,
   WCL_FINAL_SCAN_MAX_DEFER_MS,
+  WCL_LOG_CHANNEL_RETRY_HORIZON_MS,
   WCL_SCAN_MAX_PAGES_PER_PASS,
   WCL_SCAN_PAGE_SIZE,
   createReportScanState,
@@ -358,11 +359,67 @@ describe("scanReportChannels — dedicated Warcraft Logs log channel", () => {
     const failing = setup();
     failing.record.mockRejectedValueOnce(new Error("ECONNREFUSED"));
     await failing.scan();
-    expect(failing.saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1001"); // stops before 1002, re-read next time
+    expect(failing.saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1001"); // stays before 1002, re-read next time
+    expect(failing.record).toHaveBeenLastCalledWith(expect.objectContaining({ messageId: "1004" })); // later reports still delivered
     const rejected = setup();
     rejected.record.mockRejectedValue(new BotApiError(403, "NOT_AUTHORIZED", "not a configured log channel"));
     await rejected.scan();
     expect(rejected.saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1004");
+  });
+
+  it.each([
+    [400, "advance"], [403, "advance"], [404, "advance"], [409, "advance"], [422, "advance"],
+    [401, "retry"], [429, "retry"], [500, "retry"], [503, "retry"],
+  ] as const)("server %i on a trusted link → %s that message", async (status, expected) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { record, saveCursor, scan } = setup();
+    record.mockImplementation(async (link) => {
+      if (link.messageId === "1002") throw new BotApiError(status, "X", "refused");
+      return { status: "RECORDED" };
+    });
+    await scan();
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ messageId: "1004" }));
+    expect(saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, expected === "advance" ? "1004" : "1001");
+  });
+
+  it("one message that keeps failing never wedges the channel: later reports flow, and it is given up after the horizon", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { record, saveCursor, scan } = setup();
+    record.mockImplementation(async (link) => {
+      if (link.messageId === "1002") throw new BotApiError(500, "INTERNAL", "boom");
+      return { status: "RECORDED" };
+    });
+    const posted = 1_420_070_400_000; // Discord epoch — the time encoded in these tiny test ids
+    await scan("999", posted + 60_000);
+    await scan("1001", posted + 5 * 60_000);
+    expect(saveCursor.mock.calls).toEqual([[LOG_CHANNEL, "1001"]]); // held, not advanced past 1002
+    expect(record.mock.calls.filter(([link]) => link.messageId === "1004")).toHaveLength(2);
+    await scan("1001", posted + WCL_LOG_CHANNEL_RETRY_HORIZON_MS + 60_000);
+    expect(saveCursor).toHaveBeenLastCalledWith(LOG_CHANNEL, "1004");
+  });
+
+  it("two reports in one message: if the second fails, the message is re-read and the first is only re-confirmed", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const both = message({ id: "1002", authorId: WEBHOOK, content: `${URL_A}
+${URL_B}` });
+    const { record, saveCursor, scan } = setup(fakeChannel([both, message({ id: "1003" })]));
+    const stored = new Set<string>();
+    let failB = true;
+    record.mockImplementation(async (link) => {
+      if (link.reportCode === "AbCdEfGhIjKlMnOp" && failB) throw new Error("ECONNRESET");
+      const already = stored.has(link.reportCode);
+      stored.add(link.reportCode);
+      return { status: already ? "ALREADY_RECORDED" : "RECORDED" };
+    });
+    await scan("999", 0);
+    expect(saveCursor).not.toHaveBeenCalled(); // nothing fully processed before 1002
+    failB = false;
+    await scan("999", WCL_CHANNEL_SCAN_INTERVAL_MS);
+    expect(record.mock.calls.map(([link]) => link.reportCode)).toEqual([
+      "FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp", "FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp",
+    ]);
+    expect([...stored]).toEqual(["FtwhWRvqjTbAx4NQ", "AbCdEfGhIjKlMnOp"]);
+    expect(saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1003");
   });
 
   it("a Discord failure (e.g. rate limit) never breaks the sync loop and saves no cursor", async () => {

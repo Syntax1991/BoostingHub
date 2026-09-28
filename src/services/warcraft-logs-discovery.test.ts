@@ -14,6 +14,7 @@ import { warcraftLogsDiscoveryRepository } from "@/repositories/warcraft-logs-di
 import { identityKey, type ConsumableAuditParticipant } from "@/services/consumable-audit-extract";
 import { discordSyncService } from "@/services/discord-sync.service";
 import { runConsumableAutoAuditService } from "@/services/run-consumable-auto-audit.service";
+import { fetchReport, linkDiscoveredReport } from "@/services/run-warcraft-logs.service";
 import {
   WCL_DISCOVERY_LOCK_KEY,
   warcraftLogsDiscoveryService,
@@ -217,10 +218,21 @@ describe("discovery pass — matching a centrally posted report to its Run", () 
     expect(await runConsumableAutoAuditService.runDuePass(at("16:30"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
   });
 
-  it("a report WCL does not know is IGNORED and never retried; a temporary WCL failure is retried with backoff", async () => {
+  it("a report WCL does not show (missing, private or not visible yet) is retried with backoff and only IGNORED after 3 days", async () => {
     metadataSpy.mockImplementation(async () => ({ status: "NOT_FOUND" }));
     await record();
-    expect(await warcraftLogsDiscoveryService.runDuePass(at("16:00"))).toMatchObject({ evaluated: [{ status: "IGNORED", outcome: "REPORT_NOT_FOUND" }] });
+    expect(await warcraftLogsDiscoveryService.runDuePass(at("16:00"))).toMatchObject({ evaluated: [{ status: "PENDING", outcome: "REPORT_NOT_FOUND" }] });
+    expect(await discovery()).toMatchObject({ status: "PENDING", nextAttemptAt: at("16:15").toISOString() });
+    // Visible a little later (e.g. WCL indexing): found and linked after all.
+    metadataSpy.mockImplementation(async (code) => ({ status: "SUCCESS", report: metadata(code) }));
+    expect(await warcraftLogsDiscoveryService.runDuePass(at("16:15"))).toMatchObject({ evaluated: [{ status: "MATCHED", linkedRuns: 1 }] });
+
+    await clear();
+    metadataSpy.mockImplementation(async () => ({ status: "NOT_FOUND" }));
+    await record();
+    await warcraftLogsDiscoveryService.runDuePass(at("16:00"));
+    const afterHorizon = new Date("2026-09-23T15:00:00.000Z"); // posted 09-20 14:06 + 3 days
+    expect(await warcraftLogsDiscoveryService.runDuePass(afterHorizon)).toMatchObject({ evaluated: [{ status: "IGNORED", outcome: "EXPIRED_REPORT_NOT_FOUND" }] });
     expect(await discovery()).toMatchObject({ status: "IGNORED", nextAttemptAt: null });
 
     await clear();
@@ -228,6 +240,30 @@ describe("discovery pass — matching a centrally posted report to its Run", () 
     await record();
     expect(await warcraftLogsDiscoveryService.runDuePass(at("16:00"))).toMatchObject({ evaluated: [{ status: "PENDING", outcome: "WCL_UNAVAILABLE" }] });
     expect(await discovery()).toMatchObject({ nextAttemptAt: at("16:15").toISOString() });
+  });
+
+  it("a report already linked (manually or from the Run channel) is MATCHED without a second link or an attempt reset", async () => {
+    const fetched = await fetchReport(REPORT, { reuseCached: false, now: at("15:30") });
+    if (!("report" in fetched)) throw new Error("report not stored");
+    await runWarcraftLogsRepository.attachWithoutScan({ runId: RUN, reportId: fetched.report.id, createdById: null, source: "MANUAL", discordMessageId: null, discordAuthorId: null, now: at("15:30").toISOString() });
+    // The Run channel's own scan uses the same link path: still one association.
+    expect(await linkDiscoveredReport({ runId: RUN, reportId: fetched.report.id, discordMessageId: MESSAGE, discordAuthorId: LOG_BOT, now: at("15:31") })).toEqual({ created: false });
+    await runConsumableAuditRepository.incrementAutoAttempts(RUN, at("15:40").toISOString());
+    await runConsumableAuditRepository.incrementAutoAttempts(RUN, at("15:55").toISOString());
+
+    await record();
+    expect(await warcraftLogsDiscoveryService.runDuePass(at("16:00"))).toMatchObject({ evaluated: [{ status: "MATCHED", outcome: "LINKED", linkedRuns: 1 }] });
+    expect((await associations()).map((a) => a.source)).toEqual(["MANUAL"]);
+    const audit = await orm.RunConsumableAudit.where({ runId: RUN }).first();
+    expect(audit).toMatchObject({ autoAttempts: 2 });
+  });
+
+  it("a new link does not bring the audit forward: not before completedAt + 15 min, then in the next tick", async () => {
+    await record();
+    // Run completed 15:20; discovery links at 15:25 — the audit still waits.
+    expect(await warcraftLogsDiscoveryService.runDuePass(at("15:25"))).toMatchObject({ evaluated: [{ status: "MATCHED" }] });
+    expect(await runConsumableAutoAuditService.runDuePass(at("15:25"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+    expect(await runConsumableAutoAuditService.runDuePass(at("15:36"))).toMatchObject({ runs: [{ runId: RUN, status: "ANALYZED" }] });
   });
 
   it("the same report in a second message links nothing twice", async () => {

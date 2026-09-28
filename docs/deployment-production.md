@@ -412,6 +412,17 @@ matched on the bot's ~5-minute Warcraft Logs tick; the server logs
 `[wcl-discovery] recorded / evaluated / linked` (report code, status, linked Run
 ids — never message text).
 
+**First start after adding a log channel.** There is no cursor yet, so the first
+read (within ~1 min of the bot's first sync) starts 3 days back and records every
+trusted report link from those 3 days (`[wcl-discovery] recorded`); older posts
+are never read. Each is due immediately and evaluated on the next ~5-minute tick,
+at most 5 per tick: a report whose Run is COMPLETED is linked at once
+(`linked`); one already linked (e.g. pasted manually) becomes `MATCHED` without
+a second link or an audit reset; one whose Run is still running stays `PENDING`.
+The cursor row is written after the first read that saw messages. A Run's audit
+still runs no earlier than 15 min after it was completed, and an already
+analyzed Run is re-audited only if the link is new to it.
+
 ## Production smoke checklist
 
 - [ ] `sudo -u boostinghub git -C /var/www/boostinghub rev-parse HEAD` is the expected SHA,

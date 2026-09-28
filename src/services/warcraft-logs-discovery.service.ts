@@ -102,9 +102,12 @@ async function evaluateOne(discovery: WarcraftLogsDiscoveryRecord, now: Date) {
   try {
     const fetched = await fetchReport(discovery.reportCode, { reuseCached: true, now });
     if ("failure" in fetched) {
-      if (fetched.failure === "REPORT_NOT_FOUND") return save("IGNORED", "REPORT_NOT_FOUND", [], null);
-      // Transient (WCL down) or configuration: back off, give up at the age limit.
-      if (expired) return save("IGNORED", `EXPIRED_${fetched.failure}`, [], null);
+      // WCL answers "not found" alike for a missing, a private and a not-yet-visible report,
+      // so that is retried like an outage (back off) and only given up at the age limit.
+      if (expired) {
+        const linked = discovery.status === "MATCHED" || discovery.status === "NEEDS_REVIEW";
+        return save(linked ? discovery.status : "IGNORED", `EXPIRED_${fetched.failure}`, [], null);
+      }
       const backoff = Math.min(
         WCL_DISCOVERY_POLICY.maxBackoffHours * 60 * MINUTE,
         WCL_DISCOVERY_POLICY.retryMinutes * MINUTE * 2 ** Math.min(discovery.attempts, 10),
@@ -125,6 +128,7 @@ async function evaluateOne(discovery: WarcraftLogsDiscoveryRecord, now: Date) {
       postedAtMs: Date.parse(discovery.postedAt),
       nowMs: now.getTime(),
       attempts: discovery.attempts,
+      previousStatus: discovery.status,
     });
     for (const runId of decision.linkRunIds) {
       const { created } = await linkDiscoveredReport({

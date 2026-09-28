@@ -134,4 +134,17 @@ describe("evaluateReportDiscovery — which Runs a centrally posted report belon
     expect(quiet(2)).toBe(60 * MIN);
     expect(quiet(9)).toBe(WCL_DISCOVERY_POLICY.maxBackoffHours * HOUR);
   });
+
+  it("once linked it stays MATCHED / NEEDS_REVIEW — never back to PENDING, never expired into IGNORED", () => {
+    const late = at("14:05") + (WCL_DISCOVERY_POLICY.maxAgeDays * 24 + 1) * HOUR;
+    // e.g. a manager moved every fight to a Run outside this report's candidates: nothing to link any more.
+    for (const previousStatus of ["MATCHED", "NEEDS_REVIEW"] as const) {
+      expect(
+        evaluateReportDiscovery({ ...base, previousStatus, report: report(fightsA, "14:30"), candidates: [], nowMs: late }),
+      ).toMatchObject({ status: previousStatus, linkRunIds: [], nextAttemptInMs: null });
+    }
+    expect(
+      evaluateReportDiscovery({ ...base, previousStatus: "PENDING", report: report(fightsA, "14:30"), candidates: [], nowMs: late }),
+    ).toMatchObject({ status: "IGNORED", outcome: "NO_MATCHING_RUN" });
+  });
 });

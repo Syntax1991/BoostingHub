@@ -1,5 +1,5 @@
 import { BotApiError } from "@/discord-bot/bot-api-client";
-import { compareSnowflakes } from "@/lib/discord-snowflake";
+import { compareSnowflakes, snowflakeTime } from "@/lib/discord-snowflake";
 import { extractWarcraftLogsReportCodes } from "@/lib/warcraft-logs";
 
 /**
@@ -25,6 +25,13 @@ export const WCL_SCAN_MAX_PAGES_PER_PASS = 10;
 export const WCL_FINAL_SCAN_MAX_PAGES = 50;
 /** Upper bound for holding back a channel deletion because its final scan cannot finish. */
 export const WCL_FINAL_SCAN_MAX_DEFER_MS = 30 * 60_000;
+/**
+ * A log-channel message whose link keeps failing transiently is given up once
+ * it is this old, so one bad message can never hold the channel's cursor for
+ * good. Matches the server's discovery horizon (a link older than this could
+ * not be matched any more anyway) and the first read's lookback.
+ */
+export const WCL_LOG_CHANNEL_RETRY_HORIZON_MS = 3 * 24 * 60 * 60_000;
 /** Cadence of the post-completion auto-audit trigger. */
 export const WCL_AUTO_AUDIT_INTERVAL_MS = 5 * 60_000;
 
@@ -104,6 +111,12 @@ export type ChannelScanResult = {
 /**
  * Process one channel from `cursor` onwards. Without a cursor (Run start
  * unknown) only the newest page is read and becomes the starting point.
+ *
+ * By default the scan stops at a link that must be retried. With
+ * `continuePastRetry` (shared log channels) it keeps reading so later links
+ * are still delivered, while the returned cursor stays before the first
+ * message that must be retried; a message older than `giveUpBefore` (Unix ms)
+ * is no longer retried.
  */
 export async function scanChannelFromCursor(input: {
   runId: string;
@@ -113,16 +126,23 @@ export async function scanChannelFromCursor(input: {
   fetchPage: FetchMessagePage;
   attach: AttachReport;
   maxPages: number;
+  continuePastRetry?: boolean;
+  giveUpBefore?: number;
 }): Promise<ChannelScanResult> {
+  /** Durable: every message up to here is fully processed. */
   let cursor = input.cursor;
+  /** Read position; runs ahead of `cursor` only after a retry with continuePastRetry. */
+  let position = input.cursor;
+  let blocked = false;
   for (let page = 0; page < input.maxPages; page += 1) {
     const batch = await input.fetchPage(
       input.channelId,
-      cursor ? { after: cursor, limit: WCL_SCAN_PAGE_SIZE } : { limit: WCL_SCAN_PAGE_SIZE },
+      position ? { after: position, limit: WCL_SCAN_PAGE_SIZE } : { limit: WCL_SCAN_PAGE_SIZE },
     );
     const ordered = [...batch].sort((a, b) => compareSnowflakes(a.id, b.id));
     for (const message of ordered) {
-      if (cursor && compareSnowflakes(message.id, cursor) <= 0) continue;
+      if (position && compareSnowflakes(message.id, position) <= 0) continue;
+      let retryMessage = false;
       for (const link of findTrustedReportLinks([message], input.trustedAuthorIds)) {
         const context = {
           runId: input.runId,
@@ -153,16 +173,24 @@ export async function scanChannelFromCursor(input: {
           const code = error instanceof BotApiError ? error.code : undefined;
           console.warn("[discord-bot] warcraft-logs link", { ...context, result: retry ? "retry" : "rejected", code });
         }
+        if (retry && input.giveUpBefore !== undefined && snowflakeTime(message.id) < input.giveUpBefore) {
+          console.warn("[discord-bot] warcraft-logs link", { ...context, result: "gave-up" });
+          retry = false;
+        }
         // Keep the cursor before this message so it is read again next time.
-        if (retry) return { cursor, reachedEnd: false, blocked: true };
+        if (retry && !input.continuePastRetry) return { cursor, reachedEnd: false, blocked: true };
+        if (retry) retryMessage = true;
       }
-      cursor = message.id;
+      // Other links in the same message were still delivered; the message as a whole is retried.
+      if (retryMessage) blocked = true;
+      if (!blocked) cursor = message.id;
+      position = message.id;
     }
     // No cursor: the newest page is the starting point by definition.
-    if (!input.cursor && page === 0) return { cursor, reachedEnd: true, blocked: false };
-    if (batch.length < WCL_SCAN_PAGE_SIZE) return { cursor, reachedEnd: true, blocked: false };
+    if (!input.cursor && page === 0) return { cursor, reachedEnd: true, blocked };
+    if (batch.length < WCL_SCAN_PAGE_SIZE) return { cursor, reachedEnd: true, blocked };
   }
-  return { cursor, reachedEnd: false, blocked: false };
+  return { cursor, reachedEnd: false, blocked };
 }
 
 /** Per-process memory: routine-scan throttle and how long a final scan has been failing. */
@@ -259,8 +287,10 @@ export async function scanRunChannelsForReports(input: {
  * pass — never once per Run — from its durable server-side cursor, at most
  * once a minute, bounded pages, oldest → newest. Trusted links are handed to
  * the server, which records them durably and matches them to Runs itself; the
- * cursor only advances past messages the server accepted (a transport error
- * is re-read next time). discord.js' REST client honours Discord's 429
+ * cursor only advances past messages the server accepted or permanently
+ * refused. A message that fails transiently is re-read next time while later
+ * messages are still delivered; after WCL_LOG_CHANNEL_RETRY_HORIZON_MS it is
+ * given up so the cursor can never be wedged by one message. discord.js' REST client honours Discord's 429
  * `retry_after`. A failure never breaks the sync loop.
  */
 export async function scanReportChannels(input: {
@@ -289,6 +319,9 @@ export async function scanReportChannels(input: {
         fetchPage: input.fetchPage,
         attach: (_key, link) => input.record(link),
         maxPages: WCL_SCAN_MAX_PAGES_PER_PASS,
+        // One failing message must never hold back every later report in the channel.
+        continuePastRetry: true,
+        giveUpBefore: now - WCL_LOG_CHANNEL_RETRY_HORIZON_MS,
       });
       if (result.cursor && result.cursor !== channel.cursor) {
         await input.saveCursor(channel.channelId, result.cursor);

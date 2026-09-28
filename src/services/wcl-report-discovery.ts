@@ -55,8 +55,21 @@ export function evaluateReportDiscovery(input: {
   nowMs: number;
   /** Evaluations so far (backoff). */
   attempts: number;
+  /** Status before this evaluation. */
+  previousStatus?: DiscoveryDecision["status"];
   policy?: typeof WCL_DISCOVERY_POLICY;
 }): DiscoveryDecision {
+  const decision = decide(input);
+  // Once linked, a discovery stays MATCHED / NEEDS_REVIEW (its links are kept):
+  // it never falls back to PENDING or expires into IGNORED.
+  const previous = input.previousStatus;
+  if ((previous === "MATCHED" || previous === "NEEDS_REVIEW") && decision.linkRunIds.length === 0) {
+    return { ...decision, status: previous };
+  }
+  return decision;
+}
+
+function decide(input: Parameters<typeof evaluateReportDiscovery>[0]): DiscoveryDecision {
   const policy = input.policy ?? WCL_DISCOVERY_POLICY;
   const { report, candidates, nowMs } = input;
   const tolerance = WCL_FIGHT_ASSIGNMENT_POLICY.toleranceSeconds * 1000;
