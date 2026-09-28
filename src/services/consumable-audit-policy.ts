@@ -150,9 +150,12 @@ export type PlayerConsumableAudit = {
   };
   /** Food buff at pull, per fight with a CombatantInfo snapshot (like the flask). */
   food: AuraAtPullCheck;
-  /** Informational only (few players use one): PASS when used in every checked fight, else NEUTRAL. */
+  /**
+   * Augment / Vantus Rune at pull — optional, information only. Status is
+   * NEUTRAL whenever the log shows it (present or absent, see `fightsWith`) and
+   * UNKNOWN without snapshots; never PASS / WARNING, never in `warningCount`.
+   */
   augmentRune: AuraAtPullCheck;
-  /** Informational only (boss-specific): PASS when used in every checked fight, else NEUTRAL. */
   vantusRune: AuraAtPullCheck;
   /** Oil / stone, the class's own imbue, or a Death Knight Runeforge on every weapon, per fight. */
   weaponEnhancement: {
@@ -353,6 +356,8 @@ export function evaluatePlayerConsumables(
   ];
 
   // Food / Augment Rune / Vantus Rune: auras at pull, per fight with a snapshot.
+  // Required (food): PASS / WARNING. Optional (runes): NEUTRAL whether present or
+  // absent — kept out of compliance entirely.
   const auraAtPull = (category: ConsumableCategory, informational: boolean): AuraAtPullCheck => {
     const rows = obs.filter((row) => row.kind === "AURA" && row.category === category);
     const withAura = new Set(rows.map((row) => row.fightId));
@@ -364,7 +369,7 @@ export function evaluatePlayerConsumables(
     }
     const checked = participated.length - unknown.length;
     const status: ConsumableCheckStatus =
-      checked === 0 ? "UNKNOWN" : missing.length === 0 ? "PASS" : informational ? "NEUTRAL" : "WARNING";
+      checked === 0 ? "UNKNOWN" : informational ? "NEUTRAL" : missing.length === 0 ? "PASS" : "WARNING";
     return {
       status,
       fightsWith: checked - missing.length,

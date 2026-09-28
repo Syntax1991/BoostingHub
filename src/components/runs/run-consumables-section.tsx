@@ -13,6 +13,7 @@ import {
   auraCheckText,
   emptySocketText,
   enchantCheckText,
+  runePresenceText,
   formatFightClock,
   gemCheckText,
   summarizeCombatPotionUses,
@@ -249,12 +250,19 @@ function AuraSection({
   return (
     <section>
       <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">{title}</h4>
-      <p>
-        {check.fightsChecked === 0
-          ? `No pull snapshot in the log — ${title.toLowerCase()} unknown.`
-          : `Active at pull in ${check.fightsWith} of ${check.fightsChecked} fights.`}
-        {optional ? <span className="text-muted"> Shown for information — not required.</span> : null}
-      </p>
+      {optional ? (
+        <p>
+          {runePresenceText(check)}
+          {check.fightsChecked > 0 ? ` (at pull in ${check.fightsWith} of ${check.fightsChecked} fights)` : ""}
+          <span className="text-muted"> — optional, information only.</span>
+        </p>
+      ) : (
+        <p>
+          {check.fightsChecked === 0
+            ? `No pull snapshot in the log — ${title.toLowerCase()} unknown.`
+            : `Active at pull in ${check.fightsWith} of ${check.fightsChecked} fights.`}
+        </p>
+      )}
       {!optional && check.missing.length > 0 ? (
         <p className="mt-1 text-warning">
           {missingText ?? `No ${title.toLowerCase()} at pull`}:{" "}
@@ -481,10 +489,13 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                             <td className="px-3 py-2">
                               <StatusChip
                                 status={player.augmentRune.status}
-                                title="Augment Rune — shown for information, not required"
+                                title="Augment Rune — optional, shown for information only"
                               >
-                                {auraCheckText(player.augmentRune)}
+                                {`Augment: ${runePresenceText(player.augmentRune)}`}
                               </StatusChip>
+                              <p className="mt-0.5 whitespace-nowrap text-xs text-muted" title="Vantus Rune — optional, information only">
+                                Vantus: {runePresenceText(player.vantusRune)}
+                              </p>
                             </td>
                             <td className="px-3 py-2">
                               <StatusChip status={player.combatPotion.status}>{combatText(player)}</StatusChip>

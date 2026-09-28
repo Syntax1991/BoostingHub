@@ -96,3 +96,11 @@ export function gemCheckText(check: {
 export function emptySocketText(row: { slotLabel: string; emptySockets: number; sockets: number }): string {
   return row.sockets > 1 ? `${row.slotLabel} — ${row.emptySockets} of ${row.sockets} sockets empty` : row.slotLabel;
 }
+
+/** Optional rune state — never a failure: "Present", "Present 1/2", "Absent" or "Unknown". */
+export function runePresenceText(check: { fightsWith: number; fightsChecked: number }): string {
+  if (check.fightsChecked === 0) return "Unknown";
+  if (check.fightsWith === 0) return "Absent";
+  if (check.fightsWith === check.fightsChecked) return "Present";
+  return `Present ${check.fightsWith}/${check.fightsChecked}`;
+}

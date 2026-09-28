@@ -89,8 +89,8 @@ Audited players are **attended BOOSTER roster participants** (`PRESENT`, `LATE`,
 | Deaths | Each death evaluated independently (below) | WARNING per missing recovery consumable |
 | Food | "Well Fed" / "Hearty Well Fed" buff **at pull**, per fight (like the flask) | PASS / WARNING (lists fights) / UNKNOWN without snapshots |
 | Weapon | Per fight, every weapon carries an oil or stone, the class's own imbue, or a Runeforge (below) | PASS (shows what: Oil, Stone, Shaman imbue, Lightsmith rite, Runeforge) / WARNING (fight + slot) / N/A / UNKNOWN |
-| Augment Rune | Rune buff at pull | Information only — PASS when used in every fight, else NEUTRAL; never a warning (≈ 12 % of players use one) |
-| Vantus Rune | "Vantus Rune: <boss>" buff at pull | Information only (boss-specific), shown in the player details |
+| Augment Rune | Rune buff at pull, per fight | **Optional — information only**: Present / Present 1/2 / Absent / Unknown. Never PASS or WARNING, never counted in warnings or compliance (≈ 12 % of players use one) |
+| Vantus Rune | "Vantus Rune: <boss>" buff at pull, per fight | **Optional — information only** (boss-specific), same display and rules as the Augment Rune |
 | Enchants | Gear Readiness — a permanent enchant on every equipped enchantable slot (below) | PASS `8/8` / WARNING `7/8` + missing slots / N/A / UNKNOWN |
 | Gems | Gear Readiness — every socket that **exists** on an equipped item holds a gem (below) | PASS `3/3` / WARNING `2/3` + empty slots / N/A `0 sockets` / UNKNOWN |
 

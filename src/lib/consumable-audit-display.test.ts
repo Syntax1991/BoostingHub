@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { emptySocketText, gemCheckText, weaponEnhancementText } from "@/lib/consumable-audit-display";
+import { emptySocketText, gemCheckText, runePresenceText, weaponEnhancementText } from "@/lib/consumable-audit-display";
+
+describe("optional rune display", () => {
+  it("shows present / absent / unknown — never a 'missing' failure", () => {
+    expect(runePresenceText({ fightsWith: 2, fightsChecked: 2 })).toBe("Present");
+    expect(runePresenceText({ fightsWith: 1, fightsChecked: 2 })).toBe("Present 1/2");
+    expect(runePresenceText({ fightsWith: 0, fightsChecked: 2 })).toBe("Absent");
+    expect(runePresenceText({ fightsWith: 0, fightsChecked: 0 })).toBe("Unknown");
+  });
+});
 
 describe("gem column shows the actual items' totals", () => {
   const gems = (overrides: Partial<Parameters<typeof gemCheckText>[0]>) =>

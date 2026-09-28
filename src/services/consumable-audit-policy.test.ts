@@ -415,7 +415,9 @@ describe("food, runes, weapon enhancement and gear readiness", () => {
     expect(view.weaponEnhancement).toMatchObject({ status: "PASS", labels: ["Oil"], fightsChecked: 1 });
     expect(view.gear.enchants).toMatchObject({ status: "PASS", enchanted: 8, required: 8 });
     expect(view.gear.gems).toMatchObject({ status: "PASS", filled: 2, sockets: 2 });
-    expect(view.augmentRune.status).toBe("NEUTRAL"); // not used — information only
+    // 9. No runes at all: still fully compliant.
+    expect(view.augmentRune).toMatchObject({ status: "NEUTRAL", fightsWith: 0, fightsChecked: 1 });
+    expect(view.vantusRune).toMatchObject({ status: "NEUTRAL", fightsWith: 0, fightsChecked: 1 });
     expect(view.warningCount).toBe(0);
   });
 
@@ -430,13 +432,54 @@ describe("food, runes, weapon enhancement and gear readiness", () => {
     expect(unknown.food.status).toBe("UNKNOWN");
   });
 
-  it("augment and Vantus runes are shown but never warn", () => {
-    const rune: AuditObservationFact = { ...at("f1", 0), kind: "AURA", category: "AUGMENT_RUNE", spellId: 1234969 };
-    const used = evaluatePlayerConsumables(withGear([combatant("f1"), rune], []), [F1]);
-    expect(used.augmentRune).toMatchObject({ status: "PASS", names: ["Ethereal Augmentation"] });
-    const notUsed = evaluatePlayerConsumables(withGear([combatant("f1"), combatant("f2", 700_000), rune], []), [F1, F2]);
-    expect(notUsed.augmentRune.status).toBe("NEUTRAL");
-    expect(notUsed.vantusRune.status).toBe("NEUTRAL");
+  describe("augment and Vantus runes are optional — information only", () => {
+    const augment = (fightId: string): AuditObservationFact => ({ ...at(fightId, 0), kind: "AURA", category: "AUGMENT_RUNE", spellId: 1234969 });
+    const vantus = (fightId: string): AuditObservationFact => ({ ...at(fightId, 0), kind: "AURA", category: "VANTUS_RUNE", spellId: 1303171 });
+    /** Every required check passes; only the runes vary. */
+    const compliant = (extra: AuditObservationFact[], fights = [F1]) =>
+      evaluatePlayerConsumables(
+        withGear(
+          [...fights.flatMap((f) => [combatant(f.id, f.startMs), flask(f.id, f.startMs), food(f.id, f.startMs)]), damagePot("f1", 1_000), ...extra],
+          fights.flatMap((f) => readyGear(f.id)),
+        ),
+        fights,
+      );
+    const baseline = compliant([]);
+
+    it("1 / 4. present is information only (never PASS)", () => {
+      const view = compliant([augment("f1"), vantus("f1")]);
+      expect(view.augmentRune).toMatchObject({ status: "NEUTRAL", fightsWith: 1, fightsChecked: 1, names: ["Ethereal Augmentation"] });
+      expect(view.vantusRune).toMatchObject({ status: "NEUTRAL", fightsWith: 1, fightsChecked: 1 });
+    });
+
+    it("2 / 5. absent is information only (never WARNING, no missing-rune failure)", () => {
+      expect(baseline.augmentRune).toMatchObject({ status: "NEUTRAL", fightsWith: 0 });
+      expect(baseline.vantusRune).toMatchObject({ status: "NEUTRAL", fightsWith: 0 });
+    });
+
+    it("3 / 6. no pull snapshot is UNKNOWN, still never a failure", () => {
+      const view = evaluatePlayerConsumables(withGear([participant("f1"), damagePot("f1", 1_000)], []), [F1]);
+      expect(view.augmentRune.status).toBe("UNKNOWN");
+      expect(view.vantusRune.status).toBe("UNKNOWN");
+      expect(view.warningCount).toBe(0);
+    });
+
+    it("mixed across fights is still information only", () => {
+      const view = compliant([augment("f1")], [F1, F2]);
+      expect(view.augmentRune).toMatchObject({ status: "NEUTRAL", fightsWith: 1, fightsChecked: 2 });
+    });
+
+    it("7 / 8. neither rune changes warningCount or overall compliance", () => {
+      for (const view of [compliant([augment("f1")]), compliant([vantus("f1")]), compliant([augment("f1"), vantus("f1")])]) {
+        expect(view.warningCount).toBe(baseline.warningCount);
+      }
+      expect(baseline.warningCount).toBe(0);
+      // A player with a real failure keeps exactly that one warning, runes or not.
+      const noFlask = (extra: AuditObservationFact[]) =>
+        evaluatePlayerConsumables(withGear([combatant("f1"), food("f1"), damagePot("f1", 1_000), ...extra], readyGear("f1")), [F1]);
+      expect(noFlask([]).warningCount).toBe(1);
+      expect(noFlask([augment("f1"), vantus("f1")]).warningCount).toBe(1);
+    });
   });
 
   it("weapon enhancement is judged per fight; a fight without an oil is named with its weapon slot", () => {
