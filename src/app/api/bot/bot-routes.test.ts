@@ -1,4 +1,5 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { BotApiClient } from "@/discord-bot/bot-api-client";
 import { NextRequest } from "next/server";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
@@ -234,6 +235,37 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
         "warcraftLogsScanCursor",
       ].sort(),
     );
+  });
+});
+
+describe("GET /api/bot/discord/sync — Warcraft Logs configuration reaches the bot", () => {
+  const LOG_AUTHOR = "1554176548435918910";
+  /** The bot's real API client, with fetch routed straight into the route handler. */
+  function botClientAgainstRoute() {
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) =>
+      syncGet(new NextRequest(new URL(url), { method: init.method ?? "GET", headers: init.headers as HeadersInit })),
+    );
+    return new BotApiClient({ apiBaseUrl: "http://bot-api.test", botApiToken: TOKEN });
+  }
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("serializes the trusted author ids (deduplicated, malformed dropped) all the way into the bot's work", async () => {
+    vi.stubEnv("DISCORD_WCL_REPORT_AUTHOR_IDS", `${LOG_AUTHOR}, not-a-snowflake, ${LOG_AUTHOR} 12`);
+    const route = await syncGet(req("/api/bot/discord/sync", { headers: { authorization: `Bearer ${TOKEN}` } })).then((r) =>
+      r.json(),
+    );
+    expect(route.data.warcraftLogsReportAuthorIds).toEqual([LOG_AUTHOR]);
+    const work = await botClientAgainstRoute().listSyncWork();
+    expect(work.warcraftLogsReportAuthorIds).toEqual([LOG_AUTHOR]);
+  });
+
+  it("an empty configuration disables it with an empty list", async () => {
+    vi.stubEnv("DISCORD_WCL_REPORT_AUTHOR_IDS", "");
+    const work = await botClientAgainstRoute().listSyncWork();
+    expect(work.warcraftLogsReportAuthorIds).toEqual([]);
   });
 });
 
