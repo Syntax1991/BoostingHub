@@ -9,6 +9,7 @@ import {
   type AuditObservationFact,
   type AuditPlayerFact,
 } from "@/services/consumable-audit-policy";
+import { findConsumableBySpellId } from "@/lib/consumable-catalog";
 import type { CharacterRole } from "@/models/enums";
 
 const RECKLESSNESS = 1236994; // DAMAGE_POTION
@@ -611,5 +612,49 @@ describe("played role — the role in the log, not the roster (Synlight: roster 
     expect(summarizePlayedRole(["TANK", "DPS"])).toBe("MIXED");
     expect(summarizePlayedRole([null, null])).toBe("UNKNOWN");
     expect(summarizePlayedRole([])).toBe("UNKNOWN");
+  });
+});
+
+describe("Light's Potential from a Potion Cauldron (production: Synlight, Retribution)", () => {
+  // WCL abilityGameID of Light's Potential — the cauldron's "Fleeting Light's Potential" casts the same spell.
+  const LIGHTS_POTENTIAL = 1236616;
+  const RETRIBUTION = 70;
+  const HOLY_PALADIN = 65;
+  const lightsPotential = (fightId: string, ms: number) =>
+    cast(fightId, ms, LIGHTS_POTENTIAL, findConsumableBySpellId(LIGHTS_POTENTIAL)!.category);
+  const synlight = (observations: AuditObservationFact[]): AuditPlayerFact => ({
+    ...player(null, observations),
+    wowClass: "PALADIN",
+    rosterRole: "HEALER",
+  });
+
+  it("played Retribution + Light's Potential in the kill → DPS, combat potion PASS, shown by name", () => {
+    const view = evaluatePlayerConsumables(synlight([withSpec(combatant("f1"), RETRIBUTION), lightsPotential("f1", 1_100)]), [F1]);
+    expect(view.playedRole).toBe("DPS");
+    expect(view.combatPotion).toMatchObject({ status: "PASS", missing: [], killFightsChecked: 1 });
+    expect(view.combatPotion.uses.map((use) => [use.category, use.spellName, use.atFightMs])).toEqual([
+      ["DAMAGE_POTION", "Light's Potential", 1_100],
+    ]);
+  });
+
+  it("a Mana Potion still does not satisfy a Retribution kill", () => {
+    const view = evaluatePlayerConsumables(synlight([withSpec(combatant("f1"), RETRIBUTION), manaPot("f1", 81_000)]), [F1]);
+    expect(view.combatPotion.status).toBe("WARNING");
+    expect(view.combatPotion.missing.map((ref) => ref.fightId)).toEqual(["f1"]);
+  });
+
+  it("Holy kill with a Mana Potion + Retribution kill with Light's Potential → both judged per fight, PASS", () => {
+    const F2 = fight({ id: "f2", startMs: 700_000, endMs: 1_300_000 });
+    const view = evaluatePlayerConsumables(
+      synlight([
+        withSpec(combatant("f1"), HOLY_PALADIN),
+        manaPot("f1", 81_000),
+        withSpec(combatant("f2", 700_000), RETRIBUTION),
+        lightsPotential("f2", 701_100),
+      ]),
+      [F1, F2],
+    );
+    expect(view.playedRole).toBe("MIXED");
+    expect(view.combatPotion).toMatchObject({ status: "PASS", missing: [], killFightsChecked: 2 });
   });
 });
