@@ -127,7 +127,7 @@ async function assertCooldown(runId: string, now: Date): Promise<void> {
   }
 }
 
-async function fetchReport(
+export async function fetchReport(
   code: string,
   options: { reuseCached: boolean; now: Date },
 ): Promise<{ report: WarcraftLogsReportRecord } | { failure: WclAssociationFailure }> {
@@ -222,6 +222,33 @@ export async function rescanRun(
   return { status: "RESCANNED", summary };
 }
 
+/**
+ * Link a report found by the trusted log bot to a Run — the one attach path
+ * for both sources (a link in the Run's own channel, and central discovery
+ * from a dedicated log channel). Idempotent; fights are assigned later by the
+ * automatic audit's re-scan. A new link makes the Run due for the automatic
+ * audit again, with a fresh attempt budget.
+ */
+export async function linkDiscoveredReport(input: {
+  runId: string;
+  reportId: string;
+  discordMessageId: string;
+  discordAuthorId: string;
+  now: Date;
+}): Promise<{ created: boolean }> {
+  const result = await runWarcraftLogsRepository.attachWithoutScan({
+    runId: input.runId,
+    reportId: input.reportId,
+    createdById: null,
+    source: "DISCORD_BOT",
+    discordMessageId: input.discordMessageId,
+    discordAuthorId: input.discordAuthorId,
+    now: input.now.toISOString(),
+  });
+  if (result.created) await runConsumableAuditRepository.resetAutoAttempts(input.runId, input.now.toISOString());
+  return result;
+}
+
 export type DiscordAttachOutcome =
   | { status: "ATTACHED" }
   | { status: "ALREADY_ATTACHED" }
@@ -268,18 +295,13 @@ export const runWarcraftLogsService = {
     if ("failure" in fetched) {
       return { status: "FAILED", failure: fetched.failure, retryable: fetched.failure !== "REPORT_NOT_FOUND" };
     }
-    const { created } = await runWarcraftLogsRepository.attachWithoutScan({
+    const { created } = await linkDiscoveredReport({
       runId: run.id,
       reportId: fetched.report.id,
-      createdById: null,
-      source: "DISCORD_BOT",
       discordMessageId: input.messageId,
       discordAuthorId: input.authorId,
-      now: now.toISOString(),
+      now,
     });
-    // A new report after an earlier (automatic or manual) analysis makes the
-    // Run due for the automatic audit again, with a fresh attempt budget.
-    if (created) await runConsumableAuditRepository.resetAutoAttempts(run.id, now.toISOString());
     return { status: created ? "ATTACHED" : "ALREADY_ATTACHED" };
   },
 

@@ -1,0 +1,161 @@
+[
+  {
+    "id": "table.discord_channel_scan_cursor",
+    "label": "Create table \"discord_channel_scan_cursor\"",
+    "summary": "Creates table \"discord_channel_scan_cursor\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "discord_channel_scan_cursor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"discord_channel_scan_cursor\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"discord_channel_scan_cursor\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"discord_channel_scan_cursor\"",
+        "sql": "CREATE TABLE \"public\".\"discord_channel_scan_cursor\" (\n  \"channelId\" text NOT NULL,\n  \"lastMessageId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"channelId\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"discord_channel_scan_cursor\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"discord_channel_scan_cursor\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.warcraft_logs_report_discovery",
+    "label": "Create table \"warcraft_logs_report_discovery\"",
+    "summary": "Creates table \"warcraft_logs_report_discovery\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "warcraft_logs_report_discovery"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"warcraft_logs_report_discovery\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"warcraft_logs_report_discovery\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"warcraft_logs_report_discovery\"",
+        "sql": "CREATE TABLE \"public\".\"warcraft_logs_report_discovery\" (\n  \"attempts\" int4 DEFAULT 0 NOT NULL,\n  \"authorId\" text NOT NULL,\n  \"channelId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastAttemptAt\" timestamptz,\n  \"lastOutcome\" text,\n  \"linkedRunIds\" text DEFAULT '[]' NOT NULL,\n  \"messageId\" text NOT NULL,\n  \"nextAttemptAt\" timestamptz,\n  \"postedAt\" timestamptz NOT NULL,\n  \"reportCode\" text NOT NULL,\n  \"status\" text DEFAULT 'PENDING' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"warcraft_logs_report_discovery_status_check_2ec05a75\" CHECK (\"status\" IN ('PENDING', 'MATCHED', 'NEEDS_REVIEW', 'IGNORED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"warcraft_logs_report_discovery\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"warcraft_logs_report_discovery\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.warcraft_logs_report_discovery.warcraft_logs_report_discovery_channelId_messageId_reportCode_key",
+    "label": "Add unique constraint on \"warcraft_logs_report_discovery\" (channelId, messageId, reportCode)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "warcraft_logs_report_discovery_channelId_messageId_reportCode_key",
+        "table": "warcraft_logs_report_discovery"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"warcraft_logs_report_discovery_channelId_messageId_reportCode_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "warcraft_logs_report_discovery_channelId_messageId_reportCode_key",
+          "public",
+          "\"public\".\"warcraft_logs_report_discovery\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"warcraft_logs_report_discovery_channelId_messageId_reportCode_key\"",
+        "sql": "ALTER TABLE \"public\".\"warcraft_logs_report_discovery\" ADD CONSTRAINT \"warcraft_logs_report_discovery_channelId_messageId_reportCode_key\" UNIQUE (\"channelId\", \"messageId\", \"reportCode\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"warcraft_logs_report_discovery_channelId_messageId_reportCode_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "warcraft_logs_report_discovery_channelId_messageId_reportCode_key",
+          "public",
+          "\"public\".\"warcraft_logs_report_discovery\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.warcraft_logs_report_discovery.warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877",
+    "label": "Create index \"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\" on \"warcraft_logs_report_discovery\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877",
+        "table": "warcraft_logs_report_discovery"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\"",
+        "sql": "CREATE INDEX \"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\" ON \"public\".\"warcraft_logs_report_discovery\" (\"nextAttemptAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"warcraft_logs_report_discovery_nextAttemptAt_idx_34b4e877\""
+        ]
+      }
+    ]
+  }
+]

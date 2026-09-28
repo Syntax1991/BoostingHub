@@ -218,6 +218,8 @@ export class BotApiClient {
       }>;
       /** Discord ids of trusted Warcraft Logs log bots (absent/empty = auto-attach off). */
       warcraftLogsReportAuthorIds?: string[];
+      /** Dedicated Warcraft Logs log channels + durable read position; optional on the wire. */
+      warcraftLogsReportChannels?: Array<{ channelId: string; cursor: string }>;
     }>("/api/bot/discord/sync", {
       headers: classEmojiFingerprint
         ? { "x-class-emoji-fingerprint": classEmojiFingerprint }
@@ -333,6 +335,22 @@ export class BotApiClient {
       `/api/bot/runs/${runId}/warcraft-logs`,
       { method: "POST", body: JSON.stringify(input) },
     );
+  }
+
+  /** A trusted log-bot report link seen in a dedicated log channel (server matches it to Runs). */
+  recordWarcraftLogsDiscovery(input: { channelId: string; messageId: string; authorId: string; reportCode: string }) {
+    return this.request<{ status: "RECORDED" | "ALREADY_RECORDED" }>("/api/bot/warcraft-logs/discoveries", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Durable, forward-only read position in a dedicated log channel. */
+  saveWarcraftLogsChannelCursor(channelId: string, messageId: string) {
+    return this.request<{ ok: true }>(`/api/bot/warcraft-logs/channels/${channelId}/cursor`, {
+      method: "PUT",
+      body: JSON.stringify({ messageId }),
+    });
   }
 
   /** One bounded pass of the automatic post-completion Consumables Audit. */

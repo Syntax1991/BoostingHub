@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
       raidInvites: work.raidInvites,
       notificationDms: work.notificationDms,
       runAnnouncements: work.runAnnouncements,
+      // Explicit projection: every field the bot reads must be listed here.
+      warcraftLogsReportAuthorIds: work.warcraftLogsReportAuthorIds,
+      warcraftLogsReportChannels: work.warcraftLogsReportChannels,
     });
   } catch (error) {
     return botApiError(error);

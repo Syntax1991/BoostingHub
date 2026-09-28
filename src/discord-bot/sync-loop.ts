@@ -28,6 +28,7 @@ import {
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
 import {
   createReportScanState,
+  scanReportChannels,
   scanRunChannelsForReports,
   type ScannableMessage,
 } from "@/discord-bot/warcraft-logs-links";
@@ -324,6 +325,23 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     });
   } catch (error) {
     console.error("[discord-bot] Warcraft Logs link scan failed", error);
+  }
+
+  // Dedicated Warcraft Logs log channels: read once per pass (not per Run);
+  // the server matches what it finds to Runs. Never holds back archival.
+  try {
+    await scanReportChannels({
+      channels: work.warcraftLogsReportChannels ?? [],
+      trustedAuthorIds: work.warcraftLogsReportAuthorIds ?? [],
+      fetchPage: (channelId, options) => fetchScannableMessagePage(client, channelId, options),
+      record: (input) => api.recordWarcraftLogsDiscovery(input),
+      saveCursor: async (channelId, messageId) => {
+        await api.saveWarcraftLogsChannelCursor(channelId, messageId);
+      },
+      state: warcraftLogsScanState,
+    });
+  } catch (error) {
+    console.error("[discord-bot] Warcraft Logs log channel scan failed", error);
   }
 
   // Lifecycle channel announcements must post before retirement transcript/delete

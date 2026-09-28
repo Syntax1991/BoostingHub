@@ -22,3 +22,8 @@ export function compareSnowflakes(a: string, b: string): number {
   const y = BigInt(b);
   return x < y ? -1 : x > y ? 1 : 0;
 }
+
+/** Creation time (Unix ms) encoded in a Discord snowflake. */
+export function snowflakeTime(id: string): number {
+  return Number((BigInt(id) >> BigInt(22)) + DISCORD_EPOCH_MS);
+}

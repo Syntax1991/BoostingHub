@@ -254,7 +254,6 @@ export const runWarcraftLogsRepository = {
     }
   },
 
-  /** Of the given Runs, those with at least one linked report. */
   /** runId → when its newest report was linked; Runs without a report are absent (one query). */
   async latestAttachedAtByRunIds(runIds: string[]): Promise<Map<string, string>> {
     if (runIds.length === 0) return new Map();
@@ -335,10 +334,30 @@ export const runWarcraftLogsRepository = {
     startedFrom: string;
     startedTo: string;
   }): Promise<{ target: RunAssignmentCandidate; others: RunAssignmentCandidate[] }> {
+    const candidates = await this.loadStartedCandidates(input);
+    const target = candidates.find((run) => run.runId === input.targetRunId);
+    if (!target) throw new Error("Target run not found for fight assignment.");
+    return { target, others: candidates.filter((run) => run.runId !== input.targetRunId) };
+  },
+
+  /**
+   * Every started IN_PROGRESS / COMPLETED Run whose start lies in the range
+   * (plus `targetRunId` whatever its status), with lifecycle times, content
+   * and roster identity keys. Three queries regardless of how many qualify.
+   * Used by fight assignment and by central report discovery.
+   */
+  async loadStartedCandidates(input: {
+    targetRunId?: string;
+    startedFrom: string;
+    startedTo: string;
+  }): Promise<RunAssignmentCandidate[]> {
     const snapshots = (await orm.RunStartSnapshot.where((row) => row.startedAt.gte(input.startedFrom))
       .where((row) => row.startedAt.lte(input.startedTo))
       .all()) as Array<Record<string, unknown>>;
-    const runIds = [...new Set([input.targetRunId, ...snapshots.map((row) => asString(row.runId))])];
+    const runIds = [
+      ...new Set([...(input.targetRunId ? [input.targetRunId] : []), ...snapshots.map((row) => asString(row.runId))]),
+    ];
+    if (runIds.length === 0) return [];
 
     const runs = (await orm.Run.where((row) => row.id.in(runIds))
       .include("contents")
@@ -384,9 +403,7 @@ export const runWarcraftLogsRepository = {
           rosterKeys: rosterKeys.get(asString(row.id)) ?? new Set(),
         };
       });
-    const target = candidates.find((run) => run.runId === input.targetRunId);
-    if (!target) throw new Error("Target run not found for fight assignment.");
-    return { target, others: candidates.filter((run) => run.runId !== input.targetRunId) };
+    return candidates;
   },
 
   /**
