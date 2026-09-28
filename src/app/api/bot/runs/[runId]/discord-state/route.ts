@@ -43,6 +43,12 @@ export const runDiscordStateUpdateSchema = z.discriminatedUnion("kind", [
     transcriptFilename: z.string().min(1).max(200),
   }),
   z.object({ kind: z.literal("raid-invite"), signupId: z.string().uuid() }),
+  /** Warcraft Logs link scan progress: newest fully processed message in the Run channel. */
+  z.object({
+    kind: z.literal("wcl-scan-cursor"),
+    channelId: z.string().regex(/^\d{1,25}$/),
+    messageId: z.string().regex(/^\d{1,25}$/),
+  }),
   z.object({
     kind: z.literal("notification-dm"),
     notificationId: z.string().uuid(),
@@ -75,6 +81,8 @@ export type RunDiscordStateUpdate = z.infer<typeof runDiscordStateUpdateSchema>;
  * `notification-dm` updates UserNotification.discordDeliveryStatus (and on
  * SENT RAID_INVITE also appends the legacy raidInviteSentSignupIds list).
  * `run-announcement` updates RunDiscordAnnouncement delivery status.
+ * `wcl-scan-cursor` advances the Warcraft Logs link-scan cursor (forward only,
+ * current Run channel only).
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
@@ -113,6 +121,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         channelId: runDiscordStateUpdate.channelId,
         messageId: runDiscordStateUpdate.messageId,
         voiceChannelId: runDiscordStateUpdate.voiceChannelId ?? null,
+      });
+    } else if (runDiscordStateUpdate.kind === "wcl-scan-cursor") {
+      await discordSyncService.recordWarcraftLogsScanCursor({
+        runId,
+        channelId: runDiscordStateUpdate.channelId,
+        messageId: runDiscordStateUpdate.messageId,
       });
     } else if (runDiscordStateUpdate.kind === "raid-invite") {
       await discordSyncService.recordRaidInviteSent({ runId, signupId: runDiscordStateUpdate.signupId });

@@ -550,10 +550,15 @@ describe("complete run", () => {
     await expectDomainCode(runService.completeRun(otherLead, runId), "RUN_NOT_MANAGEABLE");
 
     await attendanceService.markAllUnmarkedPresent(lead, runId);
+    const beforeComplete = Date.now();
     await runService.completeRun(admin, runId);
     const run = await runRepository.findById(runId);
     expect(run?.status).toBe("COMPLETED");
     expect(run?.signupsOpen).toBe(false);
+    // completedAt closes the Run's active window for Warcraft Logs fight matching.
+    const completedRow = (await orm.Run.where({ id: runId }).first()) as { completedAt: string | null } | null;
+    expect(completedRow?.completedAt).not.toBeNull();
+    expect(Date.parse(completedRow!.completedAt!)).toBeGreaterThanOrEqual(beforeComplete - 1000);
     const manager = await attendanceService.getManagerAttendance(admin, runId);
     expect(manager.rows).toHaveLength(3);
     expect(manager.canMutate).toBe(false);

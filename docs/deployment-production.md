@@ -326,6 +326,27 @@ It is off until configured:
 An id that does not resolve to a category is logged by the bot on every pass
 and nothing is created.
 
+### Warcraft Logs log bot (optional)
+
+Reports posted by a trusted log bot (e.g. PhoenixStar Logs) in a Run channel are
+linked to that Run, and the Consumables Audit runs ~15 min after the Run is
+completed (see `docs/features/run-consumables-audit.md`). It is off until configured:
+
+1. Find the log bot's Discord user id (Developer Mode → right-click the bot → Copy User ID).
+2. Add `DISCORD_WCL_REPORT_AUTHOR_IDS="<id>[,<id>…]"` to `/var/www/boostinghub/.env`
+   (read by the **web app**; `WARCRAFT_LOGS_CLIENT_ID` / `WARCRAFT_LOGS_CLIENT_SECRET` must be set too).
+3. In the Discord Developer Portal → the bot's application → **Bot** →
+   *Privileged Gateway Intents*, enable **Message Content Intent** and save.
+   Discord blanks `content`/`embeds` of other authors' messages — over REST too —
+   for apps without it, so the log-bot links (and the text of the existing archive
+   transcripts) are otherwise invisible. Bots in fewer than 100 servers only need
+   the toggle. The bot's gateway intents stay unchanged (the scan is REST-only).
+   Verify on the application the production bot actually uses (its `flags` must
+   include bit 18 or 19). Checked 2026-09 on the apps in use at the time: not
+   enabled — re-check after any switch to a new Discord application.
+4. Restart the web app, then the bot. The bot needs **View Channel** and
+   **Read Message History** in Run channels (already required for transcripts).
+
 ## Production smoke checklist
 
 - [ ] `sudo -u boostinghub git -C /var/www/boostinghub rev-parse HEAD` is the expected SHA,

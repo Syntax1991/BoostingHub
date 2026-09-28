@@ -1,4 +1,8 @@
 import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
+import { trustedWarcraftLogsReportAuthorIds } from "@/lib/warcraft-logs/config";
+import { snowflakeAtTime } from "@/lib/discord-snowflake";
+/** The first Warcraft Logs link scan starts this long before the recorded Run start. */
+export const WCL_SCAN_START_MARGIN_MINUTES = 10;
 import {
   buildClosedDiscordRunChannelName,
   buildDiscordRunChannelName,
@@ -228,6 +232,19 @@ export type ChannelSyncWorkItem = {
   raidLeadDiscordUserId: string | null;
   /** Product / panel label for the archive log embed (e.g. raid product name). */
   panelName: string;
+  /**
+   * Read recent channel messages for trusted log-bot Warcraft Logs report
+   * links (IN_PROGRESS, or COMPLETED until the channel is retired). Only true
+   * when DISCORD_WCL_REPORT_AUTHOR_IDS is configured. Optional on the wire.
+   */
+  scanWarcraftLogs?: boolean;
+  /**
+   * Scan every message after this id (the stored cursor, or — before the
+   * first scan — a snowflake at Run start minus a margin, so nothing posted
+   * during the Run can be skipped). Null when the Run start is unknown: the
+   * bot then reads the newest page first. Optional on the wire.
+   */
+  warcraftLogsScanCursor?: string | null;
 };
 
 /**
@@ -1026,7 +1043,10 @@ export const discordSyncService = {
     notificationDms: NotificationDmWorkItem[];
     /** PENDING RunDiscordAnnouncement rows (channel lifecycle), createdAt ASC. */
     runAnnouncements: RunAnnouncementWorkItem[];
+    /** Discord ids of trusted Warcraft Logs log bots (empty = auto-attach off). */
+    warcraftLogsReportAuthorIds: string[];
   }> {
+    const warcraftLogsReportAuthorIds = trustedWarcraftLogsReportAuthorIds();
     // Only Runs that can still produce Discord work get the full Run load:
     // first-provisioning / Voice candidates by Run state, plus every Run that
     // still holds live Discord identity. Fully retired historical Runs are
@@ -1044,6 +1064,13 @@ export const discordSyncService = {
       ...pendingAnnouncements.map((row) => row.runId),
     ]);
     const channels: ChannelSyncWorkItem[] = [];
+    // Run start instants seed the first Warcraft Logs link scan (one query).
+    const startedAtByRunId =
+      warcraftLogsReportAuthorIds.length > 0
+        ? await runStartSnapshotRepository.startedAtByRunIds(
+            runs.filter((run) => run.status === "IN_PROGRESS" || run.status === "COMPLETED").map((run) => run.id),
+          )
+        : new Map<string, string>();
     const voiceChannels: DiscordRunVoiceChannelWorkItem[] = [];
     const signups: SignupSyncWorkItem[] = [];
     const roster: RosterSyncWorkItem[] = [];
@@ -1092,6 +1119,16 @@ export const discordSyncService = {
           raidLeadName: run.raidLeadName,
           raidLeadDiscordUserId: run.raidLeadDiscordUserId,
           panelName: run.contentDisplay.productLabel,
+          scanWarcraftLogs:
+            warcraftLogsReportAuthorIds.length > 0 &&
+            (run.status === "IN_PROGRESS" || run.status === "COMPLETED"),
+          warcraftLogsScanCursor:
+            post.warcraftLogsScanCursor ??
+            (startedAtByRunId.get(run.id)
+              ? snowflakeAtTime(
+                  Date.parse(startedAtByRunId.get(run.id)!) - WCL_SCAN_START_MARGIN_MINUTES * 60_000,
+                )
+              : null),
         });
       }
 
@@ -1239,7 +1276,17 @@ export const discordSyncService = {
       lootType: row.lootType,
     }));
 
-    return { channels, voiceChannels, signups, roster, start, raidInvites, notificationDms, runAnnouncements };
+    return {
+      channels,
+      voiceChannels,
+      signups,
+      roster,
+      start,
+      raidInvites,
+      notificationDms,
+      runAnnouncements,
+      warcraftLogsReportAuthorIds,
+    };
   },
 
   async getSignupEmbedData(runId: string): Promise<SignupEmbedData | null> {
@@ -1297,6 +1344,10 @@ export const discordSyncService = {
   /** Recorded immediately on channel creation, before any message is posted into it. */
   async recordRunChannel(input: { runId: string; channelId: string }): Promise<void> {
     await runDiscordPostRepository.recordRunChannel(input);
+  },
+
+  async recordWarcraftLogsScanCursor(input: { runId: string; channelId: string; messageId: string }): Promise<void> {
+    await runDiscordPostRepository.recordWarcraftLogsScanCursor(input);
   },
 
   async recordSignupPost(

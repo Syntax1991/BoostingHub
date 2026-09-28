@@ -253,6 +253,11 @@ async function wipe() {
   for (const row of await orm.ActivityEvent.select("id").all()) {
     await orm.ActivityEvent.where({ id: row.id }).delete();
   }
+  // Shared Warcraft Logs report cache is not owned by any Run; its Run
+  // associations/fight rows cascade from it (and from the Runs below).
+  for (const row of await orm.WarcraftLogsReport.select("id").all()) {
+    await orm.WarcraftLogsReport.where({ id: row.id }).delete();
+  }
   for (const row of await orm.Run.select("id").all()) {
     await orm.Run.where({ id: row.id }).delete();
   }

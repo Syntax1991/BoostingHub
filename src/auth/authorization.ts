@@ -152,6 +152,32 @@ export function assertCanManageRun(user: AuthenticatedUser, run: { raidLeadId: s
   }
 }
 
+/**
+ * Run Consumables Audit (post-run Warcraft Logs consumable/death facts,
+ * including refresh). Deliberately the Run-management rule: ADMIN / OWNER on
+ * every Run, RAID_LEAD only on Runs they lead, never a USER — so granting it
+ * can never widen a Raid Lead's Run access.
+ */
+export function canViewRunConsumableAudit(
+  user: AuthenticatedUser,
+  run: { raidLeadId: string },
+): boolean {
+  return canManageRun(user, run);
+}
+
+export function assertCanViewRunConsumableAudit(
+  user: AuthenticatedUser,
+  run: { raidLeadId: string },
+): void {
+  if (!canViewRunConsumableAudit(user, run)) {
+    throw new DomainError(
+      "NOT_AUTHORIZED",
+      "Raid lead or admin permission for this run is required.",
+      403,
+    );
+  }
+}
+
 export function isEligibleRaidLead(user: {
   accountRole: AccountRole;
   accountStatus: AccountStatus;

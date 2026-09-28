@@ -59,6 +59,7 @@ May manage any Run on the same `/runs/[runId]` route.
 - **Roster** — published roster for USER; existing `RosterBuilderView` for managers
 - **Attendance** — own result for USER; operational attendance for authorized managers after Start
 - **Payout** — own finalized line for USER; draft/finalize/paid settlement for authorized managers after Complete
+- **Consumables** — ADMIN / the Run's RAID_LEAD only, COMPLETED Runs only: Warcraft Logs flask / combat potion / death-context facts. `consumables` is `null` (and the tab absent) for everyone else. See [run-consumables-audit.md](run-consumables-audit.md)
 
 ## Manager Authorization
 
@@ -86,6 +87,7 @@ Manager reads still reuse `getRosterManagementView`, which may `ensure()` an emp
 - `RosterService` — draft, publish, published snapshot, managed index
 - `AttendanceService` — snapshot, status updates, bulk present, completeness
 - `PayoutService` — completed-run settlement, share calculation, finalize, mark paid
+- `runConsumableAuditService` — post-run Warcraft Logs consumables audit (read + explicit analyze)
 
 No second roster or signup implementation.
 
@@ -100,7 +102,7 @@ Architectural space only (not implemented):
 ## Deferred
 
 - Battle.net / Blizzard API
-- Warcraft Logs
+- Warcraft Logs beyond the Consumables Audit (e.g. performance audits)
 - Post-completion attendance corrections
 - Wallets, escrow, payment automation, extra Raid Lead / collector / advertiser cuts
 - Discord bot / notifications

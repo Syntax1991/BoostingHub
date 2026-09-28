@@ -9,9 +9,10 @@ import { RunSignupsSection } from "@/components/runs/run-signups-section";
 import { RunRosterSection } from "@/components/runs/run-roster-section";
 import { RunAttendanceSection } from "@/components/runs/run-attendance-section";
 import { RunPayoutSection } from "@/components/runs/run-payout-section";
+import { RunConsumablesSection } from "@/components/runs/run-consumables-section";
 import type { RunDetailView } from "@/services/run-detail.service";
 
-const TABS: Array<{ id: RunDetailTab; label: string }> = [
+const BASE_TABS: Array<{ id: RunDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "signups", label: "Signups" },
   { id: "roster", label: "Roster" },
@@ -27,7 +28,12 @@ export function RunDetailTabs({
   initialTab: RunDetailTab;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<RunDetailTab>(initialTab);
+  const consumables = data.consumables;
+  // The tab exists only when the server included the audit for this viewer.
+  const TABS = consumables ? [...BASE_TABS, { id: "consumables" as const, label: "Consumables" }] : BASE_TABS;
+  const [tab, setTab] = useState<RunDetailTab>(
+    initialTab === "consumables" && !consumables ? "overview" : initialTab,
+  );
 
   function selectTab(next: RunDetailTab) {
     setTab(next);
@@ -92,6 +98,7 @@ export function RunDetailTabs({
         {tab === "roster" ? <RunRosterSection data={data} /> : null}
         {tab === "attendance" ? <RunAttendanceSection data={data} /> : null}
         {tab === "payout" ? <RunPayoutSection data={data} /> : null}
+        {tab === "consumables" && consumables ? <RunConsumablesSection audit={consumables} /> : null}
       </div>
     </div>
   );

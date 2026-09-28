@@ -46,11 +46,11 @@ Prisma 8 access lives here (`orm.Model` via `src/lib/prisma.ts`). Views and most
 
 ### External integrations
 
-Outbound HTTP to third parties belongs under `src/integrations/`, not in Views or Controllers. The Battle.net / Blizzard client (`src/integrations/blizzard/blizzard-api-client.ts`) is the only place that talks to Blizzard OAuth and regional profile APIs. Services call that client; they do not scatter raw `fetch` calls across the app.
+Outbound HTTP to third parties belongs under `src/integrations/`, not in Views or Controllers. The Battle.net / Blizzard client (`src/integrations/blizzard/blizzard-api-client.ts`) is the only place that talks to Blizzard OAuth and regional profile APIs. Likewise `src/integrations/warcraft-logs/warcraft-logs-api-client.ts` is the only Warcraft Logs client (character identity, rankings, and report fights/events for the Run Consumables Audit). Services call that client; they do not scatter raw `fetch` calls across the app.
 
 ### Discord Bot API
 
-`src/app/api/bot/*` Route Handlers are the only path the separate Discord bot process (`src/discord-bot/`, its own long-lived Node process) may use to reach BoostingHub — never direct Repository or Prisma access. Inbound, not outbound: the bot calls in, authenticated by a dedicated service token (`BOOSTINGHUB_BOT_API_TOKEN`, constant-time compared) that grants access to the bot surface only, never a domain-role bypass. Every mutating call still resolves a real acting User from the Discord-authenticated `discordUserId` and runs the exact same Service the Web Controllers call, so eligibility rules can never drift between the two surfaces. See [discord-bot.md](features/discord-bot.md).
+`src/app/api/bot/*` Route Handlers are the only path the separate Discord bot process (`src/discord-bot/`, its own long-lived Node process) may use to reach BoostingHub — never direct Repository or Prisma access. Inbound, not outbound: the bot calls in, authenticated by a dedicated service token (`BOOSTINGHUB_BOT_API_TOKEN`, constant-time compared) that grants access to the bot surface only, never a domain-role bypass. Every per-User mutating call still resolves a real acting User from the Discord-authenticated `discordUserId` and runs the exact same Service the Web Controllers call, so eligibility rules can never drift between the two surfaces. The only system (no acting User) calls are Warcraft Logs automation: linking a report posted by a configured log bot in a Run's own channel (re-checked server-side against `DISCORD_WCL_REPORT_AUTHOR_IDS` and the stored Run channel) and the post-completion Consumables Audit tick. See [discord-bot.md](features/discord-bot.md).
 
 ## Persistence boundary
 
@@ -73,6 +73,7 @@ Server-side enforcement:
 - `requireAdminOrRedirect()`
 - `requireManagerOrRedirect()`
 - `canManageRun` / `assertCanManageRun` (raid lead owns assigned runs; admin owns all)
+- `canViewRunConsumableAudit` / `assertCanViewRunConsumableAudit` (same rule; Run Consumables Audit)
 
 Hidden buttons are not an authorization control.
 

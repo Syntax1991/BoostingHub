@@ -1,4 +1,5 @@
 import { orm } from "@/lib/prisma";
+import { compareSnowflakes } from "@/lib/discord-snowflake";
 import { or } from "@prisma/orm-postgres/orm-client";
 import { asNumberOrNull, asString, asStringOrNull } from "@/lib/persistence";
 
@@ -32,6 +33,8 @@ export type RunDiscordPostRecord = {
   archiveTranscriptFilename: string | null;
   /** JSON array of signup ids that already received a Raid Invite DM. */
   raidInviteSentSignupIds: string | null;
+  /** Newest Run-channel message fully processed by the Warcraft Logs link scan. */
+  warcraftLogsScanCursor: string | null;
 };
 
 export function parseRaidInviteSentSignupIds(raw: string | null | undefined): string[] {
@@ -70,6 +73,7 @@ function mapRow(row: Record<string, unknown>): RunDiscordPostRecord {
     archiveTranscriptHtml: asStringOrNull(row.archiveTranscriptHtml),
     archiveTranscriptFilename: asStringOrNull(row.archiveTranscriptFilename),
     raidInviteSentSignupIds: asStringOrNull(row.raidInviteSentSignupIds),
+    warcraftLogsScanCursor: asStringOrNull(row.warcraftLogsScanCursor),
   };
 }
 
@@ -299,6 +303,23 @@ export const runDiscordPostRepository = {
    * Appends a signup id to the Raid Invite sent list (idempotent).
    * Closed-DM failures still record so the bot does not retry forever.
    */
+  /**
+   * Advance the Warcraft Logs link-scan cursor. Ignored unless the channel is
+   * still this Run's channel, and never moves backwards (a stale or replayed
+   * report can therefore never make the scan skip ahead or re-read).
+   */
+  async recordWarcraftLogsScanCursor(input: { runId: string; channelId: string; messageId: string }): Promise<boolean> {
+    const existing = (await orm.RunDiscordPost.where({ runId: input.runId }).first()) as Record<string, unknown> | null;
+    if (!existing || asStringOrNull(existing.runChannelId) !== input.channelId) return false;
+    const current = asStringOrNull(existing.warcraftLogsScanCursor);
+    if (current && compareSnowflakes(input.messageId, current) <= 0) return false;
+    await orm.RunDiscordPost.where({ runId: input.runId }).update({
+      warcraftLogsScanCursor: input.messageId,
+      updatedAt: new Date().toISOString(),
+    });
+    return true;
+  },
+
   async recordRaidInviteSent(input: { runId: string; signupId: string }): Promise<void> {
     const existing = await orm.RunDiscordPost.where({ runId: input.runId }).first();
     const current = parseRaidInviteSentSignupIds(
@@ -346,6 +367,7 @@ async function upsert(runId: string, patch: Record<string, unknown>): Promise<vo
     archiveTranscriptHtml: null,
     archiveTranscriptFilename: null,
     raidInviteSentSignupIds: null,
+    warcraftLogsScanCursor: null,
     ...patch,
     createdAt: now,
     updatedAt: now,

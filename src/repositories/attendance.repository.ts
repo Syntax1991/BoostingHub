@@ -615,6 +615,7 @@ export const attendanceRepository = {
       await txOrm.Run.where({ id: runId }).update({
         status: "COMPLETED",
         signupsOpen: false,
+        completedAt: now,
         updatedAt: now,
       });
       const after = await txOrm.RunAttendance.where({ runId, status: "UNMARKED" }).select("id").all();

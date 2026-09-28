@@ -228,8 +228,10 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
         "raidLeadName",
         "retireChannel",
         "runId",
+        "scanWarcraftLogs",
         "scheduledStartAt",
         "targetBucket",
+        "warcraftLogsScanCursor",
       ].sort(),
     );
   });

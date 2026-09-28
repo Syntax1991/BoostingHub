@@ -1,0 +1,2189 @@
+[
+  {
+    "id": "table.run_consumable_audit",
+    "label": "Create table \"run_consumable_audit\"",
+    "summary": "Creates table \"run_consumable_audit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_consumable_audit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_consumable_audit\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_consumable_audit\"",
+        "sql": "CREATE TABLE \"public\".\"run_consumable_audit\" (\n  \"analyzedAt\" timestamptz,\n  \"analyzedById\" text,\n  \"autoAnalyzed\" bool DEFAULT false NOT NULL,\n  \"autoAttempts\" int4 DEFAULT 0 NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastAttemptAt\" timestamptz NOT NULL,\n  \"lastFailure\" text,\n  \"runId\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_consumable_audit_lastFailure_check_314da778\" CHECK (\"lastFailure\" IN ('NOT_CONFIGURED', 'REPORT_NOT_FOUND', 'NO_RELEVANT_FIGHTS', 'WCL_UNAVAILABLE'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_consumable_audit\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_consumable_audit_fight",
+    "label": "Create table \"run_consumable_audit_fight\"",
+    "summary": "Creates table \"run_consumable_audit_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_consumable_audit_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_consumable_audit_fight\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_consumable_audit_fight\"",
+        "sql": "CREATE TABLE \"public\".\"run_consumable_audit_fight\" (\n  \"auditId\" text NOT NULL,\n  \"difficulty\" int4,\n  \"encounterId\" int4 NOT NULL,\n  \"encounterName\" text NOT NULL,\n  \"endMs\" int4 NOT NULL,\n  \"healthstoneUseSeen\" bool NOT NULL,\n  \"id\" text NOT NULL,\n  \"kill\" bool NOT NULL,\n  \"raidContentId\" text,\n  \"reportCode\" text NOT NULL,\n  \"startMs\" int4 NOT NULL,\n  \"warlockPresent\" bool,\n  \"wclFightId\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_consumable_audit_fight\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_consumable_audit_gear_item",
+    "label": "Create table \"run_consumable_audit_gear_item\"",
+    "summary": "Creates table \"run_consumable_audit_gear_item\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_consumable_audit_gear_item"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_consumable_audit_gear_item\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_consumable_audit_gear_item\"",
+        "sql": "CREATE TABLE \"public\".\"run_consumable_audit_gear_item\" (\n  \"fightId\" text NOT NULL,\n  \"gemCount\" int4 NOT NULL,\n  \"id\" text NOT NULL,\n  \"itemId\" int4 NOT NULL,\n  \"permanentEnchantId\" int4,\n  \"playerId\" text NOT NULL,\n  \"slot\" int4 NOT NULL,\n  \"socketCount\" int4,\n  \"temporaryEnchantId\" int4,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_consumable_audit_gear_item\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_consumable_audit_observation",
+    "label": "Create table \"run_consumable_audit_observation\"",
+    "summary": "Creates table \"run_consumable_audit_observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_consumable_audit_observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_consumable_audit_observation\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_observation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_consumable_audit_observation\"",
+        "sql": "CREATE TABLE \"public\".\"run_consumable_audit_observation\" (\n  \"atMs\" int4 NOT NULL,\n  \"category\" text,\n  \"fightId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"kind\" text NOT NULL,\n  \"playerId\" text NOT NULL,\n  \"spellId\" int4,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_consumable_audit_observation_kind_check_3b54a688\" CHECK (\"kind\" IN ('COMBATANT', 'PARTICIPANT', 'AURA', 'CAST', 'DEATH'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_consumable_audit_observation\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_observation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_consumable_audit_player",
+    "label": "Create table \"run_consumable_audit_player\"",
+    "summary": "Creates table \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_consumable_audit_player\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_consumable_audit_player\"",
+        "sql": "CREATE TABLE \"public\".\"run_consumable_audit_player\" (\n  \"attendanceId\" text,\n  \"auditId\" text NOT NULL,\n  \"characterName\" text,\n  \"characterRealm\" text,\n  \"displayName\" text NOT NULL,\n  \"externalBoosterId\" text,\n  \"id\" text NOT NULL,\n  \"matchStatus\" text NOT NULL,\n  \"role\" text,\n  \"sortOrder\" int4 NOT NULL,\n  \"wclActorId\" int4,\n  \"wowClass\" text,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_consumable_audit_player_matchStatus_check_696e4faa\" CHECK (\"matchStatus\" IN ('MATCHED', 'NOT_IN_LOG', 'NO_CHARACTER_IDENTITY')),\n  CONSTRAINT \"run_consumable_audit_player_role_check_b1616ae6\" CHECK (\"role\" IN ('TANK', 'HEALER', 'DPS')),\n  CONSTRAINT \"run_consumable_audit_player_wowClass_check_8876c2a5\" CHECK (\"wowClass\" IN ('DEATH_KNIGHT', 'DEMON_HUNTER', 'DRUID', 'EVOKER', 'HUNTER', 'MAGE', 'MONK', 'PALADIN', 'PRIEST', 'ROGUE', 'SHAMAN', 'WARLOCK', 'WARRIOR'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_consumable_audit_player\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_warcraft_logs_fight",
+    "label": "Create table \"run_warcraft_logs_fight\"",
+    "summary": "Creates table \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_warcraft_logs_fight\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_warcraft_logs_fight\"",
+        "sql": "CREATE TABLE \"public\".\"run_warcraft_logs_fight\" (\n  \"associationId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"decidedById\" text,\n  \"decision\" text NOT NULL,\n  \"difficulty\" int4,\n  \"encounterId\" int4 NOT NULL,\n  \"encounterName\" text NOT NULL,\n  \"endAt\" timestamptz NOT NULL,\n  \"endMs\" int4 NOT NULL,\n  \"id\" text NOT NULL,\n  \"kill\" bool NOT NULL,\n  \"raidContentId\" text,\n  \"reasons\" text NOT NULL,\n  \"reportId\" text NOT NULL,\n  \"rosterMatched\" int4,\n  \"rosterSize\" int4,\n  \"runId\" text NOT NULL,\n  \"startAt\" timestamptz NOT NULL,\n  \"startMs\" int4 NOT NULL,\n  \"status\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"wclFightId\" int4 NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_warcraft_logs_fight_decision_check_74dec442\" CHECK (\"decision\" IN ('AUTO', 'MANUAL')),\n  CONSTRAINT \"run_warcraft_logs_fight_status_check_5ab4ac22\" CHECK (\"status\" IN ('ASSIGNED', 'NEEDS_REVIEW', 'IGNORED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_warcraft_logs_fight\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.run_warcraft_logs_report",
+    "label": "Create table \"run_warcraft_logs_report\"",
+    "summary": "Creates table \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_warcraft_logs_report\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_warcraft_logs_report\"",
+        "sql": "CREATE TABLE \"public\".\"run_warcraft_logs_report\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdById\" text,\n  \"discordAuthorId\" text,\n  \"discordMessageId\" text,\n  \"id\" text NOT NULL,\n  \"lastScannedAt\" timestamptz,\n  \"reportId\" text NOT NULL,\n  \"runId\" text NOT NULL,\n  \"source\" text DEFAULT 'MANUAL' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_warcraft_logs_report_source_check_fe9f0840\" CHECK (\"source\" IN ('MANUAL', 'DISCORD_BOT'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_warcraft_logs_report\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.warcraft_logs_report",
+    "label": "Create table \"warcraft_logs_report\"",
+    "summary": "Creates table \"warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"warcraft_logs_report\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"warcraft_logs_report\"",
+        "sql": "CREATE TABLE \"public\".\"warcraft_logs_report\" (\n  \"code\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"endAt\" timestamptz NOT NULL,\n  \"fetchedAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"metadataJson\" text NOT NULL,\n  \"regionSlug\" text,\n  \"startAt\" timestamptz NOT NULL,\n  \"title\" text,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"warcraft_logs_report\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"warcraft_logs_report\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.completedAt",
+    "label": "Add column \"completedAt\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "completedAt",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"completedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "completedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"completedAt\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"completedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"completedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "completedAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run_discord_post.warcraftLogsScanCursor",
+    "label": "Add column \"warcraftLogsScanCursor\" to \"run_discord_post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "warcraftLogsScanCursor",
+        "table": "run_discord_post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"warcraftLogsScanCursor\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "warcraftLogsScanCursor"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"warcraftLogsScanCursor\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_post\" ADD COLUMN \"warcraftLogsScanCursor\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"warcraftLogsScanCursor\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_discord_post",
+          "warcraftLogsScanCursor"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_consumable_audit.run_consumable_audit_runId_key",
+    "label": "Add unique constraint on \"run_consumable_audit\" (runId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_consumable_audit_runId_key",
+        "table": "run_consumable_audit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_consumable_audit_runId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_runId_key",
+          "public",
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_consumable_audit_runId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit\" ADD CONSTRAINT \"run_consumable_audit_runId_key\" UNIQUE (\"runId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_consumable_audit_runId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_runId_key",
+          "public",
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_consumable_audit_fight.run_consumable_audit_fight_auditId_reportCode_wclFightId_key",
+    "label": "Add unique constraint on \"run_consumable_audit_fight\" (auditId, reportCode, wclFightId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_consumable_audit_fight_auditId_reportCode_wclFightId_key",
+        "table": "run_consumable_audit_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_consumable_audit_fight_auditId_reportCode_wclFightId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_fight_auditId_reportCode_wclFightId_key",
+          "public",
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_consumable_audit_fight_auditId_reportCode_wclFightId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_fight\" ADD CONSTRAINT \"run_consumable_audit_fight_auditId_reportCode_wclFightId_key\" UNIQUE (\"auditId\", \"reportCode\", \"wclFightId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_consumable_audit_fight_auditId_reportCode_wclFightId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_fight_auditId_reportCode_wclFightId_key",
+          "public",
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_consumable_audit_gear_item.run_consumable_audit_gear_item_playerId_fightId_slot_key",
+    "label": "Add unique constraint on \"run_consumable_audit_gear_item\" (playerId, fightId, slot)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_consumable_audit_gear_item_playerId_fightId_slot_key",
+        "table": "run_consumable_audit_gear_item"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_consumable_audit_gear_item_playerId_fightId_slot_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_gear_item_playerId_fightId_slot_key",
+          "public",
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_consumable_audit_gear_item_playerId_fightId_slot_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_gear_item\" ADD CONSTRAINT \"run_consumable_audit_gear_item_playerId_fightId_slot_key\" UNIQUE (\"playerId\", \"fightId\", \"slot\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_consumable_audit_gear_item_playerId_fightId_slot_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_gear_item_playerId_fightId_slot_key",
+          "public",
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_warcraft_logs_fight.run_warcraft_logs_fight_runId_reportId_wclFightId_key",
+    "label": "Add unique constraint on \"run_warcraft_logs_fight\" (runId, reportId, wclFightId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_warcraft_logs_fight_runId_reportId_wclFightId_key",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_warcraft_logs_fight_runId_reportId_wclFightId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_runId_reportId_wclFightId_key",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_warcraft_logs_fight_runId_reportId_wclFightId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_fight\" ADD CONSTRAINT \"run_warcraft_logs_fight_runId_reportId_wclFightId_key\" UNIQUE (\"runId\", \"reportId\", \"wclFightId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_warcraft_logs_fight_runId_reportId_wclFightId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_runId_reportId_wclFightId_key",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.run_warcraft_logs_report.run_warcraft_logs_report_runId_reportId_key",
+    "label": "Add unique constraint on \"run_warcraft_logs_report\" (runId, reportId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "run_warcraft_logs_report_runId_reportId_key",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_warcraft_logs_report_runId_reportId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_runId_reportId_key",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"run_warcraft_logs_report_runId_reportId_key\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_report\" ADD CONSTRAINT \"run_warcraft_logs_report_runId_reportId_key\" UNIQUE (\"runId\", \"reportId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_warcraft_logs_report_runId_reportId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_runId_reportId_key",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.warcraft_logs_report.warcraft_logs_report_code_key",
+    "label": "Add unique constraint on \"warcraft_logs_report\" (code)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "warcraft_logs_report_code_key",
+        "table": "warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"warcraft_logs_report_code_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "warcraft_logs_report_code_key",
+          "public",
+          "\"public\".\"warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"warcraft_logs_report_code_key\"",
+        "sql": "ALTER TABLE \"public\".\"warcraft_logs_report\" ADD CONSTRAINT \"warcraft_logs_report_code_key\" UNIQUE (\"code\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"warcraft_logs_report_code_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "warcraft_logs_report_code_key",
+          "public",
+          "\"public\".\"warcraft_logs_report\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit.run_consumable_audit_analyzedById_idx_5971943a",
+    "label": "Create index \"run_consumable_audit_analyzedById_idx_5971943a\" on \"run_consumable_audit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_analyzedById_idx_5971943a",
+        "table": "run_consumable_audit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_analyzedById_idx_5971943a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_analyzedById_idx_5971943a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_analyzedById_idx_5971943a\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_analyzedById_idx_5971943a\" ON \"public\".\"run_consumable_audit\" (\"analyzedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_analyzedById_idx_5971943a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_analyzedById_idx_5971943a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_fight.run_consumable_audit_fight_auditId_idx_424ad2e6",
+    "label": "Create index \"run_consumable_audit_fight_auditId_idx_424ad2e6\" on \"run_consumable_audit_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_fight_auditId_idx_424ad2e6",
+        "table": "run_consumable_audit_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_fight_auditId_idx_424ad2e6\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_fight_auditId_idx_424ad2e6\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_fight_auditId_idx_424ad2e6\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_fight_auditId_idx_424ad2e6\" ON \"public\".\"run_consumable_audit_fight\" (\"auditId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_fight_auditId_idx_424ad2e6\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_fight_auditId_idx_424ad2e6\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_fight.run_consumable_audit_fight_raidContentId_idx_ecf49528",
+    "label": "Create index \"run_consumable_audit_fight_raidContentId_idx_ecf49528\" on \"run_consumable_audit_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_fight_raidContentId_idx_ecf49528",
+        "table": "run_consumable_audit_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_fight_raidContentId_idx_ecf49528\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_fight_raidContentId_idx_ecf49528\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_fight_raidContentId_idx_ecf49528\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_fight_raidContentId_idx_ecf49528\" ON \"public\".\"run_consumable_audit_fight\" (\"raidContentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_fight_raidContentId_idx_ecf49528\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_fight_raidContentId_idx_ecf49528\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_gear_item.run_consumable_audit_gear_item_fightId_idx_16bc93bc",
+    "label": "Create index \"run_consumable_audit_gear_item_fightId_idx_16bc93bc\" on \"run_consumable_audit_gear_item\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_gear_item_fightId_idx_16bc93bc",
+        "table": "run_consumable_audit_gear_item"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_gear_item_fightId_idx_16bc93bc\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_gear_item_fightId_idx_16bc93bc\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_gear_item_fightId_idx_16bc93bc\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_gear_item_fightId_idx_16bc93bc\" ON \"public\".\"run_consumable_audit_gear_item\" (\"fightId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_gear_item_fightId_idx_16bc93bc\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_gear_item_fightId_idx_16bc93bc\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_gear_item.run_consumable_audit_gear_item_playerId_idx_710cf1aa",
+    "label": "Create index \"run_consumable_audit_gear_item_playerId_idx_710cf1aa\" on \"run_consumable_audit_gear_item\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_gear_item_playerId_idx_710cf1aa",
+        "table": "run_consumable_audit_gear_item"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_gear_item_playerId_idx_710cf1aa\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_gear_item_playerId_idx_710cf1aa\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_gear_item_playerId_idx_710cf1aa\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_gear_item_playerId_idx_710cf1aa\" ON \"public\".\"run_consumable_audit_gear_item\" (\"playerId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_gear_item_playerId_idx_710cf1aa\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_gear_item_playerId_idx_710cf1aa\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_observation.run_consumable_audit_observation_fightId_idx_16bc93bc",
+    "label": "Create index \"run_consumable_audit_observation_fightId_idx_16bc93bc\" on \"run_consumable_audit_observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_observation_fightId_idx_16bc93bc",
+        "table": "run_consumable_audit_observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_observation_fightId_idx_16bc93bc\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_observation_fightId_idx_16bc93bc\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_observation_fightId_idx_16bc93bc\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_observation_fightId_idx_16bc93bc\" ON \"public\".\"run_consumable_audit_observation\" (\"fightId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_observation_fightId_idx_16bc93bc\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_observation_fightId_idx_16bc93bc\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_observation.run_consumable_audit_observation_playerId_idx_710cf1aa",
+    "label": "Create index \"run_consumable_audit_observation_playerId_idx_710cf1aa\" on \"run_consumable_audit_observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_observation_playerId_idx_710cf1aa",
+        "table": "run_consumable_audit_observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_observation_playerId_idx_710cf1aa\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_observation_playerId_idx_710cf1aa\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_observation_playerId_idx_710cf1aa\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_observation_playerId_idx_710cf1aa\" ON \"public\".\"run_consumable_audit_observation\" (\"playerId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_observation_playerId_idx_710cf1aa\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_observation_playerId_idx_710cf1aa\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_player.run_consumable_audit_player_attendanceId_idx_b259ff3f",
+    "label": "Create index \"run_consumable_audit_player_attendanceId_idx_b259ff3f\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_player_attendanceId_idx_b259ff3f",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_player_attendanceId_idx_b259ff3f\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player_attendanceId_idx_b259ff3f\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_player_attendanceId_idx_b259ff3f\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_player_attendanceId_idx_b259ff3f\" ON \"public\".\"run_consumable_audit_player\" (\"attendanceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_player_attendanceId_idx_b259ff3f\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player_attendanceId_idx_b259ff3f\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_player.run_consumable_audit_player_auditId_idx_424ad2e6",
+    "label": "Create index \"run_consumable_audit_player_auditId_idx_424ad2e6\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_player_auditId_idx_424ad2e6",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_player_auditId_idx_424ad2e6\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player_auditId_idx_424ad2e6\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_player_auditId_idx_424ad2e6\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_player_auditId_idx_424ad2e6\" ON \"public\".\"run_consumable_audit_player\" (\"auditId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_player_auditId_idx_424ad2e6\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player_auditId_idx_424ad2e6\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_consumable_audit_player.run_consumable_audit_player_externalBoosterId_idx_7e719f2c",
+    "label": "Create index \"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_consumable_audit_player_externalBoosterId_idx_7e719f2c",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\"",
+        "sql": "CREATE INDEX \"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\" ON \"public\".\"run_consumable_audit_player\" (\"externalBoosterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_consumable_audit_player_externalBoosterId_idx_7e719f2c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_fight.run_warcraft_logs_fight_associationId_idx_54f3505c",
+    "label": "Create index \"run_warcraft_logs_fight_associationId_idx_54f3505c\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_fight_associationId_idx_54f3505c",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_fight_associationId_idx_54f3505c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_associationId_idx_54f3505c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_fight_associationId_idx_54f3505c\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_fight_associationId_idx_54f3505c\" ON \"public\".\"run_warcraft_logs_fight\" (\"associationId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_fight_associationId_idx_54f3505c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_associationId_idx_54f3505c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_fight.run_warcraft_logs_fight_decidedById_idx_8194d55f",
+    "label": "Create index \"run_warcraft_logs_fight_decidedById_idx_8194d55f\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_fight_decidedById_idx_8194d55f",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_fight_decidedById_idx_8194d55f\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_decidedById_idx_8194d55f\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_fight_decidedById_idx_8194d55f\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_fight_decidedById_idx_8194d55f\" ON \"public\".\"run_warcraft_logs_fight\" (\"decidedById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_fight_decidedById_idx_8194d55f\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_decidedById_idx_8194d55f\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_fight.run_warcraft_logs_fight_raidContentId_idx_ecf49528",
+    "label": "Create index \"run_warcraft_logs_fight_raidContentId_idx_ecf49528\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_fight_raidContentId_idx_ecf49528",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_fight_raidContentId_idx_ecf49528\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_raidContentId_idx_ecf49528\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_fight_raidContentId_idx_ecf49528\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_fight_raidContentId_idx_ecf49528\" ON \"public\".\"run_warcraft_logs_fight\" (\"raidContentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_fight_raidContentId_idx_ecf49528\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_raidContentId_idx_ecf49528\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_fight.run_warcraft_logs_fight_reportId_idx_d163019e",
+    "label": "Create index \"run_warcraft_logs_fight_reportId_idx_d163019e\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_fight_reportId_idx_d163019e",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_fight_reportId_idx_d163019e\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_reportId_idx_d163019e\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_fight_reportId_idx_d163019e\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_fight_reportId_idx_d163019e\" ON \"public\".\"run_warcraft_logs_fight\" (\"reportId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_fight_reportId_idx_d163019e\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_reportId_idx_d163019e\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_fight.run_warcraft_logs_fight_runId_idx_a6016437",
+    "label": "Create index \"run_warcraft_logs_fight_runId_idx_a6016437\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_fight_runId_idx_a6016437",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_fight_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_fight_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_fight_runId_idx_a6016437\" ON \"public\".\"run_warcraft_logs_fight\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_fight_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_fight_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_fight.run_wcl_fight_assigned_once_0a75a9c0",
+    "label": "Create index \"run_wcl_fight_assigned_once_0a75a9c0\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_wcl_fight_assigned_once_0a75a9c0",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_wcl_fight_assigned_once_0a75a9c0\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_wcl_fight_assigned_once_0a75a9c0\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_wcl_fight_assigned_once_0a75a9c0\"",
+        "sql": "CREATE UNIQUE INDEX \"run_wcl_fight_assigned_once_0a75a9c0\" ON \"public\".\"run_warcraft_logs_fight\" (\"reportId\", \"wclFightId\") WHERE ((\"status\" = 'ASSIGNED'::text))",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_wcl_fight_assigned_once_0a75a9c0\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_wcl_fight_assigned_once_0a75a9c0\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_report.run_warcraft_logs_report_createdById_idx_8bf640ed",
+    "label": "Create index \"run_warcraft_logs_report_createdById_idx_8bf640ed\" on \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_report_createdById_idx_8bf640ed",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_report_createdById_idx_8bf640ed\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report_createdById_idx_8bf640ed\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_report_createdById_idx_8bf640ed\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_report_createdById_idx_8bf640ed\" ON \"public\".\"run_warcraft_logs_report\" (\"createdById\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_report_createdById_idx_8bf640ed\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report_createdById_idx_8bf640ed\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_report.run_warcraft_logs_report_reportId_idx_d163019e",
+    "label": "Create index \"run_warcraft_logs_report_reportId_idx_d163019e\" on \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_report_reportId_idx_d163019e",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_report_reportId_idx_d163019e\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report_reportId_idx_d163019e\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_report_reportId_idx_d163019e\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_report_reportId_idx_d163019e\" ON \"public\".\"run_warcraft_logs_report\" (\"reportId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_report_reportId_idx_d163019e\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report_reportId_idx_d163019e\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_warcraft_logs_report.run_warcraft_logs_report_runId_idx_a6016437",
+    "label": "Create index \"run_warcraft_logs_report_runId_idx_a6016437\" on \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_warcraft_logs_report_runId_idx_a6016437",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_warcraft_logs_report_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_warcraft_logs_report_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_warcraft_logs_report_runId_idx_a6016437\" ON \"public\".\"run_warcraft_logs_report\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_warcraft_logs_report_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_warcraft_logs_report_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit.run_consumable_audit_runId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_runId_fkey\" on \"run_consumable_audit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_runId_fkey",
+        "table": "run_consumable_audit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_runId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit\"\nADD CONSTRAINT \"run_consumable_audit_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_runId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit.run_consumable_audit_analyzedById_fkey",
+    "label": "Add foreign key \"run_consumable_audit_analyzedById_fkey\" on \"run_consumable_audit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_analyzedById_fkey",
+        "table": "run_consumable_audit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_analyzedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_analyzedById_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_analyzedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit\"\nADD CONSTRAINT \"run_consumable_audit_analyzedById_fkey\"\nFOREIGN KEY (\"analyzedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_analyzedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_analyzedById_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_fight.run_consumable_audit_fight_auditId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_fight_auditId_fkey\" on \"run_consumable_audit_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_fight_auditId_fkey",
+        "table": "run_consumable_audit_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_fight_auditId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_fight_auditId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_fight_auditId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_fight\"\nADD CONSTRAINT \"run_consumable_audit_fight_auditId_fkey\"\nFOREIGN KEY (\"auditId\")\nREFERENCES \"public\".\"run_consumable_audit\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_fight_auditId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_fight_auditId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_fight.run_consumable_audit_fight_raidContentId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_fight_raidContentId_fkey\" on \"run_consumable_audit_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_fight_raidContentId_fkey",
+        "table": "run_consumable_audit_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_fight_raidContentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_fight_raidContentId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_fight_raidContentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_fight\"\nADD CONSTRAINT \"run_consumable_audit_fight_raidContentId_fkey\"\nFOREIGN KEY (\"raidContentId\")\nREFERENCES \"public\".\"run_raid_content\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_fight_raidContentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_fight_raidContentId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_gear_item.run_consumable_audit_gear_item_playerId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_gear_item_playerId_fkey\" on \"run_consumable_audit_gear_item\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_gear_item_playerId_fkey",
+        "table": "run_consumable_audit_gear_item"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_gear_item_playerId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_gear_item_playerId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_gear_item_playerId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_gear_item\"\nADD CONSTRAINT \"run_consumable_audit_gear_item_playerId_fkey\"\nFOREIGN KEY (\"playerId\")\nREFERENCES \"public\".\"run_consumable_audit_player\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_gear_item_playerId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_gear_item_playerId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_gear_item.run_consumable_audit_gear_item_fightId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_gear_item_fightId_fkey\" on \"run_consumable_audit_gear_item\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_gear_item_fightId_fkey",
+        "table": "run_consumable_audit_gear_item"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_gear_item_fightId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_gear_item_fightId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_gear_item_fightId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_gear_item\"\nADD CONSTRAINT \"run_consumable_audit_gear_item_fightId_fkey\"\nFOREIGN KEY (\"fightId\")\nREFERENCES \"public\".\"run_consumable_audit_fight\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_gear_item_fightId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_gear_item_fightId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_gear_item\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_observation.run_consumable_audit_observation_playerId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_observation_playerId_fkey\" on \"run_consumable_audit_observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_observation_playerId_fkey",
+        "table": "run_consumable_audit_observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_observation_playerId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_observation_playerId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_observation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_observation_playerId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_observation\"\nADD CONSTRAINT \"run_consumable_audit_observation_playerId_fkey\"\nFOREIGN KEY (\"playerId\")\nREFERENCES \"public\".\"run_consumable_audit_player\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_observation_playerId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_observation_playerId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_observation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_observation.run_consumable_audit_observation_fightId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_observation_fightId_fkey\" on \"run_consumable_audit_observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_observation_fightId_fkey",
+        "table": "run_consumable_audit_observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_observation_fightId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_observation_fightId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_observation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_observation_fightId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_observation\"\nADD CONSTRAINT \"run_consumable_audit_observation_fightId_fkey\"\nFOREIGN KEY (\"fightId\")\nREFERENCES \"public\".\"run_consumable_audit_fight\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_observation_fightId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_observation_fightId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_observation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_player.run_consumable_audit_player_auditId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_player_auditId_fkey\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_player_auditId_fkey",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_player_auditId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_auditId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_player_auditId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_player\"\nADD CONSTRAINT \"run_consumable_audit_player_auditId_fkey\"\nFOREIGN KEY (\"auditId\")\nREFERENCES \"public\".\"run_consumable_audit\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_player_auditId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_auditId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_player.run_consumable_audit_player_attendanceId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_player_attendanceId_fkey\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_player_attendanceId_fkey",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_player_attendanceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_attendanceId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_player_attendanceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_player\"\nADD CONSTRAINT \"run_consumable_audit_player_attendanceId_fkey\"\nFOREIGN KEY (\"attendanceId\")\nREFERENCES \"public\".\"run_attendance\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_player_attendanceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_attendanceId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_consumable_audit_player.run_consumable_audit_player_externalBoosterId_fkey",
+    "label": "Add foreign key \"run_consumable_audit_player_externalBoosterId_fkey\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_consumable_audit_player_externalBoosterId_fkey",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_consumable_audit_player_externalBoosterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_externalBoosterId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_consumable_audit_player_externalBoosterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_player\"\nADD CONSTRAINT \"run_consumable_audit_player_externalBoosterId_fkey\"\nFOREIGN KEY (\"externalBoosterId\")\nREFERENCES \"public\".\"run_external_booster\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_consumable_audit_player_externalBoosterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_externalBoosterId_fkey",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_fight.run_warcraft_logs_fight_associationId_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_fight_associationId_fkey\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_fight_associationId_fkey",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_fight_associationId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_associationId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_fight_associationId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_fight\"\nADD CONSTRAINT \"run_warcraft_logs_fight_associationId_fkey\"\nFOREIGN KEY (\"associationId\")\nREFERENCES \"public\".\"run_warcraft_logs_report\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_fight_associationId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_associationId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_fight.run_warcraft_logs_fight_runId_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_fight_runId_fkey\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_fight_runId_fkey",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_fight_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_runId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_fight_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_fight\"\nADD CONSTRAINT \"run_warcraft_logs_fight_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_fight_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_runId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_fight.run_warcraft_logs_fight_reportId_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_fight_reportId_fkey\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_fight_reportId_fkey",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_fight_reportId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_reportId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_fight_reportId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_fight\"\nADD CONSTRAINT \"run_warcraft_logs_fight_reportId_fkey\"\nFOREIGN KEY (\"reportId\")\nREFERENCES \"public\".\"warcraft_logs_report\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_fight_reportId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_reportId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_fight.run_warcraft_logs_fight_raidContentId_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_fight_raidContentId_fkey\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_fight_raidContentId_fkey",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_fight_raidContentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_raidContentId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_fight_raidContentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_fight\"\nADD CONSTRAINT \"run_warcraft_logs_fight_raidContentId_fkey\"\nFOREIGN KEY (\"raidContentId\")\nREFERENCES \"public\".\"run_raid_content\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_fight_raidContentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_raidContentId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_fight.run_warcraft_logs_fight_decidedById_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_fight_decidedById_fkey\" on \"run_warcraft_logs_fight\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_fight_decidedById_fkey",
+        "table": "run_warcraft_logs_fight"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_fight_decidedById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_decidedById_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_fight_decidedById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_fight\"\nADD CONSTRAINT \"run_warcraft_logs_fight_decidedById_fkey\"\nFOREIGN KEY (\"decidedById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_fight_decidedById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_fight_decidedById_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_fight\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_report.run_warcraft_logs_report_runId_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_report_runId_fkey\" on \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_report_runId_fkey",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_report_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_runId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_report_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_report\"\nADD CONSTRAINT \"run_warcraft_logs_report_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_report_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_runId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_report.run_warcraft_logs_report_reportId_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_report_reportId_fkey\" on \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_report_reportId_fkey",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_report_reportId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_reportId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_report_reportId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_report\"\nADD CONSTRAINT \"run_warcraft_logs_report_reportId_fkey\"\nFOREIGN KEY (\"reportId\")\nREFERENCES \"public\".\"warcraft_logs_report\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_report_reportId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_reportId_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_warcraft_logs_report.run_warcraft_logs_report_createdById_fkey",
+    "label": "Add foreign key \"run_warcraft_logs_report_createdById_fkey\" on \"run_warcraft_logs_report\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_warcraft_logs_report_createdById_fkey",
+        "table": "run_warcraft_logs_report"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_warcraft_logs_report_createdById_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_createdById_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_warcraft_logs_report_createdById_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_warcraft_logs_report\"\nADD CONSTRAINT \"run_warcraft_logs_report_createdById_fkey\"\nFOREIGN KEY (\"createdById\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_warcraft_logs_report_createdById_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_warcraft_logs_report_createdById_fkey",
+          "public",
+          "\"public\".\"run_warcraft_logs_report\""
+        ]
+      }
+    ]
+  }
+]
