@@ -43,11 +43,13 @@ describe("fetchChannelTranscript", () => {
     expect(messages.at(-1)?.content).toBe("msg 149");
   });
 
-  it("keeps the newest `cap` messages, pages ≤100 at a time, never copies attachments", async () => {
+  it("keeps the newest `cap` messages, pages ≤100 at a time, never copies attachments (name + size only)", async () => {
     const { channel, fetch } = channelWith(600, true);
     const { messages } = await fetchChannelTranscript(channel, { cap: 500 });
     expect(messages).toHaveLength(500);
-    expect(messages.every((m) => !("attachments" in m))).toBe(true);
+    // Metadata only: no URL, no content type, no file body.
+    expect(messages.every((m) => JSON.stringify(m.attachments) === JSON.stringify([{ name: "proof.png", size: 1234 }]))).toBe(true);
+    expect(JSON.stringify(messages)).not.toContain("cdn.discordapp.com");
     expect(fetch).toHaveBeenCalledTimes(5);
     expect(fetch.mock.calls.every(([options]) => options.limit <= 100)).toBe(true);
     // Newest 500 kept, like the original Run archive fetch.

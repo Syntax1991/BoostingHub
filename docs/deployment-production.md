@@ -326,6 +326,56 @@ It is off until configured:
 An id that does not resolve to a category is logged by the bot on every pass
 and nothing is created.
 
+### Discord Message Content access (transcripts and log-bot links)
+
+Run transcripts and the Warcraft Logs link scan read channel history over the
+Discord **REST** API (`GET /channels/{id}/messages`). The gateway only requests
+`Guilds` + `GuildVoiceStates`; no gateway message listener exists, so the code
+does **not** request the `MessageContent` gateway intent (requesting it without
+the portal toggle would make Discord reject the login).
+
+REST responses still follow the application's privileged access: without it
+Discord returns empty `content`, `embeds`, `attachments`, `components` and
+`poll` for other authors' messages. Exceptions stay visible — the bot's own
+messages, messages that mention it, DMs — which makes a transcript look
+deceptively complete (Manawyrm Hub's own posts and embeds are there, members'
+text is not).
+
+Enable it on the application the **production** bot uses (check the bot's
+application, never a remembered id):
+
+Discord Developer Portal → *that application* → **Bot** → *Privileged Gateway
+Intents* → **Message Content Intent** → save, then restart the bot.
+
+*Discord policy (separate from what the bot checks):* whether an application may
+use the toggle on its own or must go through Discord's privileged intent review
+is Discord's decision and changes over time. As of 2026-09 Discord requires the
+review — renewed yearly — once more than 10,000 unique users can see the app;
+below that the toggle is self-service. See Discord's
+[Getting Started with Privileged Intent Review](https://docs.discord.com/developers/gateway/getting-started-with-privileged-intent-review).
+The bot never infers access from server or user counts — only from its
+application flags (below).
+
+Check it — the bot logs one line at startup:
+
+- `Discord Message Content: AVAILABLE (runtime-confirmed via application flags)` — on.
+- `Discord Message Content: UNAVAILABLE (runtime-confirmed …)` + warning — off: user-authored transcript text and automatic Warcraft Logs link detection are incomplete.
+- `Discord Message Content: UNKNOWN (could not be determined)` — the application could not be read; check the portal by hand.
+
+*Technical capability:* the bot reads this from its application flags
+(`GET /applications/@me`). `GATEWAY_MESSAGE_CONTENT` (1 << 18, access granted
+through Discord's review) or `GATEWAY_MESSAGE_CONTENT_LIMITED` (1 << 19, access
+enabled with the Bot page toggle) — either one means Message Content is
+available; neither means it is not.
+
+While it is off:
+
+- transcripts mark withheld messages as **(message content unavailable)**, show a
+  notice, and record `Message Content: PARTIAL` / `UNAVAILABLE` in the file;
+  archival and channel deletion proceed normally — they never wait for access;
+- the Warcraft Logs scan sees no text or embeds from the log bot, so nothing is
+  linked automatically; **manual** report linking on the Run page still works.
+
 ### Warcraft Logs log bot (optional)
 
 Reports posted by a trusted log bot (e.g. PhoenixStar Logs) in a Run channel are
@@ -335,15 +385,10 @@ completed (see `docs/features/run-consumables-audit.md`). It is off until config
 1. Find the log bot's Discord user id (Developer Mode → right-click the bot → Copy User ID).
 2. Add `DISCORD_WCL_REPORT_AUTHOR_IDS="<id>[,<id>…]"` to `/var/www/boostinghub/.env`
    (read by the **web app**; `WARCRAFT_LOGS_CLIENT_ID` / `WARCRAFT_LOGS_CLIENT_SECRET` must be set too).
-3. In the Discord Developer Portal → the bot's application → **Bot** →
-   *Privileged Gateway Intents*, enable **Message Content Intent** and save.
-   Discord blanks `content`/`embeds` of other authors' messages — over REST too —
-   for apps without it, so the log-bot links (and the text of the existing archive
-   transcripts) are otherwise invisible. Bots in fewer than 100 servers only need
-   the toggle. The bot's gateway intents stay unchanged (the scan is REST-only).
-   Verify on the application the production bot actually uses (its `flags` must
-   include bit 18 or 19). Checked 2026-09 on the apps in use at the time: not
-   enabled — re-check after any switch to a new Discord application.
+3. Make sure **Message Content** access is on for the production bot's application
+   (see [Discord Message Content access](#discord-message-content-access-transcripts-and-log-bot-links)):
+   without it the log bot's links are invisible to the scan. Confirm with the
+   bot's startup line `Discord Message Content: AVAILABLE`.
 4. Restart the web app, then the bot. The bot needs **View Channel** and
    **Read Message History** in Run channels (already required for transcripts).
 
