@@ -378,19 +378,39 @@ While it is off:
 
 ### Warcraft Logs log bot (optional)
 
-Reports posted by a trusted log bot (e.g. PhoenixStar Logs) in a Run channel are
-linked to that Run, and the Consumables Audit runs ~15 min after the Run is
-completed (see `docs/features/run-consumables-audit.md`). It is off until configured:
+Reports posted by a trusted log bot are linked to their Runs, and the
+Consumables Audit runs ~15 min after the Run is completed (see
+`docs/features/run-consumables-audit.md`). Two sources:
 
-1. Find the log bot's Discord user id (Developer Mode → right-click the bot → Copy User ID).
-2. Add `DISCORD_WCL_REPORT_AUTHOR_IDS="<id>[,<id>…]"` to `/var/www/boostinghub/.env`
-   (read by the **web app**; `WARCRAFT_LOGS_CLIENT_ID` / `WARCRAFT_LOGS_CLIENT_SECRET` must be set too).
-3. Make sure **Message Content** access is on for the production bot's application
+- a **dedicated log channel** the log bot posts every Run's report into (production:
+  the "Manawyrm Logging" webhook) — the server matches each report to Runs by its fights;
+- a link the log bot posts in a **Run's own channel** — linked to that Run directly.
+
+It is off until configured:
+
+1. Find the log bot's Discord **author** id (Developer Mode → right-click the bot → Copy User ID;
+   for a webhook it is the webhook id). Production: `1554176548435918910`.
+2. Find the dedicated log **channel** id (right-click the channel → Copy Channel ID).
+   Production: `1553838853834674226`. Author ids and channel ids are different things.
+3. Add to `/var/www/boostinghub/.env` (read by the **web app**; `WARCRAFT_LOGS_CLIENT_ID` /
+   `WARCRAFT_LOGS_CLIENT_SECRET` must be set too):
+
+   ```
+   DISCORD_WCL_REPORT_AUTHOR_IDS="1554176548435918910"
+   DISCORD_WCL_REPORT_CHANNEL_IDS="1553838853834674226"
+   ```
+4. Make sure **Message Content** access is on for the production bot's application
    (see [Discord Message Content access](#discord-message-content-access-transcripts-and-log-bot-links)):
    without it the log bot's links are invisible to the scan. Confirm with the
    bot's startup line `Discord Message Content: AVAILABLE`.
-4. Restart the web app, then the bot. The bot needs **View Channel** and
-   **Read Message History** in Run channels (already required for transcripts).
+5. Restart the web app, then the bot (the normal `update-server.sh` restart does both). The bot needs
+   **View Channel** and **Read Message History** in Run channels and in the log channel.
+
+The log channel is read once a minute from a durable position (a restart never
+re-reads its history; the very first read starts 3 days back). Found links are
+matched on the bot's ~5-minute Warcraft Logs tick; the server logs
+`[wcl-discovery] recorded / evaluated / linked` (report code, status, linked Run
+ids — never message text).
 
 ## Production smoke checklist
 

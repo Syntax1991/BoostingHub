@@ -140,9 +140,13 @@ export async function scanChannelFromCursor(input: {
               ? "attached"
               : result.status === "ALREADY_ATTACHED"
                 ? "already-attached"
-                : retry
-                  ? "retry"
-                  : "failed";
+                : result.status === "RECORDED"
+                  ? "recorded"
+                  : result.status === "ALREADY_RECORDED"
+                    ? "already-recorded"
+                    : retry
+                      ? "retry"
+                      : "failed";
           console.log("[discord-bot] warcraft-logs link", { ...context, result: outcome });
         } catch (error) {
           retry = !isPermanentRejection(error);
@@ -247,6 +251,52 @@ export async function scanRunChannelsForReports(input: {
     }
   }
   return deferRetirement;
+}
+
+/**
+ * Dedicated Warcraft Logs log channels (the log bot posts every Run's report
+ * there, not in the Run channels). Each configured channel is read ONCE per
+ * pass — never once per Run — from its durable server-side cursor, at most
+ * once a minute, bounded pages, oldest → newest. Trusted links are handed to
+ * the server, which records them durably and matches them to Runs itself; the
+ * cursor only advances past messages the server accepted (a transport error
+ * is re-read next time). discord.js' REST client honours Discord's 429
+ * `retry_after`. A failure never breaks the sync loop.
+ */
+export async function scanReportChannels(input: {
+  channels: Array<{ channelId: string; cursor: string }>;
+  trustedAuthorIds: readonly string[];
+  fetchPage: FetchMessagePage;
+  record: (input: { channelId: string; messageId: string; authorId: string; reportCode: string }) => Promise<{ status: string }>;
+  saveCursor: (channelId: string, messageId: string) => Promise<void>;
+  state: ReportScanState;
+  now?: number;
+}): Promise<void> {
+  if (input.trustedAuthorIds.length === 0) return;
+  const trusted = new Set(input.trustedAuthorIds);
+  const now = input.now ?? Date.now();
+  for (const channel of input.channels) {
+    const throttleKey = `log-channel:${channel.channelId}`;
+    const last = input.state.lastScanAt.get(throttleKey);
+    if (last !== undefined && now - last < WCL_CHANNEL_SCAN_INTERVAL_MS) continue;
+    input.state.lastScanAt.set(throttleKey, now);
+    try {
+      const result = await scanChannelFromCursor({
+        runId: throttleKey,
+        channelId: channel.channelId,
+        cursor: channel.cursor,
+        trustedAuthorIds: trusted,
+        fetchPage: input.fetchPage,
+        attach: (_key, link) => input.record(link),
+        maxPages: WCL_SCAN_MAX_PAGES_PER_PASS,
+      });
+      if (result.cursor && result.cursor !== channel.cursor) {
+        await input.saveCursor(channel.channelId, result.cursor);
+      }
+    } catch (error) {
+      console.warn(`[discord-bot] could not scan Warcraft Logs log channel ${channel.channelId}`, error);
+    }
+  }
 }
 
 /**

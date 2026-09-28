@@ -44,20 +44,37 @@ export function toWarcraftLogsServerRegion(region: WowRegion): "EU" | "US" | nul
   return null;
 }
 
+/** Comma/space separated Discord snowflakes; anything else is ignored, duplicates dropped. */
+function snowflakeList(value: string | undefined): string[] {
+  return [
+    ...new Set(
+      (value ?? "")
+        .split(/[\s,]+/)
+        .map((entry) => entry.trim())
+        .filter((entry) => /^\d{15,25}$/.test(entry)),
+    ),
+  ];
+}
+
 /**
- * Discord user ids (bots/webhooks such as "PhoenixStar Logs") whose report
- * links in a Run's own Discord channel are attached automatically. Empty =
- * the feature is off. Comma/space separated snowflakes; anything else ignored.
+ * Discord AUTHOR ids of trusted log bots / webhooks (for a webhook post
+ * Discord sets author.id to the webhook id). Only their report links are used.
+ * Empty = automatic linking is off.
  */
 export function trustedWarcraftLogsReportAuthorIds(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string[] {
-  return [
-    ...new Set(
-      (env.DISCORD_WCL_REPORT_AUTHOR_IDS ?? "")
-        .split(/[\s,]+/)
-        .map((value) => value.trim())
-        .filter((value) => /^\d{15,25}$/.test(value)),
-    ),
-  ];
+  return snowflakeList(env.DISCORD_WCL_REPORT_AUTHOR_IDS);
+}
+
+/**
+ * Discord CHANNEL ids of dedicated log channels where the trusted log bot
+ * posts reports for all Runs (not ids of authors). Reports found there are
+ * matched to Runs centrally. Empty = central discovery is off; a trusted link
+ * posted in a Run's own channel still works.
+ */
+export function warcraftLogsReportChannelIds(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  return snowflakeList(env.DISCORD_WCL_REPORT_CHANNEL_IDS);
 }

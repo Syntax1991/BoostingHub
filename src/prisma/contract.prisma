@@ -1407,3 +1407,57 @@ model RunWarcraftLogsFight {
   @@index([reportId, wclFightId], unique: true, where: "(\"status\" = 'ASSIGNED'::text)", name: "run_wcl_fight_assigned_once")
   @@map("run_warcraft_logs_fight")
 }
+
+/// Where a Warcraft Logs report found in a dedicated Discord log channel stands.
+enum WarcraftLogsDiscoveryStatus {
+  @@type("pg/text@1")
+  /// Not matched yet (no boss fights, no completed Run in its time span, WCL unreachable) — retried.
+  PENDING      = "PENDING"
+  /// Linked to every Run its fights were assigned to.
+  MATCHED      = "MATCHED"
+  /// Linked, but some fights need a manager's decision on the Run page.
+  NEEDS_REVIEW = "NEEDS_REVIEW"
+  /// Settled without a Run (report missing / private, or no Run matched in time). Not retried.
+  IGNORED      = "IGNORED"
+}
+
+/// A report link the trusted log bot posted in a dedicated log channel
+/// (DISCORD_WCL_REPORT_CHANNEL_IDS). The server matches it to Runs with the
+/// same fight assignment as the Consumables Audit and links it to each Run
+/// its fights belong to; retried with backoff until settled.
+model WarcraftLogsReportDiscovery {
+  id            String                      @id @default(uuid())
+  /// Source Discord channel + message (a message can name several reports).
+  channelId     String
+  messageId     String
+  authorId      String
+  reportCode    String
+  /// Message time (from the snowflake).
+  postedAt      TimestamptzString
+  status        WarcraftLogsDiscoveryStatus @default(PENDING)
+  attempts      Int                         @default(0)
+  /// Next evaluation; null once settled.
+  nextAttemptAt TimestamptzString?
+  lastAttemptAt TimestamptzString?
+  /// Safe reason code of the latest evaluation (never a raw error).
+  lastOutcome   String?
+  /// JSON array of the Run ids the report is linked to.
+  linkedRunIds  String                      @default("[]")
+  createdAt     TimestamptzString           @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@unique([channelId, messageId, reportCode])
+  @@index([nextAttemptAt])
+  @@map("warcraft_logs_report_discovery")
+}
+
+/// Durable read position of the bot in a dedicated Warcraft Logs log channel.
+/// Survives restarts, so history is never re-read from the start.
+model DiscordChannelScanCursor {
+  channelId     String            @id
+  /// Newest fully processed Discord message id (only moves forward).
+  lastMessageId String
+  updatedAt     temporal.updatedAtString()
+
+  @@map("discord_channel_scan_cursor")
+}

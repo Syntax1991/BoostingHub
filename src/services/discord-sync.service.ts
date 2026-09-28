@@ -1,5 +1,7 @@
 import type { CharacterRole, NotificationType, RaidDifficulty, RunLootType, RunStatus, WowClass } from "@/models/enums";
-import { trustedWarcraftLogsReportAuthorIds } from "@/lib/warcraft-logs/config";
+import { trustedWarcraftLogsReportAuthorIds, warcraftLogsReportChannelIds } from "@/lib/warcraft-logs/config";
+import { warcraftLogsDiscoveryRepository } from "@/repositories/warcraft-logs-discovery.repository";
+import { WCL_DISCOVERY_POLICY } from "@/services/wcl-report-discovery";
 import { snowflakeAtTime } from "@/lib/discord-snowflake";
 /** The first Warcraft Logs link scan starts this long before the recorded Run start. */
 export const WCL_SCAN_START_MARGIN_MINUTES = 10;
@@ -1045,8 +1047,22 @@ export const discordSyncService = {
     runAnnouncements: RunAnnouncementWorkItem[];
     /** Discord ids of trusted Warcraft Logs log bots (empty = auto-attach off). */
     warcraftLogsReportAuthorIds: string[];
+    /**
+     * Dedicated Warcraft Logs log channels to read once per pass, each with
+     * the durable position to continue after (a snowflake at now − the
+     * discovery age limit before the first read). Empty when no channel or no
+     * trusted author is configured.
+     */
+    warcraftLogsReportChannels: Array<{ channelId: string; cursor: string }>;
   }> {
     const warcraftLogsReportAuthorIds = trustedWarcraftLogsReportAuthorIds();
+    const reportChannelIds = warcraftLogsReportAuthorIds.length > 0 ? warcraftLogsReportChannelIds() : [];
+    const reportChannelCursors = await warcraftLogsDiscoveryRepository.cursorsFor(reportChannelIds);
+    const firstReadFrom = snowflakeAtTime(now.getTime() - WCL_DISCOVERY_POLICY.maxAgeDays * 24 * 3_600_000);
+    const warcraftLogsReportChannels = reportChannelIds.map((channelId) => ({
+      channelId,
+      cursor: reportChannelCursors.get(channelId) ?? firstReadFrom,
+    }));
     // Only Runs that can still produce Discord work get the full Run load:
     // first-provisioning / Voice candidates by Run state, plus every Run that
     // still holds live Discord identity. Fully retired historical Runs are
@@ -1286,6 +1302,7 @@ export const discordSyncService = {
       notificationDms,
       runAnnouncements,
       warcraftLogsReportAuthorIds,
+      warcraftLogsReportChannels,
     };
   },
 

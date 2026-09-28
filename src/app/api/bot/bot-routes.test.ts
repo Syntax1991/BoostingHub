@@ -264,8 +264,20 @@ describe("GET /api/bot/discord/sync — Warcraft Logs configuration reaches the 
 
   it("an empty configuration disables it with an empty list", async () => {
     vi.stubEnv("DISCORD_WCL_REPORT_AUTHOR_IDS", "");
+    vi.stubEnv("DISCORD_WCL_REPORT_CHANNEL_IDS", "1553838853834674226");
     const work = await botClientAgainstRoute().listSyncWork();
     expect(work.warcraftLogsReportAuthorIds).toEqual([]);
+    // No trusted author: no log channel is read either.
+    expect(work.warcraftLogsReportChannels).toEqual([]);
+  });
+
+  it("serializes the dedicated log channels (malformed dropped) with their read position into the bot's work", async () => {
+    vi.stubEnv("DISCORD_WCL_REPORT_AUTHOR_IDS", LOG_AUTHOR);
+    vi.stubEnv("DISCORD_WCL_REPORT_CHANNEL_IDS", "1553838853834674226, oops,1553838853834674226");
+    const work = await botClientAgainstRoute().listSyncWork();
+    expect(work.warcraftLogsReportChannels).toHaveLength(1);
+    expect(work.warcraftLogsReportChannels![0]).toMatchObject({ channelId: "1553838853834674226" });
+    expect(work.warcraftLogsReportChannels![0]!.cursor).toMatch(/^\d{15,25}$/);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   createReportScanState,
   findTrustedReportLinks,
   scanChannelFromCursor,
+  scanReportChannels,
   scanRunChannelsForReports,
   startWarcraftLogsAutoAuditLoop,
   type FetchMessagePage,
@@ -286,6 +287,101 @@ describe("Warcraft Logs links and Discord Message Content access", () => {
     });
     expect(deferred).toEqual(new Set());
     expect(saveCursor).toHaveBeenCalledWith("run-9", "chan-9", "1249");
+  });
+});
+
+describe("scanReportChannels — dedicated Warcraft Logs log channel", () => {
+  // Modeled on production: a webhook ("Manawyrm Logging") posts every Run's report into one channel,
+  // the report link only in an embed. Discord sets author.id to the webhook id.
+  const LOG_CHANNEL = "1553838853834674226";
+  const WEBHOOK = "1554176548435918910";
+  const reportPost = (id: string, code: string): ScannableMessage =>
+    message({ id, authorId: WEBHOOK, content: "", embeds: [{ title: "New report", url: `https://www.warcraftlogs.com/reports/${code}`, description: null, fields: [] }] });
+  const channelHistory = () =>
+    fakeChannel([
+      message({ id: "1001", content: `someone else: ${URL_B}` }), // untrusted author — ignored
+      reportPost("1002", "FtwhWRvqjTbAx4NQ"),
+      message({ id: "1003", content: "chatter" }),
+      reportPost("1004", "Kp3xZm9QwLr7Vt2N"),
+    ]);
+  const setup = (history = channelHistory()) => {
+    type Link = { channelId: string; messageId: string; authorId: string; reportCode: string };
+    const record = vi.fn<(link: Link) => Promise<{ status: string }>>(async () => ({ status: "RECORDED" }));
+    const saveCursor = vi.fn<(channelId: string, messageId: string) => Promise<void>>(async () => {});
+    const state = createReportScanState();
+    const scan = (cursor = "999", now = 0, channels = [{ channelId: LOG_CHANNEL, cursor }]) =>
+      scanReportChannels({ channels, trustedAuthorIds: [WEBHOOK], fetchPage: history.fetchPage, record, saveCursor, state, now });
+    return { history, record, saveCursor, scan };
+  };
+
+  it("records every trusted embed link once, with the channel + message it came from, and saves the cursor", async () => {
+    const { record, saveCursor, scan, history } = setup();
+    await scan();
+    expect(record.mock.calls.map(([input]) => input)).toEqual([
+      { reportCode: "FtwhWRvqjTbAx4NQ", messageId: "1002", authorId: WEBHOOK, channelId: LOG_CHANNEL },
+      { reportCode: "Kp3xZm9QwLr7Vt2N", messageId: "1004", authorId: WEBHOOK, channelId: LOG_CHANNEL },
+    ]);
+    expect(saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1004");
+    expect(history.calls).toHaveLength(1); // one bounded read, not one per Run
+  });
+
+  it("is read at most once a minute, and a restart continues after the durable cursor", async () => {
+    const { record, scan, history } = setup();
+    await scan("999", 0);
+    await scan("999", WCL_CHANNEL_SCAN_INTERVAL_MS - 1);
+    expect(history.calls).toHaveLength(1);
+    // After a restart the server hands back the saved cursor: nothing is re-read or re-recorded.
+    const restarted = setup(history);
+    await restarted.scan("1004", 0);
+    expect(restarted.record).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledTimes(2);
+  });
+
+  it("a repeat of the same message (already recorded) is fine and still moves the cursor", async () => {
+    const { record, saveCursor, scan } = setup();
+    record.mockResolvedValue({ status: "ALREADY_RECORDED" });
+    await scan();
+    expect(saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1004");
+  });
+
+  it("untrusted authors and other channels are ignored; no trusted author means no read at all", async () => {
+    const { record, history } = setup();
+    await scanReportChannels({ channels: [{ channelId: LOG_CHANNEL, cursor: "999" }], trustedAuthorIds: [], fetchPage: history.fetchPage, record, saveCursor: vi.fn(), state: createReportScanState() });
+    expect(history.calls).toHaveLength(0);
+    const other = setup(fakeChannel([message({ id: "2001", authorId: BOOSTER, content: URL_A })]));
+    await other.scan();
+    expect(other.record).not.toHaveBeenCalled();
+  });
+
+  it("a transport error keeps the cursor before that message; a permanent rejection (403) moves on", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failing = setup();
+    failing.record.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    await failing.scan();
+    expect(failing.saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1001"); // stops before 1002, re-read next time
+    const rejected = setup();
+    rejected.record.mockRejectedValue(new BotApiError(403, "NOT_AUTHORIZED", "not a configured log channel"));
+    await rejected.scan();
+    expect(rejected.saveCursor).toHaveBeenCalledWith(LOG_CHANNEL, "1004");
+  });
+
+  it("a Discord failure (e.g. rate limit) never breaks the sync loop and saves no cursor", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const record = vi.fn(async () => ({ status: "RECORDED" }));
+    const saveCursor = vi.fn(async () => {});
+    await expect(
+      scanReportChannels({
+        channels: [{ channelId: LOG_CHANNEL, cursor: "999" }],
+        trustedAuthorIds: [WEBHOOK],
+        fetchPage: async () => {
+          throw Object.assign(new Error("You are being rate limited."), { status: 429 });
+        },
+        record,
+        saveCursor,
+        state: createReportScanState(),
+      }),
+    ).resolves.toBeUndefined();
+    expect(saveCursor).not.toHaveBeenCalled();
   });
 });
 
