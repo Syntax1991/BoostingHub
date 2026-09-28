@@ -76,8 +76,19 @@ export const CONSUMABLE_CATALOG: readonly ConsumableCatalogEntry[] = [
   { category: "FLASK", spellId: 432021, name: "Flask of Alchemical Chaos", expansion: "TWW" },
   { category: "FLASK", spellId: 432473, name: "Flask of Saving Graces", expansion: "TWW" },
 
-  // Combat potions — cast events. Used by every Tank/DPS spec in the sample.
+  // Combat potions — cast events, keyed by the potion's USE spell (WCL abilityGameID),
+  // never by item id. A Midnight Potion Cauldron's "Fleeting" potions cast the SAME
+  // spell as the tradable potion (Blizzard ItemEffect): e.g. Light's Potential items
+  // 241308/241309 and Fleeting 245897/245898 all cast 1236616, and Warcraft Logs shows
+  // one ability for both — so one entry covers both variants.
+  // Used by every Tank/DPS spec in the sample.
   { category: "DAMAGE_POTION", spellId: 1236994, name: "Potion of Recklessness", expansion: "MIDNIGHT" },
+  // Primary-stat potion (items 241308/241309, Fleeting 245897/245898). 60 casts per
+  // raid in the cauldron reports 6QX9gcpjNTMdBtVR / WV3BMCHnLvZfb9Yd.
+  { category: "DAMAGE_POTION", spellId: 1236616, name: "Light's Potential", expansion: "MIDNIGHT" },
+  // Damage-proc potion (items 241296/241297, Fleeting 245900/245901) — the fourth
+  // Midnight combat potion; not seen in the sample logs yet, verified from game data.
+  { category: "DAMAGE_POTION", spellId: 1238443, name: "Potion of Zealotry", expansion: "MIDNIGHT" },
   // Used by Tank/DPS specs (BM, Assassination, Subtlety, Elemental, Arcane, Arms, Prot Paladin, Unholy).
   { category: "DAMAGE_POTION", spellId: 1236998, name: "Draught of Rampant Abandon", expansion: "MIDNIGHT" },
   // Used only by healer specs (Resto Druid/Shaman, Disc/Holy Priest, MW, Pres) in the sample.

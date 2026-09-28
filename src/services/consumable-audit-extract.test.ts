@@ -202,6 +202,18 @@ describe("extractConsumableAudit", () => {
     ]);
   });
 
+  it("detects Light's Potential (incl. the cauldron's Fleeting variant, same WCL ability 1236616) as a combat potion", () => {
+    const withLightsPotential = extractConsumableAudit({
+      report: report(),
+      fights: assignedFights,
+      events: { ...events, casts: [{ fight: 1, timestamp: 11_100, sourceId: 1, abilityId: 1236616 }] },
+      participants: [attended("Synlight", "Blackhand")],
+    });
+    expect(
+      withLightsPotential.players[0]!.observations.filter((row) => row.kind === "CAST").map((row) => [row.category, row.spellId]),
+    ).toEqual([["DAMAGE_POTION", 1236616]]);
+  });
+
   it("keeps unmatched and external players with no facts", () => {
     expect(extracted.players[1]).toMatchObject({ matchStatus: "NOT_IN_LOG", observations: [] });
     expect(extracted.players[2]).toMatchObject({
