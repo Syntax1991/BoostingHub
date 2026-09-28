@@ -49,6 +49,8 @@ export type RunWarcraftLogsAssociationRecord = {
   discordAuthorId: string | null;
   /** Null until the first fight scan (log-bot attach during IN_PROGRESS). */
   lastScannedAt: string | null;
+  /** When the report was linked to this Run. */
+  attachedAt: string;
 };
 
 export type RunWarcraftLogsFightRecord = {
@@ -202,6 +204,7 @@ export const runWarcraftLogsRepository = {
         discordMessageId: asStringOrNull(row.discordMessageId),
         discordAuthorId: asStringOrNull(row.discordAuthorId),
         lastScannedAt: asStringOrNull(row.lastScannedAt),
+        attachedAt: asString(row.createdAt),
       }))
       .sort((a, b) => a.report.startAt.localeCompare(b.report.startAt));
   },
@@ -252,12 +255,18 @@ export const runWarcraftLogsRepository = {
   },
 
   /** Of the given Runs, those with at least one linked report. */
-  async runIdsWithReports(runIds: string[]): Promise<Set<string>> {
-    if (runIds.length === 0) return new Set();
+  /** runId → when its newest report was linked; Runs without a report are absent (one query). */
+  async latestAttachedAtByRunIds(runIds: string[]): Promise<Map<string, string>> {
+    if (runIds.length === 0) return new Map();
     const rows = (await orm.RunWarcraftLogsReport.where((row) => row.runId.in(runIds))
-      .select("runId")
-      .all()) as Array<{ runId: string }>;
-    return new Set(rows.map((row) => row.runId));
+      .select("runId", "createdAt")
+      .all()) as Array<{ runId: string; createdAt: string }>;
+    const latest = new Map<string, string>();
+    for (const row of rows) {
+      const current = latest.get(row.runId);
+      if (!current || Date.parse(row.createdAt) > Date.parse(current)) latest.set(row.runId, row.createdAt);
+    }
+    return latest;
   },
 
   /** How many Runs use each report (sharing a report between Runs is normal). */

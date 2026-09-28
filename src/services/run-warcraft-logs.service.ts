@@ -70,6 +70,8 @@ export type RunWarcraftLogsView = {
     startAt: string;
     endAt: string;
     lastScannedAt: string | null;
+    /** When the report was linked to this Run. */
+    attachedAt: string;
     attachedByName: string | null;
     /** MANUAL or DISCORD_BOT (posted by the trusted log bot in the Run channel). */
     source: WarcraftLogsReportSource;
@@ -275,6 +277,9 @@ export const runWarcraftLogsService = {
       discordAuthorId: input.authorId,
       now: now.toISOString(),
     });
+    // A new report after an earlier (automatic or manual) analysis makes the
+    // Run due for the automatic audit again, with a fresh attempt budget.
+    if (created) await runConsumableAuditRepository.resetAutoAttempts(run.id, now.toISOString());
     return { status: created ? "ATTACHED" : "ALREADY_ATTACHED" };
   },
 
@@ -378,6 +383,7 @@ export const runWarcraftLogsService = {
           startAt: association.report.startAt,
           endAt: association.report.endAt,
           lastScannedAt: association.lastScannedAt,
+          attachedAt: association.attachedAt,
           attachedByName: association.createdByName,
           source: association.source,
           assigned: assigned.length,

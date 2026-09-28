@@ -193,13 +193,21 @@ export const runConsumableAuditRepository = {
   },
 
   /** COMPLETED Runs whose completedAt lies in [from, to] (auto-audit candidates). */
-  async listCompletedRunIdsBetween(from: string, to: string): Promise<string[]> {
-    const rows = (await orm.Run.where({ status: "COMPLETED" })
+  async listCompletedRunsBetween(from: string, to: string): Promise<Array<{ id: string; completedAt: string }>> {
+    return (await orm.Run.where({ status: "COMPLETED" })
       .where((row) => row.completedAt.gte(from))
       .where((row) => row.completedAt.lte(to))
-      .select("id")
-      .all()) as Array<{ id: string }>;
-    return rows.map((row) => row.id);
+      .select("id", "completedAt")
+      .all()) as Array<{ id: string; completedAt: string }>;
+  },
+
+  /**
+   * A new report was linked: the automatic audit gets a fresh attempt budget
+   * for it. No-op when the Run has no audit row yet. The latest snapshot and
+   * lastAttemptAt (retry spacing) stay untouched.
+   */
+  async resetAutoAttempts(runId: string, now: string): Promise<void> {
+    await orm.RunConsumableAudit.where({ runId }).update({ autoAttempts: 0, lastFailure: null, updatedAt: now });
   },
 
   async listByRunIds(runIds: string[]): Promise<RunConsumableAuditRecord[]> {

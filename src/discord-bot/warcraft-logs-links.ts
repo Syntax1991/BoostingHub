@@ -1,3 +1,4 @@
+import { BotApiError } from "@/discord-bot/bot-api-client";
 import { compareSnowflakes } from "@/lib/discord-snowflake";
 import { extractWarcraftLogsReportCodes } from "@/lib/warcraft-logs";
 
@@ -79,6 +80,16 @@ export type AttachReport = (
   input: { reportCode: string; channelId: string; messageId: string; authorId: string },
 ) => Promise<{ status: string; retryable?: boolean }>;
 
+/**
+ * The Bot API refused the link for a reason a retry cannot change (untrusted
+ * author, not this Run's channel, Run not found / not running or completed,
+ * invalid body). Anything else — transport errors, 401 (token), 429, 5xx —
+ * is retried so no link is lost.
+ */
+function isPermanentRejection(error: unknown): boolean {
+  return error instanceof BotApiError && [400, 403, 404, 409, 422].includes(error.status);
+}
+
 export type SaveScanCursor = (runId: string, channelId: string, messageId: string) => Promise<void>;
 
 export type ChannelScanResult = {
@@ -113,16 +124,30 @@ export async function scanChannelFromCursor(input: {
     for (const message of ordered) {
       if (cursor && compareSnowflakes(message.id, cursor) <= 0) continue;
       for (const link of findTrustedReportLinks([message], input.trustedAuthorIds)) {
+        const context = {
+          runId: input.runId,
+          channelId: input.channelId,
+          messageId: link.messageId,
+          authorId: link.authorId,
+          reportCode: link.reportCode,
+        };
         let retry: boolean;
         try {
           const result = await input.attach(input.runId, { ...link, channelId: input.channelId });
           retry = result.status === "FAILED" && result.retryable !== false;
-          if (result.status === "ATTACHED") {
-            console.log(`[discord-bot] linked Warcraft Logs report ${link.reportCode} to run ${input.runId}`);
-          }
+          const outcome =
+            result.status === "ATTACHED"
+              ? "attached"
+              : result.status === "ALREADY_ATTACHED"
+                ? "already-attached"
+                : retry
+                  ? "retry"
+                  : "failed";
+          console.log("[discord-bot] warcraft-logs link", { ...context, result: outcome });
         } catch (error) {
-          console.error(`[discord-bot] linking Warcraft Logs report ${link.reportCode} to run ${input.runId} failed`, error);
-          retry = true;
+          retry = !isPermanentRejection(error);
+          const code = error instanceof BotApiError ? error.code : undefined;
+          console.warn("[discord-bot] warcraft-logs link", { ...context, result: retry ? "retry" : "rejected", code });
         }
         // Keep the cursor before this message so it is read again next time.
         if (retry) return { cursor, reachedEnd: false, blocked: true };

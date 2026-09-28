@@ -117,7 +117,8 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
     autoAudit: autoAuditState({
       status: run.status,
       completedAt: run.completedAt,
-      hasReports: logs.reports.length > 0,
+      latestReportAttachedAt:
+        logs.reports.map((report) => report.attachedAt).sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null,
       audit,
     }),
     lastAttemptAt: audit?.lastAttemptAt ?? null,

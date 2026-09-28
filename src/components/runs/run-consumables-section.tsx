@@ -242,13 +242,16 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
           ) : null}
           {audit.autoAudit?.state === "SCHEDULED" ? (
             <p role="status">
-              Automatic analysis scheduled from {formatDateTime(audit.autoAudit.dueAt)} — gives late uploads time to
-              reach Warcraft Logs.
+              {audit.autoAudit.reason === "NEW_REPORT"
+                ? `A report was linked after this analysis — automatic re-analysis scheduled from ${formatDateTime(audit.autoAudit.dueAt)}.`
+                : `Automatic analysis scheduled from ${formatDateTime(audit.autoAudit.dueAt)} — gives late uploads time to reach Warcraft Logs.`}
             </p>
           ) : null}
           {audit.autoAudit?.state === "GAVE_UP" ? (
             <p role="status" className="text-warning">
-              Automatic analysis did not succeed after {audit.autoAudit.attempts} attempts — use Re-scan fights.
+              {audit.autoAudit.failure === "REPORT_NOT_FOUND" || audit.autoAudit.failure === "NOT_CONFIGURED"
+                ? "Automatic analysis stopped — retrying cannot fix this. Check the report, then use Re-scan fights."
+                : `Automatic analysis did not succeed after ${audit.autoAudit.attempts} attempts — use Re-scan fights.`}
             </p>
           ) : null}
           {audit.lastFailure ? (

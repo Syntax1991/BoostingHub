@@ -34,6 +34,8 @@ const RUN = "r9999996-9996-4996-8996-999999999996";
 const IN_PROGRESS_RUN = "r9999991-9991-4991-8991-999999999991";
 const OPEN_RUN = "r1111111-1111-4111-8111-111111111111";
 const REPORT = "FtwhWRvqjTbAx4NQ";
+/** A second report of the same Run (e.g. the log bot started a new one mid-run). */
+const REPORT_2 = "Kp3xZm9QwLr7Vt2N";
 const TOKEN = "bot-api-test-token-wcl-0123456789";
 const LOG_BOT = "111111111111111111";
 const STRANGER = "222222222222222222";
@@ -47,7 +49,7 @@ const REPORT_START = at("14:05").getTime();
 
 let roster: Array<Extract<ConsumableAuditParticipant, { source: "ATTENDANCE" }>> = [];
 
-function metadata(): WarcraftLogsReportMetadata {
+function metadata(code: string = REPORT): WarcraftLogsReportMetadata {
   const players = roster.map((_, i) => i + 1);
   const fight = (id: number, clock: string, kill = true): WarcraftLogsReportFight => {
     const startTime = at(clock).getTime() - REPORT_START;
@@ -63,12 +65,12 @@ function metadata(): WarcraftLogsReportMetadata {
     };
   };
   return {
-    code: REPORT,
+    code,
     title: "PhoenixStar run",
     startTime: REPORT_START,
     endTime: at("15:30").getTime(),
     regionSlug: "EU",
-    fights: [fight(1, "14:10", false), fight(2, "14:20")],
+    fights: code === REPORT_2 ? [fight(1, "14:50")] : [fight(1, "14:10", false), fight(2, "14:20")],
     actors: roster.map((p, i) => ({ id: i + 1, name: p.characterName, server: p.characterRealm, subType: "Mage" })),
     rankedCharacters: [],
   };
@@ -100,7 +102,7 @@ let createdSnapshotId: string | null = null;
 async function clear() {
   await orm.RunConsumableAudit.where((row) => row.runId.in([RUN, IN_PROGRESS_RUN])).deleteAndCount();
   await orm.RunWarcraftLogsReport.where((row) => row.runId.in([RUN, IN_PROGRESS_RUN])).deleteAndCount();
-  await orm.WarcraftLogsReport.where({ code: REPORT }).deleteAndCount();
+  await orm.WarcraftLogsReport.where((row) => row.code.in([REPORT, REPORT_2])).deleteAndCount();
 }
 
 beforeAll(async () => {
@@ -154,7 +156,7 @@ beforeEach(async () => {
   vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
   metadataSpy = vi
     .spyOn(warcraftLogsApiClient, "fetchReportMetadata")
-    .mockImplementation(async () => ({ status: "SUCCESS", report: metadata() }));
+    .mockImplementation(async (code) => ({ status: "SUCCESS", report: metadata(code) }));
   eventsSpy = vi.spyOn(warcraftLogsApiClient, "fetchReportConsumableEvents").mockImplementation(async (input) => ({
     status: "SUCCESS",
     events: {
@@ -277,7 +279,7 @@ describe("automatic Consumables Audit after completion", () => {
       { id: "44444444-4444-4444-8444-444444444444", name: "A", email: null, image: null, discordUserId: null, discordUsername: null, accountRole: "ADMIN", accountStatus: "ACTIVE" },
       RUN,
     );
-    expect(view.autoAudit).toEqual({ state: "SCHEDULED", dueAt: at("15:35").toISOString() });
+    expect(view.autoAudit).toEqual({ state: "SCHEDULED", dueAt: at("15:35").toISOString(), reason: "FIRST" });
 
     const pass = await runConsumableAutoAuditService.runDuePass(at("15:36"));
     expect(pass).toEqual({ status: "COMPLETED", due: 1, runs: [{ runId: RUN, status: "ANALYZED", fights: 2 }] });
@@ -294,25 +296,97 @@ describe("automatic Consumables Audit after completion", () => {
     expect(eventsSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("retries a failed attempt once, then gives up (no endless WCL traffic)", async () => {
+  it("retries a transient failure every 15 min, then gives up (no endless WCL traffic)", async () => {
     await botAttach();
+    metadataSpy.mockClear(); // the attach itself fetched the metadata once
     metadataSpy.mockImplementation(async () => ({ status: "TEMPORARY_FAILURE", message: "down" }));
 
-    expect((await runConsumableAutoAuditService.runDuePass(at("15:36"))).status).toBe("COMPLETED");
+    const first = await runConsumableAutoAuditService.runDuePass(at("15:36"));
+    expect(first).toMatchObject({ runs: [{ runId: RUN, status: "FAILED", failure: "WCL_UNAVAILABLE", retryable: true }] });
     // Retry only after the retry delay.
     expect(await runConsumableAutoAuditService.runDuePass(at("15:40"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
-    const second = await runConsumableAutoAuditService.runDuePass(at("15:52"));
-    expect(second).toMatchObject({ runs: [{ runId: RUN, status: "FAILED", failure: "WCL_UNAVAILABLE" }] });
-    expect(await runConsumableAutoAuditService.runDuePass(at("16:30"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+    for (const clock of ["15:52", "16:08", "16:24"]) {
+      expect(await runConsumableAutoAuditService.runDuePass(at(clock))).toMatchObject({
+        runs: [{ runId: RUN, status: "FAILED", failure: "WCL_UNAVAILABLE" }],
+      });
+    }
+    expect(await runConsumableAutoAuditService.runDuePass(at("17:30"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+    expect(metadataSpy).toHaveBeenCalledTimes(CONSUMABLE_AUTO_AUDIT_POLICY.maxAttempts);
 
     const audit = (await runConsumableAuditRepository.findByRunId(RUN))!;
     expect(audit).toMatchObject({ autoAttempts: CONSUMABLE_AUTO_AUDIT_POLICY.maxAttempts, analyzedAt: null });
     expect(
-      autoAuditState({ status: "COMPLETED", completedAt: at("15:20").toISOString(), hasReports: true, audit }),
-    ).toEqual({ state: "GAVE_UP", attempts: 2 });
+      autoAuditState({
+        status: "COMPLETED",
+        completedAt: at("15:20").toISOString(),
+        latestReportAttachedAt: at("14:06").toISOString(),
+        audit,
+      }),
+    ).toEqual({ state: "GAVE_UP", attempts: CONSUMABLE_AUTO_AUDIT_POLICY.maxAttempts, failure: "WCL_UNAVAILABLE" });
   });
 
-  it("skips Runs a manager already analyzed", async () => {
+  it("stops right away on a permanent failure (private or unknown report)", async () => {
+    await botAttach();
+    metadataSpy.mockClear(); // the attach itself fetched the metadata once
+    metadataSpy.mockImplementation(async () => ({ status: "NOT_FOUND" }));
+    expect(await runConsumableAutoAuditService.runDuePass(at("15:36"))).toMatchObject({
+      runs: [{ runId: RUN, status: "FAILED", failure: "REPORT_NOT_FOUND", retryable: false }],
+    });
+    expect(await runConsumableAutoAuditService.runDuePass(at("16:30"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+    expect(metadataSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits while no report is linked, and audits a report that arrives after completion", async () => {
+    // 15:20 COMPLETED, 15:35 due, but nothing linked yet: nothing happens and no attempt is spent.
+    expect(await runConsumableAutoAuditService.runDuePass(at("15:36"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+    expect(await runConsumableAuditRepository.findByRunId(RUN)).toBeNull();
+
+    // 15:45 the log bot's link is found (e.g. by the final pre-archive scan).
+    const attached = await runWarcraftLogsService.attachFromDiscord(
+      { runId: RUN, reportCode: REPORT, channelId: RUN_CHANNEL, messageId: MESSAGE, authorId: LOG_BOT },
+      at("15:45"),
+    );
+    expect(attached).toEqual({ status: "ATTACHED" });
+    expect(await runConsumableAutoAuditService.runDuePass(at("15:46"))).toEqual({
+      status: "COMPLETED",
+      due: 1,
+      runs: [{ runId: RUN, status: "ANALYZED", fights: 2 }],
+    });
+  });
+
+  it("re-audits when another report is linked after the analysis; the same report again is a no-op", async () => {
+    await botAttach();
+    await runConsumableAutoAuditService.runDuePass(at("15:36"));
+    expect(eventsSpy).toHaveBeenCalledTimes(1);
+
+    // Linking the same report again changes nothing.
+    await botAttach();
+    expect(await runConsumableAutoAuditService.runDuePass(at("15:59"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+
+    // 16:00 a second report appears, after the 15:36 analysis.
+    await runWarcraftLogsService.attachFromDiscord(
+      { runId: RUN, reportCode: REPORT_2, channelId: RUN_CHANNEL, messageId: "777777777777777777", authorId: LOG_BOT },
+      at("16:00"),
+    );
+    const scheduled = autoAuditState({
+      status: "COMPLETED",
+      completedAt: at("15:20").toISOString(),
+      latestReportAttachedAt: at("16:00").toISOString(),
+      audit: (await runConsumableAuditRepository.findByRunId(RUN))!,
+    });
+    expect(scheduled).toEqual({ state: "SCHEDULED", dueAt: at("15:51").toISOString(), reason: "NEW_REPORT" });
+
+    const pass = await runConsumableAutoAuditService.runDuePass(at("16:01"));
+    expect(pass).toEqual({ status: "COMPLETED", due: 1, runs: [{ runId: RUN, status: "ANALYZED", fights: 3 }] });
+    const audit = (await runConsumableAuditRepository.findByRunId(RUN))!;
+    expect(audit).toMatchObject({ autoAnalyzed: true, autoAttempts: 1, lastFailure: null });
+    const view = await runConsumableAuditService.getAuditView({ id: "44444444-4444-4444-8444-444444444444", name: "A", email: null, image: null, discordUserId: null, discordUsername: null, accountRole: "ADMIN", accountStatus: "ACTIVE" }, RUN);
+    expect(view.stale).toBe(false);
+    expect(view.snapshot?.fights.map((fight) => fight.reportCode).sort()).toEqual([REPORT, REPORT, REPORT_2].sort());
+    expect(await runConsumableAutoAuditService.runDuePass(at("17:00"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+  });
+
+  it("skips Runs a manager already analyzed (while no newer report is linked)", async () => {
     await botAttach();
     await runConsumableAutoAuditService.runDuePass(at("15:36"));
     await orm.RunConsumableAudit.where({ runId: RUN }).update({ autoAttempts: 0, autoAnalyzed: false });
@@ -340,20 +414,61 @@ describe("automatic Consumables Audit after completion", () => {
 });
 
 describe("autoAuditState", () => {
-  const base = { status: "COMPLETED", completedAt: at("15:20").toISOString(), hasReports: true, audit: null };
-  it("applies only to completed Runs with a report, a completion time and no analysis", () => {
-    expect(autoAuditState(base)).toEqual({ state: "SCHEDULED", dueAt: at("15:35").toISOString() });
+  const base = {
+    status: "COMPLETED",
+    completedAt: at("15:20").toISOString(),
+    latestReportAttachedAt: at("14:06").toISOString(),
+    audit: null,
+  };
+  type Failure = "WCL_UNAVAILABLE" | "REPORT_NOT_FOUND" | "NO_RELEVANT_FIGHTS" | null;
+  const audit = (
+    overrides: Partial<{ analyzedAt: string | null; autoAttempts: number; lastAttemptAt: string; lastFailure: Failure }> = {},
+  ) => ({
+    analyzedAt: null,
+    autoAttempts: 1,
+    lastAttemptAt: at("15:36").toISOString(),
+    lastFailure: null,
+    ...overrides,
+  });
+
+  it("applies only to completed Runs with a report, a completion time and no covering analysis", () => {
+    expect(autoAuditState(base)).toEqual({ state: "SCHEDULED", dueAt: at("15:35").toISOString(), reason: "FIRST" });
     expect(autoAuditState({ ...base, status: "IN_PROGRESS" })).toBeNull();
     expect(autoAuditState({ ...base, completedAt: null })).toBeNull();
-    expect(autoAuditState({ ...base, hasReports: false })).toBeNull();
+    expect(autoAuditState({ ...base, latestReportAttachedAt: null })).toBeNull();
+    expect(autoAuditState({ ...base, audit: audit({ analyzedAt: at("15:36").toISOString() }) })).toBeNull();
+    // Beyond the lookback window nothing is scheduled any more.
+    expect(autoAuditState({ ...base, now: new Date(at("15:20").getTime() + 4 * 86_400_000) })).toBeNull();
+  });
+
+  it("a report linked after the analysis schedules a re-analysis, spaced from the last attempt", () => {
     expect(
       autoAuditState({
         ...base,
-        audit: { analyzedAt: at("15:36").toISOString(), autoAttempts: 1, lastAttemptAt: at("15:36").toISOString() },
+        latestReportAttachedAt: at("15:40").toISOString(),
+        audit: audit({ analyzedAt: at("15:36").toISOString(), autoAttempts: 0 }),
       }),
-    ).toBeNull();
-    // Beyond the lookback window nothing is scheduled any more.
-    expect(autoAuditState({ ...base, now: new Date(at("15:20").getTime() + 4 * 86_400_000) })).toBeNull();
+    ).toEqual({ state: "SCHEDULED", dueAt: at("15:51").toISOString(), reason: "NEW_REPORT" });
+  });
+
+  it("retries transient failures up to the attempt budget; permanent ones stop at once", () => {
+    expect(
+      autoAuditState({ ...base, audit: audit({ lastFailure: "NO_RELEVANT_FIGHTS", autoAttempts: 3 }) }),
+    ).toMatchObject({ state: "SCHEDULED" });
+    expect(autoAuditState({ ...base, audit: audit({ lastFailure: "WCL_UNAVAILABLE", autoAttempts: 4 }) })).toEqual({
+      state: "GAVE_UP",
+      attempts: 4,
+      failure: "WCL_UNAVAILABLE",
+    });
+    expect(autoAuditState({ ...base, audit: audit({ lastFailure: "REPORT_NOT_FOUND", autoAttempts: 1 }) })).toEqual({
+      state: "GAVE_UP",
+      attempts: 1,
+      failure: "REPORT_NOT_FOUND",
+    });
+    // A manager's own failed attempt (no automatic attempt yet) never blocks the first automatic one.
+    expect(
+      autoAuditState({ ...base, audit: audit({ lastFailure: "REPORT_NOT_FOUND", autoAttempts: 0 }) }),
+    ).toMatchObject({ state: "SCHEDULED" });
   });
 });
 
@@ -509,6 +624,39 @@ describe("manual fallback converges with the Discord path", () => {
     await runConsumableAuditService.analyze(admin, { runId: RUN }, () => at("15:41"), { skipCooldown: true });
     // Manually analyzed: the automatic audit leaves it alone.
     expect(await runConsumableAutoAuditService.runDuePass(at("15:50"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });
+  });
+
+  it("never replaces a manually linked report: the same link is a no-op, another one is added alongside", async () => {
+    await runWarcraftLogsService.attachReport(admin, { runId: RUN, reportCode: REPORT }, at("15:40"));
+    await runConsumableAuditService.analyze(admin, { runId: RUN }, () => at("15:41"), { skipCooldown: true });
+    const analyzed = (await runConsumableAuditRepository.findByRunId(RUN))!;
+
+    // The log bot posts the report the manager already linked.
+    const same = await runWarcraftLogsService.attachFromDiscord(
+      { runId: RUN, reportCode: REPORT, channelId: RUN_CHANNEL, messageId: MESSAGE, authorId: LOG_BOT },
+      at("15:45"),
+    );
+    expect(same).toEqual({ status: "ALREADY_ATTACHED" });
+    expect((await runWarcraftLogsRepository.listAssociations(RUN)).map((row) => [row.report.code, row.source])).toEqual([
+      [REPORT, "MANUAL"],
+    ]);
+    expect(await runConsumableAuditRepository.findByRunId(RUN)).toEqual(analyzed);
+
+    // A different report is added next to it; the manual one and its fight assignment stay untouched.
+    const other = await runWarcraftLogsService.attachFromDiscord(
+      { runId: RUN, reportCode: REPORT_2, channelId: RUN_CHANNEL, messageId: "777777777777777777", authorId: LOG_BOT },
+      at("15:46"),
+    );
+    expect(other).toEqual({ status: "ATTACHED" });
+    const associations = await runWarcraftLogsRepository.listAssociations(RUN);
+    expect(associations.map((row) => [row.report.code, row.source]).sort()).toEqual(
+      [
+        [REPORT, "MANUAL"],
+        [REPORT_2, "DISCORD_BOT"],
+      ].sort(),
+    );
+    const fights = await runWarcraftLogsRepository.listRunFights(RUN);
+    expect(fights.filter((row) => row.status === "ASSIGNED").map((row) => row.reportCode)).toEqual([REPORT, REPORT]);
   });
 
   it("works without the bot at all, and a USER can use none of it", async () => {

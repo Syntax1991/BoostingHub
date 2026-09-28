@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BotApiError } from "@/discord-bot/bot-api-client";
 import {
   WCL_AUTO_AUDIT_INTERVAL_MS,
   WCL_CHANNEL_SCAN_INTERVAL_MS,
@@ -138,7 +139,7 @@ describe("scanChannelFromCursor", () => {
   });
 
   it("treats a Bot API transport error like a retryable failure", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const channel = fakeChannel(history(5, 2));
     const result = await scanChannelFromCursor({
       runId: "run-1",
@@ -152,6 +153,36 @@ describe("scanChannelFromCursor", () => {
       maxPages: 5,
     });
     expect(result).toEqual({ cursor: "1001", reachedEnd: false, blocked: true });
+  });
+
+  it("moves on past a permanent Bot API rejection (e.g. no longer this Run's channel), but retries 401/5xx", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const scan = (error: Error) =>
+      scanChannelFromCursor({
+        runId: "run-1",
+        channelId: "chan-1",
+        cursor: "999",
+        trustedAuthorIds: trusted,
+        fetchPage: fakeChannel(history(5, 2)).fetchPage,
+        attach: vi.fn(async () => {
+          throw error;
+        }),
+        maxPages: 5,
+      });
+    for (const status of [403, 404, 409]) {
+      expect(await scan(new BotApiError(status, "NOT_AUTHORIZED", "refused"))).toEqual({
+        cursor: "1004",
+        reachedEnd: true,
+        blocked: false,
+      });
+    }
+    for (const status of [401, 429, 500]) {
+      expect(await scan(new BotApiError(status, "INTERNAL", "try later"))).toEqual({
+        cursor: "1001",
+        reachedEnd: false,
+        blocked: true,
+      });
+    }
   });
 
   it("moves on past a final (non-retryable) failure such as a private report", async () => {
