@@ -552,9 +552,11 @@ export const rosterService = {
       difficulty: run.difficulty,
       characters: boosterCharacters,
     });
+    // Reserved / Committed elsewhere: only other Runs in this Run's raid ID.
     const runCommitmentsByCharacter = await getRunCommitmentsForCharacters({
-      characterIds: boosterCharacters.map((character) => character.id),
+      characters: boosterCharacters,
       excludeRunId: run.id,
+      targetScheduledStartAt: run.scheduledStartAt,
     });
 
     const wclBySignup = await resolveRosterWclPerformance({

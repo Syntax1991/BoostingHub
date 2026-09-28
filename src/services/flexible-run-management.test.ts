@@ -15,6 +15,20 @@ import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 
+/** Commitments of one Character as seen from a Run in the same raid ID as `runId` (excluding `excludeRunId`). */
+async function commitmentsInRaidIdOf(runId: string, characterId: string, excludeRunId: string) {
+  const run = (await orm.Run.where({ id: runId }).first()) as { scheduledStartAt: string };
+  const character = (await orm.Character.where({ id: characterId }).first()) as { region: "EU" | "US" };
+  return (
+    await getRunCommitmentsForCharacters({
+      characters: [{ id: characterId, region: character.region }],
+      excludeRunId,
+      targetScheduledStartAt: new Date(run.scheduledStartAt).toISOString(),
+    })
+  ).get(characterId);
+}
+
+
 /**
  * Flexible pre-start Run management: Run edits until Start (signup history
  * never locks), roster acknowledgement (runChangedSinceAck), Save / Update /
@@ -606,14 +620,14 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     const other = await createOpenRun("HEROIC", lead);
     const version = (await view(runId)).roster.version;
     await rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "HEALER" });
-    const reserved = (await getRunCommitmentsForCharacters({ characterIds: [bChar], excludeRunId: other })).get(bChar);
+    const reserved = (await commitmentsInRaidIdOf(runId, bChar, other));
     expect(reserved?.find((row) => row.runId === runId)?.state).toBe("RESERVED");
     const draft = (await view(runId)).boosters.filter((row) => row.draftSelected).map((row) => ({ signupId: row.id, selectedRole: row.selectedRole }));
     await update(runId, draft);
-    const committed = (await getRunCommitmentsForCharacters({ characterIds: [bChar], excludeRunId: other })).get(bChar);
+    const committed = (await commitmentsInRaidIdOf(runId, bChar, other));
     expect(committed?.find((row) => row.runId === runId)?.state).toBe("COMMITTED");
     await repost(runId);
-    expect((await getRunCommitmentsForCharacters({ characterIds: [bChar], excludeRunId: other })).get(bChar)).toEqual(committed);
+    expect((await commitmentsInRaidIdOf(runId, bChar, other))).toEqual(committed);
   });
 });
 

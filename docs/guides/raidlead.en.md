@@ -86,7 +86,7 @@ If there are composition warnings, you have to tick the acknowledge checkboxes b
 Notes:
 
 - At most **one** selected **BOOSTER** per user; lootbuddies can be selected in addition.
-- "Committed elsewhere" shows other BoostingHub commitments — schedule conflicts (< 2 h between start times) block the selection.
+- "Committed elsewhere" / "Reserved elsewhere" show the player's other Runs in the same raid ID (weekly reset) — schedule conflicts (< 2 h between start times) block the selection, regardless of the raid ID.
 
 ---
 

@@ -1,8 +1,9 @@
-import type { RaidDifficulty, RunStatus, SignupStatus } from "@/models/enums";
+import type { RaidDifficulty, RunStatus, SignupStatus, WowRegion } from "@/models/enums";
 import {
   signupRepository,
   type CharacterReservationCommitmentRow,
 } from "@/repositories/signup.repository";
+import { lockoutService } from "@/services/lockout.service";
 
 /**
  * Informational BoostingHub Run commitment for a Character on another Run.
@@ -50,27 +51,54 @@ export function projectCharacterRunCommitment(
 }
 
 /**
- * Batched informational commitments for Roster Builder Characters.
- * Excludes the target Run. Does not apply the 2h conflict window.
+ * A commitment is relevant to the target Run only inside the same raid ID:
+ * the Character's regional weekly reset containing the other Run's start
+ * equals the one containing the target Run's start (lockoutService — region-
+ * and DST-aware, never calendar weeks or the CURRENT/NEXT bucket).
+ */
+export function isSameRaidIdForCharacter(
+  region: WowRegion,
+  otherScheduledStartAt: string,
+  targetScheduledStartAt: string,
+): boolean {
+  return (
+    lockoutService.getResetIdentifierForRun(region, otherScheduledStartAt) ===
+    lockoutService.getResetIdentifierForRun(region, targetScheduledStartAt)
+  );
+}
+
+/**
+ * Batched informational commitments for Roster Builder Characters: other
+ * Runs in the target Run's raid ID (per Character region) where the Character
+ * is reserved or committed. One repository read for all Characters. Excludes
+ * the target Run. Independent of the <2h schedule conflict (the blocker),
+ * which may still apply across a reset boundary.
  */
 export async function getRunCommitmentsForCharacters(input: {
-  characterIds: string[];
+  characters: Array<{ id: string; region: WowRegion }>;
   excludeRunId: string;
+  targetScheduledStartAt: string;
 }): Promise<Map<string, CharacterRunCommitment[]>> {
   const result = new Map<string, CharacterRunCommitment[]>();
-  for (const characterId of input.characterIds) {
-    result.set(characterId, []);
+  const regionByCharacter = new Map<string, WowRegion>();
+  for (const character of input.characters) {
+    result.set(character.id, []);
+    regionByCharacter.set(character.id, character.region);
   }
-  if (input.characterIds.length === 0) {
+  if (input.characters.length === 0) {
     return result;
   }
 
   const rows = await signupRepository.listReservingCommitmentsByCharacterIds({
-    characterIds: input.characterIds,
+    characterIds: [...regionByCharacter.keys()],
     excludeRunId: input.excludeRunId,
   });
 
   for (const row of rows) {
+    const region = regionByCharacter.get(row.characterId);
+    if (!region || !isSameRaidIdForCharacter(region, row.run.scheduledStartAt, input.targetScheduledStartAt)) {
+      continue;
+    }
     const projected = projectCharacterRunCommitment(row);
     if (!projected) continue;
     const list = result.get(row.characterId) ?? [];

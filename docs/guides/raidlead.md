@@ -86,7 +86,7 @@ Bei Composition-Warnungen musst du das Acknowledge-Checkboxen setzen, bevor Publ
 Hinweise:
 
 - Pro User höchstens **ein** ausgewählter **BOOSTER**; Lootbuddies dürfen zusätzlich ausgewählt werden.
-- „Committed elsewhere“ zeigt andere BoostingHub-Commitments — Schedule-Konflikte (< 2 h Startabstand) blocken die Auswahl.
+- „Committed elsewhere“ / „Reserved elsewhere“ zeigen die anderen Runs des Spielers in derselben Raid-ID (Weekly Reset) — Schedule-Konflikte (< 2 h Startabstand) blocken die Auswahl, unabhängig von der Raid-ID.
 
 ---
 

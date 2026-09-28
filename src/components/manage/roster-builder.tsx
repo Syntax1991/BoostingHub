@@ -1037,7 +1037,9 @@ function SignupRowCard({
             <div className={`mt-1 space-y-1 text-xs text-muted ${rowPointer}`}>
               {committed.length > 0 ? (
                 <div>
-                  <span className="font-medium text-muted">Committed elsewhere</span>
+                  <span className="font-medium text-muted" title="Selected on another Run in this raid ID">
+                    Committed elsewhere
+                  </span>
                   <ul className="mt-0.5 space-y-0.5">
                     {committed.map((item) => (
                       <li key={`committed-${item.runId}`}>
@@ -1052,7 +1054,9 @@ function SignupRowCard({
               ) : null}
               {reserved.length > 0 ? (
                 <div>
-                  <span className="font-medium text-muted">Reserved elsewhere</span>
+                  <span className="font-medium text-muted" title="Draft-selected on another Run in this raid ID">
+                    Reserved elsewhere
+                  </span>
                   <ul className="mt-0.5 space-y-0.5">
                     {reserved.map((item) => (
                       <li key={`reserved-${item.runId}`}>
