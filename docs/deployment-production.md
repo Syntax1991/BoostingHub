@@ -341,8 +341,9 @@ completed (see `docs/features/run-consumables-audit.md`). It is off until config
    for apps without it, so the log-bot links (and the text of the existing archive
    transcripts) are otherwise invisible. Bots in fewer than 100 servers only need
    the toggle. The bot's gateway intents stay unchanged (the scan is REST-only).
-   Checked 2026-09: neither the production app (`1546909139504988161`) nor the
-   dev app (`1549032531439919124`) had it enabled (`flags` without bit 18/19).
+   Verify on the application the production bot actually uses (its `flags` must
+   include bit 18 or 19). Checked 2026-09 on the apps in use at the time: not
+   enabled — re-check after any switch to a new Discord application.
 4. Restart the web app, then the bot. The bot needs **View Channel** and
    **Read Message History** in Run channels (already required for transcripts).
 
