@@ -128,11 +128,12 @@ describe("buildArchiveTranscriptHtml — Run archive regression", () => {
     });
     expect(html).toMatchInlineSnapshot(`
       "<Server-Info>
-          Server: Guild <S> (g1)
+          Server: Guild &lt;S&gt; (g1)
           Channel: closed-sat-2200 (c1)
           Messages: 2
           Attachments Saved: 0
           Attachments Skipped: 0 (due maximum file size limits.)
+          Message Content: AVAILABLE
           
       <User-Info>
           1 - lead#0 (u2)
@@ -149,7 +150,12 @@ describe("buildArchiveTranscriptHtml — Run archive regression", () => {
       .content{white-space:pre-wrap;word-break:break-word;line-height:1.375}
       .embed{margin-top:6px;padding:8px 12px;border-left:4px solid #57f287;background:#2b2d31;border-radius:0 4px 4px 0}
       .embed-title{font-weight:600;margin-bottom:4px}
+      .unavailable{color:#f0b232}
+      .extras{margin-top:4px;font-size:12px;color:#949ba4}
+      .edited{margin-left:6px;font-style:italic}
+      .notice{margin:0 0 12px;padding:8px 12px;border-left:4px solid #f0b232;background:#2b2d31;color:#f2f3f5}
       </style>
+      <meta name="manawyrm-message-content" content="AVAILABLE">
       <div class="transcript">
       <div class="message" data-id="m1">
         <div class="meta"><strong>Titan</strong> <span class="tag">titan#0</span> <span class="id">(u1)</span> <time>2026-09-12 20:00:00 UTC</time></div>

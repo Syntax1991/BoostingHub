@@ -18,6 +18,7 @@ import {
 } from "@/discord-bot/interactions/signup-flow";
 import { handleGuideCommand } from "@/discord-bot/commands/guide";
 import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
+import { probeMessageContentCapability } from "@/discord-bot/message-content";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 import { startWarcraftLogsAutoAuditLoop } from "@/discord-bot/warcraft-logs-links";
 
@@ -32,6 +33,8 @@ export function createBotClient(env: BotEnv): Client {
 
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[discord-bot] logged in as ${readyClient.user.tag}`);
+    // One-time health line: can the bot read other members' message text?
+    void probeMessageContentCapability(async () => (await readyClient.application.fetch()).flags?.bitfield ?? null);
     startSyncLoop(client, env, api);
     startWarcraftLogsAutoAuditLoop(api);
   });

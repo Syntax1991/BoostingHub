@@ -236,6 +236,59 @@ describe("scanChannelFromCursor", () => {
   });
 });
 
+describe("Warcraft Logs links and Discord Message Content access", () => {
+  const trusted = new Set([LOG_BOT]);
+  /** The log bot's post as REST returns it: with access, or with its restricted fields withheld. */
+  const logBotPost = (id: string, where: "text" | "embed", access: boolean): ScannableMessage =>
+    message({
+      id,
+      authorId: LOG_BOT,
+      content: access && where === "text" ? `Syntax_gg started a new report ${URL_A}` : "",
+      embeds: access && where === "embed" ? [{ title: "New report", url: URL_A, description: null, fields: [] }] : [],
+    });
+
+  it("visible text link and visible embed link from the trusted log bot are detected", () => {
+    expect(findTrustedReportLinks([logBotPost("1", "text", true)], trusted).map((l) => l.reportCode)).toEqual(["FtwhWRvqjTbAx4NQ"]);
+    expect(findTrustedReportLinks([logBotPost("2", "embed", true)], trusted).map((l) => l.reportCode)).toEqual(["FtwhWRvqjTbAx4NQ"]);
+  });
+
+  it("withheld content (no access) is no link — nothing is attached, the cursor moves past it, no retry", async () => {
+    const channel = fakeChannel([logBotPost("1001", "text", false), logBotPost("1002", "embed", false), message({ id: "1003" })]);
+    const attach = vi.fn(async () => ({ status: "ATTACHED" }));
+    const result = await scanChannelFromCursor({
+      runId: "run-1",
+      channelId: "chan-1",
+      cursor: "999",
+      trustedAuthorIds: trusted,
+      fetchPage: channel.fetchPage,
+      attach,
+      maxPages: 5,
+    });
+    expect(attach).not.toHaveBeenCalled();
+    expect(result).toEqual({ cursor: "1003", reachedEnd: true, blocked: false });
+  });
+
+  it("an untrusted author's visible link stays ignored", () => {
+    expect(findTrustedReportLinks([message({ id: "1", authorId: BOOSTER, content: URL_A })], trusted)).toEqual([]);
+  });
+
+  it("a retiring channel with withheld content finishes its final scan at once — archival is never held back", async () => {
+    const channel = fakeChannel(Array.from({ length: 250 }, (_, i) => logBotPost(String(1000 + i), "text", false)));
+    const saveCursor = vi.fn(async () => {});
+    const deferred = await scanRunChannelsForReports({
+      items: [{ runId: "run-9", channelId: "chan-9", scanWarcraftLogs: true, retireChannel: true, warcraftLogsScanCursor: "999" }],
+      trustedAuthorIds: [LOG_BOT],
+      fetchPage: channel.fetchPage,
+      attach: vi.fn(async () => ({ status: "ATTACHED" })),
+      saveCursor,
+      state: createReportScanState(),
+      now: 0,
+    });
+    expect(deferred).toEqual(new Set());
+    expect(saveCursor).toHaveBeenCalledWith("run-9", "chan-9", "1249");
+  });
+});
+
 describe("scanRunChannelsForReports", () => {
   it("throttles routine scans, saves the advanced cursor, and skips unflagged channels", async () => {
     const channel = fakeChannel(history(30, 12));

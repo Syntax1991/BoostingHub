@@ -36,8 +36,10 @@ import {
   buildArchiveTranscriptFilename,
   buildArchiveTranscriptHtml,
   summarizeTranscriptUsers,
+  transcriptMessageContent,
   type TranscriptMessage,
 } from "@/discord-bot/archive-transcript";
+import { getMessageContentStatus, type MessageContentStatus } from "@/discord-bot/message-content";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import {
   buildRaidboostAnnounce,
@@ -1288,8 +1290,14 @@ async function syncArchiveArtifacts(
   }
 
   let messages: TranscriptMessage[];
+  let messageContent: MessageContentStatus;
   try {
-    messages = (await fetchChannelTranscript(runChannel as TextChannel)).messages;
+    // Text Discord withholds (no Message Content access) is recorded as
+    // unavailable; the archive never waits for access that may never come.
+    ({ messages, messageContent } = await fetchChannelTranscript(runChannel as TextChannel, {
+      appUserId: client.user?.id ?? null,
+      messageContent: getMessageContentStatus(),
+    }));
   } catch (error) {
     if (isDiscordPermissionError(error)) {
       console.warn(
@@ -1310,7 +1318,14 @@ async function syncArchiveArtifacts(
     channelId: runChannelId,
     runId: item.runId,
     messages,
+    messageContent: messageContent.capability,
   });
+  const contentSummary = transcriptMessageContent(messages, messageContent.capability);
+  if (contentSummary.unavailable > 0) {
+    console.warn(
+      `[discord-bot] run ${item.runId} transcript: text of ${contentSummary.unavailable} message(s) withheld by Discord (Message Content access unavailable) — archived as "content unavailable"`,
+    );
+  }
   const filename = buildArchiveTranscriptFilename(channelName);
 
   if (alreadyPosted) {
@@ -1352,6 +1367,7 @@ async function syncArchiveArtifacts(
     channelName,
     channelId: runChannelId,
     messageCount: messages.length,
+    messageContent: contentSummary.state,
   });
   const file = new AttachmentBuilder(Buffer.from(html, "utf8"), { name: filename });
 
