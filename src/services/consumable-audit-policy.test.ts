@@ -4,6 +4,7 @@ import {
   DEATH_CONSUMABLE_LOOKBACK_SECONDS,
   evaluatePlayerConsumables,
   healthstoneApplicability,
+  summarizePlayedRole,
   type AuditFightFact,
   type AuditObservationFact,
   type AuditPlayerFact,
@@ -37,18 +38,21 @@ const combatant = (fightId: string, ms = 0): AuditObservationFact => ({
   kind: "COMBATANT",
   category: null,
   spellId: null,
+  specId: null,
 });
 const participant = (fightId: string, ms = 0): AuditObservationFact => ({
   ...at(fightId, ms),
   kind: "PARTICIPANT",
   category: null,
   spellId: null,
+  specId: null,
 });
 const flask = (fightId: string, ms = 0): AuditObservationFact => ({
   ...at(fightId, ms),
   kind: "AURA",
   category: "FLASK",
   spellId: FLASK_MAGISTERS,
+  specId: null,
 });
 /** Food buff at pull (recognized by name at extraction; any id). */
 const food = (fightId: string, ms = 0): AuditObservationFact => ({
@@ -56,12 +60,14 @@ const food = (fightId: string, ms = 0): AuditObservationFact => ({
   kind: "AURA",
   category: "FOOD",
   spellId: 1285644,
+  specId: null,
 });
 const cast = (fightId: string, ms: number, spellId: number, category: string): AuditObservationFact => ({
   ...at(fightId, ms),
   kind: "CAST",
   category,
   spellId,
+  specId: null,
 });
 const damagePot = (fightId: string, ms: number) => cast(fightId, ms, RECKLESSNESS, "DAMAGE_POTION");
 const manaPot = (fightId: string, ms: number) => cast(fightId, ms, LIGHTFUSED_MANA, "MANA_POTION");
@@ -72,19 +78,31 @@ const death = (fightId: string, ms: number): AuditObservationFact => ({
   kind: "DEATH",
   category: null,
   spellId: null,
+  specId: null,
 });
 
+/** Blizzard spec ids: Shadow / Holy Priest, Protection Warrior. */
+const SPEC = { SHADOW: 258, HOLY: 257, PROT_WARRIOR: 73 } as const;
+const PLAYED_SPEC: Record<CharacterRole, number> = { DPS: SPEC.SHADOW, HEALER: SPEC.HOLY, TANK: SPEC.PROT_WARRIOR };
+const withSpec = (row: AuditObservationFact, specId: number | null): AuditObservationFact => ({ ...row, specId });
+
+/**
+ * `role` is the role PLAYED in every snapshot (stamped as a matching spec on
+ * COMBATANT rows without one) and the roster role alike — roster and log agree.
+ */
 function player(role: CharacterRole | null, observations: AuditObservationFact[]): AuditPlayerFact {
   return {
     id: "p1",
     displayName: "Synlight",
     characterName: "Synlight",
     characterRealm: "Blackhand",
-    wowClass: "PRIEST",
-    role,
+    wowClass: role === "TANK" ? "WARRIOR" : "PRIEST",
+    rosterRole: role,
     matchStatus: "MATCHED",
     isExternal: false,
-    observations,
+    observations: observations.map((row) =>
+      row.kind === "COMBATANT" && row.specId == null && role ? withSpec(row, PLAYED_SPEC[role]) : row,
+    ),
     gear: [],
   };
 }
@@ -160,7 +178,7 @@ describe("combat potion role policy", () => {
     expect(missedSecond.combatPotion.uses).toHaveLength(2);
   });
 
-  it("is UNKNOWN (never a failure) when the roster role is unknown", () => {
+  it("is UNKNOWN (never a failure) when the played role is unknown", () => {
     const view = evaluatePlayerConsumables(player(null, [combatant("f1"), flask("f1"), food("f1")]), [F1]);
     expect(view.combatPotion.status).toBe("UNKNOWN");
     expect(view.warningCount).toBe(0);
@@ -433,8 +451,8 @@ describe("food, runes, weapon enhancement and gear readiness", () => {
   });
 
   describe("augment and Vantus runes are optional — information only", () => {
-    const augment = (fightId: string): AuditObservationFact => ({ ...at(fightId, 0), kind: "AURA", category: "AUGMENT_RUNE", spellId: 1234969 });
-    const vantus = (fightId: string): AuditObservationFact => ({ ...at(fightId, 0), kind: "AURA", category: "VANTUS_RUNE", spellId: 1303171 });
+    const augment = (fightId: string): AuditObservationFact => ({ ...at(fightId, 0), kind: "AURA", category: "AUGMENT_RUNE", spellId: 1234969, specId: null });
+    const vantus = (fightId: string): AuditObservationFact => ({ ...at(fightId, 0), kind: "AURA", category: "VANTUS_RUNE", spellId: 1303171, specId: null });
     /** Every required check passes; only the runes vary. */
     const compliant = (extra: AuditObservationFact[], fights = [F1]) =>
       evaluatePlayerConsumables(
@@ -509,5 +527,89 @@ describe("food, runes, weapon enhancement and gear readiness", () => {
     expect(view.gear.enchants.status).toBe("UNKNOWN");
     expect(view.gear.gems.status).toBe("UNKNOWN");
     expect(view.warningCount).toBe(0);
+  });
+});
+
+describe("played role — the role in the log, not the roster (Synlight: roster Healer, played DPS)", () => {
+  const F2 = fight({ id: "f2", startMs: 700_000, endMs: 1_300_000 });
+  const priest = (rosterRole: CharacterRole | null, observations: AuditObservationFact[]): AuditPlayerFact => ({
+    ...player(null, observations),
+    rosterRole,
+  });
+
+  it("A: roster Healer, played DPS → role DPS, a Mana Potion alone does not satisfy the DPS expectation", () => {
+    const view = evaluatePlayerConsumables(priest("HEALER", [withSpec(combatant("f1"), SPEC.SHADOW), manaPot("f1", 1_000)]), [F1]);
+    expect(view).toMatchObject({ rosterRole: "HEALER", playedRole: "DPS" });
+    expect(view.combatPotion).toMatchObject({ status: "WARNING", accepted: ["DAMAGE_POTION"], killFightsChecked: 1 });
+  });
+
+  it("B: roster DPS, played Healer → role Healer, a Mana Potion passes", () => {
+    const view = evaluatePlayerConsumables(priest("DPS", [withSpec(combatant("f1"), SPEC.HOLY), manaPot("f1", 1_000)]), [F1]);
+    expect(view).toMatchObject({ rosterRole: "DPS", playedRole: "HEALER" });
+    expect(view.combatPotion).toMatchObject({ status: "PASS", accepted: ["DAMAGE_POTION", "MANA_POTION"] });
+  });
+
+  it("C: roster Healer, no spec in the log → role UNKNOWN, no potion warning, other checks unchanged", () => {
+    const view = evaluatePlayerConsumables(priest("HEALER", [combatant("f1"), flask("f1"), food("f1")]), [F1]);
+    expect(view.playedRole).toBe("UNKNOWN");
+    expect(view.combatPotion).toMatchObject({ status: "UNKNOWN", killFightsChecked: 0, missing: [], accepted: [] });
+    expect(view.combatPotion.unknown.map((ref) => ref.fightId)).toEqual(["f1"]);
+    expect(view.warningCount).toBe(0);
+    expect(view.flask.status).toBe("PASS");
+  });
+
+  it("D: Healer in fight 1, DPS in fight 2 → MIXED, each kill judged with its own role", () => {
+    const observations = [
+      withSpec(combatant("f1"), SPEC.HOLY),
+      manaPot("f1", 1_000), // fine for a healer
+      withSpec(combatant("f2", 700_000), SPEC.SHADOW),
+      manaPot("f2", 701_000), // not a DPS combat potion
+    ];
+    const view = evaluatePlayerConsumables(priest("HEALER", observations), [F1, F2]);
+    expect(view.playedRole).toBe("MIXED");
+    expect(view.playedRoleByFight.map((row) => [row.fight.fightId, row.role])).toEqual([["f1", "HEALER"], ["f2", "DPS"]]);
+    expect(view.combatPotion.status).toBe("WARNING");
+    expect(view.combatPotion.missing.map((ref) => ref.fightId)).toEqual(["f2"]);
+    expect(view.combatPotion.acceptedByRole).toEqual({ HEALER: ["DAMAGE_POTION", "MANA_POTION"], DPS: ["DAMAGE_POTION"] });
+    // Collapsing MIXED to Healer would have passed both kills.
+    const fixed = evaluatePlayerConsumables(priest("HEALER", [...observations, damagePot("f2", 702_000)]), [F1, F2]);
+    expect(fixed.combatPotion.status).toBe("PASS");
+  });
+
+  it("E: roster and log agree → unchanged, no roster hint needed", () => {
+    const view = evaluatePlayerConsumables(player("DPS", [combatant("f1"), damagePot("f1", 1_000)]), [F1]);
+    expect(view).toMatchObject({ rosterRole: "DPS", playedRole: "DPS" });
+    expect(view.combatPotion.status).toBe("PASS");
+  });
+
+  it("F: a player not in the log keeps the log-data-unavailable semantics", () => {
+    const view = evaluatePlayerConsumables({ ...priest("HEALER", []), matchStatus: "NOT_IN_LOG" }, [F1]);
+    expect(view).toMatchObject({ hasLogData: false, playedRole: "UNKNOWN", rosterRole: "HEALER" });
+    expect(view.combatPotion.status).toBe("UNKNOWN");
+    expect(view.warningCount).toBe(0);
+  });
+
+  it("a kill with a spec and one without: only the known one is judged", () => {
+    const view = evaluatePlayerConsumables(
+      priest("HEALER", [withSpec(combatant("f1"), SPEC.SHADOW), damagePot("f1", 1_000), combatant("f2", 700_000)]),
+      [F1, F2],
+    );
+    expect(view.playedRole).toBe("DPS");
+    expect(view.combatPotion).toMatchObject({ status: "PASS", killFightsChecked: 1 });
+    expect(view.combatPotion.unknown.map((ref) => ref.fightId)).toEqual(["f2"]);
+  });
+
+  it("an unknown spec id or a spec of another class gives no role (never guessed)", () => {
+    const unknownSpec = evaluatePlayerConsumables(priest("HEALER", [withSpec(combatant("f1"), 999_999)]), [F1]);
+    expect(unknownSpec.playedRole).toBe("UNKNOWN");
+    const otherClass = evaluatePlayerConsumables(priest("HEALER", [withSpec(combatant("f1"), SPEC.PROT_WARRIOR)]), [F1]);
+    expect(otherClass.playedRole).toBe("UNKNOWN");
+  });
+
+  it("summarizes: agreeing fights → that role; disagreeing → MIXED; no evidence → UNKNOWN", () => {
+    expect(summarizePlayedRole(["DPS", null, "DPS"])).toBe("DPS");
+    expect(summarizePlayedRole(["TANK", "DPS"])).toBe("MIXED");
+    expect(summarizePlayedRole([null, null])).toBe("UNKNOWN");
+    expect(summarizePlayedRole([])).toBe("UNKNOWN");
   });
 });

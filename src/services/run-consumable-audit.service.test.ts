@@ -14,6 +14,7 @@ import { identityKey, type ConsumableAuditParticipant } from "@/services/consuma
 import { runConsumableAuditService } from "@/services/run-consumable-audit.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runWarcraftLogsService } from "@/services/run-warcraft-logs.service";
+import { knownSpecializationIds, specializationById } from "@/lib/wow-specializations";
 
 /**
  * Two seeded COMPLETED Runs with IDENTICAL RunRaidContent (Manaforge Omega,
@@ -607,6 +608,50 @@ describe("consumable facts per assigned fight", () => {
     } finally {
       await orm.RunExternalBooster.where({ id: EXTERNAL_ID }).deleteAndCount();
     }
+  });
+
+  it("shows and judges the role PLAYED in the log, not the roster role; an older snapshot asks for re-analysis", async () => {
+    // A booster whose class has a spec of a different role than their roster role
+    // (e.g. roster Healer, played Shadow) — found from the seeded data, not assumed.
+    const pick = inLogA
+      .map((p) => {
+        const spec = knownSpecializationIds()
+          .map((id) => ({ id, spec: specializationById(id)! }))
+          .find(({ spec }) => spec.wowClass === p.wowClass && spec.role !== p.role);
+        return spec && p.role ? { p, spec } : null;
+      })
+      .find(Boolean);
+    expect(pick).toBeTruthy();
+    const { p, spec } = pick!;
+    const actor = actorIdByKey.get(identityKey(p.characterName, p.characterRealm))!;
+    events = { ...events, combatants: events.combatants.map((row) => (row.sourceId === actor ? { ...row, specId: spec.id } : row)) };
+
+    await attachAndAnalyze(aelira, RUN_A);
+    const find = (view: Awaited<ReturnType<typeof runConsumableAuditService.getAuditView>>) =>
+      view.snapshot!.players.find((row) => identityKey(row.characterName!, row.characterRealm!) === identityKey(p.characterName, p.characterRealm))!;
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(view.factsOutdated).toBe(false);
+    const played = find(view);
+    expect(played).toMatchObject({ rosterRole: p.role, playedRole: spec.spec.role });
+    expect(played.combatPotion.killFightsChecked).toBeGreaterThan(0); // judged with the played role
+    // Everyone else had no spec in the fake log → UNKNOWN, never a potion warning.
+    const other = view.snapshot!.players.find((row) => row.hasLogData && row !== played)!;
+    expect(other.playedRole).toBe("UNKNOWN");
+    expect(other.combatPotion.status).toBe("UNKNOWN");
+
+    const audit = (await orm.RunConsumableAudit.where({ runId: RUN_A }).first()) as { id: string; factsVersion: number };
+    expect(audit.factsVersion).toBe(2);
+    // The roster role is untouched: attendance / roster rows are never rewritten from the log.
+    expect((await runConsumableAuditRepository.listParticipants(RUN_A)).find((row) => row.source === "ATTENDANCE" && row.characterName === p.characterName)?.role).toBe(p.role);
+
+    // A snapshot from before played roles: never reinterpreted — flagged for re-analysis.
+    await orm.RunConsumableAudit.where({ id: audit.id }).update({ factsVersion: 1 });
+    const playerIds = ((await orm.RunConsumableAuditPlayer.where({ auditId: audit.id }).all()) as Array<{ id: string }>).map((row) => row.id);
+    await orm.RunConsumableAuditObservation.where((row) => row.playerId.in(playerIds)).updateAll({ specId: null });
+    const outdated = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(outdated.factsOutdated).toBe(true);
+    expect(find(outdated)).toMatchObject({ playedRole: "UNKNOWN", rosterRole: p.role });
+    expect(find(outdated).combatPotion.status).toBe("UNKNOWN");
   });
 
   it("uses one metadata request per attach and one batched events request per report", async () => {

@@ -20,6 +20,7 @@ import {
   type RunWarcraftLogsFightRecord,
 } from "@/repositories/run-warcraft-logs.repository";
 import {
+  CONSUMABLE_AUDIT_FACTS_VERSION,
   CONSUMABLE_PRE_PULL_WINDOW_MS,
   extractConsumableAudit,
   mergeExtractedAudits,
@@ -69,6 +70,11 @@ export type RunConsumableAuditView = {
   lastFailure: ConsumableAuditFailureCode | null;
   /** The ASSIGNED fights changed since the snapshot was taken — re-analyze. */
   stale: boolean;
+  /**
+   * The snapshot predates played roles (CONSUMABLE_AUDIT_FACTS_VERSION): roles
+   * show as unknown and no role-based expectation applies until re-analyzed.
+   */
+  factsOutdated: boolean;
   snapshot: {
     fights: RunConsumableAuditFightView[];
     players: PlayerConsumableAudit[];
@@ -124,6 +130,7 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
     lastAttemptAt: audit?.lastAttemptAt ?? null,
     lastFailure: audit?.lastFailure ?? null,
     stale: false,
+    factsOutdated: false,
     snapshot: null,
   };
   if (!audit?.analyzedAt) return base;
@@ -147,6 +154,7 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
   return {
     ...base,
     stale,
+    factsOutdated: audit.factsVersion < CONSUMABLE_AUDIT_FACTS_VERSION,
     snapshot: {
       fights: fights.map((fight) => ({
         ...fightRefs.get(fight.id)!,

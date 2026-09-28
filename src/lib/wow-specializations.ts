@@ -147,6 +147,69 @@ export function roleForSpecialization(wowClass: WowClass, specialization: string
 }
 
 /**
+ * Blizzard specialization ids (ChrSpecialization.ID — what Warcraft Logs
+ * reports as CombatantInfo `specID`) → class + catalog name. The role comes
+ * from WOW_SPECIALIZATIONS, so there is one role source. Checked against the
+ * game's ChrSpecialization table (40 retail specs, incl. Devourer = 1480).
+ */
+const WOW_SPECIALIZATION_IDS: Record<number, { wowClass: WowClass; name: string }> = {
+  250: { wowClass: "DEATH_KNIGHT", name: "Blood" },
+  251: { wowClass: "DEATH_KNIGHT", name: "Frost" },
+  252: { wowClass: "DEATH_KNIGHT", name: "Unholy" },
+  577: { wowClass: "DEMON_HUNTER", name: "Havoc" },
+  581: { wowClass: "DEMON_HUNTER", name: "Vengeance" },
+  1480: { wowClass: "DEMON_HUNTER", name: "Devourer" },
+  102: { wowClass: "DRUID", name: "Balance" },
+  103: { wowClass: "DRUID", name: "Feral" },
+  104: { wowClass: "DRUID", name: "Guardian" },
+  105: { wowClass: "DRUID", name: "Restoration" },
+  1467: { wowClass: "EVOKER", name: "Devastation" },
+  1468: { wowClass: "EVOKER", name: "Preservation" },
+  1473: { wowClass: "EVOKER", name: "Augmentation" },
+  253: { wowClass: "HUNTER", name: "Beast Mastery" },
+  254: { wowClass: "HUNTER", name: "Marksmanship" },
+  255: { wowClass: "HUNTER", name: "Survival" },
+  62: { wowClass: "MAGE", name: "Arcane" },
+  63: { wowClass: "MAGE", name: "Fire" },
+  64: { wowClass: "MAGE", name: "Frost" },
+  268: { wowClass: "MONK", name: "Brewmaster" },
+  269: { wowClass: "MONK", name: "Windwalker" },
+  270: { wowClass: "MONK", name: "Mistweaver" },
+  65: { wowClass: "PALADIN", name: "Holy" },
+  66: { wowClass: "PALADIN", name: "Protection" },
+  70: { wowClass: "PALADIN", name: "Retribution" },
+  256: { wowClass: "PRIEST", name: "Discipline" },
+  257: { wowClass: "PRIEST", name: "Holy" },
+  258: { wowClass: "PRIEST", name: "Shadow" },
+  259: { wowClass: "ROGUE", name: "Assassination" },
+  260: { wowClass: "ROGUE", name: "Outlaw" },
+  261: { wowClass: "ROGUE", name: "Subtlety" },
+  262: { wowClass: "SHAMAN", name: "Elemental" },
+  263: { wowClass: "SHAMAN", name: "Enhancement" },
+  264: { wowClass: "SHAMAN", name: "Restoration" },
+  265: { wowClass: "WARLOCK", name: "Affliction" },
+  266: { wowClass: "WARLOCK", name: "Demonology" },
+  267: { wowClass: "WARLOCK", name: "Destruction" },
+  71: { wowClass: "WARRIOR", name: "Arms" },
+  72: { wowClass: "WARRIOR", name: "Fury" },
+  73: { wowClass: "WARRIOR", name: "Protection" },
+};
+
+/** Null for an unknown id (e.g. a spec added after this catalog). */
+export function specializationById(
+  specId: number,
+): { wowClass: WowClass; name: string; role: CharacterRole } | null {
+  const entry = WOW_SPECIALIZATION_IDS[specId];
+  const role = entry ? roleForSpecialization(entry.wowClass, entry.name) : null;
+  return entry && role ? { ...entry, role } : null;
+}
+
+/** Every catalogued specialization id (tests / diagnostics). */
+export function knownSpecializationIds(): number[] {
+  return Object.keys(WOW_SPECIALIZATION_IDS).map(Number);
+}
+
+/**
  * The one authoritative class/spec check: used both by plain character
  * writes and by the Blizzard import/link flow so a specialization can never
  * persist against a class it doesn't belong to via either path.
