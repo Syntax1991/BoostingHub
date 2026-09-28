@@ -11,6 +11,7 @@ import {
   CONSUMABLE_AUDIT_FAILURE_LABELS,
   CONSUMABLE_AUDIT_MATCH_LABELS,
   auraCheckText,
+  emptySocketText,
   enchantCheckText,
   formatFightClock,
   gemCheckText,
@@ -159,7 +160,7 @@ function PlayerDetails({
         )}
         {player.weaponEnhancement.missing.length > 0 ? (
           <p className="mt-1 text-warning">
-            No oil, stone, class imbue or Runeforge:{" "}
+            {player.weaponEnhancement.expected === "RUNEFORGE" ? "Missing Runeforge" : "No oil, stone or class imbue"}:{" "}
             {player.weaponEnhancement.missing
               .map((row) => `${fightLabel(row.fight, contentLabels)} (${row.slots.join(", ")})`)
               .join(", ")}
@@ -287,6 +288,11 @@ function GearReadinessSection({
           {enchants.missing.length > 0 ? (
             <p className="text-warning">Missing enchant: {enchants.missing.map((row) => row.slotLabel).join(", ")}</p>
           ) : null}
+          {enchants.checkedAsWeapon.length > 0 ? (
+            <p className="text-muted">
+              {enchants.checkedAsWeapon.map((row) => row.slotLabel).join(", ")}: Runeforge — see Weapon
+            </p>
+          ) : null}
           {enchants.unknown.length > 0 ? (
             <p className="text-muted">
               Not judged: {enchants.unknown.map((row) => row.slotLabel).join(", ")} (not known to be a weapon)
@@ -295,14 +301,14 @@ function GearReadinessSection({
           <p className="mt-1">Gems {gemCheckText(gems)}</p>
           {gems.empty.length > 0 ? (
             <p className="text-warning">
-              Empty socket:{" "}
-              {gems.empty
-                .map((row) => (row.sockets > 1 ? `${row.slotLabel} (${row.emptySockets} of ${row.sockets})` : row.slotLabel))
-                .join(", ")}
+              Empty socket: {gems.empty.map(emptySocketText).join(", ")}
             </p>
           ) : null}
           {gems.unknown.length > 0 ? (
-            <p className="text-muted">Sockets unknown: {gems.unknown.map((row) => row.slotLabel).join(", ")}</p>
+            <p className="text-muted">
+              Socket count unavailable: {gems.unknown.map((row) => row.slotLabel).join(", ")} (item newer than the
+              socket data, or gems it cannot explain)
+            </p>
           ) : null}
           <p className="mt-1 text-muted">
             Checks that an enchant is present and every existing socket holds a gem — not which one is best.
@@ -522,8 +528,10 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                                 status={player.gear.gems.status}
                                 title={
                                   player.gear.gems.empty.length > 0
-                                    ? `Empty: ${player.gear.gems.empty.map((row) => row.slotLabel).join(", ")}`
-                                    : undefined
+                                    ? `Empty socket: ${player.gear.gems.empty.map(emptySocketText).join(", ")}`
+                                    : player.gear.gems.unknown.length > 0
+                                      ? "Socket count unavailable"
+                                      : undefined
                                 }
                               >
                                 {gemCheckText(player.gear.gems)}

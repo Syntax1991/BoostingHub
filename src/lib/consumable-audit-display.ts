@@ -50,11 +50,22 @@ export function auraCheckText(check: { status: string; fightsWith: number; fight
   return `${check.fightsWith}/${check.fightsChecked}`;
 }
 
-/** Weapon column: what satisfied it ("Oil", "Shaman imbue", "Runeforge"), "Missing", "N/A" or "Unknown". */
-export function weaponEnhancementText(check: { status: string; labels: readonly string[] }): string {
+/**
+ * Weapon column: what satisfied it ("Oil", "Shaman imbue", "Runeforge"),
+ * "Missing" / "Missing Runeforge" (a Death Knight is never told an oil is missing),
+ * "N/A" or "Unknown".
+ */
+export function weaponEnhancementText(check: {
+  status: string;
+  expected: "RUNEFORGE" | "TEMPORARY";
+  labels: readonly string[];
+}): string {
   if (check.status === "UNKNOWN") return "Unknown";
   if (check.status === "NA") return "N/A";
-  if (check.status === "WARNING") return check.labels.length > 0 ? `Missing · ${check.labels.join(", ")}` : "Missing";
+  if (check.status === "WARNING") {
+    const missing = check.expected === "RUNEFORGE" ? "Missing Runeforge" : "Missing";
+    return check.labels.length > 0 ? `${missing} · ${check.labels.join(", ")}` : missing;
+  }
   return check.labels.join(", ") || "Present";
 }
 
@@ -65,9 +76,23 @@ export function enchantCheckText(check: { status: string; enchanted: number; req
   return `${check.enchanted}/${check.required}`;
 }
 
-/** Gems column: "3/3", "2/3", "0 sockets" or "?". */
-export function gemCheckText(check: { status: string; filled: number; sockets: number; empty: readonly unknown[] }): string {
+/**
+ * Gems column, from the actual items' sockets: "3/3", "2/3", "0 sockets", "?"
+ * (socket count unavailable), or "2/2 + ?" when some items are unknown.
+ */
+export function gemCheckText(check: {
+  status: string;
+  filled: number;
+  sockets: number;
+  empty: readonly unknown[];
+  unknown: readonly unknown[];
+}): string {
   if (check.status === "NA") return "0 sockets";
-  if (check.status === "UNKNOWN" && check.sockets === 0) return "?";
-  return `${check.filled}/${check.sockets}`;
+  if (check.sockets === 0) return "?";
+  return check.unknown.length > 0 ? `${check.filled}/${check.sockets} + ?` : `${check.filled}/${check.sockets}`;
+}
+
+/** "Neck" for a single empty socket; "Neck — 2 of 2 sockets empty" when the item has several. */
+export function emptySocketText(row: { slotLabel: string; emptySockets: number; sockets: number }): string {
+  return row.sockets > 1 ? `${row.slotLabel} — ${row.emptySockets} of ${row.sockets} sockets empty` : row.slotLabel;
 }

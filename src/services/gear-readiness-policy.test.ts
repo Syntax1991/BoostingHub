@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GEAR_SLOT } from "@/lib/wow-gear-catalog";
-import { itemSocketCount } from "@/lib/wow-item-sockets";
+import { WOW_ITEM_SOCKETS_MAX_ITEM_ID, itemSocketCount } from "@/lib/wow-item-sockets";
 import type { WowClass } from "@/models/enums";
 import {
   evaluateEnchants,
@@ -69,7 +69,7 @@ describe("weapon enhancement — generic", () => {
   });
 
   it("no weapon equipped is N/A", () => {
-    expect(weapon("MAGE", [item(GEAR_SLOT.HEAD)])).toEqual({ status: "NA", weapons: [], skipped: [] });
+    expect(weapon("MAGE", [item(GEAR_SLOT.HEAD)])).toEqual({ status: "NA", expected: "TEMPORARY", weapons: [], skipped: [] });
   });
 
   it("a shield / off-hand frill is not a weapon and is never asked for an oil", () => {
@@ -125,33 +125,74 @@ describe("weapon enhancement — Shaman imbues", () => {
   });
 });
 
-describe("weapon enhancement — Death Knight Runeforge", () => {
-  it("a Runeforge counts as the weapon enhancement; no oil is asked for on top", () => {
+describe("weapon enhancement — Death Knight Runeforge (product rule: an oil is never required)", () => {
+  const dkMissingTexts = (gear: GearItemFact[]) => {
+    const requirement = weapon("DEATH_KNIGHT", gear);
+    return requirement.weapons.filter((row) => row.result === "MISSING").map((row) => `${row.slotLabel}: ${row.label}`);
+  };
+
+  it("1. two-hander with a Runeforge and no oil passes", () => {
     expect(weapon("DEATH_KNIGHT", [mainHand({ permanentEnchantId: FALLEN_CRUSADER })])).toMatchObject({
+      status: "PASS",
+      expected: "RUNEFORGE",
+      weapons: [{ result: "RUNEFORGE", label: "Runeforge" }],
+    });
+  });
+
+  it("2. two-hander with a Runeforge and an oil passes — the oil is optional", () => {
+    expect(weapon("DEATH_KNIGHT", [mainHand({ permanentEnchantId: FALLEN_CRUSADER, temporaryEnchantId: OIL })])).toMatchObject({
       status: "PASS",
       weapons: [{ result: "RUNEFORGE", label: "Runeforge" }],
     });
   });
 
-  it("a Runeforged weapon that also has an oil shows the oil", () => {
-    expect(weapon("DEATH_KNIGHT", [mainHand({ permanentEnchantId: FALLEN_CRUSADER, temporaryEnchantId: OIL })]).weapons[0]!.result).toBe(
-      "EXTERNAL",
-    );
-  });
-
-  it("dual-wield: both Runeforged weapons pass; one without a Runeforge (and no oil) is missing", () => {
+  it("3. dual-wield with a Runeforge on both weapons and no oil passes", () => {
     expect(
       weapon("DEATH_KNIGHT", [mainHand({ permanentEnchantId: RAZORICE }), offHand({ permanentEnchantId: FALLEN_CRUSADER })]),
     ).toMatchObject({ status: "PASS", weapons: [{ result: "RUNEFORGE" }, { result: "RUNEFORGE" }] });
+  });
+
+  it("4. dual-wield with one weapon lacking a Runeforge fails for that weapon only", () => {
     // A Death Knight off-hand is always a weapon.
     expect(weapon("DEATH_KNIGHT", [mainHand({ permanentEnchantId: RAZORICE }), offHand({ permanentEnchantId: null })])).toMatchObject({
       status: "WARNING",
-      weapons: [{ result: "RUNEFORGE" }, { slotLabel: "Off Hand", result: "MISSING" }],
+      weapons: [{ result: "RUNEFORGE" }, { slotLabel: "Off Hand", result: "MISSING", label: "Missing Runeforge" }],
     });
   });
 
+  it("5. a valid Runeforge never produces an oil failure", () => {
+    const gear = [mainHand({ permanentEnchantId: FALLEN_CRUSADER, temporaryEnchantId: null })];
+    expect(dkMissingTexts(gear)).toEqual([]);
+  });
+
+  it("6. a valid Runeforge never produces a generic weapon-enchant failure", () => {
+    const check = evaluateEnchants({ wowClass: "DEATH_KNIGHT", gear: [...enchantedArmor(), mainHand({ permanentEnchantId: FALLEN_CRUSADER })] });
+    expect(check).toMatchObject({ status: "PASS", enchanted: 8, required: 8, missing: [], runeforges: ["Rune of the Fallen Crusader"] });
+  });
+
+  it("7. a missing Runeforge is one precise failure — not an oil failure, not a second enchant failure", () => {
+    // Even an oil does not stand in for the Runeforge.
+    const gear = [...enchantedArmor(), mainHand({ permanentEnchantId: null, temporaryEnchantId: OIL })];
+    expect(dkMissingTexts(gear)).toEqual(["Main Hand: Missing Runeforge"]);
+    const enchants = evaluateEnchants({ wowClass: "DEATH_KNIGHT", gear });
+    expect(enchants).toMatchObject({ status: "PASS", missing: [], checkedAsWeapon: [{ slotLabel: "Main Hand" }] });
+    // A normal weapon enchant is not a Runeforge either — still reported once, by the weapon check.
+    const normalEnchant = [...enchantedArmor(), mainHand({ permanentEnchantId: WEAPON_ENCHANT })];
+    expect(dkMissingTexts(normalEnchant)).toEqual(["Main Hand: Missing Runeforge"]);
+    expect(evaluateEnchants({ wowClass: "DEATH_KNIGHT", gear: normalEnchant }).missing).toEqual([]);
+  });
+
+  it("no weapon data is UNKNOWN at the policy level, not a missing Runeforge", () => {
+    expect(weapon("DEATH_KNIGHT", [item(GEAR_SLOT.HEAD)])).toMatchObject({ status: "NA", weapons: [] });
+    expect(evaluateEnchants({ wowClass: "DEATH_KNIGHT", gear: null }).status).toBe("UNKNOWN");
+  });
+
   it("a Runeforge is recognized even when the class is unknown (Runeforge ids are Death Knight-only)", () => {
-    expect(weapon(null, [mainHand({ permanentEnchantId: FALLEN_CRUSADER })]).status).toBe("PASS");
+    expect(weapon(null, [mainHand({ permanentEnchantId: FALLEN_CRUSADER })])).toMatchObject({
+      status: "PASS",
+      expected: "TEMPORARY",
+      weapons: [{ result: "RUNEFORGE" }],
+    });
   });
 });
 
@@ -272,13 +313,51 @@ describe("gems — every existing socket filled", () => {
   });
 });
 
-describe("item socket count from game data", () => {
-  it("adds base sockets and bonus-list sockets; gems it cannot explain make it unknown", () => {
-    // Real items from Venomous Abyss logs.
-    expect(itemSocketCount({ itemId: 268265, bonusIds: [6652, 13668, 13334, 13987, 12852], gemCount: 2 })).toBe(2);
-    expect(itemSocketCount({ itemId: 271492, bonusIds: [13695], gemCount: 0 })).toBe(1); // socket bonus, empty
-    expect(itemSocketCount({ itemId: 271492, bonusIds: [], gemCount: 0 })).toBe(0);
-    expect(itemSocketCount({ itemId: 251513, bonusIds: [], gemCount: 1 })).toBe(1); // base socket
+describe("socket count comes from the actual item, never from its slot", () => {
+  // Real items and bonus lists from Blizzard game data (build 12.1.5), as seen in Venomous Abyss logs.
+  const ULATEK_NECK = 268265; // Aqirbane Reliquary: 1 base socket
+  const ULATEK_NECK_BONUSES = [6652, 13668, 13334, 13987, 12852]; // 13668 adds a socket
+  const TWO_BASE_SOCKET_NECK = 96932; // a neck with 2 base sockets
+  const ZERO_SOCKET_NECK = 282426; // a neck without any socket
+  const neckGems = (itemId: number, bonusIds: number[], gemCount: number) => {
+    const socketCount = itemSocketCount({ itemId, bonusIds, gemCount });
+    return { socketCount, check: evaluateGems({ gear: [item(GEAR_SLOT.NECK, { itemId, gemCount, socketCount })] }) };
+  };
+
+  it("multi-socket neck (item data: 2 base sockets): 2/2 pass, 1/2 and 0/2 fail", () => {
+    expect(neckGems(TWO_BASE_SOCKET_NECK, [], 2)).toMatchObject({ socketCount: 2, check: { status: "PASS", filled: 2, sockets: 2 } });
+    expect(neckGems(TWO_BASE_SOCKET_NECK, [], 1)).toMatchObject({
+      check: { status: "WARNING", filled: 1, sockets: 2, empty: [{ slotLabel: "Neck", emptySockets: 1, sockets: 2 }] },
+    });
+    expect(neckGems(TWO_BASE_SOCKET_NECK, [], 0)).toMatchObject({
+      check: { status: "WARNING", filled: 0, sockets: 2, empty: [{ emptySockets: 2, sockets: 2 }] },
+    });
+  });
+
+  it("base + bonus socket: the Ula'tek-type neck has 1 base socket, bonus 13668 adds the 2nd", () => {
+    expect(itemSocketCount({ itemId: ULATEK_NECK, bonusIds: [], gemCount: 0 })).toBe(1);
+    expect(itemSocketCount({ itemId: ULATEK_NECK, bonusIds: [13668], gemCount: 0 })).toBe(2);
+    expect(neckGems(ULATEK_NECK, ULATEK_NECK_BONUSES, 2)).toMatchObject({ socketCount: 2, check: { status: "PASS", filled: 2, sockets: 2 } });
+    expect(neckGems(ULATEK_NECK, ULATEK_NECK_BONUSES, 1)).toMatchObject({ check: { status: "WARNING", filled: 1, sockets: 2 } });
+    expect(neckGems(ULATEK_NECK, ULATEK_NECK_BONUSES, 0)).toMatchObject({ check: { status: "WARNING", filled: 0, sockets: 2 } });
+  });
+
+  it("zero-socket items have no gem requirement — whatever the slot", () => {
+    expect(neckGems(ZERO_SOCKET_NECK, [], 0)).toMatchObject({ socketCount: 0, check: { status: "NA", sockets: 0 } });
+    expect(itemSocketCount({ itemId: 271492, bonusIds: [], gemCount: 0 })).toBe(0); // a head piece
+  });
+
+  it("socket bonuses count on any slot, and a base socket on a ring works the same way", () => {
+    expect(itemSocketCount({ itemId: 271492, bonusIds: [13695], gemCount: 0 })).toBe(1); // head + socket bonus, empty
+    expect(itemSocketCount({ itemId: 251513, bonusIds: [], gemCount: 1 })).toBe(1); // ring, base socket
+  });
+
+  it("unknown items are UNKNOWN, never a missing gem", () => {
+    // Newer than the socket table (a later patch before it is regenerated), even with no gems seen.
+    const newItem = WOW_ITEM_SOCKETS_MAX_ITEM_ID + 1;
+    expect(neckGems(newItem, [], 0)).toMatchObject({ socketCount: null, check: { status: "UNKNOWN", unknown: [{ slotLabel: "Neck" }] } });
+    expect(neckGems(newItem, [13668], 0).check.status).toBe("UNKNOWN");
+    // Known item, but the log shows more gems than the game data explains (unknown bonus).
     expect(itemSocketCount({ itemId: 271495, bonusIds: [], gemCount: 1 })).toBeNull();
   });
 });

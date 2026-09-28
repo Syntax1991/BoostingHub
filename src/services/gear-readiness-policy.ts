@@ -2,6 +2,7 @@ import {
   ENCHANTABLE_ARMOR_SLOTS,
   GEAR_SLOT,
   OFF_HAND_WEAPON_ONLY_CLASSES,
+  RUNEFORGE_CLASSES,
   RUNEFORGES,
   TEMPORARY_WEAPON_ENCHANTS,
   gearSlotLabel,
@@ -60,21 +61,42 @@ export type WeaponEnhancementResult =
   | "OTHER"
   | "MISSING";
 
+/**
+ * What a weapon must carry. RUNEFORGE: a Death Knight — the Runeforge is the
+ * required enhancement, an oil is optional and never required. TEMPORARY:
+ * everyone else — an oil / stone or the class's own imbue.
+ */
+export type WeaponEnhancementExpectation = "RUNEFORGE" | "TEMPORARY";
+
+export function expectedWeaponEnhancement(wowClass: WowClass | null): WeaponEnhancementExpectation {
+  return wowClass && RUNEFORGE_CLASSES.has(wowClass) ? "RUNEFORGE" : "TEMPORARY";
+}
+
 export type WeaponEnhancementRequirement = {
   /** NA: no weapon equipped. */
   status: GearCheckStatus;
+  expected: WeaponEnhancementExpectation;
   weapons: Array<{ slot: number; slotLabel: string; result: WeaponEnhancementResult; label: string }>;
   /** Off-hand not checked: not a weapon (shield / frill), or unknown whether it is. */
   skipped: Array<{ slot: number; slotLabel: string; reason: "NOT_A_WEAPON" | "UNKNOWN_IF_WEAPON" }>;
 };
 
-function weaponResult(item: GearItemFact): { result: WeaponEnhancementResult; label: string } {
+function weaponResult(
+  item: GearItemFact,
+  expected: WeaponEnhancementExpectation,
+): { result: WeaponEnhancementResult; label: string } {
+  if (expected === "RUNEFORGE") {
+    // An oil next to the Runeforge is fine but never required — and never a substitute for it.
+    return isRuneforge(item.permanentEnchantId)
+      ? { result: "RUNEFORGE", label: "Runeforge" }
+      : { result: "MISSING", label: "Missing Runeforge" };
+  }
   if (item.temporaryEnchantId != null) {
     const entry = TEMPORARY_WEAPON_ENCHANTS[item.temporaryEnchantId];
     if (!entry || entry.kind === "SHIELD") return { result: "OTHER", label: "Weapon enhancement" };
     return { result: entry.kind === "CLASS_NATIVE" ? "CLASS_NATIVE" : "EXTERNAL", label: entry.label };
   }
-  // A Runeforge is Death Knight-only by id, so no class lookup is needed.
+  // Class unknown: a Runeforge is Death Knight-only by id, so it still counts.
   if (isRuneforge(item.permanentEnchantId)) return { result: "RUNEFORGE", label: "Runeforge" };
   return { result: "MISSING", label: "Missing" };
 }
@@ -90,17 +112,18 @@ export function resolveWeaponEnhancementRequirement(input: {
   wowClass: WowClass | null;
   gear: GearItemFact[];
 }): WeaponEnhancementRequirement {
+  const expected = expectedWeaponEnhancement(input.wowClass);
   const bySlot = new Map(input.gear.map((item) => [item.slot, item]));
   const mainHand = bySlot.get(GEAR_SLOT.MAIN_HAND);
-  if (!mainHand) return { status: "NA", weapons: [], skipped: [] };
+  if (!mainHand) return { status: "NA", expected, weapons: [], skipped: [] };
   const weapons: WeaponEnhancementRequirement["weapons"] = [
-    { slot: mainHand.slot, slotLabel: gearSlotLabel(mainHand.slot), ...weaponResult(mainHand) },
+    { slot: mainHand.slot, slotLabel: gearSlotLabel(mainHand.slot), ...weaponResult(mainHand, expected) },
   ];
   const skipped: WeaponEnhancementRequirement["skipped"] = [];
   const offHand = bySlot.get(GEAR_SLOT.OFF_HAND);
   const offKind = offHandKind(offHand, input.wowClass);
   if (offHand && offKind === "WEAPON") {
-    weapons.push({ slot: offHand.slot, slotLabel: gearSlotLabel(offHand.slot), ...weaponResult(offHand) });
+    weapons.push({ slot: offHand.slot, slotLabel: gearSlotLabel(offHand.slot), ...weaponResult(offHand, expected) });
   } else if (offHand) {
     skipped.push({
       slot: offHand.slot,
@@ -108,7 +131,7 @@ export function resolveWeaponEnhancementRequirement(input: {
       reason: offKind === "NOT_A_WEAPON" ? "NOT_A_WEAPON" : "UNKNOWN_IF_WEAPON",
     });
   }
-  return { status: weapons.some((row) => row.result === "MISSING") ? "WARNING" : "PASS", weapons, skipped };
+  return { status: weapons.some((row) => row.result === "MISSING") ? "WARNING" : "PASS", expected, weapons, skipped };
 }
 
 export type EnchantCheck = {
@@ -118,6 +141,11 @@ export type EnchantCheck = {
   missing: Array<{ slot: number; slotLabel: string }>;
   /** Could not be judged (off-hand that may not be a weapon). */
   unknown: Array<{ slot: number; slotLabel: string }>;
+  /**
+   * Death Knight weapons without a Runeforge: reported once, by the weapon
+   * enhancement check ("Missing Runeforge"), never a second time here.
+   */
+  checkedAsWeapon: Array<{ slot: number; slotLabel: string }>;
   /** Runeforges counted as the weapon enchant. */
   runeforges: string[];
 };
@@ -128,18 +156,39 @@ export type EnchantCheck = {
  * Which enchant is chosen is not judged — only that one is present.
  */
 export function evaluateEnchants(input: { wowClass: WowClass | null; gear: GearItemFact[] | null }): EnchantCheck {
-  const empty: EnchantCheck = { status: "UNKNOWN", enchanted: 0, required: 0, missing: [], unknown: [], runeforges: [] };
+  const empty: EnchantCheck = {
+    status: "UNKNOWN",
+    enchanted: 0,
+    required: 0,
+    missing: [],
+    unknown: [],
+    checkedAsWeapon: [],
+    runeforges: [],
+  };
   if (!input.gear) return empty;
   const bySlot = new Map(input.gear.map((item) => [item.slot, item]));
   const required: GearItemFact[] = [];
-  for (const slot of [...ENCHANTABLE_ARMOR_SLOTS, GEAR_SLOT.MAIN_HAND]) {
+  for (const slot of ENCHANTABLE_ARMOR_SLOTS) {
     const item = bySlot.get(slot);
     if (item) required.push(item);
   }
+  const weapons: GearItemFact[] = [];
+  const mainHand = bySlot.get(GEAR_SLOT.MAIN_HAND);
+  if (mainHand) weapons.push(mainHand);
   const offHand = bySlot.get(GEAR_SLOT.OFF_HAND);
   const offKind = offHandKind(offHand, input.wowClass);
   const unknown = offHand && offKind === "UNKNOWN" ? [{ slot: offHand.slot, slotLabel: gearSlotLabel(offHand.slot) }] : [];
-  if (offHand && offKind === "WEAPON") required.push(offHand);
+  if (offHand && offKind === "WEAPON") weapons.push(offHand);
+  // A Death Knight's weapon enchant is its Runeforge, judged by the weapon check.
+  const runeforgeClass = expectedWeaponEnhancement(input.wowClass) === "RUNEFORGE";
+  const checkedAsWeapon: EnchantCheck["checkedAsWeapon"] = [];
+  for (const weapon of weapons) {
+    if (runeforgeClass && !isRuneforge(weapon.permanentEnchantId)) {
+      checkedAsWeapon.push({ slot: weapon.slot, slotLabel: gearSlotLabel(weapon.slot) });
+    } else {
+      required.push(weapon);
+    }
+  }
 
   const missing = required
     .filter((item) => item.permanentEnchantId == null)
@@ -153,6 +202,7 @@ export function evaluateEnchants(input: { wowClass: WowClass | null; gear: GearI
     required: required.length,
     missing,
     unknown,
+    checkedAsWeapon,
     runeforges,
   };
 }

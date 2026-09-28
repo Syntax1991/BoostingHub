@@ -128,6 +128,9 @@ export const TEMPORARY_WEAPON_ENCHANTS: Readonly<Record<number, WeaponEnhancemen
   7587: { kind: "SHIELD", name: "Thunderstrike Ward", label: "Shield imbue", wowClass: "SHAMAN" },
 };
 
+/** Classes whose required weapon enhancement is a Runeforge (an oil is optional for them). */
+export const RUNEFORGE_CLASSES: ReadonlySet<WowClass> = new Set(["DEATH_KNIGHT"]);
+
 /**
  * Death Knight Runeforges — the Death Knight's permanent weapon enchant
  * (`gear[].permanentEnchant`). A Runeforged weapon counts as enchanted, and as

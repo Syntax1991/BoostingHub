@@ -102,10 +102,12 @@ One rule (`resolveWeaponEnhancementRequirement`, `src/services/gear-readiness-po
 | --- | --- |
 | an oil / stone temporary enchant (Thalassian Phoenix Oil, Oil of Dawn, whetstone) | pass — `Oil` / `Stone` |
 | the class's own imbue as its temporary enchant: Shaman **Flametongue / Windfury / Earthliving Weapon**, Paladin Lightsmith **Rite of Sanctification / Adjuration** | pass — `Shaman imbue` / `Lightsmith rite` |
-| no temporary enchant, but a Death Knight **Runeforge** as permanent enchant | pass — `Runeforge` (a Death Knight is never asked for an oil on top) |
+| **Death Knight**: a **Runeforge** as permanent enchant (with or without an oil) | pass — `Runeforge` |
+| **Death Knight**: no Runeforge (an oil or a normal weapon enchant does not replace it) | missing — `Missing Runeforge` |
 | a temporary enchant the catalog does not know yet | pass — present, never missing |
 | nothing | missing |
 
+- **Death Knights never need an oil** (product decision): the Runeforge is their required weapon enhancement; an oil next to it is optional. Dual-wield: each weapon needs its own Runeforge. A weapon without one is reported once, as "Missing Runeforge" — never as a missing oil, and not a second time by the enchant check (`checkedAsWeapon`). A Runeforge also counts as the weapon enchant. The class decides this in one place (`expectedWeaponEnhancement`, `RUNEFORGE_CLASSES`); with the class unknown, a Runeforge id still passes.
 - Class imbues use the weapon's single temporary-enchant slot, the same one an oil uses — the game never stacks both, so either satisfies it; nothing ever requires both.
 - **Hero Talents are never interpreted.** A Lightsmith rite is visible as the weapon's temporary enchant itself (WCL `talentTree` only holds trait entry ids). A Paladin with neither a rite nor an oil has nothing on the weapon, whatever the talents.
 - **Off-hand**: checked only when it is known to be a weapon — a weapon enchant or enhancement on it, or a class that can hold nothing else there (Rogue, Demon Hunter, Death Knight). A Shaman shield imbue (Tidecaller's Guard, Thunderstrike Ward) marks a shield. Otherwise (shield or off-hand frill possible) it is "not checked", never missing.
@@ -116,7 +118,7 @@ One rule (`resolveWeaponEnhancementRequirement`, `src/services/gear-readiness-po
 Enchants and gems are judged on the player's **latest audited snapshot** (gear at the last pull). Facts are stored per fight (`RunConsumableAuditGearItem`), statuses derived at read time. Only *presence* is checked — which enchant or gem is best is not judged.
 
 - **Enchantable slots** (Midnight, `ENCHANTABLE_ARMOR_SLOTS`): Head, Shoulders, Chest, Legs, Feet, Ring 1, Ring 2, plus the main hand and a weapon off-hand. In the evidence set these carry an enchant 80–93 % of the time; neck, waist, wrists, hands, back, trinkets 0 %. A Runeforge counts as the weapon enchant (no double failure with the weapon check).
-- **Sockets**: Warcraft Logs reports the filled gems but not an item's sockets. The socket count comes from Blizzard's game data (`src/lib/wow-item-sockets.data.json`, client build 12.1.5): base sockets of the item (`ItemSparse.SocketType`) plus sockets added by its bonus lists (`ItemBonus` type 6). Validated on 23 193 equipped items: no item ever showed more gems than computed sockets. An item whose gems the table cannot explain is **unknown**, never "empty socket". Regenerate after a content patch: `node scripts/generate-wow-item-sockets.mjs`.
+- **Sockets**: Warcraft Logs reports the filled gems but not an item's sockets. The socket count comes from Blizzard's game data (`src/lib/wow-item-sockets.data.json`, client build 12.1.5): base sockets of the item (`ItemSparse.SocketType`) plus sockets added by its bonus lists (`ItemBonus` type 6). Validated on 23 193 equipped items: no item ever showed more gems than computed sockets. The count is always the actual item's — never assumed from its slot: a neck can have 0, 1 or 2 sockets (e.g. the Ula'tek neck 268265: 1 base socket + 1 from bonus 13668). An item **newer than the table** (id above its recorded `maxKnownItemId`, from Blizzard's `Item` table) or whose gems the table cannot explain is **unknown** ("Socket count unavailable"), never "empty socket". The table is checked in; the audit never calls wago.tools at runtime. Regenerate after a content patch: `node scripts/generate-wow-item-sockets.mjs`.
 
 ### Combat potion by role
 

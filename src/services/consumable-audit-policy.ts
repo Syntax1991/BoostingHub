@@ -12,10 +12,12 @@ import type {
 import {
   evaluateEnchants,
   evaluateGems,
+  expectedWeaponEnhancement,
   resolveWeaponEnhancementRequirement,
   type EnchantCheck,
   type GearItemFact,
   type GemCheck,
+  type WeaponEnhancementExpectation,
   type WeaponEnhancementResult,
 } from "@/services/gear-readiness-policy";
 
@@ -155,6 +157,8 @@ export type PlayerConsumableAudit = {
   /** Oil / stone, the class's own imbue, or a Death Knight Runeforge on every weapon, per fight. */
   weaponEnhancement: {
     status: ConsumableCheckStatus;
+    /** RUNEFORGE for a Death Knight (an oil is optional), else TEMPORARY (oil / stone / class imbue). */
+    expected: WeaponEnhancementExpectation;
     fightsChecked: number;
     missing: Array<{ fight: FightRef; slots: string[] }>;
     /** What satisfied it, e.g. ["Oil"], ["Shaman imbue"], ["Runeforge"]. */
@@ -247,7 +251,15 @@ function unknownPlayer(player: AuditPlayerFact, fightsParticipated = 0): PlayerC
     food: emptyAuraCheck(),
     augmentRune: emptyAuraCheck(),
     vantusRune: emptyAuraCheck(),
-    weaponEnhancement: { status: "UNKNOWN", fightsChecked: 0, missing: [], labels: [], results: [], notChecked: [] },
+    weaponEnhancement: {
+      status: "UNKNOWN",
+      expected: expectedWeaponEnhancement(player.wowClass),
+      fightsChecked: 0,
+      missing: [],
+      labels: [],
+      results: [],
+      notChecked: [],
+    },
     healingPotion: { status: "UNKNOWN", uses: [] },
     healthstone: { status: "UNKNOWN", applicability: "UNKNOWN", uses: [] },
     deaths: [],
@@ -517,6 +529,7 @@ export function evaluatePlayerConsumables(
     vantusRune,
     weaponEnhancement: {
       status: weaponStatus,
+      expected: expectedWeaponEnhancement(player.wowClass),
       fightsChecked: weaponFightsChecked,
       missing: weaponMissing,
       labels: [...weaponLabels],

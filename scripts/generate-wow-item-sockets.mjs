@@ -14,6 +14,10 @@
  * computed sockets. Only prismatic (type 7) base sockets are listed — every
  * current-content socket is prismatic; a missing entry can only under-count
  * sockets, which the audit treats as "unknown", never as a missing gem.
+ *
+ * maxKnownItemId (highest id in the Item table) separates "known item without a
+ * base socket" from "item newer than this table": newer items are unknown until
+ * the table is regenerated.
  */
 import { writeFileSync } from "node:fs";
 
@@ -77,6 +81,10 @@ for (const row of sparse.rows) {
   (itemsBySocketCount[count] ??= []).push(Number(row[0]));
 }
 for (const ids of Object.values(itemsBySocketCount)) ids.sort((a, b) => a - b);
+const items = await table("Item", {});
+const maxKnownItemId = items.rows.reduce((max, row) => Math.max(max, Number(row[0]) || 0), 0);
+if (maxKnownItemId === 0) throw new Error("Item table returned no ids");
+
 // Unnamed DB2 columns carry the client build ("Field_12_1_5_69594_011").
 const buildOf = (header) => header.map((c) => c.match(/^Field_(\d+_\d+_\d+_\d+)_/)?.[1]).find(Boolean)?.replaceAll("_", ".");
 const build = buildOf(sparse.header) ?? buildOf((await table("SpellItemEnchantment", { ID: "8052" })).header) ?? null;
@@ -87,11 +95,12 @@ writeFileSync(
     source: "Blizzard DB2 via wago.tools: ItemSparse.SocketType_0..2 (prismatic), ItemBonus Type 6",
     build,
     generatedAt: new Date().toISOString().slice(0, 10),
+    maxKnownItemId,
     socketsByBonusList,
     itemsBySocketCount,
   })}\n`,
 );
 console.log(
-  `build ${build}: ${Object.keys(socketsByBonusList).length} socket bonus lists, ` +
+  `build ${build}: max item id ${maxKnownItemId}, ${Object.keys(socketsByBonusList).length} socket bonus lists, ` +
     `${Object.values(itemsBySocketCount).reduce((n, ids) => n + ids.length, 0)} items with base sockets`,
 );
