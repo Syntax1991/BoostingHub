@@ -9,6 +9,15 @@ import type {
   ConsumableAuditMatchStatus,
   ConsumableObservationKindValue,
 } from "@/services/consumable-audit-extract";
+import {
+  evaluateEnchants,
+  evaluateGems,
+  resolveWeaponEnhancementRequirement,
+  type EnchantCheck,
+  type GearItemFact,
+  type GemCheck,
+  type WeaponEnhancementResult,
+} from "@/services/gear-readiness-policy";
 
 /**
  * Read-time rules for the Run Consumables Audit. Facts are stored; statuses
@@ -70,6 +79,8 @@ export type AuditPlayerFact = {
   matchStatus: ConsumableAuditMatchStatus;
   isExternal: boolean;
   observations: AuditObservationFact[];
+  /** Equipped gear per audited fight (Gear Readiness + weapon enhancement facts). */
+  gear: GearItemFact[];
 };
 
 export type FightRef = {
@@ -135,6 +146,23 @@ export type PlayerConsumableAudit = {
     killFightsChecked: number;
     missing: FightRef[];
   };
+  /** Food buff at pull, per fight with a CombatantInfo snapshot (like the flask). */
+  food: AuraAtPullCheck;
+  /** Informational only (few players use one): PASS when used in every checked fight, else NEUTRAL. */
+  augmentRune: AuraAtPullCheck;
+  /** Informational only (boss-specific): PASS when used in every checked fight, else NEUTRAL. */
+  vantusRune: AuraAtPullCheck;
+  /** Oil / stone, the class's own imbue, or a Death Knight Runeforge on every weapon, per fight. */
+  weaponEnhancement: {
+    status: ConsumableCheckStatus;
+    fightsChecked: number;
+    missing: Array<{ fight: FightRef; slots: string[] }>;
+    /** What satisfied it, e.g. ["Oil"], ["Shaman imbue"], ["Runeforge"]. */
+    labels: string[];
+    results: WeaponEnhancementResult[];
+    /** Off-hand not judged: not a weapon, or unknown whether it is one. */
+    notChecked: string[];
+  };
   healingPotion: { status: ConsumableCheckStatus; uses: ConsumableUseView[] };
   healthstone: {
     status: ConsumableCheckStatus;
@@ -143,7 +171,22 @@ export type PlayerConsumableAudit = {
   };
   deaths: DeathView[];
   deathWarnings: number;
+  /** Gear Readiness from the player's latest audited snapshot. */
+  gear: {
+    fight: FightRef | null;
+    enchants: EnchantCheck;
+    gems: GemCheck;
+  };
   warningCount: number;
+};
+
+export type AuraAtPullCheck = {
+  status: ConsumableCheckStatus;
+  fightsWith: number;
+  fightsChecked: number;
+  missing: FightRef[];
+  unknown: FightRef[];
+  names: string[];
 };
 
 export function healthstoneApplicability(fight: AuditFightFact): HealthstoneApplicability {
@@ -201,12 +244,25 @@ function unknownPlayer(player: AuditPlayerFact, fightsParticipated = 0): PlayerC
       killFightsChecked: 0,
       missing: [],
     },
+    food: emptyAuraCheck(),
+    augmentRune: emptyAuraCheck(),
+    vantusRune: emptyAuraCheck(),
+    weaponEnhancement: { status: "UNKNOWN", fightsChecked: 0, missing: [], labels: [], results: [], notChecked: [] },
     healingPotion: { status: "UNKNOWN", uses: [] },
     healthstone: { status: "UNKNOWN", applicability: "UNKNOWN", uses: [] },
     deaths: [],
     deathWarnings: 0,
+    gear: {
+      fight: null,
+      enchants: evaluateEnchants({ wowClass: player.wowClass, gear: null }),
+      gems: evaluateGems({ gear: null }),
+    },
     warningCount: 0,
   };
+}
+
+function emptyAuraCheck(): AuraAtPullCheck {
+  return { status: "UNKNOWN", fightsWith: 0, fightsChecked: 0, missing: [], unknown: [], names: [] };
 }
 
 function latestUseBefore(
@@ -283,6 +339,74 @@ export function evaluatePlayerConsumables(
   const flaskNames = [
     ...new Set(flaskAuras.map((row) => spellLabel(row.spellId, "FLASK"))),
   ];
+
+  // Food / Augment Rune / Vantus Rune: auras at pull, per fight with a snapshot.
+  const auraAtPull = (category: ConsumableCategory, informational: boolean): AuraAtPullCheck => {
+    const rows = obs.filter((row) => row.kind === "AURA" && row.category === category);
+    const withAura = new Set(rows.map((row) => row.fightId));
+    const missing: FightRef[] = [];
+    const unknown: FightRef[] = [];
+    for (const fight of participated) {
+      if (!snapshotFights.has(fight.id)) unknown.push(refOf(fight.id));
+      else if (!withAura.has(fight.id)) missing.push(refOf(fight.id));
+    }
+    const checked = participated.length - unknown.length;
+    const status: ConsumableCheckStatus =
+      checked === 0 ? "UNKNOWN" : missing.length === 0 ? "PASS" : informational ? "NEUTRAL" : "WARNING";
+    return {
+      status,
+      fightsWith: checked - missing.length,
+      fightsChecked: checked,
+      missing,
+      unknown,
+      names: [...new Set(rows.map((row) => spellLabel(row.spellId, category)))],
+    };
+  };
+  const food = auraAtPull("FOOD", false);
+  const augmentRune = auraAtPull("AUGMENT_RUNE", true);
+  const vantusRune = auraAtPull("VANTUS_RUNE", true);
+
+  // Weapon enhancement, per fight whose snapshot carried gear.
+  const gearByFight = new Map<string, GearItemFact[]>();
+  for (const item of player.gear) {
+    if (!fightById.has(item.fightId)) continue;
+    const list = gearByFight.get(item.fightId) ?? [];
+    list.push(item);
+    gearByFight.set(item.fightId, list);
+  }
+  const weaponMissing: Array<{ fight: FightRef; slots: string[] }> = [];
+  const weaponLabels = new Set<string>();
+  const weaponResults = new Set<WeaponEnhancementResult>();
+  const notChecked = new Set<string>();
+  let weaponFightsChecked = 0;
+  for (const fight of participated) {
+    const gear = gearByFight.get(fight.id);
+    if (!gear) continue;
+    const requirement = resolveWeaponEnhancementRequirement({ wowClass: player.wowClass, gear });
+    if (requirement.status === "NA") continue;
+    weaponFightsChecked += 1;
+    for (const weapon of requirement.weapons) {
+      weaponResults.add(weapon.result);
+      if (weapon.result !== "MISSING") weaponLabels.add(weapon.label);
+    }
+    for (const row of requirement.skipped) notChecked.add(row.slotLabel);
+    const missingSlots = requirement.weapons.filter((row) => row.result === "MISSING").map((row) => row.slotLabel);
+    if (missingSlots.length > 0) weaponMissing.push({ fight: refOf(fight.id), slots: missingSlots });
+  }
+  const weaponStatus: ConsumableCheckStatus =
+    weaponFightsChecked === 0
+      ? gearByFight.size > 0
+        ? "NA"
+        : "UNKNOWN"
+      : weaponMissing.length > 0
+        ? "WARNING"
+        : "PASS";
+
+  // Gear Readiness: enchants and gems of the latest audited snapshot with gear.
+  const latestGearFight = [...participated].reverse().find((fight) => gearByFight.has(fight.id)) ?? null;
+  const latestGear = latestGearFight ? gearByFight.get(latestGearFight.id)! : null;
+  const enchants = evaluateEnchants({ wowClass: player.wowClass, gear: latestGear });
+  const gems = evaluateGems({ gear: latestGear });
 
   // Combat potion: at least one accepted potion per boss KILL the player was in.
   // Wipes are listed but never required — no "use every cooldown" rule.
@@ -388,11 +512,25 @@ export function evaluatePlayerConsumables(
       killFightsChecked: killFights.length,
       missing: combatMissing,
     },
+    food,
+    augmentRune,
+    vantusRune,
+    weaponEnhancement: {
+      status: weaponStatus,
+      fightsChecked: weaponFightsChecked,
+      missing: weaponMissing,
+      labels: [...weaponLabels],
+      results: [...weaponResults],
+      notChecked: [...notChecked],
+    },
     healingPotion: { status: healingStatus, uses: healingUses },
     healthstone: { status: healthstoneStatus, applicability: overallApplicability, uses: healthstoneUses },
     deaths,
     deathWarnings,
+    gear: { fight: latestGearFight ? refOf(latestGearFight.id) : null, enchants, gems },
     warningCount:
-      (flaskStatus === "WARNING" ? 1 : 0) + (combatStatus === "WARNING" ? 1 : 0) + deathWarnings,
+      [flaskStatus, food.status, weaponStatus, combatStatus, enchants.status, gems.status].filter(
+        (status) => status === "WARNING",
+      ).length + deathWarnings,
   };
 }

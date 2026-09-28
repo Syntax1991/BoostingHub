@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node
-import type { Contract as End } from '../../snapshots/22c611f573d8594a7107a4a231cbd5bdbc95c4a616eb7257e605b1fa1c067a26/contract';
-import endContract from '../../snapshots/22c611f573d8594a7107a4a231cbd5bdbc95c4a616eb7257e605b1fa1c067a26/contract.json' with { type: 'json' };
+import type { Contract as End } from '../../snapshots/37e097bda2e9e2c75d25347fc19a95d7e6e7a0d3cacbb3ce755a0cc71d5f078f/contract';
+import endContract from '../../snapshots/37e097bda2e9e2c75d25347fc19a95d7e6e7a0d3cacbb3ce755a0cc71d5f078f/contract.json' with { type: 'json' };
 import type { Contract as Start } from '../../snapshots/e1ac07b6a810888d26608cd1f136488065c3f2f75ba486dc7385fb932159ca95/contract';
 import startContract from '../../snapshots/e1ac07b6a810888d26608cd1f136488065c3f2f75ba486dc7385fb932159ca95/contract.json' with { type: 'json' };
 import {
@@ -77,6 +77,22 @@ export default class M extends Migration<Start, End> {
           col('startMs', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
           col('warlockPresent', 'bool', { codecRef: { codecId: 'pg/bool@1' } }),
           col('wclFightId', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'run_consumable_audit_gear_item',
+        columns: [
+          col('fightId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('gemCount', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('itemId', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('permanentEnchantId', 'int4', { codecRef: { codecId: 'pg/int4@1' } }),
+          col('playerId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('slot', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('socketCount', 'int4', { codecRef: { codecId: 'pg/int4@1' } }),
+          col('temporaryEnchantId', 'int4', { codecRef: { codecId: 'pg/int4@1' } }),
         ],
         constraints: [primaryKey(['id'])],
       }),
@@ -278,6 +294,12 @@ export default class M extends Migration<Start, End> {
       }),
       this.addUnique({
         schema: 'public',
+        table: 'run_consumable_audit_gear_item',
+        constraint: 'run_consumable_audit_gear_item_playerId_fightId_slot_key',
+        columns: ['playerId', 'fightId', 'slot'],
+      }),
+      this.addUnique({
+        schema: 'public',
         table: 'run_warcraft_logs_fight',
         constraint: 'run_warcraft_logs_fight_runId_reportId_wclFightId_key',
         columns: ['runId', 'reportId', 'wclFightId'],
@@ -311,6 +333,18 @@ export default class M extends Migration<Start, End> {
         table: 'run_consumable_audit_fight',
         index: 'run_consumable_audit_fight_raidContentId_idx_ecf49528',
         columns: ['raidContentId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'run_consumable_audit_gear_item',
+        index: 'run_consumable_audit_gear_item_fightId_idx_16bc93bc',
+        columns: ['fightId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'run_consumable_audit_gear_item',
+        index: 'run_consumable_audit_gear_item_playerId_idx_710cf1aa',
+        columns: ['playerId'],
       }),
       this.createIndex({
         schema: 'public',
@@ -435,6 +469,26 @@ export default class M extends Migration<Start, End> {
           columns: ['raidContentId'],
           references: { schema: 'public', table: 'run_raid_content', columns: ['id'] },
           onDelete: 'setNull',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'run_consumable_audit_gear_item',
+        foreignKey: {
+          name: 'run_consumable_audit_gear_item_playerId_fkey',
+          columns: ['playerId'],
+          references: { schema: 'public', table: 'run_consumable_audit_player', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'run_consumable_audit_gear_item',
+        foreignKey: {
+          name: 'run_consumable_audit_gear_item_fightId_fkey',
+          columns: ['fightId'],
+          references: { schema: 'public', table: 'run_consumable_audit_fight', columns: ['id'] },
+          onDelete: 'cascade',
         },
       }),
       this.addForeignKey({

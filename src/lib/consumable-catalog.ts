@@ -19,6 +19,9 @@ export const CONSUMABLE_CATEGORIES = [
   "MANA_POTION",
   "HEALING_POTION",
   "HEALTHSTONE",
+  "FOOD",
+  "AUGMENT_RUNE",
+  "VANTUS_RUNE",
 ] as const;
 
 export type ConsumableCategory = (typeof CONSUMABLE_CATEGORIES)[number];
@@ -36,6 +39,9 @@ export const CONSUMABLE_CATEGORY_EVIDENCE: Record<ConsumableCategory, Consumable
   MANA_POTION: "CAST",
   HEALING_POTION: "CAST",
   HEALTHSTONE: "CAST",
+  FOOD: "AURA_AT_PULL",
+  AUGMENT_RUNE: "AURA_AT_PULL",
+  VANTUS_RUNE: "AURA_AT_PULL",
 };
 
 export const CONSUMABLE_CATEGORY_LABELS: Record<ConsumableCategory, string> = {
@@ -44,6 +50,9 @@ export const CONSUMABLE_CATEGORY_LABELS: Record<ConsumableCategory, string> = {
   MANA_POTION: "Mana Potion",
   HEALING_POTION: "Healing Potion",
   HEALTHSTONE: "Healthstone",
+  FOOD: "Food",
+  AUGMENT_RUNE: "Augment Rune",
+  VANTUS_RUNE: "Vantus Rune",
 };
 
 export type ConsumableCatalogEntry = {
@@ -88,6 +97,21 @@ export const CONSUMABLE_CATALOG: readonly ConsumableCatalogEntry[] = [
   { category: "HEALING_POTION", spellId: 431416, name: "Algari Healing Potion", expansion: "TWW" },
   { category: "HEALTHSTONE", spellId: 6262, name: "Healthstone", expansion: "EVERGREEN" },
   { category: "HEALTHSTONE", spellId: 452930, name: "Demonic Healthstone", expansion: "EVERGREEN" },
+  // Augment rune buffs seen at pull in the same reports (≈12 % of players).
+  { category: "AUGMENT_RUNE", spellId: 1234969, name: "Ethereal Augmentation", expansion: "MIDNIGHT" },
+  { category: "AUGMENT_RUNE", spellId: 1242347, name: "Soulgorged Augmentation", expansion: "TWW" },
+  { category: "AUGMENT_RUNE", spellId: 393438, name: "Draconic Augmentation", expansion: "EVERGREEN" },
+];
+
+/**
+ * Food and Vantus Rune buffs come in dozens of ids (one per stat / boss) with
+ * stable in-game names, so they are recognized by the aura name Warcraft Logs
+ * reports: every food buff is "Well Fed" or "Hearty Well Fed" (91 % of 1 419
+ * players at pull), every Vantus Rune buff "Vantus Rune: <boss>".
+ */
+const AURA_NAME_RULES: ReadonlyArray<{ category: ConsumableCategory; pattern: RegExp }> = [
+  { category: "FOOD", pattern: /^(Hearty )?Well Fed$/i },
+  { category: "VANTUS_RUNE", pattern: /^Vantus Rune:/i },
 ];
 
 const BY_SPELL_ID = new Map<number, ConsumableCatalogEntry>(
@@ -96,6 +120,15 @@ const BY_SPELL_ID = new Map<number, ConsumableCatalogEntry>(
 
 export function findConsumableBySpellId(spellId: number): ConsumableCatalogEntry | null {
   return BY_SPELL_ID.get(spellId) ?? null;
+}
+
+/** Catalog category of an aura active at pull: by id first, then by the stable in-game buff name. */
+export function classifyPullAura(aura: { id: number; name: string | null }): ConsumableCategory | null {
+  const entry = BY_SPELL_ID.get(aura.id);
+  if (entry && CONSUMABLE_CATEGORY_EVIDENCE[entry.category] === "AURA_AT_PULL") return entry.category;
+  const name = aura.name?.trim();
+  if (!name) return null;
+  return AURA_NAME_RULES.find((rule) => rule.pattern.test(name))?.category ?? null;
 }
 
 export function consumableSpellIds(evidence: ConsumableEvidence): number[] {

@@ -1,9 +1,12 @@
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import {
   CONSUMABLE_CATEGORY_EVIDENCE,
+  classifyPullAura,
   findConsumableBySpellId,
   type ConsumableCategory,
 } from "@/lib/consumable-catalog";
+import { ENCHANTABLE_ARMOR_SLOTS, WEAPON_SLOTS } from "@/lib/wow-gear-catalog";
+import { itemSocketCount } from "@/lib/wow-item-sockets";
 import type {
   WarcraftLogsConsumableEvents,
   WarcraftLogsReportFight,
@@ -63,6 +66,19 @@ export type ExtractedObservation = {
   atMs: number;
 };
 
+/** One equipped item at a fight's pull (Gear Readiness + weapon enhancement facts). */
+export type ExtractedGearItem = {
+  reportCode: string;
+  wclFightId: number;
+  slot: number;
+  itemId: number;
+  permanentEnchantId: number | null;
+  temporaryEnchantId: number | null;
+  gemCount: number;
+  /** Null when the game data cannot explain the gems seen (unknown, never "missing"). */
+  socketCount: number | null;
+};
+
 export type ExtractedPlayer = {
   attendanceId: string | null;
   externalBoosterId: string | null;
@@ -75,6 +91,7 @@ export type ExtractedPlayer = {
   wclActorId: number | null;
   sortOrder: number;
   observations: ExtractedObservation[];
+  gear: ExtractedGearItem[];
 };
 
 export type ExtractedConsumableAudit = {
@@ -233,16 +250,18 @@ export function extractConsumableAudit(input: {
       sortOrder: index,
     };
     if (matchStatus !== "MATCHED") {
-      return { ...base, matchStatus, wclActorId: null, observations: [] };
+      return { ...base, matchStatus, wclActorId: null, observations: [], gear: [] };
     }
+    const actors = new Set(actorIds);
     return {
       ...base,
       matchStatus,
       wclActorId: actorIds[0] ?? null,
-      observations: observationsForActors(new Set(actorIds), fights, events).map((row) => ({
+      observations: observationsForActors(actors, fights, events).map((row) => ({
         ...row,
         reportCode: report.code,
       })),
+      gear: gearForActors(actors, fights, events.combatants).map((row) => ({ ...row, reportCode: report.code })),
     };
   });
 
@@ -271,13 +290,13 @@ function observationsForActors(
       atMs: snapshot.timestamp,
     });
     for (const auraId of new Set(snapshot.auraIds)) {
-      const entry = findConsumableBySpellId(auraId);
-      if (!entry || CONSUMABLE_CATEGORY_EVIDENCE[entry.category] !== "AURA_AT_PULL") continue;
+      const category = classifyPullAura({ id: auraId, name: snapshot.auraNames?.[auraId] ?? null });
+      if (!category) continue;
       observations.push({
         wclFightId: snapshot.fight,
         kind: "AURA",
-        category: entry.category,
-        spellId: entry.spellId,
+        category,
+        spellId: auraId,
         atMs: snapshot.timestamp,
       });
     }
@@ -327,6 +346,39 @@ function observationsForActors(
   return observations.sort((a, b) => a.atMs - b.atMs);
 }
 
+/** Slots stored as gear facts: everything that can need an enchant, plus socketed items. */
+const GEAR_FACT_SLOTS = new Set<number>([...ENCHANTABLE_ARMOR_SLOTS, ...WEAPON_SLOTS]);
+
+/** The player's equipped gear at each audited fight's pull (first snapshot per fight). */
+function gearForActors(
+  actorIds: Set<number>,
+  fights: ReadonlyArray<Pick<WarcraftLogsReportFight, "id">>,
+  combatants: WarcraftLogsConsumableEvents["combatants"],
+): Array<Omit<ExtractedGearItem, "reportCode">> {
+  const audited = new Set(fights.map((fight) => fight.id));
+  const seen = new Set<number>();
+  const rows: Array<Omit<ExtractedGearItem, "reportCode">> = [];
+  for (const snapshot of combatants) {
+    if (!actorIds.has(snapshot.sourceId) || !audited.has(snapshot.fight) || seen.has(snapshot.fight)) continue;
+    seen.add(snapshot.fight);
+    for (const item of snapshot.gear ?? []) {
+      const gemCount = item.gemIds.length;
+      const socketCount = itemSocketCount({ itemId: item.itemId, bonusIds: item.bonusIds, gemCount });
+      if (!GEAR_FACT_SLOTS.has(item.slot) && socketCount === 0) continue;
+      rows.push({
+        wclFightId: snapshot.fight,
+        slot: item.slot,
+        itemId: item.itemId,
+        permanentEnchantId: item.permanentEnchantId,
+        temporaryEnchantId: item.temporaryEnchantId,
+        gemCount,
+        socketCount,
+      });
+    }
+  }
+  return rows;
+}
+
 /**
  * Combine per-report extractions for one Run (same participant list, in the
  * same order). A player is MATCHED if any report matched them.
@@ -344,6 +396,7 @@ export function mergeExtractedAudits(parts: ExtractedConsumableAudit[]): Extract
         matchStatus: matched ? "MATCHED" : player.matchStatus,
         wclActorId: matched?.wclActorId ?? null,
         observations: all.flatMap((row) => row.observations),
+        gear: all.flatMap((row) => row.gear),
       };
     }),
   };

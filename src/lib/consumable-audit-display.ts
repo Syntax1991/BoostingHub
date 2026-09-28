@@ -41,3 +41,33 @@ export const CONSUMABLE_AUDIT_MATCH_LABELS = {
   NOT_IN_LOG: "Log data unavailable — character not found in this report",
   NO_CHARACTER_IDENTITY: "Log data unavailable — no character identity to match (external booster)",
 } as const;
+
+/** Per-fight aura check (flask / food / rune): "Active", "Missing", "3/4", "Unknown", or "—" for an unused optional rune. */
+export function auraCheckText(check: { status: string; fightsWith: number; fightsChecked: number }): string {
+  if (check.status === "UNKNOWN") return "Unknown";
+  if (check.status === "NEUTRAL" && check.fightsWith === 0) return "—";
+  if (check.fightsChecked <= 1) return check.fightsWith > 0 ? "Active" : "Missing";
+  return `${check.fightsWith}/${check.fightsChecked}`;
+}
+
+/** Weapon column: what satisfied it ("Oil", "Shaman imbue", "Runeforge"), "Missing", "N/A" or "Unknown". */
+export function weaponEnhancementText(check: { status: string; labels: readonly string[] }): string {
+  if (check.status === "UNKNOWN") return "Unknown";
+  if (check.status === "NA") return "N/A";
+  if (check.status === "WARNING") return check.labels.length > 0 ? `Missing · ${check.labels.join(", ")}` : "Missing";
+  return check.labels.join(", ") || "Present";
+}
+
+/** Enchants column: "6/7", "N/A" or "?". */
+export function enchantCheckText(check: { status: string; enchanted: number; required: number }): string {
+  if (check.status === "NA") return "N/A";
+  if (check.required === 0) return "?";
+  return `${check.enchanted}/${check.required}`;
+}
+
+/** Gems column: "3/3", "2/3", "0 sockets" or "?". */
+export function gemCheckText(check: { status: string; filled: number; sockets: number; empty: readonly unknown[] }): string {
+  if (check.status === "NA") return "0 sockets";
+  if (check.status === "UNKNOWN" && check.sockets === 0) return "?";
+  return `${check.filled}/${check.sockets}`;
+}

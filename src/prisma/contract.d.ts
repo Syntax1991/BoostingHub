@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'22c611f573d8594a7107a4a231cbd5bdbc95c4a616eb7257e605b1fa1c067a26'>;
+  StorageHashBase<'37e097bda2e9e2c75d25347fc19a95d7e6e7a0d3cacbb3ce755a0cc71d5f078f'>;
 export type ExecutionHash =
-  ExecutionHashBase<'52b548fdbad6fde2903d8abf8fb3c6573b571aa93d27f14bc7b2412a948e29cf'>;
+  ExecutionHashBase<'8bba57f9ca2ebdc0835587aa2b0ec14cafba742ae6842fd81a4f3b1cfe19aa9d'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -475,6 +475,17 @@ export type FieldOutputTypes = {
       readonly raidContentId: CodecTypes['pg/text@1']['output'] | null;
       readonly warlockPresent: CodecTypes['pg/bool@1']['output'] | null;
       readonly healthstoneUseSeen: CodecTypes['pg/bool@1']['output'];
+    };
+    readonly RunConsumableAuditGearItem: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly playerId: CodecTypes['pg/text@1']['output'];
+      readonly fightId: CodecTypes['pg/text@1']['output'];
+      readonly slot: CodecTypes['pg/int4@1']['output'];
+      readonly itemId: CodecTypes['pg/int4@1']['output'];
+      readonly permanentEnchantId: CodecTypes['pg/int4@1']['output'] | null;
+      readonly temporaryEnchantId: CodecTypes['pg/int4@1']['output'] | null;
+      readonly gemCount: CodecTypes['pg/int4@1']['output'];
+      readonly socketCount: CodecTypes['pg/int4@1']['output'] | null;
     };
     readonly RunConsumableAuditObservation: {
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -1086,6 +1097,17 @@ export type FieldInputTypes = {
       readonly warlockPresent: CodecTypes['pg/bool@1']['input'] | null;
       readonly healthstoneUseSeen: CodecTypes['pg/bool@1']['input'];
     };
+    readonly RunConsumableAuditGearItem: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly playerId: CodecTypes['pg/text@1']['input'];
+      readonly fightId: CodecTypes['pg/text@1']['input'];
+      readonly slot: CodecTypes['pg/int4@1']['input'];
+      readonly itemId: CodecTypes['pg/int4@1']['input'];
+      readonly permanentEnchantId: CodecTypes['pg/int4@1']['input'] | null;
+      readonly temporaryEnchantId: CodecTypes['pg/int4@1']['input'] | null;
+      readonly gemCount: CodecTypes['pg/int4@1']['input'];
+      readonly socketCount: CodecTypes['pg/int4@1']['input'] | null;
+    };
     readonly RunConsumableAuditObservation: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly playerId: CodecTypes['pg/text@1']['input'];
@@ -1696,6 +1718,17 @@ export type StorageColumnTypes = {
       readonly warlockPresent: CodecTypes['pg/bool@1']['output'] | null;
       readonly wclFightId: CodecTypes['pg/int4@1']['output'];
     };
+    readonly run_consumable_audit_gear_item: {
+      readonly fightId: CodecTypes['pg/text@1']['output'];
+      readonly gemCount: CodecTypes['pg/int4@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly itemId: CodecTypes['pg/int4@1']['output'];
+      readonly permanentEnchantId: CodecTypes['pg/int4@1']['output'] | null;
+      readonly playerId: CodecTypes['pg/text@1']['output'];
+      readonly slot: CodecTypes['pg/int4@1']['output'];
+      readonly socketCount: CodecTypes['pg/int4@1']['output'] | null;
+      readonly temporaryEnchantId: CodecTypes['pg/int4@1']['output'] | null;
+    };
     readonly run_consumable_audit_observation: {
       readonly atMs: CodecTypes['pg/int4@1']['output'];
       readonly category: CodecTypes['pg/text@1']['output'] | null;
@@ -2305,6 +2338,17 @@ export type StorageColumnInputTypes = {
       readonly startMs: CodecTypes['pg/int4@1']['input'];
       readonly warlockPresent: CodecTypes['pg/bool@1']['input'] | null;
       readonly wclFightId: CodecTypes['pg/int4@1']['input'];
+    };
+    readonly run_consumable_audit_gear_item: {
+      readonly fightId: CodecTypes['pg/text@1']['input'];
+      readonly gemCount: CodecTypes['pg/int4@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly itemId: CodecTypes['pg/int4@1']['input'];
+      readonly permanentEnchantId: CodecTypes['pg/int4@1']['input'] | null;
+      readonly playerId: CodecTypes['pg/text@1']['input'];
+      readonly slot: CodecTypes['pg/int4@1']['input'];
+      readonly socketCount: CodecTypes['pg/int4@1']['input'] | null;
+      readonly temporaryEnchantId: CodecTypes['pg/int4@1']['input'] | null;
     };
     readonly run_consumable_audit_observation: {
       readonly atMs: CodecTypes['pg/int4@1']['input'];
@@ -4251,6 +4295,97 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'run_raid_content';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+              ];
+            };
+            readonly run_consumable_audit_gear_item: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly playerId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly fightId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly slot: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+                readonly itemId: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+                readonly permanentEnchantId: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: true;
+                };
+                readonly temporaryEnchantId: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: true;
+                };
+                readonly gemCount: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+                readonly socketCount: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: true;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [{ readonly columns: readonly ['playerId', 'fightId', 'slot'] }];
+              indexes: readonly [
+                {
+                  readonly name: 'run_consumable_audit_gear_item_fightId_idx_16bc93bc';
+                  readonly prefix: 'run_consumable_audit_gear_item_fightId_idx';
+                  readonly columns: readonly ['fightId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'run_consumable_audit_gear_item_playerId_idx_710cf1aa';
+                  readonly prefix: 'run_consumable_audit_gear_item_playerId_idx';
+                  readonly columns: readonly ['playerId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_consumable_audit_gear_item';
+                    readonly columns: readonly ['playerId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_consumable_audit_player';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_consumable_audit_gear_item';
+                    readonly columns: readonly ['fightId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'run_consumable_audit_fight';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -7259,6 +7394,10 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RunConsumableAuditObservation';
     };
+    readonly run_consumable_audit_gear_item: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'RunConsumableAuditGearItem';
+    };
     readonly warcraft_logs_report: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'WarcraftLogsReport';
@@ -8936,6 +9075,17 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['id'];
                 };
               };
+              readonly gearItems: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunConsumableAuditGearItem';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['fightId'];
+                };
+              };
               readonly observations: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -8976,6 +9126,85 @@ type ContractBase = Omit<
                 readonly raidContentId: { readonly column: 'raidContentId' };
                 readonly warlockPresent: { readonly column: 'warlockPresent' };
                 readonly healthstoneUseSeen: { readonly column: 'healthstoneUseSeen' };
+              };
+            };
+          };
+          readonly RunConsumableAuditGearItem: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly playerId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly fightId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly slot: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly itemId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly permanentEnchantId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly temporaryEnchantId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly gemCount: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly socketCount: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+            };
+            readonly relations: {
+              readonly fight: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunConsumableAuditFight';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['fightId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+              readonly player: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunConsumableAuditPlayer';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['playerId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'run_consumable_audit_gear_item';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly playerId: { readonly column: 'playerId' };
+                readonly fightId: { readonly column: 'fightId' };
+                readonly slot: { readonly column: 'slot' };
+                readonly itemId: { readonly column: 'itemId' };
+                readonly permanentEnchantId: { readonly column: 'permanentEnchantId' };
+                readonly temporaryEnchantId: { readonly column: 'temporaryEnchantId' };
+                readonly gemCount: { readonly column: 'gemCount' };
+                readonly socketCount: { readonly column: 'socketCount' };
               };
             };
           };
@@ -9131,6 +9360,17 @@ type ContractBase = Omit<
                 readonly on: {
                   readonly localFields: readonly ['externalBoosterId'];
                   readonly targetFields: readonly ['id'];
+                };
+              };
+              readonly gearItems: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'RunConsumableAuditGearItem';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['playerId'];
                 };
               };
               readonly observations: {
@@ -12283,6 +12523,14 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'run_consumable_audit_fight';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'run_consumable_audit_gear_item';
             readonly column: 'id';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };

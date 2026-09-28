@@ -1204,6 +1204,7 @@ model RunConsumableAuditFight {
   healthstoneUseSeen Boolean
 
   observations RunConsumableAuditObservation[]
+  gearItems    RunConsumableAuditGearItem[]
 
   @@unique([auditId, reportCode, wclFightId])
   @@index([auditId])
@@ -1231,6 +1232,7 @@ model RunConsumableAuditPlayer {
   sortOrder         Int
 
   observations RunConsumableAuditObservation[]
+  gearItems    RunConsumableAuditGearItem[]
 
   @@index([auditId])
   @@map("run_consumable_audit_player")
@@ -1254,6 +1256,31 @@ model RunConsumableAuditObservation {
   @@index([playerId])
   @@index([fightId])
   @@map("run_consumable_audit_observation")
+}
+
+/// Gear Readiness fact: one equipped item of an audited player at one audited
+/// fight's pull (Warcraft Logs CombatantInfo gear). Only enchantable slots,
+/// weapons and socketed items are stored. Enchant / gem / weapon-enhancement
+/// statuses are evaluated at read time (gear-readiness-policy.ts).
+model RunConsumableAuditGearItem {
+  id                 String                   @id @default(uuid())
+  playerId           String
+  player             RunConsumableAuditPlayer @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fightId            String
+  fight              RunConsumableAuditFight  @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  /// Position in the WCL gear array = equipment slot (0 Head … 15 Main Hand, 16 Off Hand).
+  slot               Int
+  itemId             Int
+  /// SpellItemEnchantment ids as WCL reports them; null = none.
+  permanentEnchantId Int?
+  temporaryEnchantId Int?
+  gemCount           Int
+  /// Sockets from game data (base + bonus sockets); null = unknown.
+  socketCount        Int?
+
+  @@unique([playerId, fightId, slot])
+  @@index([fightId])
+  @@map("run_consumable_audit_gear_item")
 }
 
 /// Where a Warcraft Logs fight stands for one Run.

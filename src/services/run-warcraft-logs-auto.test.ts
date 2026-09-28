@@ -163,7 +163,18 @@ beforeEach(async () => {
       casts: [],
       deaths: [],
       combatants: input.fightIds.flatMap((fight) =>
-        roster.map((_, i) => ({ fight, timestamp: 0, sourceId: i + 1, auraIds: [1235108] })),
+        roster.map((_, i) => ({
+          fight,
+          timestamp: 0,
+          sourceId: i + 1,
+          auraIds: [1235108, 1285644],
+          auraNames: { 1285644: "Hearty Well Fed" },
+          // Enchanted head with an empty bonus socket; main hand with enchant + oil.
+          gear: [
+            { slot: 0, itemId: 271492, permanentEnchantId: 8017, temporaryEnchantId: null, gemIds: [], bonusIds: [13695] },
+            { slot: 15, itemId: 265337, permanentEnchantId: 8039, temporaryEnchantId: 8052, gemIds: [], bonusIds: [] },
+          ],
+        })),
       ),
     },
   }));
@@ -290,6 +301,17 @@ describe("automatic Consumables Audit after completion", () => {
       [1, "ASSIGNED", false],
       [2, "ASSIGNED", true],
     ]);
+
+    // Food and gear facts survive the database round trip.
+    const analyzed = await runConsumableAuditService.getAuditView(
+      { id: "44444444-4444-4444-8444-444444444444", name: "A", email: null, image: null, discordUserId: null, discordUsername: null, accountRole: "ADMIN", accountStatus: "ACTIVE" },
+      RUN,
+    );
+    const first = analyzed.snapshot!.players.find((row) => row.hasLogData)!;
+    expect(first.food.status).toBe("PASS");
+    expect(first.weaponEnhancement).toMatchObject({ status: "PASS", labels: ["Oil"], fightsChecked: 2 });
+    expect(first.gear.enchants).toMatchObject({ status: "PASS", enchanted: 2, required: 2 });
+    expect(first.gear.gems).toMatchObject({ status: "WARNING", filled: 0, sockets: 1, empty: [{ slotLabel: "Head" }] });
 
     // Already analyzed: never picked up again.
     expect(await runConsumableAutoAuditService.runDuePass(at("16:30"))).toEqual({ status: "COMPLETED", due: 0, runs: [] });

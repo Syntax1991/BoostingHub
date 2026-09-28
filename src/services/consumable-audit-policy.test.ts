@@ -50,6 +50,13 @@ const flask = (fightId: string, ms = 0): AuditObservationFact => ({
   category: "FLASK",
   spellId: FLASK_MAGISTERS,
 });
+/** Food buff at pull (recognized by name at extraction; any id). */
+const food = (fightId: string, ms = 0): AuditObservationFact => ({
+  ...at(fightId, ms),
+  kind: "AURA",
+  category: "FOOD",
+  spellId: 1285644,
+});
 const cast = (fightId: string, ms: number, spellId: number, category: string): AuditObservationFact => ({
   ...at(fightId, ms),
   kind: "CAST",
@@ -78,6 +85,7 @@ function player(role: CharacterRole | null, observations: AuditObservationFact[]
     matchStatus: "MATCHED",
     isExternal: false,
     observations,
+    gear: [],
   };
 }
 
@@ -130,7 +138,7 @@ describe("combat potion role policy", () => {
 
   it("does not require a potion on wipes and reports N/A with no kills", () => {
     const wipe = fight({ id: "f2", kill: false });
-    const view = evaluatePlayerConsumables(player("DPS", [combatant("f2"), flask("f2")]), [wipe]);
+    const view = evaluatePlayerConsumables(player("DPS", [combatant("f2"), flask("f2"), food("f2")]), [wipe]);
     expect(view.combatPotion.status).toBe("NA");
     expect(view.warningCount).toBe(0);
   });
@@ -153,7 +161,7 @@ describe("combat potion role policy", () => {
   });
 
   it("is UNKNOWN (never a failure) when the roster role is unknown", () => {
-    const view = evaluatePlayerConsumables(player(null, [combatant("f1"), flask("f1")]), [F1]);
+    const view = evaluatePlayerConsumables(player(null, [combatant("f1"), flask("f1"), food("f1")]), [F1]);
     expect(view.combatPotion.status).toBe("UNKNOWN");
     expect(view.warningCount).toBe(0);
   });
@@ -183,7 +191,7 @@ describe("flask", () => {
 describe("general Healing Potion / Healthstone usage", () => {
   it("zero deaths + no Healing Potion + no Healthstone is neutral, never a warning", () => {
     const view = evaluatePlayerConsumables(
-      player("DPS", [combatant("f1"), flask("f1"), damagePot("f1", 1_000)]),
+      player("DPS", [combatant("f1"), flask("f1"), food("f1"), damagePot("f1", 1_000)]),
       [F1],
     );
     expect(view.healingPotion.status).toBe("NEUTRAL");
@@ -372,6 +380,91 @@ describe("matching", () => {
   it("a matched player in no audited fight is UNKNOWN", () => {
     const view = evaluatePlayerConsumables(player("DPS", []), [F1]);
     expect(view.hasLogData).toBe(false);
+    expect(view.warningCount).toBe(0);
+  });
+});
+
+describe("food, runes, weapon enhancement and gear readiness", () => {
+  const F2 = fight({ id: "f2", startMs: 700_000, endMs: 1_300_000 });
+  const gearItem = (fightId: string, slot: number, overrides: Partial<AuditPlayerFact["gear"][number]> = {}) => ({
+    fightId,
+    slot,
+    itemId: 1000 + slot,
+    permanentEnchantId: 7987,
+    temporaryEnchantId: null,
+    gemCount: 0,
+    socketCount: 0,
+    ...overrides,
+  });
+  const readyGear = (fightId: string) => [
+    ...[0, 2, 4, 6, 7, 10, 11].map((slot) => gearItem(fightId, slot)),
+    gearItem(fightId, 15, { permanentEnchantId: 8039, temporaryEnchantId: 8052 }),
+    gearItem(fightId, 1, { permanentEnchantId: null, gemCount: 2, socketCount: 2 }),
+  ];
+  const withGear = (observations: AuditObservationFact[], gear: AuditPlayerFact["gear"]) => ({
+    ...player("DPS", observations),
+    gear,
+  });
+
+  it("a fully prepared player passes everything and has no warnings", () => {
+    const view = evaluatePlayerConsumables(
+      withGear([combatant("f1"), flask("f1"), food("f1"), damagePot("f1", 1_000)], readyGear("f1")),
+      [F1],
+    );
+    expect(view.food.status).toBe("PASS");
+    expect(view.weaponEnhancement).toMatchObject({ status: "PASS", labels: ["Oil"], fightsChecked: 1 });
+    expect(view.gear.enchants).toMatchObject({ status: "PASS", enchanted: 8, required: 8 });
+    expect(view.gear.gems).toMatchObject({ status: "PASS", filled: 2, sockets: 2 });
+    expect(view.augmentRune.status).toBe("NEUTRAL"); // not used — information only
+    expect(view.warningCount).toBe(0);
+  });
+
+  it("food missing in one fight warns and names it; no snapshot is unknown", () => {
+    const view = evaluatePlayerConsumables(
+      withGear([combatant("f1"), food("f1"), combatant("f2", 700_000)], []),
+      [F1, F2],
+    );
+    expect(view.food).toMatchObject({ status: "WARNING", fightsWith: 1, fightsChecked: 2 });
+    expect(view.food.missing.map((ref) => ref.fightId)).toEqual(["f2"]);
+    const unknown = evaluatePlayerConsumables(withGear([participant("f1")], []), [F1]);
+    expect(unknown.food.status).toBe("UNKNOWN");
+  });
+
+  it("augment and Vantus runes are shown but never warn", () => {
+    const rune: AuditObservationFact = { ...at("f1", 0), kind: "AURA", category: "AUGMENT_RUNE", spellId: 1234969 };
+    const used = evaluatePlayerConsumables(withGear([combatant("f1"), rune], []), [F1]);
+    expect(used.augmentRune).toMatchObject({ status: "PASS", names: ["Ethereal Augmentation"] });
+    const notUsed = evaluatePlayerConsumables(withGear([combatant("f1"), combatant("f2", 700_000), rune], []), [F1, F2]);
+    expect(notUsed.augmentRune.status).toBe("NEUTRAL");
+    expect(notUsed.vantusRune.status).toBe("NEUTRAL");
+  });
+
+  it("weapon enhancement is judged per fight; a fight without an oil is named with its weapon slot", () => {
+    const gear = [...readyGear("f1"), ...readyGear("f2").map((row) => (row.slot === 15 ? { ...row, temporaryEnchantId: null } : row))];
+    const view = evaluatePlayerConsumables(
+      withGear([combatant("f1"), flask("f1"), food("f1"), combatant("f2", 700_000), flask("f2"), food("f2")], gear),
+      [F1, F2],
+    );
+    expect(view.weaponEnhancement.status).toBe("WARNING");
+    expect(view.weaponEnhancement.missing).toEqual([{ fight: expect.objectContaining({ fightId: "f2" }), slots: ["Main Hand"] }]);
+  });
+
+  it("gear readiness uses the latest snapshot and names missing enchants and empty sockets", () => {
+    const early = readyGear("f1");
+    const late = readyGear("f2").map((row) =>
+      row.slot === 11 ? { ...row, permanentEnchantId: null } : row.slot === 1 ? { ...row, gemCount: 1 } : row,
+    );
+    const view = evaluatePlayerConsumables(withGear([combatant("f1"), combatant("f2", 700_000)], [...early, ...late]), [F1, F2]);
+    expect(view.gear.fight?.fightId).toBe("f2");
+    expect(view.gear.enchants).toMatchObject({ status: "WARNING", enchanted: 7, required: 8, missing: [{ slotLabel: "Ring 2" }] });
+    expect(view.gear.gems).toMatchObject({ status: "WARNING", filled: 1, sockets: 2, empty: [{ slotLabel: "Neck", emptySockets: 1 }] });
+  });
+
+  it("no gear in the log: weapon, enchants and gems are UNKNOWN and never add warnings", () => {
+    const view = evaluatePlayerConsumables(withGear([combatant("f1"), flask("f1"), food("f1"), damagePot("f1", 1)], []), [F1]);
+    expect(view.weaponEnhancement.status).toBe("UNKNOWN");
+    expect(view.gear.enchants.status).toBe("UNKNOWN");
+    expect(view.gear.gems.status).toBe("UNKNOWN");
     expect(view.warningCount).toBe(0);
   });
 });

@@ -113,7 +113,21 @@ describe("warcraftLogsApiClient.fetchReportConsumableEvents", () => {
               },
               deaths: { data: [{ timestamp: 50_000, type: "death", targetID: 1, fight: 1 }], nextPageTimestamp: null },
               combatants: {
-                data: [{ timestamp: 10_000, type: "combatantinfo", sourceID: 1, fight: 1, auras: [{ ability: 1235108 }], gear: [] }],
+                data: [
+                  {
+                    timestamp: 10_000,
+                    type: "combatantinfo",
+                    sourceID: 1,
+                    fight: 1,
+                    auras: [{ ability: 1235108, name: "Flask of the Magisters" }],
+                    // Position = equipment slot; id 0 = empty slot.
+                    gear: [
+                      { id: 0 },
+                      { id: 268265, permanentEnchant: 0, gems: [{ id: 240900, itemLevel: 1 }], bonusIDs: [13987] },
+                      { id: 271490, permanentEnchant: 8001, temporaryEnchant: 8052, bonusIDs: [] },
+                    ],
+                  },
+                ],
                 nextPageTimestamp: null,
               },
             },
@@ -126,7 +140,19 @@ describe("warcraftLogsApiClient.fetchReportConsumableEvents", () => {
     if (result.status !== "SUCCESS") return;
     expect(result.events.casts).toEqual([{ fight: null, timestamp: 9_000, sourceId: 1, abilityId: 1236994 }]);
     expect(result.events.deaths).toEqual([{ fight: 1, timestamp: 50_000, targetId: 1 }]);
-    expect(result.events.combatants).toEqual([{ fight: 1, timestamp: 10_000, sourceId: 1, auraIds: [1235108] }]);
+    expect(result.events.combatants).toEqual([
+      {
+        fight: 1,
+        timestamp: 10_000,
+        sourceId: 1,
+        auraIds: [1235108],
+        auraNames: { 1235108: "Flask of the Magisters" },
+        gear: [
+          { slot: 1, itemId: 268265, permanentEnchantId: null, temporaryEnchantId: null, gemIds: [240900], bonusIds: [13987] },
+          { slot: 2, itemId: 271490, permanentEnchantId: 8001, temporaryEnchantId: 8052, gemIds: [], bonusIds: [] },
+        ],
+      },
+    ]);
 
     const bodies = graphqlBodies();
     expect(bodies).toHaveLength(1);

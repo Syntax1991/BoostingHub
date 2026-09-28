@@ -245,19 +245,36 @@ export const runConsumableAuditRepository = {
     return row ? mapAudit(row as Record<string, unknown>) : null;
   },
 
-  /** Whole snapshot in three queries (fights, players, observations) — no N+1. */
+  /** Whole snapshot in four queries (fights, players, observations, gear) — no N+1. */
   async findSnapshot(auditId: string): Promise<RunConsumableAuditSnapshot> {
     const [fightRows, playerRows] = await Promise.all([
       orm.RunConsumableAuditFight.where({ auditId }).all(),
       orm.RunConsumableAuditPlayer.where({ auditId }).all(),
     ]);
     const playerIds = (playerRows as Array<Record<string, unknown>>).map((row) => asString(row.id));
-    const observationRows =
+    const [observationRows, gearRows] =
       playerIds.length === 0
-        ? []
-        : ((await orm.RunConsumableAuditObservation.where((row) => row.playerId.in(playerIds)).all()) as Array<
-            Record<string, unknown>
-          >);
+        ? [[], []]
+        : ((await Promise.all([
+            orm.RunConsumableAuditObservation.where((row) => row.playerId.in(playerIds)).all(),
+            orm.RunConsumableAuditGearItem.where((row) => row.playerId.in(playerIds)).all(),
+          ])) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>]);
+
+    const gearByPlayer = new Map<string, AuditPlayerFact["gear"]>();
+    for (const row of gearRows) {
+      const playerId = asString(row.playerId);
+      const list = gearByPlayer.get(playerId) ?? [];
+      list.push({
+        fightId: asString(row.fightId),
+        slot: asNumber(row.slot),
+        itemId: asNumber(row.itemId),
+        permanentEnchantId: asNumberOrNull(row.permanentEnchantId),
+        temporaryEnchantId: asNumberOrNull(row.temporaryEnchantId),
+        gemCount: asNumber(row.gemCount),
+        socketCount: asNumberOrNull(row.socketCount),
+      });
+      gearByPlayer.set(playerId, list);
+    }
 
     const observationsByPlayer = new Map<string, AuditPlayerFact["observations"]>();
     for (const row of observationRows) {
@@ -301,6 +318,7 @@ export const runConsumableAuditRepository = {
         // Attendance rows always snapshot a character name; external boosters never have one.
         isExternal: row.characterName == null,
         observations: (observationsByPlayer.get(asString(row.id)) ?? []).sort((a, b) => a.atMs - b.atMs),
+        gear: gearByPlayer.get(asString(row.id)) ?? [],
       }));
 
     return { fights, players };
@@ -376,7 +394,7 @@ export const runConsumableAuditRepository = {
       >;
       const auditId = asString(audit.id);
 
-      // Observations cascade from both players and fights.
+      // Observations and gear facts cascade from both players and fights.
       await txOrm.RunConsumableAuditPlayer.where({ auditId }).deleteAndCount();
       await txOrm.RunConsumableAuditFight.where({ auditId }).deleteAndCount();
 
@@ -389,8 +407,9 @@ export const runConsumableAuditRepository = {
       });
       const playerRows: Record<string, unknown>[] = [];
       const observationRows: Record<string, unknown>[] = [];
+      const gearRows: Record<string, unknown>[] = [];
       for (const player of input.extracted.players) {
-        const { observations, ...fields } = player;
+        const { observations, gear, ...fields } = player;
         const id = crypto.randomUUID();
         playerRows.push({ id, auditId, ...fields });
         for (const observation of observations) {
@@ -407,6 +426,21 @@ export const runConsumableAuditRepository = {
             atMs: observation.atMs,
           });
         }
+        for (const item of gear) {
+          const fightId = fightIdByKey.get(fightKey(item.reportCode, item.wclFightId));
+          if (!fightId) continue;
+          gearRows.push({
+            id: crypto.randomUUID(),
+            playerId: id,
+            fightId,
+            slot: item.slot,
+            itemId: item.itemId,
+            permanentEnchantId: item.permanentEnchantId,
+            temporaryEnchantId: item.temporaryEnchantId,
+            gemCount: item.gemCount,
+            socketCount: item.socketCount,
+          });
+        }
       }
 
       await insertChunked((rows) => txOrm.RunConsumableAuditFight.createAndCount(rows as never), fightRows);
@@ -415,6 +449,7 @@ export const runConsumableAuditRepository = {
         (rows) => txOrm.RunConsumableAuditObservation.createAndCount(rows as never),
         observationRows,
       );
+      await insertChunked((rows) => txOrm.RunConsumableAuditGearItem.createAndCount(rows as never), gearRows);
     });
   },
 };

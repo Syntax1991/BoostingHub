@@ -10,11 +10,16 @@ import { formatDateTime } from "@/lib/datetime";
 import {
   CONSUMABLE_AUDIT_FAILURE_LABELS,
   CONSUMABLE_AUDIT_MATCH_LABELS,
+  auraCheckText,
+  enchantCheckText,
   formatFightClock,
+  gemCheckText,
   summarizeCombatPotionUses,
+  weaponEnhancementText,
 } from "@/lib/consumable-audit-display";
 import { CONSUMABLE_CATEGORY_LABELS } from "@/lib/consumable-catalog";
 import type {
+  AuraAtPullCheck,
   ConsumableCheckStatus,
   ConsumableUseView,
   DeathConsumableContext,
@@ -136,6 +141,39 @@ function PlayerDetails({
           </p>
         ) : null}
       </section>
+      <AuraSection title="Food" check={player.food} contentLabels={contentLabels} missingText="No food buff at pull" />
+      <section>
+        <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">Weapon</h4>
+        {player.weaponEnhancement.status === "UNKNOWN" ? (
+          <p className="text-muted">No gear in the log — weapon enhancement unknown.</p>
+        ) : player.weaponEnhancement.status === "NA" ? (
+          <p className="text-muted">N/A — no weapon equipped.</p>
+        ) : (
+          <p>
+            {player.weaponEnhancement.labels.length > 0
+              ? `${player.weaponEnhancement.labels.join(", ")} in ${
+                  player.weaponEnhancement.fightsChecked - player.weaponEnhancement.missing.length
+                } of ${player.weaponEnhancement.fightsChecked} fights.`
+              : "No weapon enhancement detected."}
+          </p>
+        )}
+        {player.weaponEnhancement.missing.length > 0 ? (
+          <p className="mt-1 text-warning">
+            No oil, stone, class imbue or Runeforge:{" "}
+            {player.weaponEnhancement.missing
+              .map((row) => `${fightLabel(row.fight, contentLabels)} (${row.slots.join(", ")})`)
+              .join(", ")}
+          </p>
+        ) : null}
+        {player.weaponEnhancement.notChecked.length > 0 ? (
+          <p className="mt-1 text-muted">
+            Not checked: {player.weaponEnhancement.notChecked.join(", ")} (shield / off-hand item, or not known to be a
+            weapon).
+          </p>
+        ) : null}
+      </section>
+      <AuraSection title="Augment Rune" check={player.augmentRune} contentLabels={contentLabels} optional />
+      <AuraSection title="Vantus Rune" check={player.vantusRune} contentLabels={contentLabels} optional />
       <section>
         <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">Combat Potion</h4>
         <p className="mb-1 text-muted">
@@ -189,7 +227,89 @@ function PlayerDetails({
           not what was in the player&apos;s bags.
         </p>
       </section>
+      <GearReadinessSection player={player} contentLabels={contentLabels} />
     </div>
+  );
+}
+
+function AuraSection({
+  title,
+  check,
+  contentLabels,
+  missingText,
+  optional = false,
+}: {
+  title: string;
+  check: AuraAtPullCheck;
+  contentLabels: Map<string, string | null>;
+  missingText?: string;
+  optional?: boolean;
+}) {
+  return (
+    <section>
+      <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">{title}</h4>
+      <p>
+        {check.fightsChecked === 0
+          ? `No pull snapshot in the log — ${title.toLowerCase()} unknown.`
+          : `Active at pull in ${check.fightsWith} of ${check.fightsChecked} fights.`}
+        {optional ? <span className="text-muted"> Shown for information — not required.</span> : null}
+      </p>
+      {!optional && check.missing.length > 0 ? (
+        <p className="mt-1 text-warning">
+          {missingText ?? `No ${title.toLowerCase()} at pull`}:{" "}
+          {check.missing.map((fight) => fightLabel(fight, contentLabels)).join(", ")}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function GearReadinessSection({
+  player,
+  contentLabels,
+}: {
+  player: PlayerConsumableAudit;
+  contentLabels: Map<string, string | null>;
+}) {
+  const { enchants, gems, fight } = player.gear;
+  return (
+    <section className="sm:col-span-2 lg:col-span-3">
+      <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">Gear readiness</h4>
+      {!fight ? (
+        <p className="text-muted">No gear in the log — enchants and gems unknown.</p>
+      ) : (
+        <>
+          <p className="mb-1 text-muted">Gear at the pull of {fightLabel(fight, contentLabels)}.</p>
+          <p>
+            Enchants {enchantCheckText(enchants)}
+            {enchants.runeforges.length > 0 ? ` (Runeforge: ${enchants.runeforges.join(", ")})` : ""}
+          </p>
+          {enchants.missing.length > 0 ? (
+            <p className="text-warning">Missing enchant: {enchants.missing.map((row) => row.slotLabel).join(", ")}</p>
+          ) : null}
+          {enchants.unknown.length > 0 ? (
+            <p className="text-muted">
+              Not judged: {enchants.unknown.map((row) => row.slotLabel).join(", ")} (not known to be a weapon)
+            </p>
+          ) : null}
+          <p className="mt-1">Gems {gemCheckText(gems)}</p>
+          {gems.empty.length > 0 ? (
+            <p className="text-warning">
+              Empty socket:{" "}
+              {gems.empty
+                .map((row) => (row.sockets > 1 ? `${row.slotLabel} (${row.emptySockets} of ${row.sockets})` : row.slotLabel))
+                .join(", ")}
+            </p>
+          ) : null}
+          {gems.unknown.length > 0 ? (
+            <p className="text-muted">Sockets unknown: {gems.unknown.map((row) => row.slotLabel).join(", ")}</p>
+          ) : null}
+          <p className="mt-1 text-muted">
+            Checks that an enchant is present and every existing socket holds a gem — not which one is best.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -283,16 +403,21 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
             ) : null}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[48rem] text-left text-sm">
+            <table className="w-full min-w-[72rem] text-left text-sm">
               <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Player</th>
                   <th className="px-3 py-2 font-medium">Role</th>
                   <th className="px-3 py-2 font-medium">Flask</th>
+                  <th className="px-3 py-2 font-medium">Food</th>
+                  <th className="px-3 py-2 font-medium">Weapon</th>
+                  <th className="px-3 py-2 font-medium">Rune</th>
                   <th className="px-3 py-2 font-medium">Combat Pot</th>
                   <th className="px-3 py-2 font-medium">Heal Pot</th>
                   <th className="px-3 py-2 font-medium">HS</th>
                   <th className="px-3 py-2 font-medium">Deaths</th>
+                  <th className="px-3 py-2 font-medium">Enchants</th>
+                  <th className="px-3 py-2 font-medium">Gems</th>
                 </tr>
               </thead>
               <tbody>
@@ -327,7 +452,7 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                         </td>
                         <td className="px-3 py-2">{player.role ? <RoleBadge role={player.role} /> : <span className="text-muted">—</span>}</td>
                         {!player.hasLogData ? (
-                          <td colSpan={5} className="px-3 py-2">
+                          <td colSpan={10} className="px-3 py-2">
                             <StatusChip status="UNKNOWN">
                               {player.matchStatus === "MATCHED"
                                 ? "Log data unavailable — not in any audited fight"
@@ -338,6 +463,22 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                           <>
                             <td className="px-3 py-2">
                               <StatusChip status={player.flask.status}>{flaskText(player)}</StatusChip>
+                            </td>
+                            <td className="px-3 py-2">
+                              <StatusChip status={player.food.status}>{auraCheckText(player.food)}</StatusChip>
+                            </td>
+                            <td className="px-3 py-2">
+                              <StatusChip status={player.weaponEnhancement.status}>
+                                {weaponEnhancementText(player.weaponEnhancement)}
+                              </StatusChip>
+                            </td>
+                            <td className="px-3 py-2">
+                              <StatusChip
+                                status={player.augmentRune.status}
+                                title="Augment Rune — shown for information, not required"
+                              >
+                                {auraCheckText(player.augmentRune)}
+                              </StatusChip>
                             </td>
                             <td className="px-3 py-2">
                               <StatusChip status={player.combatPotion.status}>{combatText(player)}</StatusChip>
@@ -364,12 +505,36 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                                 {String(player.deaths.length)}
                               </StatusChip>
                             </td>
+                            <td className="px-3 py-2">
+                              <StatusChip
+                                status={player.gear.enchants.status}
+                                title={
+                                  player.gear.enchants.missing.length > 0
+                                    ? `Missing: ${player.gear.enchants.missing.map((row) => row.slotLabel).join(", ")}`
+                                    : undefined
+                                }
+                              >
+                                {enchantCheckText(player.gear.enchants)}
+                              </StatusChip>
+                            </td>
+                            <td className="px-3 py-2">
+                              <StatusChip
+                                status={player.gear.gems.status}
+                                title={
+                                  player.gear.gems.empty.length > 0
+                                    ? `Empty: ${player.gear.gems.empty.map((row) => row.slotLabel).join(", ")}`
+                                    : undefined
+                                }
+                              >
+                                {gemCheckText(player.gear.gems)}
+                              </StatusChip>
+                            </td>
                           </>
                         )}
                       </tr>
                       {open && player.hasLogData ? (
                         <tr className="border-b border-border/60 bg-surface-raised/40">
-                          <td colSpan={7}>
+                          <td colSpan={12}>
                             <PlayerDetails
                               player={player}
                               contentLabels={contentLabels}

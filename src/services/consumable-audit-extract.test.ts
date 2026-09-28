@@ -233,3 +233,55 @@ describe("report identity on facts", () => {
     expect(merged.players[1]!.observations.map((row) => row.reportCode)).toEqual(["ZyXwVuTsRqPoNmLk", "ZyXwVuTsRqPoNmLk"]);
   });
 });
+
+describe("extractConsumableAudit — food, runes and gear at pull", () => {
+  const extracted = extractConsumableAudit({
+    report: report(),
+    fights: assignedFights,
+    events: {
+      casts: [],
+      deaths: [],
+      combatants: [
+        {
+          fight: 1,
+          timestamp: 10_000,
+          sourceId: 1,
+          auraIds: [1285644, 1303171, 1234969, 465],
+          auraNames: {
+            1285644: "Hearty Well Fed",
+            1303171: "Vantus Rune: Tides",
+            1234969: "Ethereal Augmentation",
+            465: "Devotion Aura",
+          },
+          gear: [
+            { slot: 0, itemId: 271492, permanentEnchantId: 8017, temporaryEnchantId: null, gemIds: [], bonusIds: [13695] },
+            { slot: 1, itemId: 268265, permanentEnchantId: null, temporaryEnchantId: null, gemIds: [240900, 240983], bonusIds: [6652, 13668, 13334, 13987, 12852] },
+            { slot: 5, itemId: 251155, permanentEnchantId: null, temporaryEnchantId: null, gemIds: [], bonusIds: [] },
+            { slot: 15, itemId: 265337, permanentEnchantId: 8039, temporaryEnchantId: 8052, gemIds: [], bonusIds: [] },
+          ],
+        },
+        // A second snapshot for the same fight is ignored (first one wins).
+        { fight: 1, timestamp: 11_000, sourceId: 1, auraIds: [], gear: [] },
+      ],
+    },
+    participants: [attended("Synlight", "Blackhand")],
+  });
+  const player = extracted.players[0]!;
+
+  it("classifies food and Vantus buffs by name, augment runes by id", () => {
+    expect(player.observations.filter((row) => row.kind === "AURA").map((row) => [row.category, row.spellId])).toEqual([
+      ["FOOD", 1285644],
+      ["VANTUS_RUNE", 1303171],
+      ["AUGMENT_RUNE", 1234969],
+    ]);
+  });
+
+  it("stores enchantable slots, weapons and socketed items with their sockets; skips the rest", () => {
+    expect(player.gear.map((row) => [row.slot, row.permanentEnchantId, row.temporaryEnchantId, row.gemCount, row.socketCount])).toEqual([
+      [0, 8017, null, 0, 1], // head: socket from bonus 13695, empty
+      [1, null, null, 2, 2], // neck: two base sockets, both filled
+      [15, 8039, 8052, 0, 0], // main hand: enchant + oil
+    ]);
+    expect(player.gear.every((row) => row.reportCode === report().code && row.wclFightId === 1)).toBe(true);
+  });
+});

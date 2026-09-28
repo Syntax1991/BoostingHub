@@ -379,12 +379,26 @@ export type WarcraftLogsReportMetadataResult =
 /** `fight` is null for a cast outside any fight (e.g. a pre-pull potion). */
 export type WarcraftLogsCastEvent = { fight: number | null; timestamp: number; sourceId: number; abilityId: number };
 export type WarcraftLogsDeathEvent = { fight: number; timestamp: number; targetId: number };
-/** CombatantInfo snapshot at pull, reduced to the aura ability ids. */
+/** One equipped item in a CombatantInfo snapshot; `slot` is its position in the gear array. */
+export type WarcraftLogsGearItem = {
+  slot: number;
+  itemId: number;
+  permanentEnchantId: number | null;
+  temporaryEnchantId: number | null;
+  gemIds: number[];
+  bonusIds: number[];
+};
+
+/** CombatantInfo snapshot at pull, reduced to auras (ids + names) and equipped gear. */
 export type WarcraftLogsCombatantSnapshot = {
   fight: number;
   timestamp: number;
   sourceId: number;
   auraIds: number[];
+  /** Aura id → in-game name (food / Vantus buffs are recognized by name). */
+  auraNames?: Record<number, string>;
+  /** Equipped items; absent when the log carried no gear for this snapshot. */
+  gear?: WarcraftLogsGearItem[];
 };
 
 export type WarcraftLogsConsumableEvents = {
@@ -561,12 +575,44 @@ function mapEventPage(stream: EventStream, rows: unknown[], into: WarcraftLogsCo
     } else {
       const sourceId = asInt(event.sourceID);
       if (event.type !== "combatantinfo" || fight == null || sourceId == null) continue;
-      const auraIds = (Array.isArray(event.auras) ? event.auras : [])
-        .map((aura) => asInt(asRecord(aura)?.ability))
-        .filter((value): value is number => value != null);
-      into.combatants.push({ fight, timestamp, sourceId, auraIds });
+      const auraIds: number[] = [];
+      const auraNames: Record<number, string> = {};
+      for (const aura of Array.isArray(event.auras) ? event.auras : []) {
+        const id = asInt(asRecord(aura)?.ability);
+        if (id == null) continue;
+        auraIds.push(id);
+        const name = asString(asRecord(aura)?.name);
+        if (name) auraNames[id] = name;
+      }
+      into.combatants.push({ fight, timestamp, sourceId, auraIds, auraNames, gear: mapGear(event.gear) });
     }
   }
+}
+
+/** CombatantInfo `gear`: position = equipment slot; empty slots (id 0) are skipped. */
+function mapGear(value: unknown): WarcraftLogsGearItem[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const ids = (list: unknown, key?: string) =>
+    (Array.isArray(list) ? list : [])
+      .map((entry) => asInt(key ? asRecord(entry)?.[key] : entry))
+      .filter((id): id is number => id != null && id > 0);
+  const gear: WarcraftLogsGearItem[] = [];
+  value.forEach((entry, slot) => {
+    const item = asRecord(entry);
+    const itemId = asInt(item?.id);
+    if (!item || itemId == null || itemId <= 0) return;
+    const permanent = asInt(item.permanentEnchant);
+    const temporary = asInt(item.temporaryEnchant);
+    gear.push({
+      slot,
+      itemId,
+      permanentEnchantId: permanent && permanent > 0 ? permanent : null,
+      temporaryEnchantId: temporary && temporary > 0 ? temporary : null,
+      gemIds: ids(item.gems, "id"),
+      bonusIds: ids(item.bonusIDs),
+    });
+  });
+  return gear;
 }
 
 function graphqlErrorMessage(root: GraphqlResponse): string | null {

@@ -87,6 +87,36 @@ Audited players are **attended BOOSTER roster participants** (`PRESENT`, `LATE`,
 | Healing Potion | Uses are listed | Never a failure on its own — NEUTRAL with 0 uses; WARNING only via a death |
 | Healthstone | Uses are listed | Never a failure on its own — NEUTRAL / N/A when not applicable; WARNING only via a death |
 | Deaths | Each death evaluated independently (below) | WARNING per missing recovery consumable |
+| Food | "Well Fed" / "Hearty Well Fed" buff **at pull**, per fight (like the flask) | PASS / WARNING (lists fights) / UNKNOWN without snapshots |
+| Weapon | Per fight, every weapon carries an oil or stone, the class's own imbue, or a Runeforge (below) | PASS (shows what: Oil, Stone, Shaman imbue, Lightsmith rite, Runeforge) / WARNING (fight + slot) / N/A / UNKNOWN |
+| Augment Rune | Rune buff at pull | Information only — PASS when used in every fight, else NEUTRAL; never a warning (≈ 12 % of players use one) |
+| Vantus Rune | "Vantus Rune: <boss>" buff at pull | Information only (boss-specific), shown in the player details |
+| Enchants | Gear Readiness — a permanent enchant on every equipped enchantable slot (below) | PASS `8/8` / WARNING `7/8` + missing slots / N/A / UNKNOWN |
+| Gems | Gear Readiness — every socket that **exists** on an equipped item holds a gem (below) | PASS `3/3` / WARNING `2/3` + empty slots / N/A `0 sockets` / UNKNOWN |
+
+### Weapon enhancement — class-aware
+
+One rule (`resolveWeaponEnhancementRequirement`, `src/services/gear-readiness-policy.ts`) with the game data kept apart (`src/lib/wow-gear-catalog.ts`). Per weapon, from the CombatantInfo gear at pull:
+
+| Weapon has | Result |
+| --- | --- |
+| an oil / stone temporary enchant (Thalassian Phoenix Oil, Oil of Dawn, whetstone) | pass — `Oil` / `Stone` |
+| the class's own imbue as its temporary enchant: Shaman **Flametongue / Windfury / Earthliving Weapon**, Paladin Lightsmith **Rite of Sanctification / Adjuration** | pass — `Shaman imbue` / `Lightsmith rite` |
+| no temporary enchant, but a Death Knight **Runeforge** as permanent enchant | pass — `Runeforge` (a Death Knight is never asked for an oil on top) |
+| a temporary enchant the catalog does not know yet | pass — present, never missing |
+| nothing | missing |
+
+- Class imbues use the weapon's single temporary-enchant slot, the same one an oil uses — the game never stacks both, so either satisfies it; nothing ever requires both.
+- **Hero Talents are never interpreted.** A Lightsmith rite is visible as the weapon's temporary enchant itself (WCL `talentTree` only holds trait entry ids). A Paladin with neither a rite nor an oil has nothing on the weapon, whatever the talents.
+- **Off-hand**: checked only when it is known to be a weapon — a weapon enchant or enhancement on it, or a class that can hold nothing else there (Rogue, Demon Hunter, Death Knight). A Shaman shield imbue (Tidecaller's Guard, Thunderstrike Ward) marks a shield. Otherwise (shield or off-hand frill possible) it is "not checked", never missing.
+- Evidence (Sept 2026, 1 419 players in 75 public Venomous Abyss reports): 16 of 162 Paladins had no rite and no oil and no weapon-related aura — a genuine miss.
+
+## Gear Readiness
+
+Enchants and gems are judged on the player's **latest audited snapshot** (gear at the last pull). Facts are stored per fight (`RunConsumableAuditGearItem`), statuses derived at read time. Only *presence* is checked — which enchant or gem is best is not judged.
+
+- **Enchantable slots** (Midnight, `ENCHANTABLE_ARMOR_SLOTS`): Head, Shoulders, Chest, Legs, Feet, Ring 1, Ring 2, plus the main hand and a weapon off-hand. In the evidence set these carry an enchant 80–93 % of the time; neck, waist, wrists, hands, back, trinkets 0 %. A Runeforge counts as the weapon enchant (no double failure with the weapon check).
+- **Sockets**: Warcraft Logs reports the filled gems but not an item's sockets. The socket count comes from Blizzard's game data (`src/lib/wow-item-sockets.data.json`, client build 12.1.5): base sockets of the item (`ItemSparse.SocketType`) plus sockets added by its bonus lists (`ItemBonus` type 6). Validated on 23 193 equipped items: no item ever showed more gems than computed sockets. An item whose gems the table cannot explain is **unknown**, never "empty socket". Regenerate after a content patch: `node scripts/generate-wow-item-sockets.mjs`.
 
 ### Combat potion by role
 
@@ -124,8 +154,13 @@ Warcraft Logs records what was **cast**, not what was in a player's bags. The au
 
 ### Unknown is never a failure
 
+A check only warns on affirmative evidence that something is missing:
+
 - **Log data unavailable** — the Character is not in the report (`NOT_IN_LOG`), or the booster has no character identity (`NO_CHARACTER_IDENTITY`: external boosters only carry a Discord name).
-- **Unknown** flask — no CombatantInfo pull snapshot for that fight.
+- **Unknown** flask / food — no CombatantInfo pull snapshot for that fight.
+- **Weapon / Enchants / Gems unknown** — no gear in the log.
+- **Off-hand not checked** — not known to be a weapon (shield or frill possible).
+- **Sockets unknown** — the game data cannot explain the gems seen on an item.
 
 ## Player matching
 
@@ -143,7 +178,8 @@ Normalized **facts** are persisted; PASS/WARNING/N/A/UNKNOWN is evaluated at rea
 | `RunConsumableAudit` | one per Run (`runId` unique): last successful analysis (`autoAnalyzed` when automatic), last attempt, safe failure code, automatic attempts |
 | `RunConsumableAuditFight` | audited fight snapshot (`auditId, reportCode, wclFightId` unique), Warlock presence, Healthstone use seen |
 | `RunConsumableAuditPlayer` | audited booster snapshot: attendance / external booster link, names, class, role, match status, WCL actor id |
-| `RunConsumableAuditObservation` | one fact per player per fight: `COMBATANT` / `PARTICIPANT` presence, `AURA` (flask at pull), `CAST` (potion/Healthstone), `DEATH`; report-relative `atMs` |
+| `RunConsumableAuditObservation` | one fact per player per fight: `COMBATANT` / `PARTICIPANT` presence, `AURA` (flask, food, augment rune, Vantus rune at pull), `CAST` (potion/Healthstone), `DEATH`; report-relative `atMs` |
+| `RunConsumableAuditGearItem` | Gear Readiness fact per player per fight: WCL gear slot, item id, permanent / temporary enchant id, gem count, socket count (null = unknown). Only enchantable slots, weapons and socketed items |
 | `Run.completedAt` | set on IN_PROGRESS → COMPLETED; closes the Run's active window |
 
 A successful analysis replaces all audit fights/players/observations in one transaction (idempotent). A failed analysis or re-scan keeps the previous snapshot and associations untouched. When the assignment changes after an analysis, the view flags the audit as stale until **Re-analyze**. Deleting a Run cascades to its associations, fight rows and audit; other Runs' use of the same report is unaffected.

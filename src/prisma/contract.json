@@ -68,6 +68,10 @@
       "model": "RunConsumableAuditFight",
       "namespace": "public"
     },
+    "run_consumable_audit_gear_item": {
+      "model": "RunConsumableAuditGearItem",
+      "namespace": "public"
+    },
     "run_consumable_audit_observation": {
       "model": "RunConsumableAuditObservation",
       "namespace": "public"
@@ -3414,6 +3418,21 @@
                   "namespace": "public"
                 }
               },
+              "gearItems": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "fightId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditGearItem",
+                  "namespace": "public"
+                }
+              },
               "observations": {
                 "cardinality": "1:N",
                 "on": {
@@ -3489,6 +3508,138 @@
               },
               "namespaceId": "public",
               "table": "run_consumable_audit_fight"
+            }
+          },
+          "RunConsumableAuditGearItem": {
+            "fields": {
+              "fightId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "gemCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "itemId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "permanentEnchantId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "playerId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "slot": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "socketCount": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "temporaryEnchantId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "fight": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "fightId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditFight",
+                  "namespace": "public"
+                }
+              },
+              "player": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "playerId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditPlayer",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "fightId": {
+                  "column": "fightId"
+                },
+                "gemCount": {
+                  "column": "gemCount"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "itemId": {
+                  "column": "itemId"
+                },
+                "permanentEnchantId": {
+                  "column": "permanentEnchantId"
+                },
+                "playerId": {
+                  "column": "playerId"
+                },
+                "slot": {
+                  "column": "slot"
+                },
+                "socketCount": {
+                  "column": "socketCount"
+                },
+                "temporaryEnchantId": {
+                  "column": "temporaryEnchantId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_consumable_audit_gear_item"
             }
           },
           "RunConsumableAuditObservation": {
@@ -3757,6 +3908,21 @@
                 },
                 "to": {
                   "model": "RunExternalBooster",
+                  "namespace": "public"
+                }
+              },
+              "gearItems": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "playerId"
+                  ]
+                },
+                "to": {
+                  "model": "RunConsumableAuditGearItem",
                   "namespace": "public"
                 }
               },
@@ -10297,6 +10463,123 @@
                 }
               ]
             },
+            "run_consumable_audit_gear_item": {
+              "columns": {
+                "fightId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "gemCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "itemId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "permanentEnchantId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "playerId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "slot": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "socketCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "temporaryEnchantId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "playerId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_gear_item"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_player"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "fightId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_gear_item"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_consumable_audit_fight"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "fightId"
+                  ],
+                  "name": "run_consumable_audit_gear_item_fightId_idx_16bc93bc",
+                  "prefix": "run_consumable_audit_gear_item_fightId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "playerId"
+                  ],
+                  "name": "run_consumable_audit_gear_item_playerId_idx_710cf1aa",
+                  "prefix": "run_consumable_audit_gear_item_playerId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "playerId",
+                    "fightId",
+                    "slot"
+                  ]
+                }
+              ]
+            },
             "run_consumable_audit_observation": {
               "checks": [
                 {
@@ -14323,10 +14606,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "22c611f573d8594a7107a4a231cbd5bdbc95c4a616eb7257e605b1fa1c067a26"
+    "storageHash": "37e097bda2e9e2c75d25347fc19a95d7e6e7a0d3cacbb3ce755a0cc71d5f078f"
   },
   "execution": {
-    "executionHash": "52b548fdbad6fde2903d8abf8fb3c6573b571aa93d27f14bc7b2412a948e29cf",
+    "executionHash": "8bba57f9ca2ebdc0835587aa2b0ec14cafba742ae6842fd81a4f3b1cfe19aa9d",
     "mutations": {
       "defaults": [
         {
@@ -14683,6 +14966,17 @@
             "column": "id",
             "namespace": "public",
             "table": "run_consumable_audit_fight"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_consumable_audit_gear_item"
           }
         },
         {
