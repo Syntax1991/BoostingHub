@@ -151,14 +151,16 @@ Signup-time eligibility can rot before publish. Access and lockouts are therefor
 
 ## Run commitments (informational)
 
-Roster Builder attaches `runCommitments: CharacterRunCommitment[]` to each BOOSTER card via a **batched** repository lookup (`listReservingCommitmentsByCharacterIds`), excluding the target Run.
+Roster Builder attaches `runCommitments: CharacterRunCommitment[]` to each BOOSTER card via a **batched** repository lookup (`listReservingCommitmentsByCharacterIds`, one read for all Characters), excluding the target Run.
+
+**Scope: the target Run's raid ID.** A commitment is shown only when the other Run lies in the same regional weekly reset as the target Run *for that Character's region*: `lockoutService.getResetIdentifierForRun(character.region, other.scheduledStartAt) === …(character.region, target.scheduledStartAt)` (EU resets Wednesday 04:00 UTC, US Tuesday 15:00 UTC — fixed UTC instants, so daylight-saving changes do not matter). Never by calendar week, date distance or the Discord CURRENT/NEXT bucket. A reservation in the current raid ID is therefore not shown on a next-ID Run's roster, and vice versa.
 
 | State | Meaning |
 | --- | --- |
 | `RESERVED` | Draft-selected on another upcoming Run; not yet published `SELECTED` |
 | `COMMITTED` | Published `SELECTED` on another upcoming Run (`PUBLISHED` / `IN_PROGRESS`, etc.) |
 
-UI: muted “Committed elsewhere” / “Reserved elsewhere” lines. Separately, existing `scheduleConflicts` keep warning styling and still gate new selection / publish.
+UI: muted “Committed elsewhere” / “Reserved elsewhere” lines (tooltip: “… on another Run in this raid ID”). Separately, existing `scheduleConflicts` keep warning styling and still gate new selection / publish. They are **independent of the raid ID**: two Runs < 2 h apart conflict even when a weekly reset lies between them.
 
 Commitments are derived only — no persisted `safe` / `committed` flags. They disappear when the other Run completes/cancels, the draft deselects (for `RESERVED`), or a republish removes the published slot (for `COMMITTED`).
 

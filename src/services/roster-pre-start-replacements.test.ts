@@ -16,6 +16,20 @@ import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
 
+/** Commitments of one Character as seen from a Run in the same raid ID as `runId` (excluding `excludeRunId`). */
+async function commitmentsInRaidIdOf(runId: string, characterId: string, excludeRunId: string) {
+  const run = (await orm.Run.where({ id: runId }).first()) as { scheduledStartAt: string };
+  const character = (await orm.Character.where({ id: characterId }).first()) as { region: "EU" | "US" };
+  return (
+    await getRunCommitmentsForCharacters({
+      characters: [{ id: characterId, region: character.region }],
+      excludeRunId,
+      targetScheduledStartAt: new Date(run.scheduledStartAt).toISOString(),
+    })
+  ).get(characterId);
+}
+
+
 /**
  * Pre-start roster replacements: PUBLISHED stays editable, Add Player rosters
  * registered players atomically, Start Run is the (race-safe) lock point, and
@@ -499,10 +513,10 @@ describe("published roster replacement and the Start lock", () => {
     const { runId } = await publishedRun();
     const other = await createOpenRun(otherLead);
     await addPlayer(runId, ids.b, bChar, "DPS");
-    const reserved = (await getRunCommitmentsForCharacters({ characterIds: [bChar], excludeRunId: other.runId })).get(bChar);
+    const reserved = (await commitmentsInRaidIdOf(runId, bChar, other.runId));
     expect(reserved?.find((row) => row.runId === runId)?.state).toBe("RESERVED");
     await publish(runId);
-    const committed = (await getRunCommitmentsForCharacters({ characterIds: [bChar], excludeRunId: other.runId })).get(bChar);
+    const committed = (await commitmentsInRaidIdOf(runId, bChar, other.runId));
     expect(committed?.find((row) => row.runId === runId)?.state).toBe("COMMITTED");
   });
 
