@@ -3237,6 +3237,13 @@
                   "kind": "scalar"
                 }
               },
+              "factsVersion": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -3357,6 +3364,9 @@
                 },
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "factsVersion": {
+                  "column": "factsVersion"
                 },
                 "id": {
                   "column": "id"
@@ -3762,6 +3772,13 @@
                   "kind": "scalar"
                 }
               },
+              "specId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "spellId": {
                 "nullable": true,
                 "type": {
@@ -3821,6 +3838,9 @@
                 },
                 "playerId": {
                   "column": "playerId"
+                },
+                "specId": {
+                  "column": "specId"
                 },
                 "spellId": {
                   "column": "spellId"
@@ -10489,6 +10509,15 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "factsVersion": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 1
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -10878,6 +10907,11 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "specId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
                 },
                 "spellId": {
                   "codecId": "pg/int4@1",
@@ -14997,7 +15031,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e9665e734556b0c551f879899a7a054a242554e39ced499f128ae400462e1368"
+    "storageHash": "e6e069169ebaa1f098a957c97a4912fab9e330a3d208587e250b8ea3f3a5a99e"
   },
   "execution": {
     "executionHash": "4db3e22f9203aeabd3091cf80b607036655d4240c5b2499899845ca3a30fb4aa",

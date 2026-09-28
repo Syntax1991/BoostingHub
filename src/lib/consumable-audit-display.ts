@@ -1,4 +1,23 @@
 import type { ConsumableCategory } from "@/lib/consumable-catalog";
+import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
+import type { CharacterRole } from "@/models/enums";
+import type { PlayedRole } from "@/services/consumable-audit-policy";
+
+/** Played role label: "Healer", "Mixed", "Unknown". */
+export function playedRoleLabel(role: PlayedRole): string {
+  if (role === "MIXED") return "Mixed";
+  if (role === "UNKNOWN") return "Unknown";
+  return CHARACTER_ROLE_LABELS[role];
+}
+
+/**
+ * The roster role when it differs from a single played role — shown as
+ * information only (never a warning). Null when they agree or cannot be compared.
+ */
+export function rosterRoleMismatch(player: { rosterRole: CharacterRole | null; playedRole: PlayedRole }): CharacterRole | null {
+  if (!player.rosterRole || player.playedRole === "MIXED" || player.playedRole === "UNKNOWN") return null;
+  return player.rosterRole === player.playedRole ? null : player.rosterRole;
+}
 
 /** Fight-relative clock, e.g. 222_000 → "03:42"; pre-pull → "-00:02"; ≥ 1h → "1:02:05". */
 export function formatFightClock(ms: number): string {

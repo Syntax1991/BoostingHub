@@ -33,6 +33,7 @@ export type ConsumableAuditParticipant =
       characterRegion: WowRegion | null;
       warcraftLogsId: string | null;
       wowClass: WowClass | null;
+      /** Planned/published roster role — never the role played in the log. */
       role: CharacterRole | null;
     }
   | {
@@ -63,6 +64,8 @@ export type ExtractedObservation = {
   kind: ConsumableObservationKindValue;
   category: ConsumableCategory | null;
   spellId: number | null;
+  /** COMBATANT only: specialization played in that fight (WCL `specID`), else null. */
+  specId: number | null;
   atMs: number;
 };
 
@@ -86,6 +89,7 @@ export type ExtractedPlayer = {
   characterName: string | null;
   characterRealm: string | null;
   wowClass: WowClass | null;
+  /** Roster role (for reference only); the played role comes from the COMBATANT specIds. */
   role: CharacterRole | null;
   matchStatus: ConsumableAuditMatchStatus;
   wclActorId: number | null;
@@ -98,6 +102,13 @@ export type ExtractedConsumableAudit = {
   fights: ExtractedFight[];
   players: ExtractedPlayer[];
 };
+
+/**
+ * Shape of the facts a snapshot stores (RunConsumableAudit.factsVersion).
+ * 2: COMBATANT observations carry the specialization played in that fight.
+ * An older snapshot has no played roles — it is re-analyzed, never reinterpreted.
+ */
+export const CONSUMABLE_AUDIT_FACTS_VERSION = 2;
 
 /**
  * A catalog cast up to this long before a pull counts for that fight
@@ -287,6 +298,7 @@ function observationsForActors(
       kind: "COMBATANT",
       category: null,
       spellId: null,
+      specId: snapshot.specId ?? null,
       atMs: snapshot.timestamp,
     });
     for (const auraId of new Set(snapshot.auraIds)) {
@@ -297,6 +309,7 @@ function observationsForActors(
         kind: "AURA",
         category,
         spellId: auraId,
+        specId: null,
         atMs: snapshot.timestamp,
       });
     }
@@ -312,6 +325,7 @@ function observationsForActors(
       kind: "CAST",
       category: entry.category,
       spellId: entry.spellId,
+      specId: null,
       atMs: cast.timestamp,
     });
   }
@@ -324,6 +338,7 @@ function observationsForActors(
       kind: "DEATH",
       category: null,
       spellId: null,
+      specId: null,
       atMs: death.timestamp,
     });
   }
@@ -339,6 +354,7 @@ function observationsForActors(
       kind: "PARTICIPANT",
       category: null,
       spellId: null,
+      specId: null,
       atMs: fight.startTime,
     });
   }

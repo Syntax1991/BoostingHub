@@ -119,6 +119,7 @@ describe("warcraftLogsApiClient.fetchReportConsumableEvents", () => {
                     type: "combatantinfo",
                     sourceID: 1,
                     fight: 1,
+                    specID: 258,
                     auras: [{ ability: 1235108, name: "Flask of the Magisters" }],
                     // Position = equipment slot; id 0 = empty slot.
                     gear: [
@@ -145,6 +146,7 @@ describe("warcraftLogsApiClient.fetchReportConsumableEvents", () => {
         fight: 1,
         timestamp: 10_000,
         sourceId: 1,
+        specId: 258, // the spec played in this fight — read from the rows already fetched
         auraIds: [1235108],
         auraNames: { 1235108: "Flask of the Magisters" },
         gear: [

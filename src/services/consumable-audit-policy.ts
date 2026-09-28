@@ -4,6 +4,7 @@ import {
   isConsumableCategory,
   type ConsumableCategory,
 } from "@/lib/consumable-catalog";
+import { specializationById } from "@/lib/wow-specializations";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type {
   ConsumableAuditMatchStatus,
@@ -33,7 +34,7 @@ export const CONSUMABLE_AUDIT_POLICY = {
    * previous death in the fight. An early-fight use never covers a later death.
    */
   deathLookbackSeconds: 30,
-  /** Accepted combat potion categories per assigned roster role. */
+  /** Accepted combat potion categories per role PLAYED in that fight (from the log, not the roster). */
   combatPotionByRole: {
     TANK: ["DAMAGE_POTION"],
     DPS: ["DAMAGE_POTION"],
@@ -68,8 +69,16 @@ export type AuditObservationFact = {
   kind: ConsumableObservationKindValue;
   category: string | null;
   spellId: number | null;
+  /** COMBATANT only: specialization played in that fight; null when the log had none (or an older snapshot). */
+  specId: number | null;
   atMs: number;
 };
+
+/**
+ * Role PLAYED in the analyzed fights, from the log's specialization per fight.
+ * MIXED: the fights disagree. UNKNOWN: no fight carried a usable specialization.
+ */
+export type PlayedRole = CharacterRole | "MIXED" | "UNKNOWN";
 
 export type AuditPlayerFact = {
   id: string;
@@ -77,7 +86,8 @@ export type AuditPlayerFact = {
   characterName: string | null;
   characterRealm: string | null;
   wowClass: WowClass | null;
-  role: CharacterRole | null;
+  /** Planned/published roster role — reference only, never used as the played role. */
+  rosterRole: CharacterRole | null;
   matchStatus: ConsumableAuditMatchStatus;
   isExternal: boolean;
   observations: AuditObservationFact[];
@@ -127,7 +137,12 @@ export type PlayerConsumableAudit = {
   characterName: string | null;
   characterRealm: string | null;
   wowClass: WowClass | null;
-  role: CharacterRole | null;
+  /** Planned/published roster role (reference only). */
+  rosterRole: CharacterRole | null;
+  /** Role played in the analyzed fights (see PlayedRole). */
+  playedRole: PlayedRole;
+  /** Played role per participated fight; null = no usable specialization in that fight. */
+  playedRoleByFight: Array<{ fight: FightRef; role: CharacterRole | null }>;
   matchStatus: ConsumableAuditMatchStatus;
   isExternal: boolean;
   /** False when unmatched or in no audited fight — every check is UNKNOWN. */
@@ -143,10 +158,16 @@ export type PlayerConsumableAudit = {
   };
   combatPotion: {
     status: ConsumableCheckStatus;
+    /** Accepted categories for the role(s) played in the judged kills. */
     accepted: ConsumableCategory[];
+    /** Accepted categories per role played (several entries when MIXED). */
+    acceptedByRole: Partial<Record<CharacterRole, ConsumableCategory[]>>;
     uses: ConsumableUseView[];
+    /** Boss kills judged — each with the role played in that fight. */
     killFightsChecked: number;
     missing: FightRef[];
+    /** Boss kills without a usable played role — not judged. */
+    unknown: FightRef[];
   };
   /** Food buff at pull, per fight with a CombatantInfo snapshot (like the flask). */
   food: AuraAtPullCheck;
@@ -238,7 +259,9 @@ function unknownPlayer(player: AuditPlayerFact, fightsParticipated = 0): PlayerC
     characterName: player.characterName,
     characterRealm: player.characterRealm,
     wowClass: player.wowClass,
-    role: player.role,
+    rosterRole: player.rosterRole,
+    playedRole: "UNKNOWN",
+    playedRoleByFight: [],
     matchStatus: player.matchStatus,
     isExternal: player.isExternal,
     hasLogData: false,
@@ -246,10 +269,12 @@ function unknownPlayer(player: AuditPlayerFact, fightsParticipated = 0): PlayerC
     flask: { status: "UNKNOWN", fightsWithFlask: 0, fightsChecked: 0, missing: [], unknown: [], flaskNames: [] },
     combatPotion: {
       status: "UNKNOWN",
-      accepted: player.role ? [...CONSUMABLE_AUDIT_POLICY.combatPotionByRole[player.role]] : [],
+      accepted: [],
+      acceptedByRole: {},
       uses: [],
       killFightsChecked: 0,
       missing: [],
+      unknown: [],
     },
     food: emptyAuraCheck(),
     augmentRune: emptyAuraCheck(),
@@ -425,23 +450,43 @@ export function evaluatePlayerConsumables(
   const enchants = evaluateEnchants({ wowClass: player.wowClass, gear: latestGear });
   const gems = evaluateGems({ gear: latestGear });
 
-  // Combat potion: at least one accepted potion per boss KILL the player was in.
-  // Wipes are listed but never required — no "use every cooldown" rule.
-  const accepted: ConsumableCategory[] = player.role
-    ? [...CONSUMABLE_AUDIT_POLICY.combatPotionByRole[player.role]]
-    : [];
+  // Played role per fight, from the specialization in that fight's snapshot.
+  const roleByFight = playedRolesByFight(player, obs);
+  const playedRoleByFight = participated.map((fight) => ({
+    fight: refOf(fight.id),
+    role: roleByFight.get(fight.id) ?? null,
+  }));
+  const playedRole = summarizePlayedRole(playedRoleByFight.map((row) => row.role));
+
+  // Combat potion: at least one accepted potion per boss KILL the player was in,
+  // judged with the role PLAYED in that kill. A kill without a usable played
+  // role is not judged (UNKNOWN), never a warning. Wipes are listed but never
+  // required — no "use every cooldown" rule.
+  const acceptedFor = (role: CharacterRole): readonly ConsumableCategory[] =>
+    CONSUMABLE_AUDIT_POLICY.combatPotionByRole[role];
   const combatUses = viewsOfUses(["DAMAGE_POTION", "MANA_POTION"]);
   const killFights = participated.filter((fight) => fight.kill);
-  const combatMissing = killFights
-    .filter((fight) => !uses.some((use) => use.fightId === fight.id && accepted.includes(use.category)))
-    .map((fight) => refOf(fight.id));
-  const combatStatus: ConsumableCheckStatus = !player.role
-    ? "UNKNOWN"
-    : killFights.length === 0
+  const judgedKills = killFights.flatMap((fight) => {
+    const role = roleByFight.get(fight.id);
+    return role ? [{ fight, role }] : [];
+  });
+  const combatUnknown = killFights.filter((fight) => !roleByFight.has(fight.id)).map((fight) => refOf(fight.id));
+  const combatMissing = judgedKills
+    .filter(({ fight, role }) => !uses.some((use) => use.fightId === fight.id && acceptedFor(role).includes(use.category)))
+    .map(({ fight }) => refOf(fight.id));
+  const accepted = [
+    ...new Set(
+      (judgedKills.length > 0 ? judgedKills.map((row) => row.role) : [...roleByFight.values()]).flatMap(acceptedFor),
+    ),
+  ];
+  const combatStatus: ConsumableCheckStatus =
+    killFights.length === 0
       ? "NA"
-      : combatMissing.length > 0
-        ? "WARNING"
-        : "PASS";
+      : judgedKills.length === 0
+        ? "UNKNOWN"
+        : combatMissing.length > 0
+          ? "WARNING"
+          : "PASS";
 
   // General Healing Potion / Healthstone usage — never a failure on its own.
   const healingUses = viewsOfUses(["HEALING_POTION"]);
@@ -509,7 +554,9 @@ export function evaluatePlayerConsumables(
     characterName: player.characterName,
     characterRealm: player.characterRealm,
     wowClass: player.wowClass,
-    role: player.role,
+    rosterRole: player.rosterRole,
+    playedRole,
+    playedRoleByFight,
     matchStatus: player.matchStatus,
     isExternal: player.isExternal,
     hasLogData: true,
@@ -525,9 +572,13 @@ export function evaluatePlayerConsumables(
     combatPotion: {
       status: combatStatus,
       accepted,
+      acceptedByRole: Object.fromEntries(
+        [...new Set(roleByFight.values())].map((role) => [role, [...acceptedFor(role)]]),
+      ),
       uses: combatUses,
-      killFightsChecked: killFights.length,
+      killFightsChecked: judgedKills.length,
       missing: combatMissing,
+      unknown: combatUnknown,
     },
     food,
     augmentRune,
@@ -551,4 +602,30 @@ export function evaluatePlayerConsumables(
         (status) => status === "WARNING",
       ).length + deathWarnings,
   };
+}
+
+/**
+ * Role played per fight: the specialization in that fight's CombatantInfo
+ * snapshot, mapped through the specialization catalog. A spec of another class
+ * than the player's (never expected) or an unknown spec id gives no role.
+ */
+export function playedRolesByFight(
+  player: Pick<AuditPlayerFact, "wowClass">,
+  observations: AuditObservationFact[],
+): Map<string, CharacterRole> {
+  const roles = new Map<string, CharacterRole>();
+  for (const row of observations) {
+    if (row.kind !== "COMBATANT" || row.specId == null || roles.has(row.fightId)) continue;
+    const spec = specializationById(row.specId);
+    if (!spec || (player.wowClass && spec.wowClass !== player.wowClass)) continue;
+    roles.set(row.fightId, spec.role);
+  }
+  return roles;
+}
+
+/** One role when every fight with evidence agrees; MIXED when they differ; UNKNOWN without evidence. */
+export function summarizePlayedRole(roles: ReadonlyArray<CharacterRole | null>): PlayedRole {
+  const seen = new Set(roles.filter((role): role is CharacterRole => role != null));
+  if (seen.size === 0) return "UNKNOWN";
+  return seen.size === 1 ? [...seen][0]! : "MIXED";
 }

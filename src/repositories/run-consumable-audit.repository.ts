@@ -20,6 +20,7 @@ import type {
   ConsumableObservationKindValue,
   ExtractedConsumableAudit,
 } from "@/services/consumable-audit-extract";
+import { CONSUMABLE_AUDIT_FACTS_VERSION } from "@/services/consumable-audit-extract";
 import type { AuditFightFact, AuditPlayerFact } from "@/services/consumable-audit-policy";
 
 type TxOrm = typeof orm;
@@ -71,6 +72,8 @@ export type RunConsumableAuditRecord = {
   lastFailure: ConsumableAuditFailureCode | null;
   autoAttempts: number;
   autoAnalyzed: boolean;
+  /** See CONSUMABLE_AUDIT_FACTS_VERSION. */
+  factsVersion: number;
 };
 
 export type RunConsumableAuditSnapshot = {
@@ -98,6 +101,7 @@ function mapAudit(row: Record<string, unknown>): RunConsumableAuditRecord {
       row.lastFailure == null ? null : pick(row.lastFailure, FAILURE_CODES, "WCL_UNAVAILABLE"),
     autoAttempts: asNumber(row.autoAttempts),
     autoAnalyzed: row.autoAnalyzed === true,
+    factsVersion: typeof row.factsVersion === "number" ? row.factsVersion : 1,
   };
 }
 
@@ -285,6 +289,7 @@ export const runConsumableAuditRepository = {
         kind: pick(row.kind, OBSERVATION_KINDS, "PARTICIPANT"),
         category: asStringOrNull(row.category),
         spellId: asNumberOrNull(row.spellId),
+        specId: asNumberOrNull(row.specId),
         atMs: asNumber(row.atMs),
       });
       observationsByPlayer.set(playerId, list);
@@ -313,7 +318,7 @@ export const runConsumableAuditRepository = {
         characterName: asStringOrNull(row.characterName),
         characterRealm: asStringOrNull(row.characterRealm),
         wowClass: row.wowClass == null ? null : mapWowClass(row.wowClass),
-        role: row.role == null ? null : mapCharacterRole(row.role),
+        rosterRole: row.role == null ? null : mapCharacterRole(row.role),
         matchStatus: pick(row.matchStatus, MATCH_STATUSES, "NOT_IN_LOG"),
         // Attendance rows always snapshot a character name; external boosters never have one.
         isExternal: row.characterName == null,
@@ -372,6 +377,7 @@ export const runConsumableAuditRepository = {
       autoAnalyzed: input.auto === true,
       lastAttemptAt: now,
       lastFailure: null,
+      factsVersion: CONSUMABLE_AUDIT_FACTS_VERSION,
       updatedAt: now,
     };
 
@@ -423,6 +429,7 @@ export const runConsumableAuditRepository = {
             kind: observation.kind,
             category: observation.category,
             spellId: observation.spellId,
+            specId: observation.specId,
             atMs: observation.atMs,
           });
         }

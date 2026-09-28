@@ -84,12 +84,14 @@ A `(report, fight)` pair is ASSIGNED to at most one Run — enforced by the part
 
 Only the Run's **ASSIGNED boss fights** (kills and wipes) are audited; trash is ignored. WCL is asked for exactly those fight ids (deaths, pull snapshots); consumable casts are fetched for their time range and then attributed to those fights only, so nothing from another Run in the same report can enter the audit.
 
-Audited players are **attended BOOSTER roster participants** (`PRESENT`, `LATE`, `LEFT_EARLY`) plus the roster's external BOOSTERs. Lootbuddies, no-shows, excused and standby rows are not audited. The role is the published roster role.
+Audited players are **attended BOOSTER roster participants** (`PRESENT`, `LATE`, `LEFT_EARLY`) plus the roster's external BOOSTERs. Lootbuddies, no-shows, excused and standby rows are not audited.
+
+**Role = the role played in the log, not the roster role.** Warcraft Logs' CombatantInfo snapshot at each pull carries the specialization the player played in that fight (`specID`, Blizzard's `ChrSpecialization` id). It is stored per fight on the `COMBATANT` fact and mapped to a role through the specialization catalog (`specializationById` in `src/lib/wow-specializations.ts`; 40 retail specs, checked against the game table). No extra WCL request: these are the snapshots already fetched for flasks and gear. The **Role** column shows the played role: one role when every fight with a snapshot agrees, **Mixed** when they differ, **Unknown** without a usable specialization (no snapshot, an unknown spec id, or one of another class — never guessed from class, potions or damage). A differing roster role is shown beneath as information only ("roster Healer") and is never a warning. Roster, signup, attendance and payout keep using the roster role; the log never rewrites it.
 
 | Check | Rule | Status |
 | --- | --- | --- |
 | Flask | Flask aura active **at pull**, per fight (WCL CombatantInfo snapshot) | PASS if present in every snapshot; WARNING lists fights without one; UNKNOWN without snapshots |
-| Combat Potion | At least one accepted potion per boss **kill** the player was in. Wipes are listed but never required; no "use every cooldown" rule | PASS / WARNING (lists kills without one) / N/A (no kills) / UNKNOWN (no roster role) |
+| Combat Potion | At least one accepted potion per boss **kill** the player was in. Wipes are listed but never required; no "use every cooldown" rule | PASS / WARNING (lists kills without one) / N/A (no kills) / UNKNOWN (no played role in any kill) |
 | Healing Potion | Uses are listed | Never a failure on its own — NEUTRAL with 0 uses; WARNING only via a death |
 | Healthstone | Uses are listed | Never a failure on its own — NEUTRAL / N/A when not applicable; WARNING only via a death |
 | Deaths | Each death evaluated independently (below) | WARNING per missing recovery consumable |
@@ -134,7 +136,9 @@ Enchants and gems are judged on the player's **latest audited snapshot** (gear a
 | DPS | Damage Potion |
 | Healer | Damage Potion **or** Mana Potion |
 
-A healer never fails for choosing a Mana Potion. Mana Potions are identified by their cast, never inferred from a mana increase. Configured in `CONSUMABLE_AUDIT_POLICY.combatPotionByRole`.
+Each kill is judged with the role **played in that kill** (a priest who healed boss 1 and played Shadow on boss 2 is judged as a healer on boss 1 and as DPS on boss 2 — a Mixed role is never collapsed into one). A kill without a usable played role is not judged ("Not judged", never a warning). A healer never fails for choosing a Mana Potion. Mana Potions are identified by their cast, never inferred from a mana increase. Configured in `CONSUMABLE_AUDIT_POLICY.combatPotionByRole`.
+
+**Older analyses.** `RunConsumableAudit.factsVersion` records the shape of the stored facts (`CONSUMABLE_AUDIT_FACTS_VERSION`). A snapshot from before played roles (version 1) has no specializations: its roles show as Unknown, no role-based potion expectation applies, and the page asks for a re-analysis. The stored roster role is never reinterpreted as a played role, and the migration fetches nothing from Warcraft Logs.
 
 A catalog cast up to 5 s before a pull (`CONSUMABLE_PRE_PULL_WINDOW_MS`) counts for that fight as a pre-pull use (shown as a negative time, e.g. `-00:02`).
 
@@ -183,10 +187,10 @@ Normalized **facts** are persisted; PASS/WARNING/N/A/UNKNOWN is evaluated at rea
 | `WarcraftLogsReport` | shared report (`code` unique): title, absolute start/end, region, cached metadata JSON (boss fights, actors, ranked characters), `fetchedAt`. Reused by every Run on the report; deleted when the last Run detaches |
 | `RunWarcraftLogsReport` | Run ↔ report association (`runId, reportId` unique): `source` (MANUAL / DISCORD_BOT), attached by (null for the log bot), Discord message id, last scan (null until first scanned) |
 | `RunWarcraftLogsFight` | one report fight considered for one Run: WCL fight/encounter id, kill, relative and absolute times, `raidContentId`, `status` (ASSIGNED / NEEDS_REVIEW / IGNORED), `decision` (AUTO / MANUAL), evidence codes, roster overlap |
-| `RunConsumableAudit` | one per Run (`runId` unique): last successful analysis (`autoAnalyzed` when automatic), last attempt, safe failure code, automatic attempts |
+| `RunConsumableAudit` | one per Run (`runId` unique): last successful analysis (`autoAnalyzed` when automatic), last attempt, safe failure code, automatic attempts, `factsVersion` |
 | `RunConsumableAuditFight` | audited fight snapshot (`auditId, reportCode, wclFightId` unique), Warlock presence, Healthstone use seen |
-| `RunConsumableAuditPlayer` | audited booster snapshot: attendance / external booster link, names, class, role, match status, WCL actor id |
-| `RunConsumableAuditObservation` | one fact per player per fight: `COMBATANT` / `PARTICIPANT` presence, `AURA` (flask, food, augment rune, Vantus rune at pull), `CAST` (potion/Healthstone), `DEATH`; report-relative `atMs` |
+| `RunConsumableAuditPlayer` | audited booster snapshot: attendance / external booster link, names, class, roster role (reference only), match status, WCL actor id |
+| `RunConsumableAuditObservation` | one fact per player per fight: `COMBATANT` / `PARTICIPANT` presence, `AURA` (flask, food, augment rune, Vantus rune at pull), `CAST` (potion/Healthstone), `DEATH`; report-relative `atMs`; `specId` on `COMBATANT` = specialization played in that fight |
 | `RunConsumableAuditGearItem` | Gear Readiness fact per player per fight: WCL gear slot, item id, permanent / temporary enchant id, gem count, socket count (null = unknown). Only enchantable slots, weapons and socketed items |
 | `Run.completedAt` | set on IN_PROGRESS → COMPLETED; closes the Run's active window |
 

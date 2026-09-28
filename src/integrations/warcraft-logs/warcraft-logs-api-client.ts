@@ -394,6 +394,8 @@ export type WarcraftLogsCombatantSnapshot = {
   fight: number;
   timestamp: number;
   sourceId: number;
+  /** Blizzard specialization id played in this fight (CombatantInfo `specID`); null when absent. */
+  specId?: number | null;
   auraIds: number[];
   /** Aura id → in-game name (food / Vantus buffs are recognized by name). */
   auraNames?: Record<number, string>;
@@ -584,7 +586,16 @@ function mapEventPage(stream: EventStream, rows: unknown[], into: WarcraftLogsCo
         const name = asString(asRecord(aura)?.name);
         if (name) auraNames[id] = name;
       }
-      into.combatants.push({ fight, timestamp, sourceId, auraIds, auraNames, gear: mapGear(event.gear) });
+      const specId = asInt(event.specID);
+      into.combatants.push({
+        fight,
+        timestamp,
+        sourceId,
+        specId: specId != null && specId > 0 ? specId : null,
+        auraIds,
+        auraNames,
+        gear: mapGear(event.gear),
+      });
     }
   }
 }

@@ -139,8 +139,8 @@ describe("attributeCastsToFights", () => {
 describe("extractConsumableAudit", () => {
   const events: WarcraftLogsConsumableEvents = {
     combatants: [
-      { fight: 1, timestamp: 10_000, sourceId: 1, auraIds: [1235108, 465] },
-      { fight: 4, timestamp: 400_000, sourceId: 1, auraIds: [465] },
+      { fight: 1, timestamp: 10_000, sourceId: 1, specId: 257, auraIds: [1235108, 465] },
+      { fight: 4, timestamp: 400_000, sourceId: 1, specId: 258, auraIds: [465] },
       { fight: 5, timestamp: 800_000, sourceId: 3, auraIds: [] },
     ],
     casts: [
@@ -164,6 +164,17 @@ describe("extractConsumableAudit", () => {
       attended("Nobody", "Blackhand"),
       { source: "EXTERNAL", externalBoosterId: "ext-1", displayName: "helper", wowClass: "MAGE", role: "DPS" },
     ],
+  });
+
+  it("stores the specialization played per fight on the COMBATANT fact, never the roster role", () => {
+    const synlight = extracted.players[0]!;
+    const combatants = synlight.observations.filter((row) => row.kind === "COMBATANT");
+    expect(combatants.map((row) => [row.wclFightId, row.specId])).toEqual([
+      [1, 257],
+      [4, 258],
+    ]);
+    expect(synlight.observations.filter((row) => row.kind !== "COMBATANT").every((row) => row.specId === null)).toBe(true);
+    expect(synlight.role).toBe("HEALER"); // roster role kept for reference only (Synlight played Holy + Shadow)
   });
 
   it("records fight-level Warlock presence and Healthstone evidence", () => {

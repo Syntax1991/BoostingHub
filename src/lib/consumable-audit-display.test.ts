@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { emptySocketText, gemCheckText, runePresenceText, weaponEnhancementText } from "@/lib/consumable-audit-display";
+import {
+  emptySocketText,
+  gemCheckText,
+  playedRoleLabel,
+  rosterRoleMismatch,
+  runePresenceText,
+  weaponEnhancementText,
+} from "@/lib/consumable-audit-display";
 
 describe("optional rune display", () => {
   it("shows present / absent / unknown — never a 'missing' failure", () => {
@@ -41,5 +48,22 @@ describe("weapon column", () => {
     expect(weaponEnhancementText({ status: "PASS", expected: "TEMPORARY", labels: ["Shaman imbue"] })).toBe("Shaman imbue");
     expect(weaponEnhancementText({ status: "WARNING", expected: "TEMPORARY", labels: [] })).toBe("Missing");
     expect(weaponEnhancementText({ status: "UNKNOWN", expected: "TEMPORARY", labels: [] })).toBe("Unknown");
+  });
+});
+
+describe("played role display", () => {
+  it("labels the played role; MIXED and UNKNOWN are explicit", () => {
+    expect(playedRoleLabel("DPS")).toBe("DPS");
+    expect(playedRoleLabel("HEALER")).toBe("Healer");
+    expect(playedRoleLabel("MIXED")).toBe("Mixed");
+    expect(playedRoleLabel("UNKNOWN")).toBe("Unknown");
+  });
+
+  it("names the roster role only when it differs from a single played role (information, not a warning)", () => {
+    expect(rosterRoleMismatch({ rosterRole: "HEALER", playedRole: "DPS" })).toBe("HEALER");
+    expect(rosterRoleMismatch({ rosterRole: "DPS", playedRole: "DPS" })).toBeNull();
+    expect(rosterRoleMismatch({ rosterRole: "HEALER", playedRole: "MIXED" })).toBeNull();
+    expect(rosterRoleMismatch({ rosterRole: "HEALER", playedRole: "UNKNOWN" })).toBeNull();
+    expect(rosterRoleMismatch({ rosterRole: null, playedRole: "TANK" })).toBeNull();
   });
 });

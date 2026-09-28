@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { attackTypeForSpecialization, isRoleValidForClass, rolesForClass } from "@/lib/wow-specializations";
+import {
+  WOW_SPECIALIZATIONS,
+  attackTypeForSpecialization,
+  isRoleValidForClass,
+  knownSpecializationIds,
+  rolesForClass,
+  specializationById,
+} from "@/lib/wow-specializations";
 
 describe("attackTypeForSpecialization", () => {
   it("distinguishes the same spec name across classes (Frost Mage ranged vs Frost DK melee)", () => {
@@ -73,5 +80,29 @@ describe("rolesForClass", () => {
     expect(new Set(rolesForClass("SHAMAN"))).toEqual(new Set(["HEALER", "DPS"]));
     expect(new Set(rolesForClass("PRIEST"))).toEqual(new Set(["HEALER", "DPS"]));
     expect(rolesForClass("MAGE")).toEqual(["DPS"]);
+  });
+});
+
+describe("specializationById (Warcraft Logs CombatantInfo specID)", () => {
+  it("covers every catalogued specialization exactly once, each with the catalog's role", () => {
+    const resolved = knownSpecializationIds().map((id) => specializationById(id));
+    expect(resolved.every(Boolean)).toBe(true);
+    const keys = resolved.map((spec) => `${spec!.wowClass}:${spec!.name}`);
+    const catalog = Object.entries(WOW_SPECIALIZATIONS).flatMap(([wowClass, specs]) => specs.map((spec) => `${wowClass}:${spec.name}`));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(new Set(keys)).toEqual(new Set(catalog));
+  });
+
+  it("maps known ids (checked against the game's ChrSpecialization table)", () => {
+    expect(specializationById(256)).toEqual({ wowClass: "PRIEST", name: "Discipline", role: "HEALER" });
+    expect(specializationById(258)).toEqual({ wowClass: "PRIEST", name: "Shadow", role: "DPS" });
+    expect(specializationById(73)).toEqual({ wowClass: "WARRIOR", name: "Protection", role: "TANK" });
+    expect(specializationById(1468)).toEqual({ wowClass: "EVOKER", name: "Preservation", role: "HEALER" });
+    expect(specializationById(1480)).toEqual({ wowClass: "DEMON_HUNTER", name: "Devourer", role: "DPS" });
+  });
+
+  it("an unknown id resolves to nothing (no guess)", () => {
+    expect(specializationById(0)).toBeNull();
+    expect(specializationById(99_999)).toBeNull();
   });
 });

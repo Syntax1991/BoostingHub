@@ -1166,6 +1166,8 @@ model RunConsumableAudit {
   autoAttempts  Int                     @default(0)
   /// The latest successful analysis ran automatically (no acting user).
   autoAnalyzed  Boolean                 @default(false)
+  /// Shape of the stored facts: 1 = before played roles (no specId), 2 = COMBATANT rows carry specId.
+  factsVersion  Int                     @default(1)
   createdAt     TimestamptzString       @default(now())
   updatedAt     temporal.updatedAtString()
 
@@ -1225,6 +1227,7 @@ model RunConsumableAuditPlayer {
   characterName     String?
   characterRealm    String?
   wowClass          WowClass?
+  /// Roster (planned/published) role — reference only; the played role comes from COMBATANT specIds.
   role              CharacterRole?
   matchStatus       ConsumableAuditMatch
   /// Report-local WCL actor id when MATCHED.
@@ -1250,6 +1253,8 @@ model RunConsumableAuditObservation {
   kind     ConsumableObservationKind
   category String?
   spellId  Int?
+  /// COMBATANT only: Blizzard specialization id played in that fight (WCL CombatantInfo specID).
+  specId   Int?
   /// Report-relative milliseconds.
   atMs     Int
 

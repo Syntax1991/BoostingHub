@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { RunWarcraftLogsPanel } from "@/components/runs/run-warcraft-logs-panel";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { ClassIcon, RoleBadge } from "@/components/ui/badges";
+import { Badge, ClassIcon, RoleBadge } from "@/components/ui/badges";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/datetime";
 import {
@@ -16,10 +16,14 @@ import {
   runePresenceText,
   formatFightClock,
   gemCheckText,
+  playedRoleLabel,
+  rosterRoleMismatch,
   summarizeCombatPotionUses,
   weaponEnhancementText,
 } from "@/lib/consumable-audit-display";
 import { CONSUMABLE_CATEGORY_LABELS } from "@/lib/consumable-catalog";
+import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
+import type { CharacterRole } from "@/models/enums";
 import type {
   AuraAtPullCheck,
   ConsumableCheckStatus,
@@ -72,7 +76,9 @@ function flaskText(player: PlayerConsumableAudit): string {
 }
 
 function combatText(player: PlayerConsumableAudit): string {
-  if (player.combatPotion.status === "UNKNOWN" && !player.role) return "Role unknown";
+  if (player.hasLogData && player.combatPotion.status === "UNKNOWN" && player.combatPotion.killFightsChecked === 0) {
+    return "Role unknown";
+  }
   if (player.combatPotion.status === "NA" && player.combatPotion.uses.length === 0) return "N/A (no kills)";
   return summarizeCombatPotionUses(player.combatPotion.uses);
 }
@@ -112,6 +118,23 @@ function UseList({ uses, contentLabels }: { uses: ConsumableUseView[]; contentLa
   );
 }
 
+/** Role PLAYED in the analyzed fights; a different roster role is shown as information only. */
+function PlayedRoleCell({ player }: { player: PlayerConsumableAudit }) {
+  const roster = rosterRoleMismatch(player);
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      {player.playedRole === "MIXED" ? (
+        <Badge>Mixed</Badge>
+      ) : player.playedRole === "UNKNOWN" ? (
+        <span className="text-muted">Unknown</span>
+      ) : (
+        <RoleBadge role={player.playedRole} />
+      )}
+      {roster ? <span className="text-xs text-muted">roster {CHARACTER_ROLE_LABELS[roster]}</span> : null}
+    </div>
+  );
+}
+
 function PlayerDetails({
   player,
   contentLabels,
@@ -121,9 +144,26 @@ function PlayerDetails({
   contentLabels: Map<string, string | null>;
   lookbackSeconds: number;
 }) {
-  const accepted = player.combatPotion.accepted.map((category) => CONSUMABLE_CATEGORY_LABELS[category]).join(" or ");
+  const acceptedFor = (categories: readonly string[]) =>
+    categories.map((category) => CONSUMABLE_CATEGORY_LABELS[category as keyof typeof CONSUMABLE_CATEGORY_LABELS]).join(" or ");
+  const accepted = acceptedFor(player.combatPotion.accepted);
+  const byRole = Object.entries(player.combatPotion.acceptedByRole) as Array<[CharacterRole, string[]]>;
   return (
     <div className="grid gap-4 px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+      <section>
+        <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">Role</h4>
+        <p>
+          Played in the log: {playedRoleLabel(player.playedRole)}
+          {player.rosterRole ? ` · Roster: ${CHARACTER_ROLE_LABELS[player.rosterRole]}` : ""}
+        </p>
+        {player.playedRole === "MIXED" ? (
+          <p className="mt-1 text-muted">
+            {player.playedRoleByFight
+              .map((row) => `${fightLabel(row.fight, contentLabels)}: ${row.role ? CHARACTER_ROLE_LABELS[row.role] : "unknown"}`)
+              .join(" · ")}
+          </p>
+        ) : null}
+      </section>
       <section>
         <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">Flask</h4>
         <p>
@@ -179,12 +219,24 @@ function PlayerDetails({
       <section>
         <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">Combat Potion</h4>
         <p className="mb-1 text-muted">
-          {player.role ? `Expected per boss kill: ${accepted}.` : "Role unknown — no expectation applied."}
+          {byRole.length === 0
+            ? "Played role unknown — no expectation applied."
+            : byRole.length === 1
+              ? `Expected per boss kill: ${accepted}.`
+              : `Expected per boss kill, by the role played in it: ${byRole
+                  .map(([role, categories]) => `${CHARACTER_ROLE_LABELS[role]} — ${acceptedFor(categories)}`)
+                  .join("; ")}.`}
         </p>
         <UseList uses={player.combatPotion.uses} contentLabels={contentLabels} />
         {player.combatPotion.missing.length > 0 ? (
           <p className="mt-1 text-warning">
             No accepted combat potion: {player.combatPotion.missing.map((fight) => fightLabel(fight, contentLabels)).join(", ")}
+          </p>
+        ) : null}
+        {player.hasLogData && player.combatPotion.unknown.length > 0 && byRole.length > 0 ? (
+          <p className="mt-1 text-muted">
+            Not judged (no played role in the log):{" "}
+            {player.combatPotion.unknown.map((fight) => fightLabel(fight, contentLabels)).join(", ")}
           </p>
         ) : null}
       </section>
@@ -388,6 +440,12 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                 : `Automatic analysis did not succeed after ${audit.autoAudit.attempts} attempts — use Re-scan fights.`}
             </p>
           ) : null}
+          {audit.factsOutdated && snapshot ? (
+            <p role="status" className="text-warning">
+              This analysis predates reading the role played from the log — roles show as unknown and no role-based
+              potion expectation applies. Re-analyze to update.
+            </p>
+          ) : null}
           {audit.lastFailure ? (
             <p role="alert" className="text-warning">
               Last attempt failed: {CONSUMABLE_AUDIT_FAILURE_LABELS[audit.lastFailure]}
@@ -464,7 +522,9 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
                             {player.isExternal ? "External booster" : player.displayName}
                           </p>
                         </td>
-                        <td className="px-3 py-2">{player.role ? <RoleBadge role={player.role} /> : <span className="text-muted">—</span>}</td>
+                        <td className="px-3 py-2">
+                          <PlayedRoleCell player={player} />
+                        </td>
                         {!player.hasLogData ? (
                           <td colSpan={10} className="px-3 py-2">
                             <StatusChip status="UNKNOWN">
