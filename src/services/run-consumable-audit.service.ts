@@ -22,10 +22,13 @@ import {
 import {
   CONSUMABLE_AUDIT_FACTS_VERSION,
   CONSUMABLE_PRE_PULL_WINDOW_MS,
+  combatantCoverageByFight,
   extractConsumableAudit,
   mergeExtractedAudits,
+  restrictExtractedToFights,
   type ExtractedConsumableAudit,
 } from "@/services/consumable-audit-extract";
+import { overlapFightKey, realPullsOfRun, snapshotCoversRealPulls } from "@/services/wcl-report-overlap";
 import {
   CONSUMABLE_AUDIT_POLICY,
   buildFightRefs,
@@ -135,12 +138,20 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
   };
   if (!audit?.analyzedAt) return base;
 
-  const { fights, players } = await runConsumableAuditRepository.findSnapshot(audit.id);
-  const assignedKeys = new Set(
-    logs.fights.filter((row) => row.status === "ASSIGNED").map((row) => fightKey(row.reportCode, row.wclFightId)),
+  const [{ fights, players }, runFights] = await Promise.all([
+    runConsumableAuditRepository.findSnapshot(audit.id),
+    runWarcraftLogsRepository.listRunFights(run.id),
+  ]);
+  // Stale = the snapshot no longer holds every unique real pull exactly once
+  // (same projection the analysis uses, so a fresh analysis is never stale).
+  const pulls = realPullsOfRun(
+    runFights.filter((row) => row.status === "ASSIGNED"),
+    logs.reports.map((report) => ({ code: report.code, attachedAt: report.attachedAt })),
   );
-  const snapshotKeys = new Set(fights.map((fight) => fightKey(fight.reportCode, fight.wclFightId)));
-  const stale = assignedKeys.size !== snapshotKeys.size || [...assignedKeys].some((key) => !snapshotKeys.has(key));
+  const stale = !snapshotCoversRealPulls(
+    fights.map((fight) => fightKey(fight.reportCode, fight.wclFightId)),
+    pulls,
+  );
 
   const fightRefs = buildFightRefs(fights);
   const contentLabels = new Map(
@@ -289,36 +300,83 @@ export async function analyzeRun(
   if (!warcraftLogsApiClient.isConfigured()) return fail("NOT_CONFIGURED");
 
   const participants = await runConsumableAuditRepository.listParticipants(run.id);
+  // Every real pull once, even when two linked reports logged the same raid.
+  const pulls = realPullsOfRun(
+    assigned,
+    associations.map((association) => ({ code: association.report.code, attachedAt: association.attachedAt })),
+  );
+  const rowByKey = new Map(assigned.map((row) => [overlapFightKey(row.reportCode, row.wclFightId), row]));
   const parts: ExtractedConsumableAudit[] = [];
-  // One batched events request per linked report — never per player or death.
-  for (const association of associations) {
-    const rows = assigned.filter((row) => row.reportId === association.report.id);
-    if (rows.length === 0) continue;
-    const fights = toReportFights(rows, association.report.metadata.fights);
-    const events = await warcraftLogsApiClient.fetchReportConsumableEvents({
-      code: association.report.code,
-      // Only this Run's fights: deaths and pull snapshots are fight-scoped;
-      // casts are time-windowed and then attributed to these fights only.
-      fightIds: fights.map((fight) => fight.id),
-      startTime: Math.min(...fights.map((fight) => fight.startTime)),
-      endTime: Math.max(...fights.map((fight) => fight.endTime)),
-      castSpellIds: consumableSpellIds("CAST"),
-      castLeadMs: CONSUMABLE_PRE_PULL_WINDOW_MS,
+
+  // One batched events request per report for the given fights of it — never per player or death.
+  const extractFights = async (keys: string[]): Promise<ConsumableAuditFailureCode | null> => {
+    for (const association of associations) {
+      const rows = keys
+        .map((key) => rowByKey.get(key)!)
+        .filter((row) => row.reportId === association.report.id);
+      if (rows.length === 0) continue;
+      const fights = toReportFights(rows, association.report.metadata.fights);
+      const events = await warcraftLogsApiClient.fetchReportConsumableEvents({
+        code: association.report.code,
+        // Only these fights: deaths and pull snapshots are fight-scoped;
+        // casts are time-windowed and then attributed to these fights only.
+        fightIds: fights.map((fight) => fight.id),
+        startTime: Math.min(...fights.map((fight) => fight.startTime)),
+        endTime: Math.max(...fights.map((fight) => fight.endTime)),
+        castSpellIds: consumableSpellIds("CAST"),
+        castLeadMs: CONSUMABLE_PRE_PULL_WINDOW_MS,
+      });
+      if (events.status === "NOT_FOUND") return "REPORT_NOT_FOUND";
+      if (events.status === "NOT_CONFIGURED") return "NOT_CONFIGURED";
+      if (events.status !== "SUCCESS") return "WCL_UNAVAILABLE";
+      parts.push(
+        extractConsumableAudit({
+          report: association.report.metadata,
+          fights,
+          events: events.events,
+          participants,
+        }),
+      );
+    }
+    return null;
+  };
+
+  // 1. The canonical copy of each pull.
+  const selected = pulls.map((pull) => pull.copies[0]!.key);
+  const firstFailure = await extractFights(selected);
+  if (firstFailure) return fail(firstFailure);
+
+  // 2. A kept copy is incomplete when an audited player took part in the pull
+  // without a CombatantInfo snapshot (or it has none at all) while another
+  // logger recorded the same pull: read the duplicates of just those pulls
+  // (one request per report) and keep the copy with the most snapshots —
+  // ties keep the ranking. Facts are never mixed across copies of one pull.
+  const coverageOf = () => {
+    const coverage = new Map<string, { present: number; snapshots: number }>();
+    for (const part of parts) for (const [key, entry] of combatantCoverageByFight(part)) coverage.set(key, entry);
+    return coverage;
+  };
+  const initial = coverageOf();
+  const weak = pulls
+    .map((pull, index) => ({ pull, index }))
+    .filter(({ pull, index }) => {
+      if (pull.copies.length < 2) return false;
+      const kept = initial.get(selected[index]!);
+      return !kept || kept.snapshots === 0 || kept.snapshots < kept.present;
     });
-    if (events.status === "NOT_FOUND") return fail("REPORT_NOT_FOUND");
-    if (events.status === "NOT_CONFIGURED") return fail("NOT_CONFIGURED");
-    if (events.status !== "SUCCESS") return fail("WCL_UNAVAILABLE");
-    parts.push(
-      extractConsumableAudit({
-        report: association.report.metadata,
-        fights,
-        events: events.events,
-        participants,
-      }),
-    );
+  if (weak.length > 0) {
+    const secondFailure = await extractFights(weak.flatMap(({ pull }) => pull.copies.slice(1).map((copy) => copy.key)));
+    if (secondFailure) return fail(secondFailure);
+    const coverage = coverageOf();
+    for (const { pull, index } of weak) {
+      const snapshots = (key: string) => coverage.get(key)?.snapshots ?? 0;
+      // Stable sort: equal snapshot counts keep the deterministic ranking (canonical first).
+      selected[index] = [...pull.copies].sort((a, b) => snapshots(b.key) - snapshots(a.key))[0]!.key;
+    }
   }
 
-  const extracted = mergeExtractedAudits(parts);
+  const keep = new Set(selected);
+  const extracted = mergeExtractedAudits(parts.map((part) => restrictExtractedToFights(part, keep)));
   await runConsumableAuditRepository.replaceSnapshot({
     runId: run.id,
     analyzedAt: attemptedAt.toISOString(),

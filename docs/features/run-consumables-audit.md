@@ -80,6 +80,14 @@ The review list shows concrete evidence ("Time matches Run", "Encounter matches 
 
 A `(report, fight)` pair is ASSIGNED to at most one Run — enforced by the partial unique index `run_wcl_fight_assigned_once` on `run_warcraft_logs_fight (reportId, wclFightId) WHERE status = 'ASSIGNED'`. Assigning a fight another Run holds is a **reassignment** in one transaction: the other Run's row becomes IGNORED (MANUAL). A concurrent double-assign fails on the index and rolls back.
 
+### Several reports for one Run
+
+Several reports may be linked to one Run — different parts of it, overlapping parts, or two people logging the same raid. Every report keeps its association and fight rows (provenance stays visible); the **audit** uses each real pull exactly **once** — the union of unique pulls, never "one report only" (`src/services/wcl-report-overlap.ts`, `realPullsOfRun`).
+
+- **Same pull across two reports:** same encounter, difficulty, kill/wipe and raid content (when both known), durations within 2 s, and starts that differ by the report pair's **clock offset** within 2 s. Each logger stamps times with its own computer clock (production: 10.87–10.93 s apart on all 9 pulls, durations within 45 ms), so the offset is the start delta most same-shaped pairs agree on — never "equal timestamps". A single shared pull only matches when both copies overlap in absolute time (two distinct pulls of one raid never overlap). Fights of one report are never merged, so repeated pulls and close wipes stay separate.
+- **Which copy counts:** more identified roster players; then the report covering more of the Run (identical reports → one report's events, one request); then the earlier link; then the report code. A kept copy is **incomplete** when an audited booster took part in the pull without a CombatantInfo snapshot (a `PARTICIPANT` fact instead of `COMBATANT`) or it has no snapshot at all; only then are the other loggers' copies of just those pulls read (one extra request per report) and the copy with the most snapshots kept — ties keep the ranking. The expectation is the audit's own participants, not the fight assignment's `rosterMatched` (which also counts lootbuddies). One pull's facts always come from one copy — never CAST from one logger and COMBATANT from another.
+- The Warcraft Logs panel shows "… fights also logged in another linked report — counted once in the audit". **Staleness** uses the same projection, so a fresh analysis is never stale; manual and automatic analysis share `analyzeRun`.
+
 ## What is checked
 
 Only the Run's **ASSIGNED boss fights** (kills and wipes) are audited; trash is ignored. WCL is asked for exactly those fight ids (deaths, pull snapshots); consumable casts are fetched for their time range and then attributed to those fights only, so nothing from another Run in the same report can enter the audit.

@@ -396,8 +396,55 @@ function gearForActors(
 }
 
 /**
+ * Keep only the given fights (keys `${reportCode}#${wclFightId}`) of one
+ * report's extraction — with every fact of those fights and none of the
+ * others (COMBATANT / PARTICIPANT / AURA / CAST / DEATH and gear alike), so a
+ * duplicate copy of a pull leaves nothing behind.
+ */
+export function restrictExtractedToFights(
+  part: ExtractedConsumableAudit,
+  keys: ReadonlySet<string>,
+): ExtractedConsumableAudit {
+  const keep = (row: { reportCode: string; wclFightId: number }) => keys.has(`${row.reportCode}#${row.wclFightId}`);
+  return {
+    fights: part.fights.filter(keep),
+    players: part.players.map((player) => ({
+      ...player,
+      observations: player.observations.filter(keep),
+      gear: player.gear.filter(keep),
+    })),
+  };
+}
+
+/**
+ * How usable a copy of a pull is, per fight key: `present` audited players
+ * took part in it (a COMBATANT or PARTICIPANT fact) and `snapshots` of them
+ * have a CombatantInfo snapshot (spec, auras at pull, gear). A present player
+ * without a snapshot is missing data another logger's copy may have. Both
+ * counts are over the audit's own participants, never the whole raid.
+ */
+export function combatantCoverageByFight(part: ExtractedConsumableAudit): Map<string, { present: number; snapshots: number }> {
+  const coverage = new Map<string, { present: number; snapshots: number }>();
+  for (const player of part.players) {
+    const counted = new Set<string>();
+    for (const row of player.observations) {
+      if (row.kind !== "COMBATANT" && row.kind !== "PARTICIPANT") continue;
+      const key = `${row.reportCode}#${row.wclFightId}`;
+      if (counted.has(key)) continue;
+      counted.add(key);
+      const entry = coverage.get(key) ?? { present: 0, snapshots: 0 };
+      entry.present += 1;
+      if (row.kind === "COMBATANT") entry.snapshots += 1;
+      coverage.set(key, entry);
+    }
+  }
+  return coverage;
+}
+
+/**
  * Combine per-report extractions for one Run (same participant list, in the
- * same order). A player is MATCHED if any report matched them.
+ * same order). A player is MATCHED if any report matched them. Callers pass
+ * each report restricted to its share of the Run's unique real pulls.
  */
 export function mergeExtractedAudits(parts: ExtractedConsumableAudit[]): ExtractedConsumableAudit {
   if (parts.length === 0) return { fights: [], players: [] };
