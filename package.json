@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "tsx scripts/check-dev-db-schema.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -17,6 +18,7 @@
     "db:seed": "tsx src/prisma/seed.ts",
     "owner:bootstrap": "tsx scripts/owner-bootstrap.mts",
     "db:verify": "prisma db verify",
+    "db:status": "prisma migration status",
     "contract:emit": "prisma contract emit",
     "bot:dev": "tsx watch src/discord-bot/index.ts",
     "bot:start": "tsx src/discord-bot/index.ts",
