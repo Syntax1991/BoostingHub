@@ -193,6 +193,11 @@ export function RunWarcraftLogsPanel({
                 {row.sharedWithRuns > 0
                   ? ` · also used by ${row.sharedWithRuns} other ${row.sharedWithRuns === 1 ? "run" : "runs"}`
                   : ""}
+                {row.overlappingFights > 0
+                  ? ` · ${row.overlappingFights === row.assigned ? "all" : row.overlappingFights} ${
+                      row.overlappingFights === 1 ? "fight" : "fights"
+                    } also logged in another linked report — counted once in the audit`
+                  : ""}
               </p>
             </li>
           ))}

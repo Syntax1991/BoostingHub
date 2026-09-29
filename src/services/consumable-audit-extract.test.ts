@@ -6,7 +6,9 @@ import type {
 import {
   CONSUMABLE_PRE_PULL_WINDOW_MS,
   attributeCastsToFights,
+  combatantSnapshotsByFight,
   extractConsumableAudit,
+  restrictExtractedToFights,
   matchParticipantActors,
   realmKey,
   mergeExtractedAudits,
@@ -212,6 +214,18 @@ describe("extractConsumableAudit", () => {
     expect(
       withLightsPotential.players[0]!.observations.filter((row) => row.kind === "CAST").map((row) => [row.category, row.spellId]),
     ).toEqual([["DAMAGE_POTION", 1236616]]);
+  });
+
+  it("restricting to a set of fights drops every fact of the other fights (COMBATANT, AURA, CAST, DEATH, PARTICIPANT, gear)", () => {
+    const only1 = restrictExtractedToFights(extracted, new Set(["AbCdEfGhIjKlMnOp#1"]));
+    expect(only1.fights.map((fight) => fight.wclFightId)).toEqual([1]);
+    for (const player of only1.players) {
+      expect(player.observations.every((row) => row.wclFightId === 1)).toBe(true);
+      expect(player.gear.every((row) => row.wclFightId === 1)).toBe(true);
+    }
+    expect(only1.players[0]!.observations.map((row) => row.kind)).toEqual(["COMBATANT", "AURA", "CAST"]);
+    expect(only1.players.map((player) => player.matchStatus)).toEqual(extracted.players.map((player) => player.matchStatus));
+    expect(combatantSnapshotsByFight(extracted)).toEqual(new Map([["AbCdEfGhIjKlMnOp#1", 1], ["AbCdEfGhIjKlMnOp#4", 1]]));
   });
 
   it("keeps unmatched and external players with no facts", () => {

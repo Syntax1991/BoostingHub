@@ -396,8 +396,43 @@ function gearForActors(
 }
 
 /**
+ * Keep only the given fights (keys `${reportCode}#${wclFightId}`) of one
+ * report's extraction — with every fact of those fights and none of the
+ * others (COMBATANT / PARTICIPANT / AURA / CAST / DEATH and gear alike), so a
+ * duplicate copy of a pull leaves nothing behind.
+ */
+export function restrictExtractedToFights(
+  part: ExtractedConsumableAudit,
+  keys: ReadonlySet<string>,
+): ExtractedConsumableAudit {
+  const keep = (row: { reportCode: string; wclFightId: number }) => keys.has(`${row.reportCode}#${row.wclFightId}`);
+  return {
+    fights: part.fights.filter(keep),
+    players: part.players.map((player) => ({
+      ...player,
+      observations: player.observations.filter(keep),
+      gear: player.gear.filter(keep),
+    })),
+  };
+}
+
+/** Players with a CombatantInfo snapshot per fight key — how usable a copy of a pull is. */
+export function combatantSnapshotsByFight(part: ExtractedConsumableAudit): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const player of part.players) {
+    for (const row of player.observations) {
+      if (row.kind !== "COMBATANT") continue;
+      const key = `${row.reportCode}#${row.wclFightId}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
  * Combine per-report extractions for one Run (same participant list, in the
- * same order). A player is MATCHED if any report matched them.
+ * same order). A player is MATCHED if any report matched them. Callers pass
+ * each report restricted to its share of the Run's unique real pulls.
  */
 export function mergeExtractedAudits(parts: ExtractedConsumableAudit[]): ExtractedConsumableAudit {
   if (parts.length === 0) return { fights: [], players: [] };

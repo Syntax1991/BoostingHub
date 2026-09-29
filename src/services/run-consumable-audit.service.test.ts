@@ -11,7 +11,7 @@ import {
 import { runConsumableAuditRepository } from "@/repositories/run-consumable-audit.repository";
 import { runWarcraftLogsRepository } from "@/repositories/run-warcraft-logs.repository";
 import { identityKey, type ConsumableAuditParticipant } from "@/services/consumable-audit-extract";
-import { runConsumableAuditService } from "@/services/run-consumable-audit.service";
+import { analyzeRun, runConsumableAuditService } from "@/services/run-consumable-audit.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runWarcraftLogsService } from "@/services/run-warcraft-logs.service";
 import { knownSpecializationIds, specializationById } from "@/lib/wow-specializations";
@@ -37,6 +37,9 @@ const SETTLEMENT_ROSTER_ID = "o9999996-9996-4996-8996-999999999996";
 const OTHER_LEAD_ID = "ca000001-0000-4000-8000-00000000c0a1";
 const EXTERNAL_ID = "ca000002-0000-4000-8000-00000000c0a2";
 const REPORT = "AbCdEfGhIjKlMnOp";
+/** A second logger of the same raid: same pulls, its clock 10.9 s ahead (production shape). */
+const SECOND = "ZyXwVuTsRqPoNmLk";
+const SECOND_SKEW_MS = 10_903;
 
 const DAY = "2026-09-20";
 const at = (hhmm: string) => Date.parse(`${DAY}T${hhmm}:00.000Z`);
@@ -185,7 +188,7 @@ const later = () => {
 async function clearAssociations() {
   await orm.RunConsumableAudit.where((row) => row.runId.in([RUN_A, RUN_B, LEGACY_RUN])).deleteAndCount();
   await orm.RunWarcraftLogsReport.where((row) => row.runId.in([RUN_A, RUN_B, LEGACY_RUN])).deleteAndCount();
-  await orm.WarcraftLogsReport.where({ code: REPORT }).deleteAndCount();
+  await orm.WarcraftLogsReport.where((row) => row.code.in([REPORT, SECOND])).deleteAndCount();
 }
 
 async function attachAndAnalyze(user: AuthenticatedUser, runId: string, now = later()) {
@@ -266,7 +269,10 @@ beforeEach(async () => {
   vi.spyOn(warcraftLogsApiClient, "isConfigured").mockReturnValue(true);
   metadataSpy = vi
     .spyOn(warcraftLogsApiClient, "fetchReportMetadata")
-    .mockImplementation(async () => ({ status: "SUCCESS", report: metadata() }));
+    .mockImplementation(async (code) => ({
+      status: "SUCCESS",
+      report: code === SECOND ? metadata({ code: SECOND, startTime: REPORT_START + SECOND_SKEW_MS }) : metadata(),
+    }));
   eventsSpy = vi.spyOn(warcraftLogsApiClient, "fetchReportConsumableEvents").mockImplementation(async (input) => fakeEvents(input));
 });
 
@@ -658,6 +664,109 @@ describe("consumable facts per assigned fight", () => {
     await attachAndAnalyze(aelira, RUN_A);
     expect(metadataSpy).toHaveBeenCalledTimes(1);
     expect(eventsSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("two reports of the same raid (two loggers) linked to one Run", () => {
+  async function attachBoth() {
+    const now = later();
+    await runWarcraftLogsService.attachReport(aelira, { runId: RUN_A, reportCode: REPORT }, now);
+    await runWarcraftLogsService.attachReport(aelira, { runId: RUN_A, reportCode: SECOND }, new Date(now.getTime() + 5 * MIN));
+  }
+  const analyze = () => runConsumableAuditService.analyze(aelira, { runId: RUN_A }, () => later(), { skipCooldown: true });
+  const summaryOf = (view: Awaited<ReturnType<typeof runConsumableAuditService.getAuditView>>) => ({
+    summary: view.snapshot!.summary,
+    players: view.snapshot!.players.map((p) => [p.displayName, p.warningCount, p.deaths.length, p.combatPotion.uses.length, p.flask.fightsChecked]),
+  });
+
+  it("the audit holds every real pull once — identical to one report — and is fresh right away", async () => {
+    await attachAndAnalyze(aelira, RUN_A);
+    const single = summaryOf(await runConsumableAuditService.getAuditView(aelira, RUN_A));
+    await clearAssociations();
+
+    await attachBoth();
+    expect((await fightStatuses(RUN_A))).toBeTruthy();
+    eventsSpy.mockClear();
+    expect(await analyze()).toMatchObject({ status: "ANALYZED" });
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(summaryOf(view)).toEqual(single); // no doubled fights, deaths, uses, warnings
+    expect(new Set(view.snapshot!.fights.map((fight) => fight.reportCode))).toEqual(new Set([REPORT])); // linked first
+    expect(eventsSpy).toHaveBeenCalledTimes(1); // the second logger's copy is not fetched
+    expect(view.stale).toBe(false);
+    // Both reports stay visible; the overlap is explained, not hidden.
+    expect(view.logs.reports.map((row) => [row.code, row.assigned, row.overlappingFights])).toEqual([
+      [REPORT, 8, 8],
+      [SECOND, 8, 8],
+    ]);
+
+    // Deaths: Kael's wipe death in fight 7 is listed once, not twice.
+    const kael = view.snapshot!.players.find((p) => p.displayName === "Kael Stormhowl")!;
+    expect(kael.deaths.map((death) => death.fight.wclFightId)).toEqual([7]);
+  });
+
+  it("12. a copy without CombatantInfo is replaced by the other logger's copy of the same pulls", async () => {
+    await attachBoth();
+    const full = fakeEvents;
+    eventsSpy.mockImplementation(async (input) => {
+      const result = full(input);
+      return input.code === REPORT ? { ...result, events: { ...result.events, combatants: [] } } : result;
+    });
+    expect(await analyze()).toMatchObject({ status: "ANALYZED", fights: 8 });
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(new Set(view.snapshot!.fights.map((fight) => fight.reportCode))).toEqual(new Set([SECOND]));
+    expect(eventsSpy).toHaveBeenCalledTimes(2); // canonical report, then the duplicates of the weak pulls
+    const second = view.snapshot!.players.find((p) => p.hasLogData)!;
+    expect(second.flask.fightsChecked).toBeGreaterThan(0); // snapshots available again
+    expect(view.stale).toBe(false);
+  });
+
+  it("11. played roles come from the kept copy (specialization per fight)", async () => {
+    await attachBoth();
+    const p = inLogA.find((row) => row.wowClass && row.role)!;
+    const spec = knownSpecializationIds().map((id) => ({ id, spec: specializationById(id)! })).find(({ spec }) => spec.wowClass === p.wowClass)!;
+    const actor = actorIdByKey.get(identityKey(p.characterName, p.characterRealm))!;
+    events = { ...events, combatants: events.combatants.map((row) => (row.sourceId === actor ? { ...row, specId: spec.id } : row)) };
+    await analyze();
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    const row = view.snapshot!.players.find((x) => identityKey(x.characterName!, x.characterRealm!) === identityKey(p.characterName, p.characterRealm))!;
+    expect(row.playedRole).toBe(spec.spec.role);
+    expect(row.playedRoleByFight).toHaveLength(8); // each pull once
+  });
+
+  it("14. the automatic audit produces the same unique snapshot as a manual analysis", async () => {
+    await attachBoth();
+    await analyze();
+    const manual = summaryOf(await runConsumableAuditService.getAuditView(aelira, RUN_A));
+    const run = (await runConsumableAuditRepository.findRunContext(RUN_A))!;
+    expect(await analyzeRun(run, null, () => later(), { skipCooldown: true, auto: true })).toMatchObject({ status: "ANALYZED", fights: 8 });
+    const auto = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(summaryOf(auto)).toEqual(manual);
+    expect(auto.stale).toBe(false);
+  });
+
+  it("a report covering other pulls still adds them (partial overlap is a union, not one report)", async () => {
+    await attachBoth();
+    // The second logger only has fights 5–8 of Run A.
+    const partial = metadata({ code: SECOND, startTime: REPORT_START + SECOND_SKEW_MS });
+    await orm.RunWarcraftLogsFight.where({ runId: RUN_A })
+      .include("report")
+      .all()
+      .then(async (rows) => {
+        for (const row of rows as unknown as Array<{ id: string; wclFightId: number; report: { code: string } }>) {
+          if (row.report.code === SECOND && row.wclFightId < 5) {
+            await orm.RunWarcraftLogsFight.where({ id: row.id }).update({ status: "IGNORED" });
+          }
+        }
+      });
+    expect(partial.fights.length).toBeGreaterThan(0);
+    await analyze();
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(view.snapshot!.fights).toHaveLength(8);
+    expect(view.logs.reports.map((row) => [row.code, row.assigned, row.overlappingFights])).toEqual([
+      [REPORT, 8, 4],
+      [SECOND, 4, 4],
+    ]);
+    expect(view.stale).toBe(false);
   });
 });
 

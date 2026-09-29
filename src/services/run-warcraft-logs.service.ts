@@ -24,6 +24,7 @@ import {
   type WclFightReason,
   type WclFightStatus,
 } from "@/services/wcl-fight-assignment";
+import { overlapFightKey, realPullsOfRun } from "@/services/wcl-report-overlap";
 
 /**
  * Report → fight → Run association for the Run Consumables Audit.
@@ -83,6 +84,11 @@ export type RunWarcraftLogsView = {
     assignedTo: string | null;
     /** Other Runs using the same report — valid, not an error. */
     sharedWithRuns: number;
+    /**
+     * This report's ASSIGNED fights another linked report also logged (two
+     * loggers of one raid). Valid — the Consumables audit counts each pull once.
+     */
+    overlappingFights: number;
   }>;
   fights: RunWarcraftLogsFightView[];
   needsReview: number;
@@ -392,6 +398,15 @@ export const runWarcraftLogsService = {
       associations.map((row) => row.report.id),
     );
     const labels = fightLabels(fights);
+    // Same projection the Consumables audit uses: each real pull once.
+    const overlapping = new Set(
+      realPullsOfRun(
+        fights.filter((row) => row.status === "ASSIGNED"),
+        associations.map((association) => ({ code: association.report.code, attachedAt: association.attachedAt })),
+      )
+        .filter((pull) => pull.copies.length > 1)
+        .flatMap((pull) => pull.copies.map((copy) => copy.key)),
+    );
     return {
       runWindow: { startedAt: run.startedAt, completedAt: run.completedAt },
       toleranceSeconds: WCL_FIGHT_ASSIGNMENT_POLICY.toleranceSeconds,
@@ -414,6 +429,8 @@ export const runWarcraftLogsService = {
           assignedFrom: assigned[0]?.startAt ?? null,
           assignedTo: assigned.at(-1)?.endAt ?? null,
           sharedWithRuns: Math.max(0, (runsPerReport.get(association.report.id) ?? 1) - 1),
+          overlappingFights: assigned.filter((row) => overlapping.has(overlapFightKey(row.reportCode, row.wclFightId)))
+            .length,
         };
       }),
       fights: fights.map((fight) => ({
