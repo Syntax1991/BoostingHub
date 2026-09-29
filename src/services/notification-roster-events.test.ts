@@ -1404,7 +1404,7 @@ describe("external lootbuddies", () => {
     });
 
     view = await rosterService.getRosterManagementView(lead, runId);
-    expect(view.composition.lootbuddies).toBe(1);
+    expect(view.composition.lootbuddies.selected).toBe(1);
     expect(view.composition.dps.selected).toBe(1);
     expect(view.composition.boosterTotal).toBe(2);
     expect(view.raidBuffCoverage.buffs.find((buff) => buff.id === "ARCANE_INTELLECT")?.covered).toBe(true);

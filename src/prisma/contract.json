@@ -2616,6 +2616,13 @@
                   "kind": "scalar"
                 }
               },
+              "desiredLootbuddyCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "desiredTankCount": {
                 "nullable": false,
                 "type": {
@@ -2972,6 +2979,9 @@
                 },
                 "desiredHealerCount": {
                   "column": "desiredHealerCount"
+                },
+                "desiredLootbuddyCount": {
+                  "column": "desiredLootbuddyCount"
                 },
                 "desiredTankCount": {
                   "column": "desiredTankCount"
@@ -6280,6 +6290,13 @@
                   "kind": "scalar"
                 }
               },
+              "desiredLootbuddyCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "desiredTankCount": {
                 "nullable": false,
                 "type": {
@@ -6452,6 +6469,9 @@
                 },
                 "desiredHealerCount": {
                   "column": "desiredHealerCount"
+                },
+                "desiredLootbuddyCount": {
+                  "column": "desiredLootbuddyCount"
                 },
                 "desiredTankCount": {
                   "column": "desiredTankCount"
@@ -10121,6 +10141,15 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
+                "desiredLootbuddyCount": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "desiredTankCount": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
@@ -13074,6 +13103,15 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
+                "desiredLootbuddyCount": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "desiredTankCount": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
@@ -15031,7 +15069,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e6e069169ebaa1f098a957c97a4912fab9e330a3d208587e250b8ea3f3a5a99e"
+    "storageHash": "4d4ce8b1eda059f6bcc34ae981987dc111d1f3ab69fd262ce0343b9b8130d144"
   },
   "execution": {
     "executionHash": "4db3e22f9203aeabd3091cf80b607036655d4240c5b2499899845ca3a30fb4aa",

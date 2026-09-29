@@ -70,6 +70,7 @@ export function RunsView({ data }: { data: RunsPage }) {
                     <td className="px-4 py-3">{run.raidLeadName}</td>
                     <td className="px-4 py-3 text-xs text-muted">
                       {run.desiredTankCount}T / {run.desiredHealerCount}H / {run.desiredDpsCount}D
+                      {run.desiredLootbuddyCount > 0 ? ` · ${run.desiredLootbuddyCount} LB` : ""}
                     </td>
                     <td className="px-4 py-3">
                       <div>{run.signupCount} total</div>

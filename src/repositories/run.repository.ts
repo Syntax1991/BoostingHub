@@ -57,6 +57,7 @@ export type RunFieldsUpdate = {
   desiredTankCount?: number;
   desiredHealerCount?: number;
   desiredDpsCount?: number;
+  desiredLootbuddyCount?: number;
   discordRolePing?: boolean;
   status?: RunStatus;
   signupsOpen?: boolean;
@@ -119,6 +120,8 @@ export type RunListRecord = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Planned Lootbuddy slots — a target, never a signup. */
+  desiredLootbuddyCount: number;
   /** When true, first Discord channel provision pings Tank/Healer/DPS roles. */
   discordRolePing: boolean;
   /** Authoritative ordered raid contents for this Run. */
@@ -190,6 +193,8 @@ export type RunCreateWithContentsInput = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Defaults to 0 when omitted (legacy callers / tests). */
+  desiredLootbuddyCount?: number;
   /** Defaults to true when omitted (legacy callers / tests). */
   discordRolePing?: boolean;
   contents: RunContentWriteSpec[];
@@ -269,6 +274,7 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     desiredTankCount: asNumber(run.desiredTankCount),
     desiredHealerCount: asNumber(run.desiredHealerCount),
     desiredDpsCount: asNumber(run.desiredDpsCount),
+    desiredLootbuddyCount: asNumber(run.desiredLootbuddyCount),
     discordRolePing: asBoolean(run.discordRolePing, true),
     contents,
     contentDisplay,
@@ -443,6 +449,7 @@ export const runRepository = {
         desiredTankCount: input.desiredTankCount,
         desiredHealerCount: input.desiredHealerCount,
         desiredDpsCount: input.desiredDpsCount,
+        desiredLootbuddyCount: input.desiredLootbuddyCount ?? 0,
         discordRolePing: input.discordRolePing ?? true,
         signupsOpen: false,
         createdAt: now,
@@ -488,6 +495,7 @@ export const runRepository = {
           desiredTankCount: input.desiredTankCount,
           desiredHealerCount: input.desiredHealerCount,
           desiredDpsCount: input.desiredDpsCount,
+          desiredLootbuddyCount: input.desiredLootbuddyCount ?? 0,
           discordRolePing: input.discordRolePing ?? true,
           signupsOpen: false,
           createdAt: now,

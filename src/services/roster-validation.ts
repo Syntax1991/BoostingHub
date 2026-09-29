@@ -36,7 +36,7 @@ const PUBLISHABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PU
 export function validateRosterDraft(input: {
   runStatus: RunStatus;
   selected: RosterValidationMember[];
-  targets: { tanks: number; healers: number; dps: number };
+  targets: { tanks: number; healers: number; dps: number; lootbuddies?: number };
   /** Unregistered boosters/lootbuddies added by hand — count toward composition, nothing else to check. */
   externalBoosters?: ReadonlyArray<{ participationType?: ParticipationType; role: CharacterRole | null }>;
 }): RosterValidationResult {

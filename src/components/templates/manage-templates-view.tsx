@@ -55,6 +55,7 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
                     Owner: {template.raidLeadName} · {template.raidName} ({template.raidSeason}) ·{" "}
                     {template.plannedBossCount}/{template.totalBossCount} bosses · {template.desiredTankCount}T{" "}
                     {template.desiredHealerCount}H {template.desiredDpsCount}D
+                    {template.desiredLootbuddyCount > 0 ? ` ${template.desiredLootbuddyCount}LB` : ""}
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     Created by {template.createdByName} · Updated by {template.updatedByName}
@@ -77,6 +78,7 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
                       desiredTankCount: template.desiredTankCount,
                       desiredHealerCount: template.desiredHealerCount,
                       desiredDpsCount: template.desiredDpsCount,
+                      desiredLootbuddyCount: template.desiredLootbuddyCount,
                       notes: template.notes,
                       raidLeadId: template.raidLeadId,
                     }}

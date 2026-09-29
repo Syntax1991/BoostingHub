@@ -93,6 +93,8 @@ export type SignupEmbedRoleStatus = {
 export type SignupEmbedLootbuddyStatus = {
   signed: number;
   picked: number;
+  /** Run.desiredLootbuddyCount; optional so an older payload/bot stays valid. 0 = no target. */
+  target?: number;
 };
 
 export type SignupEmbedData = {
@@ -440,6 +442,8 @@ export type RunStartEmbedData = {
     tanks: number;
     healers: number;
     dps: number;
+    /** Planned Lootbuddy slots; optional so older payloads stay valid. */
+    lootbuddies?: number;
   };
   groups: {
     tanks: RunStartEmbedMember[];
@@ -664,6 +668,7 @@ function buildSignupRoleProjection(
       lootbuddy: {
         signed: distinctUsers(members.signed.lootbuddies),
         picked: members.picked.lootbuddies.length,
+        target: run.desiredLootbuddyCount,
       },
     },
   };
@@ -1465,6 +1470,7 @@ export const discordSyncService = {
         tanks: run.desiredTankCount,
         healers: run.desiredHealerCount,
         dps: run.desiredDpsCount,
+        lootbuddies: run.desiredLootbuddyCount,
       },
       groups: { tanks, healers, dps, lootbuddies },
       totalSelected: members.length,

@@ -158,6 +158,7 @@ function fakeTemplate(overrides: Partial<RunTemplateRecord> = {}): RunTemplateRe
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
+    desiredLootbuddyCount: 0,
     notes: null,
     isActive: true,
     createdById: ids.lead,

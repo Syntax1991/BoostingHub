@@ -103,6 +103,8 @@ export type FinalSetupInput = {
     tanks: number;
     healers: number;
     dps: number;
+    /** Planned Lootbuddy slots; 0 / absent: the section shows the count only (as before). */
+    lootbuddies?: number;
   };
   groups: {
     tanks: FinalSetupParticipant[];
@@ -136,9 +138,9 @@ function roleSection(emoji: string, label: string, selected: number, target: num
   return `${emoji} **${label}** ${emoji} ${selected}/${target}\n${body}`;
 }
 
-function lootbuddySection(selected: number, lines: string[]): string {
+function lootbuddySection(selected: number, target: number | undefined, lines: string[]): string {
   const body = lines.length > 0 ? lines.join("\n") : "—";
-  return `📦 **Lootbuddies** 📦 ${selected}\n${body}`;
+  return `📦 **Lootbuddies** 📦 ${target ? `${selected}/${target}` : selected}\n${body}`;
 }
 
 /** Deterministic participant sort for Final Setup rows. */
@@ -169,7 +171,7 @@ export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRend
     roleSection("🛡", "Tanks", data.groups.tanks.length, data.targets.tanks, data.groups.tanks.map((m) => boosterLine(m, options))),
     roleSection("✚", "Healers", data.groups.healers.length, data.targets.healers, data.groups.healers.map((m) => boosterLine(m, options))),
     roleSection("⚔", "DPS", data.groups.dps.length, data.targets.dps, data.groups.dps.map((m) => boosterLine(m, options))),
-    lootbuddySection(data.groups.lootbuddies.length, data.groups.lootbuddies.map(lootbuddyLine)),
+    lootbuddySection(data.groups.lootbuddies.length, data.targets.lootbuddies, data.groups.lootbuddies.map(lootbuddyLine)),
   ].join("\n\n");
 
   return {

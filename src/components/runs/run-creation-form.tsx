@@ -25,6 +25,7 @@ type RowOverrides = {
   desiredTankCount?: number;
   desiredHealerCount?: number;
   desiredDpsCount?: number;
+  desiredLootbuddyCount?: number;
 };
 
 type Row = {
@@ -69,6 +70,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
   const [desiredTankCount, setDesiredTankCount] = useState(form.defaults.desiredTankCount);
   const [desiredHealerCount, setDesiredHealerCount] = useState(form.defaults.desiredHealerCount);
   const [desiredDpsCount, setDesiredDpsCount] = useState(form.defaults.desiredDpsCount);
+  const [desiredLootbuddyCount, setDesiredLootbuddyCount] = useState(form.defaults.desiredLootbuddyCount ?? 0);
   const [discordRolePing, setDiscordRolePing] = useState(form.defaults.discordRolePing ?? true);
 
   const [rows, setRows] = useState<Row[]>([
@@ -93,6 +95,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     setDesiredTankCount(template.desiredTankCount);
     setDesiredHealerCount(template.desiredHealerCount);
     setDesiredDpsCount(template.desiredDpsCount);
+    setDesiredLootbuddyCount(template.desiredLootbuddyCount ?? 0);
     setNotes(template.notes ?? "");
     setRaidLeadId(template.raidLeadId);
     setRows((current) =>
@@ -246,6 +249,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           desiredTankCount,
           desiredHealerCount,
           desiredDpsCount,
+          desiredLootbuddyCount,
           discordRolePing,
         },
         runs: rows.map((row, index) => ({
@@ -412,7 +416,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
               </>
             )}
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <label className="block text-sm">
               <span className="mb-1 block text-muted">Tanks</span>
               <input
@@ -447,6 +451,18 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                 onChange={(event) => setDesiredDpsCount(Number(event.target.value))}
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
                 aria-label="Shared desired DPS"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted">Lootbuddies</span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={desiredLootbuddyCount}
+                onChange={(event) => setDesiredLootbuddyCount(Number(event.target.value))}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                aria-label="Shared desired lootbuddies"
               />
             </label>
           </div>
@@ -654,7 +670,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                       </OverrideField>
                     ) : null}
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       <OverrideField
                         label="Tanks"
                         active={row.overrides.desiredTankCount !== undefined}
@@ -704,6 +720,23 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                           }
                           className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
                           aria-label={`Run ${index + 1} desired DPS override`}
+                        />
+                      </OverrideField>
+                      <OverrideField
+                        label="Lootbuddies"
+                        active={row.overrides.desiredLootbuddyCount !== undefined}
+                        onReset={() => resetOverride(row.key, "desiredLootbuddyCount")}
+                      >
+                        <input
+                          type="number"
+                          min={0}
+                          max={40}
+                          value={row.overrides.desiredLootbuddyCount ?? desiredLootbuddyCount}
+                          onChange={(event) =>
+                            updateOverrides(row.key, { desiredLootbuddyCount: Number(event.target.value) })
+                          }
+                          className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                          aria-label={`Run ${index + 1} desired lootbuddies override`}
                         />
                       </OverrideField>
                     </div>

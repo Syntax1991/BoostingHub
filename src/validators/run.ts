@@ -49,6 +49,8 @@ const createRunCommonSchema = z.object({
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
+  /** Planned Lootbuddy slots (a target, never a signup). Omitted by older callers → 0 (service default). */
+  desiredLootbuddyCount: compositionSchema.optional(),
   /** Ping Tank/Healer/DPS Discord roles when the Run channel is first created. Default true. */
   discordRolePing: z.boolean().optional(),
 });
@@ -79,6 +81,8 @@ export const updateRunSchema = z
     desiredTankCount: compositionSchema,
     desiredHealerCount: compositionSchema,
     desiredDpsCount: compositionSchema,
+    /** Omitted → the Run keeps its current Lootbuddy target. */
+    desiredLootbuddyCount: compositionSchema.optional(),
     discordRolePing: z.boolean().optional(),
   })
   .and(

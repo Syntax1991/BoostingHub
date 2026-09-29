@@ -163,6 +163,8 @@ type EffectiveRunInput = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Planned Lootbuddy slots (target only). Omitted by legacy callers → 0. */
+  desiredLootbuddyCount?: number;
   /** When true, first Discord channel provision pings Tank/Healer/DPS roles. Default true. */
   discordRolePing?: boolean;
 };
@@ -208,6 +210,7 @@ function prepareRunDraft(
   assertComposition(input.desiredTankCount, "Desired tanks");
   assertComposition(input.desiredHealerCount, "Desired healers");
   assertComposition(input.desiredDpsCount, "Desired DPS");
+  assertComposition(input.desiredLootbuddyCount ?? 0, "Desired lootbuddies");
   assertValidRunLootType(input.difficulty, input.lootType);
 
   if (context.contents.length === 0) {
@@ -252,6 +255,7 @@ function prepareRunDraft(
     desiredTankCount: input.desiredTankCount,
     desiredHealerCount: input.desiredHealerCount,
     desiredDpsCount: input.desiredDpsCount,
+    desiredLootbuddyCount: input.desiredLootbuddyCount ?? 0,
     discordRolePing: input.discordRolePing ?? true,
     contents: context.contents,
   };
@@ -290,6 +294,8 @@ function mergeMassCreateRow(defaults: MassCreateDefaults, row: MassCreateRunRow)
     desiredHealerCount:
       (overrides.desiredHealerCount as number | undefined) ?? (base.desiredHealerCount as number),
     desiredDpsCount: (overrides.desiredDpsCount as number | undefined) ?? (base.desiredDpsCount as number),
+    desiredLootbuddyCount:
+      (overrides.desiredLootbuddyCount as number | undefined) ?? (base.desiredLootbuddyCount as number | undefined) ?? 0,
     discordRolePing:
       (overrides.discordRolePing as boolean | undefined) ??
       (base.discordRolePing as boolean | undefined) ??
@@ -366,6 +372,7 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        desiredLootbuddyCount: run.desiredLootbuddyCount,
         contents: run.contents,
         contentDisplay: run.contentDisplay,
         signupsOpen: run.signupsOpen,
@@ -438,6 +445,7 @@ export const runService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        desiredLootbuddyCount: run.desiredLootbuddyCount,
         contents: run.contents,
         contentDisplay: run.contentDisplay,
         archivedAt: run.archivedAt,
@@ -482,6 +490,7 @@ export const runService = {
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
         discordRolePing: true,
       },
     };
@@ -536,6 +545,7 @@ export const runService = {
       desiredTankCount: template.desiredTankCount,
       desiredHealerCount: template.desiredHealerCount,
       desiredDpsCount: template.desiredDpsCount,
+      desiredLootbuddyCount: template.desiredLootbuddyCount,
       notes: template.notes,
       label: `${template.raidLeadName} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${template.plannedBossCount}/${template.totalBossCount}`,
     }));
@@ -559,6 +569,7 @@ export const runService = {
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
         discordRolePing: true,
       },
     };
@@ -683,6 +694,9 @@ export const runService = {
     assertComposition(input.desiredTankCount, "Desired tanks");
     assertComposition(input.desiredHealerCount, "Desired healers");
     assertComposition(input.desiredDpsCount, "Desired DPS");
+    // Omitted by an older caller → the Run keeps its Lootbuddy target.
+    const desiredLootbuddyCount = input.desiredLootbuddyCount ?? run.desiredLootbuddyCount;
+    assertComposition(desiredLootbuddyCount, "Desired lootbuddies");
     const nextNotes = notesValue(input.notes);
 
     const currentContents = await runRepository.listRaidContents(run.id);
@@ -799,6 +813,7 @@ export const runService = {
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
+      desiredLootbuddyCount,
       discordRolePing: input.discordRolePing ?? run.discordRolePing,
     };
 
@@ -827,7 +842,8 @@ export const runService = {
       input.lootType !== run.lootType ||
       input.desiredTankCount !== run.desiredTankCount ||
       input.desiredHealerCount !== run.desiredHealerCount ||
-      input.desiredDpsCount !== run.desiredDpsCount;
+      input.desiredDpsCount !== run.desiredDpsCount ||
+      desiredLootbuddyCount !== run.desiredLootbuddyCount;
     const rosterEffect = rosterRelevantChanged ? "MARK_CHANGED" : title !== run.title ? "REFRESH_EMBED" : "NONE";
 
     // One atomic pre-start write; content rows are replaced only when they

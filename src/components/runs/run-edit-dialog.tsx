@@ -49,6 +49,7 @@ export function RunEditDialog({
   const [desiredTankCount, setDesiredTankCount] = useState(run.desiredTankCount);
   const [desiredHealerCount, setDesiredHealerCount] = useState(run.desiredHealerCount);
   const [desiredDpsCount, setDesiredDpsCount] = useState(run.desiredDpsCount);
+  const [desiredLootbuddyCount, setDesiredLootbuddyCount] = useState(run.desiredLootbuddyCount ?? 0);
   const [discordRolePing, setDiscordRolePing] = useState(run.discordRolePing);
   const [plannedBossCount, setPlannedBossCount] = useState(primaryContent?.plannedBossCount ?? 1);
 
@@ -154,6 +155,7 @@ export function RunEditDialog({
         desiredTankCount,
         desiredHealerCount,
         desiredDpsCount,
+        desiredLootbuddyCount,
         discordRolePing,
       };
 
@@ -353,7 +355,7 @@ export function RunEditDialog({
             </>
           )}
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <label className="block text-sm">
             <span className="mb-1 block text-muted">Tanks</span>
             <input
@@ -391,6 +393,19 @@ export function RunEditDialog({
               onChange={(event) => setDesiredDpsCount(Number(event.target.value))}
               className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Desired DPS"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted">Lootbuddies</span>
+            <input
+              type="number"
+              min={0}
+              max={40}
+              value={desiredLootbuddyCount}
+              disabled={!capabilities.canEditPlanning}
+              onChange={(event) => setDesiredLootbuddyCount(Number(event.target.value))}
+              className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Desired lootbuddies"
             />
           </label>
         </div>

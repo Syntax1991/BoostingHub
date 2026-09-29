@@ -23,6 +23,7 @@ export const createRunTemplateSchema = z.object({
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,
+  desiredLootbuddyCount: compositionSchema.optional(),
   notes: notesSchema,
   raidLeadId: entityIdSchema.optional(),
 });

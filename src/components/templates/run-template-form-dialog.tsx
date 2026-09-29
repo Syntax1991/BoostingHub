@@ -22,6 +22,7 @@ export type RunTemplateFormValues = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  desiredLootbuddyCount: number;
   notes: string | null;
   raidLeadId: string;
 };
@@ -36,6 +37,7 @@ function emptyValues(raids: RaidOption[], raidLeads: RaidLeadOption[], defaultRa
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
+    desiredLootbuddyCount: 0,
     notes: null,
     raidLeadId: defaultRaidLeadId,
   };
@@ -114,6 +116,7 @@ export function RunTemplateFormDialog({
         desiredTankCount: values.desiredTankCount,
         desiredHealerCount: values.desiredHealerCount,
         desiredDpsCount: values.desiredDpsCount,
+        desiredLootbuddyCount: values.desiredLootbuddyCount,
         notes: values.notes,
         // Always sent explicitly (never omitted): the Service requires an
         // ADMIN actor to name a target owner even when that target is the
@@ -267,7 +270,7 @@ export function RunTemplateFormDialog({
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
               />
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <label className="block text-sm">
                 <span className="mb-1 block text-muted">Tanks</span>
                 <input
@@ -295,6 +298,16 @@ export function RunTemplateFormDialog({
                   min={0}
                   value={values.desiredDpsCount}
                   onChange={(event) => update({ desiredDpsCount: Number(event.target.value) })}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted">Lootbuddies</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={values.desiredLootbuddyCount}
+                  onChange={(event) => update({ desiredLootbuddyCount: Number(event.target.value) })}
                   className="h-9 w-full rounded-md border border-border bg-surface px-2"
                 />
               </label>

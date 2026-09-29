@@ -117,7 +117,12 @@ export function computeUsability(template: RunTemplateRecord): TemplateUsability
   ) {
     return { usable: false, unusableReason: "This template's planned boss count is no longer valid for its raid." };
   }
-  const composition = [template.desiredTankCount, template.desiredHealerCount, template.desiredDpsCount];
+  const composition = [
+    template.desiredTankCount,
+    template.desiredHealerCount,
+    template.desiredDpsCount,
+    template.desiredLootbuddyCount,
+  ];
   if (composition.some((count) => !Number.isInteger(count) || count < RUN_COMPOSITION_MIN || count > RUN_COMPOSITION_MAX)) {
     return { usable: false, unusableReason: "This template's composition is no longer valid." };
   }
@@ -166,6 +171,7 @@ export const runTemplateService = {
     assertComposition(input.desiredTankCount, "Desired tanks");
     assertComposition(input.desiredHealerCount, "Desired healers");
     assertComposition(input.desiredDpsCount, "Desired DPS");
+    assertComposition(input.desiredLootbuddyCount ?? 0, "Desired lootbuddies");
     assertValidRunLootType(input.difficulty, input.lootType);
     assertValidPlannedBossCount(input.plannedBossCount, raid.totalBossCount);
 
@@ -179,6 +185,7 @@ export const runTemplateService = {
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
+      desiredLootbuddyCount: input.desiredLootbuddyCount ?? 0,
       notes: notesValue(input.notes),
       createdById: user.id,
       updatedById: user.id,
@@ -199,6 +206,8 @@ export const runTemplateService = {
     assertComposition(input.desiredTankCount, "Desired tanks");
     assertComposition(input.desiredHealerCount, "Desired healers");
     assertComposition(input.desiredDpsCount, "Desired DPS");
+    const desiredLootbuddyCount = input.desiredLootbuddyCount ?? existing.desiredLootbuddyCount;
+    assertComposition(desiredLootbuddyCount, "Desired lootbuddies");
     assertValidRunLootType(input.difficulty, input.lootType);
     assertValidPlannedBossCount(input.plannedBossCount, raid.totalBossCount);
 
@@ -212,6 +221,7 @@ export const runTemplateService = {
       desiredTankCount: input.desiredTankCount,
       desiredHealerCount: input.desiredHealerCount,
       desiredDpsCount: input.desiredDpsCount,
+      desiredLootbuddyCount,
       notes: notesValue(input.notes),
       updatedById: user.id,
     });
