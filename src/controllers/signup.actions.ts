@@ -2,10 +2,15 @@
 
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
-import { signupService } from "@/services/signup.service";
+import {
+  formatQuickSignupBoostersMessage,
+  signupService,
+  type QuickSignupBoostersResult,
+} from "@/services/signup.service";
 import {
   boosterSignupSchema,
   cancelSignupSchema,
+  quickSignupBoostersSchema,
   setCharacterOffersSchema,
   setLootbuddiesSchema,
   signupOptionsSchema,
@@ -63,6 +68,28 @@ export async function setCharacterOffersAction(input: unknown): Promise<ActionRe
     };
   } catch (error) {
     return mapActionError(error);
+  }
+}
+
+/**
+ * Additive Booster Quick Signup. Server derives the current active offer set
+ * and merges newly eligible Characters with their specialization default role.
+ * Never replaces existing offeredRoles and never touches Lootbuddy entries.
+ */
+export async function quickSignupBoostersAction(
+  input: unknown,
+): Promise<ActionResult & { data: QuickSignupBoostersResult | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = quickSignupBoostersSchema.parse(input);
+    const data = await signupService.quickSignupBoosters(user, parsed);
+    return {
+      ok: true,
+      message: formatQuickSignupBoostersMessage(data),
+      data,
+    };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
   }
 }
 

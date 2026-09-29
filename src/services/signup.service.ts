@@ -18,8 +18,10 @@ import { rosterRepository } from "@/repositories/roster.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { settingsRepository } from "@/repositories/settings.repository";
 import { signupRepository } from "@/repositories/signup.repository";
+import { userRepository } from "@/repositories/user.repository";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
+import { isApprovedBooster } from "@/services/boosting-role.service";
 import {
   assertSignupTransition,
   canSelfWithdrawSignup,
@@ -35,6 +37,47 @@ import {
   type CharacterScheduleConflict,
 } from "@/services/character-schedule-conflict.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
+
+export type QuickSignupBoostersResult = {
+  runId: string;
+  added: number;
+  alreadySigned: number;
+  skippedNoDefaultRole: number;
+  skippedIneligible: number;
+};
+
+/** Concise product copy for the Signup dialog / action feedback. */
+export function formatQuickSignupBoostersMessage(result: QuickSignupBoostersResult): string {
+  if (result.added === 0) {
+    if (result.alreadySigned > 0 && result.skippedNoDefaultRole === 0) {
+      return "All eligible characters are already signed up.";
+    }
+    if (result.skippedNoDefaultRole > 0 && result.alreadySigned === 0) {
+      return result.skippedNoDefaultRole === 1
+        ? "No characters were added. 1 character was skipped because no default role could be determined."
+        : `No characters were added. ${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
+    }
+    if (result.skippedNoDefaultRole > 0) {
+      return result.skippedNoDefaultRole === 1
+        ? "All eligible characters with a default role are already signed up. 1 character was skipped because no default role could be determined."
+        : `All eligible characters with a default role are already signed up. ${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
+    }
+    return "No eligible characters to add.";
+  }
+
+  const addedPart =
+    result.added === 1
+      ? "Quick Signup added 1 character."
+      : `Quick Signup added ${result.added} characters.`;
+  if (result.skippedNoDefaultRole === 0) {
+    return addedPart;
+  }
+  const skippedPart =
+    result.skippedNoDefaultRole === 1
+      ? "1 character was skipped because no default role could be determined."
+      : `${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
+  return `${addedPart.slice(0, -1)}. ${skippedPart}`;
+}
 
 /**
  * Attaches cross-Run reservation info to a batch of Characters in one query
@@ -469,6 +512,126 @@ export const signupService = {
       reactivated: result.reactivated.length,
       withdrawn: result.withdrawn.length,
       kept: plan.kept.length,
+    };
+  },
+
+  /**
+   * Additive Booster Quick Signup: merge every currently eligible Character that
+   * has a non-null specialization `defaultRole` into the User's existing BOOSTER
+   * offer set. Existing offeredRoles are never overwritten; selected /
+   * draft-selected rows are untouched; Lootbuddy rows are never touched.
+   * Derives the current active offer set server-side — never trusts a client
+   * complete-set snapshot — so a stale dialog cannot withdraw offers.
+   */
+  async quickSignupBoosters(
+    actor: AuthenticatedUser,
+    input: { runId: string },
+  ): Promise<QuickSignupBoostersResult> {
+    const run = await runRepository.findById(input.runId);
+    if (!run) {
+      throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+    }
+    if (!assertSignupWindowOpen(run)) {
+      throw new DomainError("SIGNUP_CLOSED", "Signups are not open for this run.");
+    }
+
+    const boostingRoles = await userRepository.findBoostingRoles(actor.id);
+    if (!isApprovedBooster(boostingRoles)) {
+      throw new DomainError("BOOSTER_ACCESS_REQUIRED", "The Booster role is required to sign up as a booster.");
+    }
+
+    const rawCharacters = await characterRepository.listByUserId(actor.id);
+    const characters = await withSignupEligibilityContext(
+      rawCharacters,
+      run.id,
+      run.scheduledStartAt,
+      run.difficulty,
+    );
+    const { eligible, ineligible } = evaluateBoosterOptions(characters, toEligibilityRun(run));
+
+    const currentSignups = await signupRepository.listByRunAndUser(input.runId, actor.id);
+    const activeBoosterByCharacterId = new Map<string, { id: string; offeredRoles: CharacterRole[] }>();
+    const withdrawnBoosterByCharacterId = new Map<string, string>();
+    for (const signup of currentSignups) {
+      if (signup.participationType !== "BOOSTER" || !signup.character) continue;
+      if (signup.status === "WITHDRAWN") {
+        withdrawnBoosterByCharacterId.set(signup.character.id, signup.id);
+        continue;
+      }
+      activeBoosterByCharacterId.set(signup.character.id, {
+        id: signup.id,
+        offeredRoles: signup.offeredRoles,
+      });
+    }
+
+    let alreadySigned = 0;
+    let skippedNoDefaultRole = 0;
+    const toCreate: Array<{ characterId: string; offeredRoles: CharacterRole[] }> = [];
+    const toReactivate: Array<{ id: string; characterId: string; offeredRoles: CharacterRole[] }> = [];
+
+    for (const option of eligible) {
+      if (activeBoosterByCharacterId.has(option.characterId)) {
+        alreadySigned += 1;
+        continue;
+      }
+      if (!option.defaultRole) {
+        skippedNoDefaultRole += 1;
+        continue;
+      }
+      const offeredRoles: CharacterRole[] = [option.defaultRole];
+      const withdrawnId = withdrawnBoosterByCharacterId.get(option.characterId);
+      if (withdrawnId) {
+        toReactivate.push({ id: withdrawnId, characterId: option.characterId, offeredRoles });
+      } else {
+        toCreate.push({ characterId: option.characterId, offeredRoles });
+      }
+    }
+
+    const skippedIneligible = ineligible.length;
+
+    if (toCreate.length === 0 && toReactivate.length === 0) {
+      return {
+        runId: input.runId,
+        added: 0,
+        alreadySigned,
+        skippedNoDefaultRole,
+        skippedIneligible,
+      };
+    }
+
+    const charactersById = new Map(characters.map((character) => [character.id, character]));
+    const newOffers = [...toCreate, ...toReactivate].map((offer) => {
+      const character = charactersById.get(offer.characterId);
+      if (!character) {
+        throw new DomainError("CHARACTER_NOT_OWNED", "That character does not belong to you.");
+      }
+      return { offer: { characterId: offer.characterId, offeredRoles: offer.offeredRoles }, character };
+    });
+    await validateOfferedCharacters(newOffers, run);
+
+    const result = await signupRepository.applyOfferPlan({
+      runId: input.runId,
+      userId: actor.id,
+      scheduledStartAt: run.scheduledStartAt,
+      toWithdraw: [],
+      toReactivate,
+      toCreate,
+      toUpdateRoles: [],
+    });
+
+    const added = result.created.length + result.reactivated.length;
+    await activityRepository.create({
+      userId: actor.id,
+      type: "SIGNUP",
+      message: `${actor.name} used Quick Signup on ${run.title} (${added} added).`,
+    });
+
+    return {
+      runId: input.runId,
+      added,
+      alreadySigned,
+      skippedNoDefaultRole,
+      skippedIneligible,
     };
   },
 

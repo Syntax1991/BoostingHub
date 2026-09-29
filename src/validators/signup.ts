@@ -57,3 +57,8 @@ export const setLootbuddiesSchema = z.object({
 export const cancelSignupSchema = z.object({
   runId: entityIdSchema,
 });
+
+/** Additive Booster Quick Signup — server merges eligible Characters; never a client complete-set. */
+export const quickSignupBoostersSchema = z.object({
+  runId: entityIdSchema,
+});
