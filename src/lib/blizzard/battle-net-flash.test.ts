@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { battleNetFlashMessage } from "@/lib/blizzard/battle-net-flash";
+import { battleNetErrorFlashCleanUrl, battleNetFlashMessage } from "@/lib/blizzard/battle-net-flash";
 
 const error = (code: string | null) => ({ status: "error", region: null, code, linked: 0 });
 
 describe("battleNetFlashMessage", () => {
-  it("explains an account-profile denial without calling it a sign-in failure or exposing internals", () => {
+  it("renders an account-profile denial as a titled callout without internals", () => {
     const message = battleNetFlashMessage(error("BATTLENET_ACCOUNT_PROFILE_FORBIDDEN"));
-    expect(message).toEqual({
-      tone: "danger",
-      text:
-        "Battle.net sign-in succeeded, but Blizzard did not allow access to your WoW character list. " +
-        "You can still add characters manually; they will refresh from Blizzard's public profile.",
+    expect(message?.tone).toBe("danger");
+    expect(message?.callout).toEqual({
+      kind: "account-profile-forbidden",
+      title: "Battle.net character list unavailable",
+      paragraphs: [
+        "Your Battle.net sign-in was successful, but Blizzard did not allow Manawyrm Hub to access your WoW character list. " +
+          "This is a restriction returned by Blizzard, not a failed login.",
+        "You can still add your characters manually. They will continue to update through Blizzard's public character profile.",
+      ],
     });
-    expect(message?.text).not.toMatch(/BATTLENET_|HTTP|403|connection failed|try again/i);
+    // No code, HTTP status, "connection failed" or retry advice anywhere in the prose.
+    expect(message?.text).not.toMatch(/BATTLENET_|HTTP|403|connection failed|try again|reconnect/i);
   });
 
   it("keeps the generic fallback for BATTLENET_AUTH_FAILED and other codes", () => {
@@ -34,5 +39,24 @@ describe("battleNetFlashMessage", () => {
       text: "Battle.net connected (EU). Linked 2 existing characters automatically. Use Import to choose further characters.",
     });
     expect(battleNetFlashMessage({ status: null, region: null, code: null, linked: 0 })).toBeNull();
+  });
+});
+
+describe("battleNetErrorFlashCleanUrl", () => {
+  it("drops only the Battle.net flash parameters from an error URL, keeping others and the hash", () => {
+    expect(
+      battleNetErrorFlashCleanUrl(
+        "https://hub.test/characters?battlenet=error&code=BATTLENET_ACCOUNT_PROFILE_FORBIDDEN&filter=all#list",
+      ),
+    ).toBe("/characters?filter=all#list");
+    expect(
+      battleNetErrorFlashCleanUrl("https://hub.test/characters?battlenet=error&code=BATTLENET_AUTH_FAILED&region=EU&linked=0"),
+    ).toBe("/characters");
+  });
+
+  it("leaves success and flash-free URLs alone (null = nothing to clean)", () => {
+    expect(battleNetErrorFlashCleanUrl("https://hub.test/characters?battlenet=connected&region=EU&importSession=x")).toBeNull();
+    expect(battleNetErrorFlashCleanUrl("https://hub.test/characters?filter=all")).toBeNull();
+    expect(battleNetErrorFlashCleanUrl("https://hub.test/characters")).toBeNull();
   });
 });

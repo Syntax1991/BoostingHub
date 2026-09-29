@@ -2,12 +2,18 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
 import { disconnectBattleNetAction, refreshAllBattleNetCharactersAction } from "@/controllers/blizzard.actions";
 import { BattleNetImportDialog } from "@/components/characters/battle-net-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { REGION_LABELS } from "@/lib/labels";
-import { battleNetFlashMessage } from "@/lib/blizzard/battle-net-flash";
+import {
+  battleNetErrorFlashCleanUrl,
+  battleNetFlashMessage,
+  type BattleNetFlashMessage,
+} from "@/lib/blizzard/battle-net-flash";
+import { CharacterFormDialog } from "@/components/characters/character-form-dialog";
 import { formatDateTime } from "@/lib/datetime";
 import type { WowRegion } from "@/models/enums";
 import type { characterController } from "@/controllers/app.controller";
@@ -56,6 +62,15 @@ export function BattleNetPanel({
     router.replace("/characters", { scroll: false });
   }, [battleNetFlash.status, battleNetFlash.region, router]);
 
+  // Error flashes: drop only the Battle.net flash parameters from the address bar. The
+  // native History API syncs with the router without a server round-trip, so the error
+  // stays visible now but a later refresh does not show it again.
+  useEffect(() => {
+    if (battleNetFlash.status !== "error") return;
+    const clean = battleNetErrorFlashCleanUrl(window.location.href);
+    if (clean) window.history.replaceState(null, "", clean);
+  }, [battleNetFlash.status]);
+
   const activeCandidates = openRegion ? candidatesForRegion(battleNet, openRegion) : null;
   const activeConnection = openRegion
     ? connectionFor(battleNet.connections, openRegion)
@@ -73,7 +88,9 @@ export function BattleNetPanel({
             Battle.net is not configured on this server. You can still manage characters manually.
           </p>
         ) : null}
-        {flash ? (
+        {flash?.callout ? (
+          <AccountProfileForbiddenCallout callout={flash.callout} />
+        ) : flash ? (
           <p
             role={flash.tone === "danger" ? "alert" : "status"}
             className={`rounded-md border px-3 py-2 text-sm ${
@@ -258,6 +275,35 @@ function RegionRow({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function AccountProfileForbiddenCallout({
+  callout,
+}: {
+  callout: NonNullable<BattleNetFlashMessage["callout"]>;
+}) {
+  const titleId = useId();
+  return (
+    <div
+      role="alert"
+      aria-labelledby={titleId}
+      className="flex gap-3 rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm"
+    >
+      <TriangleAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+      <div className="min-w-0 space-y-2">
+        <p id={titleId} className="font-semibold">
+          {callout.title}
+        </p>
+        {callout.paragraphs.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {/* The same Add Character flow as the page header; the Region rows below keep Connect. */}
+          <CharacterFormDialog mode="create" triggerLabel="Add character manually" />
+        </div>
+      </div>
     </div>
   );
 }
