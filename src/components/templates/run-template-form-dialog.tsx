@@ -159,7 +159,7 @@ export function RunTemplateFormDialog({
         <dialog
           ref={dialogRef}
           aria-labelledby={titleId}
-          className="w-[min(100%,32rem)] max-h-[90vh] overflow-y-auto rounded-md border border-border bg-surface p-0 text-foreground backdrop:bg-black/60"
+          className="w-[min(32rem,calc(100vw-2rem))] max-h-[90vh] overflow-y-auto rounded-md border border-border bg-surface p-0 text-foreground backdrop:bg-black/60"
         >
           <div className="border-b border-border px-4 py-3">
             <h2 id={titleId} className="text-sm font-semibold">
