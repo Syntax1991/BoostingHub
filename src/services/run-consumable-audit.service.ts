@@ -22,7 +22,7 @@ import {
 import {
   CONSUMABLE_AUDIT_FACTS_VERSION,
   CONSUMABLE_PRE_PULL_WINDOW_MS,
-  combatantSnapshotsByFight,
+  combatantCoverageByFight,
   extractConsumableAudit,
   mergeExtractedAudits,
   restrictExtractedToFights,
@@ -346,27 +346,32 @@ export async function analyzeRun(
   const firstFailure = await extractFights(selected);
   if (firstFailure) return fail(firstFailure);
 
-  // 2. A canonical copy without any CombatantInfo snapshot while another
+  // 2. A kept copy is incomplete when an audited player took part in the pull
+  // without a CombatantInfo snapshot (or it has none at all) while another
   // logger recorded the same pull: read the duplicates of just those pulls
-  // (one request per report) and keep the copy with the most snapshots.
-  const snapshotsOf = () => {
-    const counts = new Map<string, number>();
-    for (const part of parts) for (const [key, count] of combatantSnapshotsByFight(part)) counts.set(key, count);
-    return counts;
+  // (one request per report) and keep the copy with the most snapshots —
+  // ties keep the ranking. Facts are never mixed across copies of one pull.
+  const coverageOf = () => {
+    const coverage = new Map<string, { present: number; snapshots: number }>();
+    for (const part of parts) for (const [key, entry] of combatantCoverageByFight(part)) coverage.set(key, entry);
+    return coverage;
   };
+  const initial = coverageOf();
   const weak = pulls
     .map((pull, index) => ({ pull, index }))
-    .filter(({ pull, index }) => pull.copies.length > 1 && !snapshotsOf().get(selected[index]!));
+    .filter(({ pull, index }) => {
+      if (pull.copies.length < 2) return false;
+      const kept = initial.get(selected[index]!);
+      return !kept || kept.snapshots === 0 || kept.snapshots < kept.present;
+    });
   if (weak.length > 0) {
     const secondFailure = await extractFights(weak.flatMap(({ pull }) => pull.copies.slice(1).map((copy) => copy.key)));
     if (secondFailure) return fail(secondFailure);
-    const counts = snapshotsOf();
+    const coverage = coverageOf();
     for (const { pull, index } of weak) {
-      const better = pull.copies
-        .slice(1)
-        .filter((copy) => (counts.get(copy.key) ?? 0) > 0)
-        .sort((a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0))[0];
-      if (better) selected[index] = better.key;
+      const snapshots = (key: string) => coverage.get(key)?.snapshots ?? 0;
+      // Stable sort: equal snapshot counts keep the deterministic ranking (canonical first).
+      selected[index] = [...pull.copies].sort((a, b) => snapshots(b.key) - snapshots(a.key))[0]!.key;
     }
   }
 

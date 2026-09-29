@@ -6,7 +6,7 @@ import type {
 import {
   CONSUMABLE_PRE_PULL_WINDOW_MS,
   attributeCastsToFights,
-  combatantSnapshotsByFight,
+  combatantCoverageByFight,
   extractConsumableAudit,
   restrictExtractedToFights,
   matchParticipantActors,
@@ -225,7 +225,14 @@ describe("extractConsumableAudit", () => {
     }
     expect(only1.players[0]!.observations.map((row) => row.kind)).toEqual(["COMBATANT", "AURA", "CAST"]);
     expect(only1.players.map((player) => player.matchStatus)).toEqual(extracted.players.map((player) => player.matchStatus));
-    expect(combatantSnapshotsByFight(extracted)).toEqual(new Map([["AbCdEfGhIjKlMnOp#1", 1], ["AbCdEfGhIjKlMnOp#4", 1]]));
+    // Synlight: snapshots in fights 1 and 4; in fight 5 present (PARTICIPANT) without one.
+    expect(combatantCoverageByFight(extracted)).toEqual(
+      new Map([
+        ["AbCdEfGhIjKlMnOp#1", { present: 1, snapshots: 1 }],
+        ["AbCdEfGhIjKlMnOp#4", { present: 1, snapshots: 1 }],
+        ["AbCdEfGhIjKlMnOp#5", { present: 1, snapshots: 0 }],
+      ]),
+    );
   });
 
   it("keeps unmatched and external players with no facts", () => {

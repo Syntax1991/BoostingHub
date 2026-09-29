@@ -715,9 +715,58 @@ describe("two reports of the same raid (two loggers) linked to one Run", () => {
     const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
     expect(new Set(view.snapshot!.fights.map((fight) => fight.reportCode))).toEqual(new Set([SECOND]));
     expect(eventsSpy).toHaveBeenCalledTimes(2); // canonical report, then the duplicates of the weak pulls
+    expect(eventsSpy.mock.calls.map(([input]) => [input.code, input.fightIds])).toEqual([
+      [REPORT, [1, 2, 3, 4, 5, 6, 7, 8]],
+      [SECOND, [1, 2, 3, 4, 5, 6, 7, 8]],
+    ]);
     const second = view.snapshot!.players.find((p) => p.hasLogData)!;
     expect(second.flask.fightsChecked).toBeGreaterThan(0); // snapshots available again
     expect(view.stale).toBe(false);
+  });
+
+  it("partial CombatantInfo: the kept copy misses one booster in ONE pull → only that pull is read from the other logger", async () => {
+    await attachBoth();
+    const p = inLogA.find((row) => row.wowClass && row.role && row !== inLogA[1])!;
+    const spec = knownSpecializationIds().map((id) => ({ id, spec: specializationById(id)! })).find(({ spec }) => spec.wowClass === p.wowClass)!;
+    const actor = actorIdByKey.get(identityKey(p.characterName, p.characterRealm))!;
+    events = { ...events, combatants: events.combatants.map((row) => (row.sourceId === actor ? { ...row, specId: spec.id } : row)) };
+    const full = fakeEvents;
+    eventsSpy.mockImplementation(async (input) => {
+      const result = full(input);
+      if (input.code !== REPORT) return result;
+      // The first logger lost this booster's pull snapshot in fight 2 only (13 of 14 kind of gap).
+      const combatants = result.events.combatants.filter((row) => !(row.sourceId === actor && row.fight === 2));
+      return { ...result, events: { ...result.events, combatants } };
+    });
+
+    expect(await analyze()).toMatchObject({ status: "ANALYZED", fights: 8 });
+    // Pulls 1 and 3–8 were complete: only pull 2 is requested from the second logger.
+    expect(eventsSpy.mock.calls.map(([input]) => [input.code, input.fightIds])).toEqual([
+      [REPORT, [1, 2, 3, 4, 5, 6, 7, 8]],
+      [SECOND, [2]],
+    ]);
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(view.snapshot!.fights.map((fight) => [fight.wclFightId, fight.reportCode])).toEqual([
+      [1, REPORT],
+      [2, SECOND],
+      [3, REPORT],
+      [4, REPORT],
+      [5, REPORT],
+      [6, REPORT],
+      [7, REPORT],
+      [8, REPORT],
+    ]);
+    const row = view.snapshot!.players.find((x) => identityKey(x.characterName!, x.characterRealm!) === identityKey(p.characterName, p.characterRealm))!;
+    expect(row.flask).toMatchObject({ fightsChecked: 8, unknown: [] }); // fight 2 no longer unknown
+    expect(row.playedRoleByFight.map((entry) => entry.role)).toEqual(Array(8).fill(spec.spec.role));
+    // Gear rides on the same CombatantInfo row as spec and auras, so it follows the kept copy (this fixture logs no gear).
+    expect(view.stale).toBe(false);
+  });
+
+  it("complete copies are never re-read from the other logger", async () => {
+    await attachBoth();
+    await analyze();
+    expect(eventsSpy.mock.calls.map(([input]) => input.code)).toEqual([REPORT]);
   });
 
   it("11. played roles come from the kept copy (specialization per fight)", async () => {
