@@ -60,6 +60,10 @@ export function RunOverviewSection({ data }: { data: RunDetailView }) {
             <dd className="mt-1">{run.desiredDpsCount}</dd>
           </div>
           <div>
+            <dt className="text-muted">Desired lootbuddies</dt>
+            <dd className="mt-1">{run.desiredLootbuddyCount}</dd>
+          </div>
+          <div>
             <dt className="text-muted">Active signups</dt>
             <dd className="mt-1">{run.activeSignupCount}</dd>
           </div>

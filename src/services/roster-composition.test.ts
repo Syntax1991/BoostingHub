@@ -20,7 +20,7 @@ describe("composeRoster", () => {
     expect(composition.tanks).toEqual({ selected: 2, target: 2, delta: 0 });
     expect(composition.healers).toEqual({ selected: 1, target: 4, delta: -3 });
     expect(composition.dps).toEqual({ selected: 1, target: 14, delta: -13 });
-    expect(composition.lootbuddies).toBe(2);
+    expect(composition.lootbuddies).toEqual({ selected: 2, target: 0, delta: 2 });
     expect(composition.boosterTotal).toBe(4);
     expect(composition.total).toBe(6);
   });
@@ -64,7 +64,7 @@ describe("composeRoster", () => {
     expect(composition.tanks.selected).toBe(0);
     expect(composition.healers.selected).toBe(0);
     expect(composition.dps.selected).toBe(0);
-    expect(composition.lootbuddies).toBe(3);
+    expect(composition.lootbuddies.selected).toBe(3);
   });
 });
 
@@ -85,5 +85,41 @@ describe("compositionWarnings", () => {
     expect(warnings.some((item) => item.code === "COMPOSITION_UNDER_TARGET" && item.message.includes("Tank"))).toBe(true);
     expect(warnings.some((item) => item.code === "COMPOSITION_OVER_TARGET" && item.message.includes("Healer"))).toBe(true);
     expect(warnings.some((item) => item.message.includes("DPS"))).toBe(true);
+  });
+});
+
+describe("lootbuddy target (Run.desiredLootbuddyCount)", () => {
+  const booster = (role: "TANK" | "HEALER" | "DPS") => ({ participationType: "BOOSTER" as const, selectedRole: role });
+  const lootbuddy = { participationType: "LOOTBUDDY" as const, selectedRole: null };
+  const full = [booster("TANK"), booster("TANK"), ...Array(4).fill(booster("HEALER")), ...Array(12).fill(booster("DPS"))];
+  const withTargets = (lootbuddies: number) => ({ tanks: 2, healers: 4, dps: 12, lootbuddies });
+
+  it("counts selected lootbuddies against their own target; never in Tank/Healer/DPS", () => {
+    const composition = composeRoster([...full, lootbuddy], withTargets(2));
+    expect(composition.lootbuddies).toEqual({ selected: 1, target: 2, delta: -1 });
+    expect([composition.tanks.delta, composition.healers.delta, composition.dps.delta]).toEqual([0, 0, 0]);
+    expect(composition.boosterTotal).toBe(18);
+    expect(composition.total).toBe(19); // lootbuddies are real raid participants
+  });
+
+  it("a booster never counts as a lootbuddy", () => {
+    expect(composeRoster(full, withTargets(2)).lootbuddies).toEqual({ selected: 0, target: 2, delta: -2 });
+  });
+
+  it("shortage and excess are acknowledgeable warnings, exactly like booster roles; satisfied → none", () => {
+    const short = compositionWarnings(composeRoster([...full, lootbuddy], withTargets(2)));
+    expect(short).toEqual([{ code: "COMPOSITION_UNDER_TARGET", message: "Lootbuddy composition is 1 / 2." }]);
+    expect(compositionWarnings(composeRoster([...full, lootbuddy, lootbuddy], withTargets(2)))).toEqual([]);
+    const over = compositionWarnings(composeRoster([...full, lootbuddy], withTargets(0)));
+    expect(over).toEqual([{ code: "COMPOSITION_OVER_TARGET", message: "Lootbuddy composition is 1 / 0." }]);
+  });
+
+  it("a lootbuddy shortage never shows up as a DPS shortage", () => {
+    const warnings = compositionWarnings(composeRoster(full, withTargets(2)));
+    expect(warnings.map((w) => w.message)).toEqual(["Lootbuddy composition is 0 / 2."]);
+  });
+
+  it("callers without a lootbuddy target behave as target 0", () => {
+    expect(composeRoster([lootbuddy], { tanks: 0, healers: 0, dps: 0 }).lootbuddies).toEqual({ selected: 1, target: 0, delta: 1 });
   });
 });

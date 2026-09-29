@@ -614,6 +614,8 @@ model Run {
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
+  /// Planned Lootbuddy slots — a target only, never a signup or roster entry.
+  desiredLootbuddyCount Int @default(0)
   /// When true, first Discord channel provision pings Tank/Healer/DPS roles.
   discordRolePing    Boolean        @default(true)
   signupsOpen        Boolean        @default(false)
@@ -712,6 +714,8 @@ model RunTemplate {
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
+  /// Planned Lootbuddy slots — a target only, never a signup or roster entry.
+  desiredLootbuddyCount Int @default(0)
   notes              String?
   isActive           Boolean        @default(true)
   createdById        String

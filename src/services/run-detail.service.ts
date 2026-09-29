@@ -163,6 +163,7 @@ export const runDetailService = {
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,
+      desiredLootbuddyCount: run.desiredLootbuddyCount,
       discordRolePing: run.discordRolePing,
       activeSignupCount: activeSignups.length,
       selectedCount,
@@ -212,6 +213,7 @@ export const runDetailService = {
             tanks: run.desiredTankCount,
             healers: run.desiredHealerCount,
             dps: run.desiredDpsCount,
+            lootbuddies: run.desiredLootbuddyCount,
           },
           groups: groupFinalSetupParticipants([
             ...selectedSignups.map(toFinalSetupParticipant),

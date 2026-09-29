@@ -458,7 +458,7 @@ describe("rosterService publish validation", () => {
     const view = await rosterService.getRosterManagementView(thorne, ids.sunday);
     expect(view.validation.canPublish).toBe(true);
     expect(view.validation.warnings.some((item) => item.message.includes("Healer composition is 3 / 4"))).toBe(true);
-    expect(view.composition.lootbuddies).toBe(1);
+    expect(view.composition.lootbuddies.selected).toBe(1);
   });
 
   it("rejects publishing a draft-status run", async () => {

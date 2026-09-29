@@ -398,3 +398,20 @@ describe("Final Setup Discord length safety", () => {
     expect(text).toContain("📦 **Lootbuddies** 📦 5");
   });
 });
+
+describe("renderFinalSetupText — Lootbuddy target", () => {
+  it("shows selected/target only when a Lootbuddy target is set; grouping is unchanged", () => {
+    const base = sampleInput();
+    const withTarget = renderFinalSetupText(sampleInput({ targets: { ...base.targets, lootbuddies: 6 } }));
+    expect(withTarget).toContain("📦 **Lootbuddies** 📦 5/6");
+    // Booster role headers are untouched by the Lootbuddy target.
+    expect(withTarget).toContain("⚔ **DPS** ⚔ 1/8");
+
+    const legacy = renderFinalSetupText(sampleInput({ targets: { ...base.targets, lootbuddies: 0 } }));
+    expect(legacy).toContain("📦 **Lootbuddies** 📦 5\n");
+    expect(legacy).toBe(renderFinalSetupText(base));
+
+    const strip = (text: string) => text.replace(/📦 \*\*Lootbuddies\*\* 📦 [^\n]*/, "");
+    expect(strip(withTarget)).toBe(strip(legacy));
+  });
+});

@@ -497,3 +497,34 @@ describe("buildSignupButtons", () => {
     expect(byAction.get("cancel")?.disabled).toBeFalsy();
   });
 });
+
+describe("buildSignupEmbed — Lootbuddy target", () => {
+  function rosterLootbuddyFieldName(target: number | undefined) {
+    const json = buildSignupEmbed(
+      emptyData({
+        roleStatus: {
+          tank: { signed: 0, picked: 0, target: 2 },
+          healer: { signed: 0, picked: 0, target: 4 },
+          dps: { signed: 0, picked: 0, target: 14 },
+          lootbuddy: { signed: 3, picked: 1, ...(target === undefined ? {} : { target }) },
+        },
+      }),
+    ).toJSON();
+    const fields = json.fields ?? [];
+    const rosterHeading = fields.findIndex((f) => f.name === "Roster");
+    const signupsHeading = fields.findIndex((f) => f.name === "Signups by role");
+    return {
+      roster: fields.slice(rosterHeading + 1).find((f) => f.name.startsWith("📦 Lootbuddies"))?.name,
+      signed: fields.slice(signupsHeading + 1, rosterHeading).find((f) => f.name.startsWith("📦 Lootbuddies"))?.name,
+    };
+  }
+
+  it("shows picked/target in the Roster column only when a target is set", () => {
+    expect(rosterLootbuddyFieldName(2)).toEqual({ roster: "📦 Lootbuddies — 1/2", signed: "📦 Lootbuddies — 3" });
+  });
+
+  it("keeps the legacy picked-only count for target 0 or an older payload without target", () => {
+    expect(rosterLootbuddyFieldName(0)).toEqual({ roster: "📦 Lootbuddies — 1", signed: "📦 Lootbuddies — 3" });
+    expect(rosterLootbuddyFieldName(undefined)).toEqual({ roster: "📦 Lootbuddies — 1", signed: "📦 Lootbuddies — 3" });
+  });
+});

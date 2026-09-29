@@ -36,6 +36,7 @@ export type RunTemplateRecord = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  desiredLootbuddyCount: number;
   notes: string | null;
   isActive: boolean;
   createdById: string;
@@ -56,6 +57,8 @@ export type CreateRunTemplateFields = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Omitted → 0 on create, unchanged on update. */
+  desiredLootbuddyCount?: number;
   notes: string | null;
   createdById: string;
   updatedById: string;
@@ -71,6 +74,8 @@ export type UpdateRunTemplateFields = {
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
+  /** Omitted → 0 on create, unchanged on update. */
+  desiredLootbuddyCount?: number;
   notes: string | null;
   updatedById: string;
 };
@@ -102,6 +107,7 @@ function mapTemplate(row: Record<string, unknown>): RunTemplateRecord {
     desiredTankCount: asNumber(row.desiredTankCount),
     desiredHealerCount: asNumber(row.desiredHealerCount),
     desiredDpsCount: asNumber(row.desiredDpsCount),
+    desiredLootbuddyCount: asNumber(row.desiredLootbuddyCount),
     notes: asStringOrNull(row.notes),
     isActive: asBoolean(row.isActive, true),
     createdById: asString(row.createdById ?? createdBy.id),
@@ -170,6 +176,7 @@ export const runTemplateRepository = {
       desiredTankCount: fields.desiredTankCount,
       desiredHealerCount: fields.desiredHealerCount,
       desiredDpsCount: fields.desiredDpsCount,
+      desiredLootbuddyCount: fields.desiredLootbuddyCount ?? 0,
       notes: fields.notes,
       isActive: true,
       createdById: fields.createdById,
@@ -191,6 +198,7 @@ export const runTemplateRepository = {
       desiredTankCount: fields.desiredTankCount,
       desiredHealerCount: fields.desiredHealerCount,
       desiredDpsCount: fields.desiredDpsCount,
+      ...(fields.desiredLootbuddyCount !== undefined ? { desiredLootbuddyCount: fields.desiredLootbuddyCount } : {}),
       notes: fields.notes,
       updatedById: fields.updatedById,
       updatedAt: new Date().toISOString(),

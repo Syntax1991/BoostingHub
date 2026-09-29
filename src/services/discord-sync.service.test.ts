@@ -1727,7 +1727,7 @@ describe("discordSyncService — run start operational post", () => {
 
     const dto = await discordSyncService.getRunStartEmbedData(id);
     expect(dto).toBeTruthy();
-    expect(dto!.targets).toEqual({ tanks: 1, healers: 1, dps: 1 });
+    expect(dto!.targets).toEqual({ tanks: 1, healers: 1, dps: 1, lootbuddies: 0 });
     expect(dto!.groups.tanks).toHaveLength(1);
     expect(dto!.groups.healers).toHaveLength(1);
     expect(dto!.groups.dps).toHaveLength(1);

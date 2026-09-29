@@ -68,6 +68,7 @@ export function RunDetailView({
           <span className="text-sm text-muted">{run.signupWindowOpen ? "Signups open" : "Signups closed"}</span>
           <span className="text-sm text-muted">
             {run.desiredTankCount}T / {run.desiredHealerCount}H / {run.desiredDpsCount}D
+            {run.desiredLootbuddyCount > 0 ? ` · ${run.desiredLootbuddyCount} Lootbuddies` : ""}
           </span>
           <span className="text-sm text-muted">{run.activeSignupCount} signed</span>
         </div>

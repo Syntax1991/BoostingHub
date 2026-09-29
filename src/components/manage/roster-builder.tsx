@@ -223,6 +223,7 @@ function RosterBuilderEditor({
           tanks: data.run.desiredTankCount,
           healers: data.run.desiredHealerCount,
           dps: data.run.desiredDpsCount,
+          lootbuddies: data.run.desiredLootbuddyCount,
         },
         externalBoosters,
       }),
@@ -231,6 +232,7 @@ function RosterBuilderEditor({
       data.run.desiredTankCount,
       data.run.desiredHealerCount,
       data.run.desiredDpsCount,
+      data.run.desiredLootbuddyCount,
       domainSignups,
       stagedSelections,
       externalBoosters,
@@ -517,7 +519,8 @@ function RosterBuilderEditor({
           <CompositionMeter label="Tanks" slot={liveComposition.tanks} />
           <CompositionMeter label="Healers" slot={liveComposition.healers} />
           <CompositionMeter label="DPS" slot={liveComposition.dps} />
-          <Stat label="Lootbuddies" value={String(liveComposition.lootbuddies)} />
+          {/* Its own target, separate from the booster roles: a shortage here is never a DPS shortage. */}
+          <CompositionMeter label="Lootbuddies" slot={liveComposition.lootbuddies} />
         </div>
       </Card>
 
@@ -782,10 +785,10 @@ function RosterBuilderEditor({
           )}
           <p>
             {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
-            {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies} Lootbuddies
+            {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies.selected} Lootbuddies
           </p>
           <p>
-            {liveComposition.boosterTotal} Boosters · {liveComposition.lootbuddies} Lootbuddies ·{" "}
+            {liveComposition.boosterTotal} Boosters · {liveComposition.lootbuddies.selected} Lootbuddies ·{" "}
             {liveComposition.total} total selected
           </p>
           {dialogMode !== "repost" && liveValidation.warnings.length > 0 ? (

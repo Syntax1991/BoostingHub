@@ -222,7 +222,10 @@ function rosterRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
     {
       emojiKey: "lootbuddy",
       label: "Lootbuddies",
-      countLabel: String(roleStatus.lootbuddy.picked),
+      // Picked / planned when the Run has a Lootbuddy target; count only otherwise (as before).
+      countLabel: roleStatus.lootbuddy.target
+        ? `${roleStatus.lootbuddy.picked}/${roleStatus.lootbuddy.target}`
+        : String(roleStatus.lootbuddy.picked),
       members: members.picked.lootbuddies,
     },
   ];

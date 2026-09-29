@@ -10,7 +10,8 @@ export type RosterComposition = {
   tanks: RosterCompositionSlot;
   healers: RosterCompositionSlot;
   dps: RosterCompositionSlot;
-  lootbuddies: number;
+  /** Its own target (Run.desiredLootbuddyCount) — never part of Tank/Healer/DPS. */
+  lootbuddies: RosterCompositionSlot;
   boosterTotal: number;
   total: number;
 };
@@ -31,7 +32,7 @@ function slot(selected: number, target: number): RosterCompositionSlot {
  */
 export function composeRoster(
   selected: CompositionMember[],
-  targets: { tanks: number; healers: number; dps: number },
+  targets: { tanks: number; healers: number; dps: number; lootbuddies?: number },
 ): RosterComposition {
   const boosters = selected.filter((item) => item.participationType === "BOOSTER");
   const tanks = boosters.filter((item) => item.selectedRole === "TANK").length;
@@ -43,7 +44,7 @@ export function composeRoster(
     tanks: slot(tanks, targets.tanks),
     healers: slot(healers, targets.healers),
     dps: slot(dps, targets.dps),
-    lootbuddies,
+    lootbuddies: slot(lootbuddies, targets.lootbuddies ?? 0),
     boosterTotal: boosters.length,
     total: selected.length,
   };
@@ -55,6 +56,8 @@ export function compositionWarnings(composition: RosterComposition): Array<{ cod
     ["Tank", composition.tanks],
     ["Healer", composition.healers],
     ["DPS", composition.dps],
+    // Same severity as the booster roles: an acknowledgeable warning, never a blocker.
+    ["Lootbuddy", composition.lootbuddies],
   ] as const;
 
   for (const [label, slotValue] of roles) {

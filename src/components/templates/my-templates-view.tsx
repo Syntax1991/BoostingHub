@@ -48,6 +48,7 @@ export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
                   <p className="mt-1 text-sm text-muted">
                     {template.raidName} ({template.raidSeason}) · {template.plannedBossCount}/{template.totalBossCount} bosses ·{" "}
                     {template.desiredTankCount}T {template.desiredHealerCount}H {template.desiredDpsCount}D
+                    {template.desiredLootbuddyCount > 0 ? ` ${template.desiredLootbuddyCount}LB` : ""}
                   </p>
                   {template.notes ? <p className="mt-1 text-xs text-muted">{template.notes}</p> : null}
                   {template.isActive && !template.usable ? (
@@ -67,6 +68,7 @@ export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
                       desiredTankCount: template.desiredTankCount,
                       desiredHealerCount: template.desiredHealerCount,
                       desiredDpsCount: template.desiredDpsCount,
+                      desiredLootbuddyCount: template.desiredLootbuddyCount,
                       notes: template.notes,
                       raidLeadId: template.raidLeadId,
                     }}

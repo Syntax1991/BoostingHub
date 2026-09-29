@@ -352,6 +352,7 @@ async function planAuthoritativeRoster(
       tanks: run.desiredTankCount,
       healers: run.desiredHealerCount,
       dps: run.desiredDpsCount,
+      lootbuddies: run.desiredLootbuddyCount,
     },
     externalBoosters: roster.externalBoosters,
   });
@@ -484,6 +485,7 @@ export const rosterService = {
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,
+        desiredLootbuddyCount: run.desiredLootbuddyCount,
       actionLabel: rosterActionLabel(
         run.status,
         Boolean(run.roster),
@@ -604,6 +606,7 @@ export const rosterService = {
         tanks: run.desiredTankCount,
         healers: run.desiredHealerCount,
         dps: run.desiredDpsCount,
+        lootbuddies: run.desiredLootbuddyCount,
       },
       externalBoosters: roster.externalBoosters,
     });
@@ -636,6 +639,7 @@ export const rosterService = {
         desiredTankCount: run.desiredTankCount,
         desiredHealerCount: run.desiredHealerCount,
         desiredDpsCount: run.desiredDpsCount,
+        desiredLootbuddyCount: run.desiredLootbuddyCount,
         activeSignupCount: inspected.filter((item) => item.status !== "WITHDRAWN").length,
         publishedSelectedCount: publishedSelection.length,
         backupCount: inspected.filter((item) => item.isBackup && item.status !== "WITHDRAWN").length,
