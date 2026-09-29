@@ -9,7 +9,26 @@ export type BattleNetFlashInput = {
   linked: number;
 };
 
-export type BattleNetFlashMessage = { tone: "success" | "danger"; text: string };
+export type BattleNetFlashMessage = {
+  tone: "success" | "danger";
+  text: string;
+  /**
+   * Set only for states that render as a titled callout with actions instead of a
+   * one-line banner. `text` stays the plain-prose equivalent (title + paragraphs).
+   */
+  callout?: {
+    kind: "account-profile-forbidden";
+    title: string;
+    paragraphs: string[];
+  };
+};
+
+export const ACCOUNT_PROFILE_FORBIDDEN_TITLE = "Battle.net character list unavailable";
+export const ACCOUNT_PROFILE_FORBIDDEN_PARAGRAPHS = [
+  "Your Battle.net sign-in was successful, but Blizzard did not allow Manawyrm Hub to access your WoW character list. " +
+    "This is a restriction returned by Blizzard, not a failed login.",
+  "You can still add your characters manually. They will continue to update through Blizzard's public character profile.",
+];
 
 /** The `/characters` banner after a Battle.net connect attempt; null when there is nothing to show. */
 export function battleNetFlashMessage(flash: BattleNetFlashInput): BattleNetFlashMessage | null {
@@ -40,9 +59,12 @@ export function battleNetFlashMessage(flash: BattleNetFlashInput): BattleNetFlas
       // user or Manawyrm Hub can fix by retrying, and manual Characters still work.
       return {
         tone: "danger",
-        text:
-          "Battle.net sign-in succeeded, but Blizzard did not allow access to your WoW character list. " +
-          "You can still add characters manually; they will refresh from Blizzard's public profile.",
+        text: [ACCOUNT_PROFILE_FORBIDDEN_TITLE, ...ACCOUNT_PROFILE_FORBIDDEN_PARAGRAPHS].join(" "),
+        callout: {
+          kind: "account-profile-forbidden",
+          title: ACCOUNT_PROFILE_FORBIDDEN_TITLE,
+          paragraphs: ACCOUNT_PROFILE_FORBIDDEN_PARAGRAPHS,
+        },
       };
     }
     return {
@@ -53,4 +75,20 @@ export function battleNetFlashMessage(flash: BattleNetFlashInput): BattleNetFlas
     };
   }
   return null;
+}
+
+/** Query parameters the Battle.net connect/callback redirect adds to `/characters`. */
+const BATTLENET_FLASH_PARAMS = ["battlenet", "code", "region", "importSession", "linked"] as const;
+
+/**
+ * For an ERROR flash: the same URL without the Battle.net flash parameters (every other
+ * parameter and the hash kept), so a refresh does not show the stale error again.
+ * Null when there is nothing to clean. Success keeps its own router.replace cleanup.
+ */
+export function battleNetErrorFlashCleanUrl(href: string): string | null {
+  const url = new URL(href);
+  if (url.searchParams.get("battlenet") !== "error") return null;
+  for (const key of BATTLENET_FLASH_PARAMS) url.searchParams.delete(key);
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
 }
