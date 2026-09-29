@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatTime } from "@/lib/datetime";
 import type { ActionResult } from "@/lib/action-result";
+import { runActionWithFeedback } from "@/lib/run-action-feedback";
 import type { WclFightReason, WclFightStatus } from "@/services/wcl-fight-assignment";
 import type { RunWarcraftLogsFightView, RunWarcraftLogsView } from "@/services/run-warcraft-logs.service";
 
@@ -58,9 +59,10 @@ function useAction() {
   function run(action: () => Promise<ActionResult>) {
     setMessage(null);
     startTransition(async () => {
-      const result = await action();
-      setMessage({ ok: result.ok, text: result.message });
-      if (result.ok) window.location.reload();
+      await runActionWithFeedback(action, {
+        onMessage: setMessage,
+        onSuccess: () => window.location.reload(),
+      });
     });
   }
   return { pending, message, run };
