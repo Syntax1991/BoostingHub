@@ -417,9 +417,9 @@ function RosterBuilderEditor({
   }
 
   /**
-   * Publish (first) accepts the saved draft and posts the first roster message;
-   * Update accepts the CURRENT selection in one step and edits the current
-   * message; repost only asks the bot to post a NEW message.
+   * Publish (first) accepts the saved draft and syncs the persistent Roster
+   * message; Update accepts the CURRENT selection in one step and edits the
+   * same message; repost asks the bot to refresh that same Roster message.
    */
   function confirmDialog() {
     setError(null);
@@ -773,8 +773,8 @@ function RosterBuilderEditor({
             </p>
           ) : dialogMode === "repost" ? (
             <p>
-              Posts the current roster to Discord as a NEW message. The previous roster message stays in the channel
-              and is no longer kept up to date; later Updates edit the new one. Players are not notified again.
+              Refreshes the current Discord Roster message in place (same message id). No second Roster post is
+              created. Players are not notified again.
             </p>
           ) : (
             <p>

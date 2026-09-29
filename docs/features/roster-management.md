@@ -170,14 +170,14 @@ The Roster tab shows exactly one primary path per state (`resolveRosterActions`,
 
 | State | Actions | Discord |
 | --- | --- | --- |
-| Never published, local edits | **Save Roster** (+ Discard) | nothing — Save never posts |
-| Never published, saved | **Publish Roster** — first authoritative publication | posts the first roster message (`postRevision 0 → 1`) |
+| Never published, local edits | **Save Roster** (+ Discard) | edits the persistent Roster message when one exists (or creates the empty/draft Roster once Signup is provisioned) — Save alone never advances `postRevision` |
+| Never published, saved | **Publish Roster** — first authoritative publication | syncs the same Roster message and acknowledges `postRevision 0 → 1` (creates it only if missing) |
 | Published, local edits / saved changes / changed Run settings | **Update Roster** — ONE action: accepts the current selection as the published roster | edits the **current** roster message in place |
-| Published, clean (`PUBLISHED` Run) | **Publish Roster** — explicit repost | sends a **new** roster message |
+| Published, clean (`PUBLISHED` Run) | **Publish Roster** — explicit refresh | edits the **same** roster message in place and acknowledges a new `postRevision` |
 
 - **Update Roster** (`rosterService.updateRoster` → `rosterRepository.updatePublishedAtomic`) validates the submitted selection against the current Run, then writes it as the draft and publishes it in one transaction (same row lock / version check / pre-start check as Publish) and clears `runChangedSinceAck`. A refused Update changes nothing. There is no separate Save step on a published roster.
-- **Publish Roster on a published roster** never changes membership, roles, statuses or notifications; it only requests a new Discord post. It is blocked while there are unpublished changes (Update first; `ROSTER_UNPUBLISHED_CHANGES`). The request is a compare-and-set on the expected roster `version` **and** the expected `RunRoster.postRevision` (`rosterRepository.requestRepostAtomic`): exactly one of two double-submitted requests advances `postRevision` to N + 1; the other fails with `ROSTER_ALREADY_CHANGED`. Logged as Activity `ROSTER_POSTED`.
-- Previous roster messages stay in the channel as history and are no longer updated; the newest posted message becomes the current `rosterMessageId`, which later Updates edit.
+- **Publish Roster on a published roster** never changes membership, roles, statuses or notifications; it only requests another Discord sync of the persistent Roster message. It is blocked while there are unpublished changes (Update first; `ROSTER_UNPUBLISHED_CHANGES`). The request is a compare-and-set on the expected roster `version` **and** the expected `RunRoster.postRevision` (`rosterRepository.requestRepostAtomic`): exactly one of two double-submitted requests advances `postRevision` to N + 1; the other fails with `ROSTER_ALREADY_CHANGED`. Logged as Activity `ROSTER_POSTED`.
+- There is exactly one live Roster Discord message per provisioned Run (`rosterMessageId`). Publish / Update / Save always edit that message; missing or Discord-deleted messages are recreated once. Final Setup (`startMessageId`) stays a separate post after Start.
 
 The first publication, and Update Roster, run in one database transaction:
 In one database transaction:

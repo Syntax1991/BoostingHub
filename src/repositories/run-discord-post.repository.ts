@@ -16,7 +16,7 @@ export type RunDiscordPostRecord = {
   rosterMessageId: string | null;
   rosterPostedAt: string | null;
   lastRosterVersion: number | null;
-  /** RunRoster.postRevision the bot last fulfilled with a NEW roster message; null = none yet (treated as 0). */
+  /** RunRoster.postRevision the bot last fulfilled on the persistent Roster message; null = none yet (treated as 0). */
   lastRosterPostRevision: number | null;
   /** Guild emoji fingerprint the roster message was rendered with; null = unknown (older post). */
   lastRosterEmojiFingerprint: string | null;
@@ -149,8 +149,9 @@ export const runDiscordPostRepository = {
 
   /**
    * The current roster message (edited or newly sent). `lastRosterPostRevision`
-   * is given only when the bot fulfilled an explicit Publish (a NEW message);
-   * refreshes and missing-message recovery leave it unchanged.
+   * is given only when the bot fulfilled an explicit Publish intent on that
+   * same persistent message; refreshes and missing-message recovery leave it
+   * unchanged unless Publish is also being acknowledged.
    */
   async recordRosterPost(input: {
     runId: string;

@@ -121,7 +121,7 @@ export type RosterRecord = {
   externalBoosters: ExternalBooster[];
   /** A roster-relevant Run setting changed since the roster was last accepted (Publish / Update). */
   runChangedSinceAck: boolean;
-  /** Latest explicit Publish Roster intent — the bot posts a NEW roster message for each. */
+  /** Latest explicit Publish Roster intent — the bot syncs the persistent Roster message for each. */
   postRevision: number;
 };
 
@@ -394,7 +394,7 @@ export function publishStateSignup(row: Record<string, unknown>) {
  * Run → PUBLISHED on a first publish, one version bump, publishedAt, and the
  * roster counts as acknowledged again (runChangedSinceAck = false). A FIRST
  * publish also records one explicit post intent (postRevision + 1) so the bot
- * posts the first roster message; republishing never adds post intents.
+ * syncs the first roster message; republishing never adds post intents.
  */
 async function publishSelectionsInTx(txOrm: TxOrm, mapped: RosterRecord, input: PublishSelectionsInput) {
   // Race-safety net: the caller already checked cross-Run reservation
@@ -1018,11 +1018,11 @@ export const rosterRepository = {
 
   /**
    * Publish Roster on an already published, clean roster: the explicit
-   * "post it to Discord again" intent. Compare-and-set on BOTH the roster
-   * version and postRevision, so a double-submit / retry carrying the same
-   * expected postRevision can advance it only once. Changes nothing else —
-   * no membership, roles, notifications or Discord identity (rosterMessageId
-   * stays; the bot posts a NEW message and then tracks that one).
+   * "sync the persistent Roster Discord message again" intent. Compare-and-set
+   * on BOTH the roster version and postRevision, so a double-submit / retry
+   * carrying the same expected postRevision can advance it only once. Changes
+   * nothing else — no membership, roles, notifications or Discord identity
+   * (rosterMessageId stays; the bot edits that same message in place).
    */
   async requestRepostAtomic(input: {
     rosterId: string;

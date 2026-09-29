@@ -7,7 +7,7 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { discordSyncService, planRunVoiceChannel } from "@/services/discord-sync.service";
+import { discordSyncService, planRunVoiceChannel, rosterEmbedRenderFingerprint } from "@/services/discord-sync.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
@@ -674,7 +674,9 @@ describe("discordSyncService.getRosterEmbedData", () => {
   it("a record without a fingerprint keeps the stored one; a legacy null fingerprint refreshes once", async () => {
     const now = new Date();
     await discordSyncService.recordRosterPost({ runId, channelId: "chan-2", messageId: "roster-msg-1" });
-    expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe("emoji-b");
+    expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe(
+      rosterEmbedRenderFingerprint("emoji-b"),
+    );
 
     // Posts made before this column existed carry null.
     await orm.RunDiscordPost.where({ runId }).update({ lastRosterEmojiFingerprint: null });
@@ -683,6 +685,167 @@ describe("discordSyncService.getRosterEmbedData", () => {
       existingMessageId: "roster-msg-1",
       mode: "REFRESH",
     });
+  });
+
+  it("legacy bare emoji fingerprints refresh once onto the presentation-format fingerprint", async () => {
+    const now = new Date();
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-b",
+    });
+    await orm.RunDiscordPost.where({ runId }).update({ lastRosterEmojiFingerprint: "emoji-b" });
+    const work = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(work.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-1",
+      mode: "REFRESH",
+    });
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-1",
+      classEmojiFingerprint: "emoji-b",
+    });
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("discordSyncService — empty Roster once Signup is provisioned", () => {
+  it("emits one Roster REFRESH with no picks when Signup exists; settles after record; no second send", async () => {
+    const id = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(),
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 2,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "empty-roster-chan" });
+    await discordSyncService.recordSignupPost({
+      runId: id,
+      channelId: "empty-roster-chan",
+      messageId: "empty-signup-msg",
+    });
+
+    const data = await discordSyncService.getRosterEmbedData(id);
+    expect(data?.totalSelected).toBe(0);
+    expect(data?.publishedAt).toBeNull();
+
+    let work = await discordSyncService.listSyncWork();
+    const first = work.roster.find((item) => item.runId === id);
+    expect(first).toMatchObject({
+      mode: "REFRESH",
+      existingMessageId: null,
+      postRevision: null,
+    });
+
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "empty-roster-chan",
+      messageId: "empty-roster-msg",
+    });
+    work = await discordSyncService.listSyncWork();
+    expect(work.roster.some((item) => item.runId === id)).toBe(false);
+    expect((await runDiscordPostRepository.findByRunId(id))?.rosterMessageId).toBe("empty-roster-msg");
+  });
+
+  it("Publish with an existing draft Roster message keeps that message id and acknowledges postRevision", async () => {
+    const id = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(),
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 2,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(id);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "publish-inplace-chan" });
+    await discordSyncService.recordSignupPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-signup",
+    });
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-roster",
+    });
+
+    // Dedicated Characters on already-qualified boosters — avoids schedule clashes
+    // with the shared suite runId that already holds Dstank/Dsheal.
+    const localTankChar = await createCharacter(ids.melee, "PubExistTank", "WARRIOR", "Protection", "TANK");
+    const localHealerChar = await createCharacter(ids.ranged, "PubExistHeal", "PRIEST", "Holy", "HEALER");
+    const tankSignup = await createSignup({
+      runId: id,
+      userId: ids.melee,
+      characterId: localTankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const healerSignup = await createSignup({
+      runId: id,
+      userId: ids.ranged,
+      characterId: localHealerChar,
+      participationType: "BOOSTER",
+      role: "HEALER",
+    });
+    let view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.saveDraftSelection(lead, {
+      runId: id,
+      version: view.roster.version,
+      selections: [
+        { signupId: tankSignup, selectedRole: "TANK" },
+        { signupId: healerSignup, selectedRole: "HEALER" },
+      ],
+    });
+    // Draft version bump → REFRESH same id
+    expect((await discordSyncService.listSyncWork()).roster.find((item) => item.runId === id)).toMatchObject({
+      mode: "REFRESH",
+      existingMessageId: "publish-exists-roster",
+    });
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-roster",
+    });
+
+    view = await rosterService.getRosterManagementView(lead, id);
+    await rosterService.publishRoster(lead, { runId: id, version: view.roster.version, acknowledgeWarnings: true });
+    const postWork = (await discordSyncService.listSyncWork()).roster.find((item) => item.runId === id);
+    expect(postWork).toMatchObject({
+      mode: "POST",
+      postRevision: 1,
+      existingMessageId: "publish-exists-roster",
+    });
+    await discordSyncService.recordRosterPost({
+      runId: id,
+      channelId: "publish-exists-chan",
+      messageId: "publish-exists-roster",
+      postRevision: 1,
+    });
+    expect((await runDiscordPostRepository.findByRunId(id))?.rosterMessageId).toBe("publish-exists-roster");
+    expect((await runDiscordPostRepository.findByRunId(id))?.lastRosterPostRevision).toBe(1);
+    expect((await discordSyncService.listSyncWork()).roster.some((item) => item.runId === id)).toBe(false);
   });
 });
 

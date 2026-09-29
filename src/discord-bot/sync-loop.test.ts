@@ -445,7 +445,7 @@ describe("syncOnce — confirmed-deleted Run channel quiescence", () => {
   });
 });
 
-describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
+describe("syncOnce — roster post: persistent message + Publish ack", () => {
   const RUN = "aaaaaaaa-aaaa-4aaa-8aaa-rrrrrrrrrrr1";
   const RUN_CHAN = "run-chan-roster";
   const CURRENT_MSG = "roster-m1";
@@ -512,10 +512,41 @@ describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
   const listedFingerprint = (api: BotApiClient) =>
     (api.listSyncWork as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
 
-  it("POST (explicit Publish) sends a NEW message even though a current one exists, and records the fulfilled postRevision", async () => {
+  it("POST (explicit Publish) edits the existing Roster message in place and records the fulfilled postRevision", async () => {
     const { client, api, edit, send } = setup({ mode: "POST", postRevision: 2, existingMessageId: CURRENT_MSG });
     await syncOnce(client, botEnv(), api);
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(send()).not.toHaveBeenCalled();
+    expect(recorded(api)).toEqual([
+      {
+        kind: "roster",
+        channelId: RUN_CHAN,
+        messageId: CURRENT_MSG,
+        postRevision: 2,
+        classEmojiFingerprint: listedFingerprint(api),
+      },
+    ]);
+  });
+
+  it("POST with no existing Roster message sends exactly one and records the fulfilled postRevision", async () => {
+    const { client, api, edit, send } = setup({ mode: "POST", postRevision: 1, existingMessageId: null });
+    await syncOnce(client, botEnv(), api);
     expect(edit).not.toHaveBeenCalled();
+    expect(send()).toHaveBeenCalledTimes(1);
+    expect(recorded(api)).toEqual([
+      {
+        kind: "roster",
+        channelId: RUN_CHAN,
+        messageId: `msg-${RUN_CHAN}-1`,
+        postRevision: 1,
+        classEmojiFingerprint: listedFingerprint(api),
+      },
+    ]);
+  });
+
+  it("POST whose stored Roster message was deleted re-sends once and records the fulfilled postRevision", async () => {
+    const { client, api, send } = setup({ mode: "POST", postRevision: 2, existingMessageId: CURRENT_MSG }, true);
+    await syncOnce(client, botEnv(), api);
     expect(send()).toHaveBeenCalledTimes(1);
     expect(recorded(api)).toEqual([
       {

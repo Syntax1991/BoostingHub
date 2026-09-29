@@ -1236,12 +1236,13 @@ export const rosterService = {
   },
 
   /**
-   * Publish Roster on an already published, clean roster: explicitly post the
-   * current roster to Discord AGAIN as a NEW message (the old one stays and is
-   * no longer kept in sync). Only records the intent — postRevision + 1 with a
-   * compare-and-set on the expected version AND postRevision — the bot posts.
-   * Never changes membership/roles, never notifies players. A roster with
-   * unpublished changes must be updated first.
+   * Publish Roster on an already published, clean roster: asks the bot to
+   * refresh the persistent Roster Discord message in place (Draft → Published
+   * presentation / republish acknowledgement). Only records the intent —
+   * postRevision + 1 with a compare-and-set on the expected version AND
+   * postRevision — the bot edits (or creates once if missing). Never changes
+   * membership/roles, never notifies players, never appends a second Roster
+   * message. A roster with unpublished changes must be updated first.
    */
   async repostRoster(user: AuthenticatedUser, input: { runId: string; version: number; postRevision: number }) {
     const run = await loadEditableRun(user, input.runId);

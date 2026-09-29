@@ -8,8 +8,8 @@ import type { RunStatus } from "@/models/enums";
  * - Published with local edits, saved draft changes or changed Run settings:
  *   Update Roster — ONE action that accepts the current selection and edits
  *   the current Discord roster message. No Save step, no Publish.
- * - Published and clean: Publish Roster as a deliberate repost (a NEW Discord
- *   message). Save / Update are not needed.
+ * - Published and clean: Publish Roster as a deliberate in-place Discord refresh
+ *   of the persistent Roster message. Save / Update are not needed.
  */
 export type RosterActions = {
   save: boolean;

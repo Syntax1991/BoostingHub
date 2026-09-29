@@ -115,7 +115,7 @@ export class BotApiClient {
         existingRunChannelId: string | null;
         desiredChannelName: string;
         targetBucket: "CURRENT" | "NEXT" | "ARCHIVE";
-        /** POST = explicit Publish (send a NEW message); REFRESH/absent = edit the current one. */
+        /** POST = explicit Publish (edit/create persistent Roster + ack postRevision); REFRESH/absent = edit the current one. */
         mode?: "POST" | "REFRESH";
         postRevision?: number | null;
       }>;

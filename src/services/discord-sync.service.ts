@@ -310,6 +310,19 @@ export type SignupSyncWorkItem = {
    */
   announceOnCreate: boolean;
 };
+/**
+ * Bumped when Roster Discord embed presentation changes without a domain
+ * `RunRoster.version` bump (title/layout/targets/empty-state). Combined with
+ * the Guild emoji fingerprint into `RunDiscordPost.lastRosterEmojiFingerprint`
+ * so existing messages refresh once after deploy — no schema migration.
+ */
+export const ROSTER_EMBED_FORMAT_VERSION = "v2-persistent-split";
+
+/** Render fingerprint stored/compared for Roster message refresh detection. */
+export function rosterEmbedRenderFingerprint(classEmojiFingerprint: string): string {
+  return `${ROSTER_EMBED_FORMAT_VERSION}|${classEmojiFingerprint}`;
+}
+
 export type RosterSyncWorkItem = {
   runId: string;
   existingChannelId: string | null;
@@ -318,11 +331,14 @@ export type RosterSyncWorkItem = {
   desiredChannelName: string;
   targetBucket: DiscordRunChannelTarget;
   /**
-   * POST: an explicit Publish Roster is pending — send a NEW roster message
-   * (never edit the old one) and record `postRevision` with it.
-   * REFRESH: Save / Update / other roster changes — edit the CURRENT message
-   * in place (a missing message is re-sent, the existing recovery).
+   * POST: an explicit Publish Roster intent is pending — sync the single
+   * persistent Roster message and record `postRevision` when fulfilled.
+   * REFRESH: Save / Update / empty provisioning / other roster changes —
+   * edit the CURRENT message in place (a missing message is re-sent).
    * Older API payloads omit it → REFRESH.
+   *
+   * Neither mode appends historical Roster messages. Publish always edits
+   * the same `rosterMessageId` when it exists.
    */
   mode?: "POST" | "REFRESH";
   /** The RunRoster.postRevision a POST fulfils; null for REFRESH. */
@@ -1236,23 +1252,26 @@ export const discordSyncService = {
       // cleared) rather than skipped without evidence on every poll.
       const dedicatedChannelId = post?.runChannelId ?? post?.signupChannelId ?? null;
       //
-      // Maintain a Roster message once the Run has a dedicated channel and
-      // either the roster is published, a roster post already exists, or draft
-      // picks / externals are present. An empty Signup-only channel does not
-      // force an empty Roster post. Explicit Publish Roster intents
-      // (RunRoster.postRevision) beyond the last one the bot fulfilled
-      // (lastRosterPostRevision, null → 0) mean "post a NEW message" and win
-      // over a refresh. A legacy roster message (postRevision 0, fulfilled
-      // null) is therefore never reposted.
+      // Maintain exactly one Roster message once Signup has been provisioned
+      // on a non-ARCHIVE Run (or a Roster message / published / draft content
+      // already exists). An empty selected lineup still keeps the empty-state
+      // Roster post so the channel converges to Signup + Roster. ARCHIVE
+      // (including cancelled/past) does not invent a first empty Roster solely
+      // from signupMessageId. Explicit Publish intents sync that same
+      // persistent message and acknowledge the revision — never append history.
       const hasDraftRosterContent =
         (run.roster?.selections?.some((selection) => selection.selected) ?? false) ||
         (run.roster?.externalBoosters.length ?? 0) > 0;
       const maintainRosterMessage =
         Boolean(dedicatedChannelId) &&
         Boolean(run.roster) &&
-        (Boolean(run.roster?.publishedAt) || Boolean(post?.rosterMessageId) || hasDraftRosterContent);
+        (Boolean(post?.rosterMessageId) ||
+          Boolean(run.roster?.publishedAt) ||
+          hasDraftRosterContent ||
+          (Boolean(post?.signupMessageId) && targetBucket !== "ARCHIVE"));
       if (maintainRosterMessage && dedicatedChannelId) {
         const postPending = (run.roster?.postRevision ?? 0) > (post?.lastRosterPostRevision ?? 0);
+        const rosterRenderFingerprint = rosterEmbedRenderFingerprint(classEmojiFingerprint);
         const base = {
           runId: run.id,
           existingChannelId: post?.rosterChannelId ?? null,
@@ -1266,7 +1285,7 @@ export const discordSyncService = {
         } else if (
           !post?.rosterMessageId ||
           post.lastRosterVersion !== run.roster!.version ||
-          (classEmojiFingerprint !== "" && post.lastRosterEmojiFingerprint !== classEmojiFingerprint)
+          (classEmojiFingerprint !== "" && post.lastRosterEmojiFingerprint !== rosterRenderFingerprint)
         ) {
           roster.push({ ...base, mode: "REFRESH", postRevision: null });
         }
@@ -1440,7 +1459,7 @@ export const discordSyncService = {
     runId: string;
     channelId: string;
     messageId: string;
-    /** Set when the bot fulfilled an explicit Publish (sent a NEW message). */
+    /** Set when the bot fulfilled an explicit Publish on the persistent Roster message. */
     postRevision?: number;
     /** Guild class/role emoji fingerprint the message was rendered with. */
     classEmojiFingerprint?: string;
@@ -1453,7 +1472,9 @@ export const discordSyncService = {
       rosterMessageId: input.messageId,
       lastRosterVersion: run.roster.version,
       ...(input.postRevision !== undefined ? { lastRosterPostRevision: input.postRevision } : {}),
-      ...(input.classEmojiFingerprint !== undefined ? { lastRosterEmojiFingerprint: input.classEmojiFingerprint } : {}),
+      ...(input.classEmojiFingerprint !== undefined
+        ? { lastRosterEmojiFingerprint: rosterEmbedRenderFingerprint(input.classEmojiFingerprint) }
+        : {}),
     });
   },
 
