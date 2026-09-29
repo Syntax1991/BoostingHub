@@ -136,13 +136,18 @@ export function AppShell({
               </Link>
             ) : null}
           </div>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex min-w-0 items-center gap-3">
             <NotificationBell
               unreadCount={notifications.unreadCount}
               latest={notifications.latest}
               timeZone={timeZone}
             />
-            <div className="text-right">
+            {/*
+              Below `sm` the name/role text would push this row past a phone's width
+              (the whole page then scrolls sideways). The avatar stays visible, the text
+              stays for screen readers, and Profile shows the full identity.
+            */}
+            <div className="sr-only min-w-0 text-right sm:not-sr-only">
               <p className="max-w-[180px] truncate text-sm font-medium">{user.name}</p>
               <p className="text-[11px] uppercase tracking-wide text-muted">
                 {ROLE_LABELS[user.accountRole]}
@@ -184,7 +189,8 @@ export function AppShell({
           </div>
         ) : null}
         <main className="flex-1 overflow-x-hidden px-4 py-5 md:px-6">{children}</main>
-        <nav className="grid grid-cols-5 border-t border-border bg-surface md:hidden">
+        {/* One column per NAV entry: with 6 entries a 5-column grid pushed Settings onto a second row. */}
+        <nav className="grid grid-cols-6 border-t border-border bg-surface md:hidden">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;

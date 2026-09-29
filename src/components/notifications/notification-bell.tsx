@@ -53,7 +53,11 @@ export function NotificationBell({
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    // Below `sm` the wrapper is not the positioning anchor: on a phone the bell sits well
+    // left of the edge (avatar + Sign out follow it), so a right-anchored panel ran off the
+    // LEFT side of the screen. There the panel spans the page width minus a gutter instead;
+    // from `sm` up it is the usual dropdown anchored to the bell's right edge.
+    <div ref={rootRef} className="sm:relative">
       <button
         type="button"
         className={cn(
@@ -76,7 +80,7 @@ export function NotificationBell({
         <div
           role="dialog"
           aria-label="Recent notifications"
-          className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-md border border-border bg-surface shadow-lg"
+          className="absolute inset-x-3 z-40 mt-2 overflow-hidden rounded-md border border-border bg-surface shadow-lg sm:inset-x-auto sm:right-0 sm:w-[min(22rem,calc(100vw-1.5rem))] sm:max-w-[calc(100vw-1.5rem)]"
         >
           <div className="border-b border-border px-3 py-2">
             <p className="text-sm font-semibold">Notifications</p>
