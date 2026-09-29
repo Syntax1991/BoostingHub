@@ -213,10 +213,12 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 
 Public signup embed Roles field:
 
-- **Signups** = active offers not yet on the roster (hybrids count once per offered role). Users already draft-selected or SELECTED are omitted here.
-- **Roster** = authoritative roster by `selectedRole` (saved draft while OPEN/ROSTERING; published SELECTED after publish)
-- Lootbuddies: signup count / roster count (no target denominator)
+- **Signups** = every active offer (PENDING or SELECTED) by offered role — hybrids count once per offered role. Selected Users remain listed here; selection does not remove them from the signup pool.
+- Selected lineup is **not** rendered on this message — it lives on the separate **Roster** Discord message (`rosterMessageId`).
+- External boosters never appear on the Signup embed.
+- Lootbuddy signup column is a volunteered count only (planned Lootbuddy target lives on Roster).
 - Participant lines: Discord `<@id>` mention once per User, then distinct class emoji(s) for that User's offers in the column (no Character-Realm, no repeated mentions). Mentions show the server nickname when set; Character identity is in Final Setup and the Web app.
+- Footer clarifies: signup does not mean selected.
 
 **Sign as Lootbuddy** — two steps (no Character selector, no Mode picker on Discord):
 
@@ -231,22 +233,29 @@ Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain availabl
 
 A **picked** User (on the roster or its saved draft) must give a reason: without one the API answers `WITHDRAW_REASON_REQUIRED` and writes nothing, and the button opens a **modal** (`boostinghub:withdraw-reason:<runId>`, one paragraph field, 3–300 chars). The button therefore replies without deferring (a modal must be the first response). The modal submit withdraws with the reason; the Raid Lead gets a `ROSTER_WITHDRAWN` DM (**Roster Withdrawal**: player, character, reason — escaped so it cannot mention anyone — and a link to the Roster tab built from `BETTER_AUTH_URL`). After Start Run a picked User cannot withdraw.
 
-## Final roster embed
+## Roster embed
 
-Posted into the **same Run channel** as the signup embed (or the legacy global roster channel). One Run, one channel, both signup and roster information — no separate roster channel per Run in this MVP. Selected Characters only — never the full offer set.
+Posted into the **same Run channel** as the signup embed (or the legacy global roster channel) as a **second Discord message** (`rosterMessageId`), independent of the Signup message. Selected Characters / external boosters only — never the volunteered signup pool. Title is `Roster`; Final Setup (`startMessageId`) remains a separate plain-text operational post after Start.
+
+The lane maintains exactly one Roster message once the Signup message has been
+provisioned (also when draft picks / externals / a prior Roster id already
+exist). An empty selected lineup still posts/keeps the empty-state Roster embed
+(`No players selected yet.`). **Publish Roster** transitions Draft → Published
+on that **same** `rosterMessageId` in place — it never appends a second Roster
+message. Save / Update / emoji / presentation refreshes also edit the current id.
 
 **Post vs refresh.** The roster lane decides per Run:
 
 | Condition | Mode | Bot action |
 | --- | --- | --- |
-| `RunRoster.postRevision > (RunDiscordPost.lastRosterPostRevision ?? 0)` | `POST` (carries `postRevision`) | sends a **new** message, even if a current one exists, and records it with `{ kind: "roster", messageId, postRevision }` — the new id becomes `rosterMessageId`, `lastRosterPostRevision` is set to the fulfilled revision |
-| otherwise, no message yet, `lastRosterVersion !== RunRoster.version`, or the bot's Guild class/role emoji fingerprint differs from `lastRosterEmojiFingerprint` (null for posts made before it was recorded) | `REFRESH` | edits the current `rosterMessageId` in place (Save / Update Roster, External Boosters, Raid Lead title change, new or renamed Guild emojis); if that message was deleted in Discord it is re-sent as recovery, without claiming a post revision |
+| `RunRoster.postRevision > (RunDiscordPost.lastRosterPostRevision ?? 0)` | `POST` (carries `postRevision`) | edits the current `rosterMessageId` in place when it exists (or sends exactly one if missing / Discord-deleted), and records `{ kind: "roster", messageId, postRevision }` so `lastRosterPostRevision` acknowledges the fulfilled revision — **same message id** when the message already existed |
+| otherwise, no message yet, `lastRosterVersion !== RunRoster.version`, or the bot's Roster render fingerprint (`ROSTER_EMBED_FORMAT_VERSION` + Guild class/role emoji fingerprint) differs from `lastRosterEmojiFingerprint` (null / pre-format posts refresh once) | `REFRESH` | edits the current `rosterMessageId` in place (Save / Update Roster, External Boosters, Raid Lead title change, new or renamed Guild emojis, presentation-format bumps); if that message was deleted in Discord it is re-sent as recovery, without claiming a post revision |
 
-`postRevision` is advanced only by the first Publish and by an explicit **Publish Roster** repost (compare-and-set, see [roster-management.md](roster-management.md#publication)); Save and Update never advance it, so they never repost. Old roster messages stay in the channel as history and are no longer edited.
+`postRevision` is advanced only by the first Publish and by an explicit **Publish Roster** republish (compare-and-set, see [roster-management.md](roster-management.md#publication)); Save and Update never advance it. There is no historical stack of Roster messages — one live Roster embed per provisioned Run channel (Final Setup after Start is separate).
 
-**Legacy rows.** Rosters published before this change have `postRevision = 0` and `lastRosterPostRevision = null` (treated as 0): no POST is pending, so their existing message is only refreshed — never automatically reposted. The next explicit Publish Roster requests revision 1.
+**Legacy rows.** Rosters published before postRevision existed have `postRevision = 0` and `lastRosterPostRevision = null` (treated as 0): no POST is pending, so their existing message is only refreshed. The next explicit Publish Roster requests revision 1 and edits that same message.
 
-**Delivery.** Recording is idempotent per revision: after the bot records revision N, later polls see no pending POST, and a double-submitted repost request can only advance the revision once. The bot does not provide exactly-once delivery across crashes: if it crashes after Discord accepted the new message but before the web app recorded it, the next pass sends the message again (at-least-once for that window).
+**Delivery.** Recording is idempotent per revision: after the bot records revision N, later polls see no pending POST, and a double-submitted republish request can only advance the revision once. If the bot crashes after Discord accepted an edit/send but before the web app recorded it, the next pass retries (at-least-once for that window) without creating a duplicate when the stored message still edits successfully.
 
 Groups: Tanks, Healers, Melee DPS, Ranged DPS, and Lootbuddies (omitted when empty). Melee/ranged classification comes from `attackTypeForSpecialization` (`src/lib/wow-specializations.ts`) — the one authoritative (class, specialization) → attack-type table, so the bot never re-derives WoW class rules itself. Tank/Healer show a real target from the Run's desired composition counts; **melee/ranged DPS show a bare count with no denominator**, because `Run.desiredDpsCount` is one combined number with no melee/ranged split in the current schema — introducing a fake denominator was deliberately avoided rather than inventing new Run fields for cosmetics.
 

@@ -816,8 +816,8 @@ model RunRoster {
   /// Publish / Update Roster. Start is refused while true.
   runChangedSinceAck Boolean  @default(false)
   /// Latest explicit Publish Roster intent (first post and every deliberate
-  /// repost). The bot posts a NEW roster message while this exceeds
-  /// RunDiscordPost.lastRosterPostRevision.
+  /// republish). The bot syncs the single persistent Roster message while this
+  /// exceeds RunDiscordPost.lastRosterPostRevision.
   postRevision  Int         @default(0)
   createdAt     TimestamptzString @default(now())
   updatedAt     temporal.updatedAtString()
@@ -1044,7 +1044,7 @@ model RunDiscordPost {
   rosterPostedAt      TimestamptzString?
   /// RunRoster.version at last successful roster post, to detect republish.
   lastRosterVersion   Int?
-  /// RunRoster.postRevision the bot last fulfilled by sending a NEW roster
+  /// RunRoster.postRevision the bot last fulfilled on the persistent Roster
   /// message. Null = no explicit Publish fulfilled yet (treated as 0).
   lastRosterPostRevision Int?
   /// Guild emoji fingerprint (class + role emoji ids) the posted roster embed

@@ -20,6 +20,8 @@ const ROLE_EMOJI_FALLBACK: Record<RoleDiscordEmojiKey, string> = {
   raidlead: "⭐",
 };
 
+const EMPTY_SELECTION = "No players selected yet.";
+
 export type BuildRosterEmbedOptions = {
   classIndicators?: Partial<Record<WowClass, string>>;
   roleIndicators?: GuildRoleIndicators;
@@ -49,16 +51,18 @@ export function formatRosterParticipantLine(
 function memberList(
   members: RosterEmbedMember[],
   classIndicators?: Partial<Record<WowClass, string>>,
+  emptyValue: string = EMPTY_SELECTION,
 ): string {
-  if (members.length === 0) return "—";
+  if (members.length === 0) return emptyValue;
   return members.map((member) => formatRosterParticipantLine(member, classIndicators)).join("\n");
 }
 
 /**
- * Final published roster only — selected Characters, never the full offer
- * set. Tank/Healer show a real target from the Run; melee/ranged DPS show a
- * count only because the Run schema has no melee/ranged split target.
+ * Selected lineup only — never the volunteered signup pool.
+ * Tank/Healer/DPS/Lootbuddy targets come from the Run. Melee/ranged DPS stay a
+ * display split of selected DPS (no melee/ranged target in the schema).
  * Role column icons match the signup embed (guild custom tank/healer/dps/lootbuddy).
+ * Display-only: no buttons.
  */
 export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmbedOptions): EmbedBuilder {
   const classIndicators = options?.classIndicators;
@@ -67,36 +71,48 @@ export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmb
   const healer = roleEmoji("healer", roleIndicators);
   const dps = roleEmoji("dps", roleIndicators);
   const lootbuddy = roleEmoji("lootbuddy", roleIndicators);
+  const dpsSelected = data.groups.meleeDps.length + data.groups.rangedDps.length;
+  const emptyValue = data.totalSelected === 0 ? EMPTY_SELECTION : "—";
+  const showLootbuddy = data.groups.lootbuddies.length > 0 || data.targets.lootbuddies > 0;
+  const lootbuddyCount =
+    data.targets.lootbuddies > 0
+      ? `${data.groups.lootbuddies.length}/${data.targets.lootbuddies}`
+      : String(data.groups.lootbuddies.length);
+  const stateLabel = data.publishedAt ? "Published" : "Draft";
 
   return new EmbedBuilder()
-    .setTitle(`Roster for ${data.runTitle}`)
-    .setDescription(`${DIFFICULTY_LABEL[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`)
+    .setTitle("Roster")
+    .setDescription(
+      `${data.runTitle}\n${DIFFICULTY_LABEL[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`,
+    )
     .addFields(
       {
         name: `${tank} Tanks (${data.groups.tanks.length}/${data.targets.tanks})`,
-        value: memberList(data.groups.tanks, classIndicators),
+        value: memberList(data.groups.tanks, classIndicators, emptyValue),
       },
       {
         name: `${healer} Healers (${data.groups.healers.length}/${data.targets.healers})`,
-        value: memberList(data.groups.healers, classIndicators),
+        value: memberList(data.groups.healers, classIndicators, emptyValue),
       },
       {
         name: `${dps} Melee DPS (${data.groups.meleeDps.length})`,
-        value: memberList(data.groups.meleeDps, classIndicators),
+        value: memberList(data.groups.meleeDps, classIndicators, emptyValue),
       },
       {
         name: `${dps} Ranged DPS (${data.groups.rangedDps.length})`,
-        value: memberList(data.groups.rangedDps, classIndicators),
+        value: memberList(data.groups.rangedDps, classIndicators, emptyValue),
       },
-      ...(data.groups.lootbuddies.length > 0
+      ...(showLootbuddy
         ? [
             {
-              name: `${lootbuddy} Lootbuddies (${data.groups.lootbuddies.length})`,
-              value: memberList(data.groups.lootbuddies, classIndicators),
+              name: `${lootbuddy} Lootbuddies (${lootbuddyCount})`,
+              value: memberList(data.groups.lootbuddies, classIndicators, emptyValue),
             },
           ]
         : []),
     )
-    .setColor(0x2ecc71)
-    .setFooter({ text: `Total selected: ${data.totalSelected} · Roster version ${data.version}` });
+    .setColor(data.publishedAt ? 0x2ecc71 : 0x3498db)
+    .setFooter({
+      text: `${stateLabel} · Selected ${data.totalSelected} · DPS ${dpsSelected}/${data.targets.dps} · Roster version ${data.version}`,
+    });
 }

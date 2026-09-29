@@ -921,12 +921,13 @@ async function syncRosterPost(
   const { channelId } = resolved;
 
   const embed = buildRosterEmbed(data, { classIndicators, roleIndicators });
-  const explicitPost = item.mode === "POST" && typeof item.postRevision === "number";
+  const fulfillPostRevision =
+    item.mode === "POST" && typeof item.postRevision === "number" ? item.postRevision : undefined;
 
-  // Save / Update (REFRESH): edit the CURRENT roster message in place. Only an
-  // explicit Publish (POST) skips this and always sends a new message — the
-  // previous one stays in the channel and is no longer kept in sync.
-  if (!explicitPost && item.existingMessageId) {
+  // Always edit the single persistent Roster message when it exists. Publish
+  // only acknowledges postRevision on that same message — never appends a
+  // second historical Roster post. Missing / deleted → send exactly one.
+  if (item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });
     if (edited) {
       await api.recordDiscordState(item.runId, {
@@ -934,6 +935,7 @@ async function syncRosterPost(
         channelId,
         messageId: item.existingMessageId,
         classEmojiFingerprint,
+        ...(fulfillPostRevision !== undefined ? { postRevision: fulfillPostRevision } : {}),
       });
       return;
     }
@@ -948,7 +950,7 @@ async function syncRosterPost(
     channelId: message.channelId,
     messageId: message.id,
     classEmojiFingerprint,
-    ...(explicitPost ? { postRevision: item.postRevision as number } : {}),
+    ...(fulfillPostRevision !== undefined ? { postRevision: fulfillPostRevision } : {}),
   });
 }
 

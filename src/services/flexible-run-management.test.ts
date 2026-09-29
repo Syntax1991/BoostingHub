@@ -14,6 +14,7 @@ import { discordSyncService } from "@/services/discord-sync.service";
 import { rosterService } from "@/services/roster.service";
 import { runService } from "@/services/run.service";
 import { signupService } from "@/services/signup.service";
+import { currentWeekFutureIso } from "@/test/time";
 
 /** Commitments of one Character as seen from a Run in the same raid ID as `runId` (excluding `excludeRunId`). */
 async function commitmentsInRaidIdOf(runId: string, characterId: string, excludeRunId: string) {
@@ -178,26 +179,31 @@ async function repost(runId: string) {
 
 /**
  * One simulated bot pass over this Run's roster lane, recorded exactly like
- * the bot: POST → a NEW message id + the fulfilled postRevision; REFRESH →
- * the existing message is edited (same id). Returns what happened.
+ * the bot: edit the persistent Roster message when it exists; send only when
+ * missing. POST additionally records the fulfilled postRevision.
  */
 const sent: Record<string, string[]> = {};
 async function botPass(runId: string): Promise<{ mode: "POST" | "REFRESH"; messageId: string } | null> {
   const item = (await discordSyncService.listSyncWork()).roster.find((row) => row.runId === runId);
   if (!item) return null;
-  if (item.mode === "POST" || !item.existingMessageId) {
+  if (!item.existingMessageId) {
     const messageId = `${runId.slice(-4)}-M${(sent[runId]?.length ?? 0) + 1}`;
     (sent[runId] ??= []).push(messageId);
     await discordSyncService.recordRosterPost({
       runId,
       channelId: CHAN,
       messageId,
-      ...(item.mode === "POST" && typeof item.postRevision === "number" ? { postRevision: item.postRevision } : {}),
+      ...(typeof item.postRevision === "number" ? { postRevision: item.postRevision } : {}),
     });
     return { mode: item.mode === "POST" ? "POST" : "REFRESH", messageId };
   }
-  await discordSyncService.recordRosterPost({ runId, channelId: CHAN, messageId: item.existingMessageId });
-  return { mode: "REFRESH", messageId: item.existingMessageId };
+  await discordSyncService.recordRosterPost({
+    runId,
+    channelId: CHAN,
+    messageId: item.existingMessageId,
+    ...(typeof item.postRevision === "number" ? { postRevision: item.postRevision } : {}),
+  });
+  return { mode: item.mode === "POST" ? "POST" : "REFRESH", messageId: item.existingMessageId };
 }
 
 async function currentRosterMessageId(runId: string) {
@@ -458,7 +464,7 @@ describe("NORMAL → HEROIC on a published roster", () => {
 });
 
 describe("Save / Update / Publish and the Discord roster message", () => {
-  it("first Save persists without posting; first Publish posts M1 (postRevision 0 → 1)", async () => {
+  it("first Save refreshes the Roster message; first Publish edits the same message (postRevision 0 → 1)", async () => {
     const runId = await createOpenRun();
     await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
     const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
@@ -467,7 +473,11 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(current.roster.publishedAt).toBeNull();
     expect(current.run.status).not.toBe("PUBLISHED");
     expect(current.roster.postRevision).toBe(0);
-    expect(await botPass(runId)).toBeNull();
+    // Draft picks maintain the separate Roster Discord message (REFRESH until Publish).
+    const draftPass = await botPass(runId);
+    expect(draftPass?.mode).toBe("REFRESH");
+    expect(await currentRosterMessageId(runId)).toBe(draftPass?.messageId);
+    const draftMessageId = draftPass!.messageId;
 
     await publish(runId);
     current = await view(runId);
@@ -476,8 +486,8 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(current.roster.runChangedSinceAck).toBe(false);
     expect(current.roster.postRevision).toBe(1);
     const first = await botPass(runId);
-    expect(first?.mode).toBe("POST");
-    expect(await currentRosterMessageId(runId)).toBe(first?.messageId);
+    expect(first).toEqual({ mode: "POST", messageId: draftMessageId });
+    expect(await currentRosterMessageId(runId)).toBe(draftMessageId);
     expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterPostRevision).toBe(1);
     expect(await botPass(runId)).toBeNull(); // poll after recording: nothing more
   });
@@ -524,19 +534,17 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(after.boosters.find((row) => row.id === normalSignup)).toMatchObject({ status: "PENDING", draftSelected: false });
   });
 
-  it("explicit Publish reposts: M2, then Update edits M2, then Publish again → M3; old posts are no longer tracked", async () => {
+  it("explicit Publish edits the same Roster message in place; Update keeps that id; republish never appends history", async () => {
     const { runId, cSignup, firstMessageId } = await publishedRunWithPost();
     const notificationsBefore = (await userNotificationRepository.listForUser(ids.a, 100)).length;
     const lineupBefore = await publishedSelections(runId);
 
     expect(await repost(runId)).toEqual({ postRevision: 2 });
     let pass = await botPass(runId);
-    expect(pass?.mode).toBe("POST");
-    const m2 = pass!.messageId;
-    expect(m2).not.toBe(firstMessageId);
-    expect(await currentRosterMessageId(runId)).toBe(m2);
+    expect(pass).toEqual({ mode: "POST", messageId: firstMessageId });
+    expect(await currentRosterMessageId(runId)).toBe(firstMessageId);
     expect(await botPass(runId)).toBeNull();
-    // A repost changes no membership/roles and notifies nobody.
+    // A republish changes no membership/roles and notifies nobody.
     expect(await publishedSelections(runId)).toEqual(lineupBefore);
     expect((await userNotificationRepository.listForUser(ids.a, 100)).length).toBe(notificationsBefore);
 
@@ -545,15 +553,15 @@ describe("Save / Update / Publish and the Discord roster message", () => {
       { signupId: cSignup, selectedRole: "TANK" },
       { signupId: bSignup, selectedRole: "HEALER" },
     ]);
-    expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: m2 });
+    expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: firstMessageId });
 
     expect(await repost(runId)).toEqual({ postRevision: 3 });
     pass = await botPass(runId);
-    expect(pass?.mode).toBe("POST");
-    expect(await currentRosterMessageId(runId)).toBe(pass!.messageId);
-    expect(sent[runId]).toHaveLength(3); // M1, M2, M3 — each only from an explicit Publish
+    expect(pass).toEqual({ mode: "POST", messageId: firstMessageId });
+    expect(await currentRosterMessageId(runId)).toBe(firstMessageId);
+    expect(sent[runId]).toHaveLength(1); // only the original create — Publish never appends
     await update(runId, await publishedSelections(runId));
-    expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: pass!.messageId });
+    expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: firstMessageId });
   });
 
   it("Publish cannot bypass unpublished changes: a dirty published roster must be updated first", async () => {
@@ -565,8 +573,8 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(await repost(runId)).toEqual({ postRevision: 2 });
   });
 
-  it("double-submitted Publish with the same expected postRevision advances it once and posts once", async () => {
-    const { runId } = await publishedRunWithPost();
+  it("double-submitted Publish with the same expected postRevision advances it once and syncs once", async () => {
+    const { runId, firstMessageId } = await publishedRunWithPost();
     const current = await view(runId);
     const request = () =>
       rosterService.repostRoster(lead, { runId, version: current.roster.version, postRevision: current.roster.postRevision });
@@ -574,12 +582,12 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(results.filter((row) => row.status === "fulfilled")).toHaveLength(1);
     expect(results.find((row) => row.status === "rejected")).toMatchObject({ reason: { code: "ROSTER_ALREADY_CHANGED" } });
     expect((await view(runId)).roster.postRevision).toBe(2);
-    expect((await botPass(runId))?.mode).toBe("POST");
+    expect(await botPass(runId)).toEqual({ mode: "POST", messageId: firstMessageId });
     expect(await botPass(runId)).toBeNull();
-    expect(sent[runId]).toHaveLength(2);
+    expect(sent[runId]).toEqual([firstMessageId]);
   });
 
-  it("legacy roster message (postRevision 0, fulfilled null) is never reposted automatically; refresh edits it; only Publish posts anew", async () => {
+  it("legacy roster message (postRevision 0, fulfilled null) is never auto-POSTed; refresh edits it; Publish edits the same id", async () => {
     const { runId } = await publishedRunWithPost();
     await orm.RunRoster.where({ runId }).update({ postRevision: 0, updatedAt: new Date().toISOString() });
     await orm.RunDiscordPost.where({ runId }).update({ lastRosterPostRevision: null, rosterMessageId: "legacy-msg", updatedAt: new Date().toISOString() });
@@ -590,11 +598,11 @@ describe("Save / Update / Publish and the Discord roster message", () => {
 
     expect(await repost(runId)).toEqual({ postRevision: 1 });
     const pass = await botPass(runId);
-    expect(pass?.mode).toBe("POST");
-    expect(await currentRosterMessageId(runId)).toBe(pass!.messageId);
+    expect(pass).toEqual({ mode: "POST", messageId: "legacy-msg" });
+    expect(await currentRosterMessageId(runId)).toBe("legacy-msg");
   });
 
-  it("Run edit + Update and Add Booster + Update keep the message id; an explicit Publish afterwards creates a new one", async () => {
+  it("Run edit + Update and Add Booster + Update keep the message id; an explicit Publish afterwards still edits the same id", async () => {
     const { runId, firstMessageId } = await publishedRunWithPost();
     await runService.updateRun(lead, venomousUpdateInput(runId, (await runRepository.findById(runId))!, { desiredDpsCount: 2 }));
     expect(await botPass(runId)).toBeNull(); // the edit alone does not touch Discord
@@ -611,8 +619,8 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(sent[runId]).toEqual([firstMessageId]);
 
     await repost(runId);
-    expect((await botPass(runId))?.mode).toBe("POST");
-    expect(sent[runId]).toHaveLength(2);
+    expect(await botPass(runId)).toEqual({ mode: "POST", messageId: firstMessageId });
+    expect(sent[runId]).toEqual([firstMessageId]);
   });
 
   it("commitments: a repost does not change them; Update reconciles RESERVED → COMMITTED", async () => {
@@ -628,6 +636,41 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(committed?.find((row) => row.runId === runId)?.state).toBe("COMMITTED");
     await repost(runId);
     expect((await commitmentsInRaidIdOf(runId, bChar, other))).toEqual(committed);
+  });
+
+  it("Signup-provisioned empty Roster: create once, clear picks edits empty state, never deletes or duplicates", async () => {
+    // CURRENT week so Signup→Roster empty maintenance is not ARCHIVE-gated.
+    const run = await runService.createRun(
+      lead,
+      venomousCreateInput({
+        scheduledStartAt: currentWeekFutureIso({ hoursAhead: 6 }),
+        difficulty: "HEROIC",
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 0,
+      }),
+    );
+    const runId = run.id;
+    await runService.openRun(lead, runId);
+    await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
+    await discordSyncService.recordSignupPost({ runId, channelId: CHAN, messageId: `${runId.slice(-4)}-signup` });
+
+    const empty = await botPass(runId);
+    expect(empty?.mode).toBe("REFRESH");
+    const rosterId = empty!.messageId;
+    expect(await currentRosterMessageId(runId)).toBe(rosterId);
+    expect(await botPass(runId)).toBeNull();
+
+    const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
+    await saveDraft(runId, [{ signupId: aSignup, selectedRole: "HEALER" }]);
+    expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: rosterId });
+
+    await saveDraft(runId, []);
+    expect(await botPass(runId)).toEqual({ mode: "REFRESH", messageId: rosterId });
+    expect(await currentRosterMessageId(runId)).toBe(rosterId);
+    expect(sent[runId]).toEqual([rosterId]);
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data?.totalSelected).toBe(0);
   });
 });
 

@@ -158,10 +158,13 @@ describe("Discord Bundle content labels", () => {
       discordRolePing: true,
     }).toJSON();
 
+    expect(embed.title).toBe("Signups");
+    expect(embed.description).toContain("Bundle Run");
     expect(embed.description).toContain("Season 2 Bundle");
     expect(embed.description).toContain("Tide 1/1");
     expect(embed.description).toContain("The Venomous Abyss 8/8");
     expect(embed.fields?.find((field) => field.name === "Content")).toBeUndefined();
+    expect(embed.fields?.find((field) => field.name === "Roster")).toBeUndefined();
     expect(embed.fields?.find((field) => field.name?.includes("Raid Lead"))?.value).toBe("<@111>");
     expect(display.titleCoverage).toBe("9/9");
     expect(display.channelCoverage).toBe("9of9");
@@ -180,11 +183,13 @@ describe("Discord Bundle content labels", () => {
       difficulty: "HEROIC",
       publishedAt: "2026-09-18T12:00:00.000Z",
       version: 1,
-      targets: { tanks: 2, healers: 4 },
+      targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
       groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
       totalSelected: 0,
     }).toJSON();
 
+    expect(embed.title).toBe("Roster");
+    expect(embed.description).toContain("Bundle Run");
     expect(embed.description).toContain("Season 2 Bundle");
     expect(embed.description).toContain("Tide 1/1 · The Venomous Abyss 8/8");
   });

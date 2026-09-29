@@ -213,7 +213,8 @@ describe("buildSignupEmbed", () => {
     const embed = buildSignupEmbed(emptyData());
     expect(embed).toBeTruthy();
     expect(Array.isArray(embed)).toBe(false);
-    expect(embed.toJSON().title).toBe("Weekend Heroic Catch-up");
+    expect(embed.toJSON().title).toBe("Signups");
+    expect(embed.toJSON().description).toContain("Weekend Heroic Catch-up");
   });
 
   it("renders Tank|Healer|DPS as the primary inline grid with Lootbuddy after, Signups then Roster", () => {
@@ -289,14 +290,14 @@ describe("buildSignupEmbed", () => {
 
     const fields = json.fields ?? [];
     expect(fields.find((f) => f.name === "Signed users")?.value).toBe("4");
+    expect(json.title).toBe("Signups");
+    expect(json.description).toContain("Weekend Heroic Catch-up");
+    expect(json.footer?.text).toContain("Signup does not mean selected");
 
     const signupsHeading = fields.findIndex((f) => f.name === "Signups by role");
     const rosterHeading = fields.findIndex((f) => f.name === "Roster");
     expect(signupsHeading).toBeGreaterThanOrEqual(0);
-    expect(rosterHeading).toBeGreaterThan(signupsHeading);
-    expect(fields[signupsHeading]?.inline).toBe(false);
-    expect(fields[rosterHeading]?.inline).toBe(false);
-    expect(fields[signupsHeading]?.value).toBe("\u200b");
+    expect(rosterHeading).toBe(-1);
 
     const signupPrimaries = fields.slice(signupsHeading + 1, signupsHeading + 5);
     expect(signupPrimaries.map((f) => f.name)).toEqual([
@@ -309,22 +310,14 @@ describe("buildSignupEmbed", () => {
     expect(signupPrimaries[0]?.value).toContain("<@111111111111111111> <:paladin:1>");
     expect(signupPrimaries[0]?.value).not.toContain("Tankone");
     expect(signupPrimaries[3]?.value).toBe("<@444444444444444444> <:mage:3>");
-
-    const rosterPrimaries = fields.slice(rosterHeading + 1, rosterHeading + 5);
-    expect(rosterPrimaries.map((f) => f.name)).toEqual([
-      "🛡 Tanks — 1/2",
-      "✚ Healers — 1/4",
-      "⚔ DPS — 1/14",
-      "📦 Lootbuddies — 1",
-    ]);
     expect(JSON.stringify(json)).not.toMatch(/\d+ signed · /);
   });
 
   it("keeps empty role columns so the grid stays stable", () => {
     const fields = buildSignupEmbed(emptyData()).toJSON().fields ?? [];
     expect(fields.some((f) => f.name === "🛡 Tanks — 0")).toBe(true);
-    expect(fields.find((f) => f.name === "🛡 Tanks — 0")?.value).toBe("—");
-    expect(fields.some((f) => f.name === "🛡 Tanks — 0/2")).toBe(true);
+    expect(fields.find((f) => f.name === "🛡 Tanks — 0")?.value).toBe("No signups yet.");
+    expect(fields.some((f) => f.name === "Roster")).toBe(false);
   });
 
   it("shows unique Signed users, never a projected role-offer sum", () => {
@@ -498,33 +491,22 @@ describe("buildSignupButtons", () => {
   });
 });
 
-describe("buildSignupEmbed — Lootbuddy target", () => {
-  function rosterLootbuddyFieldName(target: number | undefined) {
+describe("buildSignupEmbed — Signups only (no Roster section)", () => {
+  it("does not render a Roster section; lootbuddy signed count stays a plain count", () => {
     const json = buildSignupEmbed(
       emptyData({
+        uniqueSignupCount: 3,
         roleStatus: {
           tank: { signed: 0, picked: 0, target: 2 },
           healer: { signed: 0, picked: 0, target: 4 },
           dps: { signed: 0, picked: 0, target: 14 },
-          lootbuddy: { signed: 3, picked: 1, ...(target === undefined ? {} : { target }) },
+          lootbuddy: { signed: 3, picked: 1, target: 2 },
         },
       }),
     ).toJSON();
     const fields = json.fields ?? [];
-    const rosterHeading = fields.findIndex((f) => f.name === "Roster");
-    const signupsHeading = fields.findIndex((f) => f.name === "Signups by role");
-    return {
-      roster: fields.slice(rosterHeading + 1).find((f) => f.name.startsWith("📦 Lootbuddies"))?.name,
-      signed: fields.slice(signupsHeading + 1, rosterHeading).find((f) => f.name.startsWith("📦 Lootbuddies"))?.name,
-    };
-  }
-
-  it("shows picked/target in the Roster column only when a target is set", () => {
-    expect(rosterLootbuddyFieldName(2)).toEqual({ roster: "📦 Lootbuddies — 1/2", signed: "📦 Lootbuddies — 3" });
-  });
-
-  it("keeps the legacy picked-only count for target 0 or an older payload without target", () => {
-    expect(rosterLootbuddyFieldName(0)).toEqual({ roster: "📦 Lootbuddies — 1", signed: "📦 Lootbuddies — 3" });
-    expect(rosterLootbuddyFieldName(undefined)).toEqual({ roster: "📦 Lootbuddies — 1", signed: "📦 Lootbuddies — 3" });
+    expect(fields.some((f) => f.name === "Roster")).toBe(false);
+    expect(fields.some((f) => f.name === "📦 Lootbuddies — 3")).toBe(true);
+    expect(fields.some((f) => f.name?.includes("Lootbuddies — 1/2"))).toBe(false);
   });
 });

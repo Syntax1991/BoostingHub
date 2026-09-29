@@ -11,7 +11,7 @@ const data: RosterEmbedData = {
   difficulty: "HEROIC",
   publishedAt: "2026-09-20T20:00:00.000Z",
   version: 3,
-  targets: { tanks: 2, healers: 4 },
+  targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
   groups: {
     tanks: [
       {
@@ -76,14 +76,17 @@ describe("formatRosterParticipantLine", () => {
 });
 
 describe("buildRosterEmbed", () => {
-  it("shows real Tank/Healer targets and a bare count for melee/ranged DPS", () => {
+  it("titles the embed Roster and keeps Tank/Healer targets with melee/ranged DPS counts", () => {
     const embed = buildRosterEmbed(data).toJSON();
+    expect(embed.title).toBe("Roster");
+    expect(embed.description).toContain("Weekend Heroic Catch-up");
     const byName = new Map(embed.fields?.map((field) => [field.name, field.value]));
     expect([...byName.keys()].find((name) => name?.includes("Tanks"))).toContain("(1/2)");
     expect([...byName.keys()].find((name) => name?.includes("Healers"))).toContain("(1/4)");
     expect([...byName.keys()].find((name) => name?.includes("Melee DPS"))).toContain("(1)");
     expect([...byName.keys()].find((name) => name?.includes("Melee DPS"))).not.toContain("/");
     expect([...byName.keys()].find((name) => name?.includes("Ranged DPS"))).toContain("(0)");
+    expect(embed.footer?.text).toContain("DPS 1/14");
   });
 
   it("uses signup-embed role emoji fallbacks (✚ not ♻, 📦 for loot)", () => {
@@ -117,14 +120,27 @@ describe("buildRosterEmbed", () => {
     expect(healers).toContain("Dawnward-Silvermoon");
   });
 
-  it("omits the lootbuddies field entirely when there are none", () => {
+  it("omits the lootbuddies field when empty and no lootbuddy target", () => {
     const embed = buildRosterEmbed(data).toJSON();
     expect(embed.fields?.some((field) => field.name?.includes("Lootbuddies"))).toBe(false);
   });
 
-  it("includes a lootbuddies field when present", () => {
+  it("always shows lootbuddies when a target is set, with picked/target", () => {
+    const withTarget: RosterEmbedData = {
+      ...data,
+      targets: { ...data.targets, lootbuddies: 3 },
+      groups: { ...data.groups, lootbuddies: [] },
+    };
+    const embed = buildRosterEmbed(withTarget).toJSON();
+    const field = embed.fields?.find((row) => row.name?.includes("Lootbuddies"));
+    expect(field?.name).toContain("(0/3)");
+    expect(field?.value).toBe("—");
+  });
+
+  it("includes a lootbuddies field when members are present", () => {
     const withLoot: RosterEmbedData = {
       ...data,
+      targets: { ...data.targets, lootbuddies: 2 },
       groups: {
         ...data.groups,
         lootbuddies: [
@@ -138,13 +154,26 @@ describe("buildRosterEmbed", () => {
           },
         ],
       },
+      totalSelected: 4,
     };
     const embed = buildRosterEmbed(withLoot).toJSON();
-    expect(embed.fields?.some((field) => field.name?.startsWith("📦 Lootbuddies"))).toBe(true);
+    expect(embed.fields?.some((field) => field.name?.startsWith("📦 Lootbuddies (1/2)"))).toBe(true);
   });
 
-  it("reports total selected and roster version in the footer", () => {
+  it("reports selected/DPS targets and version in the footer", () => {
     const embed = buildRosterEmbed(data).toJSON();
-    expect(embed.footer?.text).toBe("Total selected: 3 · Roster version 3");
+    expect(embed.footer?.text).toBe("Published · Selected 3 · DPS 1/14 · Roster version 3");
+  });
+
+  it("shows an empty-state when nobody is selected yet", () => {
+    const empty: RosterEmbedData = {
+      ...data,
+      publishedAt: null,
+      totalSelected: 0,
+      groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
+    };
+    const embed = buildRosterEmbed(empty).toJSON();
+    expect(embed.footer?.text).toContain("Draft");
+    expect(embed.fields?.every((field) => field.value === "No players selected yet.")).toBe(true);
   });
 });

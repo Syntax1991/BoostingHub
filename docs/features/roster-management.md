@@ -101,9 +101,9 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 Boosters who are **not registered** on the website (e.g. in-house helpers) are added by hand via the **External Boosters** button in the Run header (left of **Edit Run**, managers only, while the roster is editable: `OPEN` / `ROSTERING` / `PUBLISHED`). The dialog takes a name (usually their Discord name, a leading `@` is stripped), a WoW class and a **type**: **Booster** (plus a role the class can play) or **Lootbuddy** (class only, no role). Stored in `RunExternalBooster` (per `RunRoster`, `participationType` + nullable `role`).
 
 - The dialog saves the full set on its own (`rosterService.saveExternalBoosters`, optimistic on the roster version) and bumps the roster version once; the page reloads, so unsaved Roster builder edits are lost. Save Roster from the builder leaves them untouched (`saveDraftSelection` without `externalBoosters`); seeding a replacement draft never touches them. After Start, use **Replace** on the Attendance tab instead.
-- External boosters count toward the Tank/Healer/DPS composition, external lootbuddies toward the lootbuddy count; both count in the Class Buff Checker and never create validation blockers. External lootbuddies are listed with the lootbuddies everywhere (roster views, signup embed, Discord roster, Final Setup as `@name`). Replace after Start fills a lootbuddy slot with an external lootbuddy.
+- External boosters count toward the Tank/Healer/DPS composition, external lootbuddies toward the lootbuddy count; both count in the Class Buff Checker and never create validation blockers. External lootbuddies are listed with the lootbuddies everywhere (roster views, Discord roster, Final Setup as `@name`). Replace after Start fills a lootbuddy slot with an external lootbuddy.
 - **Live roster data, not draft data:** there is no separate published snapshot. Saving them while `PUBLISHED` changes the published roster (`getPublishedRosterView`) immediately, bumps the roster version (so the Discord roster post is edited) and is **not** an "unpublished change" — Start and the Final Setup use the current rows.
-- Shown as `@name <class emoji>` (plain text, never a ping) in the signup embed's picked lists, the published Discord roster embed (DPS split melee/ranged by class), the Start Run preview and the Final Setup post.
+- Shown as `@name <class emoji>` (plain text, never a ping) on the Discord **Roster** embed (DPS split melee/ranged by class), the Start Run preview and the Final Setup post — never fabricated onto the Signup embed.
 - Not signups: no notifications/DMs, no attendance, payouts, strikes, lockouts or Raid Invites.
 - Names allow letters, digits, space, `.`, `_`, `-` (max 32); `everyone`/`here` and markdown/mention syntax are rejected. Max 40 per roster.
 
@@ -170,14 +170,14 @@ The Roster tab shows exactly one primary path per state (`resolveRosterActions`,
 
 | State | Actions | Discord |
 | --- | --- | --- |
-| Never published, local edits | **Save Roster** (+ Discard) | nothing — Save never posts |
-| Never published, saved | **Publish Roster** — first authoritative publication | posts the first roster message (`postRevision 0 → 1`) |
+| Never published, local edits | **Save Roster** (+ Discard) | edits the persistent Roster message when one exists (or creates the empty/draft Roster once Signup is provisioned) — Save alone never advances `postRevision` |
+| Never published, saved | **Publish Roster** — first authoritative publication | syncs the same Roster message and acknowledges `postRevision 0 → 1` (creates it only if missing) |
 | Published, local edits / saved changes / changed Run settings | **Update Roster** — ONE action: accepts the current selection as the published roster | edits the **current** roster message in place |
-| Published, clean (`PUBLISHED` Run) | **Publish Roster** — explicit repost | sends a **new** roster message |
+| Published, clean (`PUBLISHED` Run) | **Publish Roster** — explicit refresh | edits the **same** roster message in place and acknowledges a new `postRevision` |
 
 - **Update Roster** (`rosterService.updateRoster` → `rosterRepository.updatePublishedAtomic`) validates the submitted selection against the current Run, then writes it as the draft and publishes it in one transaction (same row lock / version check / pre-start check as Publish) and clears `runChangedSinceAck`. A refused Update changes nothing. There is no separate Save step on a published roster.
-- **Publish Roster on a published roster** never changes membership, roles, statuses or notifications; it only requests a new Discord post. It is blocked while there are unpublished changes (Update first; `ROSTER_UNPUBLISHED_CHANGES`). The request is a compare-and-set on the expected roster `version` **and** the expected `RunRoster.postRevision` (`rosterRepository.requestRepostAtomic`): exactly one of two double-submitted requests advances `postRevision` to N + 1; the other fails with `ROSTER_ALREADY_CHANGED`. Logged as Activity `ROSTER_POSTED`.
-- Previous roster messages stay in the channel as history and are no longer updated; the newest posted message becomes the current `rosterMessageId`, which later Updates edit.
+- **Publish Roster on a published roster** never changes membership, roles, statuses or notifications; it only requests another Discord sync of the persistent Roster message. It is blocked while there are unpublished changes (Update first; `ROSTER_UNPUBLISHED_CHANGES`). The request is a compare-and-set on the expected roster `version` **and** the expected `RunRoster.postRevision` (`rosterRepository.requestRepostAtomic`): exactly one of two double-submitted requests advances `postRevision` to N + 1; the other fails with `ROSTER_ALREADY_CHANGED`. Logged as Activity `ROSTER_POSTED`.
+- There is exactly one live Roster Discord message per provisioned Run (`rosterMessageId`). Publish / Update / Save always edit that message; missing or Discord-deleted messages are recreated once. Final Setup (`startMessageId`) stays a separate post after Start.
 
 The first publication, and Update Roster, run in one database transaction:
 In one database transaction:
