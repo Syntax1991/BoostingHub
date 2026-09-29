@@ -213,10 +213,12 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 
 Public signup embed Roles field:
 
-- **Signups** = active offers not yet on the roster (hybrids count once per offered role). Users already draft-selected or SELECTED are omitted here.
-- **Roster** = authoritative roster by `selectedRole` (saved draft while OPEN/ROSTERING; published SELECTED after publish)
-- Lootbuddies: signup count / roster count (no target denominator)
+- **Signups** = every active offer (PENDING or SELECTED) by offered role — hybrids count once per offered role. Selected Users remain listed here; selection does not remove them from the signup pool.
+- Selected lineup is **not** rendered on this message — it lives on the separate **Roster** Discord message (`rosterMessageId`).
+- External boosters never appear on the Signup embed.
+- Lootbuddy signup column is a volunteered count only (planned Lootbuddy target lives on Roster).
 - Participant lines: Discord `<@id>` mention once per User, then distinct class emoji(s) for that User's offers in the column (no Character-Realm, no repeated mentions). Mentions show the server nickname when set; Character identity is in Final Setup and the Web app.
+- Footer clarifies: signup does not mean selected.
 
 **Sign as Lootbuddy** — two steps (no Character selector, no Mode picker on Discord):
 
@@ -231,9 +233,11 @@ Mode (`Loot only` / `Play along`) and multi-entry lootbuddy sets remain availabl
 
 A **picked** User (on the roster or its saved draft) must give a reason: without one the API answers `WITHDRAW_REASON_REQUIRED` and writes nothing, and the button opens a **modal** (`boostinghub:withdraw-reason:<runId>`, one paragraph field, 3–300 chars). The button therefore replies without deferring (a modal must be the first response). The modal submit withdraws with the reason; the Raid Lead gets a `ROSTER_WITHDRAWN` DM (**Roster Withdrawal**: player, character, reason — escaped so it cannot mention anyone — and a link to the Roster tab built from `BETTER_AUTH_URL`). After Start Run a picked User cannot withdraw.
 
-## Final roster embed
+## Roster embed
 
-Posted into the **same Run channel** as the signup embed (or the legacy global roster channel). One Run, one channel, both signup and roster information — no separate roster channel per Run in this MVP. Selected Characters only — never the full offer set.
+Posted into the **same Run channel** as the signup embed (or the legacy global roster channel) as a **second Discord message** (`rosterMessageId`), independent of the Signup message. Selected Characters / external boosters only — never the volunteered signup pool. Title is `Roster`; Final Setup (`startMessageId`) remains a separate plain-text operational post after Start.
+
+The lane also maintains a draft Roster message once the Run channel exists and draft picks / external boosters are present — so Discord shows Signup and Roster as two concepts before Publish. An explicit **Publish Roster** still POSTs a new message (history kept); Save / Update continue to REFRESH the current `rosterMessageId`.
 
 **Post vs refresh.** The roster lane decides per Run:
 

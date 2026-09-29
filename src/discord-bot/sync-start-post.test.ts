@@ -439,7 +439,7 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
       difficulty: "HEROIC",
       publishedAt: "2026-09-18T12:00:00.000Z",
       version: 1,
-      targets: { tanks: 2, healers: 4 },
+      targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
       groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
       totalSelected: 0,
     });

@@ -497,11 +497,11 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.dps.picked).toBe(0);
     expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
     expect(embed?.members.picked.healers.filter((m) => m.signupId === hybridSignupId)).toHaveLength(1);
-    // Rostered users leave the Signups section entirely.
-    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
-    expect(embed?.members.signed.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
-    expect(embed?.roleStatus.tank.signed).toBe(0);
-    expect(embed?.roleStatus.healer.signed).toBe(1);
+    // Selected Users remain on Signups — Roster is a separate Discord message.
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
+    expect(embed?.members.signed.healers.some((m) => m.signupId === hybridSignupId)).toBe(true);
+    expect(embed?.roleStatus.tank.signed).toBe(1);
+    expect(embed?.roleStatus.healer.signed).toBe(2);
     expect(embed?.roleStatus.dps.signed).toBe(1);
 
     view = await rosterService.getRosterManagementView(lead, hybridRunId);
@@ -515,7 +515,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(embed?.roleStatus.healer.picked).toBe(0);
     expect(embed?.members.picked.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
     expect(embed?.members.picked.healers.some((m) => m.signupId === hybridSignupId)).toBe(false);
-    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(false);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === hybridSignupId)).toBe(true);
   });
 });
 
@@ -583,9 +583,12 @@ describe("discordSyncService.listSyncWork", () => {
 });
 
 describe("discordSyncService.getRosterEmbedData", () => {
-  it("is null before the roster is published", async () => {
+  it("returns a draft Roster payload before publish (empty until picks exist)", async () => {
     const data = await discordSyncService.getRosterEmbedData(runId);
-    expect(data).toBeNull();
+    expect(data).not.toBeNull();
+    expect(data?.publishedAt).toBeNull();
+    expect(data?.totalSelected).toBe(0);
+    expect(data?.groups.tanks).toEqual([]);
   });
 
   it("groups selected participants into tanks/healers/melee/ranged/lootbuddies with Discord mentions", async () => {
@@ -612,7 +615,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     expect(data?.groups.rangedDps.map((m) => m.userId)).toEqual([ids.ranged]);
     expect(data?.groups.lootbuddies.map((m) => m.userId)).toEqual([ids.loot]);
     expect(data?.totalSelected).toBe(5);
-    expect(data?.targets).toEqual({ tanks: 1, healers: 1 });
+    expect(data?.targets).toEqual({ tanks: 1, healers: 1, dps: 2, lootbuddies: 0 });
   });
 
   it("reports roster sync work, clears it after recording, and reopens it on republish", async () => {

@@ -458,7 +458,7 @@ describe("NORMAL → HEROIC on a published roster", () => {
 });
 
 describe("Save / Update / Publish and the Discord roster message", () => {
-  it("first Save persists without posting; first Publish posts M1 (postRevision 0 → 1)", async () => {
+  it("first Save refreshes the Roster message; first Publish posts M1 (postRevision 0 → 1)", async () => {
     const runId = await createOpenRun();
     await discordSyncService.recordRunChannel({ runId, channelId: CHAN });
     const aSignup = await createSignup(runId, ids.a, aChar, ["HEALER"]);
@@ -467,7 +467,10 @@ describe("Save / Update / Publish and the Discord roster message", () => {
     expect(current.roster.publishedAt).toBeNull();
     expect(current.run.status).not.toBe("PUBLISHED");
     expect(current.roster.postRevision).toBe(0);
-    expect(await botPass(runId)).toBeNull();
+    // Draft picks maintain the separate Roster Discord message (REFRESH until Publish).
+    const draftPass = await botPass(runId);
+    expect(draftPass?.mode).toBe("REFRESH");
+    expect(await currentRosterMessageId(runId)).toBe(draftPass?.messageId);
 
     await publish(runId);
     current = await view(runId);

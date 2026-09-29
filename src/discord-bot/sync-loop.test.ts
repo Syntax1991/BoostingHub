@@ -458,7 +458,7 @@ describe("syncOnce — roster post: explicit POST vs in-place REFRESH", () => {
     difficulty: "HEROIC",
     publishedAt: "2026-09-20T20:00:00.000Z",
     version: 3,
-    targets: { tanks: 2, healers: 4 },
+    targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
     groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
     totalSelected: 0,
   };

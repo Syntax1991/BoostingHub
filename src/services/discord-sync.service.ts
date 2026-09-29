@@ -133,10 +133,11 @@ export type SignupEmbedData = {
     lootbuddy: SignupEmbedLootbuddyStatus;
   };
   /**
-   * Participants behind those counts. Signups is offered-role projection for
-   * Users not yet on the roster (multi-role boosters appear in every offered
-   * role). Roster (`picked`) is one authoritative role (draft selectedRole or
-   * publishedRole); rostered Users are omitted from Signups.
+   * Participants behind those counts. Signups lists every active offer
+   * (PENDING or SELECTED) by offered role — multi-role boosters appear in
+   * every offered role. Selected lineup is rendered on the separate Roster
+   * Discord message; `picked` is kept for roleStatus counts / signatures only.
+   * External boosters never appear here.
    */
   members: {
     signed: SignupEmbedRoleMembers;
@@ -165,15 +166,15 @@ export type RosterEmbedData = {
   productLabel: string;
   contentSummary: string;
   difficulty: RaidDifficulty;
-  publishedAt: string;
+  /** Null while the roster is still a draft (pre-Publish). */
+  publishedAt: string | null;
   version: number;
   /**
-   * Tank/Healer targets come from the Run's real desired counts. DPS has no
-   * melee/ranged split target in the current Run schema (desiredDpsCount is
-   * one combined number) — melee/ranged DPS groups are reported without a
-   * denominator rather than inventing one.
+   * Tank/Healer/DPS/Lootbuddy targets come from the Run's real desired counts.
+   * Melee/ranged DPS groups stay a display split of selected DPS — there is
+   * no melee/ranged target in the schema.
    */
-  targets: { tanks: number; healers: number };
+  targets: { tanks: number; healers: number; dps: number; lootbuddies: number };
   groups: {
     tanks: RosterEmbedMember[];
     healers: RosterEmbedMember[];
@@ -535,10 +536,11 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
 }
 
 /**
- * OPEN / ROSTERING (and pre-publish): roster = saved draft selections.
- * PUBLISHED+: roster = live SELECTED signups + publishedRole (replacement drafts stay private).
- * Users already on the roster are omitted from the Signups lists so they appear once.
- * Counts are length-derived from the same member lists rendered in the embed.
+ * OPEN / ROSTERING (and pre-publish): roster picks = saved draft selections.
+ * PUBLISHED+: roster picks = live SELECTED signups + publishedRole (replacement drafts stay private).
+ * Signups lists every active offer (including already-selected Users) — the
+ * separate Roster Discord message owns the selected lineup.
+ * Counts are length-derived from the same member lists rendered in the embeds.
  */
 function buildSignupRoleProjection(
   run: RunListRecord,
@@ -573,29 +575,26 @@ function buildSignupRoleProjection(
       .filter((booster) => booster.participationType === "BOOSTER" && booster.role === role)
       .map(externalSignupEmbedMember);
 
-  const rosteredUserIds = new Set(pickedRows.map((signup) => signup.userId));
-  const waitingSignups = activeSignups.filter((signup) => !rosteredUserIds.has(signup.userId));
-
   const signedTanks = sortSignupEmbedMembers(
-    waitingSignups
+    activeSignups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"))
       .map(toSignupEmbedMember),
   );
   const signedHealers = sortSignupEmbedMembers(
-    waitingSignups
+    activeSignups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"))
       .map(toSignupEmbedMember),
   );
   const signedDps = sortSignupEmbedMembers(
-    waitingSignups
+    activeSignups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"))
       .map(toSignupEmbedMember),
   );
   const signedLoot = sortSignupEmbedMembers(
-    waitingSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
+    activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
   );
 
-  // External boosters are listed after the registered picks, in the order they were added.
+  // External boosters are roster-only — never fabricated as Signup rows.
   const pickedTanks = [
     ...sortSignupEmbedMembers(
       pickedRows
@@ -749,15 +748,21 @@ function buildSignupEmbedSignature(
     runStatus: data.runStatus,
     signupWindowOpen: data.signupWindowOpen,
     uniqueSignupCount: data.uniqueSignupCount,
-    roleStatus: data.roleStatus,
-    members: data.members,
+    // Signed-only: roster picks refresh the separate Roster message.
+    roleStatus: {
+      tank: { signed: data.roleStatus.tank.signed, target: data.roleStatus.tank.target },
+      healer: { signed: data.roleStatus.healer.signed, target: data.roleStatus.healer.target },
+      dps: { signed: data.roleStatus.dps.signed, target: data.roleStatus.dps.target },
+      lootbuddy: { signed: data.roleStatus.lootbuddy.signed, target: data.roleStatus.lootbuddy.target },
+    },
+    members: { signed: data.members.signed },
     channelName: extra.channelName,
     targetBucket: extra.targetBucket,
     classEmojiFingerprint: extra.classEmojiFingerprint ?? "",
     // Bump when participant line / summary-field rendering changes without
     // member-data changes so existing posts refresh (Content→Raid Lead, role emojis,
-    // multi-char mention grouping, description content summary).
-    participantLineFormat: "mention-v4-content-summary",
+    // multi-char mention grouping, description content summary, signup/roster split).
+    participantLineFormat: "mention-v5-signups-only",
   });
 }
 
@@ -1231,12 +1236,23 @@ export const discordSyncService = {
       // cleared) rather than skipped without evidence on every poll.
       const dedicatedChannelId = post?.runChannelId ?? post?.signupChannelId ?? null;
       //
-      // Explicit Publish Roster intents (RunRoster.postRevision) beyond the
-      // last one the bot fulfilled (lastRosterPostRevision, null → 0) mean
-      // "post a NEW message" and win over a refresh. A legacy roster message
-      // (postRevision 0, fulfilled null) is therefore never reposted.
-      if (run.roster?.publishedAt && dedicatedChannelId) {
-        const postPending = run.roster.postRevision > (post?.lastRosterPostRevision ?? 0);
+      // Maintain a Roster message once the Run has a dedicated channel and
+      // either the roster is published, a roster post already exists, or draft
+      // picks / externals are present. An empty Signup-only channel does not
+      // force an empty Roster post. Explicit Publish Roster intents
+      // (RunRoster.postRevision) beyond the last one the bot fulfilled
+      // (lastRosterPostRevision, null → 0) mean "post a NEW message" and win
+      // over a refresh. A legacy roster message (postRevision 0, fulfilled
+      // null) is therefore never reposted.
+      const hasDraftRosterContent =
+        (run.roster?.selections?.some((selection) => selection.selected) ?? false) ||
+        (run.roster?.externalBoosters.length ?? 0) > 0;
+      const maintainRosterMessage =
+        Boolean(dedicatedChannelId) &&
+        Boolean(run.roster) &&
+        (Boolean(run.roster?.publishedAt) || Boolean(post?.rosterMessageId) || hasDraftRosterContent);
+      if (maintainRosterMessage && dedicatedChannelId) {
+        const postPending = (run.roster?.postRevision ?? 0) > (post?.lastRosterPostRevision ?? 0);
         const base = {
           runId: run.id,
           existingChannelId: post?.rosterChannelId ?? null,
@@ -1245,11 +1261,11 @@ export const discordSyncService = {
           desiredChannelName: desiredChannelNameFor(run),
           targetBucket,
         };
-        if (postPending) {
+        if (postPending && run.roster?.publishedAt) {
           roster.push({ ...base, mode: "POST", postRevision: run.roster.postRevision });
         } else if (
           !post?.rosterMessageId ||
-          post.lastRosterVersion !== run.roster.version ||
+          post.lastRosterVersion !== run.roster!.version ||
           (classEmojiFingerprint !== "" && post.lastRosterEmojiFingerprint !== classEmojiFingerprint)
         ) {
           roster.push({ ...base, mode: "REFRESH", postRevision: null });
@@ -1317,13 +1333,33 @@ export const discordSyncService = {
     return toSignupEmbedData(run);
   },
 
-  /** Null when the Run has no published roster yet — there is nothing to post. */
+  /**
+   * Draft or published roster lineup for the Roster Discord message.
+   * Null only when the Run (or its roster row) is missing.
+   */
   async getRosterEmbedData(runId: string): Promise<RosterEmbedData | null> {
     const run = await runRepository.findById(runId);
-    if (!run || !run.roster?.publishedAt) return null;
+    if (!run?.roster) return null;
 
     const rows = await rosterRepository.listSignups(runId);
-    const selected = rows.filter((row) => row.status === "SELECTED");
+    const usePublishedPicks =
+      Boolean(run.roster.publishedAt) &&
+      (run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED");
+
+    let selected: RosterSignupRow[];
+    if (usePublishedPicks) {
+      selected = rows.filter((row) => row.status === "SELECTED");
+    } else {
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      selected = [];
+      for (const selection of run.roster.selections) {
+        if (!selection.selected) continue;
+        const signup = byId.get(selection.signupId);
+        if (!signup || (signup.status !== "PENDING" && signup.status !== "SELECTED")) continue;
+        selected.push({ ...signup, publishedRole: selection.selectedRole });
+      }
+    }
+
     const dps = boosterByRole(selected, "DPS");
     const rangedDps = dps.filter(
       (row) => attackTypeForSpecialization(row.character?.wowClass ?? "WARRIOR", row.character?.specialization ?? null) === "RANGED",
@@ -1345,7 +1381,12 @@ export const discordSyncService = {
       difficulty: run.difficulty,
       publishedAt: run.roster.publishedAt,
       version: run.roster.version,
-      targets: { tanks: run.desiredTankCount, healers: run.desiredHealerCount },
+      targets: {
+        tanks: run.desiredTankCount,
+        healers: run.desiredHealerCount,
+        dps: run.desiredDpsCount,
+        lootbuddies: run.desiredLootbuddyCount,
+      },
       groups: {
         tanks: [...boosterByRole(selected, "TANK").map(toMember), ...externalMembers((b) => b.role === "TANK")],
         healers: [...boosterByRole(selected, "HEALER").map(toMember), ...externalMembers((b) => b.role === "HEALER")],

@@ -134,6 +134,7 @@ function buildRoleColumnFields(
   role: RoleColumnSpec,
   classIndicators?: Partial<Record<WowClass, string>>,
   roleIndicators?: GuildRoleIndicators,
+  emptyValue: string = EMPTY_FIELD_VALUE,
 ): Array<{ name: string; value: string; inline: boolean }> {
   const emoji = roleEmoji(role.emojiKey, roleIndicators);
   const lines = groupSignupMembersByUser(role.members).map((group) =>
@@ -145,7 +146,7 @@ function buildRoleColumnFields(
 
   return chunks.map((chunk, index) => ({
     name: index === 0 ? primaryName : continuationName,
-    value: chunk.length > 0 ? chunk.join("\n") : EMPTY_FIELD_VALUE,
+    value: chunk.length > 0 ? chunk.join("\n") : emptyValue,
     // Primary role columns stay inline so Tank|Healer|DPS share a row and
     // Lootbuddy starts the next. Continuations are full-width so they do not
     // scramble the following section's primary grid.
@@ -161,8 +162,9 @@ function buildRoleSectionFields(
   roles: RoleColumnSpec[],
   classIndicators?: Partial<Record<WowClass, string>>,
   roleIndicators?: GuildRoleIndicators,
+  emptyValue: string = EMPTY_FIELD_VALUE,
 ): Array<{ name: string; value: string; inline: boolean }> {
-  const built = roles.map((role) => buildRoleColumnFields(role, classIndicators, roleIndicators));
+  const built = roles.map((role) => buildRoleColumnFields(role, classIndicators, roleIndicators, emptyValue));
   const primary = built.map((fields) => fields[0]!);
   const continuations = built.flatMap((fields) => fields.slice(1));
   return [...primary, ...continuations];
@@ -198,39 +200,6 @@ function signedRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
   ];
 }
 
-function rosterRoleColumns(data: SignupEmbedData): RoleColumnSpec[] {
-  const { roleStatus, members } = data;
-  return [
-    {
-      emojiKey: "tank",
-      label: "Tanks",
-      countLabel: `${roleStatus.tank.picked}/${roleStatus.tank.target}`,
-      members: members.picked.tanks,
-    },
-    {
-      emojiKey: "healer",
-      label: "Healers",
-      countLabel: `${roleStatus.healer.picked}/${roleStatus.healer.target}`,
-      members: members.picked.healers,
-    },
-    {
-      emojiKey: "dps",
-      label: "DPS",
-      countLabel: `${roleStatus.dps.picked}/${roleStatus.dps.target}`,
-      members: members.picked.dps,
-    },
-    {
-      emojiKey: "lootbuddy",
-      label: "Lootbuddies",
-      // Picked / planned when the Run has a Lootbuddy target; count only otherwise (as before).
-      countLabel: roleStatus.lootbuddy.target
-        ? `${roleStatus.lootbuddy.picked}/${roleStatus.lootbuddy.target}`
-        : String(roleStatus.lootbuddy.picked),
-      members: members.picked.lootbuddies,
-    },
-  ];
-}
-
 export function emptySignupEmbedMembers(): SignupEmbedRoleMembers {
   return { tanks: [], healers: [], dps: [], lootbuddies: [] };
 }
@@ -252,7 +221,8 @@ export function measureEmbedJsonSize(embed: ReturnType<EmbedBuilder["toJSON"]>):
 }
 
 /**
- * One Signup Discord message → one Embed: summary + Signups by role + Roster.
+ * One Signup Discord message → one Embed: run summary + volunteered Signups by role.
+ * Selected lineup lives on the separate Roster message (`rosterMessageId`).
  * Continuations (if a role exceeds 1024 chars) stay inside this same Embed.
  * Designed for realistic Run capacity (~20–25 unique signup users).
  */
@@ -263,13 +233,16 @@ export function buildSignupEmbed(
   const classIndicators = options?.classIndicators;
   const roleIndicators = options?.roleIndicators;
   const color = data.signupWindowOpen ? 0xd4af37 : 0x555555;
-  const description = data.contentSummary
+  const summary = data.contentSummary
     ? `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`
     : `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
+  const description = `${data.runTitle}\n${summary}`;
   const raidLeadEmoji = roleEmoji("raidlead", roleIndicators);
+  const emptyValue = data.uniqueSignupCount === 0 ? "No signups yet." : EMPTY_FIELD_VALUE;
+  const windowLine = data.signupWindowOpen ? "Signups are open." : "Signups are closed.";
 
   return new EmbedBuilder()
-    .setTitle(data.runTitle)
+    .setTitle("Signups")
     .setDescription(description)
     .addFields(
       { name: "Scheduled", value: discordTimestamp(data.scheduledStartAt), inline: true },
@@ -278,12 +251,10 @@ export function buildSignupEmbed(
       { name: "Loot", value: RUN_LOOT_TYPE_LABELS[data.lootType], inline: true },
       { name: `${raidLeadEmoji} Raid Lead`, value: formatRaidLeadFieldValue(data), inline: true },
       { name: "Signups by role", value: SECTION_HEADING_VALUE, inline: false },
-      ...buildRoleSectionFields(signedRoleColumns(data), classIndicators, roleIndicators),
-      { name: "Roster", value: SECTION_HEADING_VALUE, inline: false },
-      ...buildRoleSectionFields(rosterRoleColumns(data), classIndicators, roleIndicators),
+      ...buildRoleSectionFields(signedRoleColumns(data), classIndicators, roleIndicators, emptyValue),
     )
     .setColor(color)
-    .setFooter({ text: data.signupWindowOpen ? "Signups are open." : "Signups are closed." });
+    .setFooter({ text: `${windowLine} Signup does not mean selected.` });
 }
 
 /** Buttons disable once the signup window is no longer open — the server remains the real gate either way. */
