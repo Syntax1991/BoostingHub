@@ -58,6 +58,14 @@ GET /profile/user/wow  (regional host + profile namespace)
 
 That response is the source of owned candidates for the import session. Later Refresh does not re-enumerate the account; it loads one linked character profile via client credentials.
 
+### Account profile denied (HTTP 403)
+
+Blizzard can deny `/profile/user/wow` for an individual account even after the authorization code, token exchange and userinfo all succeeded. The client maps exactly that case (HTTP 403 in the `account-profile` context) to `BATTLENET_ACCOUNT_PROFILE_FORBIDDEN`; every other 401/403 — including an `account-profile` 401 — stays `BATTLENET_AUTH_FAILED`. The callback redirects to `/characters?battlenet=error&code=BATTLENET_ACCOUNT_PROFILE_FORBIDDEN`, which explains that sign-in worked but Blizzard did not allow access to the character list.
+
+- Nothing is persisted: no `BattleNetConnection`, no import session (both are written only after the account profile succeeded). The user OAuth token stays ephemeral as always.
+- No automatic retry — a repeated denial is not treated as a transient outage. We do not know Blizzard's reason for an individual account.
+- Manual Character management keeps working; manual Characters refresh through the public Character Profile APIs (client credentials), which never produce this code. `classifySyncError` therefore does not map it.
+
 ## Scoped Blizzard identity
 
 A linked Character stores:

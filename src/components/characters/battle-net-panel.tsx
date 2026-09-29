@@ -7,6 +7,7 @@ import { BattleNetImportDialog } from "@/components/characters/battle-net-import
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { REGION_LABELS } from "@/lib/labels";
+import { battleNetFlashMessage } from "@/lib/blizzard/battle-net-flash";
 import { formatDateTime } from "@/lib/datetime";
 import type { WowRegion } from "@/models/enums";
 import type { characterController } from "@/controllers/app.controller";
@@ -18,39 +19,6 @@ type Connection = BattleNetPanelData["connections"][number];
 type CandidatesPayload = NonNullable<BattleNetPanelData["candidates"]>;
 
 const REGIONS: WowRegion[] = ["EU", "US"];
-
-function flashMessage(flash: BattleNetFlash): { tone: "success" | "danger"; text: string } | null {
-  if (flash.status === "connected") {
-    const region =
-      flash.region && flash.region in REGION_LABELS
-        ? REGION_LABELS[flash.region as WowRegion]
-        : flash.region;
-    const connected = region ? `Battle.net connected (${region}).` : "Battle.net connected.";
-    const linked =
-      flash.linked > 0
-        ? ` Linked ${flash.linked} existing character${flash.linked === 1 ? "" : "s"} automatically.`
-        : "";
-    return {
-      tone: "success",
-      text: `${connected}${linked} Use Import to choose further characters.`,
-    };
-  }
-  if (flash.status === "error") {
-    if (flash.code === "BATTLENET_IMPORT_SESSION_EXPIRED") {
-      return {
-        tone: "danger",
-        text: "Battle.net character selection expired. Reconnect to refresh your owned characters.",
-      };
-    }
-    return {
-      tone: "danger",
-      text: flash.code
-        ? `Battle.net connection failed (${flash.code}).`
-        : "Battle.net connection failed.",
-    };
-  }
-  return null;
-}
 
 function connectionFor(connections: Connection[], region: WowRegion): Connection | undefined {
   return connections.find((row) => row.region === region);
@@ -71,7 +39,7 @@ export function BattleNetPanel({
   battleNetFlash: BattleNetFlash;
 }) {
   const router = useRouter();
-  const flash = flashMessage(battleNetFlash);
+  const flash = battleNetFlashMessage(battleNetFlash);
   const [openRegion, setOpenRegion] = useState<WowRegion | null>(() => {
     if (battleNetFlash.status !== "connected") return null;
     const region = battleNetFlash.region;
