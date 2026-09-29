@@ -14,8 +14,10 @@ npm install --legacy-peer-deps
 npm run db:emit
 npm run db:migrate
 npm run db:seed
-npm run dev
+npm run dev   # checks the DB schema first (read-only), see "Schema check before npm run dev"
 ```
+
+After pulling changes that add migrations, run `npm run db:migrate` before `npm run dev` — the dev check tells you when it is needed.
 
 `--legacy-peer-deps` is required because Better Auth still optionally peers Prisma 5–7 while this app uses Prisma 8 for domain data.
 
@@ -31,7 +33,30 @@ Optional `DISCORD_BOOSTER_TICKET_URL` is an external Discord link for Booster ap
 4. `npm run db:migrate`
 5. Update seed/docs if domain behavior changed
 
-`npm run db:verify` checks the live database against the emitted contract.
+`npm run db:verify` checks the live database against the emitted contract. `npm run db:status` lists applied / pending migrations for DATABASE_URL.
+
+### Schema check before `npm run dev`
+
+`npm run dev` first runs a **read-only** check (`predev` → `scripts/check-dev-db-schema.ts`) that the database in DATABASE_URL is on the committed migration history and current. It prints which database it checked (host/port/name only) and stops with an explicit instruction instead of letting the app fail later with `SqlQueryError: column … does not exist`:
+
+- **behind** (pending migrations) → `npm run db:migrate`
+- **not reachable** → start Postgres / check DATABASE_URL
+- **off the migration history** → see below
+
+It never migrates, signs or resets anything. `SKIP_DEV_DB_SCHEMA_CHECK=1 npm run dev` bypasses it (it then says the database is unverified). Deployment (`deploy/update-server.sh` runs `db:migrate` itself) and the automated-test database (`npm run test:db:reset`) are unaffected.
+
+**Only apply committed migrations to the shared development database.** Plan and try a branch's migration on an isolated database (a fresh `*_test_*` database, migrated + seeded), not on DATABASE_URL: if the branch is rebased and its migration re-planned, the shared database is left on a contract hash that is not in the committed graph.
+
+### Development database off the migration history
+
+`MIGRATION.MARKER_NOT_IN_HISTORY` means the database's marker is a hash no committed migration produces — typically a branch's draft migration that was later re-planned. `db migrate` cannot walk from there, and **`prisma db update` is the wrong fix**: it diffs tables and would skip the committed migrations' data steps (e.g. `20260927T1408_boosting_roles_on_user` carries BoosterQualification approvals into `User.isBooster`).
+
+Recover by putting the marker back on the committed chain, then migrating normally:
+
+1. Back up the database (`pg_dump --format=custom`).
+2. From `prisma_contract.ledger`, find the last migration the database actually ran and compare its `operations` with the committed migration(s) that replaced it; work out which committed node the live schema equals (plus anything the draft skipped).
+3. `npx prisma db sign <committed migration dir or dir^>` — verifies the live schema against that exact contract first and writes nothing if it does not match. Apply any skipped committed migration with `npx prisma db migrate --to <dir>`, and sign again where the draft already made the change.
+4. `npm run db:migrate`, then `npm run db:status` (**Up to date**) and `npm run db:verify` (**marker and schema match contract**).
 
 Queries use `db.orm.public.Model`, not Prisma 7 `prisma.model.findMany`.
 
