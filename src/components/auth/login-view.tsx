@@ -43,7 +43,12 @@ export function LoginView({
           <div className="space-y-3 px-4 py-4">
             <h2 className="text-sm font-semibold">Discord</h2>
             {discordEnabled ? (
-              <DiscordSignInButton callbackURL={callbackURL} />
+              <>
+                <p className="text-xs text-muted">
+                  Use the Discord account you want associated with Manawyrm Hub.
+                </p>
+                <DiscordSignInButton callbackURL={callbackURL} />
+              </>
             ) : (
               <p className="text-sm text-muted">
                 Discord OAuth is not configured. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET to enable it.

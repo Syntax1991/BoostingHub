@@ -28,6 +28,7 @@ describe("LoginView", () => {
     );
 
     expect(html).toContain("Sign in with Discord to continue.");
+    expect(html).toContain("Use the Discord account you want associated with Manawyrm Hub.");
     expect(html).not.toContain("Discord is the production identity");
     expect(html).not.toContain("DEV_AUTH_ENABLED");
     expect(html).not.toContain("NODE_ENV");
