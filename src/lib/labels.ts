@@ -68,17 +68,32 @@ export const DIFFICULTY_LABELS: Record<RaidDifficulty, string> = {
   MYTHIC: "Mythic",
 };
 
-/** Single source of truth for both the derived Run title and the Discord channel-name slug. */
+/**
+ * Single source of truth for both the derived Run title and the Discord
+ * channel-name slug (lowercased). Mythic uses the full word, not `MY`/`my`.
+ */
 export const DIFFICULTY_ABBREVIATIONS: Record<RaidDifficulty, string> = {
   NORMAL: "NM",
   HEROIC: "HC",
-  MYTHIC: "MY",
+  MYTHIC: "Mythic",
 };
 
 export const RUN_LOOT_TYPE_LABELS: Record<RunLootType, string> = {
   SAVED: "Saved",
   UNSAVED: "Unsaved",
   VIP: "VIP",
+  COMMUNITY: "Community",
+};
+
+/**
+ * Discord Run-channel segment for `lootType` — Community shortens to `com`
+ * rather than `community`. Used by `buildDiscordRunChannelName`.
+ */
+export const RUN_LOOT_TYPE_CHANNEL_TOKENS: Record<RunLootType, string> = {
+  SAVED: "saved",
+  UNSAVED: "unsaved",
+  VIP: "vip",
+  COMMUNITY: "com",
 };
 
 export const ACCESS_STATUS_LABELS: Record<BoosterAccessStatus, string> = {

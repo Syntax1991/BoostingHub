@@ -12,9 +12,9 @@ import {
 // type surfaces here as an obviously-incomplete matrix rather than silently
 // passing.
 const EXPECTED: Record<RaidDifficulty, Record<RunLootType, boolean>> = {
-  NORMAL: { SAVED: true, UNSAVED: true, VIP: true },
-  HEROIC: { SAVED: true, UNSAVED: true, VIP: true },
-  MYTHIC: { SAVED: false, UNSAVED: true, VIP: true },
+  NORMAL: { SAVED: true, UNSAVED: true, VIP: true, COMMUNITY: true },
+  HEROIC: { SAVED: true, UNSAVED: true, VIP: true, COMMUNITY: true },
+  MYTHIC: { SAVED: false, UNSAVED: true, VIP: true, COMMUNITY: true },
 };
 
 describe("isLootTypeAllowedForDifficulty", () => {

@@ -72,11 +72,13 @@ enum RaidDifficulty {
 
 /// Independent of RaidDifficulty. Compatibility (e.g. MYTHIC cannot be SAVED)
 /// is a domain rule enforced in the Service layer, not a schema constraint.
+/// Persisted column remains `lootType`; product UI presents these as Run types.
 enum RunLootType {
   @@type("pg/text@1")
-  SAVED   = "SAVED"
-  UNSAVED = "UNSAVED"
-  VIP     = "VIP"
+  SAVED      = "SAVED"
+  UNSAVED    = "UNSAVED"
+  VIP        = "VIP"
+  COMMUNITY  = "COMMUNITY"
 }
 
 enum BoosterAccessStatus {

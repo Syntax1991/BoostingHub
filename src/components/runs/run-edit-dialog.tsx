@@ -300,9 +300,9 @@ export function RunEditDialog({
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-muted">Loot Type</span>
+          <span className="mb-1 block text-muted">Run type</span>
           <select
-            aria-label="Loot Type"
+            aria-label="Run type"
             value={lootType}
             disabled={!capabilities.canEditPlanning}
             onChange={(event) => setLootType(event.target.value as RunLootType)}

@@ -368,6 +368,26 @@ describe("runService.createManyRuns — loot type rules", () => {
     const leaked = await orm.Run.where({ scheduledStartAt: futureIso(440) }).select("id").all();
     expect(leaked).toHaveLength(0);
   });
+
+  it("shared COMMUNITY default and a per-row COMMUNITY override both persist", async () => {
+    const result = await runService.createManyRuns(lead, {
+      defaults: defaultsFor({ lootType: "COMMUNITY", difficulty: "HEROIC" }),
+      runs: [
+        { scheduledStartAt: futureIso(442) },
+        {
+          scheduledStartAt: futureIso(443),
+          overrides: { difficulty: "MYTHIC", lootType: "COMMUNITY" },
+        },
+      ],
+    });
+    createdRunIds.push(...result.ids);
+    const [a, b] = await Promise.all(result.ids.map((id) => runRepository.findById(id)));
+    expect(a?.lootType).toBe("COMMUNITY");
+    expect(a?.title).toContain("HC Community");
+    expect(b?.lootType).toBe("COMMUNITY");
+    expect(b?.title).toContain("Mythic Community");
+    expect(b?.title).not.toMatch(/\bMY\b/);
+  });
 });
 
 describe("runService.createManyRuns — boss count rules", () => {
@@ -479,7 +499,8 @@ describe("runService.createManyRuns — title derivation", () => {
     expect(a?.title).toContain("HC");
     expect(a?.title).toContain("Unsaved");
     expect(a?.title).toContain("8/8");
-    expect(b?.title).toContain("MY");
+    expect(b?.title).toContain("Mythic");
+    expect(b?.title).not.toMatch(/\bMY\b/);
     expect(b?.title).toContain("VIP");
     expect(b?.title).toContain("3/8");
   });

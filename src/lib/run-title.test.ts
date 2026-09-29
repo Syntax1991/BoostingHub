@@ -40,7 +40,7 @@ describe("buildRunTitle", () => {
         titleCoverage: "9/9",
         raidLeadName: "Thorne",
       }),
-    ).toBe("Sat 23:00 MY VIP 9/9 Thorne");
+    ).toBe("Sat 23:00 Mythic VIP 9/9 Thorne");
 
     expect(
       buildRunTitle({
@@ -53,7 +53,32 @@ describe("buildRunTitle", () => {
     ).toBe("Sun 20:00 HC Saved 7/9 Aelira");
   });
 
-  it("never renders MY Saved — MYTHIC always pairs with UNSAVED or VIP", () => {
+  it("formats Mythic Community with the full Mythic word, never MY", () => {
+    const title = buildRunTitle({
+      scheduledStartAt: "2026-09-11T18:15:00.000Z",
+      difficulty: "MYTHIC",
+      lootType: "COMMUNITY",
+      titleCoverage: "8/8",
+      raidLeadName: "UwE",
+    });
+    expect(title).toContain("Mythic Community");
+    expect(title).not.toContain("MY Community");
+    expect(title).not.toMatch(/\bMY\b/);
+  });
+
+  it("formats Heroic Community as HC Community", () => {
+    expect(
+      buildRunTitle({
+        scheduledStartAt: "2026-09-11T18:15:00.000Z",
+        difficulty: "HEROIC",
+        lootType: "COMMUNITY",
+        titleCoverage: "8/8",
+        raidLeadName: "UwE",
+      }),
+    ).toContain("HC Community");
+  });
+
+  it("never renders MY Saved — MYTHIC always pairs with UNSAVED, VIP, or COMMUNITY", () => {
     const title = buildRunTitle({
       scheduledStartAt: "2026-09-12T21:00:00.000Z",
       difficulty: "MYTHIC",
@@ -61,7 +86,9 @@ describe("buildRunTitle", () => {
       titleCoverage: "8/8",
       raidLeadName: "Thorne",
     });
+    expect(title).toContain("Mythic Unsaved");
     expect(title).not.toContain("MY Saved");
+    expect(title).not.toMatch(/\bMY\b/);
   });
 
   it("is deterministic for the same input", () => {

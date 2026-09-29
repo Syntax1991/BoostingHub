@@ -278,7 +278,7 @@ describe("run creation domain", () => {
     expect(run?.difficulty).toBe("HEROIC");
   });
 
-  it("rejects MYTHIC + SAVED and accepts MYTHIC + UNSAVED / MYTHIC + VIP", async () => {
+  it("rejects MYTHIC + SAVED and accepts MYTHIC + UNSAVED / VIP / COMMUNITY", async () => {
     await expectDomainCode(
       createDraft(lead, { difficulty: "MYTHIC", lootType: "SAVED" }),
       "RUN_LOOT_TYPE_INVALID",
@@ -287,6 +287,20 @@ describe("run creation domain", () => {
     expect((await runRepository.findById(unsavedId))?.lootType).toBe("UNSAVED");
     const vipId = await createDraft(lead, { difficulty: "MYTHIC", lootType: "VIP" });
     expect((await runRepository.findById(vipId))?.lootType).toBe("VIP");
+    const communityId = await createDraft(lead, { difficulty: "MYTHIC", lootType: "COMMUNITY" });
+    const community = await runRepository.findById(communityId);
+    expect(community?.lootType).toBe("COMMUNITY");
+    expect(community?.title).toContain("Mythic Community");
+    expect(community?.title).not.toMatch(/\bMY\b/);
+  });
+
+  it("accepts COMMUNITY on Normal and Heroic", async () => {
+    const normalId = await createDraft(lead, { difficulty: "NORMAL", lootType: "COMMUNITY" });
+    expect((await runRepository.findById(normalId))?.lootType).toBe("COMMUNITY");
+    const heroicId = await createDraft(lead, { difficulty: "HEROIC", lootType: "COMMUNITY" });
+    const heroic = await runRepository.findById(heroicId);
+    expect(heroic?.lootType).toBe("COMMUNITY");
+    expect(heroic?.title).toContain("HC Community");
   });
 
   it("enforces plannedBossCount boundaries against the raid's total boss count", async () => {

@@ -166,7 +166,7 @@ export function RunTemplateFormDialog({
               {mode === "create" ? "New Run Template" : "Edit Run Template"}
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Stores planning defaults only — raid, difficulty, loot type, planned bosses, composition, and notes.
+              Stores planning defaults only — raid, difficulty, run type, planned bosses, composition, and notes.
               Schedule and status are always set per Run.
             </p>
           </div>
@@ -243,7 +243,7 @@ export function RunTemplateFormDialog({
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block text-muted">Loot type</span>
+                <span className="mb-1 block text-muted">Run type</span>
                 <select
                   value={values.lootType}
                   onChange={(event) => update({ lootType: event.target.value as RunLootType })}

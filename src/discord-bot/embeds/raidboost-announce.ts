@@ -12,6 +12,7 @@ const LOOT_EMOJIS: Record<RunLootType, string> = {
   SAVED: "💰❌",
   UNSAVED: "💰",
   VIP: "💎",
+  COMMUNITY: "👥",
 };
 
 export type RaidboostAnnounceInput = {

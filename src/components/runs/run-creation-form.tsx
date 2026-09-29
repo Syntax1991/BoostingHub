@@ -368,9 +368,9 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-muted">Loot Type</span>
+              <span className="mb-1 block text-muted">Run type</span>
               <select
-                aria-label="Shared loot type"
+                aria-label="Shared run type"
                 value={lootType}
                 onChange={(event) => setLootType(event.target.value as RunLootType)}
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
@@ -624,12 +624,12 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                         </select>
                       </OverrideField>
                       <OverrideField
-                        label="Loot Type"
+                        label="Run type"
                         active={row.overrides.lootType !== undefined}
                         onReset={() => resetOverride(row.key, "lootType")}
                       >
                         <select
-                          aria-label={`Run ${index + 1} loot type override`}
+                          aria-label={`Run ${index + 1} run type override`}
                           value={effectiveLootType(row)}
                           onChange={(event) =>
                             updateOverrides(row.key, { lootType: event.target.value as RunLootType })

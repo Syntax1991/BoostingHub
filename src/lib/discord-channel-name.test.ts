@@ -26,20 +26,80 @@ describe("buildDiscordRunChannelName", () => {
     expect(buildDiscordRunChannelName(BASE)).toBe("sat-2200-hc-vip-7of9-titan");
   });
 
-  it("abbreviates all three difficulties consistently", () => {
+  it("abbreviates Normal/Heroic and spells Mythic (never my)", () => {
     expect(buildDiscordRunChannelName({ ...BASE, difficulty: "NORMAL" })).toContain("-nm-");
     expect(buildDiscordRunChannelName({ ...BASE, difficulty: "HEROIC" })).toContain("-hc-");
-    expect(buildDiscordRunChannelName({ ...BASE, difficulty: "MYTHIC", lootType: "UNSAVED" })).toContain("-my-");
+    const mythic = buildDiscordRunChannelName({ ...BASE, difficulty: "MYTHIC", lootType: "UNSAVED" });
+    expect(mythic).toContain("-mythic-");
+    expect(mythic).not.toContain("-my-");
   });
 
-  it("lowercases all three loot types consistently, as separate segments from difficulty", () => {
+  it("maps every run type to its Discord channel token, separate from difficulty", () => {
     expect(buildDiscordRunChannelName({ ...BASE, lootType: "SAVED" })).toContain("-hc-saved-");
     expect(buildDiscordRunChannelName({ ...BASE, lootType: "UNSAVED" })).toContain("-hc-unsaved-");
     expect(buildDiscordRunChannelName({ ...BASE, lootType: "VIP" })).toContain("-hc-vip-");
+    expect(buildDiscordRunChannelName({ ...BASE, lootType: "COMMUNITY" })).toContain("-hc-com-");
+    expect(buildDiscordRunChannelName({ ...BASE, lootType: "COMMUNITY" })).not.toContain("-community-");
+  });
+
+  it("builds Mythic + Community as -mythic-com-, never -my- or -community-", () => {
+    const name = buildDiscordRunChannelName({
+      ...BASE,
+      difficulty: "MYTHIC",
+      lootType: "COMMUNITY",
+      coverage: "8of8",
+      raidLeadChannelName: "UwE",
+    });
+    expect(name).toContain("-mythic-com-");
+    expect(name).not.toContain("-my-");
+    expect(name).not.toContain("-community-");
+  });
+
+  it("builds Heroic + VIP / Mythic + VIP / Heroic + Community examples", () => {
+    const fri = "2026-09-11T18:15:00.000Z"; // Fri 20:15 Berlin
+    const lead = "UwE";
+    const coverage = "8of8";
+    expect(
+      buildDiscordRunChannelName({
+        scheduledStartAt: fri,
+        difficulty: "HEROIC",
+        lootType: "VIP",
+        coverage,
+        raidLeadChannelName: lead,
+      }),
+    ).toMatch(/^[a-z]{3}-2015-hc-vip-8of8-uwe$/);
+    expect(
+      buildDiscordRunChannelName({
+        scheduledStartAt: fri,
+        difficulty: "MYTHIC",
+        lootType: "VIP",
+        coverage,
+        raidLeadChannelName: lead,
+      }),
+    ).toMatch(/^[a-z]{3}-2015-mythic-vip-8of8-uwe$/);
+    expect(
+      buildDiscordRunChannelName({
+        scheduledStartAt: fri,
+        difficulty: "MYTHIC",
+        lootType: "COMMUNITY",
+        coverage,
+        raidLeadChannelName: lead,
+      }),
+    ).toMatch(/^[a-z]{3}-2015-mythic-com-8of8-uwe$/);
+    expect(
+      buildDiscordRunChannelName({
+        scheduledStartAt: fri,
+        difficulty: "HEROIC",
+        lootType: "COMMUNITY",
+        coverage,
+        raidLeadChannelName: lead,
+      }),
+    ).toMatch(/^[a-z]{3}-2015-hc-com-8of8-uwe$/);
   });
 
   it("never concatenates difficulty and lootType into one segment", () => {
     const name = buildDiscordRunChannelName({ ...BASE, difficulty: "MYTHIC", lootType: "UNSAVED" });
+    expect(name).not.toContain("mythicunsaved");
     expect(name).not.toContain("myunsaved");
     expect(name).not.toContain("my-saved");
   });
@@ -186,6 +246,21 @@ describe("buildDiscordRunChannelName", () => {
 describe("buildClosedDiscordRunChannelName", () => {
   it("prefixes the live slug with closed-", () => {
     expect(buildClosedDiscordRunChannelName(BASE)).toBe("closed-sat-2200-hc-vip-7of9-titan");
+  });
+
+  it("uses mythic/com consistently for Mythic Community", () => {
+    const name = buildClosedDiscordRunChannelName({
+      ...BASE,
+      difficulty: "MYTHIC",
+      lootType: "COMMUNITY",
+      coverage: "8of8",
+      raidLeadChannelName: "UwE",
+    });
+    expect(name.startsWith("closed-")).toBe(true);
+    expect(name).toContain("-mythic-com-");
+    expect(name).not.toContain("-my-");
+    expect(name).not.toContain("-community-");
+    expect(name.length).toBeLessThanOrEqual(100);
   });
 
   it("stays within Discord's 100-character limit", () => {
