@@ -152,6 +152,8 @@ function reportEvents(): WarcraftLogsConsumableEvents {
     { fight: 3, timestamp: f(3).startTime + 60_000, sourceId: kaelActor, abilityId: 6262 },
     { fight: 12, timestamp: f(12).startTime + 118_000, sourceId: kaelActor, abilityId: 1234768 },
   );
+  // The dying booster in fight 2 casts Divine Shield 10 s before; Kael's wipe death in 7 has none.
+  casts.push({ fight: 2, timestamp: f(2).startTime + 80_000, sourceId: ids(inLogA)[1]!, abilityId: 642 });
   const deaths = [
     { fight: 7, timestamp: f(7).startTime + 200_000, targetId: kaelActor }, // wipe death in A
     { fight: 12, timestamp: f(12).startTime + 120_000, targetId: kaelActor }, // death in B
@@ -646,7 +648,7 @@ describe("consumable facts per assigned fight", () => {
     expect(other.combatPotion.status).toBe("UNKNOWN");
 
     const audit = (await orm.RunConsumableAudit.where({ runId: RUN_A }).first()) as { id: string; factsVersion: number };
-    expect(audit.factsVersion).toBe(2);
+    expect(audit.factsVersion).toBe(3);
     // The roster role is untouched: attendance / roster rows are never rewritten from the log.
     expect((await runConsumableAuditRepository.listParticipants(RUN_A)).find((row) => row.source === "ATTENDANCE" && row.characterName === p.characterName)?.role).toBe(p.role);
 
@@ -658,6 +660,33 @@ describe("consumable facts per assigned fight", () => {
     expect(outdated.factsOutdated).toBe(true);
     expect(find(outdated)).toMatchObject({ playedRole: "UNKNOWN", rosterRole: p.role });
     expect(find(outdated).combatPotion.status).toBe("UNKNOWN");
+  });
+
+  it("survival: deaths know kill/wipe and the player's own defensive — same single events request", async () => {
+    await attachAndAnalyze(aelira, RUN_A);
+    expect(eventsSpy).toHaveBeenCalledTimes(1);
+    expect(eventsSpy.mock.calls[0]![0].castSpellIds).toEqual(expect.arrayContaining([1236616, 642, 403876]));
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(view).toMatchObject({ factsOutdated: false, factsVersion: 3 });
+    const dying = view.snapshot!.players.find(
+      (p) => identityKey(p.characterName!, p.characterRealm!) === identityKey(inLogA[1]!.characterName, inLogA[1]!.characterRealm),
+    )!;
+    expect(dying.deaths[0]).toMatchObject({
+      fightResult: "KILL",
+      defensiveStatus: "USED",
+      personalDefensives: [{ spellName: "Divine Shield", msBeforeDeath: 10_000 }],
+    });
+    const kael = view.snapshot!.players.find((p) => p.displayName === "Kael Stormhowl")!;
+    expect(kael.deaths.map((d) => [d.fight.wclFightId, d.fightResult, d.defensiveStatus])).toEqual([[7, "WIPE", "NOT_DETECTED"]]);
+    expect(kael).toMatchObject({ deathsInWipes: 1, deathsInKills: 0 });
+
+    // A snapshot from before defensive tracking: shown as unknown and flagged for re-analysis, never "not detected".
+    await orm.RunConsumableAudit.where({ runId: RUN_A }).update({ factsVersion: 2 });
+    const old = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(old).toMatchObject({ factsOutdated: true, factsVersion: 2 });
+    const oldKael = old.snapshot!.players.find((p) => p.displayName === "Kael Stormhowl")!;
+    expect(oldKael.deaths[0]).toMatchObject({ defensiveStatus: "UNKNOWN", personalDefensives: [] });
+    expect(oldKael.warningCount).toBe(kael.warningCount);
   });
 
   it("uses one metadata request per attach and one batched events request per report", async () => {
@@ -702,6 +731,12 @@ describe("two reports of the same raid (two loggers) linked to one Run", () => {
     // Deaths: Kael's wipe death in fight 7 is listed once, not twice.
     const kael = view.snapshot!.players.find((p) => p.displayName === "Kael Stormhowl")!;
     expect(kael.deaths.map((death) => death.fight.wclFightId)).toEqual([7]);
+    // 16. The defensive before a death is counted once with two loggers.
+    const dying = view.snapshot!.players.find(
+      (p) => identityKey(p.characterName!, p.characterRealm!) === identityKey(inLogA[1]!.characterName, inLogA[1]!.characterRealm),
+    )!;
+    expect(dying.deaths).toHaveLength(1);
+    expect(dying.deaths[0]!.personalDefensives).toHaveLength(1);
   });
 
   it("12. a copy without CombatantInfo is replaced by the other logger's copy of the same pulls", async () => {

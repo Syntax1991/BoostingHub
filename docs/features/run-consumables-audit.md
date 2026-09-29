@@ -146,7 +146,7 @@ Enchants and gems are judged on the player's **latest audited snapshot** (gear a
 
 Each kill is judged with the role **played in that kill** (a priest who healed boss 1 and played Shadow on boss 2 is judged as a healer on boss 1 and as DPS on boss 2 — a Mixed role is never collapsed into one). A kill without a usable played role is not judged ("Not judged", never a warning). A healer never fails for choosing a Mana Potion. Mana Potions are identified by their cast, never inferred from a mana increase. Configured in `CONSUMABLE_AUDIT_POLICY.combatPotionByRole`.
 
-**Older analyses.** `RunConsumableAudit.factsVersion` records the shape of the stored facts (`CONSUMABLE_AUDIT_FACTS_VERSION`). A snapshot from before played roles (version 1) has no specializations: its roles show as Unknown, no role-based potion expectation applies, and the page asks for a re-analysis. The stored roster role is never reinterpreted as a played role, and the migration fetches nothing from Warcraft Logs.
+**Older analyses.** `RunConsumableAudit.factsVersion` records the shape of the stored facts (`CONSUMABLE_AUDIT_FACTS_VERSION`). Version 3 adds personal defensive casts; a version-2 snapshot shows defensives as unknown and asks for a re-analysis. A snapshot from before played roles (version 1) has no specializations: its roles show as Unknown, no role-based potion expectation applies, and the page asks for a re-analysis. The stored roster role is never reinterpreted as a played role, and the migration fetches nothing from Warcraft Logs.
 
 A catalog cast up to 5 s before a pull (`CONSUMABLE_PRE_PULL_WINDOW_MS`) counts for that fight as a pre-pull use (shown as a negative time, e.g. `-00:02`).
 
@@ -159,6 +159,12 @@ For every death, the audit looks for the **latest** Healing Potion and Healthsto
 - and after that player's previous death in the same fight (a battle-ressed player dying again is not covered by the first use).
 
 A consumable used early in a fight never satisfies a later death. Multiple deaths — across one fight or many encounters — are listed and judged separately, each with its encounter and fight-relative time (`Ula'tek · Pull 3 (wipe) @ 03:42`).
+
+**Kill or wipe.** Every death shows whether its pull ended in a **Kill** or a **Wipe** (Warcraft Logs `kill`), and the Survival heading counts deaths in wipes and in kills. That is all a wipe means here: the log does not say when a wipe was called, so nothing is inferred about whether a player "should have survived". Wipe deaths are analyzed exactly like kill deaths; combat potions are still only expected on kills.
+
+**Personal defensives** (`src/lib/personal-defensive-catalog.ts`): the player's **own** defensive cooldown casts in the same window as the recovery checks (30 s, same fight, after an earlier death in it) — damage reductions, immunities, absorbs and major self-heals, 42 spell ids covering all 13 classes. Every id was seen being cast in real Midnight raid logs (16 Venomous Abyss reports) and matches the game's SpellName table; spells not seen there are left out rather than guessed. Excluded on purpose: externals (Pain Suppression, Ironbark, Blessing of Protection, and Lay on Hands, which is mostly cast on others), offensive cooldowns (e.g. Havoc Metamorphosis), utility (Fade) and secondary events of one use. The casts come from the same Casts stream (its filter is consumables + these ids), so there is no extra request; they are stored as `CAST` facts with category `PERSONAL_DEFENSIVE`, so no schema change.
+
+Per death: **USED** (spell, time, seconds before death), **NOT_DETECTED** ("no tracked personal defensive detected in the previous 30 s"), or **UNKNOWN** (the snapshot predates defensive tracking, facts version < 3 — Re-analyze). This is **information only**: it never adds a warning. The log proves a defensive was cast, not that one was available or would have helped (talents, resets, cooldowns).
 
 ### Healthstone applicability
 

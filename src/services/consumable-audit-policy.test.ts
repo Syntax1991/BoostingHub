@@ -658,3 +658,104 @@ describe("Light's Potential from a Potion Cauldron (production: Synlight, Retrib
     expect(view.combatPotion).toMatchObject({ status: "PASS", missing: [], killFightsChecked: 2 });
   });
 });
+
+describe("survival — deaths are wipe-aware and show personal defensives (information only)", () => {
+  const DIVINE_PROTECTION_RET = 403876;
+  const DIVINE_SHIELD = 642;
+  const AVENGING_WRATH = 31884; // offensive — never a defensive
+  const defensive = (fightId: string, ms: number, spellId = DIVINE_PROTECTION_RET): AuditObservationFact => ({
+    ...at(fightId, ms),
+    kind: "CAST",
+    category: "PERSONAL_DEFENSIVE",
+    spellId,
+    specId: null,
+  });
+  const WIPE = fight({ id: "w1", kill: false });
+  const KILL = fight({ id: "k1", kill: true });
+  const evaluate = (observations: AuditObservationFact[], fights: AuditFightFact[] = [WIPE], defensivesRecorded = true) =>
+    evaluatePlayerConsumables(player("DPS", observations), fights, undefined, undefined, { defensivesRecorded });
+
+  it("1. wipe death + Healing Potion + Healthstone + defensive → all shown, fight result WIPE", () => {
+    const view = evaluate([combatant("w1"), defensive("w1", 110_000), healPot("w1", 112_000), stone("w1", 113_000), death("w1", 115_200)]);
+    const d = view.deaths[0]!;
+    expect(d).toMatchObject({ fightResult: "WIPE", atFightMs: 115_200, defensiveStatus: "USED", warnings: 0 });
+    expect(d.healingPotion).toMatchObject({ status: "USED" });
+    expect(d.healthstone).toMatchObject({ status: "USED" });
+    expect(d.personalDefensives).toEqual([
+      { spellId: DIVINE_PROTECTION_RET, spellName: "Divine Protection", kind: "MITIGATION", atFightMs: 110_000, msBeforeDeath: 5_200 },
+    ]);
+    expect(view).toMatchObject({ deathsInWipes: 1, deathsInKills: 0 });
+  });
+
+  it("2. wipe death with nothing → existing recovery warnings unchanged, defensive NOT_DETECTED and never a warning", () => {
+    const view = evaluate([combatant("w1"), death("w1", 115_200)]);
+    expect(view.deaths[0]).toMatchObject({ fightResult: "WIPE", defensiveStatus: "NOT_DETECTED", personalDefensives: [], warnings: 2 });
+    expect(view.deathWarnings).toBe(2); // Healing Potion + Healthstone (a Warlock is present), nothing for the defensive
+  });
+
+  it("3. the same facts in a kill → fight result KILL, identical survival facts", () => {
+    const wipe = evaluate([combatant("w1"), defensive("w1", 110_000), death("w1", 115_200)]);
+    const kill = evaluate([combatant("k1"), defensive("k1", 110_000), death("k1", 115_200)], [KILL]);
+    expect(kill.deaths[0]!.fightResult).toBe("KILL");
+    expect({ ...kill.deaths[0]!, fight: null, fightResult: null }).toEqual({ ...wipe.deaths[0]!, fight: null, fightResult: null });
+    expect(kill).toMatchObject({ deathsInWipes: 0, deathsInKills: 1 });
+  });
+
+  it("4. a wipe without deaths → no death entries; combat potion still never required on a wipe", () => {
+    const view = evaluate([combatant("w1"), defensive("w1", 10_000)]);
+    expect(view).toMatchObject({ deaths: [], deathsInWipes: 0, deathsInKills: 0 });
+    expect(view.combatPotion.status).toBe("NA");
+  });
+
+  it("5./6. several deaths in one pull (battle res): each only sees its own window", () => {
+    const view = evaluate([
+      combatant("w1"),
+      defensive("w1", 50_000, DIVINE_SHIELD), // before death 1
+      death("w1", 60_000),
+      death("w1", 120_000), // after a battle res, no defensive in between
+      defensive("w1", 150_000), // after the res, before death 3
+      death("w1", 155_000),
+    ]);
+    expect(view.deaths.map((d) => [d.defensiveStatus, d.personalDefensives.map((u) => u.spellName)])).toEqual([
+      ["USED", ["Divine Shield"]],
+      ["NOT_DETECTED", []],
+      ["USED", ["Divine Protection"]],
+    ]);
+  });
+
+  it("7./8./9. window: outside 30 s no, exactly 30 s and exactly at the death yes, after the death no", () => {
+    const outside = evaluate([combatant("w1"), defensive("w1", 69_999), death("w1", 100_000)]);
+    expect(outside.deaths[0]!.defensiveStatus).toBe("NOT_DETECTED");
+    const boundary = evaluate([combatant("w1"), defensive("w1", 70_000), death("w1", 100_000)]);
+    expect(boundary.deaths[0]!.personalDefensives.map((u) => u.msBeforeDeath)).toEqual([30_000]);
+    const atDeath = evaluate([combatant("w1"), defensive("w1", 100_000), death("w1", 100_000)]);
+    expect(atDeath.deaths[0]!.personalDefensives.map((u) => u.msBeforeDeath)).toEqual([0]);
+    const after = evaluate([combatant("w1"), death("w1", 100_000), defensive("w1", 100_001)]);
+    expect(after.deaths[0]!.defensiveStatus).toBe("NOT_DETECTED");
+  });
+
+  it("10. a defensive in the previous pull never counts for a death in the next one", () => {
+    const next = fight({ id: "w2", kill: false, startMs: 700_000, endMs: 800_000 });
+    const view = evaluate([combatant("w1"), defensive("w1", 590_000), combatant("w2", 700_000), death("w2", 705_000)], [WIPE, next]);
+    expect(view.deaths[0]!.defensiveStatus).toBe("NOT_DETECTED");
+  });
+
+  it("12./13. an offensive cooldown or an unknown spell is never a defensive", () => {
+    const view = evaluate([combatant("w1"), defensive("w1", 95_000, AVENGING_WRATH), defensive("w1", 96_000, 999_999), death("w1", 100_000)]);
+    expect(view.deaths[0]).toMatchObject({ defensiveStatus: "NOT_DETECTED", personalDefensives: [] });
+  });
+
+  it("14. a snapshot that did not record defensives → UNKNOWN, never 'not detected'; warnings unchanged", () => {
+    const view = evaluate([combatant("w1"), death("w1", 100_000)], [WIPE], false);
+    expect(view.deaths[0]).toMatchObject({ defensiveStatus: "UNKNOWN", personalDefensives: [], warnings: 2 });
+  });
+
+  it("15. defensives never change warning counts or combat-potion rules", () => {
+    const base = [combatant("k1"), damagePot("k1", 1_000), death("k1", 100_000)];
+    const without = evaluate(base, [KILL]);
+    const withDefensive = evaluate([...base, defensive("k1", 95_000)], [KILL]);
+    expect(withDefensive.warningCount).toBe(without.warningCount);
+    expect(withDefensive.combatPotion).toEqual(without.combatPotion);
+    expect(withDefensive.combatPotion.uses).toHaveLength(1); // a defensive is not a potion use
+  });
+});
