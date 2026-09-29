@@ -813,6 +813,19 @@ describe("raid wipe (boosting-team collapse): deaths are shown, nothing missing 
       ["WIPE_CASCADE", 0],
     ]);
     expect(view).toMatchObject({ deathsActive: 1, deathsInRaidWipe: 1, deathWarnings: 2 });
+    // Aggregates: the earlier active death keeps them at WARNING; the raid-wipe death adds nothing.
+    expect(view.healingPotion.status).toBe("WARNING");
+    expect(view.healthstone.status).toBe("WARNING");
+  });
+
+  it("aggregates never reintroduce a suppressed warning; a Healthstone used during the raid wipe stays visible", () => {
+    const onlyWipe = evaluate([combatant("w1"), death("w1", 113_000), death("w1", 120_000)]);
+    expect(onlyWipe.healingPotion.status).not.toBe("WARNING");
+    expect(onlyWipe.healthstone.status).not.toBe("WARNING"); // applicable (Warlock present) but unused, only during the wipe
+    expect(onlyWipe.deathWarnings).toBe(0);
+    const used = evaluate([combatant("w1"), stone("w1", 112_600), death("w1", 113_000)]);
+    expect(used.deaths[0]!.healthstone).toMatchObject({ status: "USED", atFightMs: 112_600 });
+    expect(used.healthstone.uses).toHaveLength(1);
   });
 
   it("no collapse known (older snapshot / too few boosters) → every death judged as before", () => {

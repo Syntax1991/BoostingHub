@@ -57,6 +57,14 @@ describe("boosting-team collapse (raid wipe) — the approved rule", () => {
     expect(onset(T14, [died("b1", 10), died("b1", 12), died("b2", 13)])).toBeNull();
   });
 
+  it("15b. a battle-ressed booster's SECOND death still counts in a later window (unique per window, not per fight)", () => {
+    // b1..b6 die early and are ressed (no collapse: 6 of 14 over 50 s). The real collapse starts with b1's second death.
+    const early = ["b1", "b2", "b3", "b4", "b5", "b6"].map((id, i) => died(id, 30 + i * 10));
+    const collapse = ["b1", "b2", "b3", "b4", "b5", "b6", "b7"].map((id, i) => died(id, 180 + i * 0.5));
+    expect(onset(T14, early)).toBeNull();
+    expect(onset(T14, [...early, ...collapse])).toBe(180 * S);
+  });
+
   it("17. a kill never has a collapse, however many boosters die", () => {
     expect(onset(T14, [...T14].map((id, i) => died(id, 100 + i * 0.1)), true)).toBeNull();
   });
