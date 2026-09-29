@@ -31,6 +31,7 @@ import {
   type ExtractedConsumableAudit,
 } from "@/services/consumable-audit-extract";
 import { overlapFightKey, realPullsOfRun, snapshotCoversRealPulls } from "@/services/wcl-report-overlap";
+import { wipeCollapseOnsets } from "@/services/wipe-collapse";
 import {
   CONSUMABLE_AUDIT_POLICY,
   buildFightRefs,
@@ -166,7 +167,13 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
     }),
   );
   const showContent = run.contents.length > 1;
-  const facts = { defensivesRecorded: audit.factsVersion >= PERSONAL_DEFENSIVE_FACTS_VERSION };
+  // Facts version 3: defensives recorded and the raid-wipe (boosting-team collapse) context applies.
+  // An older snapshot is re-analyzed, never reinterpreted: no collapse context there.
+  const current = audit.factsVersion >= PERSONAL_DEFENSIVE_FACTS_VERSION;
+  const facts = {
+    defensivesRecorded: current,
+    wipeCollapseOnsets: current ? wipeCollapseOnsets(players, fights) : undefined,
+  };
   const evaluated = players.map((player) =>
     evaluatePlayerConsumables(player, fights, fightRefs, CONSUMABLE_AUDIT_POLICY, facts),
   );

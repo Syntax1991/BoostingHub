@@ -576,6 +576,32 @@ describe("runs without a recorded lifecycle window", () => {
   });
 });
 
+
+/**
+ * Wipe 7 of Run A, production-shaped: a booster dies early (+20 s, raid keeps going), two
+ * buyers die (+230 / +235 s — not audited), then half the boosters incl. Kael die within
+ * seconds from +250 s: the boosting team collapses.
+ */
+function raidWipeInFight7() {
+  const f7 = metadata().fights.find((row) => row.id === 7)!;
+  const pop = [...new Set(ids(inLogA))];
+  const early = pop.find((id) => id !== kaelActor)!;
+  const collapse = [kaelActor, ...pop.filter((id) => id !== kaelActor && id !== early)].slice(0, Math.ceil(pop.length / 2));
+  events = {
+    ...events,
+    deaths: [
+      ...events.deaths.filter((row) => row.fight !== 7),
+      { fight: 7, timestamp: f7.startTime + 20_000, targetId: early },
+      { fight: 7, timestamp: f7.startTime + 230_000, targetId: 900 },
+      { fight: 7, timestamp: f7.startTime + 235_000, targetId: 901 },
+      ...collapse.map((id, i) => ({ fight: 7, timestamp: f7.startTime + 250_000 + i * 500, targetId: id })),
+    ],
+  };
+  return { early, collapse };
+}
+const deathsInFight7 = (view: Awaited<ReturnType<typeof runConsumableAuditService.getAuditView>>) =>
+  view.snapshot!.players.flatMap((p) => p.deaths.filter((d) => d.fight.wclFightId === 7).map((d) => ({ player: p, death: d })));
+
 describe("consumable facts per assigned fight", () => {
   it("evaluates flask, potions and death context from the Run's own fights", async () => {
     await attachAndAnalyze(aelira, RUN_A);
@@ -689,6 +715,30 @@ describe("consumable facts per assigned fight", () => {
     expect(oldKael.warningCount).toBe(kael.warningCount);
   });
 
+  it("raid wipe: deaths during the boosting team's collapse are shown but not judged; an earlier death is", async () => {
+    const { collapse } = raidWipeInFight7();
+    await attachAndAnalyze(aelira, RUN_A);
+    expect(eventsSpy).toHaveBeenCalledTimes(1); // no extra request
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    const rows = deathsInFight7(view);
+    expect(rows).toHaveLength(1 + collapse.length); // buyers are not audited; every booster death stays visible
+    const early = rows.find((row) => row.death.atFightMs === 20_000)!;
+    expect(early.death).toMatchObject({ fightResult: "WIPE", context: "ACTIVE_PULL", healingPotion: { status: "NOT_USED" } });
+    expect(early.death.warnings).toBeGreaterThan(0);
+    for (const row of rows.filter((r) => r !== early)) {
+      expect(row.death).toMatchObject({ fightResult: "WIPE", context: "WIPE_CASCADE", healingPotion: { status: "NOT_JUDGED" }, warnings: 0 });
+    }
+    const kael = view.snapshot!.players.find((p) => p.displayName === "Kael Stormhowl")!;
+    expect(kael.deaths.find((d) => d.fight.wclFightId === 7)).toMatchObject({ context: "WIPE_CASCADE", warnings: 0 });
+
+    // 25. A snapshot from before (facts version 2) is never reinterpreted: deaths judged as before, flagged outdated.
+    await orm.RunConsumableAudit.where({ runId: RUN_A }).update({ factsVersion: 2 });
+    const old = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    expect(old.factsOutdated).toBe(true);
+    expect(deathsInFight7(old).every((row) => row.death.context === "ACTIVE_PULL")).toBe(true);
+    expect(old.snapshot!.players.find((p) => p.displayName === "Kael Stormhowl")!.deaths.find((d) => d.fight.wclFightId === 7)!.warnings).toBeGreaterThan(0);
+  });
+
   it("uses one metadata request per attach and one batched events request per report", async () => {
     await attachAndAnalyze(aelira, RUN_A);
     expect(metadataSpy).toHaveBeenCalledTimes(1);
@@ -737,6 +787,17 @@ describe("two reports of the same raid (two loggers) linked to one Run", () => {
     )!;
     expect(dying.deaths).toHaveLength(1);
     expect(dying.deaths[0]!.personalDefensives).toHaveLength(1);
+  });
+
+  it("24. two loggers: one raid-wipe timeline, each death once with the same context", async () => {
+    const { collapse } = raidWipeInFight7();
+    await attachBoth();
+    await analyze();
+    const view = await runConsumableAuditService.getAuditView(aelira, RUN_A);
+    const rows = deathsInFight7(view);
+    expect(rows).toHaveLength(1 + collapse.length);
+    expect(rows.filter((row) => row.death.context === "WIPE_CASCADE")).toHaveLength(collapse.length);
+    expect(view.stale).toBe(false);
   });
 
   it("12. a copy without CombatantInfo is replaced by the other logger's copy of the same pulls", async () => {

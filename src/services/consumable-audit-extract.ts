@@ -108,7 +108,8 @@ export type ExtractedConsumableAudit = {
 /**
  * Shape of the facts a snapshot stores (RunConsumableAudit.factsVersion).
  * 2: COMBATANT observations carry the specialization played in that fight.
- * 3: the player's own personal defensive casts are stored (PERSONAL_DEFENSIVE).
+ * 3: the player's own personal defensive casts are stored (PERSONAL_DEFENSIVE);
+ *    the raid-wipe context of deaths is derived from stored facts only for 3.
  * An older snapshot lacks those facts — it is re-analyzed, never reinterpreted
  * (e.g. "no defensive" is never concluded from a snapshot that did not record them).
  */

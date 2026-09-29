@@ -759,3 +759,73 @@ describe("survival — deaths are wipe-aware and show personal defensives (infor
     expect(withDefensive.combatPotion.uses).toHaveLength(1); // a defensive is not a potion use
   });
 });
+
+describe("raid wipe (boosting-team collapse): deaths are shown, nothing missing is judged", () => {
+  const DIVINE_PROTECTION_RET = 403876;
+  const defensive = (fightId: string, ms: number): AuditObservationFact => ({
+    ...at(fightId, ms), kind: "CAST", category: "PERSONAL_DEFENSIVE", spellId: DIVINE_PROTECTION_RET, specId: null,
+  });
+  const WIPE = fight({ id: "w1", kill: false, endMs: 141_000 });
+  // Collapse (from wipeCollapseOnsets) at +112.5 s, like the production Sszorak wipe.
+  const onsets = new Map([["w1", 112_500]]);
+  const evaluate = (observations: AuditObservationFact[], collapse: ReadonlyMap<string, number> | undefined = onsets) =>
+    evaluatePlayerConsumables(player("DPS", observations), [WIPE], undefined, undefined, { defensivesRecorded: true, wipeCollapseOnsets: collapse });
+
+  it("A. Synlight-like: death +115.2 s during the collapse, no Healing Potion / Healthstone → not judged, zero warnings", () => {
+    const view = evaluate([combatant("w1"), death("w1", 115_200)]);
+    expect(view.deaths[0]).toMatchObject({
+      fightResult: "WIPE",
+      context: "WIPE_CASCADE",
+      healingPotion: { status: "NOT_JUDGED" },
+      healthstone: { status: "NOT_JUDGED" }, // applicable (a Warlock is present), still not judged
+      defensiveStatus: "NOT_DETECTED",
+      warnings: 0,
+    });
+    expect(view).toMatchObject({ deathWarnings: 0, deathsActive: 0, deathsInRaidWipe: 1 });
+    // The raid-wipe death adds nothing to the warning count (flask/food of this minimal fixture aside).
+    expect(view.warningCount).toBe(evaluate([combatant("w1")]).warningCount);
+    expect(view.healingPotion.status).toBe("NEUTRAL");
+    expect(view.healthstone.status).not.toBe("WARNING");
+  });
+
+  it("B. an isolated earlier death in the same wipe is judged normally (warnings unchanged)", () => {
+    const view = evaluate([combatant("w1"), death("w1", 26_600)]);
+    expect(view.deaths[0]).toMatchObject({ context: "ACTIVE_PULL", healingPotion: { status: "NOT_USED" }, healthstone: { status: "NOT_USED" }, warnings: 2 });
+    expect(view.deathWarnings).toBe(2);
+  });
+
+  it("uses before a raid-wipe death are still shown; a defensive is shown too (information only)", () => {
+    const view = evaluate([combatant("w1"), healPot("w1", 110_000), stone("w1", 111_000), defensive("w1", 112_000), death("w1", 115_200)]);
+    expect(view.deaths[0]).toMatchObject({
+      context: "WIPE_CASCADE",
+      healingPotion: { status: "USED", atFightMs: 110_000 },
+      healthstone: { status: "USED", atFightMs: 111_000 },
+      defensiveStatus: "USED",
+      warnings: 0,
+    });
+    expect(view.deaths[0]!.personalDefensives.map((u) => u.spellName)).toEqual(["Divine Protection"]);
+  });
+
+  it("10./16. battle res: first death active (warned), second during the collapse (not judged) — both deaths visible", () => {
+    const view = evaluate([combatant("w1"), death("w1", 26_600), death("w1", 114_000)]);
+    expect(view.deaths.map((d) => [d.context, d.warnings])).toEqual([
+      ["ACTIVE_PULL", 2],
+      ["WIPE_CASCADE", 0],
+    ]);
+    expect(view).toMatchObject({ deathsActive: 1, deathsInRaidWipe: 1, deathWarnings: 2 });
+  });
+
+  it("no collapse known (older snapshot / too few boosters) → every death judged as before", () => {
+    const view = evaluate([combatant("w1"), death("w1", 115_200)], new Map());
+    expect(view.deaths[0]).toMatchObject({ context: "ACTIVE_PULL", warnings: 2 });
+  });
+
+  it("a kill is never a raid wipe, even with an onset map entry", () => {
+    const KILL = fight({ id: "k1", kill: true });
+    const view = evaluatePlayerConsumables(player("DPS", [combatant("k1"), death("k1", 115_200)]), [KILL], undefined, undefined, {
+      defensivesRecorded: true,
+      wipeCollapseOnsets: new Map(), // wipeCollapseOnsets never returns kills
+    });
+    expect(view.deaths[0]).toMatchObject({ fightResult: "KILL", context: "ACTIVE_PULL", warnings: 2 });
+  });
+});

@@ -96,6 +96,8 @@ function deathContextText(label: string, context: DeathConsumableContext): { tex
       return { text: `Used @ ${formatFightClock(context.atFightMs)} (${context.spellName})`, warn: false };
     case "NOT_USED":
       return { text: `No ${label} use detected before death`, warn: true };
+    case "NOT_JUDGED":
+      return { text: "Not detected · not judged during raid wipe", warn: false };
     case "NOT_APPLICABLE":
       return { text: "N/A — no Warlock or Healthstone use in this fight", warn: false };
     case "UNKNOWN":
@@ -276,7 +278,7 @@ function PlayerDetails({
           {player.deaths.length > 0 ? (
             <span className="font-normal normal-case">
               {" "}
-              ({player.deathsInWipes} in wipes, {player.deathsInKills} in kills)
+              ({player.deathsActive} active · {player.deathsInRaidWipe} during raid wipe)
             </span>
           ) : null}
         </h4>
@@ -295,6 +297,7 @@ function PlayerDetails({
                       <span className="font-mono">{formatFightClock(death.atFightMs)}</span>
                     </span>
                     <Badge>{death.fightResult === "KILL" ? "Kill" : "Wipe"}</Badge>
+                    {death.context === "WIPE_CASCADE" ? <span className="text-muted">Part of raid wipe</span> : null}
                   </p>
                   <p className={healing.warn ? "text-warning" : undefined}>Healing Potion: {healing.text}</p>
                   <p className={stone.warn ? "text-warning" : undefined}>Healthstone: {stone.text}</p>
@@ -310,7 +313,8 @@ function PlayerDetails({
           Looks back {lookbackSeconds}s before each death, within the same fight and after an earlier death in it.
           The log shows what was used, not what was in the player&apos;s bags or off cooldown. Personal defensives
           are the player&apos;s own cooldowns (no externals) and are information only. &quot;Wipe&quot; means the
-          pull ended without a kill.
+          pull ended without a kill. &quot;Part of raid wipe&quot;: from the moment the boosting team collapsed
+          (at least 3 boosters within 10s and half of them within 20s) — shown, but nothing missing is judged.
         </p>
       </section>
       <GearReadinessSection player={player} contentLabels={contentLabels} />
