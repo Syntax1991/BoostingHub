@@ -35,6 +35,11 @@ const discord = isDiscordOAuthConfigured()
       discord: {
         clientId: process.env.DISCORD_CLIENT_ID!,
         clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+        // Better Auth 1.7.3 otherwise sends prompt=none, which lets Discord skip its
+        // authorization screen for an already-authorized app — a browser still signed
+        // in to another Discord account then lands in Manawyrm Hub unnoticed. "consent"
+        // always shows Discord's screen, including which account is being used.
+        prompt: "consent" as const,
         mapProfileToUser: (profile: {
           id: string;
           username: string;
