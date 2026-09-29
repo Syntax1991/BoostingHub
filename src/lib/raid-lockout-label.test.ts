@@ -27,9 +27,10 @@ describe("lockoutService.getResetIdentifierForRun", () => {
 });
 
 describe("requiresFreshRaidLockout", () => {
-  it("UNSAVED and VIP share fresh-lockout attention; SAVED does not", () => {
+  it("UNSAVED, VIP, and COMMUNITY share fresh-lockout attention; SAVED does not", () => {
     expect(requiresFreshRaidLockout("UNSAVED")).toBe(true);
     expect(requiresFreshRaidLockout("VIP")).toBe(true);
+    expect(requiresFreshRaidLockout("COMMUNITY")).toBe(true);
     expect(requiresFreshRaidLockout("SAVED")).toBe(false);
   });
 });

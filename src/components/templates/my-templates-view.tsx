@@ -12,7 +12,7 @@ export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
     <div>
       <PageHeader
         title="My Run Templates"
-        description="Reusable planning presets for your runs. A template only stores planning defaults — raid, difficulty, loot type, planned bosses, composition, and notes. Schedule and status are always set per Run."
+        description="Reusable planning presets for your runs. A template only stores planning defaults — raid, difficulty, run type, planned bosses, composition, and notes. Schedule and status are always set per Run."
         actions={
           <RunTemplateFormDialog
             mode="create"

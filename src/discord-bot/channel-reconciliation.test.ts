@@ -113,6 +113,19 @@ describe("reconcileExistingRunChannel — name drift", () => {
     expect(result).toEqual({ status: "ok", channelId: "chan-1" });
   });
 
+  it("Mythic abbreviation drift: renames -my- to -mythic- in place on the same channel id", async () => {
+    const channel = fakeChannel({ name: "fri-2015-my-vip-8of8-uwe", parentId: ACTIVE_CATEGORY });
+    const result = await reconcileExistingRunChannel(
+      fetcherFor(channel),
+      envConfigured,
+      item({ desiredChannelName: "fri-2015-mythic-vip-8of8-uwe" }),
+    );
+
+    expect(channel.setName).toHaveBeenCalledWith("fri-2015-mythic-vip-8of8-uwe");
+    expect(channel.setName).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ status: "ok", channelId: "chan-1" });
+  });
+
   it("name already correct: setName is not called", async () => {
     const channel = fakeChannel({ name: "sat-2200-hc-syntax", parentId: ACTIVE_CATEGORY });
     await reconcileExistingRunChannel(fetcherFor(channel), envConfigured, item({ desiredChannelName: "sat-2200-hc-syntax" }));

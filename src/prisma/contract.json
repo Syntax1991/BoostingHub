@@ -537,6 +537,10 @@
               {
                 "name": "VIP",
                 "value": "VIP"
+              },
+              {
+                "name": "COMMUNITY",
+                "value": "COMMUNITY"
               }
             ]
           },
@@ -10096,8 +10100,8 @@
                   "prefix": "run_difficulty_check"
                 },
                 {
-                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')",
-                  "name": "run_lootType_check_3071d052",
+                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP', 'COMMUNITY')",
+                  "name": "run_lootType_check_5a157d0a",
                   "prefix": "run_lootType_check"
                 },
                 {
@@ -11201,8 +11205,8 @@
                   "prefix": "run_discord_announcement_difficulty_check"
                 },
                 {
-                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')",
-                  "name": "run_discord_announcement_lootType_check_3071d052",
+                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP', 'COMMUNITY')",
+                  "name": "run_discord_announcement_lootType_check_5a157d0a",
                   "prefix": "run_discord_announcement_lootType_check"
                 },
                 {
@@ -13073,8 +13077,8 @@
                   "prefix": "run_template_difficulty_check"
                 },
                 {
-                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP')",
-                  "name": "run_template_lootType_check_3071d052",
+                  "expression": "\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP', 'COMMUNITY')",
+                  "name": "run_template_lootType_check_5a157d0a",
                   "prefix": "run_template_lootType_check"
                 }
               ],
@@ -14968,7 +14972,8 @@
               "values": [
                 "SAVED",
                 "UNSAVED",
-                "VIP"
+                "VIP",
+                "COMMUNITY"
               ]
             },
             "RunStatus": {
@@ -15069,7 +15074,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "4d4ce8b1eda059f6bcc34ae981987dc111d1f3ab69fd262ce0343b9b8130d144"
+    "storageHash": "415430a681c72b2ecaaf5c450efc66212913fb8b18e1b315a0a512c21f841031"
   },
   "execution": {
     "executionHash": "4db3e22f9203aeabd3091cf80b607036655d4240c5b2499899845ca3a30fb4aa",

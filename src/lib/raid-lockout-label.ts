@@ -7,7 +7,7 @@ import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
  * difficulty. SAVED does not treat existing progress as attention/error.
  */
 export function requiresFreshRaidLockout(lootType: RunLootType): boolean {
-  return lootType === "UNSAVED" || lootType === "VIP";
+  return lootType === "UNSAVED" || lootType === "VIP" || lootType === "COMMUNITY";
 }
 
 export type RaidLockoutLabelKind = "unsaved" | "saved" | "fully_saved" | "unknown";

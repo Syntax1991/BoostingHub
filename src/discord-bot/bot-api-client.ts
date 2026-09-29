@@ -1,4 +1,5 @@
 import type { BotEnv } from "@/discord-bot/env";
+import type { RaidDifficulty, RunLootType } from "@/models/enums";
 
 export class BotApiError extends Error {
   readonly status: number;
@@ -136,8 +137,8 @@ export class BotApiClient {
         runChannelId: string | null;
         productLabel: string;
         scheduledStartAt: string;
-        difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
-        lootType: "SAVED" | "UNSAVED" | "VIP";
+        difficulty: RaidDifficulty;
+        lootType: RunLootType;
         participationType: "BOOSTER" | "LOOTBUDDY";
         selectedRole: "TANK" | "HEALER" | "DPS" | null;
         characterName: string | null;
@@ -184,8 +185,8 @@ export class BotApiClient {
         productLabel: string;
         scheduledStartAt: string;
         previousScheduledStartAt: string | null;
-        difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
-        lootType: "SAVED" | "UNSAVED" | "VIP";
+        difficulty: RaidDifficulty;
+        lootType: RunLootType;
         participationType: "BOOSTER" | "LOOTBUDDY" | null;
         selectedRole: "TANK" | "HEALER" | "DPS" | null;
         characterName: string | null;
@@ -213,8 +214,8 @@ export class BotApiClient {
         previousScheduledStartAt: string | null;
         scheduledStartAt: string;
         productLabel: string;
-        difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
-        lootType: "SAVED" | "UNSAVED" | "VIP";
+        difficulty: RaidDifficulty;
+        lootType: RunLootType;
       }>;
       /** Discord ids of trusted Warcraft Logs log bots (absent/empty = auto-attach off). */
       warcraftLogsReportAuthorIds?: string[];

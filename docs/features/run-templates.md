@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Persistent, reusable Run-creation presets so a Raid Lead does not have to re-enter the same raid/difficulty/loot type/composition every time they open [Create Run](run-management.md#creation). A template stores planning defaults only — it is never a schedule, a status, or a second source of truth for an existing Run.
+Persistent, reusable Run-creation presets so a Raid Lead does not have to re-enter the same raid/difficulty/run type/composition every time they open [Create Run](run-management.md#creation). A template stores planning defaults only — it is never a schedule, a status, or a second source of truth for an existing Run.
 
 ```text
 RAID_LEAD (self-service, /profile/templates)
@@ -65,7 +65,7 @@ Reactivating a deactivated template re-validates every usability condition above
 
 Template create/update reuses the exact same Run-planning validators Run creation and editing use — no parallel or slightly-different rule set:
 
-- `assertValidRunLootType` / `isLootTypeAllowedForDifficulty` (difficulty × loot type compatibility)
+- `assertValidRunLootType` / `isLootTypeAllowedForDifficulty` (difficulty × run type / `lootType` compatibility, including `COMMUNITY`)
 - `assertValidPlannedBossCount` (1 ≤ planned ≤ raid's total boss count)
 - `assertComposition` / `RUN_COMPOSITION_MIN` / `RUN_COMPOSITION_MAX` (tank/healer/DPS bounds)
 - `notesValue` (trim, empty → `null`)
@@ -76,7 +76,7 @@ These were extracted from `run.service.ts` into the shared `src/services/run-sta
 
 A template selector sits **above Shared Defaults** on the canonical [Create Run](run-management.md#creation) page. RAID_LEAD sees only their own usable active templates; ADMIN sees every usable active template across every Raid Lead, labeled to disambiguate the owner (e.g. "Thorne — HC Unsaved 8/8").
 
-Applying a template copies its planning defaults (raid, difficulty, loot type, planned boss count, composition, notes) into Shared Defaults and sets the effective Raid Lead to the template's owner. Per-row `scheduledStartAt` values are never touched. This is staged, client-side form state — no Run is created yet.
+Applying a template copies its planning defaults (raid, difficulty, run type, planned boss count, composition, notes) into Shared Defaults and sets the effective Raid Lead to the template's owner. Per-row `scheduledStartAt` values are never touched. This is staged, client-side form state — no Run is created yet.
 
 **Other template-derived values remain freely editable after applying a template.** A Raid Lead may apply a preset and still tweak composition or notes before submitting — a template is a starting point, not an immutable contract. The one exception is Raid Lead identity:
 

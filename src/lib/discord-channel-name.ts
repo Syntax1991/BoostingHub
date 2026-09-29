@@ -1,6 +1,6 @@
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 import { DEFAULT_TIME_ZONE, zonedParts } from "@/lib/datetime";
-import { DIFFICULTY_ABBREVIATIONS } from "@/lib/labels";
+import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_CHANNEL_TOKENS } from "@/lib/labels";
 
 /**
  * Discord raid-channel naming:
@@ -54,7 +54,7 @@ export function buildDiscordRunChannelName(input: RunChannelNameInput): string {
   const weekday = slugDiscordChannelSegment(parts.weekday);
   const hhmm = `${String(parts.hour).padStart(2, "0")}${String(parts.minute).padStart(2, "0")}`;
   const difficulty = DIFFICULTY_ABBREVIATIONS[input.difficulty].toLowerCase();
-  const lootType = input.lootType.toLowerCase();
+  const lootType = RUN_LOOT_TYPE_CHANNEL_TOKENS[input.lootType];
   const bossCoverage = slugDiscordChannelSegment(input.coverage);
   const raidLead = slugDiscordChannelSegment(input.raidLeadChannelName);
 

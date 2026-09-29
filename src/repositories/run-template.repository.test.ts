@@ -136,6 +136,16 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
     expect(new Date(after!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(before!.updatedAt).getTime());
   });
 
+  it("round-trips COMMUNITY lootType on create", async () => {
+    const id = await runTemplateRepository.create(
+      baseFields({ name: "Community Template", lootType: "COMMUNITY", difficulty: "MYTHIC" }),
+    );
+    createdTemplateIds.push(id);
+    const loaded = await runTemplateRepository.findById(id);
+    expect(loaded?.lootType).toBe("COMMUNITY");
+    expect(loaded?.difficulty).toBe("MYTHIC");
+  });
+
   it("setActive toggles isActive and records who changed it", async () => {
     const id = await runTemplateRepository.create(baseFields());
     createdTemplateIds.push(id);

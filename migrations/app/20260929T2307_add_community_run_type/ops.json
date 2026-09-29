@@ -1,0 +1,254 @@
+[
+  {
+    "id": "dropCheckConstraint.run.run_lootType_check_3071d052",
+    "label": "Drop check constraint \"run_lootType_check_3071d052\" on \"run\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_lootType_check_3071d052",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_lootType_check_3071d052\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_lootType_check_3071d052\"",
+        "sql": "ALTER TABLE \"public\".\"run\" DROP CONSTRAINT \"run_lootType_check_3071d052\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_lootType_check_3071d052\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_discord_announcement.run_discord_announcement_lootType_check_3071d052",
+    "label": "Drop check constraint \"run_discord_announcement_lootType_check_3071d052\" on \"run_discord_announcement\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_lootType_check_3071d052",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_lootType_check_3071d052\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_discord_announcement_lootType_check_3071d052\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" DROP CONSTRAINT \"run_discord_announcement_lootType_check_3071d052\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_lootType_check_3071d052\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_template.run_template_lootType_check_3071d052",
+    "label": "Drop check constraint \"run_template_lootType_check_3071d052\" on \"run_template\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_template_lootType_check_3071d052",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_template_lootType_check_3071d052\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_template_lootType_check_3071d052\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\" DROP CONSTRAINT \"run_template_lootType_check_3071d052\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_template_lootType_check_3071d052\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_lootType_check_3071d052",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run.run_lootType_check_5a157d0a",
+    "label": "Add check constraint \"run_lootType_check_5a157d0a\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_lootType_check_5a157d0a",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_lootType_check_5a157d0a\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_lootType_check_5a157d0a",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_lootType_check_5a157d0a\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD CONSTRAINT \"run_lootType_check_5a157d0a\" CHECK (\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP', 'COMMUNITY'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_lootType_check_5a157d0a\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_lootType_check_5a157d0a",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_discord_announcement.run_discord_announcement_lootType_check_5a157d0a",
+    "label": "Add check constraint \"run_discord_announcement_lootType_check_5a157d0a\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_lootType_check_5a157d0a",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_lootType_check_5a157d0a\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_lootType_check_5a157d0a",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_discord_announcement_lootType_check_5a157d0a\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD CONSTRAINT \"run_discord_announcement_lootType_check_5a157d0a\" CHECK (\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP', 'COMMUNITY'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_lootType_check_5a157d0a\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_lootType_check_5a157d0a",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_template.run_template_lootType_check_5a157d0a",
+    "label": "Add check constraint \"run_template_lootType_check_5a157d0a\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_template_lootType_check_5a157d0a",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_template_lootType_check_5a157d0a\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_lootType_check_5a157d0a",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_template_lootType_check_5a157d0a\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\" ADD CONSTRAINT \"run_template_lootType_check_5a157d0a\" CHECK (\"lootType\" IN ('SAVED', 'UNSAVED', 'VIP', 'COMMUNITY'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_template_lootType_check_5a157d0a\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_lootType_check_5a157d0a",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  }
+]

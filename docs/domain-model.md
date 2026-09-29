@@ -103,13 +103,13 @@ Commercial Create products (`VENOMOUS_ABYSS`, `MIDNIGHT_S2_BUNDLE`) expand into 
 
 `Run.title` is **server-derived, never client-authored**. Run creation and Edit Run have no title input — they show a read-only "Generated title" preview that live-updates as the schedule/difficulty/lootType/content coverage/raidLead change, computed client-side with the same pure `buildRunTitle` helper (`src/lib/run-title.ts`) the server uses. Coverage comes from persisted contents (`titleCoverage`: e.g. `8/8` or Bundle `9/9`). `createManyRuns` (via `prepareRunDraft`, per row) and `updateRun` always recompute and persist the title server-side from the final normalized values — a client-sent `title` is never accepted.
 
-Format: `{weekday} {HH:mm} {difficulty} {lootType} {titleCoverage} {raidLead}` in the Europe/Berlin community timezone — e.g. `Thu 21:00 HC VIP 8/8 Titan` or `Thu 21:00 HC Unsaved 9/9 Titan` (Season 2 Bundle). Difficulty abbreviations are `NM`/`HC`/`MY`; loot-type labels are `Saved`/`Unsaved`/`VIP`. Raid Lead is always the canonical BoostingHub display name, never a Discord nickname.
+Format: `{weekday} {HH:mm} {difficulty} {runType} {titleCoverage} {raidLead}` in the Europe/Berlin community timezone — e.g. `Thu 21:00 HC VIP 8/8 Titan`, `Fri 20:15 Mythic Community 8/8 UwE`, or `Thu 21:00 HC Unsaved 9/9 Titan` (Season 2 Bundle). Difficulty display tokens are `NM` / `HC` / `Mythic` (never `MY`); run-type labels are `Saved` / `Unsaved` / `VIP` / `Community`. The persisted field remains `lootType` for backward compatibility. Raid Lead is always the canonical BoostingHub display name, never a Discord nickname.
 
 Historical Runs are **not** retroactively retitled — their `title` stays whatever it already was until the Run is next edited (which always regenerates it). Content identity always comes from persisted `RunRaidContent`, never from regenerating commercial presets.
 
-### RunLootType
+### RunLootType (product: Run type)
 
-`SAVED` \| `UNSAVED` \| `VIP` — independent of `RaidDifficulty`, not a combined enum. **Compatibility is a Service-layer rule, not a schema constraint**: every difficulty allows every loot type except `MYTHIC + SAVED`, which is rejected everywhere (Create, Edit, the future Mass Create feature, and Discord naming) via one central helper, `isLootTypeAllowedForDifficulty` / `assertValidRunLootType` in `src/services/run-state.ts` (throwing `RUN_LOOT_TYPE_INVALID`). New Runs default to `UNSAVED` — the only loot type valid for every difficulty including Mythic, so the default never needs a client-side override. The Create/Edit UI disables the `SAVED` option and auto-switches to `UNSAVED` when the selected difficulty is Mythic.
+`SAVED` \| `UNSAVED` \| `VIP` \| `COMMUNITY` — independent of `RaidDifficulty`, not a combined enum. The database column and TypeScript field stay named `lootType` / `RunLootType`; Create/Edit UI labels this selector **Run type**. **Compatibility is a Service-layer rule, not a schema constraint**: every difficulty allows every value except `MYTHIC + SAVED`, which is rejected everywhere (Create, Edit, Mass Create, templates, and Discord naming) via one central helper, `isLootTypeAllowedForDifficulty` / `assertValidRunLootType` in `src/services/run-state.ts` (throwing `RUN_LOOT_TYPE_INVALID`). `COMMUNITY` is valid for Normal, Heroic, and Mythic. New Runs default to `UNSAVED` — valid for every difficulty including Mythic, so the default never needs a client-side override. The Create/Edit UI disables the `SAVED` option and auto-switches to `UNSAVED` when the selected difficulty is Mythic.
 
 ### Planned boss count (per content)
 
@@ -121,14 +121,16 @@ A raid is never deleted when superseded — `RaidRecord.availableForRuns` (catal
 
 ### Discord channel naming
 
-Discord run-channel names are derived from structured Run fields — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{lootType}-{coverage}-{raidLead}`, e.g. `thu-2100-hc-vip-8of8-titan`.
+Discord run-channel names are derived from structured Run fields — never parsed from `Run.title` — via `buildDiscordRunChannelName` (`src/lib/discord-channel-name.ts`): `{weekday}-{HHMM}-{difficulty}-{runType}-{coverage}-{raidLead}`, e.g. `thu-2100-hc-vip-8of8-titan` or `fri-2015-mythic-com-8of8-uwe`.
+
+Difficulty Discord tokens: `nm` / `hc` / `mythic` (never `my`). Run-type Discord tokens come from `RUN_LOOT_TYPE_CHANNEL_TOKENS`: `saved` / `unsaved` / `vip` / `com` (Community is never `community`).
 
 Coverage comes from `contentDisplay.channelCoverage` (same projection as titles):
 
 - single Venomous: `8of8` / `6of8`
 - Season 2 Bundle: `9of9` / `7of9` (Tide + Venomous planned/total summed) — no `s2b-` prefix
 
-Difficulty and loot type are always separate hyphenated segments (`hc-vip`, never `hcvip`). Any change to a naming-source field renames the Run's existing Discord channel in place.
+Difficulty and run type are always separate hyphenated segments (`hc-vip`, `mythic-com`, never `hcvip`). Any change to a naming-source field renames the Run's existing Discord channel in place (same channel ID).
 
 Run statuses:
 

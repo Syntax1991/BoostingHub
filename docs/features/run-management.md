@@ -60,9 +60,9 @@ Button visibility is not authorization.
 
 **Templates**: a Raid Lead may optionally apply a saved Venomous-only planning preset from the template selector above Shared Defaults. Bundle templates are intentionally not supported — Create/Mass Create still offer Season 2 Bundle via `contentPreset`. Applying a template expands to `contentPreset: VENOMOUS_ABYSS` + `venomousPlannedBossCount` and locks the effective Raid Lead to the template's owner. The server always re-resolves the template fresh at submit time and rejects a forged Raid Lead override. See [run-templates.md](run-templates.md).
 
-## Derived identity (title, loot type, boss coverage)
+## Derived identity (title, run type, boss coverage)
 
-There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, loot type, content coverage token (`titleCoverage` from `projectRunContentDisplay`), and raid lead. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected), and how Discord channel naming reuses the same structured coverage projection. Creation (above) reuses this exact same structured validation and title-generation path per row, never a duplicate implementation.
+There is no title input on Create or Edit — `Run.title` is always server-derived from the schedule, difficulty, run type (`lootType`), content coverage token (`titleCoverage` from `projectRunContentDisplay`), and raid lead. Difficulty display is `NM` / `HC` / `Mythic`; run-type labels are `Saved` / `Unsaved` / `VIP` / `Community`. See [domain-model.md § Run](../domain-model.md#run) for the full format, the `RunLootType` compatibility matrix (`MYTHIC + SAVED` rejected; `COMMUNITY` allowed on every difficulty), and how Discord channel naming reuses the same structured coverage projection (`mythic` / `com` tokens). Creation (above) reuses this exact same structured validation and title-generation path per row, never a duplicate implementation.
 
 ## Run lifecycle responsibilities
 

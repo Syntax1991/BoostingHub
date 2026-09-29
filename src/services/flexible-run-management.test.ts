@@ -359,6 +359,7 @@ describe("roster acknowledgement after Run edits (runChangedSinceAck)", () => {
       { contentPreset: "VENOMOUS_ABYSS", plannedBossCount: 5 },
       { scheduledStartAt: futureIso() },
       { lootType: "VIP" },
+      { lootType: "COMMUNITY" },
       { desiredTankCount: 2 },
       { desiredHealerCount: 2 },
       { desiredDpsCount: 3 },

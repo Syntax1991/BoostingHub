@@ -27,7 +27,7 @@ describe("buildRaidboostAnnounce", () => {
       roleMentions: ["<@&9>"],
     });
     expect(result.embeds[0]!.toJSON().title).toBe("Raidboost Announce");
-    expect(result.embeds[0]!.toJSON().description).toContain("**MY** 💎 Mythic VIP");
+    expect(result.embeds[0]!.toJSON().description).toContain("**Mythic** 💎 Mythic VIP");
     expect(result.content).toBe("<@&9>");
   });
 
