@@ -55,6 +55,20 @@ a {
   color: inherit;
 }
 
+@layer base {
+  /*
+   * Tailwind's preflight sets `margin: 0` on every element, which removes the
+   * browser's own centering of modal dialogs (`dialog:modal { margin: auto }`
+   * inside the fixed, inset-0 top-layer box). Restore it for every
+   * showModal() dialog. It lives in the base layer on purpose, so a dialog that
+   * positions itself with utilities (`m-0 top-[8vh] -translate-x-1/2 …`) still
+   * wins. Non-modal dialogs are untouched.
+   */
+  dialog:modal {
+    margin: auto;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
