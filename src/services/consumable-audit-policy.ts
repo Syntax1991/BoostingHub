@@ -4,7 +4,13 @@ import {
   isConsumableCategory,
   type ConsumableCategory,
 } from "@/lib/consumable-catalog";
+import {
+  PERSONAL_DEFENSIVE_CATEGORY,
+  findPersonalDefensive,
+  type PersonalDefensiveKind,
+} from "@/lib/personal-defensive-catalog";
 import { specializationById } from "@/lib/wow-specializations";
+import { deathContextOf, type DeathContext } from "@/services/wipe-collapse";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type {
   ConsumableAuditMatchStatus,
@@ -118,16 +124,47 @@ export type HealthstoneApplicability = "APPLICABLE" | "NOT_APPLICABLE" | "UNKNOW
 export type DeathConsumableContext =
   | { status: "USED"; atFightMs: number; spellName: string }
   | { status: "NOT_USED" }
+  /** Not detected, and not judged: the death was part of the boosting team's collapse (raid wipe). */
+  | { status: "NOT_JUDGED" }
   | { status: "NOT_APPLICABLE" }
   | { status: "UNKNOWN" };
+
+/** A personal defensive the player cast themselves before a death (fact, never a judgment). */
+export type DefensiveUseView = {
+  spellId: number;
+  spellName: string;
+  kind: PersonalDefensiveKind;
+  /** Milliseconds since the fight's pull. */
+  atFightMs: number;
+  msBeforeDeath: number;
+};
+
+/**
+ * USED: a tracked personal defensive was cast in the window. NOT_DETECTED:
+ * none was — information only: the log cannot tell whether one was available.
+ * UNKNOWN: the snapshot did not record defensive casts (re-analyze).
+ */
+export type DefensiveStatus = "USED" | "NOT_DETECTED" | "UNKNOWN";
 
 export type DeathView = {
   /** 1-based across the whole Run for this player. */
   number: number;
   fight: FightRef;
+  /** The pull ended in a kill or not (Warcraft Logs `kill`); nothing about when a wipe was called. */
+  fightResult: "KILL" | "WIPE";
+  /**
+   * ACTIVE_PULL: judged normally. WIPE_CASCADE: at or after the boosting
+   * team's collapse in a wipe (wipe-collapse.ts) — uses are shown, nothing
+   * missing is judged or warned. Separate from `fightResult`.
+   */
+  context: DeathContext;
   atFightMs: number;
   healingPotion: DeathConsumableContext;
   healthstone: DeathConsumableContext;
+  /** Own defensive casts in the same window as the recovery checks, oldest first. */
+  personalDefensives: DefensiveUseView[];
+  defensiveStatus: DefensiveStatus;
+  /** Healing Potion / Healthstone of an ACTIVE_PULL death only — never a defensive, never a wipe-cascade death. */
   warnings: number;
 };
 
@@ -198,6 +235,12 @@ export type PlayerConsumableAudit = {
     uses: ConsumableUseView[];
   };
   deaths: DeathView[];
+  /** Counts only — a wipe death is neither automatically a mistake nor irrelevant. */
+  deathsInWipes: number;
+  deathsInKills: number;
+  /** Deaths judged normally vs. deaths during a raid wipe (not judged). */
+  deathsActive: number;
+  deathsInRaidWipe: number;
   deathWarnings: number;
   /** Gear Readiness from the player's latest audited snapshot. */
   gear: {
@@ -291,6 +334,10 @@ function unknownPlayer(player: AuditPlayerFact, fightsParticipated = 0): PlayerC
     healingPotion: { status: "UNKNOWN", uses: [] },
     healthstone: { status: "UNKNOWN", applicability: "UNKNOWN", uses: [] },
     deaths: [],
+    deathsInWipes: 0,
+    deathsInKills: 0,
+    deathsActive: 0,
+    deathsInRaidWipe: 0,
     deathWarnings: 0,
     gear: {
       fight: null,
@@ -326,6 +373,13 @@ export function evaluatePlayerConsumables(
   fights: AuditFightFact[],
   fightRefs: Map<string, FightRef> = buildFightRefs(fights),
   policy: { deathLookbackSeconds: number } = CONSUMABLE_AUDIT_POLICY,
+  /**
+   * defensivesRecorded: false for a snapshot taken before defensive casts were
+   * recorded — defensives are UNKNOWN, never "not detected".
+   * wipeCollapseOnsets: boosting-team collapse per fight (wipeCollapseOnsets()
+   * over the whole snapshot); absent → every death is an active-pull death.
+   */
+  facts: { defensivesRecorded: boolean; wipeCollapseOnsets?: ReadonlyMap<string, number> } = { defensivesRecorded: true },
 ): PlayerConsumableAudit {
   if (player.matchStatus !== "MATCHED") {
     return unknownPlayer(player);
@@ -509,23 +563,50 @@ export function evaluatePlayerConsumables(
     const healing = latestUseBefore(uses, ["HEALING_POTION"], death.fightId, windowStart, death.atMs);
     const stone = latestUseBefore(uses, ["HEALTHSTONE"], death.fightId, windowStart, death.atMs);
     const applicability = healthstoneApplicability(fightById.get(death.fightId)!);
+    const context = deathContextOf(facts.wipeCollapseOnsets?.get(death.fightId), death.atMs);
+    // During the raid wipe, what was used is shown but nothing missing is judged.
+    const missing: DeathConsumableContext = context === "WIPE_CASCADE" ? { status: "NOT_JUDGED" } : { status: "NOT_USED" };
     const healingPotion: DeathConsumableContext = healing
       ? { status: "USED", atFightMs: healing.atMs - start, spellName: spellLabel(healing.spellId, healing.category) }
-      : { status: "NOT_USED" };
+      : missing;
     const healthstone: DeathConsumableContext = stone
       ? { status: "USED", atFightMs: stone.atMs - start, spellName: spellLabel(stone.spellId, stone.category) }
       : applicability === "APPLICABLE"
-        ? { status: "NOT_USED" }
+        ? missing
         : applicability === "NOT_APPLICABLE"
           ? { status: "NOT_APPLICABLE" }
           : { status: "UNKNOWN" };
     const warnings = (healingPotion.status === "NOT_USED" ? 1 : 0) + (healthstone.status === "NOT_USED" ? 1 : 0);
+    // Same window as the recovery checks: this fight, up to the death, after the previous death.
+    const personalDefensives: DefensiveUseView[] = facts.defensivesRecorded
+      ? obs
+          .filter(
+            (row) =>
+              row.kind === "CAST" &&
+              row.category === PERSONAL_DEFENSIVE_CATEGORY &&
+              row.fightId === death.fightId &&
+              row.spellId != null &&
+              row.atMs >= windowStart &&
+              row.atMs <= death.atMs,
+          )
+          .flatMap((row) => {
+            const entry = findPersonalDefensive(row.spellId!);
+            return entry
+              ? [{ spellId: entry.spellId, spellName: entry.name, kind: entry.kind, atFightMs: row.atMs - start, msBeforeDeath: death.atMs - row.atMs }]
+              : [];
+          })
+          .sort((a, b) => a.atFightMs - b.atFightMs)
+      : [];
     return {
       number: index + 1,
       fight: refOf(death.fightId),
+      fightResult: fightById.get(death.fightId)!.kill ? "KILL" : "WIPE",
+      context,
       atFightMs: death.atMs - start,
       healingPotion,
       healthstone,
+      personalDefensives,
+      defensiveStatus: !facts.defensivesRecorded ? "UNKNOWN" : personalDefensives.length > 0 ? "USED" : "NOT_DETECTED",
       warnings,
     };
   });
@@ -595,6 +676,10 @@ export function evaluatePlayerConsumables(
     healingPotion: { status: healingStatus, uses: healingUses },
     healthstone: { status: healthstoneStatus, applicability: overallApplicability, uses: healthstoneUses },
     deaths,
+    deathsInWipes: deaths.filter((death) => death.fightResult === "WIPE").length,
+    deathsInKills: deaths.filter((death) => death.fightResult === "KILL").length,
+    deathsActive: deaths.filter((death) => death.context === "ACTIVE_PULL").length,
+    deathsInRaidWipe: deaths.filter((death) => death.context === "WIPE_CASCADE").length,
     deathWarnings,
     gear: { fight: latestGearFight ? refOf(latestGearFight.id) : null, enchants, gems },
     warningCount:

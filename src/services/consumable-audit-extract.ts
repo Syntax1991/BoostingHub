@@ -5,6 +5,7 @@ import {
   findConsumableBySpellId,
   type ConsumableCategory,
 } from "@/lib/consumable-catalog";
+import { PERSONAL_DEFENSIVE_CATEGORY, findPersonalDefensive } from "@/lib/personal-defensive-catalog";
 import { ENCHANTABLE_ARMOR_SLOTS, WEAPON_SLOTS } from "@/lib/wow-gear-catalog";
 import { itemSocketCount } from "@/lib/wow-item-sockets";
 import type {
@@ -62,7 +63,8 @@ export type ExtractedObservation = {
   reportCode: string;
   wclFightId: number;
   kind: ConsumableObservationKindValue;
-  category: ConsumableCategory | null;
+  /** A consumable category, or PERSONAL_DEFENSIVE for the player's own defensive cooldown cast. */
+  category: ConsumableCategory | typeof PERSONAL_DEFENSIVE_CATEGORY | null;
   spellId: number | null;
   /** COMBATANT only: specialization played in that fight (WCL `specID`), else null. */
   specId: number | null;
@@ -106,9 +108,14 @@ export type ExtractedConsumableAudit = {
 /**
  * Shape of the facts a snapshot stores (RunConsumableAudit.factsVersion).
  * 2: COMBATANT observations carry the specialization played in that fight.
- * An older snapshot has no played roles — it is re-analyzed, never reinterpreted.
+ * 3: the player's own personal defensive casts are stored (PERSONAL_DEFENSIVE);
+ *    the raid-wipe context of deaths is derived from stored facts only for 3.
+ * An older snapshot lacks those facts — it is re-analyzed, never reinterpreted
+ * (e.g. "no defensive" is never concluded from a snapshot that did not record them).
  */
-export const CONSUMABLE_AUDIT_FACTS_VERSION = 2;
+export const CONSUMABLE_AUDIT_FACTS_VERSION = 3;
+/** First facts version that records personal defensive casts. */
+export const PERSONAL_DEFENSIVE_FACTS_VERSION = 3;
 
 /**
  * A catalog cast up to this long before a pull counts for that fight
@@ -316,7 +323,21 @@ function observationsForActors(
   }
 
   for (const cast of events.casts) {
+    // Only the player's OWN casts: a defensive another player cast on them never counts.
     if (!actorIds.has(cast.sourceId) || !fightById.has(cast.fight)) continue;
+    const defensive = findPersonalDefensive(cast.abilityId);
+    if (defensive) {
+      activeFights.add(cast.fight);
+      observations.push({
+        wclFightId: cast.fight,
+        kind: "CAST",
+        category: PERSONAL_DEFENSIVE_CATEGORY,
+        spellId: defensive.spellId,
+        specId: null,
+        atMs: cast.timestamp,
+      });
+      continue;
+    }
     const entry = findConsumableBySpellId(cast.abilityId);
     if (!entry || CONSUMABLE_CATEGORY_EVIDENCE[entry.category] !== "CAST") continue;
     activeFights.add(cast.fight);

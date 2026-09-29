@@ -29,6 +29,7 @@ import type {
   ConsumableCheckStatus,
   ConsumableUseView,
   DeathConsumableContext,
+  DeathView,
   FightRef,
   PlayerConsumableAudit,
 } from "@/services/consumable-audit-policy";
@@ -95,10 +96,29 @@ function deathContextText(label: string, context: DeathConsumableContext): { tex
       return { text: `Used @ ${formatFightClock(context.atFightMs)} (${context.spellName})`, warn: false };
     case "NOT_USED":
       return { text: `No ${label} use detected before death`, warn: true };
+    case "NOT_JUDGED":
+      return { text: "Not detected · not judged during raid wipe", warn: false };
     case "NOT_APPLICABLE":
       return { text: "N/A — no Warlock or Healthstone use in this fight", warn: false };
     case "UNKNOWN":
       return { text: "Unknown — fight participants not reported", warn: false };
+  }
+}
+
+/** Own defensive cooldowns before a death — information only, never a warning. */
+function defensiveText(death: DeathView, lookbackSeconds: number): string {
+  switch (death.defensiveStatus) {
+    case "USED":
+      return death.personalDefensives
+        .map(
+          (use) =>
+            `${use.spellName} @ ${formatFightClock(use.atFightMs)} · ${(use.msBeforeDeath / 1000).toFixed(1)}s before death`,
+        )
+        .join("; ");
+    case "NOT_DETECTED":
+      return `No tracked personal defensive detected in the previous ${lookbackSeconds}s (information only)`;
+    case "UNKNOWN":
+      return "Not recorded in this analysis — Re-analyze to see personal defensives";
   }
 }
 
@@ -254,7 +274,13 @@ function PlayerDetails({
       </section>
       <section className="sm:col-span-2">
         <h4 className="mb-1 font-semibold uppercase tracking-wide text-muted">
-          Deaths · {player.deaths.length}
+          Survival · {player.deaths.length} {player.deaths.length === 1 ? "death" : "deaths"}
+          {player.deaths.length > 0 ? (
+            <span className="font-normal normal-case">
+              {" "}
+              ({player.deathsActive} active · {player.deathsInRaidWipe} during raid wipe)
+            </span>
+          ) : null}
         </h4>
         {player.deaths.length === 0 ? (
           <p className="text-muted">No deaths.</p>
@@ -265,20 +291,30 @@ function PlayerDetails({
               const stone = deathContextText("Healthstone", death.healthstone);
               return (
                 <li key={death.number}>
-                  <p className="font-medium">
-                    Death #{death.number} · {fightLabel(death.fight, contentLabels)} @{" "}
-                    <span className="font-mono">{formatFightClock(death.atFightMs)}</span>
+                  <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                    <span>
+                      Death #{death.number} · {fightLabel(death.fight, contentLabels)} @{" "}
+                      <span className="font-mono">{formatFightClock(death.atFightMs)}</span>
+                    </span>
+                    <Badge>{death.fightResult === "KILL" ? "Kill" : "Wipe"}</Badge>
+                    {death.context === "WIPE_CASCADE" ? <span className="text-muted">Part of raid wipe</span> : null}
                   </p>
                   <p className={healing.warn ? "text-warning" : undefined}>Healing Potion: {healing.text}</p>
                   <p className={stone.warn ? "text-warning" : undefined}>Healthstone: {stone.text}</p>
+                  <p className={death.defensiveStatus === "USED" ? undefined : "text-muted"}>
+                    Personal defensive: {defensiveText(death, lookbackSeconds)}
+                  </p>
                 </li>
               );
             })}
           </ul>
         )}
         <p className="mt-2 text-muted">
-          Looks back {lookbackSeconds}s before each death, within the same fight. The log shows what was used,
-          not what was in the player&apos;s bags.
+          Looks back {lookbackSeconds}s before each death, within the same fight and after an earlier death in it.
+          The log shows what was used, not what was in the player&apos;s bags or off cooldown. Personal defensives
+          are the player&apos;s own cooldowns (no externals) and are information only. &quot;Wipe&quot; means the
+          pull ended without a kill. &quot;Part of raid wipe&quot;: from the moment the boosting team collapsed
+          (at least 3 boosters within 10s and half of them within 20s) — shown, but nothing missing is judged.
         </p>
       </section>
       <GearReadinessSection player={player} contentLabels={contentLabels} />
@@ -442,8 +478,9 @@ export function RunConsumablesSection({ audit }: { audit: RunConsumableAuditView
           ) : null}
           {audit.factsOutdated && snapshot ? (
             <p role="status" className="text-warning">
-              This analysis predates reading the role played from the log — roles show as unknown and no role-based
-              potion expectation applies. Re-analyze to update.
+              {audit.factsVersion != null && audit.factsVersion < 2
+                ? "This analysis predates reading the role played and personal defensives from the log — roles and defensives show as unknown and no role-based potion expectation applies. Re-analyze to update."
+                : "This analysis predates personal defensive tracking — defensives around deaths show as unknown. Re-analyze to update."}
             </p>
           ) : null}
           {audit.lastFailure ? (

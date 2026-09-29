@@ -235,6 +235,26 @@ describe("extractConsumableAudit", () => {
     );
   });
 
+  it("stores the player's OWN personal defensive casts — never another player's, never offensive or unknown spells", () => {
+    const withDefensives = extractConsumableAudit({
+      report: report(),
+      fights: assignedFights,
+      events: {
+        ...events,
+        casts: [
+          { fight: 1, timestamp: 11_000, sourceId: 1, abilityId: 403876 }, // Synlight: Divine Protection
+          { fight: 1, timestamp: 11_500, sourceId: 3, abilityId: 642 }, // another player's Divine Shield
+          { fight: 1, timestamp: 12_000, sourceId: 1, abilityId: 31884 }, // Avenging Wrath (offensive)
+          { fight: 1, timestamp: 12_500, sourceId: 1, abilityId: 999_999 }, // unknown
+        ],
+      },
+      participants: [attended("Synlight", "Blackhand")],
+    });
+    expect(
+      withDefensives.players[0]!.observations.filter((row) => row.kind === "CAST").map((row) => [row.category, row.spellId, row.atMs]),
+    ).toEqual([["PERSONAL_DEFENSIVE", 403876, 11_000]]);
+  });
+
   it("keeps unmatched and external players with no facts", () => {
     expect(extracted.players[1]).toMatchObject({ matchStatus: "NOT_IN_LOG", observations: [] });
     expect(extracted.players[2]).toMatchObject({

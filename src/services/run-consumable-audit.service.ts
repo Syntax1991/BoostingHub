@@ -4,6 +4,7 @@ import {
   type AuthenticatedUser,
 } from "@/auth/authorization";
 import { consumableSpellIds } from "@/lib/consumable-catalog";
+import { personalDefensiveSpellIds } from "@/lib/personal-defensive-catalog";
 import { DomainError } from "@/lib/errors";
 import { findRaidCatalogById, raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import {
@@ -22,6 +23,7 @@ import {
 import {
   CONSUMABLE_AUDIT_FACTS_VERSION,
   CONSUMABLE_PRE_PULL_WINDOW_MS,
+  PERSONAL_DEFENSIVE_FACTS_VERSION,
   combatantCoverageByFight,
   extractConsumableAudit,
   mergeExtractedAudits,
@@ -29,6 +31,7 @@ import {
   type ExtractedConsumableAudit,
 } from "@/services/consumable-audit-extract";
 import { overlapFightKey, realPullsOfRun, snapshotCoversRealPulls } from "@/services/wcl-report-overlap";
+import { wipeCollapseOnsets } from "@/services/wipe-collapse";
 import {
   CONSUMABLE_AUDIT_POLICY,
   buildFightRefs,
@@ -78,6 +81,8 @@ export type RunConsumableAuditView = {
    * show as unknown and no role-based expectation applies until re-analyzed.
    */
   factsOutdated: boolean;
+  /** RunConsumableAudit.factsVersion of the shown snapshot (null without one) — what an outdated one lacks. */
+  factsVersion: number | null;
   snapshot: {
     fights: RunConsumableAuditFightView[];
     players: PlayerConsumableAudit[];
@@ -134,6 +139,7 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
     lastFailure: audit?.lastFailure ?? null,
     stale: false,
     factsOutdated: false,
+    factsVersion: audit?.analyzedAt ? audit.factsVersion : null,
     snapshot: null,
   };
   if (!audit?.analyzedAt) return base;
@@ -161,7 +167,16 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
     }),
   );
   const showContent = run.contents.length > 1;
-  const evaluated = players.map((player) => evaluatePlayerConsumables(player, fights, fightRefs));
+  // Facts version 3: defensives recorded and the raid-wipe (boosting-team collapse) context applies.
+  // An older snapshot is re-analyzed, never reinterpreted: no collapse context there.
+  const current = audit.factsVersion >= PERSONAL_DEFENSIVE_FACTS_VERSION;
+  const facts = {
+    defensivesRecorded: current,
+    wipeCollapseOnsets: current ? wipeCollapseOnsets(players, fights) : undefined,
+  };
+  const evaluated = players.map((player) =>
+    evaluatePlayerConsumables(player, fights, fightRefs, CONSUMABLE_AUDIT_POLICY, facts),
+  );
   return {
     ...base,
     stale,
@@ -323,7 +338,8 @@ export async function analyzeRun(
         fightIds: fights.map((fight) => fight.id),
         startTime: Math.min(...fights.map((fight) => fight.startTime)),
         endTime: Math.max(...fights.map((fight) => fight.endTime)),
-        castSpellIds: consumableSpellIds("CAST"),
+        // Consumables + the players' own defensive cooldowns: one filter, same request.
+        castSpellIds: [...consumableSpellIds("CAST"), ...personalDefensiveSpellIds()],
         castLeadMs: CONSUMABLE_PRE_PULL_WINDOW_MS,
       });
       if (events.status === "NOT_FOUND") return "REPORT_NOT_FOUND";
