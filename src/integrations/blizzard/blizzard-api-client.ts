@@ -38,6 +38,15 @@ type CachedClientToken = {
 let cachedClientToken: CachedClientToken | null = null;
 
 function mapHttpError(status: number, context: string): never {
+  // Only the account-wide WoW profile of the Connect flow: OAuth and userinfo already
+  // succeeded, but Blizzard refuses this one account's character list. Not a sign-in failure.
+  if (status === 403 && context === "account-profile") {
+    throw new DomainError(
+      "BATTLENET_ACCOUNT_PROFILE_FORBIDDEN",
+      "Battle.net sign-in succeeded, but Blizzard denied access to the WoW account profile.",
+      403,
+    );
+  }
   if (status === 401 || status === 403) {
     throw new DomainError("BATTLENET_AUTH_FAILED", `Battle.net authorization failed (${context}, HTTP ${status}).`, 401);
   }
