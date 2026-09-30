@@ -1889,10 +1889,11 @@ describe("syncOnce — app-archive transcript artifacts", () => {
 });
 
 describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
-  function markerChildren() {
+  function markerChildren(extra: Array<[string, Child]> = []) {
     return new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
       [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ...extra,
     ]);
   }
 
@@ -1958,8 +1959,8 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     expect(pinSpies.get(`msg-${NEXT_MARKER}-1`)).toHaveBeenCalledTimes(1);
   });
 
-  it("V: unchanged signature causes no Discord edit or send", async () => {
-    const { client } = makeDiscordClient(markerChildren(), {
+  it("A: converged message still exists — fetch only, no edit/send/record", async () => {
+    const { client, editSpies, messagesFetchSpies } = makeDiscordClient(markerChildren(), {
       editableMessageIds: new Set(["sched-current", "sched-next"]),
     });
     const api = makeApi({
@@ -1986,14 +1987,61 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
 
     await syncOnce(client, botEnv(), api);
 
+    expect(messagesFetchSpies.get(CURRENT_MARKER)).toHaveBeenCalledWith("sched-current");
+    expect(messagesFetchSpies.get(NEXT_MARKER)).toHaveBeenCalledWith("sched-next");
+    expect(editSpies.get("sched-current")).toHaveBeenCalledTimes(0);
+    expect(editSpies.get("sched-next")).toHaveBeenCalledTimes(0);
     expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
     expect((client.channels.cache.get(NEXT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
     expect(api.recordScheduleState).not.toHaveBeenCalled();
   });
 
-  it("W: changed signature edits the same message in place", async () => {
+  it("B: converged message manually deleted (10008) — one replacement without needsUpdate", async () => {
+    const { client, pinSpies } = makeDiscordClient(markerChildren(), {
+      editableMessageIds: new Set(["sched-next"]),
+      messageFetchErrors: new Map([["deleted-converged", { code: 10008 }]]),
+    });
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: CURRENT_MARKER,
+          existingMessageId: "deleted-converged",
+          lastSignature: "sig-current",
+          desiredSignature: "sig-current",
+          needsUpdate: false,
+        }),
+        scheduleItem("NEXT", {
+          existingChannelId: NEXT_MARKER,
+          existingMessageId: "sched-next",
+          lastSignature: "sig-next",
+          desiredSignature: "sig-next",
+          needsUpdate: false,
+        }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).toHaveBeenCalledTimes(1);
+    expect((client.channels.cache.get(NEXT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+    expect(api.recordScheduleState).toHaveBeenCalledTimes(1);
+    expect(api.recordScheduleState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "CURRENT",
+        channelId: CURRENT_MARKER,
+        messageId: `msg-${CURRENT_MARKER}-1`,
+        signature: "sig-current",
+      }),
+    );
+    expect(pinSpies.get(`msg-${CURRENT_MARKER}-1`)).toHaveBeenCalledTimes(1);
+  });
+
+  it("C: stale content + existing message — edit in place, no replacement", async () => {
     const { client, editSpies } = makeDiscordClient(markerChildren(), {
-      editableMessageIds: new Set(["sched-current"]),
+      editableMessageIds: new Set(["sched-current", "sched-next"]),
     });
     const api = makeApi({
       channels: [],
@@ -2008,7 +2056,11 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
           needsUpdate: true,
           description: "🟢 Open · <t:1:t> · Heroic VIP 8/8 · Lead",
         }),
-        scheduleItem("NEXT", { needsUpdate: false, existingMessageId: "sched-next", existingChannelId: NEXT_MARKER }),
+        scheduleItem("NEXT", {
+          needsUpdate: false,
+          existingMessageId: "sched-next",
+          existingChannelId: NEXT_MARKER,
+        }),
       ],
     });
 
@@ -2021,9 +2073,11 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
     );
   });
 
-  it("X: deleted Schedule message creates exactly one replacement", async () => {
-    const { client } = makeDiscordClient(markerChildren());
-    // No editableMessageIds → fetch throws → create replacement.
+  it("D: stale content + confirmed Unknown Message — one replacement", async () => {
+    const { client } = makeDiscordClient(markerChildren(), {
+      messageFetchErrors: new Map([["gone-stale", { code: 10008 }]]),
+      editableMessageIds: new Set(["sched-next"]),
+    });
     const api = makeApi({
       channels: [],
       signups: [],
@@ -2031,12 +2085,16 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
       schedules: [
         scheduleItem("CURRENT", {
           existingChannelId: CURRENT_MARKER,
-          existingMessageId: "deleted-msg",
+          existingMessageId: "gone-stale",
           lastSignature: "old",
           desiredSignature: "fresh",
           needsUpdate: true,
         }),
-        scheduleItem("NEXT", { needsUpdate: false }),
+        scheduleItem("NEXT", {
+          needsUpdate: false,
+          existingMessageId: "sched-next",
+          existingChannelId: NEXT_MARKER,
+        }),
       ],
     });
 
@@ -2050,6 +2108,150 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
         signature: "fresh",
       }),
     );
+  });
+
+  it("E: stale content + transient network error — no replacement, identity kept", async () => {
+    const { client } = makeDiscordClient(markerChildren(), {
+      messageFetchErrors: new Map([["sched-current", new Error("ECONNRESET")]]),
+      editableMessageIds: new Set(["sched-next"]),
+    });
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: CURRENT_MARKER,
+          existingMessageId: "sched-current",
+          lastSignature: "old",
+          desiredSignature: "new-sig",
+          needsUpdate: true,
+        }),
+        scheduleItem("NEXT", {
+          needsUpdate: false,
+          existingMessageId: "sched-next",
+          existingChannelId: NEXT_MARKER,
+        }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+    expect(api.recordScheduleState).not.toHaveBeenCalled();
+  });
+
+  it("F: stale content + Missing Access / Missing Permissions — no replacement", async () => {
+    for (const code of [50001, 50013] as const) {
+      const { client } = makeDiscordClient(markerChildren(), {
+        messageFetchErrors: new Map([["sched-current", { code }]]),
+        editableMessageIds: new Set(["sched-next"]),
+      });
+      const api = makeApi({
+        channels: [],
+        signups: [],
+        roster: [],
+        schedules: [
+          scheduleItem("CURRENT", {
+            existingChannelId: CURRENT_MARKER,
+            existingMessageId: "sched-current",
+            lastSignature: "old",
+            desiredSignature: "new-sig",
+            needsUpdate: true,
+          }),
+          scheduleItem("NEXT", {
+            needsUpdate: false,
+            existingMessageId: "sched-next",
+            existingChannelId: NEXT_MARKER,
+          }),
+        ],
+      });
+
+      await syncOnce(client, botEnv(), api);
+
+      expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+      expect(api.recordScheduleState).not.toHaveBeenCalled();
+    }
+  });
+
+  it("G: converged content + transient fetch error — no replacement", async () => {
+    const { client } = makeDiscordClient(markerChildren(), {
+      messageFetchErrors: new Map([["sched-current", new Error("timeout")]]),
+      editableMessageIds: new Set(["sched-next"]),
+    });
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: CURRENT_MARKER,
+          existingMessageId: "sched-current",
+          lastSignature: "sig-current",
+          desiredSignature: "sig-current",
+          needsUpdate: false,
+        }),
+        scheduleItem("NEXT", {
+          existingChannelId: NEXT_MARKER,
+          existingMessageId: "sched-next",
+          lastSignature: "sig-next",
+          desiredSignature: "sig-next",
+          needsUpdate: false,
+        }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+    expect(api.recordScheduleState).not.toHaveBeenCalled();
+  });
+
+  it("marker channel env change: create in new marker and best-effort delete old identity", async () => {
+    const OLD_MARKER = "old-current-marker";
+    const { client, deleteMessageSpies } = makeDiscordClient(
+      markerChildren([
+        [OLD_MARKER, { id: OLD_MARKER, name: "old-current-id", parentId: CATEGORY_ID, position: 3, type: ChannelType.GuildText }],
+      ]),
+      {
+        editableMessageIds: new Set(["old-sched-msg", "sched-next"]),
+      },
+    );
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: OLD_MARKER,
+          existingMessageId: "old-sched-msg",
+          lastSignature: "sig-current",
+          desiredSignature: "sig-current",
+          // Server does not know bot env marker ids — signature may be unchanged.
+          needsUpdate: false,
+        }),
+        scheduleItem("NEXT", {
+          existingChannelId: NEXT_MARKER,
+          existingMessageId: "sched-next",
+          lastSignature: "sig-next",
+          desiredSignature: "sig-next",
+          needsUpdate: false,
+        }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).toHaveBeenCalledTimes(1);
+    expect(api.recordScheduleState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "CURRENT",
+        channelId: CURRENT_MARKER,
+        messageId: `msg-${CURRENT_MARKER}-1`,
+        signature: "sig-current",
+      }),
+    );
+    expect(deleteMessageSpies.get("old-sched-msg")).toHaveBeenCalledTimes(1);
   });
 
   it("AA: Schedule sync failure does not block archive / signup work", async () => {
@@ -2090,15 +2292,12 @@ describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
       roster: [],
       schedules: [scheduleItem("CURRENT"), scheduleItem("NEXT")],
     });
-    // Force Schedule persistence to fail after Discord create.
     (api.recordScheduleState as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("schedule persist failed"));
 
     await expect(syncOnce(client, botEnv(), api)).resolves.toBeUndefined();
 
-    // Archive log still posted despite Schedule failure.
     const logChannel = client.channels.cache.get("archive-log-chan") as { send: ReturnType<typeof vi.fn> };
     expect(logChannel.send.mock.calls.length).toBeGreaterThan(0);
-    // Signup embed still attempted in the run channel.
     const runChannel = client.channels.cache.get("run-chan") as { send: ReturnType<typeof vi.fn> };
     expect(runChannel.send.mock.calls.length).toBeGreaterThan(0);
   });
@@ -2202,8 +2401,13 @@ function makeDiscordClient(
   options: {
     sendFails?: boolean;
     freshAppliesAfterSetPositionsCalls?: number;
-    /** Message ids that successfully edit when fetched by id (Schedule edit-in-place). */
+    /** Message ids that successfully fetch (and edit when needed). */
     editableMessageIds?: ReadonlySet<string>;
+    /**
+     * Per-message-id fetch outcome. Prefer Discord error shapes (`{ code: 10008 }`)
+     * so Schedule recovery only replaces on confirmed Unknown Message.
+     */
+    messageFetchErrors?: ReadonlyMap<string, unknown>;
   } = {},
 ) {
   const createdIds: string[] = [];
@@ -2214,6 +2418,7 @@ function makeDiscordClient(
   const sendSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const pinSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const editSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const deleteMessageSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const setNameSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const setParentSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const deleteSpies = new Map<string, ReturnType<typeof vi.fn>>();
@@ -2312,12 +2517,23 @@ function makeDiscordClient(
         child.id,
         vi.fn().mockImplementation(async (arg?: string | { limit?: number; before?: string }) => {
           if (typeof arg === "string") {
+            if (options.messageFetchErrors?.has(arg)) {
+              throw options.messageFetchErrors.get(arg);
+            }
             if (options.editableMessageIds?.has(arg)) {
               if (!editSpies.has(arg)) {
                 editSpies.set(arg, vi.fn().mockResolvedValue(undefined));
               }
-              return { id: arg, edit: editSpies.get(arg)! };
+              if (!deleteMessageSpies.has(arg)) {
+                deleteMessageSpies.set(arg, vi.fn().mockResolvedValue(undefined));
+              }
+              return {
+                id: arg,
+                edit: editSpies.get(arg)!,
+                delete: deleteMessageSpies.get(arg)!,
+              };
             }
+            // Untyped missing → not Discord Unknown Message (must not auto-replace).
             throw new Error("missing");
           }
           return history;
@@ -2476,6 +2692,8 @@ function makeDiscordClient(
     editSpies,
     pinSpies,
     sendSpies,
+    messagesFetchSpies,
+    deleteMessageSpies,
     cacheOrder: () => ordered(cacheChildren),
     serverOrder: () => ordered(serverChildren),
   };

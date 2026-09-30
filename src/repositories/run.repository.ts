@@ -404,12 +404,16 @@ export const runRepository = {
 
   /**
    * Schedule posts: every operational active Run (OPEN/ROSTERING/PUBLISHED/
-   * IN_PROGRESS). Week bucket CURRENT/NEXT is applied by the sync service —
-   * PAST/FUTURE and terminal statuses never appear on either Schedule.
+   * IN_PROGRESS) that is not application-archived. Week bucket CURRENT/NEXT
+   * is applied by the sync service — PAST/FUTURE, terminal statuses, and
+   * `archivedAt != null` never appear on either Schedule.
    */
   async listScheduleActiveRunIds(): Promise<string[]> {
     const rows = await orm.Run.where((run) =>
-      run.status.in(["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"]),
+      and(
+        run.status.in(["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"]),
+        run.archivedAt.isNull(),
+      ),
     )
       .select("id")
       .all();

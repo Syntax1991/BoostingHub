@@ -24,6 +24,7 @@ import {
   isDiscordCannotDmError,
   isDiscordPermissionError,
   isDiscordUnknownChannelError,
+  isDiscordUnknownMessageError,
 } from "@/discord-bot/discord-api-errors";
 import { fetchChannelTranscript } from "@/discord-bot/transcript-fetch";
 import {
@@ -1243,53 +1244,187 @@ async function syncSchedulePosts(
         );
         continue;
       }
-      if (!item.needsUpdate) continue;
 
       const payload = { embeds: [item.embed] };
-      let messageId = item.existingMessageId;
-      let createdFresh = false;
-      let applied = false;
+      const storedMessageId = item.existingMessageId;
+      const storedChannelId = item.existingChannelId;
+      const inConfiguredMarker =
+        Boolean(storedMessageId) && storedChannelId === markerChannelId;
+      // Server signature is env-agnostic; marker id lives only in bot env, so a
+      // configured-marker change must wake reconciliation even when content is settled.
+      const mustReconcile =
+        item.needsUpdate || !storedMessageId || storedChannelId !== markerChannelId;
 
-      // Prefer editing the recorded message when it still lives in the marker channel.
-      if (messageId && item.existingChannelId === markerChannelId) {
-        applied = await tryEditMessage(client, markerChannelId, messageId, payload);
-      }
-
-      if (!applied) {
-        const channel = await client.channels.fetch(markerChannelId);
-        if (!channel?.isTextBased() || !("send" in channel)) {
+      if (!mustReconcile && inConfiguredMarker && storedMessageId) {
+        // Converged content: still confirm the canonical message exists.
+        const probe = await probeScheduleMessage(client, markerChannelId, storedMessageId);
+        if (probe === "exists") continue;
+        if (probe === "transient") {
           console.warn(
-            `[discord-bot] schedule ${item.bucket}: marker channel ${markerChannelId} is not text-based`,
+            `[discord-bot] schedule ${item.bucket}: cannot verify stored message ${storedMessageId} — keeping identity, retry next poll`,
           );
           continue;
         }
-        const sent = await channel.send(payload);
-        messageId = sent.id;
-        createdFresh = true;
-        applied = true;
-        // Best-effort pin on first create only — never fail Schedule sync.
-        if (typeof sent.pin === "function") {
-          try {
-            await sent.pin();
-          } catch (error) {
-            console.warn(`[discord-bot] schedule ${item.bucket}: pin failed (ignored)`, error);
-          }
-        }
+        // Confirmed Unknown Message (10008) → one replacement below.
+        await createAndRecordScheduleMessage({
+          client,
+          api,
+          bucket: item.bucket,
+          markerChannelId,
+          payload,
+          signature: item.desiredSignature,
+        });
+        continue;
       }
 
-      if (!applied || !messageId) continue;
-      await api.recordScheduleState({
+      if (inConfiguredMarker && storedMessageId && item.needsUpdate) {
+        const edited = await editScheduleMessage(client, markerChannelId, storedMessageId, payload);
+        if (edited === "edited") {
+          await api.recordScheduleState({
+            bucket: item.bucket,
+            channelId: markerChannelId,
+            messageId: storedMessageId,
+            signature: item.desiredSignature,
+          });
+          continue;
+        }
+        if (edited === "transient") {
+          console.warn(
+            `[discord-bot] schedule ${item.bucket}: edit of ${storedMessageId} failed transiently — keeping identity, retry next poll`,
+          );
+          continue;
+        }
+        // Confirmed Unknown Message → one replacement below.
+        await createAndRecordScheduleMessage({
+          client,
+          api,
+          bucket: item.bucket,
+          markerChannelId,
+          payload,
+          signature: item.desiredSignature,
+        });
+        continue;
+      }
+
+      // First create, or marker-channel env change: post into the configured marker.
+      const created = await createAndRecordScheduleMessage({
+        client,
+        api,
         bucket: item.bucket,
-        channelId: markerChannelId,
-        messageId,
+        markerChannelId,
+        payload,
         signature: item.desiredSignature,
       });
-      if (createdFresh) {
-        console.log(`[discord-bot] schedule ${item.bucket}: created message in marker channel`);
+      if (
+        created &&
+        storedMessageId &&
+        storedChannelId &&
+        storedChannelId !== markerChannelId
+      ) {
+        // Best-effort only, after the new identity is recorded — exact old ids, no scan.
+        await bestEffortDeleteScheduleMessage(
+          client,
+          storedChannelId,
+          storedMessageId,
+          item.bucket,
+        );
       }
     } catch (error) {
       console.error(`[discord-bot] schedule ${item.bucket} sync failed`, error);
     }
+  }
+}
+
+type ScheduleMessageOutcome = "exists" | "unknown" | "transient";
+type ScheduleEditOutcome = "edited" | "unknown" | "transient";
+
+async function probeScheduleMessage(
+  client: Client,
+  channelId: string,
+  messageId: string,
+): Promise<ScheduleMessageOutcome> {
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isTextBased() || !("messages" in channel)) return "transient";
+    await channel.messages.fetch(messageId);
+    return "exists";
+  } catch (error) {
+    if (isDiscordUnknownMessageError(error)) return "unknown";
+    return "transient";
+  }
+}
+
+async function editScheduleMessage(
+  client: Client,
+  channelId: string,
+  messageId: string,
+  payload: MessageEditOptions,
+): Promise<ScheduleEditOutcome> {
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isTextBased() || !("messages" in channel)) return "transient";
+    const message = await channel.messages.fetch(messageId);
+    await message.edit(payload);
+    return "edited";
+  } catch (error) {
+    if (isDiscordUnknownMessageError(error)) return "unknown";
+    return "transient";
+  }
+}
+
+async function createAndRecordScheduleMessage(input: {
+  client: Client;
+  api: BotApiClient;
+  bucket: "CURRENT" | "NEXT";
+  markerChannelId: string;
+  payload: { embeds: Array<{ title: string; description: string; color: number }> };
+  signature: string;
+}): Promise<boolean> {
+  const channel = await input.client.channels.fetch(input.markerChannelId);
+  if (!channel?.isTextBased() || !("send" in channel)) {
+    console.warn(
+      `[discord-bot] schedule ${input.bucket}: marker channel ${input.markerChannelId} is not text-based`,
+    );
+    return false;
+  }
+  const sent = await channel.send(input.payload);
+  // Best-effort pin on create/replacement — never fail Schedule sync.
+  if (typeof sent.pin === "function") {
+    try {
+      await sent.pin();
+    } catch (error) {
+      console.warn(`[discord-bot] schedule ${input.bucket}: pin failed (ignored)`, error);
+    }
+  }
+  await input.api.recordScheduleState({
+    bucket: input.bucket,
+    channelId: input.markerChannelId,
+    messageId: sent.id,
+    signature: input.signature,
+  });
+  console.log(`[discord-bot] schedule ${input.bucket}: created message in marker channel`);
+  return true;
+}
+
+/** Exact stored identity only — never scan; failures never undo the new post. */
+async function bestEffortDeleteScheduleMessage(
+  client: Client,
+  channelId: string,
+  messageId: string,
+  bucket: "CURRENT" | "NEXT",
+): Promise<void> {
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isTextBased() || !("messages" in channel)) return;
+    const message = await channel.messages.fetch(messageId);
+    if (typeof message.delete === "function") {
+      await message.delete();
+    }
+  } catch (error) {
+    console.warn(
+      `[discord-bot] schedule ${bucket}: old marker message cleanup failed (ignored)`,
+      error,
+    );
   }
 }
 

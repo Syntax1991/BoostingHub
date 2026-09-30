@@ -30,6 +30,7 @@ import {
   buildScheduleSignature,
   DISCORD_SCHEDULE_BUCKETS,
   filterAndSortScheduleRuns,
+  isScheduleEligibleStatus,
   type ScheduleRunRenderInput,
 } from "@/lib/discord-schedule";
 import {
@@ -1379,19 +1380,21 @@ export const discordSyncService = {
       lootType: row.lootType,
     }));
 
-    const scheduleRenderInputs: ScheduleRunRenderInput[] = runs.map((run) => ({
-      runId: run.id,
-      scheduledStartAt: run.scheduledStartAt,
-      status: run.status,
-      difficulty: run.difficulty,
-      lootType: run.lootType,
-      titleCoverage: run.contentDisplay.titleCoverage,
-      raidLeadDisplay: effectiveRaidLeadChannelName({
-        raidLeadName: run.raidLeadName,
-        discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
-      }),
-      runChannelId: postsByRunId.get(run.id)?.runChannelId ?? null,
-    }));
+    const scheduleRenderInputs: ScheduleRunRenderInput[] = runs
+      .filter((run) => !run.archivedAt && isScheduleEligibleStatus(run.status))
+      .map((run) => ({
+        runId: run.id,
+        scheduledStartAt: run.scheduledStartAt,
+        status: run.status,
+        difficulty: run.difficulty,
+        lootType: run.lootType,
+        titleCoverage: run.contentDisplay.titleCoverage,
+        raidLeadDisplay: effectiveRaidLeadChannelName({
+          raidLeadName: run.raidLeadName,
+          discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+        }),
+        runChannelId: postsByRunId.get(run.id)?.runChannelId ?? null,
+      }));
     const schedulePostsByBucket = new Map(schedulePosts.map((row) => [row.bucket, row]));
     const schedules: ScheduleSyncWorkItem[] = DISCORD_SCHEDULE_BUCKETS.map((bucket) => {
       const bucketRuns = filterAndSortScheduleRuns(scheduleRenderInputs, bucket, now);

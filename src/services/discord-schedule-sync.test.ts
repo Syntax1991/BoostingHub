@@ -41,7 +41,7 @@ const { currentStart, nextStart, followingStart } = classifyRunWeek({
 
 const createdRunIds: string[] = [];
 
-async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus } = {}) {
+async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus; archived?: boolean } = {}) {
   const id = await runService
     .createRun(lead, {
       raidId: VENOMOUS_ABYSS_RAID_ID,
@@ -55,11 +55,11 @@ async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus
     })
     .then((run) => run.id);
   createdRunIds.push(id);
-  if (state.status) {
+  if (state.status || state.archived) {
     const now = new Date().toISOString();
     await orm.Run.where({ id }).update({
-      status: state.status,
-      signupsOpen: state.status === "OPEN" || state.status === "ROSTERING",
+      ...(state.status ? { status: state.status, signupsOpen: state.status === "OPEN" || state.status === "ROSTERING" } : {}),
+      ...(state.archived ? { archivedAt: now } : {}),
       updatedAt: now,
     });
   }
@@ -370,5 +370,45 @@ describe("discord schedule lane — listSyncWork", () => {
     expect(scheduleLineFor(again, "CURRENT").desiredSignature).toBe(item.desiredSignature);
     expect(item.desiredSignature).toHaveLength(32);
     void buildScheduleSignature;
+  });
+
+  it("app-archived eligible statuses are excluded; non-archived equivalents remain", async () => {
+    const statuses = ["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"] as const;
+    for (let i = 0; i < statuses.length; i++) {
+      await createRunAt(new Date(Date.parse(currentStart) + (20 + i) * 3_600_000).toISOString(), {
+        status: statuses[i],
+        archived: true,
+      });
+      await createRunAt(new Date(Date.parse(currentStart) + (30 + i) * 3_600_000).toISOString(), {
+        status: statuses[i],
+      });
+    }
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const desc = scheduleLineFor(work, "CURRENT").embed.description;
+    expect(desc).toMatch(/🟢 Open/);
+    expect(desc).toMatch(/🟡 Rostering/);
+    expect(desc).toMatch(/🔵 Published/);
+    expect(desc).toMatch(/🔴 In Progress/);
+    // Four non-archived only — archived siblings never appear.
+    expect(desc.split("\n")).toHaveLength(4);
+  });
+
+  it("setting archivedAt removes a visible CURRENT Run on the next listSyncWork", async () => {
+    const id = await createRunAt(new Date(Date.parse(currentStart) + 40 * 3_600_000).toISOString(), {
+      status: "OPEN",
+    });
+    await setPost(id, { runChannelId: "chan-then-archive" });
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    expect(scheduleLineFor(work, "CURRENT").embed.description).toContain("<#chan-then-archive>");
+
+    await orm.Run.where({ id }).update({
+      archivedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    work = await discordSyncService.listSyncWork(classificationNow);
+    expect(scheduleLineFor(work, "CURRENT").embed.description).not.toContain("chan-then-archive");
+    expect(scheduleLineFor(work, "CURRENT").embed.description).toBe(SCHEDULE_EMPTY_DESCRIPTION);
+    // Channel lane may still reconcile the archived Run independently.
+    expect(work.channels.some((c) => c.runId === id && c.existingRunChannelId === "chan-then-archive")).toBe(true);
   });
 });
