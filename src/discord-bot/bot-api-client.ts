@@ -394,6 +394,28 @@ export class BotApiClient {
     });
   }
 
+  /** Whether a one-time product announcement was already recorded successfully. */
+  getGlobalAnnouncement(key: string) {
+    return this.request<
+      | { recorded: false }
+      | { recorded: true; key: string; channelId: string; messageId: string }
+    >(`/api/bot/discord/global-announcements/${encodeURIComponent(key)}`);
+  }
+
+  /** Persist a successful one-time product announcement (idempotent on key). */
+  recordGlobalAnnouncement(input: { key: string; channelId: string; messageId: string }) {
+    return this.request<{
+      recorded: true;
+      created: boolean;
+      key: string;
+      channelId: string;
+      messageId: string;
+    }>(`/api/bot/discord/global-announcements/${encodeURIComponent(input.key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ channelId: input.channelId, messageId: input.messageId }),
+    });
+  }
+
   /** One bounded pass of the automatic post-completion Consumables Audit. */
   runWarcraftLogsAutoAudit() {
     return this.request<unknown>("/api/bot/warcraft-logs/auto-audit", { method: "POST" });

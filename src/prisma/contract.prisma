@@ -1494,3 +1494,17 @@ model DiscordChannelScanCursor {
 
   @@map("discord_channel_scan_cursor")
 }
+
+/// One-time Discord product / release announcement delivery record.
+/// Distinct from RunDiscordPost, RunDiscordAnnouncement, and Schedule posts.
+/// After a successful send, the row is permanent — deleting the Discord
+/// message must not trigger a repost.
+model DiscordGlobalAnnouncement {
+  key       String            @id
+  channelId String
+  messageId String
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  @@map("discord_global_announcement")
+}

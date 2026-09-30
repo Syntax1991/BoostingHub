@@ -33,9 +33,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'0997cd939b8c093f24b9df56258422bc1a5301ab4026b9d91344a21da13ee44b'>;
+  StorageHashBase<'dbad356042188ae4456d56fe738b240c8c251a8e45f548d1158ad6a44ea47f33'>;
 export type ExecutionHash =
-  ExecutionHashBase<'fdad52966eb8796b7bf57414b35d4f300e34a9c71cd723a7a54bc106e95e0c38'>;
+  ExecutionHashBase<'d0c2baa773bdfe02ed36d9314a3b8d8d55bd89a599993f9293b6293092378430'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -405,12 +405,10 @@ export type FieldOutputTypes = {
       readonly lastMessageId: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
-    readonly DiscordSchedulePost: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly bucket: 'CURRENT' | 'NEXT';
-      readonly channelId: CodecTypes['pg/text@1']['output'] | null;
-      readonly messageId: CodecTypes['pg/text@1']['output'] | null;
-      readonly lastSignature: CodecTypes['pg/text@1']['output'] | null;
+    readonly DiscordGlobalAnnouncement: {
+      readonly key: CodecTypes['pg/text@1']['output'];
+      readonly channelId: CodecTypes['pg/text@1']['output'];
+      readonly messageId: CodecTypes['pg/text@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -1060,12 +1058,10 @@ export type FieldInputTypes = {
       readonly lastMessageId: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
-    readonly DiscordSchedulePost: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly bucket: 'CURRENT' | 'NEXT';
-      readonly channelId: CodecTypes['pg/text@1']['input'] | null;
-      readonly messageId: CodecTypes['pg/text@1']['input'] | null;
-      readonly lastSignature: CodecTypes['pg/text@1']['input'] | null;
+    readonly DiscordGlobalAnnouncement: {
+      readonly key: CodecTypes['pg/text@1']['input'];
+      readonly channelId: CodecTypes['pg/text@1']['input'];
+      readonly messageId: CodecTypes['pg/text@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -1715,13 +1711,11 @@ export type StorageColumnTypes = {
       readonly lastMessageId: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
-    readonly discord_schedule_post: {
-      readonly bucket: 'CURRENT' | 'NEXT';
-      readonly channelId: CodecTypes['pg/text@1']['output'] | null;
+    readonly discord_global_announcement: {
+      readonly channelId: CodecTypes['pg/text@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly lastSignature: CodecTypes['pg/text@1']['output'] | null;
-      readonly messageId: CodecTypes['pg/text@1']['output'] | null;
+      readonly key: CodecTypes['pg/text@1']['output'];
+      readonly messageId: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
     readonly raid: {
@@ -2370,13 +2364,11 @@ export type StorageColumnInputTypes = {
       readonly lastMessageId: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
-    readonly discord_schedule_post: {
-      readonly bucket: 'CURRENT' | 'NEXT';
-      readonly channelId: CodecTypes['pg/text@1']['input'] | null;
+    readonly discord_global_announcement: {
+      readonly channelId: CodecTypes['pg/text@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly lastSignature: CodecTypes['pg/text@1']['input'] | null;
-      readonly messageId: CodecTypes['pg/text@1']['input'] | null;
+      readonly key: CodecTypes['pg/text@1']['input'];
+      readonly messageId: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
     readonly raid: {
@@ -3870,14 +3862,9 @@ type ContractBase = Omit<
               indexes: readonly [];
               foreignKeys: readonly [];
             };
-            readonly discord_schedule_post: {
+            readonly discord_global_announcement: {
               columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly bucket: {
+                readonly key: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
@@ -3885,17 +3872,12 @@ type ContractBase = Omit<
                 readonly channelId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
+                  readonly nullable: false;
                 };
                 readonly messageId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly lastSignature: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
+                  readonly nullable: false;
                 };
                 readonly createdAt: {
                   readonly nativeType: 'timestamptz';
@@ -3909,8 +3891,8 @@ type ContractBase = Omit<
                   readonly nullable: false;
                 };
               };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [{ readonly columns: readonly ['bucket'] }];
+              primaryKey: { readonly columns: readonly ['key'] };
+              uniques: readonly [];
               indexes: readonly [];
               foreignKeys: readonly [];
             };
@@ -7501,10 +7483,6 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['PENDING', 'SENT', 'SKIPPED', 'FAILED_PERMANENT'];
             };
-            readonly DiscordScheduleBucket: {
-              readonly kind: 'valueSet';
-              readonly values: readonly ['CURRENT', 'NEXT'];
-            };
             readonly LootbuddyMode: {
               readonly kind: 'valueSet';
               readonly values: readonly ['LOOT_ONLY', 'PLAYING'];
@@ -7717,10 +7695,6 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RunDiscordPost';
     };
-    readonly discord_schedule_post: {
-      readonly namespace: 'public' & NamespaceId;
-      readonly model: 'DiscordSchedulePost';
-    };
     readonly run_discord_announcement: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RunDiscordAnnouncement';
@@ -7764,6 +7738,10 @@ type ContractBase = Omit<
     readonly discord_channel_scan_cursor: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'DiscordChannelScanCursor';
+    };
+    readonly discord_global_announcement: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'DiscordGlobalAnnouncement';
     };
   };
   readonly domain: {
@@ -8752,26 +8730,18 @@ type ContractBase = Omit<
               };
             };
           };
-          readonly DiscordSchedulePost: {
+          readonly DiscordGlobalAnnouncement: {
             readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly bucket: {
+              readonly key: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly channelId: {
-                readonly nullable: true;
+                readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly messageId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly lastSignature: {
-                readonly nullable: true;
+                readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly createdAt: {
@@ -8791,14 +8761,12 @@ type ContractBase = Omit<
             };
             readonly relations: Record<string, never>;
             readonly storage: {
-              readonly table: 'discord_schedule_post';
+              readonly table: 'discord_global_announcement';
               readonly namespaceId: 'public';
               readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly bucket: { readonly column: 'bucket' };
+                readonly key: { readonly column: 'key' };
                 readonly channelId: { readonly column: 'channelId' };
                 readonly messageId: { readonly column: 'messageId' };
-                readonly lastSignature: { readonly column: 'lastSignature' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };
@@ -12768,13 +12736,6 @@ type ContractBase = Omit<
               { readonly name: 'RUN_CANCELLED'; readonly value: 'RUN_CANCELLED' },
             ];
           };
-          readonly DiscordScheduleBucket: {
-            readonly codecId: 'pg/text@1';
-            readonly members: readonly [
-              { readonly name: 'CURRENT'; readonly value: 'CURRENT' },
-              { readonly name: 'NEXT'; readonly value: 'NEXT' },
-            ];
-          };
           readonly ConsumableAuditFailure: {
             readonly codecId: 'pg/text@1';
             readonly members: readonly [
@@ -13024,15 +12985,7 @@ type ContractBase = Omit<
         {
           readonly ref: {
             readonly namespace: 'public';
-            readonly table: 'discord_schedule_post';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'discord_schedule_post';
+            readonly table: 'discord_global_announcement';
             readonly column: 'updatedAt';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'timestampNow' };
