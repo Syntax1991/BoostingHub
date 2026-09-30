@@ -130,11 +130,12 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
       {
         name: "Quick Signup",
         value: [
-          "One click signs every currently eligible Booster Character using its current specialization's default role.",
+          "One click adds Booster **offers** for every currently eligible Character using its specialization default role.",
           "",
           "• Additive — existing offers stay unchanged",
           "• Unavailable / reserved Characters are skipped",
           "• No recognized default role → skipped",
+          "• Does **not** put you on the Roster — the Raid Lead selects separately",
           "• Use normal **Signup** for manual role control",
         ].join("\n"),
       },

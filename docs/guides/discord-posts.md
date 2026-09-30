@@ -31,7 +31,7 @@ Preview: `docs/guides/booster-discord-preview.md`
 | 📘 Getting started | `getting-started` | `bo-01-dashboard.png` |
 | 🧙 Characters | `characters` | `bo-02-characters.png` |
 | 📝 Signing up | `signing-up` | `bo-04-signup.png` |
-| ⚡ Discord Signups | `discord-signups` | `bo-06-discord-signups.png` |
+| ⚡ Discord Signups | `discord-signups` | `bo-06-discord-signups.png` (sanitized real Discord capture) |
 | ✅ After signing up | `after-signing-up` | `bo-05-my-runs.png` |
 
 Accent: `#d4af37`. Card 1 may include a Link button **Open Manawyrm Hub**.

@@ -58,7 +58,7 @@ Booster is a Boosting Role granted by the community/admin. It applies to your ac
 **Fields:** Signup · Quick Signup (highlighted) · Sign as Lootbuddy · Cancel Signup
 
 **Screenshot:** `screenshots/bo-06-discord-signups.png`  
-Builder-driven Discord UI preview from `buildSignupEmbed` / `buildSignupButtons` (anonymized fixture, HEROIC + COMMUNITY). Not a live Discord client capture.
+Sanitized real Discord client capture of the production Manawyrm Hub Signups message (crop: bot identity + Signups embed + four buttons). Participant names anonymized. Builder-driven HTML preview remains available for automated regression via `renderGuideSignupPreviewHtml()` / `guide:screenshots` (`_discord-signup-preview.png`) and must not replace this Card 4 asset.
 
 ![Card 4](./screenshots/bo-06-discord-signups.png)
 

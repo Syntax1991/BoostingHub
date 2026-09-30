@@ -57,13 +57,15 @@ Every open Run channel has a persistent **Signups** message with four buttons:
 | Button | Effect |
 | --- | --- |
 | **Signup** | Choose Characters and offered roles manually |
-| **Quick Signup** | One click: every currently eligible Booster Character with its specialization default role (additive; existing offers unchanged; unavailable/reserved/no-default-role skipped) |
+| **Quick Signup** | One click: adds Booster **offers** for every currently eligible Character with its specialization default role (additive; existing offers unchanged; unavailable/reserved/no-default-role skipped). Does **not** auto-select the Roster — the Raid Lead selects separately. |
 | **Sign as Lootbuddy** | Creates **Loot-only** entries (Play along and finer setups are website-only) |
 | **Cancel Signup** | Withdraws Booster **and** Lootbuddy participation for this Run |
 
 Use normal **Signup** when you need manual role control.
 
 ![Discord Signups](./screenshots/bo-06-discord-signups.png)
+
+Card 4 image is a sanitized real Discord capture of the live Signups message (not a generated mock).
 
 Quick status: `/mysignups`.
 
