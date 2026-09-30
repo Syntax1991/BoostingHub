@@ -92,6 +92,7 @@ Every open run has its own Discord channel with a **signup embed** and buttons:
 | Button | Effect |
 | --- | --- |
 | **Signup** | Sign up as a booster (character + roles) |
+| **Quick Signup** | Sign up every eligible character with its current specialization role (additive; keeps existing offers) |
 | **Sign as Lootbuddy** | Sign up as a lootbuddy (choose classes) |
 | **Cancel Signup** | Withdraw your active booster **and** lootbuddy participation |
 
@@ -102,6 +103,10 @@ Every open run has its own Discord channel with a **signup embed** and buttons:
 3. Set the offered roles per character → **Confirm**.
 
 Without the Booster role or without eligible characters, the flow stops with a message.
+
+### Quick Signup
+
+One click: adds every currently eligible booster character using its specialization default role. Existing offers and roles stay as they are. Characters without a known specialization role are skipped — use **Signup** to add those manually.
 
 ### Lootbuddy (Sign as Lootbuddy button)
 

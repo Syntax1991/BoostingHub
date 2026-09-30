@@ -311,6 +311,15 @@ export type SignupSyncWorkItem = {
   announceOnCreate: boolean;
 };
 /**
+ * Presentation version for the persistent Signup Discord message (embed +
+ * component layout). Bump when existing Signup posts must refresh without any
+ * domain/member-data change — e.g. adding Quick Signup to the button row.
+ * Folded into `lastSignupSignature` so existing messages refresh once after
+ * deploy — no schema migration.
+ */
+export const SIGNUP_MESSAGE_FORMAT_VERSION = "v6-quick-signup";
+
+/**
  * Bumped when Roster Discord embed presentation changes without a domain
  * `RunRoster.version` bump (title/layout/targets/empty-state). Combined with
  * the Guild emoji fingerprint into `RunDiscordPost.lastRosterEmojiFingerprint`
@@ -779,6 +788,8 @@ function buildSignupEmbedSignature(
     // member-data changes so existing posts refresh (Content→Raid Lead, role emojis,
     // multi-char mention grouping, description content summary, signup/roster split).
     participantLineFormat: "mention-v5-signups-only",
+    // Component/layout presentation (button row, etc.) — independent of participant lines.
+    messageFormatVersion: SIGNUP_MESSAGE_FORMAT_VERSION,
   });
 }
 

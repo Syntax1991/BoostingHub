@@ -10,6 +10,7 @@ import {
   handleDiscardSignupButton,
   handleLootbuddyButton,
   handleLootbuddyClassSelect,
+  handleQuickSignupButton,
   handleRoleSelect,
   handleSignupButton,
   handleSignupNextButton,
@@ -50,6 +51,9 @@ export function createBotClient(env: BotEnv): Client {
             break;
           case "signup":
             await handleSignupButton(interaction, api, parsed.runId);
+            break;
+          case "quick-signup":
+            await handleQuickSignupButton(interaction, api, parsed.runId);
             break;
           case "signup-next":
             await handleSignupNextButton(interaction, api, parsed.runId);

@@ -92,6 +92,7 @@ Jeder offene Run hat einen eigenen Discord-Channel mit **Signup-Embed** und Butt
 | Button | Wirkung |
 | --- | --- |
 | **Signup** | Als Booster anmelden (Character + Rollen) |
+| **Quick Signup** | Alle eligible Characters mit aktueller Spec-Rolle anmelden (additiv; bestehende Offers bleiben) |
 | **Sign as Lootbuddy** | Als Lootbuddy anmelden (Klassen wählen) |
 | **Cancel Signup** | Aktive Booster- **und** Lootbuddy-Teilnahme zurückziehen |
 
@@ -102,6 +103,10 @@ Jeder offene Run hat einen eigenen Discord-Channel mit **Signup-Embed** und Butt
 3. Pro Character angebotene Rollen setzen → **Confirm**.
 
 Ohne Booster-Rolle oder ohne eligible Characters bricht der Flow mit einer Meldung ab.
+
+### Quick Signup
+
+Ein Klick: meldet jeden aktuell eligible Booster-Character mit Spec-Default-Rolle an. Bestehende Offers/Rollen bleiben. Characters ohne bekannte Spec-Rolle werden übersprungen — die manuell über **Signup** hinzufügen.
 
 ### Lootbuddy (Button Sign as Lootbuddy)
 

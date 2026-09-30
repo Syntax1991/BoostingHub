@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BotApiClient } from "@/discord-bot/bot-api-client";
+import { BotApiError, type BotApiClient } from "@/discord-bot/bot-api-client";
 import {
   buildCharacterSelectOptions,
   describeOfferResult,
@@ -8,12 +8,16 @@ import {
   handleDiscardSignupButton,
   handleLootbuddyButton,
   handleLootbuddyClassSelect,
+  handleQuickSignupButton,
   handleRoleSelect,
   handleSignupButton,
   handleSignupNextButton,
   type IneligibleCharacterOption,
 } from "@/discord-bot/interactions/signup-flow";
 import { clearAllSessionsForTests, getSession } from "@/discord-bot/interactions/signup-staging";
+import { requestImmediateSync } from "@/discord-bot/sync-loop";
+
+vi.mock("@/discord-bot/sync-loop", () => ({ requestImmediateSync: vi.fn() }));
 
 const mistweaver: { characterId: string; characterName: string; realm: string; roles: ("TANK" | "HEALER" | "DPS")[]; defaultRole: "HEALER" | null } = {
   characterId: "c-mist",
@@ -122,11 +126,13 @@ function fakeApi(input: {
   getSignupOptions?: unknown;
   setCharacterOffers?: unknown;
   setLootbuddies?: unknown;
+  quickSignupBoosters?: unknown;
 }): BotApiClient {
   return {
     getSignupOptions: input.getSignupOptions ?? vi.fn(),
     setCharacterOffers: input.setCharacterOffers ?? vi.fn(),
     setLootbuddies: input.setLootbuddies ?? vi.fn(),
+    quickSignupBoosters: input.quickSignupBoosters ?? vi.fn(),
   } as unknown as BotApiClient;
 }
 
@@ -633,5 +639,100 @@ describe("LOOTBUDDY two-step flow (class select → done)", () => {
         components: [],
       }),
     );
+  });
+});
+
+describe("Quick Signup button", () => {
+  beforeEach(() => {
+    vi.mocked(requestImmediateSync).mockClear();
+  });
+
+  const quickSignup = handleQuickSignupButton as unknown as (
+    interaction: FakeInteraction,
+    api: BotApiClient,
+    runId: string,
+  ) => Promise<void>;
+
+  it("adds eligible Characters and requests an immediate public Signup sync", async () => {
+    const quickSignupBoosters = vi.fn().mockResolvedValue({
+      runId: RUN_ID,
+      added: 3,
+      alreadySigned: 0,
+      skippedNoDefaultRole: 0,
+      skippedIneligible: 0,
+    });
+    const api = fakeApi({ quickSignupBoosters });
+    const interaction = fakeInteraction("user-a");
+
+    await quickSignup(interaction, api, RUN_ID);
+
+    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(quickSignupBoosters).toHaveBeenCalledWith(RUN_ID, "user-a");
+    expect(interaction.editReply).toHaveBeenCalledWith({ content: "Quick Signup added 3 characters." });
+    expect(requestImmediateSync).toHaveBeenCalledOnce();
+  });
+
+  it("reports when all eligible Characters are already signed up", async () => {
+    const api = fakeApi({
+      quickSignupBoosters: vi.fn().mockResolvedValue({
+        runId: RUN_ID,
+        added: 0,
+        alreadySigned: 2,
+        skippedNoDefaultRole: 0,
+        skippedIneligible: 1,
+      }),
+    });
+    const interaction = fakeInteraction("user-a");
+
+    await quickSignup(interaction, api, RUN_ID);
+
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: "All eligible characters are already signed up.",
+    });
+    expect(requestImmediateSync).toHaveBeenCalledOnce();
+  });
+
+  it("mentions Characters skipped for missing defaultRole", async () => {
+    const api = fakeApi({
+      quickSignupBoosters: vi.fn().mockResolvedValue({
+        runId: RUN_ID,
+        added: 7,
+        alreadySigned: 0,
+        skippedNoDefaultRole: 1,
+        skippedIneligible: 0,
+      }),
+    });
+    const interaction = fakeInteraction("user-a");
+
+    await quickSignup(interaction, api, RUN_ID);
+
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content:
+        "Quick Signup added 7 characters. 1 character was skipped because no default role could be determined.",
+    });
+  });
+
+  it("renders Booster-access and signup-closed domain errors through describeBotApiError", async () => {
+    const closed = fakeApi({
+      quickSignupBoosters: vi.fn().mockRejectedValue(new BotApiError(400, "SIGNUP_CLOSED", "Signups are not open for this run.")),
+    });
+    const closedInteraction = fakeInteraction("user-a");
+    await quickSignup(closedInteraction, closed, RUN_ID);
+    expect(closedInteraction.editReply).toHaveBeenCalledWith({
+      content: expect.stringMatching(/not open|closed/i),
+    });
+    expect(requestImmediateSync).not.toHaveBeenCalled();
+
+    vi.mocked(requestImmediateSync).mockClear();
+    const noBooster = fakeApi({
+      quickSignupBoosters: vi
+        .fn()
+        .mockRejectedValue(new BotApiError(403, "BOOSTER_ACCESS_REQUIRED", "The Booster role is required to sign up as a booster.")),
+    });
+    const noBoosterInteraction = fakeInteraction("user-a");
+    await quickSignup(noBoosterInteraction, noBooster, RUN_ID);
+    expect(noBoosterInteraction.editReply).toHaveBeenCalledWith({
+      content: expect.stringMatching(/Booster role/i),
+    });
   });
 });

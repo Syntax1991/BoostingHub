@@ -470,22 +470,29 @@ describe("buildSignupEmbed", () => {
 });
 
 describe("buildSignupButtons", () => {
-  it("builds Signup, Lootbuddy, and Cancel buttons with runId-scoped custom ids", () => {
+  it("builds Signup, Quick Signup, Lootbuddy, and Cancel buttons with runId-scoped custom ids", () => {
     const row = buildSignupButtons(emptyData()).toJSON();
-    const components = row.components as Array<{ custom_id: string; disabled?: boolean; label: string }>;
-    expect(components).toHaveLength(3);
+    const components = row.components as Array<{ custom_id: string; disabled?: boolean; label: string; style?: number }>;
+    expect(components).toHaveLength(4);
     for (const component of components) {
       const parsed = parseCustomId(component.custom_id);
       expect(parsed?.runId).toBe("r7777777-7777-4777-8777-777777777777");
     }
-    expect(components.map((c) => parseCustomId(c.custom_id)?.action)).toEqual(["signup", "lootbuddy", "cancel"]);
+    expect(components.map((c) => parseCustomId(c.custom_id)?.action)).toEqual([
+      "signup",
+      "quick-signup",
+      "lootbuddy",
+      "cancel",
+    ]);
+    expect(components.map((c) => c.label)).toEqual(["Signup", "Quick Signup", "Sign as Lootbuddy", "Cancel Signup"]);
   });
 
-  it("disables Signup and Lootbuddy but keeps Cancel enabled once the window is closed", () => {
+  it("disables Signup, Quick Signup and Lootbuddy but keeps Cancel enabled once the window is closed", () => {
     const row = buildSignupButtons(emptyData({ signupWindowOpen: false })).toJSON();
     const components = row.components as Array<{ custom_id: string; disabled?: boolean }>;
     const byAction = new Map(components.map((c) => [parseCustomId(c.custom_id)?.action, c]));
     expect(byAction.get("signup")?.disabled).toBe(true);
+    expect(byAction.get("quick-signup")?.disabled).toBe(true);
     expect(byAction.get("lootbuddy")?.disabled).toBe(true);
     expect(byAction.get("cancel")?.disabled).toBeFalsy();
   });

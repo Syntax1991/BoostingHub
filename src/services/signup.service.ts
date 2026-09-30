@@ -11,6 +11,7 @@ import { DomainError } from "@/lib/errors";
 import { preferDefaultCharacterId } from "@/lib/default-character-preference";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
+import type { QuickSignupBoostersResult } from "@/lib/quick-signup-message";
 import { activityRepository } from "@/repositories/activity.repository";
 import type { CharacterPageRecord } from "@/repositories/character.repository";
 import { characterRepository } from "@/repositories/character.repository";
@@ -38,46 +39,8 @@ import {
 } from "@/services/character-schedule-conflict.service";
 import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 
-export type QuickSignupBoostersResult = {
-  runId: string;
-  added: number;
-  alreadySigned: number;
-  skippedNoDefaultRole: number;
-  skippedIneligible: number;
-};
-
-/** Concise product copy for the Signup dialog / action feedback. */
-export function formatQuickSignupBoostersMessage(result: QuickSignupBoostersResult): string {
-  if (result.added === 0) {
-    if (result.alreadySigned > 0 && result.skippedNoDefaultRole === 0) {
-      return "All eligible characters are already signed up.";
-    }
-    if (result.skippedNoDefaultRole > 0 && result.alreadySigned === 0) {
-      return result.skippedNoDefaultRole === 1
-        ? "No characters were added. 1 character was skipped because no default role could be determined."
-        : `No characters were added. ${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
-    }
-    if (result.skippedNoDefaultRole > 0) {
-      return result.skippedNoDefaultRole === 1
-        ? "All eligible characters with a default role are already signed up. 1 character was skipped because no default role could be determined."
-        : `All eligible characters with a default role are already signed up. ${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
-    }
-    return "No eligible characters to add.";
-  }
-
-  const addedPart =
-    result.added === 1
-      ? "Quick Signup added 1 character."
-      : `Quick Signup added ${result.added} characters.`;
-  if (result.skippedNoDefaultRole === 0) {
-    return addedPart;
-  }
-  const skippedPart =
-    result.skippedNoDefaultRole === 1
-      ? "1 character was skipped because no default role could be determined."
-      : `${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
-  return `${addedPart.slice(0, -1)}. ${skippedPart}`;
-}
+export type { QuickSignupBoostersResult } from "@/lib/quick-signup-message";
+export { formatQuickSignupBoostersMessage } from "@/lib/quick-signup-message";
 
 /**
  * Attaches cross-Run reservation info to a batch of Characters in one query

@@ -7,7 +7,7 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { discordSyncService, planRunVoiceChannel, rosterEmbedRenderFingerprint } from "@/services/discord-sync.service";
+import { discordSyncService, planRunVoiceChannel, rosterEmbedRenderFingerprint, SIGNUP_MESSAGE_FORMAT_VERSION } from "@/services/discord-sync.service";
 import { runDetailService } from "@/services/run-detail.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
@@ -579,6 +579,62 @@ describe("discordSyncService.listSyncWork", () => {
     await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
     const settled = await discordSyncService.listSyncWork();
     expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
+  });
+
+  it("refreshes an existing Signup post once when messageFormatVersion bumps (Quick Signup button row)", async () => {
+    // Ensure a settled post exists under the current signature.
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(post?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
+    expect(post?.signupMessageId).toBe("msg-1");
+
+    // Simulate a pre-#154 stored signature: same domain fields, without messageFormatVersion.
+    const stripped = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
+    delete stripped.messageFormatVersion;
+    await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(stripped) });
+
+    const refresh = await discordSyncService.listSyncWork();
+    const items = refresh.signups.filter((entry) => entry.runId === runId);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.existingMessageId).toBe("msg-1");
+    expect(items[0]?.existingChannelId).toBe("chan-1");
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-1" });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.signupMessageId).toBe("msg-1");
+    expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
+    expect(after?.lastSignupSignature).toContain('"messageFormatVersion"');
+
+    const settled = await discordSyncService.listSyncWork();
+    expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
+  });
+
+  it("also refreshes a closed-window Signup post once for the Quick Signup button layout", async () => {
+    // Continuity path: post already exists; closing the window must still refresh presentation.
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
+    await runService.setSignupWindow(lead, runId, false);
+
+    // Re-settle under the new closed-window signature, then downgrade the format marker only.
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(JSON.parse(post!.lastSignupSignature!).signupWindowOpen).toBe(false);
+
+    const stripped = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
+    delete stripped.messageFormatVersion;
+    await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(stripped) });
+
+    const refresh = await discordSyncService.listSyncWork();
+    const item = refresh.signups.find((entry) => entry.runId === runId);
+    expect(item?.existingMessageId).toBe("msg-closed");
+    expect((await discordSyncService.getSignupEmbedData(runId))?.signupWindowOpen).toBe(false);
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+
+    // Restore OPEN for later tests that share runId.
+    await runService.setSignupWindow(lead, runId, true);
   });
 });
 
