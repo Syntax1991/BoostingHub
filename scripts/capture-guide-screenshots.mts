@@ -10,9 +10,9 @@
  * before every screenshot (via [data-guide-hide="true"]). Capture fails if
  * forbidden development-auth text remains visible.
  *
- * `bo-06-discord-signups.png` is a sanitized real Discord capture and is NOT
- * overwritten here. The builder-driven HTML preview is written only to
- * `_discord-signup-preview.*` for regression.
+ * Card 4 (Discord Signups) is text-only in the live guide. The builder-driven
+ * HTML preview is written only to `_discord-signup-preview.*` for regression
+ * and must never become a canonical Card 4 screenshot asset.
  *
  * Usage:
  *   npx tsx scripts/capture-guide-screenshots.mts
@@ -57,8 +57,8 @@ async function shot(page: Page, file: string) {
 
 /**
  * Builder-driven Discord signup preview for regression only.
- * Card 4's committed screenshot (`bo-06-discord-signups.png`) is a sanitized
- * real Discord capture — this helper must not overwrite it.
+ * Card 4 in the live guide is text-only — this must never write a canonical
+ * `bo-0x-*.png` guide asset.
  */
 async function captureDiscordPreview() {
   const html = renderGuideSignupPreviewHtml();
@@ -74,7 +74,7 @@ async function captureDiscordPreview() {
   const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
   await page.goto(`file://${previewPath.replace(/\\/g, "/")}`, { waitUntil: "load" });
   await page.screenshot({ path: resolve(OUT, "_discord-signup-preview.png"), type: "png" });
-  console.log("wrote _discord-signup-preview.png (builder-driven regression preview; does not replace bo-06)");
+  console.log("wrote _discord-signup-preview.png (builder-driven regression preview; Card 4 stays text-only)");
   await browser.close();
 }
 

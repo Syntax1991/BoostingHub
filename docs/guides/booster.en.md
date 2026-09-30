@@ -63,10 +63,6 @@ Every open Run channel has a persistent **Signups** message with four buttons:
 
 Use normal **Signup** when you need manual role control.
 
-![Discord Signups](./screenshots/bo-06-discord-signups.png)
-
-Card 4 image is a sanitized real Discord capture of the live Signups message (not a generated mock).
-
 Quick status: `/mysignups`.
 
 ---

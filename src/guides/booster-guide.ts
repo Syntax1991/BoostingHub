@@ -148,7 +148,7 @@ export const BOOSTER_GUIDE_CARDS: readonly BoosterGuideCard[] = [
         value: "Withdraws your current Booster **and** Lootbuddy participation for this Run (protected roster rows may block).",
       },
     ],
-    imageFile: "bo-06-discord-signups.png",
+    imageFile: null,
   },
   {
     key: "after-signing-up",
