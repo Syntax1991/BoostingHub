@@ -239,6 +239,37 @@ describe("GET /api/bot/discord/sync — channel reconciliation contract", () => 
   });
 });
 
+describe("GET /api/bot/discord/sync — Schedule lane projection", () => {
+  it("exposes exactly CURRENT + NEXT schedule work items on the wire", async () => {
+    const sync = await syncGet(req("/api/bot/discord/sync", { headers: { authorization: `Bearer ${TOKEN}` } })).then((r) =>
+      r.json(),
+    );
+    expect(Array.isArray(sync.data.schedules)).toBe(true);
+    expect(sync.data.schedules).toHaveLength(2);
+    expect(sync.data.schedules.map((row: { bucket: string }) => row.bucket).sort()).toEqual(["CURRENT", "NEXT"]);
+    for (const item of sync.data.schedules) {
+      expect(typeof item.desiredSignature).toBe("string");
+      expect(typeof item.needsUpdate).toBe("boolean");
+      expect(item.embed).toMatchObject({
+        title: expect.any(String),
+        description: expect.any(String),
+        color: expect.any(Number),
+      });
+      expect(Object.keys(item).sort()).toEqual(
+        [
+          "bucket",
+          "desiredSignature",
+          "embed",
+          "existingChannelId",
+          "existingMessageId",
+          "lastSignature",
+          "needsUpdate",
+        ].sort(),
+      );
+    }
+  });
+});
+
 describe("GET /api/bot/discord/sync — Warcraft Logs configuration reaches the bot", () => {
   const LOG_AUTHOR = "1554176548435918910";
   /** The bot's real API client, with fetch routed straight into the route handler. */

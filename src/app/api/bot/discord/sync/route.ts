@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       // Explicit projection: every field the bot reads must be listed here.
       warcraftLogsReportAuthorIds: work.warcraftLogsReportAuthorIds,
       warcraftLogsReportChannels: work.warcraftLogsReportChannels,
+      schedules: work.schedules,
     });
   } catch (error) {
     return botApiError(error);
