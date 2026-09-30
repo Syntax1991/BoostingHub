@@ -402,6 +402,20 @@ export const runRepository = {
     return rows.map((row) => asString((row as Record<string, unknown>).id));
   },
 
+  /**
+   * Schedule posts: every operational active Run (OPEN/ROSTERING/PUBLISHED/
+   * IN_PROGRESS). Week bucket CURRENT/NEXT is applied by the sync service —
+   * PAST/FUTURE and terminal statuses never appear on either Schedule.
+   */
+  async listScheduleActiveRunIds(): Promise<string[]> {
+    const rows = await orm.Run.where((run) =>
+      run.status.in(["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"]),
+    )
+      .select("id")
+      .all();
+    return rows.map((row) => asString((row as Record<string, unknown>).id));
+  },
+
   /** Same projection and ordering as listManaged, limited to the given Run ids (one query). */
   async listManagedByIds(ids: readonly string[]): Promise<RunListRecord[]> {
     const uniqueIds = [...new Set(ids)];

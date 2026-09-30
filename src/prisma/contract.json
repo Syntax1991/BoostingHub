@@ -48,6 +48,10 @@
       "model": "DiscordChannelScanCursor",
       "namespace": "public"
     },
+    "discord_schedule_post": {
+      "model": "DiscordSchedulePost",
+      "namespace": "public"
+    },
     "raid": {
       "model": "Raid",
       "namespace": "public"
@@ -392,6 +396,19 @@
               {
                 "name": "FAILED_PERMANENT",
                 "value": "FAILED_PERMANENT"
+              }
+            ]
+          },
+          "DiscordScheduleBucket": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "CURRENT",
+                "value": "CURRENT"
+              },
+              {
+                "name": "NEXT",
+                "value": "NEXT"
               }
             ]
           },
@@ -2375,6 +2392,93 @@
               },
               "namespaceId": "public",
               "table": "discord_channel_scan_cursor"
+            }
+          },
+          "DiscordSchedulePost": {
+            "fields": {
+              "bucket": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "DiscordScheduleBucket",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "channelId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastSignature": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "messageId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "bucket": {
+                  "column": "bucket"
+                },
+                "channelId": {
+                  "column": "channelId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastSignature": {
+                  "column": "lastSignature"
+                },
+                "messageId": {
+                  "column": "messageId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "discord_schedule_post"
             }
           },
           "Raid": {
@@ -9983,6 +10087,76 @@
               },
               "uniques": []
             },
+            "discord_schedule_post": {
+              "checks": [
+                {
+                  "expression": "\"bucket\" IN ('CURRENT', 'NEXT')",
+                  "name": "discord_schedule_post_bucket_check_b7555829",
+                  "prefix": "discord_schedule_post_bucket_check"
+                }
+              ],
+              "columns": {
+                "bucket": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "DiscordScheduleBucket",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "channelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "lastSignature": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "messageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "bucket"
+                  ]
+                }
+              ]
+            },
             "raid": {
               "columns": {
                 "createdAt": {
@@ -14905,6 +15079,13 @@
                 "FAILED_PERMANENT"
               ]
             },
+            "DiscordScheduleBucket": {
+              "kind": "valueSet",
+              "values": [
+                "CURRENT",
+                "NEXT"
+              ]
+            },
             "LootbuddyMode": {
               "kind": "valueSet",
               "values": [
@@ -15074,10 +15255,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "415430a681c72b2ecaaf5c450efc66212913fb8b18e1b315a0a512c21f841031"
+    "storageHash": "0997cd939b8c093f24b9df56258422bc1a5301ab4026b9d91344a21da13ee44b"
   },
   "execution": {
-    "executionHash": "4db3e22f9203aeabd3091cf80b607036655d4240c5b2499899845ca3a30fb4aa",
+    "executionHash": "fdad52966eb8796b7bf57414b35d4f300e34a9c71cd723a7a54bc106e95e0c38",
     "mutations": {
       "defaults": [
         {
@@ -15323,6 +15504,32 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "discord_channel_scan_cursor"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "discord_schedule_post"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "discord_schedule_post"
           }
         },
         {

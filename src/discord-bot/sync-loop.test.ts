@@ -1888,6 +1888,222 @@ describe("syncOnce — app-archive transcript artifacts", () => {
   });
 });
 
+describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
+  function markerChildren() {
+    return new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+  }
+
+  function scheduleItem(
+    bucket: "CURRENT" | "NEXT",
+    overrides: Partial<{
+      existingChannelId: string | null;
+      existingMessageId: string | null;
+      lastSignature: string | null;
+      desiredSignature: string;
+      needsUpdate: boolean;
+      description: string;
+    }> = {},
+  ) {
+    return {
+      bucket,
+      existingChannelId: overrides.existingChannelId ?? null,
+      existingMessageId: overrides.existingMessageId ?? null,
+      lastSignature: overrides.lastSignature ?? null,
+      desiredSignature: overrides.desiredSignature ?? `sig-${bucket.toLowerCase()}`,
+      needsUpdate: overrides.needsUpdate ?? true,
+      embed: {
+        title: bucket === "CURRENT" ? "📅 Current Raid ID — Schedule" : "📅 Next Raid ID — Schedule",
+        description: overrides.description ?? "No active Runs scheduled.",
+        color: 0xd4af37,
+      },
+    };
+  }
+
+  it("X/Y: creates exactly one Schedule message per marker and records state (pins once)", async () => {
+    const { client, pinSpies } = makeDiscordClient(markerChildren());
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [scheduleItem("CURRENT"), scheduleItem("NEXT")],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    const currentSend = (client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send;
+    const nextSend = (client.channels.cache.get(NEXT_MARKER) as { send: ReturnType<typeof vi.fn> }).send;
+    expect(currentSend).toHaveBeenCalledTimes(1);
+    expect(nextSend).toHaveBeenCalledTimes(1);
+    expect(api.recordScheduleState).toHaveBeenCalledTimes(2);
+    expect(api.recordScheduleState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "CURRENT",
+        channelId: CURRENT_MARKER,
+        messageId: `msg-${CURRENT_MARKER}-1`,
+        signature: "sig-current",
+      }),
+    );
+    expect(api.recordScheduleState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "NEXT",
+        channelId: NEXT_MARKER,
+        messageId: `msg-${NEXT_MARKER}-1`,
+        signature: "sig-next",
+      }),
+    );
+    expect(pinSpies.get(`msg-${CURRENT_MARKER}-1`)).toHaveBeenCalledTimes(1);
+    expect(pinSpies.get(`msg-${NEXT_MARKER}-1`)).toHaveBeenCalledTimes(1);
+  });
+
+  it("V: unchanged signature causes no Discord edit or send", async () => {
+    const { client } = makeDiscordClient(markerChildren(), {
+      editableMessageIds: new Set(["sched-current", "sched-next"]),
+    });
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: CURRENT_MARKER,
+          existingMessageId: "sched-current",
+          lastSignature: "sig-current",
+          desiredSignature: "sig-current",
+          needsUpdate: false,
+        }),
+        scheduleItem("NEXT", {
+          existingChannelId: NEXT_MARKER,
+          existingMessageId: "sched-next",
+          lastSignature: "sig-next",
+          desiredSignature: "sig-next",
+          needsUpdate: false,
+        }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+    expect((client.channels.cache.get(NEXT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+    expect(api.recordScheduleState).not.toHaveBeenCalled();
+  });
+
+  it("W: changed signature edits the same message in place", async () => {
+    const { client, editSpies } = makeDiscordClient(markerChildren(), {
+      editableMessageIds: new Set(["sched-current"]),
+    });
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: CURRENT_MARKER,
+          existingMessageId: "sched-current",
+          lastSignature: "old",
+          desiredSignature: "new-sig",
+          needsUpdate: true,
+          description: "🟢 Open · <t:1:t> · Heroic VIP 8/8 · Lead",
+        }),
+        scheduleItem("NEXT", { needsUpdate: false, existingMessageId: "sched-next", existingChannelId: NEXT_MARKER }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(editSpies.get("sched-current")).toHaveBeenCalledTimes(1);
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+    expect(api.recordScheduleState).toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "CURRENT", messageId: "sched-current", signature: "new-sig" }),
+    );
+  });
+
+  it("X: deleted Schedule message creates exactly one replacement", async () => {
+    const { client } = makeDiscordClient(markerChildren());
+    // No editableMessageIds → fetch throws → create replacement.
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      schedules: [
+        scheduleItem("CURRENT", {
+          existingChannelId: CURRENT_MARKER,
+          existingMessageId: "deleted-msg",
+          lastSignature: "old",
+          desiredSignature: "fresh",
+          needsUpdate: true,
+        }),
+        scheduleItem("NEXT", { needsUpdate: false }),
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect((client.channels.cache.get(CURRENT_MARKER) as { send: ReturnType<typeof vi.fn> }).send).toHaveBeenCalledTimes(1);
+    expect(api.recordScheduleState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "CURRENT",
+        messageId: `msg-${CURRENT_MARKER}-1`,
+        signature: "fresh",
+      }),
+    );
+  });
+
+  it("AA: Schedule sync failure does not block archive / signup work", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["run-chan", { id: "run-chan", name: "fri-1800-hc-vip-8of8-lead", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 0, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-retire",
+          existingRunChannelId: "run-chan",
+          desiredChannelName: "fri-1800-hc-vip-8of8-lead",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-01-16T18:00:00.000Z",
+          retireChannel: true,
+          archiveArtifactsNeeded: true,
+          raidLeadName: "Lead",
+          panelName: "Raid",
+        },
+      ],
+      signups: [
+        {
+          runId: "run-open",
+          existingChannelId: "run-chan",
+          existingMessageId: null,
+          existingRunChannelId: "run-chan",
+          desiredChannelName: "fri-1800-hc-vip-8of8-lead",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-01-16T18:00:00.000Z",
+          allowChannelCreate: false,
+          embed: signupEmbed("run-open", "2026-01-16T18:00:00.000Z"),
+        },
+      ],
+      roster: [],
+      schedules: [scheduleItem("CURRENT"), scheduleItem("NEXT")],
+    });
+    // Force Schedule persistence to fail after Discord create.
+    (api.recordScheduleState as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("schedule persist failed"));
+
+    await expect(syncOnce(client, botEnv(), api)).resolves.toBeUndefined();
+
+    // Archive log still posted despite Schedule failure.
+    const logChannel = client.channels.cache.get("archive-log-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(logChannel.send.mock.calls.length).toBeGreaterThan(0);
+    // Signup embed still attempted in the run channel.
+    const runChannel = client.channels.cache.get("run-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(runChannel.send.mock.calls.length).toBeGreaterThan(0);
+  });
+});
+
 function makeApi(input: {
   channels: Array<{
     runId: string;
@@ -1937,6 +2153,15 @@ function makeApi(input: {
   raidInvites?: Array<Record<string, unknown>>;
   notificationDms?: Array<Record<string, unknown>>;
   runAnnouncements?: Array<Record<string, unknown>>;
+  schedules?: Array<{
+    bucket: "CURRENT" | "NEXT";
+    existingChannelId: string | null;
+    existingMessageId: string | null;
+    lastSignature: string | null;
+    desiredSignature: string;
+    needsUpdate: boolean;
+    embed: { title: string; description: string; color: number };
+  }>;
 }): BotApiClient {
   return {
     listSyncWork: vi.fn().mockResolvedValue({
@@ -1957,8 +2182,10 @@ function makeApi(input: {
       raidInvites: input.raidInvites ?? [],
       notificationDms: input.notificationDms ?? [],
       runAnnouncements: input.runAnnouncements ?? [],
+      schedules: input.schedules ?? [],
     }),
     recordDiscordState: vi.fn().mockResolvedValue(undefined),
+    recordScheduleState: vi.fn().mockResolvedValue({ ok: true }),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
     getRunStartEmbedData: vi.fn().mockResolvedValue(null),
   } as unknown as BotApiClient;
@@ -1975,6 +2202,8 @@ function makeDiscordClient(
   options: {
     sendFails?: boolean;
     freshAppliesAfterSetPositionsCalls?: number;
+    /** Message ids that successfully edit when fetched by id (Schedule edit-in-place). */
+    editableMessageIds?: ReadonlySet<string>;
   } = {},
 ) {
   const createdIds: string[] = [];
@@ -1983,6 +2212,8 @@ function makeDiscordClient(
   const freshAfter = options.freshAppliesAfterSetPositionsCalls ?? 1;
   /** Stable per-channel spies so refreshCache does not erase call history under assertion. */
   const sendSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const pinSpies = new Map<string, ReturnType<typeof vi.fn>>();
+  const editSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const setNameSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const setParentSpies = new Map<string, ReturnType<typeof vi.fn>>();
   const deleteSpies = new Map<string, ReturnType<typeof vi.fn>>();
@@ -2039,10 +2270,15 @@ function makeDiscordClient(
                 name: fileName,
               });
             }
+            const messageId = `msg-${child.id}-${seq}`;
+            if (!pinSpies.has(messageId)) {
+              pinSpies.set(messageId, vi.fn().mockResolvedValue(undefined));
+            }
             return {
-              id: `msg-${child.id}-${seq}`,
+              id: messageId,
               channelId: child.id,
               attachments,
+              pin: pinSpies.get(messageId)!,
             };
           }),
         );
@@ -2076,6 +2312,12 @@ function makeDiscordClient(
         child.id,
         vi.fn().mockImplementation(async (arg?: string | { limit?: number; before?: string }) => {
           if (typeof arg === "string") {
+            if (options.editableMessageIds?.has(arg)) {
+              if (!editSpies.has(arg)) {
+                editSpies.set(arg, vi.fn().mockResolvedValue(undefined));
+              }
+              return { id: arg, edit: editSpies.get(arg)! };
+            }
             throw new Error("missing");
           }
           return history;
@@ -2231,6 +2473,9 @@ function makeDiscordClient(
     client: client as any,
     createdIds,
     setPositions,
+    editSpies,
+    pinSpies,
+    sendSpies,
     cacheOrder: () => ordered(cacheChildren),
     serverOrder: () => ordered(serverChildren),
   };

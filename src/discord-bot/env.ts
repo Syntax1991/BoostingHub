@@ -16,15 +16,16 @@ export type BotEnv = {
   /**
    * The manually-managed `#current-id` text channel inside
    * `discordRunCategoryId` — a stable ordering anchor, never a Run channel.
-   * BoostingHub never creates, renames, deletes, or repositions this channel
-   * itself; it only reads its live `position` to know where the CURRENT
-   * section starts. Required for CURRENT-section position reconciliation —
-   * when unset, that reconciliation is skipped with a warning (channels
-   * still get the correct parent category and name, just not corrected
-   * ordering) rather than guessing a replacement anchor.
+   * Also the destination for the persistent Current Raid ID Schedule message.
+   * BoostingHub never creates, renames, or deletes this channel itself; it may
+   * only shift its numeric position as part of CURRENT/NEXT section reindexing,
+   * and create/edit the canonical Schedule message inside it. Required for
+   * CURRENT-section position reconciliation and Schedule sync — when unset,
+   * those are skipped with a warning (channels still get the correct parent
+   * category and name, just not corrected ordering / Schedule).
    */
   discordRunCurrentMarkerChannelId: string | null;
-  /** Same role as `discordRunCurrentMarkerChannelId`, for the NEXT section (`#next-id`). */
+  /** Same role as `discordRunCurrentMarkerChannelId`, for the NEXT section (`#next-id`) + Next Raid ID Schedule. */
   discordRunNextMarkerChannelId: string | null;
   /**
    * Where PAST/FUTURE holding channels move (schedule ARCHIVE, not app-archive).

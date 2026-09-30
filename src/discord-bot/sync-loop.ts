@@ -372,6 +372,14 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     }
   }
 
+  // Global CURRENT/NEXT Schedule posts — fully independent of archival and of
+  // per-Run message lanes. Failures here never block signup/roster/archive.
+  try {
+    await syncSchedulePosts(client, env, api, work.schedules ?? []);
+  } catch (error) {
+    console.error("[discord-bot] schedule sync failed", error);
+  }
+
   // CURRENT/NEXT section ordering runs once after provisioning so same-pass
   // creates are included. It must not be skipped merely because a later
   // signup/roster embed send fails — wrap message work and always reconcile
@@ -1214,6 +1222,74 @@ async function syncRunAnnouncement(
       return;
     }
     throw error;
+  }
+}
+
+async function syncSchedulePosts(
+  client: Client,
+  env: BotEnv,
+  api: BotApiClient,
+  items: NonNullable<SyncWork["schedules"]>,
+): Promise<void> {
+  for (const item of items) {
+    try {
+      const markerChannelId =
+        item.bucket === "CURRENT"
+          ? env.discordRunCurrentMarkerChannelId
+          : env.discordRunNextMarkerChannelId;
+      if (!markerChannelId) {
+        console.warn(
+          `[discord-bot] schedule ${item.bucket}: marker channel unset — skipping Schedule sync`,
+        );
+        continue;
+      }
+      if (!item.needsUpdate) continue;
+
+      const payload = { embeds: [item.embed] };
+      let messageId = item.existingMessageId;
+      let createdFresh = false;
+      let applied = false;
+
+      // Prefer editing the recorded message when it still lives in the marker channel.
+      if (messageId && item.existingChannelId === markerChannelId) {
+        applied = await tryEditMessage(client, markerChannelId, messageId, payload);
+      }
+
+      if (!applied) {
+        const channel = await client.channels.fetch(markerChannelId);
+        if (!channel?.isTextBased() || !("send" in channel)) {
+          console.warn(
+            `[discord-bot] schedule ${item.bucket}: marker channel ${markerChannelId} is not text-based`,
+          );
+          continue;
+        }
+        const sent = await channel.send(payload);
+        messageId = sent.id;
+        createdFresh = true;
+        applied = true;
+        // Best-effort pin on first create only — never fail Schedule sync.
+        if (typeof sent.pin === "function") {
+          try {
+            await sent.pin();
+          } catch (error) {
+            console.warn(`[discord-bot] schedule ${item.bucket}: pin failed (ignored)`, error);
+          }
+        }
+      }
+
+      if (!applied || !messageId) continue;
+      await api.recordScheduleState({
+        bucket: item.bucket,
+        channelId: markerChannelId,
+        messageId,
+        signature: item.desiredSignature,
+      });
+      if (createdFresh) {
+        console.log(`[discord-bot] schedule ${item.bucket}: created message in marker channel`);
+      }
+    } catch (error) {
+      console.error(`[discord-bot] schedule ${item.bucket} sync failed`, error);
+    }
   }
 }
 
