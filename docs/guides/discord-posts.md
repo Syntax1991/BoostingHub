@@ -1,9 +1,9 @@
 # Discord-Posts: Anleitungen
 
 Die Guides stehen in eigenen, normalen Discord-Channels — ohne Threads, ohne Forum-Posts und ohne „Back to menu“.
-Gepostet werden die englischen Guides per SSH auf dem Server mit den Skripten (siehe **Posten per SSH** unten).
-Die deutschen Texte hier sind die Vorlage/Referenz. Jede **Nachricht** ist unter 2000 Zeichen; die genannten
-Screenshots liegen unter `docs/guides/screenshots/`.
+
+Der **Booster-Guide v2** wird als fünf Discord-Embeds mit Footer-Marker
+`guide:booster:v2:<cardKey>` gepflegt (idempotent edit-in-place).
 
 App: https://manawyrm-boosting.com
 
@@ -11,146 +11,58 @@ App: https://manawyrm-boosting.com
 
 ## Channel-Struktur
 
-Ein normaler Channel pro Guide; die Nachrichten stehen direkt im Channel:
-
-| Guide | Channel | Skript | `/guide` |
+| Guide | Channel | Publisher | `/guide` |
 | --- | --- | --- | --- |
-| 📘 Booster | `1552712971543650425` | `scripts/post-booster-guide.mts` | `/guide booster` |
+| 📘 Booster | `1552712971543650425` | `npm run guide:booster:publish` | `/guide booster` |
 | 📗 Raidlead | `1553768153572708514` | `scripts/post-raidlead-guide.mts` | `/guide raidlead` |
 
-Die IDs stehen an einer Stelle: `src/discord-bot/guide-channels.ts` (genutzt von `/guide` und als Standardziel der Skripte).
+IDs: `src/discord-bot/guide-channels.ts`.
 
 ---
 
-# Booster
+# Booster Guide v2 (Discord embeds)
 
-## Nachricht B1 — Intro + Login
+Canonical source: `src/guides/booster-guide.ts`  
+Markdown mirrors: `docs/guides/booster.en.md` (EN) / `docs/guides/booster.md` (DE)  
+Preview: `docs/guides/booster-discord-preview.md`
 
-```
-## 📘 Anleitung für Booster
+| Card | Key | Screenshot |
+| --- | --- | --- |
+| 📘 Getting started | `getting-started` | `bo-01-dashboard.png` |
+| 🧙 Characters | `characters` | `bo-02-characters.png` |
+| 📝 Signing up | `signing-up` | `bo-04-signup.png` |
+| ⚡ Discord Signups | `discord-signups` | `bo-06-discord-signups.png` |
+| ✅ After signing up | `after-signing-up` | `bo-05-my-runs.png` |
 
-Kurzer Einstieg in **BoostingHub**: anmelden, Characters anlegen, für Runs anmelden und Status unter **My Runs** verfolgen.
+Accent: `#d4af37`. Card 1 may include a Link button **Open Manawyrm Hub**.
 
-App: https://manawyrm-boosting.com
+### Maintainer workflow
 
-**Wichtig:** Deine Account-Rolle ist meist **USER**.
-**Booster** und **Lootbuddy** sind keine Account-Rollen, sondern **Boosting-Rollen** auf deinem Account (vergibt ein Admin).
+```bash
+# 1) Refresh screenshots (local DEV_AUTH + Playwright)
+npm run guide:screenshots
 
-### 1. Anmelden
-Öffne BoostingHub → **Continue with Discord**.
-Danach landest du auf dem **Dashboard**.
-```
+# 2) Preview cards (no Discord mutation)
+npm run guide:booster:preview
 
-Anhang: `common-01-login.png`
+# 3) Upsert the five canonical embeds (edit-in-place when markers exist)
+npm run guide:booster:publish
 
----
+# 4) After verifying the new guide, retire old unmarked bot posts once
+npm run guide:booster:publish -- --retire-legacy
 
-## Nachricht B2 — Dashboard + Characters
-
-```
-### 2. Dashboard
-Hier siehst du auf einen Blick:
-• **Your attention** — Termin-Konflikte
-• **Upcoming Runs** — offene / laufende Runs
-• **Next selected run** — dein nächster SELECTED-Run
-• **Characters** — aktive / booster-eligible Chars
-
-### 3. Characters anlegen
-Unter **Characters**:
-1. Optional Battle.net (EU/US) verbinden
-2. Oder **Add Character** (Region / Realm / Name + Spec)
-3. **Account Access** und **Availability** prüfen
-
-**Booster-Rolle:** Für Booster-Signups braucht dein Account die Booster-Rolle (gilt für alle Difficulties). Beantragung über Discord (**Apply via Discord**) — nicht in der App. Ohne sie kannst du dich weiterhin als **Lootbuddy** anmelden.
+# Optional local rollback snapshot (do not commit):
+npm run guide:booster:publish -- --snapshot-dir=/tmp/booster-guide-snapshots
 ```
 
-Anhänge: `bo-01-dashboard.png`, `bo-02-characters.png`
+Safety:
 
----
+- Default / preview = dry listing of cards; `--publish` required to mutate Discord.
+- Canonical messages are identified by embed footer markers — not “last five messages”.
+- Duplicate markers or foreign authors → refuse.
+- Legacy append-only posts are never deleted unless `--retire-legacy` is explicit.
 
-## Nachricht B3 — Signup
-
-```
-### 4. Für einen Run anmelden
-**Runs** öffnen → Runs mit **Signups open** suchen → **Sign up**.
-
-Spalten kurz:
-• **RAID** — Titel, Difficulty, Status
-• **SCHEDULE** — Datum / Uhrzeit
-• **LEAD** — Raid Lead
-• **COMP** — z. B. 2T / 4H / 14D
-• **YOU** — dein Status
-• **ACTION** — Sign up / Signed ×N
-
-**Booster**
-1. Character(s) anhaken
-2. Rollen wählen (Tank / Healer / DPS)
-3. **Save Booster Offers**
-
-**Lootbuddy** (unabhängig, kein Character nötig)
-• Class + Mode (Loot only / Play along)
-• **Save Lootbuddies**
-
-Tipp: Web und Discord nutzen dieselben Signups — Discord-Buttons: nächste Nachricht.
-```
-
-Anhänge: `bo-03-runs.png`, `bo-04-signup.png`
-
----
-
-## Nachricht B4 — Discord-Bot
-
-```
-### 5. Anmeldung über den Discord-Bot
-Voraussetzung: Discord mit BoostingHub verknüpft (Discord-Login auf der Website).
-
-Jeder offene Run hat einen Channel mit Signup-Embed und Buttons:
-
-• **Signup** — als Booster (Character + Rollen)
-• **Sign as Lootbuddy** — Klassen wählen → speichert als **Loot only**
-• **Cancel Signup** — zieht Booster **und** Lootbuddy zurück
-
-**Booster-Flow**
-1. **Signup** klicken (Antwort nur für dich sichtbar)
-2. Character(s) wählen → **Next**
-3. Rollen setzen → **Confirm**
-
-**Lootbuddy:** Mode **Play along** und feinere Sets nur über die Website.
-
-**`/mysignups`** — deine aktuellen Signups (wie My Runs). Es gibt kein `/signup`.
-
-Nach Publish: Roster-Embed im Channel. Beim Start ggf. Raid-Invite-DM.
-```
-
-Keine Pflicht-Anhänge (optional: Screenshot vom Signup-Embed + Buttons, Character-Select, `/mysignups`).
-
----
-
-## Nachricht B5 — My Runs + Checkliste
-
-```
-### 6. Status unter My Runs
-• **Selected** — im veröffentlichten Roster
-• **Pending** — Raid Lead entscheidet noch
-• **Not Selected / Withdrawn** — Historie
-
-**Withdraw** zieht ein Angebot zurück, solange erlaubt (Pending meist frei; Selected oft erst vor Publish/Start).
-
-### Ablauf (Booster-Sicht)
-Sign up (Pending)
-→ Roster
-→ Publish (Selected / Not Selected)
-→ Start → Attendance → Complete → Payout
-
-### ✅ Checkliste
-1. Discord-Login (verknüpft Discord mit BoostingHub)
-2. Character(s) anlegen
-3. Booster-Rolle über Discord beantragen (**Apply via Discord**)
-4. Anmelden: Website **Runs → Sign up** *oder* Discord-Buttons
-5. Status prüfen: **My Runs** / `/mysignups`, ggf. Withdraw / **Cancel Signup**
-```
-
-Anhang: `bo-05-my-runs.png`
+Screenshots live under `docs/guides/screenshots/`. Capture viewport: **1440×900**, dark theme, no browser chrome.
 
 ---
 
@@ -269,25 +181,25 @@ Anhänge: `rl-08-start-run.png`, `rl-07-attendance.png`
 
 ## Posten per SSH
 
-Gepostet wird auf dem Produktionsserver mit dem Produktions-Bot. Der Server-Checkout muss den gewünschten
-Skript-Stand haben (also nach dem Deploy). Die Skripte posten die Texte aus dem Skript selbst plus die Screenshots
-aus `docs/guides/screenshots/`.
+Booster-Guide (v2, idempotent):
 
 ```bash
 ssh root@manawyrm-boosting.com
 cd /var/www/boostinghub
 
-# Probelauf: zeigt nur die Nachrichten (Länge, Anhänge), sendet nichts
-sudo -u boostinghub npx tsx --env-file=.env scripts/post-booster-guide.mts
-
-# wirklich posten (Standardziel: der Booster-Guide-Channel; anderes Ziel mit --channel=<id>)
-sudo -u boostinghub npx tsx --env-file=.env scripts/post-booster-guide.mts --post
+sudo -u boostinghub npm run guide:booster:preview
+sudo -u boostinghub npm run guide:booster:publish
+# after visual verify:
+sudo -u boostinghub npm run guide:booster:publish -- --retire-legacy
 ```
 
-Für den Raidlead-Guide dasselbe mit `scripts/post-raidlead-guide.mts`.
+Raidlead-Guide (noch append-only):
 
-- Ohne `--post` ist es immer ein Probelauf.
-- `--post` sendet **neue** Nachrichten. Die Skripte aktualisieren oder entdoppeln einen schon geposteten Guide
-  **nicht** — ein zweiter Lauf postet den Guide ein zweites Mal. Vorher die alten Nachrichten löschen oder,
-  für kleine Textänderungen, die bestehenden Nachrichten bearbeiten statt neu zu posten.
+```bash
+sudo -u boostinghub npx tsx --env-file=.env scripts/post-raidlead-guide.mts
+sudo -u boostinghub npx tsx --env-file=.env scripts/post-raidlead-guide.mts --post
+```
+
+- Booster: ohne `--publish` nur Preview; mit `--publish` edit-in-place / create missing; nie blind duplizieren.
+- Raidlead: `--post` sendet weiterhin **neue** Nachrichten (noch nicht idempotent).
 - Es gibt keinen „Back to menu“-Button und keine Threads.
