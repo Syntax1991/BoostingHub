@@ -32,6 +32,7 @@ import {
   type GuideDiscordClient,
 } from "@/guides/booster-guide-publisher";
 import { RUN_LOOT_TYPES } from "@/models/enums";
+import { APP_BRAND_NAME } from "@/lib/branding";
 
 const BOT = "bot-1";
 
@@ -127,6 +128,25 @@ describe("booster guide v2 content", () => {
     expect(JSON.stringify(discord)).toMatch(/Quick Signup/);
     expect(JSON.stringify(web)).not.toMatch(/Web Quick Signup/);
     expect(web.description).toMatch(/Save Booster Offers/);
+  });
+
+  it("keeps Discord Signups text-only with offers vs Roster clarified", () => {
+    const discord = BOOSTER_GUIDE_CARDS.find((c) => c.key === "discord-signups")!;
+    expect(discord.imageFile).toBeNull();
+    const embed = buildBoosterGuideEmbed(discord, { assetRevision: null });
+    expect(embed.image).toBeUndefined();
+    expect(embed.footer.text).toBe(`${APP_BRAND_NAME} · ${BOOSTER_GUIDE_MARKER_PREFIX}discord-signups`);
+    expect(embed.footer.text).not.toContain("asset:");
+    expect(embed.fields?.map((f) => f.name)).toEqual([
+      "Signup",
+      "Quick Signup",
+      "Sign as Lootbuddy",
+      "Cancel Signup",
+    ]);
+    const quick = embed.fields?.find((f) => f.name === "Quick Signup")?.value ?? "";
+    expect(quick).toMatch(/offers/i);
+    expect(quick).toMatch(/does \*\*not\*\* put you on the Roster/i);
+    expect(quick).toMatch(/Raid Lead selects separately/i);
   });
 
   it("stays within Discord embed size limits", () => {
@@ -237,6 +257,91 @@ describe("asset fingerprinting", () => {
       assetRevisions: { ...assetRevisions, "getting-started": "bbbbbbbbbbbb" },
     });
     expect(plan.actions.every((a) => a.type === "unchanged")).toBe(true);
+  });
+
+  it("plans UPDATE when Card 4 still has an old screenshot attachment, then converges", () => {
+    const discord = BOOSTER_GUIDE_CARDS.find((c) => c.key === "discord-signups")!;
+    expect(discord.imageFile).toBeNull();
+
+    const withOldImage: DiscordMessageLike = {
+      id: "discord-old",
+      author: { id: BOT, bot: true },
+      content: "",
+      embeds: [
+        {
+          title: discord.title,
+          description: discord.description,
+          footer: {
+            text: `${APP_BRAND_NAME} · ${BOOSTER_GUIDE_MARKER_PREFIX}discord-signups · asset:oldshotsha12`,
+          },
+          fields: discord.fields?.map((f) => ({ name: f.name, value: f.value, inline: false })),
+          image: { url: "attachment://bo-06-discord-signups.png" },
+        },
+      ],
+      attachments: [
+        {
+          id: "att-old",
+          filename: "bo-06-discord-signups.png",
+          url: "https://cdn.example/bo-06-discord-signups.png",
+        },
+      ],
+      components: [],
+    };
+
+    expect(guideMessageNeedsUpdate(withOldImage, discord, null)).toBe(true);
+
+    const planUpdate = planBoosterGuidePublish({
+      channelId: "ch",
+      botUserId: BOT,
+      messages: [
+        ...BOOSTER_GUIDE_CARDS.filter((c) => c.key !== "discord-signups").map((card, i) =>
+          marked(card.key, `m${i}`, assetRevisions[card.key]),
+        ),
+        withOldImage,
+      ],
+      assetRevisions,
+    });
+    const discordAction = planUpdate.actions.find((a) => a.cardKey === "discord-signups");
+    expect(discordAction).toEqual({
+      type: "update",
+      cardKey: "discord-signups",
+      messageId: "discord-old",
+    });
+
+    const cleanedEmbed = buildBoosterGuideEmbed(discord, { assetRevision: null });
+    const afterUpdate: DiscordMessageLike = {
+      id: "discord-old",
+      author: { id: BOT, bot: true },
+      content: "",
+      embeds: [
+        {
+          title: cleanedEmbed.title,
+          description: cleanedEmbed.description,
+          footer: { text: cleanedEmbed.footer.text },
+          fields: cleanedEmbed.fields,
+        },
+      ],
+      attachments: [],
+      components: [],
+    };
+    expect(guideMessageNeedsUpdate(afterUpdate, discord, null)).toBe(false);
+
+    const planConverged = planBoosterGuidePublish({
+      channelId: "ch",
+      botUserId: BOT,
+      messages: [
+        ...BOOSTER_GUIDE_CARDS.filter((c) => c.key !== "discord-signups").map((card, i) =>
+          marked(card.key, `m${i}`, assetRevisions[card.key]),
+        ),
+        afterUpdate,
+      ],
+      assetRevisions,
+    });
+    expect(planConverged.actions.find((a) => a.cardKey === "discord-signups")).toEqual({
+      type: "unchanged",
+      cardKey: "discord-signups",
+      messageId: "discord-old",
+    });
   });
 });
 

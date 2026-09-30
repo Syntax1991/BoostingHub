@@ -55,12 +55,13 @@ Booster is a Boosting Role granted by the community/admin. It applies to your ac
 
 **Title:** ⚡ Discord Signups
 
-**Fields:** Signup · Quick Signup (highlighted) · Sign as Lootbuddy · Cancel Signup
+**Fields:** Signup · Quick Signup · Sign as Lootbuddy · Cancel Signup
 
-**Screenshot:** `screenshots/bo-06-discord-signups.png`  
-Sanitized real Discord client capture of the production Manawyrm Hub Signups message (crop: bot identity + Signups embed + four buttons). Participant names anonymized. Builder-driven HTML preview remains available for automated regression via `renderGuideSignupPreviewHtml()` / `guide:screenshots` (`_discord-signup-preview.png`) and must not replace this Card 4 asset.
+**Screenshot:** none (intentionally text-only)
 
-![Card 4](./screenshots/bo-06-discord-signups.png)
+Card 4 is text-only: the four Discord button actions are clearer as native embed fields than as a screenshot. Quick Signup creates Booster **offers**; the Raid Lead still selects the Roster separately.
+
+A builder-driven HTML preview (`renderGuideSignupPreviewHtml`) remains available for automated regression only and is not published as a guide image.
 
 ---
 
