@@ -40,6 +40,7 @@ export type DiscordMessageLike = {
     description?: string | null;
     footer?: { text?: string | null } | null;
     fields?: Array<{ name?: string | null; value?: string | null; inline?: boolean | null }>;
+    image?: { url?: string | null } | null;
   }>;
   attachments?: Array<{ id: string; filename: string; url: string }>;
   components?: unknown[];
@@ -317,8 +318,12 @@ export function guideMessageNeedsUpdate(
   if (JSON.stringify(existingFields) !== JSON.stringify(desiredFields)) return true;
 
   const existingNames = attachmentNames(existing);
+  const hasEmbedImage = Boolean(embed.image?.url);
   if (card.imageFile && !existingNames.has(card.imageFile)) return true;
-  if (!card.imageFile && (existing.attachments?.length ?? 0) > 0) return true;
+  if (!card.imageFile && ((existing.attachments?.length ?? 0) > 0 || hasEmbedImage)) {
+    // Text-only cards must drop both the attachment and any leftover embed.image.
+    return true;
+  }
 
   const existingAsset = parseBoosterGuideAssetRevision(embed.footer?.text);
   if ((assetRevision ?? null) !== (existingAsset ?? null)) return true;

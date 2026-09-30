@@ -63,10 +63,6 @@ Jeder offene Run-Channel hat eine persistente **Signups**-Nachricht mit vier But
 
 Für manuelle Rollenkontrolle **Signup** nutzen.
 
-![Discord Signups](./screenshots/bo-06-discord-signups.png)
-
-Das Card-4-Bild ist ein bereinigter echter Discord-Screenshot der Live-Signups-Nachricht (kein generierter Mock).
-
 Schneller Status: `/mysignups`.
 
 ---
