@@ -27,8 +27,9 @@ Route Handlers under `/api/bot/*` (see [run-signups.md](run-signups.md) for the 
 | `GET /api/bot/discord/sync` | Independent channel-reconciliation work (`channels`) plus what needs a Discord post created or refreshed (`signups`/`roster`) |
 | `GET /api/bot/runs/:runId/signup-options` | Eligible Booster Characters + `activeBoosterOffers` + `activeLootbuddies` for the acting Discord User |
 | `PUT /api/bot/runs/:runId/signup` | `setCharacterOffers` (BOOSTER-only) over HTTP |
+| `POST /api/bot/runs/:runId/signup/quick` | `quickSignupBoosters` (additive Booster Quick Signup) |
 | `PUT /api/bot/runs/:runId/lootbuddies` | `setLootbuddies` over HTTP |
-| `POST /api/bot/runs/:runId/signup/cancel` | `cancelBoosterSignup` over HTTP |
+| `POST /api/bot/runs/:runId/signup/cancel` | `cancelBoosterSignup` / withdraw-from-run over HTTP |
 | `GET /api/bot/my-signups` | Backs `/mysignups` |
 | `GET /api/bot/runs/:runId/roster` | Discord-ready final roster DTO |
 | `PUT /api/bot/runs/:runId/discord-state` | Records a created channel id, or a posted message's channel/message id |
@@ -198,9 +199,9 @@ BoostingHub places each Run's dedicated channel according to its `scheduledStart
 
 Posted into the Run's dedicated channel (or the legacy global signup channel — see Per-Run Discord channel above) once a Run is actually signup-available (not merely non-`DRAFT` — see Sync architecture above). Summary fields: Run title, difficulty, **product label** (e.g. Season 2 Bundle), **ordered per-raid content summary** (e.g. `Tide 1/1 · The Venomous Abyss 8/8`), scheduled time, **unique signup count**, status, loot type, and **Raid Lead** (`<@id>` when linked). Role columns use Guild custom emojis named `tank` / `healer` (or `heal`) / `dps` / `loot` / `raidlead` when present (unicode fallback otherwise). Class emojis use the class name (`warrior`, `mage`, …, `dk`, `dh`). Emoji names match case-insensitively, so `:Warrior:` / `:DK:` / `:Tank:` / `:DPS:` work too. Guild emoji metadata (class and role emojis) comes from one shared per-Guild snapshot cached for **10 minutes** (`class-emoji-lookup.ts`): a sync pass makes at most one emoji REST fetch and usually none, so a new or renamed Guild emoji can take up to 10 minutes to appear. If a refresh fails, the previous snapshot keeps being used (with a warning) and the next pass retries — during a Discord outage that is at most one shared emoji request per sync pass, still half the old two-per-pass rate. With no earlier snapshot the failure propagates as before and nothing is cached. Missing emojis keep the same label/unicode fallbacks. The rare Raidboost Announce still fetches its own emoji and roles when a Run channel is created. It never lists any User's offered Characters (that stays in the ephemeral per-User reply). "Signups: 39" means 39 distinct Users with an active offer, never 39 `RunSignup` rows — a User offering three Characters still counts once.
 
-Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signup** (Danger). Signup/Lootbuddy disable once the signup window closes; Cancel stays enabled (a User may still remove a still-pending offer after the window closes, matching the Web withdraw rule). Custom ids (`src/discord-bot/custom-ids.ts`) carry `action:runId` (never a User id) for the buttons and the character multi-select, and a character-scoped `action:runId:characterId` form for the per-Character role selects described below — every id is validated against the same shape the server accepts before any network call is made.
+Buttons: **Signup** (Primary), **Quick Signup** (Success), **Sign as Lootbuddy** (Secondary), **Cancel Signup** (Danger). Signup / Quick Signup / Lootbuddy disable once the signup window closes; Cancel stays enabled (a User may still remove a still-pending offer after the window closes, matching the Web withdraw rule). Custom ids (`src/discord-bot/custom-ids.ts`) carry `action:runId` (never a User id) for the buttons and the character multi-select, and a character-scoped `action:runId:characterId` form for the per-Character role selects described below — every id is validated against the same shape the server accepts before any network call is made.
 
-### Signup / Lootbuddy button flow
+### Signup / Quick Signup / Lootbuddy button flow
 
 **Signup (Booster)** — Character multi-select + **Next** → staged role editor → Confirm:
 
@@ -210,6 +211,15 @@ Buttons: **Signup** (Primary), **Sign as Lootbuddy** (Secondary), **Cancel Signu
 4. Start a BOOSTER staging session (seeded from `activeBoosterOffers`) and show Character multi-select with **Next** / **Cancel**. Closing the select dropdown only updates the staged picks in memory and refreshes the same menu — it does not change the step or list selections in the message. **Next** is the only advance into roles.
 5. **Next** opens the role editor: per-Character **offered-role** multi-selects (`minValues=1`; single-role classes show a fixed label), Confirm / Cancel. Confirm calls `setCharacterOffers` once with `{ characterId, offeredRoles[] }`; Cancel discards staging only.
 6. Staging is in-memory (`signup-staging.ts`), TTL ~15 minutes, wiped on bot restart without touching DB.
+
+**Quick Signup (Booster)** — one click, no Character selector, no staging session:
+
+1. `interaction.deferReply({ ephemeral: true })`.
+2. `POST .../signup/quick` for the acting Discord User (`signupService.quickSignupBoosters`).
+3. Concise ephemeral feedback (added / already signed / skipped no-default-role). Detailed ineligibility stays on the normal Signup flow.
+4. `requestImmediateSync()` so the public Signups embed refreshes through the normal sync lane.
+
+Quick Signup is additive (preserves existing `offeredRoles` and selected/draft-selected rows), Booster-only, and never touches Lootbuddies. Web does not expose this accelerator.
 
 Public signup embed Roles field:
 

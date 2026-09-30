@@ -267,6 +267,11 @@ export function buildSignupButtons(data: SignupEmbedData): ActionRowBuilder<Butt
       .setStyle(ButtonStyle.Primary)
       .setDisabled(disabled),
     new ButtonBuilder()
+      .setCustomId(buildCustomId("quick-signup", data.runId))
+      .setLabel("Quick Signup")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
       .setCustomId(buildCustomId("lootbuddy", data.runId))
       .setLabel("Sign as Lootbuddy")
       .setStyle(ButtonStyle.Secondary)

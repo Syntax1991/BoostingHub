@@ -13,6 +13,7 @@ import { GET as mySignupsGet } from "@/app/api/bot/my-signups/route";
 import { GET as signupOptionsGet } from "@/app/api/bot/runs/[runId]/signup-options/route";
 import { PUT as signupPut } from "@/app/api/bot/runs/[runId]/signup/route";
 import { POST as cancelPost } from "@/app/api/bot/runs/[runId]/signup/cancel/route";
+import { POST as quickSignupPost } from "@/app/api/bot/runs/[runId]/signup/quick/route";
 import { GET as rosterGet } from "@/app/api/bot/runs/[runId]/roster/route";
 import { PUT as discordStatePut } from "@/app/api/bot/runs/[runId]/discord-state/route";
 
@@ -505,6 +506,81 @@ describe("bot API domain reuse", () => {
     );
     const mine = await mineRes.json();
     expect(mine.data.withdrawn.some((item: { runId: string }) => item.runId === runId)).toBe(true);
+  });
+});
+
+describe("POST /api/bot/runs/:runId/signup/quick", () => {
+  afterEach(async () => {
+    await cancelPost(
+      req(`/api/bot/runs/${runId}/signup/cancel`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN}`, "x-discord-user-id": TARGET_DISCORD_ID },
+      }),
+      params(runId),
+    ).catch(() => {});
+  });
+
+  it("requires bot service auth and an acting Discord User", async () => {
+    const noToken = await quickSignupPost(req(`/api/bot/runs/${runId}/signup/quick`, { method: "POST" }), params(runId));
+    expect(noToken.status).toBe(401);
+
+    const noUser = await quickSignupPost(
+      req(`/api/bot/runs/${runId}/signup/quick`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN}` },
+      }),
+      params(runId),
+    );
+    expect(noUser.status).toBe(401);
+  });
+
+  it("calls signupService.quickSignupBoosters for the URL runId and returns the result DTO", async () => {
+    const res = await quickSignupPost(
+      req(`/api/bot/runs/${runId}/signup/quick`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN}`, "x-discord-user-id": TARGET_DISCORD_ID },
+      }),
+      params(runId),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.data).toMatchObject({
+      runId,
+      added: 1,
+      alreadySigned: 0,
+      skippedNoDefaultRole: 0,
+    });
+    expect(typeof body.data.skippedIneligible).toBe("number");
+
+    const second = await quickSignupPost(
+      req(`/api/bot/runs/${runId}/signup/quick`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN}`, "x-discord-user-id": TARGET_DISCORD_ID },
+      }),
+      params(runId),
+    );
+    const secondBody = await second.json();
+    expect(secondBody.data.added).toBe(0);
+    expect(secondBody.data.alreadySigned).toBe(1);
+  });
+
+  it("refuses without the Booster role", async () => {
+    await orm.User.where({ id: ids.target }).update({ isBooster: false });
+    try {
+      const res = await quickSignupPost(
+        req(`/api/bot/runs/${runId}/signup/quick`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${TOKEN}`, "x-discord-user-id": TARGET_DISCORD_ID },
+        }),
+        params(runId),
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("BOOSTER_ACCESS_REQUIRED");
+    } finally {
+      await orm.User.where({ id: ids.target }).update({ isBooster: true });
+    }
   });
 });
 

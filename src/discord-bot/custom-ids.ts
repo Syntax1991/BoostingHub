@@ -8,6 +8,7 @@
 const NAMESPACE = "boostinghub";
 const ACTIONS = [
   "signup",
+  "quick-signup",
   "lootbuddy",
   "cancel",
   "signup-next",

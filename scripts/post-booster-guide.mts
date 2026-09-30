@@ -101,6 +101,7 @@ Requirement: Discord linked to Manawyrm Hub (sign in with Discord on the website
 Every open run has a channel with a signup embed and buttons:
 
 • **Signup** — as booster (character + roles)
+• **Quick Signup** — all eligible characters with specialization default role (additive)
 • **Sign as Lootbuddy** — pick classes → saved as **Loot only**
 • **Cancel Signup** — withdraws booster **and** lootbuddy
 

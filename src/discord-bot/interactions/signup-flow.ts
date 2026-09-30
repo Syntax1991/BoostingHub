@@ -21,6 +21,7 @@ import {
   type WowClass,
 } from "@/discord-bot/interactions/signup-staging";
 import { requestImmediateSync } from "@/discord-bot/sync-loop";
+import { formatQuickSignupBoostersMessage } from "@/lib/quick-signup-message";
 import type { RunLootType } from "@/models/enums";
 
 const MAX_SELECT_OPTIONS = 25;
@@ -571,6 +572,26 @@ export async function handleDiscardSignupButton(interaction: ButtonInteraction, 
   await interaction.deferUpdate();
   discardSession(interaction.user.id, runId);
   await interaction.editReply({ content: "Signup changes cancelled.", components: [] });
+}
+
+/**
+ * Quick Signup button: one-click additive Booster signup for every currently
+ * eligible Character with a known specialization defaultRole. No staging
+ * session and no Character selector — the server decides eligibility.
+ */
+export async function handleQuickSignupButton(
+  interaction: ButtonInteraction,
+  api: BotApiClient,
+  runId: string,
+): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+  try {
+    const result = await api.quickSignupBoosters(runId, interaction.user.id);
+    await interaction.editReply({ content: formatQuickSignupBoostersMessage(result) });
+    requestImmediateSync();
+  } catch (error) {
+    await interaction.editReply({ content: describeBotApiError(error) });
+  }
 }
 
 export function describeOfferResult(result: OfferResult, offerCount: number): string {

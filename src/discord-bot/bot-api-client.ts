@@ -298,6 +298,23 @@ export class BotApiClient {
     );
   }
 
+  /**
+   * Additive Booster Quick Signup — server merges eligible Characters with
+   * their specialization defaultRole. No Character ids are accepted from Discord.
+   */
+  quickSignupBoosters(runId: string, discordUserId: string) {
+    return this.request<{
+      runId: string;
+      added: number;
+      alreadySigned: number;
+      skippedNoDefaultRole: number;
+      skippedIneligible: number;
+    }>(`/api/bot/runs/${runId}/signup/quick`, {
+      method: "POST",
+      discordUserId,
+    });
+  }
+
   setLootbuddies(
     runId: string,
     discordUserId: string,

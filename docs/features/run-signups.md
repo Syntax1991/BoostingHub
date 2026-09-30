@@ -30,11 +30,11 @@ Removal protection: a `PENDING` offer may always be withdrawn while lifecycle ru
 - **Additive.** Existing active Booster offers (and their `offeredRoles`) are preserved unchanged — including draft-selected and published `SELECTED` rows. Quick Signup never withdraws and never overwrites roles.
 - **Same eligibility authority** as the Signup dialog (`evaluateBoosterOptions`). Raid lockouts / saved progress remain informational only — a saved Character is still added when otherwise eligible.
 - **No role guessing.** Characters with `defaultRole: null` (missing/unrecognized specialization) are skipped; the User can still add them manually and choose a role.
-- **Server-side merge.** The current active Booster offer set is loaded at execution time — the client does not supply a complete desired set — so a stale dialog cannot wipe existing offers. Idempotent: a second click with no state change adds 0.
+- **Server-side merge.** The current active Booster offer set is loaded at execution time — the client does not supply a complete desired set — so a stale client cannot wipe existing offers. Idempotent: a second click with no state change adds 0.
 - **Never touches Lootbuddies.**
 - Works for Normal / Heroic / Mythic and for Saved / Unsaved / VIP / Community alike (`MYTHIC + SAVED` remains invalid at Run level).
 
-Web: **Quick Signup** sits in the Booster section of the Signup dialog beside Save Booster Offers. Discord does not expose a Quick Signup button yet; resulting rows are normal Booster offers and appear in the Discord Signups embed through the usual sync path.
+**UI placement:** Discord Signup embed only (**Quick Signup** button). Web keeps manual Booster Character selection + **Save Booster Offers**; it does not expose Quick Signup. The domain service is shared application logic.
 
 ## Lootbuddy entries (characterless)
 
@@ -77,9 +77,9 @@ Updating one side never clears the other. Removing one Lootbuddy does not affect
 ## User flow (Web)
 
 1. Open `/runs` or `/runs/[runId]` → **Sign up**.
-2. **Booster** section (optional): select Characters + roles. Requires owned active Characters and the account-level Booster role (`User.isBooster`, any run difficulty). **Quick Signup** adds every currently eligible Character with a known specialization default role without replacing existing offers.
+2. **Booster** section (optional): select Characters + roles. Requires owned active Characters and the account-level Booster role (`User.isBooster`, any run difficulty). For one-click all-eligible signup, use Discord **Quick Signup** instead.
 3. **Lootbuddies** section (optional, independent): add N entries with Class + Mode. No Character selector. Zero-character Users may still sign as Lootbuddy.
-4. Save each section separately (`setCharacterOffers` / `setLootbuddies`), or use Quick Signup for the Booster side (`quickSignupBoosters`).
+4. Save each section separately (`setCharacterOffers` / `setLootbuddies`).
 5. Review on `/my-runs` or the Run detail Signups tab — both participation types can appear for the same Run.
 
 ## Booster offered roles vs selected role
@@ -181,12 +181,12 @@ Run signup counts exclude `WITHDRAWN` rows. Selected counts are `SELECTED` only.
 
 ## Architecture
 
-- View: `/runs` dialog (independent Booster + Lootbuddy sections + Quick Signup), `/runs/[runId]` Signups tab, `/my-runs`
-- Controller: `src/controllers/signup.actions.ts` (`setCharacterOffersAction`, `quickSignupBoostersAction`, `setLootbuddiesAction`, …)
+- View: `/runs` dialog (independent Booster + Lootbuddy sections; manual Booster offers), `/runs/[runId]` Signups tab, `/my-runs`
+- Controller: `src/controllers/signup.actions.ts` (`setCharacterOffersAction`, `setLootbuddiesAction`, …)
 - Service: `signupService` (`setCharacterOffers`, `quickSignupBoosters`, `setLootbuddies`, `cancelBoosterSignup`) + `signup-eligibility.ts` + `signup-state.ts` (`planCharacterOfferReconciliation`, `planLootbuddyReconciliation`)
 - Repository: `signup.repository.ts` (`applyOfferPlan`, `applyLootbuddyPlan`)
 - Model: `RunSignup` (`lootbuddyClass` optional; `characterId` nullable)
-- Discord: `src/discord-bot/*` via `/api/bot/*` — see [discord-bot.md](discord-bot.md). Discord Quick Signup is a possible later extension; web Quick Signup rows sync as normal Booster offers.
+- Discord: `src/discord-bot/*` via `/api/bot/*` — see [discord-bot.md](discord-bot.md). **Quick Signup** is Discord-only UI (`POST /api/bot/runs/:runId/signup/quick` → `quickSignupBoosters`); resulting rows are normal Booster offers.
 
 Granting and revoking the Booster role: [boosting-roles.md](boosting-roles.md).
 

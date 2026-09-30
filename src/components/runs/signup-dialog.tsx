@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { getSignupOptionsAction, quickSignupBoostersAction, setCharacterOffersAction, setLootbuddiesAction } from "@/controllers/signup.actions";
+import { getSignupOptionsAction, setCharacterOffersAction, setLootbuddiesAction } from "@/controllers/signup.actions";
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { formatDateTime } from "@/lib/datetime";
@@ -237,32 +237,6 @@ export function RunSignupButton({
     });
   }
 
-  /**
-   * Server-side additive Quick Signup. Reloads options afterward so the dialog
-   * reflects newly created offers without trusting client merge state.
-   */
-  function submitQuickSignup() {
-    setError(null);
-    setSuccess(null);
-    startBoosterTransition(async () => {
-      const result = await quickSignupBoostersAction({ runId });
-      if (!result.ok) {
-        setError(result.message);
-        return;
-      }
-      setSuccess(result.message);
-      const refreshed = await getSignupOptionsAction({ runId });
-      if (refreshed.ok && refreshed.data) {
-        setOptions(refreshed.data);
-        setSelectedCharacterIds(new Set(refreshed.data.activeBoosterOffers.characterIds));
-        setRolesByCharacterId({
-          ...refreshed.data.activeBoosterOffers.offeredRolesByCharacterId,
-        } as Record<string, CharacterRole[]>);
-      }
-      router.refresh();
-    });
-  }
-
   function addLootbuddy() {
     setLootbuddies((current) => [...current, { wowClass: WOW_CLASSES[0], mode: "LOOT_ONLY", verification: "NONE" }]);
   }
@@ -355,16 +329,6 @@ export function RunSignupButton({
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="h-8 px-2 text-xs"
-                  aria-label="Sign up all eligible characters using their current specialization role."
-                  disabled={boosterPending || !options.run.signupWindowOpen}
-                  onClick={submitQuickSignup}
-                >
-                  {boosterPending ? "Working…" : "Quick Signup"}
-                </Button>
-                <Button
-                  type="button"
                   variant="secondary"
                   disabled={boosterPending || (selectedCharacterIds.size > 0 && !options.run.signupWindowOpen)}
                   onClick={submitBooster}
@@ -372,9 +336,6 @@ export function RunSignupButton({
                   {boosterPending ? "Saving…" : "Save Booster Offers"}
                 </Button>
               </div>
-              <p className="text-xs text-muted">
-                Quick Signup adds every eligible character with a known specialization role. Existing offers stay as they are.
-              </p>
             </section>
 
             <section className="space-y-3 rounded-md border border-border p-3">
