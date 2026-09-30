@@ -26,7 +26,10 @@
     "sync:characters": "tsx scripts/sync-blizzard-characters.ts",
     "guide:screenshots": "tsx scripts/capture-guide-screenshots.mts",
     "guide:booster:preview": "tsx --env-file=.env scripts/publish-booster-guide.mts",
-    "guide:booster:publish": "tsx --env-file=.env scripts/publish-booster-guide.mts --publish"
+    "guide:booster:publish": "tsx --env-file=.env scripts/publish-booster-guide.mts --publish",
+    "guide:raidlead:preview": "tsx --env-file=.env scripts/publish-raidlead-guide.mts",
+    "guide:raidlead:publish": "tsx --env-file=.env scripts/publish-raidlead-guide.mts --publish",
+    "guide:raidlead:screenshots": "tsx scripts/capture-raidlead-guide-screenshots.mts"
   },
   "dependencies": {
     "@prisma/orm-postgres": "^8.0.0-rc.8",
