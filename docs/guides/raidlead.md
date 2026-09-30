@@ -1,151 +1,73 @@
-# Anleitung für Raidleads
+# Raid Lead Guide
 
-Kurzer Einstieg in BoostingHub als **RAID_LEAD**: Run anlegen, Signups öffnen, Roster bauen, starten, Attendance markieren und abschließen.
+Kurze Einführung in **Manawyrm Hub** als **RAID_LEAD**: Runs anlegen, Signups öffnen, Roster bauen, starten, Attendance markieren, Complete und Payout vorbereiten.
 
-> Du verwaltest nur **deine** Runs (Lead = du). Admins können alle Runs sehen und bearbeiten.
+> Du verwaltest **deine** zugewiesenen Runs. **ADMIN** kann alle Runs verwalten.
 
----
+App: https://manawyrm-boosting.com
 
-## 1. Anmelden
-
-Wie jeder User: **Continue with Discord**.
-
-![Login mit Discord](./screenshots/common-01-login.png)
-
-Nach dem Login siehst du oben rechts **RAID LEAD** und in der Sidebar den Bereich **Manage**.
+Live-Discord-Guide (v2 Embeds): siehe [raidlead-discord-preview.md](./raidlead-discord-preview.md). Veröffentlichen mit `npm run guide:raidlead:publish` (kein Append-Only mehr).
 
 ---
 
-## 2. Dashboard — Boosting Control Center
+## 1. Raid Lead Basics
 
-Das **Boosting Control Center** listet Hand-offs für deine zugewiesenen Runs, z. B.:
+Mit **Discord** anmelden. Du siehst **RAID LEAD** und **Manage**. Das **Dashboard** zeigt Hand-offs (Build Roster / Start / Attendance / Payout).
 
-- **Build Roster** / **Start Run**
-- **Mark Attendance**
-- **Prepare Payout** / **Review Payout**
-
-![Raidlead-Dashboard](./screenshots/rl-01-dashboard.png)
+![Dashboard](./screenshots/rl-01-dashboard.png)
 
 ---
 
-## 3. Run erstellen
+## 2. Run erstellen
 
-1. Gehe zu **Runs** → **Create Run** (oder direkt `/runs/create`).
-2. Setze **Shared defaults**: Product, Bosses, Difficulty, Loot Type, Composition (Tanks / Healers / DPS), optional Discord-Role-Ping und Notes.
-3. Trage pro Zeile den **Startzeitpunkt** ein (1–25 Runs auf einmal möglich).
-4. **Create … Draft** — der Run startet als **DRAFT** mit geschlossenen Signups.
+**Runs → Create Run** (1–25 Drafts in einem Submit).
+
+Shared Defaults: **Product**, **Bosses**, **Difficulty** (Normal / Heroic / Mythic), **Run type** (Saved / Unsaved / VIP / **Community**), Composition, optionaler Discord-Role-Ping + Notes. Startzeit pro Zeile → **Create N Draft(s)**.
+
+Mythic kann nicht Saved nutzen. Als Raid Lead bist du immer der Lead.
 
 ![Create Run](./screenshots/rl-04-create-run.png)
 
-Als Raid Lead ist der Lead fest auf dich gesetzt; du kannst keinen anderen Lead zuweisen.
+---
+
+## 3. Signups öffnen & verwalten
+
+Auf **Overview**: **Open Run** · **Close / Reopen Signups** · **Edit Run** (bis Start) · **Cancel Run** (nicht nach Start).
+
+Discord hält persistente **Signups**- und **Roster**-Messages. Drafts erscheinen nicht unter öffentlichen **Runs**.
+
+![Run Overview](./screenshots/rl-06-run-overview.png)
 
 ---
 
-## 4. Manage Runs
+## 4. Roster bauen
 
-Unter **Manage → Runs** siehst du deine Runs inkl. Status, Signup-Fenster und Aktionen (**Build Roster**, **View Run**, **Cancel Run**, …).
+**Signup ≠ Selected.**
 
-![Manage Runs](./screenshots/rl-03-manage-runs.png)
+Offers prüfen → Character / **Selected Role** wählen → Lootbuddies / External Boosters → Composition & Class Buffs → Schedule-/Commitment-Warnungen → **Save Roster** → **Publish Roster** (SELECTED / NOT_SELECTED → Published).
 
-Öffentliche Entdeckung läuft über **Runs**; Drafts erscheinen dort **nicht** für normale User.
-
----
-
-## 5. Run öffnen und Signups steuern
-
-Auf der Run-Detailseite (**Overview**):
-
-| Aktion | Wirkung |
-| --- | --- |
-| **Open Run** | DRAFT → OPEN, Signups öffnen |
-| **Close Signups** / **Reopen Signups** | Fenster zu/auf (Status bleibt OPEN/ROSTERING) |
-| **Edit Run** | Planung ändern (je nach Status/Signup-Historie eingeschränkt) |
-| **Cancel Run** | Abbrechen; Historie bleibt erhalten |
-
-![Run Overview mit Manager-Aktionen](./screenshots/rl-06-run-overview.png)
-
-Unter **Runs** siehst du Community-Runs und den Button **Create Run**:
-
-![Runs-Liste mit Create Run](./screenshots/rl-02-runs.png)
+![Roster](./screenshots/rl-05-roster.png)
 
 ---
 
-## 6. Roster bauen und publishen
+## 5. Start & Attendance
 
-Tab **Roster**:
+**Start Run** → In Progress, Signups zu, Attendance-Snapshot, Discord-Operations-Output.
 
-1. Composition und **Class Buffs** im Blick behalten (Warnungen, keine harten Blocks).
-2. Signup-Karten auswählen und bei Boostern die **Selected Role** setzen.
-3. **Save Roster** speichert den Draft (erster Save auf OPEN → Status **ROSTERING**).
-4. **Publish Roster** setzt SELECTED / NOT_SELECTED und Status **PUBLISHED**.
-
-Bei Composition-Warnungen musst du das Acknowledge-Checkboxen setzen, bevor Publish geht.
-
-![Roster Builder](./screenshots/rl-05-roster.png)
-
-Hinweise:
-
-- Pro User höchstens **ein** ausgewählter **BOOSTER**; Lootbuddies dürfen zusätzlich ausgewählt werden.
-- „Committed elsewhere“ / „Reserved elsewhere“ zeigen die anderen Runs des Spielers in derselben Raid-ID (Weekly Reset) — Schedule-Konflikte (< 2 h Startabstand) blocken die Auswahl, unabhängig von der Raid-ID.
-
----
-
-## 7. Run starten
-
-Auf einem **PUBLISHED**-Run: **Start Run**.
-
-![Start Run](./screenshots/rl-08-start-run.png)
-
-Danach: Status **IN PROGRESS**, Signups zu, Attendance-Snapshot der SELECTED-Teilnehmer. Roster ist eingefroren.
-
----
-
-## 8. Attendance und Complete
-
-Tab **Attendance**:
-
-1. Ausnahmen zuerst setzen (**Late**, **No show**, **Standby**, **Excused**, …) inkl. Note.
-2. **Mark all unmarked as Present**.
-3. **Complete Run** — nur möglich, wenn niemand mehr **Unmarked** ist.
+Attendance: Present / Late / No show / Standby / Excused · Mark all unmarked as Present · Complete braucht keine Unmarked-Zeilen.
 
 ![Attendance](./screenshots/rl-07-attendance.png)
 
-**Standby** ist für Backups, die nicht gebraucht wurden — nicht als No-Show markieren.
-
 ---
 
-## 9. Payout (kurz)
+## 6. Complete & Payout
 
-Nach **COMPLETED** Tab **Payout**:
+**Complete** → **Payout**-Tab: Pot → Split → KEEP/SHARE → Finalize → Admin **Mark Paid**.
 
-1. Settlement-Draft vorbereiten (Gold-Pot manuell)
-2. Split berechnen / finalisieren
-3. **Mark Paid** macht ein Admin
+External Boosters stehen **nicht** auf dem Settlement. Nach Complete gibt es den Consumables-(WCL)-Audit.
 
-Details: [run-payouts.md](../features/run-payouts.md).
+Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed → Paid
 
----
+![Payout](./screenshots/rl-09-payout.png)
 
-## Typischer Ablauf
-
-```text
-Create Draft
-  → Edit (falls nötig)
-  → Open Run (Signups auf)
-  → Signups sammeln / Fenster schließen
-  → Roster speichern → Publish
-  → Start Run
-  → Attendance → Complete
-  → Payout
-```
-
----
-
-## Kurz-Checkliste
-
-1. Discord-Login als RAID_LEAD
-2. **Create Run** → Draft
-3. **Open Run**, Signups beobachten
-4. **Roster** speichern und **Publish**
-5. **Start Run** → Attendance → **Complete**
-6. Payout vorbereiten (Admin markiert Paid)
+Discord: `/guide raidlead`

@@ -1,151 +1,73 @@
 # Raid Lead Guide
 
-A quick introduction to BoostingHub as a **RAID_LEAD**: create runs, open signups, build the roster, start the run, mark attendance and complete it.
+A concise introduction to **Manawyrm Hub** as a **RAID_LEAD**: create Runs, open signups, build the Roster, start, mark Attendance, Complete, and prepare Payout.
 
-> You only manage **your own** runs (lead = you). Admins can see and edit all runs.
+> You manage **your** assigned Runs. **ADMIN** can manage every Run.
 
----
+App: https://manawyrm-boosting.com
 
-## 1. Sign in
-
-Like every user: **Continue with Discord**.
-
-![Login with Discord](./screenshots/common-01-login.png)
-
-After signing in you see **RAID LEAD** in the top right and the **Manage** section in the sidebar.
+Live Discord guide (v2 embeds): see [raidlead-discord-preview.md](./raidlead-discord-preview.md). Publish with `npm run guide:raidlead:publish` (never append-only).
 
 ---
 
-## 2. Dashboard — Boosting Control Center
+## 1. Raid Lead basics
 
-The **Boosting Control Center** lists hand-offs for the runs assigned to you, e.g.:
+Sign in with **Discord**. You see **RAID LEAD** and **Manage**. The **Dashboard** surfaces hand-offs (Build Roster / Start / Attendance / Payout).
 
-- **Build Roster** / **Start Run**
-- **Mark Attendance**
-- **Prepare Payout** / **Review Payout**
-
-![Raid lead dashboard](./screenshots/rl-01-dashboard.png)
+![Dashboard](./screenshots/rl-01-dashboard.png)
 
 ---
 
-## 3. Create a run
+## 2. Create a Run
 
-1. Go to **Runs** → **Create Run** (or directly `/runs/create`).
-2. Set the **Shared defaults**: product, bosses, difficulty, loot type, composition (tanks / healers / DPS), optional Discord role ping and notes.
-3. Enter the **start time** for each row (1–25 runs at once).
-4. **Create … Draft** — the run starts as a **DRAFT** with signups closed.
+**Runs → Create Run** (1–25 drafts in one submit).
+
+Shared defaults: **Product**, **Bosses**, **Difficulty** (Normal / Heroic / Mythic), **Run type** (Saved / Unsaved / VIP / **Community**), composition, optional Discord role ping + notes. Set a start time per row → **Create N Draft(s)**.
+
+Mythic cannot use Saved. As Raid Lead, the lead is always you.
 
 ![Create Run](./screenshots/rl-04-create-run.png)
 
-As a raid lead, the lead is fixed to you; you can't assign a different lead.
+---
+
+## 3. Open & manage signups
+
+On **Overview**: **Open Run** · **Close / Reopen Signups** · **Edit Run** (until Start) · **Cancel Run** (not after Start).
+
+Discord keeps persistent **Signups** and **Roster** messages. Drafts are not listed under public **Runs**.
+
+![Run Overview](./screenshots/rl-06-run-overview.png)
 
 ---
 
-## 4. Manage runs
+## 4. Build the Roster
 
-Under **Manage → Runs** you see your runs with status, signup window and actions (**Build Roster**, **View Run**, **Cancel Run**, …).
+**Signup ≠ Selected.**
 
-![Manage Runs](./screenshots/rl-03-manage-runs.png)
+Review offers → select Character / **Selected Role** → Lootbuddies / External Boosters → composition & class buffs → schedule / commitment warnings → **Save Roster** → **Publish Roster** (SELECTED / NOT_SELECTED → Published).
 
-Public discovery happens under **Runs**; drafts do **not** show up there for regular users.
-
----
-
-## 5. Open the run and control signups
-
-On the run detail page (**Overview**):
-
-| Action | Effect |
-| --- | --- |
-| **Open Run** | DRAFT → OPEN, opens signups |
-| **Close Signups** / **Reopen Signups** | Closes / reopens the window (status stays OPEN/ROSTERING) |
-| **Edit Run** | Change planning (restricted depending on status / signup history) |
-| **Cancel Run** | Cancel; history is preserved |
-
-![Run overview with manager actions](./screenshots/rl-06-run-overview.png)
-
-Under **Runs** you see community runs and the **Create Run** button:
-
-![Runs list with Create Run](./screenshots/rl-02-runs.png)
+![Roster](./screenshots/rl-05-roster.png)
 
 ---
 
-## 6. Build and publish the roster
+## 5. Start & Attendance
 
-**Roster** tab:
+**Start Run** → In Progress, signups close, attendance snapshot, Discord operational output.
 
-1. Keep an eye on the composition and **Class Buffs** (warnings, not hard blocks).
-2. Select signup cards and set the **Selected Role** for boosters.
-3. **Save Roster** saves the draft (first save on OPEN → status **ROSTERING**).
-4. **Publish Roster** sets SELECTED / NOT_SELECTED and status **PUBLISHED**.
-
-If there are composition warnings, you have to tick the acknowledge checkboxes before you can publish.
-
-![Roster Builder](./screenshots/rl-05-roster.png)
-
-Notes:
-
-- At most **one** selected **BOOSTER** per user; lootbuddies can be selected in addition.
-- "Committed elsewhere" / "Reserved elsewhere" show the player's other Runs in the same raid ID (weekly reset) — schedule conflicts (< 2 h between start times) block the selection, regardless of the raid ID.
-
----
-
-## 7. Start the run
-
-On a **PUBLISHED** run: **Start Run**.
-
-![Start Run](./screenshots/rl-08-start-run.png)
-
-Afterwards: status **IN PROGRESS**, signups closed, attendance snapshot of the SELECTED participants. The roster is frozen.
-
----
-
-## 8. Attendance and complete
-
-**Attendance** tab:
-
-1. Set the exceptions first (**Late**, **No show**, **Standby**, **Excused**, …) including a note.
-2. **Mark all unmarked as Present**.
-3. **Complete Run** — only possible once nobody is **Unmarked** anymore.
+Attendance: Present / Late / No show / Standby / Excused · Mark all unmarked as Present · Complete requires no Unmarked rows.
 
 ![Attendance](./screenshots/rl-07-attendance.png)
 
-**Standby** is for backups who weren't needed — don't mark them as no-show.
-
 ---
 
-## 9. Payout (short)
+## 6. Complete & Payout
 
-After **COMPLETED**, **Payout** tab:
+**Complete** → **Payout** tab: pot → split → KEEP/SHARE → finalize → Admin **Mark Paid**.
 
-1. Prepare the settlement draft (gold pot entered manually)
-2. Calculate / finalize the split
-3. An admin does **Mark Paid**
+External boosters are **not** on the settlement. Consumables (WCL) audit is available after Complete.
 
-Details: [run-payouts.md](../features/run-payouts.md).
+Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed → Paid
 
----
+![Payout](./screenshots/rl-09-payout.png)
 
-## Typical flow
-
-```text
-Create Draft
-  → Edit (if needed)
-  → Open Run (signups open)
-  → Collect signups / close window
-  → Save roster → Publish
-  → Start Run
-  → Attendance → Complete
-  → Payout
-```
-
----
-
-## Quick checklist
-
-1. Sign in with Discord as RAID_LEAD
-2. **Create Run** → draft
-3. **Open Run**, watch the signups
-4. Save the **Roster** and **Publish**
-5. **Start Run** → Attendance → **Complete**
-6. Prepare the payout (an admin marks it paid)
+Discord: `/guide raidlead`

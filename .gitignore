@@ -56,3 +56,6 @@ docs/guides/screenshots/_debug*
 tmp-booster-guide-snapshots/
 /tmp-booster-guide-snapshots/
 booster-guide-snapshot-*.json
+tmp-raidlead-guide-snapshots/
+/tmp-raidlead-guide-snapshots/
+raidlead-guide-snapshot-*.json
