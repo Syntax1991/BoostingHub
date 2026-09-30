@@ -35,6 +35,16 @@ describe("Quick Signup release announcement — content", () => {
     expect(content).not.toContain("<#1526998141159735498>");
     expect(QUICK_SIGNUP_RELEASE_ANNOUNCEMENT_KEY).toBe("quick-signup-release-v1");
   });
+
+  it("reflects saved / non-conflicting inclusion and conflicting-reservation skip wording", () => {
+    const content = buildQuickSignupReleaseAnnouncementContent();
+    expect(content).toContain("Saved characters");
+    expect(content).toContain("non-conflicting runs");
+    expect(content).toContain("conflicting run");
+    expect(content).not.toContain("Unavailable or already reserved characters are skipped");
+    expect(content).toContain("Quick Signup");
+    expect(content).toContain(BOOSTER_GUIDE_ANNOUNCEMENT_URL);
+  });
 });
 
 describe("syncGlobalAnnouncements", () => {

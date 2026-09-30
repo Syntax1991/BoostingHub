@@ -529,6 +529,16 @@ export const signupService = {
 
     let alreadySigned = 0;
     let skippedNoDefaultRole = 0;
+    let skippedUnavailable = 0;
+    let skippedReservationConflict = 0;
+    let skippedInactive = 0;
+    for (const row of ineligible) {
+      if (row.reason === "CHARACTER_UNAVAILABLE") skippedUnavailable += 1;
+      else if (row.reason === "ALREADY_SELECTED_OTHER_RUN") skippedReservationConflict += 1;
+      else if (row.reason === "INACTIVE") skippedInactive += 1;
+    }
+    const skippedIneligible = ineligible.length;
+
     const toCreate: Array<{ characterId: string; offeredRoles: CharacterRole[] }> = [];
     const toReactivate: Array<{ id: string; characterId: string; offeredRoles: CharacterRole[] }> = [];
 
@@ -550,14 +560,15 @@ export const signupService = {
       }
     }
 
-    const skippedIneligible = ineligible.length;
-
     if (toCreate.length === 0 && toReactivate.length === 0) {
       return {
         runId: input.runId,
         added: 0,
         alreadySigned,
         skippedNoDefaultRole,
+        skippedUnavailable,
+        skippedReservationConflict,
+        skippedInactive,
         skippedIneligible,
       };
     }
@@ -594,6 +605,9 @@ export const signupService = {
       added,
       alreadySigned,
       skippedNoDefaultRole,
+      skippedUnavailable,
+      skippedReservationConflict,
+      skippedInactive,
       skippedIneligible,
     };
   },

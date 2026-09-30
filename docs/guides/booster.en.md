@@ -24,7 +24,7 @@ Under **Characters**:
 2. Your **specialization** supplies the default role used by Discord Quick Signup.
 3. Set **Availability**.
 4. Lockouts are **informational**.
-5. Inactive or unavailable Characters are **skipped** by Quick Signup.
+5. Inactive or weekly-unavailable Characters are **skipped** by Quick Signup. Saved Characters and Characters on non-conflicting other Runs are **included**.
 
 The Booster role is **account-wide**.
 
@@ -57,7 +57,7 @@ Every open Run channel has a persistent **Signups** message with four buttons:
 | Button | Effect |
 | --- | --- |
 | **Signup** | Choose Characters and offered roles manually |
-| **Quick Signup** | One click: adds Booster **offers** for every currently eligible Character with its specialization default role (additive; existing offers unchanged; unavailable/reserved/no-default-role skipped). Does **not** auto-select the Roster — the Raid Lead selects separately. |
+| **Quick Signup** | One click: offers all eligible Booster Characters with specialization default roles. Saved Characters and non-conflicting other-Run usage are included; weekly unavailable, conflicting reservation (&lt; 2h), inactive, and missing default role are skipped. Additive; existing offers unchanged. Does **not** auto-select the Roster — the Raid Lead selects separately. |
 | **Sign as Lootbuddy** | Creates **Loot-only** entries (Play along and finer setups are website-only) |
 | **Cancel Signup** | Withdraws Booster **and** Lootbuddy participation for this Run |
 

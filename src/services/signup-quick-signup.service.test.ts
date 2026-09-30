@@ -136,6 +136,28 @@ async function activeBoosters(runId: string, userId: string) {
   return rows.filter((row) => row.participationType === "BOOSTER" && row.status !== "WITHDRAWN");
 }
 
+/** Clear draft roster picks then withdraw Booster offers so reservation state cannot leak across cases. */
+async function clearBoosterOffers(actor: AuthenticatedUser, leadActor: AuthenticatedUser, runId: string) {
+  try {
+    const view = await rosterService.getRosterManagementView(leadActor, runId);
+    await rosterService.saveDraftSelection(leadActor, {
+      runId,
+      version: view.roster.version,
+      selections: [],
+    });
+  } catch {
+    // Run may lack a roster yet.
+  }
+  const rows = await signupRepository.listByRunAndUser(runId, actor.id);
+  for (const row of rows) {
+    if (row.participationType !== "BOOSTER" || row.status === "WITHDRAWN") continue;
+    if (row.status === "SELECTED") {
+      await orm.RunSignup.where({ id: row.id }).update({ status: "PENDING", publishedRole: null });
+    }
+  }
+  await signupService.setCharacterOffers(actor, { runId, offers: [] }).catch(() => {});
+}
+
 const lead = asUser(ids.lead, "QS Lead", "RAID_LEAD");
 const target = asUser(ids.target, "QS Target", "USER");
 const otherLead = asUser(ids.otherLead, "QS Other Lead", "RAID_LEAD");
@@ -253,36 +275,48 @@ afterAll(async () => {
 }, 60_000);
 
 describe("formatQuickSignupBoostersMessage", () => {
-  it("covers added / already signed / skipped-default-role copy", () => {
-    expect(
-      formatQuickSignupBoostersMessage({
-        runId: "r",
-        added: 8,
-        alreadySigned: 0,
-        skippedNoDefaultRole: 0,
-        skippedIneligible: 0,
-      }),
-    ).toBe("Quick Signup added 8 characters.");
-    expect(
-      formatQuickSignupBoostersMessage({
-        runId: "r",
-        added: 7,
-        alreadySigned: 0,
-        skippedNoDefaultRole: 1,
-        skippedIneligible: 2,
-      }),
-    ).toBe(
-      "Quick Signup added 7 characters. 1 character was skipped because no default role could be determined.",
+  const base = {
+    runId: "r",
+    alreadySigned: 0,
+    skippedNoDefaultRole: 0,
+    skippedUnavailable: 0,
+    skippedReservationConflict: 0,
+    skippedInactive: 0,
+    skippedIneligible: 0,
+  };
+
+  it("covers added / already signed / detailed skip copy", () => {
+    expect(formatQuickSignupBoostersMessage({ ...base, added: 8 })).toBe(
+      "Signed up with 8 characters offered.",
     );
     expect(
       formatQuickSignupBoostersMessage({
-        runId: "r",
+        ...base,
+        added: 8,
+        skippedUnavailable: 2,
+        skippedReservationConflict: 1,
+        skippedNoDefaultRole: 1,
+        skippedIneligible: 3,
+      }),
+    ).toBe(
+      "Signed up with 8 characters offered. 2 unavailable · 1 scheduling conflict · 1 missing default role skipped",
+    );
+    expect(
+      formatQuickSignupBoostersMessage({
+        ...base,
         added: 0,
         alreadySigned: 3,
-        skippedNoDefaultRole: 0,
         skippedIneligible: 1,
+        skippedUnavailable: 1,
       }),
-    ).toBe("All eligible characters are already signed up.");
+    ).toBe("All eligible characters are already signed up. 1 unavailable skipped");
+    expect(
+      formatQuickSignupBoostersMessage({
+        ...base,
+        added: 0,
+        skippedNoDefaultRole: 2,
+      }),
+    ).toBe("No characters were added. 2 missing default roles skipped");
   });
 });
 
@@ -344,7 +378,8 @@ describe("signupService.quickSignupBoosters", () => {
     });
     await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
     const result = await signupService.quickSignupBoosters(target, { runId: mainRunId });
-    expect(result.skippedIneligible).toBeGreaterThanOrEqual(1);
+    expect(result.skippedUnavailable).toBeGreaterThanOrEqual(1);
+    expect(result.skippedIneligible).toBeGreaterThanOrEqual(result.skippedUnavailable);
     const active = await activeBoosters(mainRunId, ids.target);
     expect(active.some((row) => row.character?.id === unavailableHunter)).toBe(false);
     await orm.CharacterWeeklyUnavailability.where({ characterId: unavailableHunter }).delete().catch(() => {});
@@ -380,11 +415,12 @@ describe("signupService.quickSignupBoosters", () => {
 
     await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
     const result = await signupService.quickSignupBoosters(target, { runId: mainRunId });
-    expect(result.skippedIneligible).toBeGreaterThanOrEqual(1);
+    expect(result.skippedReservationConflict).toBeGreaterThanOrEqual(1);
+    expect(result.skippedIneligible).toBeGreaterThanOrEqual(result.skippedReservationConflict);
     const active = await activeBoosters(mainRunId, ids.target);
     expect(active.some((row) => row.character?.id === hunterC)).toBe(false);
 
-    await signupService.setCharacterOffers(target, { runId: collide.id, offers: [] }).catch(() => {});
+    await clearBoosterOffers(target, otherLead, collide.id);
   });
 
   it("H. still adds a Character with saved lockout progress (informational only)", async () => {
@@ -516,5 +552,231 @@ describe("signupService.quickSignupBoosters", () => {
     const options = await signupService.getSignupOptions(target, communityRunId);
     expect(options.activeBoosterOffers.characterIds.length).toBeGreaterThanOrEqual(1);
     expect(options.activeBoosterOffers.offeredRolesByCharacterId[hunterA]).toEqual(["DPS"]);
+  });
+
+  it("Q. PENDING on another overlapping Run does not block Quick Signup", async () => {
+    const other = await runService.createRun(
+      otherLead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: (await runRepository.findById(mainRunId))!.scheduledStartAt,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
+    createdRunIds.push(other.id);
+    await runService.openRun(otherLead, other.id);
+    await signupService.setCharacterOffers(target, {
+      runId: other.id,
+      offers: [{ characterId: hunterB, offeredRoles: ["DPS"] }],
+    });
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    const result = await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    const active = await activeBoosters(mainRunId, ids.target);
+    expect(active.some((row) => row.character?.id === hunterB)).toBe(true);
+    // hunterB itself must not be counted as a reservation conflict (PENDING ≠ reservation).
+    const options = await signupService.getSignupOptions(target, mainRunId);
+    expect(options.booster.ineligible.find((row) => row.characterId === hunterB)?.reason).not.toBe(
+      "ALREADY_SELECTED_OTHER_RUN",
+    );
+    expect(result.added + result.alreadySigned).toBeGreaterThanOrEqual(1);
+    await clearBoosterOffers(target, otherLead, other.id);
+  });
+
+  it("R. draft-selected / SELECTED exactly 2h apart are included; <2h skipped", async () => {
+    const targetStart = new Date((await runRepository.findById(mainRunId))!.scheduledStartAt).getTime();
+    const exactly2h = new Date(targetStart - 2 * 60 * 60 * 1000).toISOString();
+    const under2h = new Date(targetStart - 90 * 60 * 1000).toISOString();
+
+    async function reserveOn(at: string, characterId: string, mode: "draft" | "selected") {
+      const run = await runService.createRun(
+        otherLead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: at,
+          desiredTankCount: 1,
+          desiredHealerCount: 1,
+          desiredDpsCount: 2,
+        }),
+      );
+      createdRunIds.push(run.id);
+      await runService.openRun(otherLead, run.id);
+      await signupService.setCharacterOffers(target, {
+        runId: run.id,
+        offers: [{ characterId, offeredRoles: ["DPS"] }],
+      });
+      const rows = await activeBoosters(run.id, ids.target);
+      const signup = rows.find((row) => row.character?.id === characterId)!;
+      if (mode === "draft") {
+        const view = await rosterService.getRosterManagementView(otherLead, run.id);
+        await rosterService.saveDraftSelection(otherLead, {
+          runId: run.id,
+          version: view.roster.version,
+          selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+        });
+      } else {
+        await orm.RunSignup.where({ id: signup.id }).update({ status: "SELECTED" });
+      }
+      return run.id;
+    }
+
+    const allowedRunId = await reserveOn(exactly2h, hunterA, "draft");
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === hunterA)).toBe(true);
+    await clearBoosterOffers(target, otherLead, allowedRunId);
+
+    const blockedRunId = await reserveOn(under2h, hunterB, "selected");
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    const blocked = await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect(blocked.skippedReservationConflict).toBeGreaterThanOrEqual(1);
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === hunterB)).toBe(false);
+    await clearBoosterOffers(target, otherLead, blockedRunId);
+  });
+
+  it("S. reserved >2h apart and saved+non-conflicting reservation are included", async () => {
+    const targetStart = new Date((await runRepository.findById(mainRunId))!.scheduledStartAt).getTime();
+    const over2h = new Date(targetStart - 3 * 60 * 60 * 1000).toISOString();
+    const far = await runService.createRun(
+      otherLead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: over2h,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
+    createdRunIds.push(far.id);
+    await runService.openRun(otherLead, far.id);
+    await signupService.setCharacterOffers(target, {
+      runId: far.id,
+      offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
+    });
+    const farRows = await activeBoosters(far.id, ids.target);
+    const farSignup = farRows.find((row) => row.character?.id === hunterA)!;
+    await orm.RunSignup.where({ id: farSignup.id }).update({ status: "SELECTED" });
+
+    const run = await runRepository.findById(mainRunId);
+    const raidId = run!.contents[0]!.raidId;
+    const resetIdentifier = lockoutService.getResetIdentifierForRun("EU", run!.scheduledStartAt);
+    await orm.CharacterRaidLockout.where({ characterId: hunterA }).delete().catch(() => {});
+    await orm.CharacterRaidLockout.create({
+      id: crypto.randomUUID(),
+      characterId: hunterA,
+      raidId,
+      difficulty: "HEROIC",
+      resetIdentifier,
+      bossesDefeated: 8,
+      isComplete: true,
+      killedBossIds: JSON.stringify([]),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === hunterA)).toBe(true);
+    await orm.CharacterRaidLockout.where({ characterId: hunterA }).delete().catch(() => {});
+    await clearBoosterOffers(target, otherLead, far.id);
+  });
+
+  it("T. inactive Characters are skipped with skippedInactive", async () => {
+    const inactiveId = await createCharacter(ids.target, "Qsinactive", { isActive: false });
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    const result = await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect(result.skippedInactive).toBeGreaterThanOrEqual(1);
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === inactiveId)).toBe(false);
+  });
+
+  it("U. withdrawn eligible offer is reactivated in place", async () => {
+    await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      offers: [{ characterId: hunterA, offeredRoles: ["DPS"] }],
+    });
+    const before = (await activeBoosters(mainRunId, ids.target)).find((row) => row.character?.id === hunterA)!;
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    const withdrawn = await signupRepository.listByRunAndUser(mainRunId, ids.target);
+    expect(withdrawn.find((row) => row.id === before.id)?.status).toBe("WITHDRAWN");
+    const result = await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect(result.added).toBeGreaterThanOrEqual(1);
+    const after = await activeBoosters(mainRunId, ids.target);
+    const revived = after.find((row) => row.character?.id === hunterA)!;
+    expect(revived.id).toBe(before.id);
+    expect(revived.status).toBe("PENDING");
+    expect(revived.offeredRoles).toEqual(["DPS"]);
+  });
+
+  it("V. manual and Quick Signup agree on hard blockers; no-defaultRole differs", async () => {
+    const options = await signupService.getSignupOptions(target, mainRunId);
+    const eligibleIds = new Set(options.booster.eligible.map((row) => row.characterId));
+    const ineligibleById = new Map(options.booster.ineligible.map((row) => [row.characterId, row.reason]));
+
+    expect(ineligibleById.get(hunterA)).not.toBe("INACTIVE");
+    if (!ineligibleById.has(hunterA)) {
+      expect(eligibleIds.has(hunterA)).toBe(true);
+    }
+
+    const mageEligible = options.booster.eligible.find((row) => row.characterId === noSpecMage);
+    expect(mageEligible).toBeTruthy();
+    expect(mageEligible?.defaultRole).toBeNull();
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    const quick = await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect(quick.skippedNoDefaultRole).toBeGreaterThanOrEqual(1);
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === noSpecMage)).toBe(false);
+
+    await signupService.setCharacterOffers(target, {
+      runId: mainRunId,
+      offers: [{ characterId: noSpecMage, offeredRoles: ["DPS"] }],
+    });
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === noSpecMage)).toBe(true);
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+  });
+
+  it("W. race safety: applyOfferPlan re-checks reservation conflicts transactionally", async () => {
+    // Contract: quickSignupBoosters → validateOfferedCharacters → applyOfferPlan, and
+    // applyOfferPlan calls queryReservationConflicts inside the write transaction for
+    // activating Character ids. Write-boundary races are covered in
+    // signup-cross-run-reservation.test.ts; here Quick Signup must skip a colliding
+    // draft-selected Character through the shared eligibility path.
+    const collideAt = (await runRepository.findById(mainRunId))!.scheduledStartAt;
+    const collide = await runService.createRun(
+      otherLead,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: collideAt,
+        desiredTankCount: 1,
+        desiredHealerCount: 1,
+        desiredDpsCount: 2,
+      }),
+    );
+    createdRunIds.push(collide.id);
+    await runService.openRun(otherLead, collide.id);
+    await signupService.setCharacterOffers(target, {
+      runId: collide.id,
+      offers: [{ characterId: hunterC, offeredRoles: ["DPS"] }],
+    });
+    const rows = await activeBoosters(collide.id, ids.target);
+    const signup = rows.find((row) => row.character?.id === hunterC)!;
+    const view = await rosterService.getRosterManagementView(otherLead, collide.id);
+    await rosterService.saveDraftSelection(otherLead, {
+      runId: collide.id,
+      version: view.roster.version,
+      selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+    });
+    await signupService.setCharacterOffers(target, { runId: mainRunId, offers: [] });
+    const result = await signupService.quickSignupBoosters(target, { runId: mainRunId });
+    expect(result.skippedReservationConflict).toBeGreaterThanOrEqual(1);
+    expect((await activeBoosters(mainRunId, ids.target)).some((row) => row.character?.id === hunterC)).toBe(false);
+    await clearBoosterOffers(target, otherLead, collide.id);
   });
 });
