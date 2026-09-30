@@ -221,6 +221,16 @@ export class BotApiClient {
       warcraftLogsReportAuthorIds?: string[];
       /** Dedicated Warcraft Logs log channels + durable read position; optional on the wire. */
       warcraftLogsReportChannels?: Array<{ channelId: string; cursor: string }>;
+      /** Global CURRENT/NEXT Schedule posts — optional so older API responses are tolerated. */
+      schedules?: Array<{
+        bucket: "CURRENT" | "NEXT";
+        existingChannelId: string | null;
+        existingMessageId: string | null;
+        lastSignature: string | null;
+        desiredSignature: string;
+        needsUpdate: boolean;
+        embed: { title: string; description: string; color: number };
+      }>;
     }>("/api/bot/discord/sync", {
       headers: classEmojiFingerprint
         ? { "x-class-emoji-fingerprint": classEmojiFingerprint }
@@ -278,6 +288,19 @@ export class BotApiClient {
         },
   ) {
     return this.request<{ recorded: true }>(`/api/bot/runs/${runId}/discord-state`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Persist the global CURRENT/NEXT Schedule message identity + signature. */
+  recordScheduleState(input: {
+    bucket: "CURRENT" | "NEXT";
+    channelId: string;
+    messageId: string;
+    signature: string;
+  }) {
+    return this.request<{ ok: true }>("/api/bot/discord/schedule-state", {
       method: "PUT",
       body: JSON.stringify(input),
     });

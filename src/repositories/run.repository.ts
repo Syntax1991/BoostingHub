@@ -402,6 +402,24 @@ export const runRepository = {
     return rows.map((row) => asString((row as Record<string, unknown>).id));
   },
 
+  /**
+   * Schedule posts: every operational active Run (OPEN/ROSTERING/PUBLISHED/
+   * IN_PROGRESS) that is not application-archived. Week bucket CURRENT/NEXT
+   * is applied by the sync service — PAST/FUTURE, terminal statuses, and
+   * `archivedAt != null` never appear on either Schedule.
+   */
+  async listScheduleActiveRunIds(): Promise<string[]> {
+    const rows = await orm.Run.where((run) =>
+      and(
+        run.status.in(["OPEN", "ROSTERING", "PUBLISHED", "IN_PROGRESS"]),
+        run.archivedAt.isNull(),
+      ),
+    )
+      .select("id")
+      .all();
+    return rows.map((row) => asString((row as Record<string, unknown>).id));
+  },
+
   /** Same projection and ordering as listManaged, limited to the given Run ids (one query). */
   async listManagedByIds(ids: readonly string[]): Promise<RunListRecord[]> {
     const uniqueIds = [...new Set(ids)];

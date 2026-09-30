@@ -1,6 +1,9 @@
 /** Discord API error code: Unknown Channel */
 export const DISCORD_UNKNOWN_CHANNEL_CODE = 10003;
 
+/** Discord API error code: Unknown Message */
+export const DISCORD_UNKNOWN_MESSAGE_CODE = 10008;
+
 /** Discord API error code: Cannot send messages to this user (closed DMs). */
 export const DISCORD_CANNOT_DM_CODE = 50007;
 
@@ -13,6 +16,17 @@ export function isDiscordUnknownChannelError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = (error as { code?: unknown }).code;
   return code === DISCORD_UNKNOWN_CHANNEL_CODE || code === "10003";
+}
+
+/**
+ * True when Discord confirmed the message id does not exist (deleted / never
+ * existed). Transient/network/permission failures must NOT be treated as
+ * deletion — recreating would duplicate Schedule (or other) posts.
+ */
+export function isDiscordUnknownMessageError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === DISCORD_UNKNOWN_MESSAGE_CODE || code === "10008";
 }
 
 /** True when the recipient has DMs closed / blocked the bot. */

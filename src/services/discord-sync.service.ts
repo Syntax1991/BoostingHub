@@ -21,9 +21,18 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
 import { runDiscordPostRepository, type RunDiscordPostRecord } from "@/repositories/run-discord-post.repository";
+import { discordSchedulePostRepository } from "@/repositories/discord-schedule-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
 import { runRepository, type RunListRecord } from "@/repositories/run.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
+import {
+  buildScheduleEmbed,
+  buildScheduleSignature,
+  DISCORD_SCHEDULE_BUCKETS,
+  filterAndSortScheduleRuns,
+  isScheduleEligibleStatus,
+  type ScheduleRunRenderInput,
+} from "@/lib/discord-schedule";
 import {
   ROSTER_SWAPPED_SOURCE_KEY_PREFIX,
   userNotificationRepository,
@@ -268,6 +277,26 @@ export type DiscordRunVoiceChannelWorkItem = {
   /** `Raid with <effective Raid Lead>` — never Run.title or the Start Run actor. */
   desiredVoiceChannelName: string;
   action: DiscordRunVoiceChannelAction;
+};
+
+/**
+ * Global CURRENT/NEXT Schedule message (marker channels). Independent of
+ * per-Run channel archival — COMPLETED/CANCELLED drop out immediately even
+ * while the Run channel still exists for WCL/transcript.
+ */
+export type ScheduleSyncWorkItem = {
+  bucket: "CURRENT" | "NEXT";
+  existingChannelId: string | null;
+  existingMessageId: string | null;
+  lastSignature: string | null;
+  desiredSignature: string;
+  /** True when the Discord message is missing or the signature is stale. */
+  needsUpdate: boolean;
+  embed: {
+    title: string;
+    description: string;
+    color: number;
+  };
 };
 
 /**
@@ -1091,6 +1120,11 @@ export const discordSyncService = {
      * trusted author is configured.
      */
     warcraftLogsReportChannels: Array<{ channelId: string; cursor: string }>;
+    /**
+     * Exactly two global Schedule messages (CURRENT + NEXT). Independent of
+     * Run-channel archival — terminal Runs disappear here immediately.
+     */
+    schedules: ScheduleSyncWorkItem[];
   }> {
     const warcraftLogsReportAuthorIds = trustedWarcraftLogsReportAuthorIds();
     const reportChannelIds = warcraftLogsReportAuthorIds.length > 0 ? warcraftLogsReportChannelIds() : [];
@@ -1104,12 +1138,15 @@ export const discordSyncService = {
     // first-provisioning / Voice candidates by Run state, plus every Run that
     // still holds live Discord identity. Fully retired historical Runs are
     // skipped — they would generate no work below.
-    const [baseRunIds, liveIdentityRunIds, pendingAnnouncements] = await Promise.all([
-      runRepository.listDiscordSyncBaseRunIds(),
-      runDiscordPostRepository.listLiveIdentityRunIds(),
-      runDiscordAnnouncementRepository.listPending(50),
-    ]);
-    const candidateRunIds = [...new Set([...baseRunIds, ...liveIdentityRunIds])];
+    const [baseRunIds, liveIdentityRunIds, scheduleRunIds, pendingAnnouncements, schedulePosts] =
+      await Promise.all([
+        runRepository.listDiscordSyncBaseRunIds(),
+        runDiscordPostRepository.listLiveIdentityRunIds(),
+        runRepository.listScheduleActiveRunIds(),
+        runDiscordAnnouncementRepository.listPending(50),
+        discordSchedulePostRepository.listAll(),
+      ]);
+    const candidateRunIds = [...new Set([...baseRunIds, ...liveIdentityRunIds, ...scheduleRunIds])];
     const runs = await runRepository.listManagedByIds(candidateRunIds);
     // One batched post read serves both the Run lanes and pending announcements.
     const postsByRunId = await runDiscordPostRepository.listByRunIds([
@@ -1343,6 +1380,40 @@ export const discordSyncService = {
       lootType: row.lootType,
     }));
 
+    const scheduleRenderInputs: ScheduleRunRenderInput[] = runs
+      .filter((run) => !run.archivedAt && isScheduleEligibleStatus(run.status))
+      .map((run) => ({
+        runId: run.id,
+        scheduledStartAt: run.scheduledStartAt,
+        status: run.status,
+        difficulty: run.difficulty,
+        lootType: run.lootType,
+        titleCoverage: run.contentDisplay.titleCoverage,
+        raidLeadDisplay: effectiveRaidLeadChannelName({
+          raidLeadName: run.raidLeadName,
+          discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
+        }),
+        runChannelId: postsByRunId.get(run.id)?.runChannelId ?? null,
+      }));
+    const schedulePostsByBucket = new Map(schedulePosts.map((row) => [row.bucket, row]));
+    const schedules: ScheduleSyncWorkItem[] = DISCORD_SCHEDULE_BUCKETS.map((bucket) => {
+      const bucketRuns = filterAndSortScheduleRuns(scheduleRenderInputs, bucket, now);
+      const embed = buildScheduleEmbed({ bucket, runs: bucketRuns });
+      const desiredSignature = buildScheduleSignature({ bucket, runs: bucketRuns });
+      const existing = schedulePostsByBucket.get(bucket) ?? null;
+      const needsUpdate =
+        !existing?.messageId || !existing.channelId || existing.lastSignature !== desiredSignature;
+      return {
+        bucket,
+        existingChannelId: existing?.channelId ?? null,
+        existingMessageId: existing?.messageId ?? null,
+        lastSignature: existing?.lastSignature ?? null,
+        desiredSignature,
+        needsUpdate,
+        embed,
+      };
+    });
+
     return {
       channels,
       voiceChannels,
@@ -1354,6 +1425,7 @@ export const discordSyncService = {
       runAnnouncements,
       warcraftLogsReportAuthorIds,
       warcraftLogsReportChannels,
+      schedules,
     };
   },
 
@@ -1464,6 +1536,16 @@ export const discordSyncService = {
       // runChannelId looks like first provision and re-creates + re-pings.
       runChannelId: input.channelId,
     });
+  },
+
+  /** Persist the global CURRENT/NEXT Schedule message identity + signature. */
+  async recordSchedulePost(input: {
+    bucket: "CURRENT" | "NEXT";
+    channelId: string;
+    messageId: string;
+    signature: string;
+  }): Promise<void> {
+    await discordSchedulePostRepository.recordPost(input);
   },
 
   async recordRosterPost(input: {

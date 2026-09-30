@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   DISCORD_CANNOT_DM_CODE,
   DISCORD_UNKNOWN_CHANNEL_CODE,
+  DISCORD_UNKNOWN_MESSAGE_CODE,
   isDiscordCannotDmError,
   isDiscordUnknownChannelError,
+  isDiscordUnknownMessageError,
 } from "@/discord-bot/discord-api-errors";
 
 describe("isDiscordUnknownChannelError", () => {
@@ -17,6 +19,21 @@ describe("isDiscordUnknownChannelError", () => {
     expect(isDiscordUnknownChannelError({ code: 50035 })).toBe(false);
     expect(isDiscordUnknownChannelError(new Error("network"))).toBe(false);
     expect(isDiscordUnknownChannelError(null)).toBe(false);
+  });
+});
+
+describe("isDiscordUnknownMessageError", () => {
+  it("accepts numeric and string 10008", () => {
+    expect(isDiscordUnknownMessageError({ code: DISCORD_UNKNOWN_MESSAGE_CODE })).toBe(true);
+    expect(isDiscordUnknownMessageError({ code: "10008" })).toBe(true);
+  });
+
+  it("rejects permission, network, and unknown-channel errors", () => {
+    expect(isDiscordUnknownMessageError({ code: 10003 })).toBe(false);
+    expect(isDiscordUnknownMessageError({ code: 50001 })).toBe(false);
+    expect(isDiscordUnknownMessageError({ code: 50013 })).toBe(false);
+    expect(isDiscordUnknownMessageError(new Error("ECONNRESET"))).toBe(false);
+    expect(isDiscordUnknownMessageError(null)).toBe(false);
   });
 });
 

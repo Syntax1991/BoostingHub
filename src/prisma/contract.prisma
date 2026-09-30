@@ -1088,6 +1088,28 @@ model RunDiscordPost {
   @@map("run_discord_post")
 }
 
+/// Raid-ID week bucket for the global Discord Schedule posts (#current-id / #next-id).
+enum DiscordScheduleBucket {
+  @@type("pg/text@1")
+  CURRENT = "CURRENT"
+  NEXT    = "NEXT"
+}
+
+/// Global persistent Schedule message per CURRENT/NEXT marker channel.
+/// Not per-Run — one row per bucket. Bot creates/edits the Discord message;
+/// BoostingHub stores message identity + last render signature.
+model DiscordSchedulePost {
+  id            String                @id @default(uuid())
+  bucket        DiscordScheduleBucket @unique
+  channelId     String?
+  messageId     String?
+  lastSignature String?
+  createdAt     TimestamptzString     @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@map("discord_schedule_post")
+}
+
 /// Durable Run-channel lifecycle announcement (reschedule / cancel).
 /// Shared channel communication — never gated by User DM preferences.
 /// Distinct from UserNotification rows. Idempotent via sourceKey.
