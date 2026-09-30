@@ -1,164 +1,95 @@
 # Anleitung für Booster
 
-Kurzer Einstieg in BoostingHub: anmelden, Characters anlegen, für Runs anmelden und den Status unter **My Runs** verfolgen.
+Kurzer Einstieg in **Manawyrm Hub**: anmelden, Characters verwalten, für Runs anmelden und den Status unter **My Runs** verfolgen.
 
-> **Wichtig:** Deine Account-Rolle ist meist **USER**. **Booster** und **Lootbuddy** sind keine Account-Rollen, sondern **Boosting-Rollen** auf deinem Account, die ein Admin separat vergibt. Pro Run wählst du weiterhin, wie du dich anmeldest (Booster oder Lootbuddy).
+> **Booster** ist eine Boosting-Rolle, die Community/Admin vergibt. Sie gilt für den **Account**, nicht für einen einzelnen Character. Pro Run wählst du weiterhin, wie du teilnimmst (Booster und/oder Lootbuddy).
 
----
-
-## 1. Anmelden
-
-Öffne BoostingHub und melde dich mit **Continue with Discord** an. Discord ist der Produktions-Login.
-
-![Login mit Discord](./screenshots/common-01-login.png)
-
-Nach dem Login landest du auf dem **Dashboard**.
+App: https://manawyrm-boosting.com
 
 ---
 
-## 2. Dashboard
+## 1. Einstieg
 
-Hier siehst du auf einen Blick:
+Melde dich mit **Discord** an. Du landest auf dem **Dashboard** mit Shortcuts zu **Runs**, **Characters** und **My Runs**.
 
-- **Your attention** — Termin-Konflikte bei ausgewählten Runs
-- **Upcoming Runs** — offene und laufende Community-Runs
-- **Next selected run** — dein nächster **SELECTED**-Run inkl. Character und Rolle
-- **Characters** — aktive / booster-eligible Characters und Lockout-Hinweise
-
-![Booster-Dashboard](./screenshots/bo-01-dashboard.png)
+![Dashboard](./screenshots/bo-01-dashboard.png)
 
 ---
 
-## 3. Characters anlegen
+## 2. Characters
 
-Unter **Characters** verwaltest du deine WoW-Chars. Für Booster-Signups brauchst du mindestens einen **aktiven** Character.
+Unter **Characters**:
 
-1. Optional **Battle.net** (EU/US) verbinden — Import und Item-Level-Refresh.
-2. Oder **Add Character**: Region / Realm / Name eingeben, Spec wählen (Klasse und ilvl kommen von Blizzard).
-3. Prüfe **Account Access** (z. B. Heroic / Mythic) und **Availability**.
+1. Optional **Battle.net** verbinden oder **Add Character** nutzen.
+2. Die **Specialization** liefert die Default-Rolle für Discord Quick Signup.
+3. **Availability** setzen.
+4. Lockouts sind **nur informativ**.
+5. Inaktive oder nicht verfügbare Characters werden bei Quick Signup **übersprungen**.
 
-![Characters-Seite](./screenshots/bo-02-characters.png)
+Die Booster-Rolle gilt **account-weit**.
 
-### Booster-Rolle
-
-Um dich als **Booster** anzumelden, braucht dein Account die **Booster-Rolle**. Sie gehört zu deinem Account (nicht zu einem Character) und gilt für Normal-, Heroic- und Mythic-Runs gleichermaßen. Du bewirbst dich über Discord (**Apply via Discord**) — nicht über ein Self-Service-Formular in der App. Ohne sie kannst du dich weiterhin als **Lootbuddy** anmelden. Deine Rollen siehst du im **Profil** und oben unter **Characters**.
+![Characters](./screenshots/bo-02-characters.png)
 
 ---
 
-## 4. Für einen Run anmelden
+## 3. Anmeldung (Website)
 
-Öffne **Runs**. Filtere nach Difficulty oder Status und suche Runs mit **Signups open**.
+**Runs** → **Sign up**.
 
-![Runs-Liste](./screenshots/bo-03-runs.png)
+Manueller Booster-Flow:
 
-Spalten kurz erklärt:
+1. Einen oder mehrere Characters auswählen
+2. Angebotene Rollen wählen (Tank / Healer / DPS)
+3. **Save Booster Offers**
 
-| Spalte | Bedeutung |
-| --- | --- |
-| **RAID** | Titel, Content, Difficulty, Status |
-| **SCHEDULE** | Datum / Uhrzeit |
-| **LEAD** | zuständiger Raid Lead |
-| **COMP** | Ziel-Composition (z. B. 2T / 4H / 14D) |
-| **YOU** | dein Status (Not signed, Pending, Selected, …) |
-| **ACTION** | **Sign up** oder bereits **Signed ×N** |
+Die Website eignet sich am besten für feine Rollenwahl. Es gibt **keinen** Web-Quick-Signup-Button.
 
-Klicke **Sign up**. Im Dialog gibt es zwei unabhängige Bereiche:
-
-### Booster
-
-1. Character(s) anhaken.
-2. Angebotene Rollen wählen (**Tank** / **Healer** / **DPS**) — was deine Klasse kann.
-3. **Save Booster Offers**.
-
-### Lootbuddy
-
-- Kein Character nötig.
-- Class + Mode (**Loot only** oder **Play along**).
-- Kann parallel zum Booster-Signup bestehen.
-- **Save Lootbuddies**.
+**Lootbuddy**-Einträge sind unabhängig und können parallel zu Booster-Offers bestehen.
 
 ![Signup-Dialog](./screenshots/bo-04-signup.png)
 
-Web und Discord nutzen **dieselben** Signups — siehe Abschnitt 5.
-
 ---
 
-## 5. Anmeldung über den Discord-Bot
+## 4. Discord-Signups
 
-Voraussetzung: Discord-Account ist mit BoostingHub verknüpft (einmalig über Discord-Login auf der Website).
-
-Jeder offene Run hat einen eigenen Discord-Channel mit **Signup-Embed** und Buttons:
+Jeder offene Run-Channel hat eine persistente **Signups**-Nachricht mit vier Buttons:
 
 | Button | Wirkung |
 | --- | --- |
-| **Signup** | Als Booster anmelden (Character + Rollen) |
-| **Quick Signup** | Alle eligible Characters mit aktueller Spec-Rolle anmelden (additiv; bestehende Offers bleiben) |
-| **Sign as Lootbuddy** | Als Lootbuddy anmelden (Klassen wählen) |
-| **Cancel Signup** | Aktive Booster- **und** Lootbuddy-Teilnahme zurückziehen |
+| **Signup** | Characters und angebotene Rollen manuell wählen |
+| **Quick Signup** | Ein Klick: legt Booster-**Offers** für alle aktuell geeigneten Characters mit Spec-Default-Rolle an (additiv; bestehende Offers bleiben; unavailable/reserviert/ohne Default-Rolle werden übersprungen). Füllt das **Roster nicht automatisch** — der Raid Lead wählt separat. |
+| **Sign as Lootbuddy** | Erstellt **Loot-only**-Einträge (Play along und feinere Sets nur auf der Website) |
+| **Cancel Signup** | Zieht Booster- **und** Lootbuddy-Teilnahme für diesen Run zurück |
 
-### Booster (Button Signup)
+Für manuelle Rollenkontrolle **Signup** nutzen.
 
-1. Im Run-Channel **Signup** klicken (Antwort ist nur für dich sichtbar).
-2. Character(s) auswählen → **Next**.
-3. Pro Character angebotene Rollen setzen → **Confirm**.
+![Discord Signups](./screenshots/bo-06-discord-signups.png)
 
-Ohne Booster-Rolle oder ohne eligible Characters bricht der Flow mit einer Meldung ab.
+Das Card-4-Bild ist ein bereinigter echter Discord-Screenshot der Live-Signups-Nachricht (kein generierter Mock).
 
-### Quick Signup
-
-Ein Klick: meldet jeden aktuell eligible Booster-Character mit Spec-Default-Rolle an. Bestehende Offers/Rollen bleiben. Characters ohne bekannte Spec-Rolle werden übersprungen — die manuell über **Signup** hinzufügen.
-
-### Lootbuddy (Button Sign as Lootbuddy)
-
-1. **Sign as Lootbuddy** klicken.
-2. Eine oder mehrere Klassen wählen → bestätigen.
-3. Discord speichert das als **Loot only** (ein Eintrag pro Klasse). Mode **Play along** und feinere Lootbuddy-Sets nur über die Website.
-
-### Cancel Signup
-
-Zieht **Booster und Lootbuddy** auf diesem Run zurück (anders als Web „Cancel Booster“, das nur Booster betrifft). Geschützte Roster-/Selected-Zeilen können die Aktion blocken.
-
-### Slash-Command `/mysignups`
-
-Zeigt deine aktuellen Signups (ephemeral), gruppiert wie **My Runs** auf der Website. Es gibt kein `/signup` — Anmeldung läuft nur über die Embed-Buttons.
-
-Nach Publish erscheint im selben Channel das **Roster-Embed** (nur Selected). Beim **Start Run** kann zusätzlich eine Raid-Invite-DM kommen (wenn in Settings erlaubt).
+Schneller Status: `/mysignups`.
 
 ---
 
-## 6. Status unter My Runs
+## 5. Nach der Anmeldung
 
-Unter **My Runs** siehst du deine Signups gruppiert:
+Unter **My Runs**:
 
-- **Selected** — im veröffentlichten Roster
-- **Pending** — Angebot, Raid Lead entscheidet noch
-- **Not Selected** / **Withdrawn** — Historie
+- **Pending** — du hast dich angeboten
+- **Selected** — du stehst im veröffentlichten Roster
+- **Not Selected / Withdrawn** — Historie / aktueller Stand
+
+Ablauf:
+
+```text
+Signup → Roster → Publish → Start → Attendance → Complete → Payout
+```
 
 ![My Runs](./screenshots/bo-05-my-runs.png)
 
-**Withdraw** zieht ein Angebot zurück, solange die Regeln es erlauben (z. B. Pending meist frei; Selected oft erst vor Publish / Start).
+### Checkliste
 
----
-
-## 7. Ablauf eines Runs (aus Booster-Sicht)
-
-```text
-Sign up (Pending)
-  → Raid Lead baut Roster
-  → Publish (Selected / Not Selected)
-  → Start Run
-  → Attendance
-  → Complete → Payout
-```
-
-Auf dem Dashboard und unter **My Runs** erkennst du, ob du Selected bist und mit welchem Character / welcher Rolle.
-
----
-
-## Kurz-Checkliste
-
-1. Discord-Login (verknüpft Discord mit BoostingHub)
-2. Character(s) unter **Characters** anlegen
-3. Booster-Rolle über Discord beantragen (**Apply via Discord**)
-4. Anmelden: Website **Runs → Sign up** *oder* Discord-Buttons im Run-Channel
-5. Status prüfen: **My Runs** / `/mysignups`, bei Bedarf Withdraw / **Cancel Signup**
+1. Mit Discord anmelden
+2. Character(s) anlegen + Booster-Rolle
+3. Anmelden (Website oder Discord)
+4. Status prüfen: **My Runs** / `/mysignups`

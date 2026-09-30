@@ -57,34 +57,36 @@ export function LoginView({
           </div>
         </Card>
         {devAuthEnabled ? (
-          <Card>
-            <div className="px-4 py-4">
-              <h2 className="text-sm font-semibold text-warning">Development identities</h2>
-              <p className="mt-1 text-xs text-muted">
-                This panel is intentionally obvious and is compiled out of production by a runtime guard.
-              </p>
-              <div className="mt-4 grid gap-2">
-                {identities.map((identity) => (
-                  <form key={identity.id} action={signInWithDevIdentity}>
-                    <input type="hidden" name="userId" value={identity.id} />
-                    <input type="hidden" name="next" value={callbackURL} />
-                    <button
-                      type="submit"
-                      className="flex w-full items-center justify-between rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-left text-sm hover:bg-warning/15"
-                    >
-                      <span>
-                        <span className="font-medium">{identity.name}</span>
-                        <span className="ml-2 text-xs text-muted">{identity.email}</span>
-                      </span>
-                      <span className="text-xs uppercase tracking-wide text-warning">
-                        {ROLE_LABELS[identity.accountRole as AccountRole]}
-                      </span>
-                    </button>
-                  </form>
-                ))}
+          <div data-guide-hide="true">
+            <Card>
+              <div className="px-4 py-4">
+                <h2 className="text-sm font-semibold text-warning">Development identities</h2>
+                <p className="mt-1 text-xs text-muted">
+                  This panel is intentionally obvious and is compiled out of production by a runtime guard.
+                </p>
+                <div className="mt-4 grid gap-2">
+                  {identities.map((identity) => (
+                    <form key={identity.id} action={signInWithDevIdentity}>
+                      <input type="hidden" name="userId" value={identity.id} />
+                      <input type="hidden" name="next" value={callbackURL} />
+                      <button
+                        type="submit"
+                        className="flex w-full items-center justify-between rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-left text-sm hover:bg-warning/15"
+                      >
+                        <span>
+                          <span className="font-medium">{identity.name}</span>
+                          <span className="ml-2 text-xs text-muted">{identity.email}</span>
+                        </span>
+                        <span className="text-xs uppercase tracking-wide text-warning">
+                          {ROLE_LABELS[identity.accountRole as AccountRole]}
+                        </span>
+                      </button>
+                    </form>
+                  ))}
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         ) : null}
       </div>
     </div>
