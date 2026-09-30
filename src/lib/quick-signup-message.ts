@@ -9,38 +9,74 @@ export type QuickSignupBoostersResult = {
   added: number;
   alreadySigned: number;
   skippedNoDefaultRole: number;
+  /** Weekly availability mark for the target Run's reset. */
+  skippedUnavailable: number;
+  /** Draft-selected or SELECTED on another Run with start gap &lt; 2h. */
+  skippedReservationConflict: number;
+  skippedInactive: number;
+  /**
+   * Additive total of hard-ineligible skips (unavailable + reservation conflict
+   * + inactive + any residual reason). Prefer the detailed fields for product copy.
+   */
   skippedIneligible: number;
 };
 
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? `1 ${one}` : `${count} ${many}`;
+}
+
+/**
+ * Concise skip breakdown for Discord / action feedback.
+ * Never mentions "saved" — lockouts are not Quick Signup skip reasons.
+ */
+export function formatQuickSignupSkipSummary(
+  result: Pick<
+    QuickSignupBoostersResult,
+    | "skippedUnavailable"
+    | "skippedReservationConflict"
+    | "skippedNoDefaultRole"
+    | "skippedInactive"
+  >,
+): string | null {
+  const parts: string[] = [];
+  if (result.skippedUnavailable > 0) {
+    parts.push(plural(result.skippedUnavailable, "unavailable", "unavailable"));
+  }
+  if (result.skippedReservationConflict > 0) {
+    parts.push(
+      plural(result.skippedReservationConflict, "scheduling conflict", "scheduling conflicts"),
+    );
+  }
+  if (result.skippedNoDefaultRole > 0) {
+    parts.push(plural(result.skippedNoDefaultRole, "missing default role", "missing default roles"));
+  }
+  if (result.skippedInactive > 0) {
+    parts.push(plural(result.skippedInactive, "inactive", "inactive"));
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join(" · ")} skipped`;
+}
+
 /** Concise ephemeral / action feedback for Quick Signup outcomes. */
 export function formatQuickSignupBoostersMessage(result: QuickSignupBoostersResult): string {
-  if (result.added === 0) {
-    if (result.alreadySigned > 0 && result.skippedNoDefaultRole === 0) {
-      return "All eligible characters are already signed up.";
-    }
-    if (result.skippedNoDefaultRole > 0 && result.alreadySigned === 0) {
-      return result.skippedNoDefaultRole === 1
-        ? "No characters were added. 1 character was skipped because no default role could be determined."
-        : `No characters were added. ${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
-    }
-    if (result.skippedNoDefaultRole > 0) {
-      return result.skippedNoDefaultRole === 1
-        ? "All eligible characters with a default role are already signed up. 1 character was skipped because no default role could be determined."
-        : `All eligible characters with a default role are already signed up. ${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
-    }
-    return "No eligible characters to add.";
+  const skipSummary = formatQuickSignupSkipSummary(result);
+
+  if (result.added > 0) {
+    const addedPart =
+      result.added === 1
+        ? "Signed up with 1 character offered."
+        : `Signed up with ${result.added} characters offered.`;
+    return skipSummary ? `${addedPart} ${skipSummary}` : addedPart;
   }
 
-  const addedPart =
-    result.added === 1
-      ? "Quick Signup added 1 character."
-      : `Quick Signup added ${result.added} characters.`;
-  if (result.skippedNoDefaultRole === 0) {
-    return addedPart;
+  if (result.alreadySigned > 0) {
+    const base = "All eligible characters are already signed up.";
+    return skipSummary ? `${base} ${skipSummary}` : base;
   }
-  const skippedPart =
-    result.skippedNoDefaultRole === 1
-      ? "1 character was skipped because no default role could be determined."
-      : `${result.skippedNoDefaultRole} characters were skipped because no default role could be determined.`;
-  return `${addedPart.slice(0, -1)}. ${skippedPart}`;
+
+  if (skipSummary) {
+    return `No characters were added. ${skipSummary}`;
+  }
+
+  return "No eligible characters to add.";
 }

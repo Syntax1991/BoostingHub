@@ -27,10 +27,15 @@ Removal protection: a `PENDING` offer may always be withdrawn while lifecycle ru
 
 `signupService.quickSignupBoosters(actor, { runId })` adds every **currently eligible** Booster Character that has a non-null specialization `defaultRole`, using `offeredRoles: [defaultRole]`.
 
+**Product rule:** Quick Signup offers all of your eligible Booster characters. Saved characters and characters used in non-conflicting runs are included. Characters marked unavailable or reserved for a conflicting run are skipped.
+
 - **Additive.** Existing active Booster offers (and their `offeredRoles`) are preserved unchanged — including draft-selected and published `SELECTED` rows. Quick Signup never withdraws and never overwrites roles.
-- **Same eligibility authority** as the Signup dialog (`evaluateBoosterOptions`). Raid lockouts / saved progress remain informational only — a saved Character is still added when otherwise eligible.
-- **No role guessing.** Characters with `defaultRole: null` (missing/unrecognized specialization) are skipped; the User can still add them manually and choose a role.
-- **Server-side merge.** The current active Booster offer set is loaded at execution time — the client does not supply a complete desired set — so a stale client cannot wipe existing offers. Idempotent: a second click with no state change adds 0.
+- **Same eligibility authority** as the Signup dialog (`evaluateBoosterOptions` via `withSignupEligibilityContext` / reservation collision). Raid lockouts / saved progress remain informational only (`contentSaves`) — a saved Character is still added when otherwise eligible. A mere `PENDING` offer on another Run does **not** reserve the Character.
+- **Conflicting reservation only.** A Character is skipped for scheduling when it is draft-selected or `SELECTED` on another upcoming Run whose start is **strictly less than** 2 hours from this Run (`CROSS_RUN_RESERVATION_MIN_GAP_MS`). Exactly 2 hours apart is allowed.
+- **Weekly unavailable / inactive.** Deliberate Character weekly unavailability and inactive Characters are hard skips (same as manual eligibility).
+- **No role guessing.** Characters with `defaultRole: null` (missing/unrecognized specialization) are skipped by Quick Signup only; the User can still add them manually and choose a role.
+- **Server-side merge.** The current active Booster offer set is loaded at execution time — the client does not supply a complete desired set — so a stale client cannot wipe existing offers. Idempotent: a second click with no state change adds 0. Race safety: `validateOfferedCharacters` then `applyOfferPlan`'s transactional `queryReservationConflicts` re-check before create/reactivate.
+- **Result breakdown.** `added`, `alreadySigned`, `skippedNoDefaultRole`, `skippedUnavailable`, `skippedReservationConflict`, `skippedInactive`, plus additive `skippedIneligible`.
 - **Never touches Lootbuddies.**
 - Works for Normal / Heroic / Mythic and for Saved / Unsaved / VIP / Community alike (`MYTHIC + SAVED` remains invalid at Run level).
 

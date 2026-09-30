@@ -226,10 +226,10 @@ Buttons: **Signup** (Primary), **Quick Signup** (Success), **Sign as Lootbuddy**
 
 1. `interaction.deferReply({ ephemeral: true })`.
 2. `POST .../signup/quick` for the acting Discord User (`signupService.quickSignupBoosters`).
-3. Concise ephemeral feedback (added / already signed / skipped no-default-role). Detailed ineligibility stays on the normal Signup flow.
+3. Concise ephemeral feedback: `Signed up with N characters offered.` plus, when relevant, skip reasons (`unavailable` / `scheduling conflict` / `missing default role` / `inactive`). Saved progress is never a skip reason; a non-conflicting reservation is not either.
 4. `requestImmediateSync()` so the public Signups embed refreshes through the normal sync lane.
 
-Quick Signup is additive (preserves existing `offeredRoles` and selected/draft-selected rows), Booster-only, and never touches Lootbuddies. Web does not expose this accelerator.
+Quick Signup offers all eligible Booster characters (same `evaluateBoosterOptions` authority as manual signup). Saved characters and characters used on non-conflicting runs are included. Characters marked unavailable or reserved for a conflicting run (&lt; 2h) are skipped. Additive (preserves existing `offeredRoles` and selected/draft-selected rows), Booster-only, and never touches Lootbuddies. Web does not expose this accelerator.
 
 Public signup embed Roles field:
 

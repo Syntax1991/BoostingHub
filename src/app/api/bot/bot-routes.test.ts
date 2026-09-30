@@ -583,6 +583,9 @@ describe("POST /api/bot/runs/:runId/signup/quick", () => {
       skippedNoDefaultRole: 0,
     });
     expect(typeof body.data.skippedIneligible).toBe("number");
+    expect(typeof body.data.skippedUnavailable).toBe("number");
+    expect(typeof body.data.skippedReservationConflict).toBe("number");
+    expect(typeof body.data.skippedInactive).toBe("number");
 
     const second = await quickSignupPost(
       req(`/api/bot/runs/${runId}/signup/quick`, {

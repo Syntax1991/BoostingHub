@@ -31,7 +31,7 @@ Booster is a Boosting Role granted by the community/admin. It applies to your ac
 
 **Title:** 🧙 Characters
 
-**Copy:** Connect Battle.net or Add Character · specialization → default role · Availability · account-wide Booster · lockouts informational · inactive/unavailable skipped by Quick Signup
+**Copy:** Connect Battle.net or Add Character · specialization → default role · Availability · account-wide Booster · lockouts informational · inactive/weekly-unavailable skipped by Quick Signup · saved and non-conflicting runs included
 
 **Screenshot:** `screenshots/bo-02-characters.png`
 

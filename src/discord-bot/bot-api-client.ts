@@ -324,6 +324,8 @@ export class BotApiClient {
   /**
    * Additive Booster Quick Signup — server merges eligible Characters with
    * their specialization defaultRole. No Character ids are accepted from Discord.
+   * Skip counts mirror evaluateBoosterOptions hard blockers plus the Quick Signup
+   * automation-only no-defaultRole skip; lockouts/saves are never skip reasons.
    */
   quickSignupBoosters(runId: string, discordUserId: string) {
     return this.request<{
@@ -331,6 +333,9 @@ export class BotApiClient {
       added: number;
       alreadySigned: number;
       skippedNoDefaultRole: number;
+      skippedUnavailable: number;
+      skippedReservationConflict: number;
+      skippedInactive: number;
       skippedIneligible: number;
     }>(`/api/bot/runs/${runId}/signup/quick`, {
       method: "POST",

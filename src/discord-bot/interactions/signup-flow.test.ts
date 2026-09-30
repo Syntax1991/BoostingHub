@@ -659,6 +659,9 @@ describe("Quick Signup button", () => {
       added: 3,
       alreadySigned: 0,
       skippedNoDefaultRole: 0,
+      skippedUnavailable: 0,
+      skippedReservationConflict: 0,
+      skippedInactive: 0,
       skippedIneligible: 0,
     });
     const api = fakeApi({ quickSignupBoosters });
@@ -668,7 +671,7 @@ describe("Quick Signup button", () => {
 
     expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
     expect(quickSignupBoosters).toHaveBeenCalledWith(RUN_ID, "user-a");
-    expect(interaction.editReply).toHaveBeenCalledWith({ content: "Quick Signup added 3 characters." });
+    expect(interaction.editReply).toHaveBeenCalledWith({ content: "Signed up with 3 characters offered." });
     expect(requestImmediateSync).toHaveBeenCalledOnce();
   });
 
@@ -679,6 +682,9 @@ describe("Quick Signup button", () => {
         added: 0,
         alreadySigned: 2,
         skippedNoDefaultRole: 0,
+        skippedUnavailable: 1,
+        skippedReservationConflict: 0,
+        skippedInactive: 0,
         skippedIneligible: 1,
       }),
     });
@@ -687,19 +693,22 @@ describe("Quick Signup button", () => {
     await quickSignup(interaction, api, RUN_ID);
 
     expect(interaction.editReply).toHaveBeenCalledWith({
-      content: "All eligible characters are already signed up.",
+      content: "All eligible characters are already signed up. 1 unavailable skipped",
     });
     expect(requestImmediateSync).toHaveBeenCalledOnce();
   });
 
-  it("mentions Characters skipped for missing defaultRole", async () => {
+  it("mentions Characters skipped for missing defaultRole and scheduling conflicts", async () => {
     const api = fakeApi({
       quickSignupBoosters: vi.fn().mockResolvedValue({
         runId: RUN_ID,
         added: 7,
         alreadySigned: 0,
         skippedNoDefaultRole: 1,
-        skippedIneligible: 0,
+        skippedUnavailable: 2,
+        skippedReservationConflict: 1,
+        skippedInactive: 0,
+        skippedIneligible: 3,
       }),
     });
     const interaction = fakeInteraction("user-a");
@@ -708,7 +717,7 @@ describe("Quick Signup button", () => {
 
     expect(interaction.editReply).toHaveBeenCalledWith({
       content:
-        "Quick Signup added 7 characters. 1 character was skipped because no default role could be determined.",
+        "Signed up with 7 characters offered. 2 unavailable · 1 scheduling conflict · 1 missing default role skipped",
     });
   });
 
