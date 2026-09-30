@@ -58,7 +58,7 @@ Booster is a Boosting Role granted by the community/admin. It applies to your ac
 **Fields:** Signup · Quick Signup (highlighted) · Sign as Lootbuddy · Cancel Signup
 
 **Screenshot:** `screenshots/bo-06-discord-signups.png`  
-(Controlled Discord-faithful preview: anonymized participants, real button order/styles.)
+Builder-driven Discord UI preview from `buildSignupEmbed` / `buildSignupButtons` (anonymized fixture, HEROIC + COMMUNITY). Not a live Discord client capture.
 
 ![Card 4](./screenshots/bo-06-discord-signups.png)
 

@@ -2,16 +2,18 @@
  * Canonical Manawyrm Hub Booster Guide (Discord v2).
  *
  * Live Discord posts identify themselves via embed footer:
- *   `Manawyrm Hub · guide:booster:v2:<cardKey>`
+ *   `Manawyrm Hub · guide:booster:v2:<cardKey>[ · asset:<12hex>]`
  *
- * English copy here is authoritative for Discord. Markdown guides under
- * docs/guides/booster.en.md / booster.md mirror the same structure for the website.
+ * The optional `asset:` segment is a SHA-256 prefix of the attached screenshot
+ * bytes so screenshot-only refreshes still trigger Discord edits.
  */
+import { createHash } from "node:crypto";
 import { APP_BRAND_NAME } from "@/lib/branding";
 
 export const BOOSTER_GUIDE_KIND = "booster" as const;
 export const BOOSTER_GUIDE_VERSION = "v2" as const;
 export const BOOSTER_GUIDE_MARKER_PREFIX = `guide:${BOOSTER_GUIDE_KIND}:${BOOSTER_GUIDE_VERSION}:`;
+export const BOOSTER_GUIDE_ASSET_PREFIX = "asset:";
 
 /** Discord embed accent — same gold family as signup embeds / CSS --accent. */
 export const BOOSTER_GUIDE_EMBED_COLOR = 0xd4af37;
@@ -35,16 +37,34 @@ export type BoosterGuideCard = {
   linkButton?: { label: string; url: string };
 };
 
-export function boosterGuideFooter(cardKey: string): string {
-  return `${APP_BRAND_NAME} · ${BOOSTER_GUIDE_MARKER_PREFIX}${cardKey}`;
+/** First 12 hex chars of SHA-256 — short, stable, collision-resistant enough for guide assets. */
+export function hashGuideAssetBytes(bytes: Uint8Array | Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
 }
 
+export function boosterGuideFooter(cardKey: string, assetRevision?: string | null): string {
+  const base = `${APP_BRAND_NAME} · ${BOOSTER_GUIDE_MARKER_PREFIX}${cardKey}`;
+  if (!assetRevision) return base;
+  return `${base} · ${BOOSTER_GUIDE_ASSET_PREFIX}${assetRevision}`;
+}
+
+/**
+ * Extract the stable card key from a v2 footer. Ignores trailing ` · asset:…`
+ * metadata so revision bumps never break identity parsing.
+ */
 export function parseBoosterGuideCardKey(footerText: string | null | undefined): string | null {
   if (!footerText) return null;
   const idx = footerText.indexOf(BOOSTER_GUIDE_MARKER_PREFIX);
   if (idx < 0) return null;
-  const key = footerText.slice(idx + BOOSTER_GUIDE_MARKER_PREFIX.length).trim();
-  return key.length > 0 ? key : null;
+  const rest = footerText.slice(idx + BOOSTER_GUIDE_MARKER_PREFIX.length).trim();
+  const match = /^([a-z0-9-]+)/i.exec(rest);
+  return match?.[1] ?? null;
+}
+
+export function parseBoosterGuideAssetRevision(footerText: string | null | undefined): string | null {
+  if (!footerText) return null;
+  const match = new RegExp(`·\\s*${BOOSTER_GUIDE_ASSET_PREFIX}([a-f0-9]{12})\\b`, "i").exec(footerText);
+  return match?.[1]?.toLowerCase() ?? null;
 }
 
 /**
@@ -157,7 +177,10 @@ export function boosterGuideCardByKey(key: string): BoosterGuideCard | undefined
 }
 
 /** Discord embed payload (API shape) for one card — no attachments. */
-export function buildBoosterGuideEmbed(card: BoosterGuideCard): {
+export function buildBoosterGuideEmbed(
+  card: BoosterGuideCard,
+  options?: { assetRevision?: string | null },
+): {
   title: string;
   description: string;
   color: number;
@@ -176,7 +199,7 @@ export function buildBoosterGuideEmbed(card: BoosterGuideCard): {
     title: card.title,
     description: card.description,
     color: BOOSTER_GUIDE_EMBED_COLOR,
-    footer: { text: boosterGuideFooter(card.key) },
+    footer: { text: boosterGuideFooter(card.key, options?.assetRevision ?? null) },
   };
   if (card.fields?.length) {
     embed.fields = card.fields.map((field) => ({
@@ -186,7 +209,6 @@ export function buildBoosterGuideEmbed(card: BoosterGuideCard): {
     }));
   }
   if (card.imageFile) {
-    // Attachment is referenced as attachment://filename when uploaded with the message.
     embed.image = { url: `attachment://${card.imageFile}` };
   }
   return embed;
@@ -210,7 +232,10 @@ export function buildBoosterGuideComponents(card: BoosterGuideCard): unknown[] |
 }
 
 /** Rough Discord embed size accounting used by publisher tests. */
-export function measureBoosterGuideEmbed(card: BoosterGuideCard): {
+export function measureBoosterGuideEmbed(
+  card: BoosterGuideCard,
+  assetRevision: string | null = "a".repeat(12),
+): {
   titleChars: number;
   descriptionChars: number;
   fieldCount: number;
@@ -218,7 +243,7 @@ export function measureBoosterGuideEmbed(card: BoosterGuideCard): {
   footerChars: number;
   totalChars: number;
 } {
-  const footer = boosterGuideFooter(card.key);
+  const footer = boosterGuideFooter(card.key, card.imageFile ? assetRevision : null);
   const fields = card.fields ?? [];
   const fieldNameChars = fields.reduce((n, f) => n + f.name.length, 0);
   const fieldValueChars = fields.reduce((n, f) => n + f.value.length, 0);

@@ -52,5 +52,6 @@ dist/
 # guide capture / publish scratch (never commit live Discord snapshots)
 docs/guides/screenshots/_*.html
 docs/guides/screenshots/_debug*
+tmp-booster-guide-snapshots/
 /tmp-booster-guide-snapshots/
 booster-guide-snapshot-*.json

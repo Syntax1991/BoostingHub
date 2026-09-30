@@ -58,9 +58,11 @@ npm run guide:booster:publish -- --snapshot-dir=/tmp/booster-guide-snapshots
 Safety:
 
 - Default / preview = dry listing of cards; `--publish` required to mutate Discord.
-- Canonical messages are identified by embed footer markers — not “last five messages”.
+- Canonical messages are identified by embed footer markers + optional `asset:<sha12>` — not “last five messages”.
+- Screenshot byte changes bump `asset:` and force an edit even when the filename is unchanged.
 - Duplicate markers or foreign authors → refuse.
-- Legacy append-only posts are never deleted unless `--retire-legacy` is explicit.
+- Legacy retirement requires the complete known five-message fingerprint set, then upsert + re-read verification of all five v2 cards before any delete.
+- Every `--publish` writes a local rollback snapshot under `tmp-booster-guide-snapshots/` (gitignored).
 
 Screenshots live under `docs/guides/screenshots/`. Capture viewport: **1440×900**, dark theme, no browser chrome.
 
