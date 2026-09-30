@@ -51,6 +51,7 @@ GROUPS = {
         ("DISCORD_PING_ROLE_TANK_ID", "public"),
         ("DISCORD_PING_ROLE_HEALER_ID", "public"),
         ("DISCORD_PING_ROLE_DPS_ID", "public"),
+        ("DISCORD_ANNOUNCEMENT_CHANNEL_ID", "public"),
         ("DISCORD_SIGNUP_CHANNEL_ID", "public"),
         ("DISCORD_ROSTER_CHANNEL_ID", "public"),
         ("DISCORD_SYNC_INTERVAL_MS", "public"),

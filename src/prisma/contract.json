@@ -48,6 +48,10 @@
       "model": "DiscordChannelScanCursor",
       "namespace": "public"
     },
+    "discord_global_announcement": {
+      "model": "DiscordGlobalAnnouncement",
+      "namespace": "public"
+    },
     "raid": {
       "model": "Raid",
       "namespace": "public"
@@ -2375,6 +2379,67 @@
               },
               "namespaceId": "public",
               "table": "discord_channel_scan_cursor"
+            }
+          },
+          "DiscordGlobalAnnouncement": {
+            "fields": {
+              "channelId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "key": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "messageId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "channelId": {
+                  "column": "channelId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "key": {
+                  "column": "key"
+                },
+                "messageId": {
+                  "column": "messageId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "discord_global_announcement"
             }
           },
           "Raid": {
@@ -9983,6 +10048,47 @@
               },
               "uniques": []
             },
+            "discord_global_announcement": {
+              "columns": {
+                "channelId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "key": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "messageId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "key"
+                ]
+              },
+              "uniques": []
+            },
             "raid": {
               "columns": {
                 "createdAt": {
@@ -15074,10 +15180,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "415430a681c72b2ecaaf5c450efc66212913fb8b18e1b315a0a512c21f841031"
+    "storageHash": "dbad356042188ae4456d56fe738b240c8c251a8e45f548d1158ad6a44ea47f33"
   },
   "execution": {
-    "executionHash": "4db3e22f9203aeabd3091cf80b607036655d4240c5b2499899845ca3a30fb4aa",
+    "executionHash": "d0c2baa773bdfe02ed36d9314a3b8d8d55bd89a599993f9293b6293092378430",
     "mutations": {
       "defaults": [
         {
@@ -15323,6 +15429,21 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "discord_channel_scan_cursor"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "discord_global_announcement"
           }
         },
         {
