@@ -259,6 +259,135 @@ describe("syncOnce — raidboost announce on first channel create", () => {
     expect(only.components).toBeDefined();
     expect(only.content).toBeUndefined();
   });
+
+  it("edits an existing Signup message in place with the Quick Signup button row (no channel.send)", async () => {
+    const RUN_CHAN = "existing-signup-chan";
+    const MSG = "signup-msg-existing";
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      [RUN_CHAN, { id: RUN_CHAN, name: "tue-1800-hc-unsaved-lead", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const edit = vi.fn().mockResolvedValue(undefined);
+    const originalFetch = client.channels.fetch;
+    client.channels.fetch = vi.fn(async (id: string) => {
+      const channel = await originalFetch(id);
+      if (id !== RUN_CHAN || !channel) return channel;
+      return {
+        ...channel,
+        messages: {
+          fetch: async (messageId: string) => {
+            if (messageId !== MSG) throw new Error("Unknown Message");
+            return { id: messageId, edit };
+          },
+        },
+      };
+    });
+
+    const api = makeApi({
+      channels: [],
+      signups: [
+        {
+          runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+          existingChannelId: RUN_CHAN,
+          existingMessageId: MSG,
+          existingRunChannelId: RUN_CHAN,
+          desiredChannelName: "tue-1800-hc-unsaved-lead",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-15T16:00:00.000Z",
+          allowChannelCreate: true,
+          embed: signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
+        },
+      ],
+      roster: [],
+      start: [],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    const send = (client.channels.cache.get(RUN_CHAN) as { send: ReturnType<typeof vi.fn> }).send;
+    expect(send).not.toHaveBeenCalled();
+
+    const payload = edit.mock.calls[0][0] as { components: Array<{ components: Array<{ data: { custom_id: string; label?: string; disabled?: boolean } }> }> };
+    const buttons = payload.components[0]!.components.map((c) => c.data);
+    expect(buttons.map((b) => b.custom_id.split(":")[1])).toEqual(["signup", "quick-signup", "lootbuddy", "cancel"]);
+    expect(buttons.map((b) => b.label)).toEqual(["Signup", "Quick Signup", "Sign as Lootbuddy", "Cancel Signup"]);
+    expect(buttons.filter((b) => b.custom_id.includes("cancel"))[0]?.disabled).toBeFalsy();
+
+    expect((api.recordDiscordState as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+      [
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+        expect.objectContaining({ kind: "signup", channelId: RUN_CHAN, messageId: MSG }),
+      ],
+    ]);
+  });
+
+  it("edits a closed Signup message with Signup/Quick Signup/Lootbuddy disabled and Cancel enabled", async () => {
+    const RUN_CHAN = "closed-signup-chan";
+    const MSG = "signup-msg-closed";
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      [RUN_CHAN, { id: RUN_CHAN, name: "closed-tue-1800-hc-unsaved-lead", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const edit = vi.fn().mockResolvedValue(undefined);
+    const originalFetch = client.channels.fetch;
+    client.channels.fetch = vi.fn(async (id: string) => {
+      const channel = await originalFetch(id);
+      if (id !== RUN_CHAN || !channel) return channel;
+      return {
+        ...channel,
+        messages: {
+          fetch: async (messageId: string) => {
+            if (messageId !== MSG) throw new Error("Unknown Message");
+            return { id: messageId, edit };
+          },
+        },
+      };
+    });
+
+    await syncOnce(
+      client,
+      botEnv(),
+      makeApi({
+        channels: [],
+        signups: [
+          {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            existingChannelId: RUN_CHAN,
+            existingMessageId: MSG,
+            existingRunChannelId: RUN_CHAN,
+            desiredChannelName: "closed-tue-1800-hc-unsaved-lead",
+            targetBucket: "CURRENT",
+            scheduledStartAt: "2026-09-15T16:00:00.000Z",
+            allowChannelCreate: false,
+            embed: {
+              ...signupEmbed("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-09-15T16:00:00.000Z"),
+              signupWindowOpen: false,
+              runStatus: "ROSTERING",
+            },
+          },
+        ],
+        roster: [],
+        start: [],
+      }),
+    );
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    const payload = edit.mock.calls[0][0] as {
+      components: Array<{ components: Array<{ data: { custom_id: string; disabled?: boolean } }> }>;
+    };
+    const byAction = new Map(
+      payload.components[0]!.components.map((c) => [c.data.custom_id.split(":")[1], c.data] as const),
+    );
+    expect(byAction.get("signup")?.disabled).toBe(true);
+    expect(byAction.get("quick-signup")?.disabled).toBe(true);
+    expect(byAction.get("lootbuddy")?.disabled).toBe(true);
+    expect(byAction.get("cancel")?.disabled).toBeFalsy();
+  });
 });
 
 describe("syncOnce — confirmed-deleted Run channel quiescence", () => {
