@@ -259,6 +259,28 @@ describe("asset fingerprinting", () => {
     expect(plan.actions.every((a) => a.type === "unchanged")).toBe(true);
   });
 
+  it("treats CDN embed.image without attachments as present for screenshot cards", () => {
+    const card = BOOSTER_GUIDE_CARDS.find((c) => c.key === "getting-started")!;
+    const existing: DiscordMessageLike = {
+      id: "m-cdn",
+      author: { id: BOT, bot: true },
+      content: "",
+      embeds: [
+        {
+          title: card.title,
+          description: card.description,
+          footer: {
+            text: `${APP_BRAND_NAME} · ${BOOSTER_GUIDE_MARKER_PREFIX}getting-started · asset:aaaaaaaaaaaa`,
+          },
+          image: { url: "https://cdn.discordapp.com/attachments/1/2/bo-01-dashboard.png" },
+        },
+      ],
+      attachments: [],
+      components: card.linkButton ? [{ type: 1 }] : [],
+    };
+    expect(guideMessageNeedsUpdate(existing, card, "aaaaaaaaaaaa")).toBe(false);
+  });
+
   it("plans UPDATE when Card 4 still has an old screenshot attachment, then converges", () => {
     const discord = BOOSTER_GUIDE_CARDS.find((c) => c.key === "discord-signups")!;
     expect(discord.imageFile).toBeNull();

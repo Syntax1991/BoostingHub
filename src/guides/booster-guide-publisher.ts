@@ -319,8 +319,11 @@ export function guideMessageNeedsUpdate(
 
   const existingNames = attachmentNames(existing);
   const hasEmbedImage = Boolean(embed.image?.url);
-  if (card.imageFile && !existingNames.has(card.imageFile)) return true;
-  if (!card.imageFile && ((existing.attachments?.length ?? 0) > 0 || hasEmbedImage)) {
+  if (card.imageFile) {
+    // Discord may keep the file only as a CDN embed.image after upload.
+    const hasNamedAttachment = existingNames.has(card.imageFile);
+    if (!hasNamedAttachment && !hasEmbedImage) return true;
+  } else if ((existing.attachments?.length ?? 0) > 0 || hasEmbedImage) {
     // Text-only cards must drop both the attachment and any leftover embed.image.
     return true;
   }
