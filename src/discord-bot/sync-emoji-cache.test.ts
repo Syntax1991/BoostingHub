@@ -62,6 +62,7 @@ const env = {
   discordPingRoleTankId: null,
   discordPingRoleHealerId: null,
   discordPingRoleDpsId: null,
+  discordAnnouncementChannelId: null,
   discordSignupChannelId: null,
   discordRosterChannelId: null,
   syncIntervalMs: 5000,

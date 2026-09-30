@@ -53,6 +53,11 @@ export type BotEnv = {
   discordPingRoleTankId: string | null;
   discordPingRoleHealerId: string | null;
   discordPingRoleDpsId: string | null;
+  /**
+   * Optional destination for one-time product / release announcements.
+   * When unset, global announcements are skipped and startup still succeeds.
+   */
+  discordAnnouncementChannelId: string | null;
   /** Legacy/test fallback, used only when discordRunCategoryId is unset. */
   discordSignupChannelId: string | null;
   discordRosterChannelId: string | null;
@@ -84,6 +89,7 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
   const pingRoleTankId = env.DISCORD_PING_ROLE_TANK_ID?.trim() || null;
   const pingRoleHealerId = env.DISCORD_PING_ROLE_HEALER_ID?.trim() || null;
   const pingRoleDpsId = env.DISCORD_PING_ROLE_DPS_ID?.trim() || null;
+  const announcementChannelId = env.DISCORD_ANNOUNCEMENT_CHANNEL_ID?.trim() || null;
   const signupChannelId = env.DISCORD_SIGNUP_CHANNEL_ID?.trim() || null;
   const rosterChannelId = env.DISCORD_ROSTER_CHANNEL_ID?.trim() || null;
 
@@ -106,6 +112,7 @@ export function loadBotEnv(env: NodeJS.ProcessEnv = process.env): BotEnv {
     discordPingRoleTankId: pingRoleTankId,
     discordPingRoleHealerId: pingRoleHealerId,
     discordPingRoleDpsId: pingRoleDpsId,
+    discordAnnouncementChannelId: announcementChannelId,
     discordSignupChannelId: signupChannelId,
     discordRosterChannelId: rosterChannelId,
     apiBaseUrl: env.BOOSTINGHUB_API_BASE_URL!.replace(/\/$/, ""),

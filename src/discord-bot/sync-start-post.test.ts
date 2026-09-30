@@ -32,6 +32,7 @@ function botEnv(): BotEnv {
     discordPingRoleTankId: null,
     discordPingRoleHealerId: null,
     discordPingRoleDpsId: null,
+    discordAnnouncementChannelId: null,
     discordSignupChannelId: null,
     discordRosterChannelId: null,
     apiBaseUrl: "http://localhost",

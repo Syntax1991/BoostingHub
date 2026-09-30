@@ -20,6 +20,7 @@ import {
 } from "@/discord-bot/voice-channels";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import type { BotEnv } from "@/discord-bot/env";
+import { syncGlobalAnnouncements } from "@/discord-bot/global-announcements";
 import {
   isDiscordCannotDmError,
   isDiscordPermissionError,
@@ -279,6 +280,10 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     fingerprintRoleIndicators(roleIndicators),
   ].join("||");
   const work: SyncWork = await api.listSyncWork(classEmojiFingerprint);
+
+  // One-time product announcements — independent of Run / Schedule / Guide lanes.
+  // Failures are logged inside; they must never block normal Discord sync.
+  await syncGlobalAnnouncements(client, env, api);
 
   // Channel reconciliation (name + parent category) runs first and
   // independently of message state — a Run's channel should already be in

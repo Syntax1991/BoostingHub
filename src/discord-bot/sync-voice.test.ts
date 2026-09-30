@@ -27,6 +27,7 @@ function botEnv(overrides: Partial<BotEnv> = {}): BotEnv {
     discordPingRoleTankId: null,
     discordPingRoleHealerId: null,
     discordPingRoleDpsId: null,
+    discordAnnouncementChannelId: null,
     discordSignupChannelId: null,
     discordRosterChannelId: null,
     apiBaseUrl: "http://localhost",
