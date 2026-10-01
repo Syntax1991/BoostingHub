@@ -223,9 +223,10 @@ export type ChannelSyncWorkItem = {
   /** Needed by the bot's CURRENT/NEXT section position reconciliation to order channels chronologically — never used for week classification itself, which already happened above. */
   scheduledStartAt: string;
   /**
-   * True when the Run channel should be retired (transcript + delete):
-   * app-archived (`Run.archivedAt`), COMPLETED, or CANCELLED.
-   * Schedule-based PAST/FUTURE ARCHIVE holding stays false.
+   * True when the dedicated Run TEXT channel should be retired (transcript +
+   * delete). Destructive authority is **only** `Run.archivedAt != null`.
+   * COMPLETED / CANCELLED alone never set this; schedule-based PAST/FUTURE
+   * ARCHIVE category holding stays false (move only, never delete).
    * False while PENDING RunDiscordAnnouncement rows exist for this Run
    * (cancellation message must post before transcript/delete).
    */
@@ -533,7 +534,7 @@ function desiredChannelNameFor(run: {
       discordRunChannelNickname: run.raidLeadDiscordRunChannelNickname,
     }),
   };
-  if (shouldRetireDiscordChannel(run)) return buildClosedDiscordRunChannelName(input);
+  if (shouldUseClosedDiscordRunChannelName(run)) return buildClosedDiscordRunChannelName(input);
   return buildDiscordRunChannelName(input);
 }
 
@@ -552,11 +553,29 @@ export function isStartVoiceStale(
   return (post.lastStartVoiceChannelId ?? null) !== (post.voiceChannelId ?? null);
 }
 
-/** App archive, completed, or cancelled — Discord channel is transcribed then deleted.
- * Terminal Runs must not get a new channel after retirement (`clear-channel`). */
-export function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: string | null }): boolean {
+/**
+ * Closed-style Discord channel **presentation** (name prefix `closed-`).
+ * Independent of destructive retirement: COMPLETED / CANCELLED unarchived Runs
+ * keep their text channel but still show as closed in Discord.
+ */
+export function shouldUseClosedDiscordRunChannelName(run: {
+  status?: string;
+  archivedAt?: string | null;
+}): boolean {
   if (run.archivedAt) return true;
   return run.status === "COMPLETED" || run.status === "CANCELLED";
+}
+
+/**
+ * Destructive TEXT-channel retirement authority.
+ *
+ * ONLY `Run.archivedAt != null` authorizes transcript + delete.
+ * COMPLETED / CANCELLED / schedule ARCHIVE placement alone NEVER authorize
+ * deletion — the Run domain row stays stored; only the Discord text channel
+ * is removed after explicit app archival.
+ */
+export function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: string | null }): boolean {
+  return Boolean(run.archivedAt);
 }
 
 /**
@@ -1187,10 +1206,11 @@ export const discordSyncService = {
       // (existingRunChannelId is only ever set once the signup path below
       // has already created one).
       if (post?.runChannelId) {
-        // CANCELLED/COMPLETED/app-archived Runs are eligible to retire, but
-        // PENDING RunDiscordAnnouncement rows must finish first — otherwise
-        // the channel can be deleted before RUN_CANCELLED / RUN_RESCHEDULED
-        // posts land. Wire field names (`retireChannel`, …) are stable JSON.
+        // Only explicit app archive (`archivedAt`) authorizes TEXT-channel
+        // retirement. COMPLETED/CANCELLED keep the channel (closed naming only).
+        // PENDING RunDiscordAnnouncement rows must finish first — otherwise the
+        // channel can be deleted before RUN_CANCELLED / RUN_RESCHEDULED posts
+        // land. Wire field names (`retireChannel`, …) are stable JSON.
         const runEligibleForRetirement = shouldRetireDiscordChannel(run);
         const hasPendingLifecycleAnnouncements = pendingAnnouncementRunIds.has(run.id);
         const shouldRetireChannelNow = runEligibleForRetirement && !hasPendingLifecycleAnnouncements;
@@ -1843,9 +1863,11 @@ export const discordSyncService = {
   },
 
   /**
-   * Authoritative retirement gate for the bot. Re-checked immediately before
-   * destructive channel delete so a stale CANCELLED work projection cannot
-   * retire a Run that was reactivated mid-pass.
+   * Authoritative TEXT-channel retirement gate for the bot.
+   * Re-checked immediately before every irreversible channel.delete().
+   * Only the current Run row's `archivedAt != null` grants delete authority —
+   * Restore Archive, Reactivate, or any unarchived COMPLETED/CANCELLED state
+   * must revoke deletion even if stale work projected `retireChannel: true`.
    */
   async shouldRetireRunChannel(runId: string): Promise<boolean> {
     const run = await runRepository.findById(runId);

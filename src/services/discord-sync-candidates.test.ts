@@ -355,17 +355,30 @@ describe("Discord sync candidate selection", () => {
     expect(lanesFor(work, runId).voice).toMatchObject([{ action: "RECONCILE", existingVoiceChannelId: "voice-live" }]);
   });
 
-  it("7. COMPLETED / CANCELLED with a Run channel are loaded and retire it", async () => {
+  it("7. COMPLETED / CANCELLED with a Run channel keep it (closed naming; no retire until app archive)", async () => {
     for (const status of ["COMPLETED", "CANCELLED"] as const) {
       const runId = await createRunAt(currentStart, { status });
       await discordSyncService.recordRunChannel({ runId, channelId: `terminal-chan-${status}` });
 
       const { work, loaded } = await loadedRunIds(classificationNow);
       expect(loaded.has(runId)).toBe(true);
-      expect(lanesFor(work, runId).channels).toMatchObject([
-        { existingRunChannelId: `terminal-chan-${status}`, retireChannel: true, archiveArtifactsNeeded: true },
-      ]);
+      const [channel] = lanesFor(work, runId).channels;
+      expect(channel).toMatchObject({
+        existingRunChannelId: `terminal-chan-${status}`,
+        retireChannel: false,
+        archiveArtifactsNeeded: false,
+      });
+      expect(channel.desiredChannelName.startsWith("closed-")).toBe(true);
     }
+
+    // Voice cleanup remains independent of text-channel app-archive authority.
+    const voiceCompleted = await createRunAt(currentStart, { status: "COMPLETED" });
+    await discordSyncService.recordRunVoiceChannel({ runId: voiceCompleted, channelId: "voice-completed" });
+    const voiceWork = await loadedRunIds(classificationNow);
+    expect(lanesFor(voiceWork.work, voiceCompleted).voice).toMatchObject([
+      { action: "RETIRE_IF_EMPTY", existingVoiceChannelId: "voice-completed" },
+    ]);
+    expect(lanesFor(voiceWork.work, voiceCompleted).channels).toHaveLength(0);
   });
 
   it("8. a terminal Run holding only a Voice channel is loaded and gets RETIRE_IF_EMPTY", async () => {
@@ -410,7 +423,7 @@ describe("Discord sync candidate selection", () => {
     expectNoWork(after.work, runId);
   });
 
-  it("10. a pending announcement gets the live runChannelId and blocks retirement until delivered", async () => {
+  it("10. a pending announcement gets the live runChannelId and blocks retirement; CANCELLED alone never retires", async () => {
     const runId = await createRunAt(currentStart, { status: "CANCELLED" });
     await discordSyncService.recordRunChannel({ runId, channelId: "cancel-chan" });
     const announcementId = await addPendingAnnouncement(runId);
@@ -430,7 +443,16 @@ describe("Discord sync candidate selection", () => {
     });
     ({ work } = await loadedRunIds(classificationNow));
     expect(lanesFor(work, runId).announcements).toHaveLength(0);
-    expect(lanesFor(work, runId).channels).toMatchObject([{ retireChannel: true, pendingLifecycleAnnouncements: false }]);
+    // CANCELLED without app archive must keep the text channel.
+    expect(lanesFor(work, runId).channels).toMatchObject([
+      { retireChannel: false, pendingLifecycleAnnouncements: false, archiveArtifactsNeeded: false },
+    ]);
+
+    await runService.archiveRun(lead, runId);
+    ({ work } = await loadedRunIds(classificationNow));
+    expect(lanesFor(work, runId).channels).toMatchObject([
+      { retireChannel: true, pendingLifecycleAnnouncements: false, archiveArtifactsNeeded: true },
+    ]);
   });
 
   it("11. a pending announcement for a Run without a channel keeps runChannelId null (Run itself not loaded)", async () => {

@@ -1923,6 +1923,52 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     expect(api.recordDiscordState).not.toHaveBeenCalled();
   });
 
+  it("never deletes when stale work projects retire but archivedAt is null (artifacts already present)", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      [
+        "completed-kept-chan",
+        {
+          id: "completed-kept-chan",
+          name: "closed-sat-2200-hc-vip-7of9-titan",
+          parentId: "archive-cat",
+          position: 2,
+          type: ChannelType.GuildText,
+        },
+      ],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-completed-unarchived",
+          existingRunChannelId: "completed-kept-chan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          // Stale projection as if an older bot build still retired on COMPLETED.
+          retireChannel: true,
+          archiveArtifactsNeeded: false,
+          archiveCloseMessageId: "close-existing",
+          archiveTranscriptMessageId: "transcript-existing",
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: "lead-1",
+          panelName: "The Venomous Abyss",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+    (api.confirmChannelRetirement as ReturnType<typeof vi.fn>).mockResolvedValue({ retire: false });
+
+    await syncOnce(client, botEnv(), api);
+
+    const kept = client.channels.cache.get("completed-kept-chan") as { delete: ReturnType<typeof vi.fn> };
+    expect(kept.delete).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-completed-unarchived", expect.objectContaining({ kind: "channel-gone" }));
+  });
+
   it("stale RUN_CANCELLED announcement work does not send when delivery authority is false", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],

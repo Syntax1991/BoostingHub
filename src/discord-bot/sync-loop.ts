@@ -1537,20 +1537,25 @@ async function tryEditMessage(
 }
 
 /**
- * Channel retirement (app-archive, COMPLETED, or CANCELLED): never moves the
- * Run channel into an archive category. Builds the HTML transcript for website
- * download and (when not already posted) sends Ticket-Tool-style artifacts into
- * `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`:
+ * Channel retirement after **explicit app archive** (`Run.archivedAt`):
+ * never moves the Run channel into an archive category. Builds the HTML
+ * transcript for website download and (when not already posted) sends
+ * Ticket-Tool-style artifacts into `DISCORD_RUN_ARCHIVE_LOG_CHANNEL_ID`:
  * (1) Server-Info text + `transcript-{name}.html` attachment,
  * (2) green details embed + Direct Link button.
  * When Discord message ids already exist, skips re-send and only persists HTML.
- * After the transcript is safely recorded, deletes the Run's Discord channel
- * and records `channel-gone` for it, which clears every identity stored for
- * that exact channel (Run channel, signup and roster posts) — the lasting
- * record is the transcript alone. Missing access/permission or an unusable
- * channel keep the stored identity (the channel may still exist) and retry.
- * Schedule-based PAST/FUTURE ARCHIVE holding is unchanged (silent move, no
- * delete) and never enters this path (`retireChannel` is false).
+ * After the transcript is safely recorded, re-checks `archivedAt` and deletes
+ * the Run's Discord TEXT channel (the Manawyrm Hub Run row itself is kept as
+ * an archived Run). Records `channel-gone` for that exact channel id.
+ *
+ * COMPLETED / CANCELLED without app archive never enter this path
+ * (`retireChannel` is false). Schedule-based PAST/FUTURE ARCHIVE holding is
+ * unchanged (silent category move, no delete).
+ *
+ * Partial failure: if the details embed fails after the transcript attachment
+ * was posted, we still persist transcript message id + HTML (durable archive
+ * authority) and proceed to delete when `archivedAt` remains set — the embed
+ * is presentation for the log channel, not the archival record itself.
  */
 async function syncArchiveArtifacts(
   client: Client,
@@ -1787,7 +1792,7 @@ async function syncArchiveArtifacts(
   await deleteArchivedRunChannel(client, api, item.runId, runChannelId);
 }
 
-/** Deletes an app-archived Run channel after the transcript is recorded. */
+/** Deletes an app-archived Run TEXT channel after the transcript is recorded. */
 async function deleteArchivedRunChannel(
   client: Client,
   api: BotApiClient,
