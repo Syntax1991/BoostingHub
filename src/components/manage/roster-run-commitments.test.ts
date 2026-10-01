@@ -98,20 +98,18 @@ describe("RosterRunCommitmentsBlock", () => {
   });
 });
 
+const scheduleConflict = {
+  source: "RUN_RESERVATION" as const,
+  conflictingRunId: "run-pub-other",
+  conflictingRunTitle: "The Venomous Abyss",
+  conflictingScheduledStartAt: "2026-10-01T21:30:00.000Z",
+  message: "Another Manawyrm Hub Run: The Venomous Abyss at Thu 01/10/2026 23:30",
+};
+
 describe("RosterScheduleConflictAlert", () => {
   it("L/M: renders Schedule conflict with strong danger alert treatment", () => {
     const html = renderToStaticMarkup(
-      createElement(RosterScheduleConflictAlert, {
-        conflicts: [
-          {
-            source: "RUN_RESERVATION",
-            conflictingRunId: "run-pub-other",
-            conflictingRunTitle: "The Venomous Abyss",
-            conflictingScheduledStartAt: "2026-10-01T21:30:00.000Z",
-            message: "Another Manawyrm Hub Run: The Venomous Abyss at Thu 01/10/2026 23:30",
-          },
-        ],
-      }),
+      createElement(RosterScheduleConflictAlert, { conflicts: [scheduleConflict] }),
     );
     expect(html).toContain("Schedule conflict");
     expect(html).toContain("Another Manawyrm Hub Run: The Venomous Abyss");
@@ -119,6 +117,25 @@ describe("RosterScheduleConflictAlert", () => {
     expect(html).toContain("bg-danger");
     expect(html).toContain("text-danger");
     expect(html).toContain('role="alert"');
+    expect(html).toMatch(/<svg[\s>]/i);
+  });
+
+  it("htmlFor: label targets checkbox without nesting a div inside the label", () => {
+    const html = renderToStaticMarkup(
+      createElement(RosterScheduleConflictAlert, {
+        conflicts: [scheduleConflict],
+        htmlFor: "signup-checkbox-1",
+      }),
+    );
+    expect(html).toContain('for="signup-checkbox-1"');
+    expect(html).toContain("Schedule conflict");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("border-danger");
+    expect(html).toContain("bg-danger");
+    expect(html).toContain("text-danger");
+    expect(html).toMatch(/<svg[\s>]/i);
+    expect(html).not.toMatch(/<label[^>]*>[\s\S]*?<div/i);
+    expect(html).toMatch(/^<label\b/);
   });
 
   it("J/K: commitments without conflicts do not invent Schedule conflict copy", () => {
@@ -141,18 +158,20 @@ describe("RosterScheduleConflictAlert", () => {
         createElement(RosterScheduleConflictAlert, {
           conflicts: [
             {
-              source: "RUN_RESERVATION",
+              ...scheduleConflict,
               conflictingRunId: committed.runId,
               conflictingRunTitle: committed.runTitle,
               conflictingScheduledStartAt: committed.scheduledStartAt,
-              message: "Another Manawyrm Hub Run: The Venomous Abyss at Thu 01/10/2026 23:30",
             },
           ],
+          htmlFor: "signup-checkbox-composed",
         }),
       ),
     );
     expect(html).toContain("Published roster");
     expect(html).toContain("Schedule conflict");
     expect(html).toContain("The Venomous Abyss");
+    expect(html).toContain('for="signup-checkbox-composed"');
+    expect(html).not.toMatch(/<label[^>]*>[\s\S]*?<div/i);
   });
 });

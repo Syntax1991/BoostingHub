@@ -98,9 +98,30 @@ export function RosterRunCommitmentsBlock({
   );
 }
 
+/** Phrasing-safe alert body so it can sit inside a <label> without block nesting. */
+function ScheduleConflictAlertBody({ conflicts }: { conflicts: CharacterScheduleConflict[] }) {
+  return (
+    <>
+      <span className="flex items-center gap-1.5 text-xs font-semibold">
+        <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        Schedule conflict
+      </span>
+      <span className="mt-1 block space-y-0.5 text-xs">
+        {conflicts.map((conflict) => (
+          <span key={`${conflict.source}-${conflict.message}`} className="block">
+            {conflict.message}
+          </span>
+        ))}
+      </span>
+    </>
+  );
+}
+
 /**
  * Strong danger alert for real schedule conflicts (blocking).
  * Visually stronger than informational Draft roster chips.
+ * When `htmlFor` is set, the label itself carries alert chrome so click-to-toggle
+ * stays valid HTML (no block elements nested inside label).
  */
 export function RosterScheduleConflictAlert({
   conflicts,
@@ -112,23 +133,24 @@ export function RosterScheduleConflictAlert({
   className?: string;
 }) {
   if (conflicts.length === 0) return null;
-  const body = (
-    <div className={`${SCHEDULE_CONFLICT_ALERT_CLASSNAME} ${className}`} role="alert">
-      <p className="flex items-center gap-1.5 text-xs font-semibold">
-        <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-        Schedule conflict
-      </p>
-      <ul className="mt-1 space-y-0.5 text-xs">
-        {conflicts.map((conflict) => (
-          <li key={`${conflict.source}-${conflict.message}`}>{conflict.message}</li>
-        ))}
-      </ul>
-    </div>
-  );
-  if (!htmlFor) return <div className="mt-1">{body}</div>;
+
+  if (htmlFor) {
+    return (
+      <label
+        htmlFor={htmlFor}
+        className={`mt-1 block cursor-pointer ${SCHEDULE_CONFLICT_ALERT_CLASSNAME} ${className}`}
+        role="alert"
+      >
+        <ScheduleConflictAlertBody conflicts={conflicts} />
+      </label>
+    );
+  }
+
   return (
-    <label htmlFor={htmlFor} className="mt-1 block cursor-pointer">
-      {body}
-    </label>
+    <div className="mt-1">
+      <div className={`${SCHEDULE_CONFLICT_ALERT_CLASSNAME} ${className}`} role="alert">
+        <ScheduleConflictAlertBody conflicts={conflicts} />
+      </div>
+    </div>
   );
 }
