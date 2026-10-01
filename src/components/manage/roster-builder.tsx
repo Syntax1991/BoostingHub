@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +11,10 @@ import {
 } from "@/controllers/roster.actions";
 import { Button } from "@/components/ui/button";
 import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
+import {
+  RosterRunCommitmentsBlock,
+  RosterScheduleConflictAlert,
+} from "@/components/manage/roster-run-commitments";
 import { setRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import { resolveRosterActions } from "@/components/manage/roster-actions";
 import {
@@ -27,12 +30,10 @@ import {
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
-import { runDetailPath } from "@/lib/run-routes";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_COLORS,
   CLASS_LABELS,
-  DIFFICULTY_LABELS,
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
@@ -1034,56 +1035,10 @@ function SignupRowCard({
         {(() => {
           const runCommitments = signup.runCommitments ?? [];
           if (runCommitments.length === 0) return null;
-          const committed = runCommitments.filter((item) => item.state === "COMMITTED");
-          const reserved = runCommitments.filter((item) => item.state === "RESERVED");
-          return (
-            <div className={`mt-1 space-y-1 text-xs text-muted ${rowPointer}`}>
-              {committed.length > 0 ? (
-                <div>
-                  <span className="font-medium text-muted" title="Selected on another Run in this raid ID">
-                    Committed elsewhere
-                  </span>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {committed.map((item) => (
-                      <li key={`committed-${item.runId}`}>
-                        <Link href={runDetailPath(item.runId)} className="hover:underline">
-                          {item.productLabel || item.runTitle}
-                        </Link>
-                        {` · ${DIFFICULTY_LABELS[item.difficulty]} · ${formatDateTime(item.scheduledStartAt)}`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {reserved.length > 0 ? (
-                <div>
-                  <span className="font-medium text-muted" title="Draft-selected on another Run in this raid ID">
-                    Reserved elsewhere
-                  </span>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {reserved.map((item) => (
-                      <li key={`reserved-${item.runId}`}>
-                        <Link href={runDetailPath(item.runId)} className="hover:underline">
-                          {item.productLabel || item.runTitle}
-                        </Link>
-                        {` · ${DIFFICULTY_LABELS[item.difficulty]} · ${formatDateTime(item.scheduledStartAt)}`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          );
+          return <RosterRunCommitmentsBlock commitments={runCommitments} className={rowPointer} />;
         })()}
         {scheduleConflicts.length > 0 ? (
-          <label htmlFor={checkboxId} className={`mt-1 block space-y-0.5 text-xs text-warning ${rowPointer}`}>
-            <span className="font-medium text-warning">Schedule conflict</span>
-            {scheduleConflicts.map((conflict) => (
-              <span key={`${conflict.source}-${conflict.message}`} className="block">
-                {conflict.message}
-              </span>
-            ))}
-          </label>
+          <RosterScheduleConflictAlert conflicts={scheduleConflicts} htmlFor={checkboxId} className={rowPointer} />
         ) : null}
         {signup.issue ? (
           <label htmlFor={checkboxId} className={`mt-1 block text-xs text-danger ${rowPointer}`}>

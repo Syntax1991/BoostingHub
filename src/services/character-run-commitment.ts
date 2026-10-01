@@ -1,38 +1,16 @@
-import type { RaidDifficulty, RunStatus, SignupStatus, WowRegion } from "@/models/enums";
+import type { WowRegion } from "@/models/enums";
 import {
   signupRepository,
   type CharacterReservationCommitmentRow,
 } from "@/repositories/signup.repository";
 import { lockoutService } from "@/services/lockout.service";
+import {
+  deriveCharacterRunCommitmentState,
+  type CharacterRunCommitment,
+} from "@/services/character-run-commitment-state";
 
-/**
- * Informational BoostingHub Run commitment for a Character on another Run.
- * Derived only — never persisted. Distinct from schedule conflict (blocking).
- */
-export type CharacterRunCommitment = {
-  runId: string;
-  runTitle: string;
-  productLabel: string;
-  difficulty: RaidDifficulty;
-  scheduledStartAt: string;
-  runStatus: RunStatus;
-  state: "RESERVED" | "COMMITTED";
-};
-
-/**
- * RESERVED = draft-selected elsewhere, not yet published SELECTED.
- * COMMITTED = published SELECTED on another upcoming Run (authoritative even
- * while a replacement draft is being edited on that Run).
- */
-export function deriveCharacterRunCommitmentState(
-  status: SignupStatus,
-  draftSelected: boolean,
-): "RESERVED" | "COMMITTED" | null {
-  if (status === "WITHDRAWN") return null;
-  if (status === "SELECTED") return "COMMITTED";
-  if (draftSelected) return "RESERVED";
-  return null;
-}
+export type { CharacterRunCommitment } from "@/services/character-run-commitment-state";
+export { deriveCharacterRunCommitmentState } from "@/services/character-run-commitment-state";
 
 export function projectCharacterRunCommitment(
   row: CharacterReservationCommitmentRow,

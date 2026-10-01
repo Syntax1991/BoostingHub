@@ -160,7 +160,13 @@ Roster Builder attaches `runCommitments: CharacterRunCommitment[]` to each BOOST
 | `RESERVED` | Draft-selected on another upcoming Run; not yet published `SELECTED` |
 | `COMMITTED` | Published `SELECTED` on another upcoming Run (`PUBLISHED` / `IN_PROGRESS`, etc.) |
 
-UI: muted “Committed elsewhere” / “Reserved elsewhere” lines (tooltip: “… on another Run in this raid ID”). Separately, existing `scheduleConflicts` keep warning styling and still gate new selection / publish. They are **independent of the raid ID**: two Runs < 2 h apart conflict even when a weekly reset lies between them.
+UI: compact **Other run · Draft roster** (danger/red, informational) and **Other run · Published roster** (warning/orange, informational) indicators — they do **not** themselves block selection. Separately, real `scheduleConflicts` use a strong danger/red alert treatment and still gate new selection / publish. They are **independent of the raid ID**: two Runs < 2 h apart conflict even when a weekly reset lies between them.
+
+| UI label | Domain state | Tone | Blocks selection? |
+| --- | --- | --- | --- |
+| Draft roster | `RESERVED` | danger / red | No |
+| Published roster | `COMMITTED` | warning / orange | No |
+| Schedule conflict | existing blocker | strong danger alert | Yes |
 
 Commitments are derived only — no persisted `safe` / `committed` flags. They disappear when the other Run completes/cancels, the draft deselects (for `RESERVED`), or a republish removes the published slot (for `COMMITTED`).
 

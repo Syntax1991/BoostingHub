@@ -554,7 +554,7 @@ export const rosterService = {
       difficulty: run.difficulty,
       characters: boosterCharacters,
     });
-    // Reserved / Committed elsewhere: only other Runs in this Run's raid ID.
+    // Cross-run RESERVED/COMMITTED commitments: only other Runs in this Run's raid ID.
     const runCommitmentsByCharacter = await getRunCommitmentsForCharacters({
       characters: boosterCharacters,
       excludeRunId: run.id,
