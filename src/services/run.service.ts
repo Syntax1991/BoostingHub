@@ -948,33 +948,22 @@ export const runService = {
       throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
     }
 
-    const nextCancelRevision = run.cancelRevision + 1;
     // Channel lifecycle announcement is authoritative and atomic with CANCELLED.
+    // The repository re-reads Run state, derives cancelRevision, snapshots
+    // pre-cancel fields, and skips any still-PENDING prior RUN_REACTIVATED
+    // channel announcement inside the same transaction.
     // Personal UserNotifications are separate (notifyRunCancelled) and must not
     // be mixed into this transaction — bot retirement waits on RunDiscordAnnouncement
     // terminal status before transcript/archive and channel deletion.
-    await runRepository.cancelWithDiscordAnnouncement(
-      run.id,
-      {
-        cancelledFromStatus: run.status,
-        cancelledFromSignupsOpen: run.signupsOpen,
-        nextCancelRevision,
-      },
-      {
-        runId: run.id,
-        type: "RUN_CANCELLED",
-        sourceKey: runCancelledChannelSourceKey(run.id, nextCancelRevision),
-        previousScheduledStartAt: null,
-        scheduledStartAt: run.scheduledStartAt,
-        productLabel: run.contentDisplay.productLabel || run.title,
-        difficulty: run.difficulty,
-        lootType: run.lootType,
-        status: "PENDING",
-      },
-    );
+    const { cancelRevision } = await runRepository.cancelWithDiscordAnnouncement(run.id, {
+      scheduledStartAt: run.scheduledStartAt,
+      productLabel: run.contentDisplay.productLabel || run.title,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+    });
     await runLifecycleNotificationService.notifyRunCancelled({
       runId: run.id,
-      cancelRevision: nextCancelRevision,
+      cancelRevision,
       runTitle: run.title,
       scheduledStartAt: run.scheduledStartAt,
       difficulty: run.difficulty,

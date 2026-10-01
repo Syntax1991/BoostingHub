@@ -142,15 +142,6 @@ describe("lifecycle announcement atomicity", () => {
       runRepository.cancelWithDiscordAnnouncement(
         runId,
         {
-          cancelledFromStatus: "OPEN",
-          cancelledFromSignupsOpen: true,
-          nextCancelRevision: 1,
-        },
-        {
-          runId,
-          type: "RUN_CANCELLED",
-          sourceKey: runCancelledChannelSourceKey(runId, 1),
-          previousScheduledStartAt: null,
           scheduledStartAt: before!.scheduledStartAt,
           productLabel: "x",
           difficulty: "HEROIC",
@@ -174,15 +165,6 @@ describe("lifecycle announcement atomicity", () => {
       runRepository.cancelWithDiscordAnnouncement(
         runId,
         {
-          cancelledFromStatus: "OPEN",
-          cancelledFromSignupsOpen: true,
-          nextCancelRevision: 1,
-        },
-        {
-          runId,
-          type: "RUN_CANCELLED",
-          sourceKey: runCancelledChannelSourceKey(runId, 1),
-          previousScheduledStartAt: null,
           scheduledStartAt: before!.scheduledStartAt,
           productLabel: "x",
           difficulty: "HEROIC",
@@ -195,6 +177,27 @@ describe("lifecycle announcement atomicity", () => {
     const after = await runRepository.findById(runId);
     expect(after?.status).toBe("OPEN");
     expect(await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 1))).toBeNull();
+  });
+
+  it("cancel transactionally rejects when Run is already CANCELLED", async () => {
+    const runId = await openRun(futureIso());
+    await runService.cancelRun(lead, runId);
+    const before = await runRepository.findById(runId);
+    expect(before?.status).toBe("CANCELLED");
+    expect(before?.cancelRevision).toBe(1);
+
+    await expect(
+      runRepository.cancelWithDiscordAnnouncement(runId, {
+        scheduledStartAt: before!.scheduledStartAt,
+        productLabel: "x",
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+      }),
+    ).rejects.toThrow(/cannot be cancelled/i);
+
+    const after = await runRepository.findById(runId);
+    expect(after?.cancelRevision).toBe(1);
+    expect(await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 2))).toBeNull();
   });
 
   it("successful reschedule persists scheduleRevision and RUN_RESCHEDULED together", async () => {

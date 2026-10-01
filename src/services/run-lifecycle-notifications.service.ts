@@ -36,6 +36,17 @@ export const runLifecycleNotificationService = {
     );
     const userIds = [...new Set(active.map((signup) => signup.userId))];
 
+    // A prior Reactivate cycle may still have undelivered Discord DMs.
+    // Retire those PENDING deliveries with this Cancel so they cannot linger.
+    // Keep the in-app UserNotification rows; only Discord delivery is skipped.
+    if (input.cancelRevision > 1) {
+      const previousRevision = input.cancelRevision - 1;
+      const priorReactivateKeys = userIds.map((userId) =>
+        runReactivatedSourceKey(input.runId, previousRevision, userId),
+      );
+      await userNotificationRepository.skipPendingDiscordDeliveryForSourceKeys(priorReactivateKeys);
+    }
+
     for (const userId of userIds) {
       const [prefs, user] = await Promise.all([
         settingsRepository.getNotificationDmPreferences(userId),

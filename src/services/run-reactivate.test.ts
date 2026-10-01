@@ -381,7 +381,7 @@ describe("reactivate cancelled run", () => {
     >;
     expect(reactivateAnns).toHaveLength(1);
 
-    // Second cancel cycle
+    // Second cancel cycle — must retire still-PENDING rev1 RUN_REACTIVATED work
     await runService.cancelRun(lead, runId);
     const runAfterSecondCancel = await runRepository.findById(runId);
     expect(runAfterSecondCancel?.cancelRevision).toBe(2);
@@ -390,6 +390,14 @@ describe("reactivate cancelled run", () => {
     );
     expect(cancelAnn2?.status).toBe("PENDING");
     expect(cancelAnn2?.sourceKey).not.toBe(cancelAnn1!.sourceKey);
+
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(runId, 1)))
+        ?.status,
+    ).toBe("SKIPPED");
+    expect(
+      (await userNotificationRepository.findById(reactivateNote!.id))?.discordDeliveryStatus,
+    ).toBe("SKIPPED");
 
     // Already-SENT cancel remains historical through Reactivate (not rewritten).
     await runDiscordAnnouncementRepository.updateStatus(cancelAnn2!.id, "SENT", {
@@ -407,18 +415,249 @@ describe("reactivate cancelled run", () => {
     expect(
       (await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 1)))?.status,
     ).toBe("SKIPPED");
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(runId, 1)))
+        ?.status,
+    ).toBe("SKIPPED");
 
     const reactivateAnn2 = await runDiscordAnnouncementRepository.findBySourceKey(
       runReactivatedChannelSourceKey(runId, 2),
     );
     expect(reactivateAnn2?.sourceKey).toBe(runReactivatedChannelSourceKey(runId, 2));
     expect(reactivateAnn2?.sourceKey).not.toBe(reactivateAnn!.sourceKey);
+    expect(reactivateAnn2?.status).toBe("PENDING");
 
     const recent = await activityRepository.listRecent(50);
     const reactivateActivities = recent.filter(
       (row) => row.type === "RUN_REACTIVATED" && row.message.includes("Reactivated a cancelled run"),
     );
     expect(reactivateActivities.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("cancel cycle convergence: PENDING/SENT/FAILED reactivate channel + DM cleanup", async () => {
+    // A: first cancel (rev 0 → 1) has no prior RUN_REACTIVATED
+    const firstId = await createDraft({ title: "Rx first cancel" });
+    await runService.openRun(lead, firstId);
+    await runService.cancelRun(lead, firstId);
+    expect(await runRepository.findById(firstId)).toMatchObject({ cancelRevision: 1, status: "CANCELLED" });
+    expect(
+      await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(firstId, 0)),
+    ).toBeNull();
+    expect(
+      await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(firstId, 1)),
+    ).toMatchObject({ status: "PENDING" });
+
+    // B: PENDING rev1 RUN_REACTIVATED → SKIPPED on second Cancel; rev2 RUN_CANCELLED PENDING
+    const pendingId = await createDraft({ title: "Rx pending reactivate skip" });
+    await runService.openRun(lead, pendingId);
+    await addPendingSignup(pendingId);
+    await runService.cancelRun(lead, pendingId);
+    await runService.reactivateRun(lead, pendingId);
+    const pendingAnn = await runDiscordAnnouncementRepository.findBySourceKey(
+      runReactivatedChannelSourceKey(pendingId, 1),
+    );
+    expect(pendingAnn?.status).toBe("PENDING");
+    await runService.cancelRun(lead, pendingId);
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(pendingId, 1)))
+        ?.status,
+    ).toBe("SKIPPED");
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(pendingId, 2)))
+        ?.status,
+    ).toBe("PENDING");
+    expect(
+      (await userNotificationRepository.listForUser(ids.player, 50)).find(
+        (row) => row.sourceKey === runReactivatedSourceKey(pendingId, 1, ids.player),
+      )?.discordDeliveryStatus,
+    ).toBe("SKIPPED");
+
+    // C: SENT rev1 RUN_REACTIVATED remains SENT on second Cancel
+    const sentId = await createDraft({ title: "Rx sent reactivate preserve" });
+    await runService.openRun(lead, sentId);
+    await runService.cancelRun(lead, sentId);
+    await runService.reactivateRun(lead, sentId);
+    const sentAnn = await runDiscordAnnouncementRepository.findBySourceKey(
+      runReactivatedChannelSourceKey(sentId, 1),
+    );
+    await runDiscordAnnouncementRepository.updateStatus(sentAnn!.id, "SENT", {
+      sentAt: new Date().toISOString(),
+    });
+    await runService.cancelRun(lead, sentId);
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(sentId, 1)))
+        ?.status,
+    ).toBe("SENT");
+
+    // D: FAILED_PERMANENT rev1 remains FAILED_PERMANENT
+    const failedId = await createDraft({ title: "Rx failed reactivate preserve" });
+    await runService.openRun(lead, failedId);
+    await runService.cancelRun(lead, failedId);
+    await runService.reactivateRun(lead, failedId);
+    const failedAnn = await runDiscordAnnouncementRepository.findBySourceKey(
+      runReactivatedChannelSourceKey(failedId, 1),
+    );
+    await runDiscordAnnouncementRepository.updateStatus(failedAnn!.id, "FAILED_PERMANENT");
+    await runService.cancelRun(lead, failedId);
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(failedId, 1)))
+        ?.status,
+    ).toBe("FAILED_PERMANENT");
+
+    // E/F: Reactivate DM PENDING → SKIPPED; SENT DM preserved
+    const dmId = await createDraft({ title: "Rx dm reactivate cleanup" });
+    await runService.openRun(lead, dmId);
+    await addPendingSignup(dmId);
+    await runService.cancelRun(lead, dmId);
+    await runService.reactivateRun(lead, dmId);
+    const pendingDm = (await userNotificationRepository.listForUser(ids.player, 50)).find(
+      (row) => row.sourceKey === runReactivatedSourceKey(dmId, 1, ids.player),
+    );
+    expect(pendingDm?.discordDeliveryStatus).toBe("PENDING");
+    await runService.cancelRun(lead, dmId);
+    expect((await userNotificationRepository.findById(pendingDm!.id))?.discordDeliveryStatus).toBe(
+      "SKIPPED",
+    );
+
+    const sentDmId = await createDraft({ title: "Rx dm sent preserve" });
+    await runService.openRun(lead, sentDmId);
+    await addPendingSignup(sentDmId);
+    await runService.cancelRun(lead, sentDmId);
+    await runService.reactivateRun(lead, sentDmId);
+    const sentDm = (await userNotificationRepository.listForUser(ids.player, 50)).find(
+      (row) => row.sourceKey === runReactivatedSourceKey(sentDmId, 1, ids.player),
+    );
+    await userNotificationRepository.updateDiscordDelivery(sentDm!.id, "SENT");
+    await runService.cancelRun(lead, sentDmId);
+    expect((await userNotificationRepository.findById(sentDm!.id))?.discordDeliveryStatus).toBe("SENT");
+  });
+
+  it("stale projected RUN_REACTIVATED announcement blocked after recancel; SKIPPED→SENT prevented", async () => {
+    const runId = await createDraft({ title: "Rx stale reactivate announce" });
+    await runService.openRun(lead, runId);
+    await addPendingSignup(runId);
+    await discordSyncService.recordRunChannel({ runId, channelId: "rx-stale-reactivate-chan" });
+    await runService.cancelRun(lead, runId);
+    await runService.reactivateRun(lead, runId);
+
+    const pendingWork = await discordSyncService.listSyncWork();
+    const staleItem = pendingWork.runAnnouncements.find(
+      (row) => row.runId === runId && row.type === "RUN_REACTIVATED",
+    );
+    expect(staleItem).toBeTruthy();
+    expect(await discordSyncService.getRunAnnouncementDeliveryAuthority(staleItem!.announcementId)).toEqual({
+      deliver: true,
+    });
+
+    await runService.cancelRun(lead, runId);
+    expect(await discordSyncService.getRunAnnouncementDeliveryAuthority(staleItem!.announcementId)).toEqual({
+      deliver: false,
+    });
+    expect((await runDiscordAnnouncementRepository.findById(staleItem!.announcementId))?.status).toBe(
+      "SKIPPED",
+    );
+
+    const record = await discordSyncService.recordRunAnnouncementDelivery({
+      announcementId: staleItem!.announcementId,
+      result: "SENT",
+    });
+    expect(record.applied).toBe(false);
+    expect((await runDiscordAnnouncementRepository.findById(staleItem!.announcementId))?.status).toBe(
+      "SKIPPED",
+    );
+  });
+
+  it("stale projected RUN_REACTIVATED DM blocked after recancel; SKIPPED→SENT prevented", async () => {
+    const runId = await createDraft({ title: "Rx stale reactivate dm" });
+    await runService.openRun(lead, runId);
+    await addPendingSignup(runId);
+    await runService.cancelRun(lead, runId);
+    await runService.reactivateRun(lead, runId);
+
+    const notes = (await userNotificationRepository.listForUser(ids.player, 50)).filter(
+      (row) => row.runId === runId && row.type === "RUN_REACTIVATED",
+    );
+    expect(notes).toHaveLength(1);
+    expect(notes[0].discordDeliveryStatus).toBe("PENDING");
+    expect(await discordSyncService.getNotificationDmDeliveryAuthority(notes[0].id)).toEqual({
+      deliver: true,
+    });
+
+    await runService.cancelRun(lead, runId);
+    expect(await discordSyncService.getNotificationDmDeliveryAuthority(notes[0].id)).toEqual({
+      deliver: false,
+    });
+    expect((await userNotificationRepository.findById(notes[0].id))?.discordDeliveryStatus).toBe(
+      "SKIPPED",
+    );
+
+    const record = await discordSyncService.recordNotificationDmDelivery({
+      notificationId: notes[0].id,
+      result: "SENT",
+    });
+    expect(record.applied).toBe(false);
+    expect((await userNotificationRepository.findById(notes[0].id))?.discordDeliveryStatus).toBe(
+      "SKIPPED",
+    );
+  });
+
+  it("three cancel/reactivate cycles: unique keys and no permanently PENDING obsolete rev work", async () => {
+    const runId = await createDraft({ title: "Rx triple cycle" });
+    await runService.openRun(lead, runId);
+    await addPendingSignup(runId);
+
+    for (let revision = 1; revision <= 3; revision += 1) {
+      await runService.cancelRun(lead, runId);
+      expect(await runRepository.findById(runId)).toMatchObject({
+        status: "CANCELLED",
+        cancelRevision: revision,
+      });
+      expect(
+        (await runDiscordAnnouncementRepository.findBySourceKey(
+          runCancelledChannelSourceKey(runId, revision),
+        ))?.status,
+      ).toBe("PENDING");
+
+      if (revision > 1) {
+        expect(
+          (await runDiscordAnnouncementRepository.findBySourceKey(
+            runReactivatedChannelSourceKey(runId, revision - 1),
+          ))?.status,
+        ).toBe("SKIPPED");
+        const priorDm = (await userNotificationRepository.listForUser(ids.player, 50)).find(
+          (row) => row.sourceKey === runReactivatedSourceKey(runId, revision - 1, ids.player),
+        );
+        expect(priorDm?.discordDeliveryStatus).toBe("SKIPPED");
+      }
+
+      await runService.reactivateRun(lead, runId);
+      expect(await runRepository.findById(runId)).toMatchObject({
+        status: "OPEN",
+        cancelRevision: revision,
+      });
+      expect(
+        (await runDiscordAnnouncementRepository.findBySourceKey(
+          runReactivatedChannelSourceKey(runId, revision),
+        ))?.status,
+      ).toBe("PENDING");
+    }
+
+    const cancelledKeys = [1, 2, 3].map((rev) => runCancelledChannelSourceKey(runId, rev));
+    const reactivatedKeys = [1, 2, 3].map((rev) => runReactivatedChannelSourceKey(runId, rev));
+    expect(new Set(cancelledKeys).size).toBe(3);
+    expect(new Set(reactivatedKeys).size).toBe(3);
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(runId, 1)))
+        ?.status,
+    ).toBe("SKIPPED");
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(runId, 2)))
+        ?.status,
+    ).toBe("SKIPPED");
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runReactivatedChannelSourceKey(runId, 3)))
+        ?.status,
+    ).toBe("PENDING");
   });
 
   it("AF–AK: existing channel not retired after Reactivate; archive pointers cleared; deleted ids not restored", async () => {

@@ -1970,6 +1970,104 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     });
   });
 
+  it("stale RUN_REACTIVATED announcement work does not send when delivery authority is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["run-chan", { id: "run-chan", name: "sat-2200-hc-vip", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-stale-reactivate",
+          existingRunChannelId: "run-chan",
+          desiredChannelName: "sat-2200-hc-vip",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          retireChannel: false,
+        },
+      ],
+      signups: [],
+      roster: [],
+      runAnnouncements: [
+        {
+          announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa79",
+          runId: "run-stale-reactivate",
+          type: "RUN_REACTIVATED",
+          runChannelId: "run-chan",
+          previousScheduledStartAt: null,
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          productLabel: "Season 2 Bundle",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+        },
+      ],
+    });
+    (api.confirmRunAnnouncementDelivery as ReturnType<typeof vi.fn>).mockResolvedValue({ deliver: false });
+
+    await syncOnce(client, botEnv(), api);
+
+    const runChannel = client.channels.cache.get("run-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(runChannel.send).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-stale-reactivate", {
+      kind: "run-announcement",
+      announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa79",
+      result: "SENT",
+    });
+  });
+
+  it("stale RUN_REACTIVATED DM work does not send when delivery authority is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-stale-reactivate" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-stale-reactivate", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa80",
+          type: "RUN_REACTIVATED",
+          discordUserId: "discord-stale-reactivate",
+          runId: "run-stale-reactivate-dm",
+          signupId: null,
+          runChannelId: null,
+          productLabel: "Season 2 Bundle",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          previousScheduledStartAt: null,
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: null,
+          selectedRole: null,
+          characterName: null,
+          wowClass: null,
+        },
+      ],
+      runAnnouncements: [],
+      schedules: [],
+    });
+    (api.confirmNotificationDmDelivery as ReturnType<typeof vi.fn>).mockResolvedValue({ deliver: false });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-stale-reactivate-dm", {
+      kind: "notification-dm",
+      notificationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa80",
+      result: "SENT",
+    });
+  });
+
   it("RUN_REACTIVATED with no channel yet stays PENDING (does not SKIP)", async () => {
     const children = new Map<string, Child>([
       [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],

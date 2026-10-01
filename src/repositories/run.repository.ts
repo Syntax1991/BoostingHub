@@ -31,10 +31,12 @@ import {
 } from "@/lib/persistence";
 import {
   insertAnnouncementIgnoreDuplicateTx,
+  runCancelledChannelSourceKey,
+  runReactivatedChannelSourceKey,
   type CreateRunDiscordAnnouncementInput,
 } from "@/repositories/run-discord-announcement.repository";
 import { lockRosterInTx } from "@/repositories/roster.repository";
-import { canEditRunBeforeStart } from "@/services/run-state";
+import { canCancelRun, canEditRunBeforeStart } from "@/services/run-state";
 
 /**
  * Test-only hooks that force a mid-transaction failure for rollback proofs.
@@ -568,43 +570,84 @@ export const runRepository = {
   },
 
   /**
-   * Atomically cancel a Run (snapshotting pre-cancel state + bumping
-   * cancelRevision) and insert the RUN_CANCELLED channel announcement.
-   * Either both commit or neither does — never cancel without the announcement
-   * row the bot needs before retiring the Discord channel.
+   * Atomically cancel a Run: re-read current state, snapshot pre-cancel
+   * status/signupsOpen, bump cancelRevision, skip any still-PENDING
+   * RUN_REACTIVATED announcement from the previous cycle, and insert the
+   * RUN_CANCELLED channel announcement. Either all commit or none do.
    */
   async cancelWithDiscordAnnouncement(
     runId: string,
-    snapshot: {
-      cancelledFromStatus: RunStatus;
-      cancelledFromSignupsOpen: boolean;
-      nextCancelRevision: number;
+    announcement: {
+      scheduledStartAt: string;
+      productLabel: string;
+      difficulty: RaidDifficulty;
+      lootType: RunLootType;
     },
-    announcement: CreateRunDiscordAnnouncementInput,
     hooks: LifecycleAnnouncementTxHooks = {},
-  ): Promise<void> {
-    await db.transaction(async (tx) => {
+  ): Promise<{ cancelRevision: number }> {
+    return db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
       const now = new Date().toISOString();
+      const current = (await txOrm.Run.where({ id: runId }).first()) as Record<string, unknown> | null;
+      if (!current) {
+        throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+      }
+      const currentStatus = mapRunStatus(current.status);
+      if (!canCancelRun(currentStatus)) {
+        throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
+      }
+
+      const previousCancelRevision = asNumber(current.cancelRevision, 0);
+      const nextCancelRevision = previousCancelRevision + 1;
+      const cancelledFromStatus = currentStatus;
+      const cancelledFromSignupsOpen = asBoolean(current.signupsOpen);
+
+      // A prior Reactivate cycle may still have an undelivered channel message.
+      // Retire it with this Cancel so it cannot remain PENDING forever.
+      // PENDING-only CAS: never rewrite SENT / FAILED_PERMANENT / SKIPPED.
+      if (previousCancelRevision > 0) {
+        const priorReactivateKey = runReactivatedChannelSourceKey(runId, previousCancelRevision);
+        await txOrm.RunDiscordAnnouncement.where({
+          sourceKey: priorReactivateKey,
+          status: "PENDING",
+        }).update({
+          status: "SKIPPED",
+          updatedAt: now,
+        });
+      }
+
       await txOrm.Run.where({ id: runId }).update({
         status: "CANCELLED",
         signupsOpen: false,
-        cancelledFromStatus: snapshot.cancelledFromStatus,
-        cancelledFromSignupsOpen: snapshot.cancelledFromSignupsOpen,
-        cancelRevision: snapshot.nextCancelRevision,
+        cancelledFromStatus,
+        cancelledFromSignupsOpen,
+        cancelRevision: nextCancelRevision,
         updatedAt: now,
       });
       if (hooks.failAfterRunUpdate) {
         throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
       }
+
+      const cancelAnnouncement: CreateRunDiscordAnnouncementInput = {
+        runId,
+        type: "RUN_CANCELLED",
+        sourceKey: runCancelledChannelSourceKey(runId, nextCancelRevision),
+        previousScheduledStartAt: null,
+        scheduledStartAt: announcement.scheduledStartAt,
+        productLabel: announcement.productLabel,
+        difficulty: announcement.difficulty,
+        lootType: announcement.lootType,
+        status: "PENDING",
+      };
       if (hooks.failAnnouncementInsert) {
         await insertAnnouncementIgnoreDuplicateTx(txOrm, {
-          ...announcement,
+          ...cancelAnnouncement,
           runId: "00000000-0000-4000-8000-000000000000",
         });
-        return;
+        return { cancelRevision: nextCancelRevision };
       }
-      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, cancelAnnouncement);
+      return { cancelRevision: nextCancelRevision };
     });
   },
 
