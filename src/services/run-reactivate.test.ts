@@ -391,15 +391,23 @@ describe("reactivate cancelled run", () => {
     expect(cancelAnn2?.status).toBe("PENDING");
     expect(cancelAnn2?.sourceKey).not.toBe(cancelAnn1!.sourceKey);
 
-    // Already SENT cancel for rev1 remains historical if we mark it SENT
-    await runDiscordAnnouncementRepository.updateStatus(cancelAnnAfter!.id, "SENT", {
+    // Already-SENT cancel remains historical through Reactivate (not rewritten).
+    await runDiscordAnnouncementRepository.updateStatus(cancelAnn2!.id, "SENT", {
       sentAt: new Date().toISOString(),
     });
     expect(
-      (await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 1)))?.status,
+      (await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 2)))?.status,
     ).toBe("SENT");
 
     await runService.reactivateRun(lead, runId);
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 2)))?.status,
+    ).toBe("SENT");
+    // First-cycle SKIPPED also remains untouched.
+    expect(
+      (await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 1)))?.status,
+    ).toBe("SKIPPED");
+
     const reactivateAnn2 = await runDiscordAnnouncementRepository.findBySourceKey(
       runReactivatedChannelSourceKey(runId, 2),
     );
@@ -449,17 +457,6 @@ describe("reactivate cancelled run", () => {
     expect(post?.archiveCloseMessageId).toBeNull();
     expect(post?.archiveTranscriptMessageId).toBeNull();
     expect(post?.archiveTranscriptHtml).toBeNull();
-
-    // Case B: deleted channel — identities cleared; Reactivate does not restore old ids
-    const deletedId = await createDraft({ title: "Rx discord deleted" });
-    await runService.openRun(lead, deletedId);
-    await discordSyncService.recordRunChannel({ runId: deletedId, channelId: "rx-dead-chan" });
-    await runService.cancelRun(lead, deletedId);
-    await runDiscordPostRepository.clearDeletedChannelIdentity(deletedId, "rx-dead-chan");
-    await runService.reactivateRun(lead, deletedId);
-    const deletedPost = await runDiscordPostRepository.findByRunId(deletedId);
-    expect(deletedPost?.runChannelId ?? null).toBeNull();
-    expect(deletedPost?.signupMessageId ?? null).toBeNull();
   });
 
   it("AL/AM: CANCELLED leaves schedule; Reactivate returns to schedule-active set", async () => {
@@ -473,5 +470,62 @@ describe("reactivate cancelled run", () => {
 
     await runService.reactivateRun(lead, runId);
     expect(await runRepository.listScheduleActiveRunIds()).toContain(runId);
+  });
+
+  it("stale projected CANCELLED announcement cannot send or revive SKIPPED after Reactivate", async () => {
+    const runId = await createDraft({ title: "Rx stale announce" });
+    await runService.openRun(lead, runId);
+    await addPendingSignup(runId);
+    await discordSyncService.recordRunChannel({ runId, channelId: "rx-stale-chan" });
+    await runService.cancelRun(lead, runId);
+
+    const pendingWork = await discordSyncService.listSyncWork();
+    const staleItem = pendingWork.runAnnouncements.find(
+      (row) => row.runId === runId && row.type === "RUN_CANCELLED",
+    );
+    expect(staleItem).toBeTruthy();
+    expect(await discordSyncService.getRunAnnouncementDeliveryAuthority(staleItem!.announcementId)).toEqual({
+      deliver: true,
+    });
+
+    await runService.reactivateRun(lead, runId);
+    expect(await discordSyncService.getRunAnnouncementDeliveryAuthority(staleItem!.announcementId)).toEqual({
+      deliver: false,
+    });
+
+    const skipped = await runDiscordAnnouncementRepository.findById(staleItem!.announcementId);
+    expect(skipped?.status).toBe("SKIPPED");
+
+    const record = await discordSyncService.recordRunAnnouncementDelivery({
+      announcementId: staleItem!.announcementId,
+      result: "SENT",
+    });
+    expect(record.applied).toBe(false);
+    expect((await runDiscordAnnouncementRepository.findById(staleItem!.announcementId))?.status).toBe("SKIPPED");
+  });
+
+  it("stale projected CANCELLED DM cannot send or revive SKIPPED after Reactivate", async () => {
+    const runId = await createDraft({ title: "Rx stale dm" });
+    await runService.openRun(lead, runId);
+    await addPendingSignup(runId);
+    await runService.cancelRun(lead, runId);
+
+    const notes = (await userNotificationRepository.listForUser(ids.player, 20)).filter(
+      (row) => row.runId === runId && row.type === "RUN_CANCELLED",
+    );
+    expect(notes).toHaveLength(1);
+    expect(notes[0].discordDeliveryStatus).toBe("PENDING");
+    expect(await discordSyncService.getNotificationDmDeliveryAuthority(notes[0].id)).toEqual({ deliver: true });
+
+    await runService.reactivateRun(lead, runId);
+    expect(await discordSyncService.getNotificationDmDeliveryAuthority(notes[0].id)).toEqual({ deliver: false });
+    expect((await userNotificationRepository.findById(notes[0].id))?.discordDeliveryStatus).toBe("SKIPPED");
+
+    const record = await discordSyncService.recordNotificationDmDelivery({
+      notificationId: notes[0].id,
+      result: "SENT",
+    });
+    expect(record.applied).toBe(false);
+    expect((await userNotificationRepository.findById(notes[0].id))?.discordDeliveryStatus).toBe("SKIPPED");
   });
 });

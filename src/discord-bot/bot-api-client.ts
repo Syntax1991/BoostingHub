@@ -255,6 +255,20 @@ export class BotApiClient {
     return this.request<{ retire: boolean }>(`/api/bot/runs/${runId}/discord-retirement`);
   }
 
+  /** Fresh deliverability for a RunDiscordAnnouncement immediately before send. */
+  confirmRunAnnouncementDelivery(announcementId: string) {
+    return this.request<{ deliver: boolean }>(
+      `/api/bot/run-announcements/${announcementId}/delivery-authority`,
+    );
+  }
+
+  /** Fresh deliverability for a UserNotification Discord DM immediately before send. */
+  confirmNotificationDmDelivery(notificationId: string) {
+    return this.request<{ deliver: boolean }>(
+      `/api/bot/notifications/${notificationId}/delivery-authority`,
+    );
+  }
+
   recordDiscordState(
     runId: string,
     input:

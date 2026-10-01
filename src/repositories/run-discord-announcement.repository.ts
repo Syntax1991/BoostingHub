@@ -83,6 +83,15 @@ export function runReactivatedChannelSourceKey(runId: string, cancelRevision: nu
   return `run-reactivated:${runId}:${cancelRevision}`;
 }
 
+/** Extract cancelRevision from `run-cancelled:` / `run-reactivated:` channel source keys. */
+export function parseCancelRevisionFromChannelSourceKey(sourceKey: string): number | null {
+  const parts = sourceKey.split(":");
+  if (parts.length < 3) return null;
+  if (parts[0] !== "run-cancelled" && parts[0] !== "run-reactivated") return null;
+  const revision = Number(parts[2]);
+  return Number.isInteger(revision) && revision > 0 ? revision : null;
+}
+
 /** Insert announcement inside an open transaction; no-op when sourceKey already exists. */
 export async function insertAnnouncementIgnoreDuplicateTx(
   txOrm: TxOrm,
@@ -166,12 +175,29 @@ export const runDiscordAnnouncementRepository = {
     status: DiscordDeliveryStatus,
     options: { sentAt?: string | null } = {},
   ): Promise<void> {
+    await this.updateStatusIfPending(id, status, options);
+  },
+
+  /**
+   * Compare-and-set delivery transition. Only PENDING rows may move to a
+   * terminal status — a stale bot SENT report must not revive SKIPPED.
+   * Returns true when the row was updated.
+   */
+  async updateStatusIfPending(
+    id: string,
+    status: DiscordDeliveryStatus,
+    options: { sentAt?: string | null } = {},
+  ): Promise<boolean> {
     const now = new Date().toISOString();
-    await orm.RunDiscordAnnouncement.where({ id }).update({
+    const before = await this.findById(id);
+    if (!before || before.status !== "PENDING") return false;
+    await orm.RunDiscordAnnouncement.where({ id, status: "PENDING" }).update({
       status,
       ...(options.sentAt !== undefined ? { sentAt: options.sentAt } : {}),
       ...(status === "SENT" && options.sentAt === undefined ? { sentAt: now } : {}),
       updatedAt: now,
     });
+    const after = await this.findById(id);
+    return after?.status === status;
   },
 };

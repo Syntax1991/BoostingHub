@@ -352,10 +352,18 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     console.error("[discord-bot] Warcraft Logs log channel scan failed", error);
   }
 
-  // Lifecycle channel announcements must post before retirement transcript/delete
-  // so CANCELLED messages appear in the final transcript.
-  if ((work.runAnnouncements ?? []).length > 0) {
-    for (const item of work.runAnnouncements ?? []) {
+  // Lifecycle channel announcements that must land before retirement
+  // (cancel / reschedule) post first. RUN_REACTIVATED waits until after
+  // signup provisioning so a replacement channel from continuity recovery
+  // can be used in the same pass.
+  const earlyAnnouncements = (work.runAnnouncements ?? []).filter(
+    (item) => item.type !== "RUN_REACTIVATED",
+  );
+  const reactivatedAnnouncements = (work.runAnnouncements ?? []).filter(
+    (item) => item.type === "RUN_REACTIVATED",
+  );
+  if (earlyAnnouncements.length > 0) {
+    for (const item of earlyAnnouncements) {
       try {
         await syncRunAnnouncement(client, api, item, resolvedChannels);
       } catch (error) {
@@ -434,6 +442,19 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
         );
       } catch (error) {
         console.error(`[discord-bot] roster sync failed for run ${item.runId}`, error);
+        messagePhaseError ??= error;
+      }
+    }
+
+    // After continuity recovery may have provisioned a replacement channel.
+    for (const item of reactivatedAnnouncements) {
+      try {
+        await syncRunAnnouncement(client, api, item, resolvedChannels);
+      } catch (error) {
+        console.error(
+          `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
+          error,
+        );
         messagePhaseError ??= error;
       }
     }
@@ -639,10 +660,11 @@ async function resolveRunChannel(
     return legacyFallbackChannelId ? { channelId: legacyFallbackChannelId, created: false } : null;
   }
 
-  if (item.existingRunChannelId) {
-    const reconciled = resolvedChannels.get(item.runId);
-    if (reconciled) return { channelId: reconciled, created: false };
+  // Same-pass continuity: signup may have just provisioned a replacement.
+  const alreadyResolved = resolvedChannels.get(item.runId);
+  if (alreadyResolved) return { channelId: alreadyResolved, created: false };
 
+  if (item.existingRunChannelId) {
     // Not reconciled this pass — defensive only; every Run with a persisted
     // runChannelId is always included in work.channels, so this should
     // never actually be reached. Just verify the id still resolves; name
@@ -651,7 +673,10 @@ async function resolveRunChannel(
     // one pass.
     try {
       const existing = await client.channels.fetch(item.existingRunChannelId);
-      if (existing) return { channelId: item.existingRunChannelId, created: false };
+      if (existing) {
+        resolvedChannels.set(item.runId, item.existingRunChannelId);
+        return { channelId: item.existingRunChannelId, created: false };
+      }
       console.warn(
         `[discord-bot] run ${item.runId}'s channel ${item.existingRunChannelId} resolved to an incompatible type — keeping stored id, not recreating`,
       );
@@ -681,9 +706,8 @@ async function resolveRunChannel(
   }
 
   if (!allowCreate) {
-    // Only first provisioning for an open CURRENT/NEXT signup window may
-    // create a channel. Continuity edits (CANCELLED/COMPLETED after archive
-    // cleared runChannelId) must not recreate — that re-fires role pings.
+    // Only first provisioning / continuity recovery (signup lane) may create.
+    // Continuity after archive-only clear must not recreate — that re-fires role pings.
     console.warn(
       `[discord-bot] run ${item.runId} has no usable channel and channel create is not allowed — skipping (no re-ping)`,
     );
@@ -702,6 +726,7 @@ async function resolveRunChannel(
     parent: category.id,
   });
   await api.recordDiscordState(item.runId, { kind: "channel", channelId: created.id });
+  resolvedChannels.set(item.runId, created.id);
   return { channelId: created.id, created: true };
 }
 
@@ -1147,6 +1172,23 @@ async function syncNotificationDm(
 
   try {
     const user = await client.users.fetch(item.discordUserId);
+    // Stale in-memory CANCELLED DM must not send after Reactivate.
+    let authority: { deliver: boolean };
+    try {
+      authority = await api.confirmNotificationDmDelivery(item.notificationId);
+    } catch (error) {
+      console.warn(
+        `[discord-bot] notification DM authority unavailable for ${item.notificationId} — not sending (retry next pass)`,
+        error,
+      );
+      return;
+    }
+    if (!authority.deliver) {
+      console.warn(
+        `[discord-bot] skipping notification DM ${item.notificationId}: delivery no longer authorized`,
+      );
+      return;
+    }
     await user.send({ content });
     await api.recordDiscordState(item.runId, {
       kind: "notification-dm",
@@ -1184,11 +1226,38 @@ async function syncRunAnnouncement(
 ): Promise<void> {
   const runChannelId = resolvedChannels.get(item.runId) ?? item.runChannelId;
   if (!runChannelId) {
+    // RUN_REACTIVATED after channel-gone: leave PENDING so a later pass (or
+    // same-pass continuity recovery that already filled resolvedChannels)
+    // can deliver once a replacement channel exists. Do not terminal-SKIP.
+    if (item.type === "RUN_REACTIVATED") {
+      console.warn(
+        `[discord-bot] RUN_REACTIVATED ${item.announcementId} has no channel yet — leaving PENDING for continuity recovery`,
+      );
+      return;
+    }
     await api.recordDiscordState(item.runId, {
       kind: "run-announcement",
       announcementId: item.announcementId,
       result: "SKIPPED",
     });
+    return;
+  }
+
+  // Stale in-memory CANCELLED work must not post after Reactivate.
+  let authority: { deliver: boolean };
+  try {
+    authority = await api.confirmRunAnnouncementDelivery(item.announcementId);
+  } catch (error) {
+    console.warn(
+      `[discord-bot] announcement delivery authority unavailable for ${item.announcementId} — not sending (retry next pass)`,
+      error,
+    );
+    return;
+  }
+  if (!authority.deliver) {
+    console.warn(
+      `[discord-bot] skipping announcement ${item.announcementId}: delivery no longer authorized`,
+    );
     return;
   }
 

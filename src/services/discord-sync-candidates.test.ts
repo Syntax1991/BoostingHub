@@ -247,6 +247,96 @@ describe("Discord sync candidate selection", () => {
     expect(await runDiscordPostRepository.findByRunId(runId)).toBeNull();
   });
 
+  it("4b. continuity recovery after channel-gone: OPEN/closed + PUBLISHED/closed recreate; no prior history stays closed", async () => {
+    const openClosed = await createRunAt(nextStart, { status: "OPEN" });
+    await orm.Run.where({ id: openClosed }).update({ signupsOpen: false, updatedAt: new Date().toISOString() });
+    await discordSyncService.recordRunChannel({ runId: openClosed, channelId: "open-closed-old" });
+    await runDiscordPostRepository.recordSignupPost({
+      runId: openClosed,
+      signupChannelId: "open-closed-old",
+      signupMessageId: "signup-open-closed",
+      lastSignupSignature: "old-sig",
+      runChannelId: "open-closed-old",
+    });
+    await runDiscordPostRepository.clearDeletedChannelIdentity(openClosed, "open-closed-old");
+
+    const publishedClosed = await createRunAt(nextStart, { status: "PUBLISHED" });
+    await orm.Run.where({ id: publishedClosed }).update({
+      signupsOpen: false,
+      updatedAt: new Date().toISOString(),
+    });
+    await orm.RunRoster.where({ runId: publishedClosed }).update({
+      state: "PUBLISHED",
+      publishedAt: new Date().toISOString(),
+      publishedById: ids.lead,
+      version: 2,
+      updatedAt: new Date().toISOString(),
+    });
+    await discordSyncService.recordRunChannel({ runId: publishedClosed, channelId: "pub-closed-old" });
+    await runDiscordPostRepository.recordSignupPost({
+      runId: publishedClosed,
+      signupChannelId: "pub-closed-old",
+      signupMessageId: "signup-pub-closed",
+      lastSignupSignature: "old-sig-pub",
+      runChannelId: "pub-closed-old",
+    });
+    await runDiscordPostRepository.clearDeletedChannelIdentity(publishedClosed, "pub-closed-old");
+
+    const neverProvisioned = await createRunAt(nextStart, { status: "PUBLISHED" });
+    await orm.Run.where({ id: neverProvisioned }).update({
+      signupsOpen: false,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const { work } = await loadedRunIds(classificationNow);
+
+    const openSignup = lanesFor(work, openClosed).signups[0];
+    expect(openSignup).toMatchObject({
+      allowChannelCreate: true,
+      announceOnCreate: false,
+      existingRunChannelId: null,
+      existingMessageId: null,
+    });
+
+    const pubSignup = lanesFor(work, publishedClosed).signups[0];
+    expect(pubSignup).toMatchObject({
+      allowChannelCreate: true,
+      announceOnCreate: false,
+      existingRunChannelId: null,
+    });
+    expect(lanesFor(work, publishedClosed).roster.length).toBeGreaterThan(0);
+    expect(lanesFor(work, publishedClosed).roster[0]).toMatchObject({
+      existingRunChannelId: null,
+      existingMessageId: null,
+      mode: "REFRESH",
+    });
+
+    expect(lanesFor(work, neverProvisioned).signups).toHaveLength(0);
+    expect(lanesFor(work, neverProvisioned).roster).toHaveLength(0);
+
+    // Old Discord ids must not be restored by Reactivate/continuity projection.
+    expect((await runDiscordPostRepository.findByRunId(openClosed))?.runChannelId ?? null).toBeNull();
+    expect((await runDiscordPostRepository.findByRunId(publishedClosed))?.signupPostedAt).toBeTruthy();
+  });
+
+  it("4c. DRAFT never continuity-recovers a channel even with leftover signupPostedAt", async () => {
+    const runId = await createRunAt(nextStart, { status: "DRAFT" });
+    // Seed durable evidence without a live channel identity.
+    await runDiscordPostRepository.recordSignupPost({
+      runId,
+      signupChannelId: "draft-never-live",
+      signupMessageId: "draft-msg",
+      lastSignupSignature: "draft-sig",
+      runChannelId: "draft-never-live",
+    });
+    await runDiscordPostRepository.clearDeletedChannelIdentity(runId, "draft-never-live");
+    expect((await runDiscordPostRepository.findByRunId(runId))?.signupPostedAt).toBeTruthy();
+
+    const { work } = await loadedRunIds(classificationNow);
+    expect(lanesFor(work, runId).signups).toHaveLength(0);
+    expect(lanesFor(work, runId).channels).toHaveLength(0);
+  });
+
   it("5. IN_PROGRESS with a start snapshot and no post is loaded and gets Voice PROVISION", async () => {
     const runId = await createRunAt(currentStart, { status: "IN_PROGRESS" });
     await addStartSnapshot(runId);

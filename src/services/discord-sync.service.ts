@@ -19,7 +19,10 @@ import { runDetailPath } from "@/lib/run-routes";
 import type { ExternalBooster } from "@/lib/external-booster";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { attendanceRepository } from "@/repositories/attendance.repository";
-import { runDiscordAnnouncementRepository } from "@/repositories/run-discord-announcement.repository";
+import {
+  parseCancelRevisionFromChannelSourceKey,
+  runDiscordAnnouncementRepository,
+} from "@/repositories/run-discord-announcement.repository";
 import { runDiscordPostRepository, type RunDiscordPostRecord } from "@/repositories/run-discord-post.repository";
 import { discordSchedulePostRepository } from "@/repositories/discord-schedule-post.repository";
 import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.repository";
@@ -34,12 +37,13 @@ import {
   type ScheduleRunRenderInput,
 } from "@/lib/discord-schedule";
 import {
+  parseCancelRevisionFromNotificationSourceKey,
   ROSTER_SWAPPED_SOURCE_KEY_PREFIX,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
-import { isSignupWindowOpen } from "@/services/run-state";
+import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/services/run-state";
 import { isActiveSignupOffer } from "@/services/signup-state";
 import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
 
@@ -1253,8 +1257,20 @@ export const discordSyncService = {
       // is actually CURRENT or NEXT — PAST and FUTURE both resolve to
       // ARCHIVE above, so gating on `targetBucket !== "ARCHIVE"` here blocks
       // first provisioning for both without duplicating the week logic.
-      const eligibleForFirstProvisioning = isSignupWindowOpen(run.status, run.signupsOpen) && targetBucket !== "ARCHIVE";
-      if (hasExistingSignupPost || eligibleForFirstProvisioning) {
+      const eligibleForFirstProvisioning =
+        isSignupWindowOpen(run.status, run.signupsOpen) && targetBucket !== "ARCHIVE";
+      // Continuity recovery: cancellation retired a previously provisioned
+      // Run channel (`signupPostedAt` survives channel-gone). Recreate
+      // infrastructure for OPEN/ROSTERING/PUBLISHED CURRENT/NEXT even when
+      // signups are closed — presentation only, not first-ever provisioning.
+      const eligibleForContinuityRecovery =
+        !run.archivedAt &&
+        (SIGNUP_WINDOW_STATUSES as readonly string[]).includes(run.status) &&
+        targetBucket !== "ARCHIVE" &&
+        !post?.runChannelId &&
+        Boolean(post?.signupPostedAt);
+      const allowChannelCreate = eligibleForFirstProvisioning || eligibleForContinuityRecovery;
+      if (hasExistingSignupPost || eligibleForFirstProvisioning || eligibleForContinuityRecovery) {
         const signature = buildSignupEmbedSignature(toSignupEmbedData(run), {
           channelName: desiredChannelNameFor(run),
           targetBucket,
@@ -1272,7 +1288,7 @@ export const discordSyncService = {
             desiredChannelName: desiredChannelNameFor(run),
             targetBucket,
             scheduledStartAt: run.scheduledStartAt,
-            allowChannelCreate: eligibleForFirstProvisioning,
+            allowChannelCreate,
             announceOnCreate: !post?.signupPostedAt,
           });
         }
@@ -1305,19 +1321,25 @@ export const discordSyncService = {
       // already exists). An empty selected lineup still keeps the empty-state
       // Roster post so the channel converges to Signup + Roster. ARCHIVE
       // (including cancelled/past) does not invent a first empty Roster solely
-      // from signupMessageId. Explicit Publish intents sync that same
-      // persistent message and acknowledge the revision — never append history.
+      // from signupMessageId. Continuity recovery after channel-gone also
+      // projects Roster work when a published roster exists so the next pass
+      // (or same-pass after signup creates the channel) recreates presentation.
+      // Explicit Publish intents sync that same persistent message and
+      // acknowledge the revision — never append history.
       const hasDraftRosterContent =
         (run.roster?.selections?.some((selection) => selection.selected) ?? false) ||
         (run.roster?.externalBoosters.length ?? 0) > 0;
       const maintainRosterMessage =
-        Boolean(dedicatedChannelId) &&
         Boolean(run.roster) &&
-        (Boolean(post?.rosterMessageId) ||
-          Boolean(run.roster?.publishedAt) ||
-          hasDraftRosterContent ||
-          (Boolean(post?.signupMessageId) && targetBucket !== "ARCHIVE"));
-      if (maintainRosterMessage && dedicatedChannelId) {
+        (
+          (Boolean(dedicatedChannelId) &&
+            (Boolean(post?.rosterMessageId) ||
+              Boolean(run.roster?.publishedAt) ||
+              hasDraftRosterContent ||
+              (Boolean(post?.signupMessageId) && targetBucket !== "ARCHIVE"))) ||
+          (eligibleForContinuityRecovery && Boolean(run.roster?.publishedAt))
+        );
+      if (maintainRosterMessage) {
         const postPending = (run.roster?.postRevision ?? 0) > (post?.lastRosterPostRevision ?? 0);
         const rosterRenderFingerprint = rosterEmbedRenderFingerprint(classEmojiFingerprint);
         const base = {
@@ -1333,7 +1355,8 @@ export const discordSyncService = {
         } else if (
           !post?.rosterMessageId ||
           post.lastRosterVersion !== run.roster!.version ||
-          (classEmojiFingerprint !== "" && post.lastRosterEmojiFingerprint !== rosterRenderFingerprint)
+          (classEmojiFingerprint !== "" && post.lastRosterEmojiFingerprint !== rosterRenderFingerprint) ||
+          eligibleForContinuityRecovery
         ) {
           roster.push({ ...base, mode: "REFRESH", postRevision: null });
         }
@@ -1714,14 +1737,19 @@ export const discordSyncService = {
   /**
    * Records Discord DM delivery for a PENDING UserNotification.
    * RAID_INVITE successes also append the legacy raidInviteSentSignupIds list.
+   * Compare-and-set: SKIPPED/SENT/FAILED rows are left untouched (stale bot no-op).
    */
   async recordNotificationDmDelivery(input: {
     notificationId: string;
     result: "SENT" | "FAILED_PERMANENT";
-  }): Promise<void> {
+  }): Promise<{ applied: boolean }> {
     const notification = await userNotificationRepository.findById(input.notificationId);
-    await userNotificationRepository.updateDiscordDelivery(input.notificationId, input.result);
+    const applied = await userNotificationRepository.updateDiscordDelivery(
+      input.notificationId,
+      input.result,
+    );
     if (
+      applied &&
       input.result === "SENT" &&
       notification?.type === "RAID_INVITE" &&
       notification.runId &&
@@ -1732,18 +1760,86 @@ export const discordSyncService = {
         signupId: notification.signupId,
       });
     }
+    return { applied };
   },
 
   /**
    * Records delivery outcome for a PENDING RunDiscordAnnouncement (channel post).
+   * Compare-and-set: non-PENDING rows are left untouched (stale bot no-op).
    */
   async recordRunAnnouncementDelivery(input: {
     announcementId: string;
     result: "SENT" | "SKIPPED" | "FAILED_PERMANENT";
-  }): Promise<void> {
-    await runDiscordAnnouncementRepository.updateStatus(input.announcementId, input.result, {
-      sentAt: input.result === "SENT" ? new Date().toISOString() : null,
-    });
+  }): Promise<{ applied: boolean }> {
+    const applied = await runDiscordAnnouncementRepository.updateStatusIfPending(
+      input.announcementId,
+      input.result,
+      {
+        sentAt: input.result === "SENT" ? new Date().toISOString() : null,
+      },
+    );
+    return { applied };
+  },
+
+  /**
+   * Fresh authority for posting a RunDiscordAnnouncement. Re-checked immediately
+   * before Discord send so stale in-memory CANCELLED work cannot post after Reactivate.
+   */
+  async getRunAnnouncementDeliveryAuthority(announcementId: string): Promise<{ deliver: boolean }> {
+    const announcement = await runDiscordAnnouncementRepository.findById(announcementId);
+    if (!announcement || announcement.status !== "PENDING") {
+      return { deliver: false };
+    }
+
+    if (announcement.type === "RUN_CANCELLED") {
+      const run = await runRepository.findById(announcement.runId);
+      if (!run || run.status !== "CANCELLED") return { deliver: false };
+      const revision = parseCancelRevisionFromChannelSourceKey(announcement.sourceKey);
+      if (revision == null || revision !== run.cancelRevision) return { deliver: false };
+      return { deliver: true };
+    }
+
+    if (announcement.type === "RUN_REACTIVATED") {
+      const run = await runRepository.findById(announcement.runId);
+      if (!run || run.status === "CANCELLED") return { deliver: false };
+      const revision = parseCancelRevisionFromChannelSourceKey(announcement.sourceKey);
+      if (revision == null || revision !== run.cancelRevision) return { deliver: false };
+      return { deliver: true };
+    }
+
+    // RUN_RESCHEDULED (and any future types): PENDING is sufficient.
+    return { deliver: true };
+  },
+
+  /**
+   * Fresh authority for sending a UserNotification Discord DM. Same stale-work
+   * protection as channel announcements.
+   */
+  async getNotificationDmDeliveryAuthority(notificationId: string): Promise<{ deliver: boolean }> {
+    const notification = await userNotificationRepository.findById(notificationId);
+    if (!notification || notification.discordDeliveryStatus !== "PENDING") {
+      return { deliver: false };
+    }
+
+    if (notification.type === "RUN_CANCELLED") {
+      if (!notification.runId) return { deliver: false };
+      const run = await runRepository.findById(notification.runId);
+      if (!run || run.status !== "CANCELLED") return { deliver: false };
+      const revision = parseCancelRevisionFromNotificationSourceKey(notification.sourceKey);
+      if (revision == null || revision !== run.cancelRevision) return { deliver: false };
+      return { deliver: true };
+    }
+
+    if (notification.type === "RUN_REACTIVATED") {
+      if (!notification.runId) return { deliver: false };
+      const run = await runRepository.findById(notification.runId);
+      if (!run || run.status === "CANCELLED") return { deliver: false };
+      const revision = parseCancelRevisionFromNotificationSourceKey(notification.sourceKey);
+      if (revision == null || revision !== run.cancelRevision) return { deliver: false };
+      return { deliver: true };
+    }
+
+    return { deliver: true };
   },
 
   /**

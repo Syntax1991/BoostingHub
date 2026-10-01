@@ -128,6 +128,15 @@ export function runRescheduledSourceKey(runId: string, scheduleRevision: number,
   return `run-rescheduled:${runId}:${scheduleRevision}:${userId}`;
 }
 
+/** Extract cancelRevision from personal cancel/reactivate notification source keys. */
+export function parseCancelRevisionFromNotificationSourceKey(sourceKey: string): number | null {
+  const parts = sourceKey.split(":");
+  if (parts.length < 3) return null;
+  if (parts[0] !== "run-cancelled" && parts[0] !== "run-reactivated") return null;
+  const revision = Number(parts[2]);
+  return Number.isInteger(revision) && revision > 0 ? revision : null;
+}
+
 export const userNotificationRepository = {
   async createInTx(txOrm: typeof orm, input: CreateUserNotificationInput): Promise<boolean> {
     const existing = await txOrm.UserNotification.where({ sourceKey: input.sourceKey }).first();
@@ -290,12 +299,16 @@ export const userNotificationRepository = {
   async updateDiscordDelivery(
     notificationId: string,
     status: Extract<DiscordDeliveryStatus, "SENT" | "FAILED_PERMANENT">,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date().toISOString();
+    const before = await this.findById(notificationId);
+    if (!before || before.discordDeliveryStatus !== "PENDING") return false;
     await orm.UserNotification.where({ id: notificationId, discordDeliveryStatus: "PENDING" }).update({
       discordDeliveryStatus: status,
       updatedAt: now,
     });
+    const after = await this.findById(notificationId);
+    return after?.discordDeliveryStatus === status;
   },
 
   /**
