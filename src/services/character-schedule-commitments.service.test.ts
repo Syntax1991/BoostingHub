@@ -239,7 +239,7 @@ describe("CharacterScheduleCommitmentsSection", () => {
     const empty = renderToStaticMarkup(
       createElement(CharacterScheduleCommitmentsSection, { commitments: [] }),
     );
-    expect(empty).toContain("No upcoming Manawyrm Hub reservations");
+    expect(empty).toContain("No upcoming Manawyrm Hub commitments");
 
     const withConflict = renderToStaticMarkup(
       createElement(CharacterScheduleCommitmentsSection, {
@@ -270,8 +270,13 @@ describe("CharacterScheduleCommitmentsSection", () => {
       }),
     );
     expect(withConflict).toContain("Thu 21:00 HC Unsaved 8/8 Lead");
-    expect(withConflict).toContain("Draft selected");
+    expect(withConflict).toContain("Draft roster");
+    expect(withConflict).toContain("text-danger");
+    expect(withConflict).toContain("Schedule conflict");
+    expect(withConflict).toContain("border-danger");
     expect(withConflict).toContain("Another Manawyrm Hub Run");
     expect(withConflict).toContain(`/runs/r1`);
+    expect(withConflict).not.toContain("Draft selected");
+    expect(withConflict).not.toContain("Reserved elsewhere");
   });
 });

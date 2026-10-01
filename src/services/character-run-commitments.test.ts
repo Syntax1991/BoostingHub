@@ -671,13 +671,13 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
     return { row: view.boosters.find((row) => row.character?.id === characterId)!, runOther, runTarget, characterId };
   }
 
-  it("A: same raid ID, draft-selected elsewhere → Reserved elsewhere", async () => {
+  it("A: same raid ID, draft-selected elsewhere → RESERVED (Draft roster UI)", async () => {
     const { row, runOther } = await rowOnTarget({ name: "Crcida", otherAt: EU_WEEK + 10 * HOUR, targetAt: EU_WEEK + 60 * HOUR });
     expect(row.runCommitments.map((c) => [c.runId, c.state])).toEqual([[runOther.id, "RESERVED"]]);
     expect(row.scheduleConflicts).toEqual([]);
   });
 
-  it("B: same raid ID, published SELECTED elsewhere → Committed elsewhere", async () => {
+  it("B: same raid ID, published SELECTED elsewhere → COMMITTED (Published roster UI)", async () => {
     const { row } = await rowOnTarget({ name: "Crcidb", otherAt: EU_WEEK + 12 * HOUR, targetAt: EU_WEEK + 62 * HOUR, publish: true });
     expect(row.runCommitments.map((c) => c.state)).toEqual(["COMMITTED"]);
   });
@@ -689,7 +689,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
     const { row } = await rowOnTarget({ name: "Crcidc", otherAt, targetAt });
     expect(row.runCommitments).toEqual([]);
     expect(row.scheduleConflicts).toEqual([]);
-    // Published SELECTED in the previous raid ID is not "Committed elsewhere" either.
+    // Published SELECTED in the previous raid ID is not a same-reset COMMITTED either.
     const committed = await rowOnTarget({ name: "Crcidc2", otherAt: otherAt - 2 * HOUR, targetAt, publish: true });
     expect(committed.row.runCommitments).toEqual([]);
   });

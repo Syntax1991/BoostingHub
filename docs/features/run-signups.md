@@ -142,8 +142,8 @@ These are separate derived projections:
 
 | Concept | Question | Blocks selection / publish? |
 | --- | --- | --- |
-| **Run commitment** | Is this Character already draft-selected or published SELECTED on another upcoming BoostingHub Run? | **No** — informational only (`RESERVED` / `COMMITTED`) |
-| **Schedule conflict** | Does another reserving Run violate the 2-hour start gap (or weekly unavailability)? | **Yes** — existing blocker semantics |
+| **Run commitment** | Is this Character already draft-selected or published SELECTED on another upcoming BoostingHub Run? | **No** — informational only (`RESERVED` / `COMMITTED`). Roster UI: **Draft roster** (danger) / **Published roster** (warning). |
+| **Schedule conflict** | Does another reserving Run violate the 2-hour start gap (or weekly unavailability)? | **Yes** — existing blocker semantics (strong danger alert in Roster Builder) |
 
 A Character may be committed elsewhere with **no** schedule conflict (e.g. other Run ≥ 2h away). Roster Builder still shows the commitment so Raid Leads see context without inventing a broader blocker.
 
