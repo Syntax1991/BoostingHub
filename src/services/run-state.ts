@@ -13,6 +13,8 @@ export const RUN_TRANSITIONS: Record<RunStatus, readonly RunStatus[]> = {
   PUBLISHED: ["IN_PROGRESS", "CANCELLED"],
   IN_PROGRESS: ["COMPLETED", "CANCELLED"],
   COMPLETED: [],
+  // CANCELLED is not generically mutable — Reactivate is a dedicated domain
+  // operation (`reactivateRun`) that restores snapshotted pre-cancel state.
   CANCELLED: [],
 };
 
@@ -125,6 +127,7 @@ export type RunLifecycleCapabilities = {
   canCloseSignups: boolean;
   canReopenSignups: boolean;
   canCancel: boolean;
+  canReactivate: boolean;
   canStart: boolean;
   canManageAttendance: boolean;
   canComplete: boolean;
@@ -143,6 +146,7 @@ export function emptyRunCapabilities(): RunLifecycleCapabilities {
     canCloseSignups: false,
     canReopenSignups: false,
     canCancel: false,
+    canReactivate: false,
     canStart: false,
     canManageAttendance: false,
     canComplete: false,
@@ -172,6 +176,25 @@ export function canToggleSignupWindow(status: RunStatus): boolean {
 
 export function canCancelRun(status: RunStatus): boolean {
   return CANCELLABLE_STATUSES.includes(status);
+}
+
+/** Statuses that Cancel may snapshot for a later Reactivate. */
+export const REACTIVATABLE_FROM_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
+
+/**
+ * Pure capability: a CANCELLED Run with a known pre-cancel snapshot may be
+ * reactivated. Legacy CANCELLED rows (null snapshot) stay terminal. Start
+ * evidence (attendance / start snapshot) is checked in the service, not here.
+ */
+export function canReactivateRun(input: {
+  status: RunStatus;
+  cancelledFromStatus: RunStatus | null | undefined;
+  archivedAt?: string | null;
+}): boolean {
+  if (input.status !== "CANCELLED") return false;
+  if (input.archivedAt) return false;
+  const from = input.cancelledFromStatus;
+  return from != null && (REACTIVATABLE_FROM_STATUSES as readonly string[]).includes(from);
 }
 
 export function canStartRun(status: RunStatus): boolean {
@@ -213,6 +236,7 @@ export function getRunLifecycleCapabilities(input: {
   signupsOpen: boolean;
   actorIsAdmin: boolean;
   archivedAt?: string | null;
+  cancelledFromStatus?: RunStatus | null;
 }): RunLifecycleCapabilities {
   // Identity (content/difficulty) and planning share the one pre-start rule;
   // both flags stay for the edit form.
@@ -231,6 +255,11 @@ export function getRunLifecycleCapabilities(input: {
     canCloseSignups: windowToggle && input.signupsOpen,
     canReopenSignups: windowToggle && !input.signupsOpen,
     canCancel: canCancelRun(input.status),
+    canReactivate: canReactivateRun({
+      status: input.status,
+      cancelledFromStatus: input.cancelledFromStatus,
+      archivedAt,
+    }),
     canStart: canStartRun(input.status),
     canManageAttendance: canManageAttendance(input.status),
     canComplete: canCompleteRun(input.status),

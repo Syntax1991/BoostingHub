@@ -140,6 +140,8 @@ export const runDetailService = {
           status: run.status,
           signupsOpen: run.signupsOpen,
           actorIsAdmin: hasAdminAccess(user.accountRole),
+          archivedAt: run.archivedAt,
+          cancelledFromStatus: run.cancelledFromStatus,
         })
       : emptyRunCapabilities();
 
@@ -160,6 +162,8 @@ export const runDetailService = {
       notes: run.notes,
       signupsOpen: run.signupsOpen,
       signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
+      cancelledFromStatus: run.cancelledFromStatus,
+      cancelRevision: run.cancelRevision,
       desiredTankCount: run.desiredTankCount,
       desiredHealerCount: run.desiredHealerCount,
       desiredDpsCount: run.desiredDpsCount,

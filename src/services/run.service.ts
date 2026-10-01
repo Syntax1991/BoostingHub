@@ -18,13 +18,14 @@ import {
 import { TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
 import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
+import { attendanceRepository } from "@/repositories/attendance.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository, type RunCreateWithContentsInput } from "@/repositories/run.repository";
+import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 import {
-  runCancelledChannelSourceKey,
   runRescheduledChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
 import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
@@ -315,7 +316,13 @@ async function loadManagedRun(user: AuthenticatedUser, runId: string) {
 
 function capabilitiesFor(
   user: AuthenticatedUser,
-  run: { status: RunStatus; signupsOpen: boolean; raidLeadId: string; archivedAt?: string | null },
+  run: {
+    status: RunStatus;
+    signupsOpen: boolean;
+    raidLeadId: string;
+    archivedAt?: string | null;
+    cancelledFromStatus?: RunStatus | null;
+  },
 ): RunLifecycleCapabilities {
   if (!canManageRun(user, run)) {
     return emptyRunCapabilities();
@@ -325,6 +332,7 @@ function capabilitiesFor(
     signupsOpen: run.signupsOpen,
     actorIsAdmin: hasAdminAccess(user.accountRole),
     archivedAt: run.archivedAt,
+    cancelledFromStatus: run.cancelledFromStatus,
   });
 }
 
@@ -932,27 +940,28 @@ export const runService = {
       status: run.status,
       signupsOpen: run.signupsOpen,
       actorIsAdmin: hasAdminAccess(user.accountRole),
+      archivedAt: run.archivedAt,
+      cancelledFromStatus: run.cancelledFromStatus,
     }).canCancel) {
       throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
     }
 
     // Channel lifecycle announcement is authoritative and atomic with CANCELLED.
+    // The repository re-reads Run state, derives cancelRevision, snapshots
+    // pre-cancel fields, and skips any still-PENDING prior RUN_REACTIVATED
+    // channel announcement inside the same transaction.
     // Personal UserNotifications are separate (notifyRunCancelled) and must not
     // be mixed into this transaction — bot retirement waits on RunDiscordAnnouncement
     // terminal status before transcript/archive and channel deletion.
-    await runRepository.cancelWithDiscordAnnouncement(run.id, {
-      runId: run.id,
-      type: "RUN_CANCELLED",
-      sourceKey: runCancelledChannelSourceKey(run.id),
-      previousScheduledStartAt: null,
+    const { cancelRevision } = await runRepository.cancelWithDiscordAnnouncement(run.id, {
       scheduledStartAt: run.scheduledStartAt,
       productLabel: run.contentDisplay.productLabel || run.title,
       difficulty: run.difficulty,
       lootType: run.lootType,
-      status: "PENDING",
     });
     await runLifecycleNotificationService.notifyRunCancelled({
       runId: run.id,
+      cancelRevision,
       runTitle: run.title,
       scheduledStartAt: run.scheduledStartAt,
       difficulty: run.difficulty,
@@ -962,6 +971,65 @@ export const runService = {
       userId: user.id,
       type: "RUN_CANCELLED",
       message: "Cancelled a run.",
+    });
+    return { id: run.id };
+  },
+
+  async reactivateRun(user: AuthenticatedUser, runId: string) {
+    const run = await loadManagedRun(user, runId);
+    if (!getRunLifecycleCapabilities({
+      status: run.status,
+      signupsOpen: run.signupsOpen,
+      actorIsAdmin: hasAdminAccess(user.accountRole),
+      archivedAt: run.archivedAt,
+      cancelledFromStatus: run.cancelledFromStatus,
+    }).canReactivate) {
+      throw new DomainError(
+        "RUN_CANNOT_REACTIVATE",
+        "This cancelled run cannot be reactivated.",
+      );
+    }
+
+    // Hard safety: never resurrect a Run that actually started.
+    // The repository rechecks under the shared roster lock — this is UX-fast.
+    const [startSnapshot, attendanceCount] = await Promise.all([
+      runStartSnapshotRepository.findByRunId(run.id),
+      attendanceRepository.countByRunId(run.id),
+    ]);
+    if (startSnapshot || attendanceCount > 0 || run.completedAt) {
+      throw new DomainError(
+        "RUN_CANNOT_REACTIVATE",
+        "A run that has started cannot be reactivated.",
+      );
+    }
+
+    // Internal expected revision from this service read. The repository
+    // re-validates under lock and rejects ABA (rev1 intent against rev2).
+    const expectedCancelRevision = run.cancelRevision;
+
+    await runRepository.reactivateWithDiscordAnnouncement(run.id, expectedCancelRevision, {
+      scheduledStartAt: run.scheduledStartAt,
+      productLabel: run.contentDisplay.productLabel || run.title,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+    });
+
+    // Historical archive pointers describe the cancelled channel's retirement,
+    // not the currently active Run — clear so a later retirement can post again.
+    await discordSyncService.clearArchiveArtifacts(run.id);
+
+    await runLifecycleNotificationService.notifyRunReactivated({
+      runId: run.id,
+      cancelRevision: expectedCancelRevision,
+      runTitle: run.title,
+      scheduledStartAt: run.scheduledStartAt,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+    });
+    await activityRepository.create({
+      userId: user.id,
+      type: "RUN_REACTIVATED",
+      message: "Reactivated a cancelled run.",
     });
     return { id: run.id };
   },

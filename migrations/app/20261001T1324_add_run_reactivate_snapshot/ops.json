@@ -1,0 +1,338 @@
+[
+  {
+    "id": "dropCheckConstraint.run_discord_announcement.run_discord_announcement_type_check_b8186a62",
+    "label": "Drop check constraint \"run_discord_announcement_type_check_b8186a62\" on \"run_discord_announcement\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_type_check_b8186a62",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_type_check_b8186a62\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_b8186a62",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_discord_announcement_type_check_b8186a62\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" DROP CONSTRAINT \"run_discord_announcement_type_check_b8186a62\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_type_check_b8186a62\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_b8186a62",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.user_notification.user_notification_type_check_6413e97d",
+    "label": "Drop check constraint \"user_notification_type_check_6413e97d\" on \"user_notification\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_6413e97d",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_6413e97d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_6413e97d",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"user_notification_type_check_6413e97d\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" DROP CONSTRAINT \"user_notification_type_check_6413e97d\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_6413e97d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_6413e97d",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.cancelRevision",
+    "label": "Add column \"cancelRevision\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "cancelRevision",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"cancelRevision\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "cancelRevision"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"cancelRevision\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"cancelRevision\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"cancelRevision\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "cancelRevision"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.cancelledFromSignupsOpen",
+    "label": "Add column \"cancelledFromSignupsOpen\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "cancelledFromSignupsOpen",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"cancelledFromSignupsOpen\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "cancelledFromSignupsOpen"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"cancelledFromSignupsOpen\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"cancelledFromSignupsOpen\" bool"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"cancelledFromSignupsOpen\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "cancelledFromSignupsOpen"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.run.cancelledFromStatus",
+    "label": "Add column \"cancelledFromStatus\" to \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "cancelledFromStatus",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"cancelledFromStatus\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "cancelledFromStatus"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"cancelledFromStatus\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD COLUMN \"cancelledFromStatus\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"cancelledFromStatus\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run",
+          "cancelledFromStatus"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run.run_cancelledFromStatus_check_30cdad8d",
+    "label": "Add check constraint \"run_cancelledFromStatus_check_30cdad8d\" on \"run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_cancelledFromStatus_check_30cdad8d",
+        "table": "run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_cancelledFromStatus_check_30cdad8d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_cancelledFromStatus_check_30cdad8d",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_cancelledFromStatus_check_30cdad8d\"",
+        "sql": "ALTER TABLE \"public\".\"run\" ADD CONSTRAINT \"run_cancelledFromStatus_check_30cdad8d\" CHECK (\"cancelledFromStatus\" IN ('DRAFT', 'OPEN', 'ROSTERING', 'PUBLISHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_cancelledFromStatus_check_30cdad8d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_cancelledFromStatus_check_30cdad8d",
+          "public",
+          "\"public\".\"run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_discord_announcement.run_discord_announcement_type_check_2be127eb",
+    "label": "Add check constraint \"run_discord_announcement_type_check_2be127eb\" on \"run_discord_announcement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_discord_announcement_type_check_2be127eb",
+        "table": "run_discord_announcement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_discord_announcement_type_check_2be127eb\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_2be127eb",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_discord_announcement_type_check_2be127eb\"",
+        "sql": "ALTER TABLE \"public\".\"run_discord_announcement\" ADD CONSTRAINT \"run_discord_announcement_type_check_2be127eb\" CHECK (\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_discord_announcement_type_check_2be127eb\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_discord_announcement_type_check_2be127eb",
+          "public",
+          "\"public\".\"run_discord_announcement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user_notification.user_notification_type_check_c6b92315",
+    "label": "Add check constraint \"user_notification_type_check_c6b92315\" on \"user_notification\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_notification_type_check_c6b92315",
+        "table": "user_notification"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_notification_type_check_c6b92315\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_c6b92315",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_notification_type_check_c6b92315\"",
+        "sql": "ALTER TABLE \"public\".\"user_notification\" ADD CONSTRAINT \"user_notification_type_check_c6b92315\" CHECK (\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_notification_type_check_c6b92315\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_notification_type_check_c6b92315",
+          "public",
+          "\"public\".\"user_notification\""
+        ]
+      }
+    ]
+  }
+]

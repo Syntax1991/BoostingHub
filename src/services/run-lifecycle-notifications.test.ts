@@ -271,7 +271,7 @@ describe("run lifecycle notifications", () => {
       (row) => row.runId === created.id && row.type === "RUN_CANCELLED",
     );
     expect(playerNotes).toHaveLength(1);
-    expect(playerNotes[0].sourceKey).toBe(runCancelledSourceKey(created.id, ids.player));
+    expect(playerNotes[0].sourceKey).toBe(runCancelledSourceKey(created.id, 1, ids.player));
     expect(playerNotes[0].discordDeliveryStatus).toBe("PENDING");
 
     const multiNotes = (await userNotificationRepository.listForUser(ids.multi, 20)).filter(

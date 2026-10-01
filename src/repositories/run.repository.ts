@@ -31,10 +31,12 @@ import {
 } from "@/lib/persistence";
 import {
   insertAnnouncementIgnoreDuplicateTx,
+  runCancelledChannelSourceKey,
+  runReactivatedChannelSourceKey,
   type CreateRunDiscordAnnouncementInput,
 } from "@/repositories/run-discord-announcement.repository";
 import { lockRosterInTx } from "@/repositories/roster.repository";
-import { canEditRunBeforeStart } from "@/services/run-state";
+import { canCancelRun, canEditRunBeforeStart, REACTIVATABLE_FROM_STATUSES } from "@/services/run-state";
 
 /**
  * Test-only hooks that force a mid-transaction failure for rollback proofs.
@@ -44,6 +46,11 @@ export type LifecycleAnnouncementTxHooks = {
   failAfterRunUpdate?: boolean;
   /** Insert with a nonexistent runId so the FK fails and rolls back the Run write. */
   failAnnouncementInsert?: boolean;
+  /**
+   * Invoked after the shared RunRoster lock is held and before authoritative
+   * Run re-read / mutation. Used by concurrency tests to serialize races.
+   */
+  afterRosterLocked?: () => void | Promise<void>;
 };
 
 export type RunFieldsUpdate = {
@@ -129,6 +136,14 @@ export type RunListRecord = {
   /** Pure display projection from persisted contents (never regenerated from presets). */
   contentDisplay: RunContentDisplay;
   signupsOpen: boolean;
+  /** Cancellation-cycle identity; increments on each Cancel Run. */
+  cancelRevision: number;
+  /** Pre-cancel status snapshot (null when not cancelled / legacy). */
+  cancelledFromStatus: RunStatus | null;
+  /** Pre-cancel signupsOpen snapshot. */
+  cancelledFromSignupsOpen: boolean | null;
+  /** Set when IN_PROGRESS → COMPLETED. */
+  completedAt: string | null;
   archivedAt: string | null;
   archivedById: string | null;
   signups: SignupOnRun[];
@@ -279,6 +294,15 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     contents,
     contentDisplay,
     signupsOpen: asBoolean(run.signupsOpen),
+    cancelRevision: asNumber(run.cancelRevision, 0),
+    cancelledFromStatus: run.cancelledFromStatus
+      ? mapRunStatus(run.cancelledFromStatus)
+      : null,
+    cancelledFromSignupsOpen:
+      run.cancelledFromSignupsOpen === null || run.cancelledFromSignupsOpen === undefined
+        ? null
+        : asBoolean(run.cancelledFromSignupsOpen),
+    completedAt: asStringOrNull(run.completedAt),
     archivedAt: asStringOrNull(run.archivedAt),
     archivedById: asStringOrNull(run.archivedById),
     signups: signups.map((row) => {
@@ -551,34 +575,233 @@ export const runRepository = {
   },
 
   /**
-   * Atomically cancel a Run and insert the RUN_CANCELLED channel announcement.
-   * Either both commit or neither does — never cancel without the announcement
-   * row the bot needs before retiring the Discord channel.
+   * Atomically cancel a Run under the shared RunRoster lock (same order as
+   * Start / roster writes): lock roster → re-read Run → validate → snapshot →
+   * bump cancelRevision → skip obsolete prior RUN_REACTIVATED → write CANCELLED
+   * → insert RUN_CANCELLED. Either all commit or none do.
    */
   async cancelWithDiscordAnnouncement(
     runId: string,
-    announcement: CreateRunDiscordAnnouncementInput,
+    announcement: {
+      scheduledStartAt: string;
+      productLabel: string;
+      difficulty: RaidDifficulty;
+      lootType: RunLootType;
+    },
     hooks: LifecycleAnnouncementTxHooks = {},
-  ): Promise<void> {
-    await db.transaction(async (tx) => {
+  ): Promise<{ cancelRevision: number }> {
+    return db.transaction(async (tx) => {
       const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
       const now = new Date().toISOString();
+
+      // Shared lifecycle lock — must precede any authoritative Run read.
+      const rosterLookup = (await txOrm.RunRoster.where({ runId }).select("id").first()) as Record<
+        string,
+        unknown
+      > | null;
+      if (!rosterLookup) {
+        throw new DomainError("NOT_FOUND", "Roster was not found.", 404);
+      }
+      await lockRosterInTx(txOrm, asString(rosterLookup.id));
+      if (hooks.afterRosterLocked) {
+        await hooks.afterRosterLocked();
+      }
+
+      const current = (await txOrm.Run.where({ id: runId }).first()) as Record<string, unknown> | null;
+      if (!current) {
+        throw new DomainError("NOT_FOUND", "Run was not found.", 404);
+      }
+      const currentStatus = mapRunStatus(current.status);
+      if (!canCancelRun(currentStatus)) {
+        throw new DomainError("RUN_CANNOT_CANCEL", "This run cannot be cancelled.");
+      }
+
+      const previousCancelRevision = asNumber(current.cancelRevision, 0);
+      const nextCancelRevision = previousCancelRevision + 1;
+      const cancelledFromStatus = currentStatus;
+      const cancelledFromSignupsOpen = asBoolean(current.signupsOpen);
+
+      // A prior Reactivate cycle may still have an undelivered channel message.
+      // Retire it with this Cancel so it cannot remain PENDING forever.
+      // PENDING-only CAS: never rewrite SENT / FAILED_PERMANENT / SKIPPED.
+      if (previousCancelRevision > 0) {
+        const priorReactivateKey = runReactivatedChannelSourceKey(runId, previousCancelRevision);
+        await txOrm.RunDiscordAnnouncement.where({
+          sourceKey: priorReactivateKey,
+          status: "PENDING",
+        }).update({
+          status: "SKIPPED",
+          updatedAt: now,
+        });
+      }
+
       await txOrm.Run.where({ id: runId }).update({
         status: "CANCELLED",
         signupsOpen: false,
+        cancelledFromStatus,
+        cancelledFromSignupsOpen,
+        cancelRevision: nextCancelRevision,
         updatedAt: now,
       });
       if (hooks.failAfterRunUpdate) {
         throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
       }
+
+      const cancelAnnouncement: CreateRunDiscordAnnouncementInput = {
+        runId,
+        type: "RUN_CANCELLED",
+        sourceKey: runCancelledChannelSourceKey(runId, nextCancelRevision),
+        previousScheduledStartAt: null,
+        scheduledStartAt: announcement.scheduledStartAt,
+        productLabel: announcement.productLabel,
+        difficulty: announcement.difficulty,
+        lootType: announcement.lootType,
+        status: "PENDING",
+      };
       if (hooks.failAnnouncementInsert) {
         await insertAnnouncementIgnoreDuplicateTx(txOrm, {
-          ...announcement,
+          ...cancelAnnouncement,
           runId: "00000000-0000-4000-8000-000000000000",
         });
-        return;
+        return { cancelRevision: nextCancelRevision };
       }
-      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, cancelAnnouncement);
+      return { cancelRevision: nextCancelRevision };
+    });
+  },
+
+  /**
+   * Atomically reactivate a CANCELLED Run under the shared RunRoster lock.
+   * Restores from the CURRENT locked row (not a stale service projection),
+   * requires expectedCancelRevision to match (ABA protection), rechecks archive
+   * + Start evidence, skips pending RUN_CANCELLED for this revision, and
+   * inserts RUN_REACTIVATED.
+   */
+  async reactivateWithDiscordAnnouncement(
+    runId: string,
+    expectedCancelRevision: number,
+    announcement: {
+      scheduledStartAt: string;
+      productLabel: string;
+      difficulty: RaidDifficulty;
+      lootType: RunLootType;
+    },
+    hooks: LifecycleAnnouncementTxHooks = {},
+  ): Promise<{ cancelRevision: number; restoredStatus: RunStatus }> {
+    return db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+
+      const rosterLookup = (await txOrm.RunRoster.where({ runId }).select("id").first()) as Record<
+        string,
+        unknown
+      > | null;
+      if (!rosterLookup) {
+        throw new DomainError("NOT_FOUND", "Roster was not found.", 404);
+      }
+      await lockRosterInTx(txOrm, asString(rosterLookup.id));
+      if (hooks.afterRosterLocked) {
+        await hooks.afterRosterLocked();
+      }
+
+      const current = (await txOrm.Run.where({ id: runId }).first()) as Record<string, unknown> | null;
+      if (!current || mapRunStatus(current.status) !== "CANCELLED") {
+        throw new DomainError("RUN_CANNOT_REACTIVATE", "Only a cancelled run can be reactivated.");
+      }
+      if (asStringOrNull(current.archivedAt) != null) {
+        throw new DomainError(
+          "RUN_CANNOT_REACTIVATE",
+          "Restore the archive before reactivating this run.",
+        );
+      }
+
+      const cancelRevision = asNumber(current.cancelRevision, 0);
+      if (cancelRevision !== expectedCancelRevision) {
+        throw new DomainError(
+          "RUN_CANNOT_REACTIVATE",
+          "This cancelled run was superseded by a newer cancellation cycle.",
+        );
+      }
+
+      const fromStatus = current.cancelledFromStatus
+        ? mapRunStatus(current.cancelledFromStatus)
+        : null;
+      if (
+        fromStatus == null ||
+        !(REACTIVATABLE_FROM_STATUSES as readonly string[]).includes(fromStatus)
+      ) {
+        throw new DomainError(
+          "RUN_CANNOT_REACTIVATE",
+          "This cancelled run cannot be reactivated.",
+        );
+      }
+
+      const existingSnapshot = await txOrm.RunStartSnapshot.where({ runId }).first();
+      if (existingSnapshot) {
+        throw new DomainError(
+          "RUN_CANNOT_REACTIVATE",
+          "A run that has started cannot be reactivated.",
+        );
+      }
+      const attendanceRows = await txOrm.RunAttendance.where({ runId }).select("id").all();
+      if (attendanceRows.length > 0) {
+        throw new DomainError(
+          "RUN_CANNOT_REACTIVATE",
+          "A run that has started cannot be reactivated.",
+        );
+      }
+      if (asStringOrNull(current.completedAt) != null) {
+        throw new DomainError(
+          "RUN_CANNOT_REACTIVATE",
+          "A run that has started cannot be reactivated.",
+        );
+      }
+
+      const restoreSignupsOpen =
+        fromStatus === "DRAFT" ? false : asBoolean(current.cancelledFromSignupsOpen);
+
+      await txOrm.Run.where({ id: runId }).update({
+        status: fromStatus,
+        signupsOpen: restoreSignupsOpen,
+        cancelledFromStatus: null,
+        cancelledFromSignupsOpen: null,
+        updatedAt: now,
+      });
+      if (hooks.failAfterRunUpdate) {
+        throw new Error("TEST_HOOK_FAIL_AFTER_RUN_UPDATE");
+      }
+
+      // Suppress undelivered cancel announcement for this cycle so the bot
+      // never posts a stale "Run cancelled" after Reactivate.
+      const cancelAnnouncementSourceKey = runCancelledChannelSourceKey(runId, cancelRevision);
+      await txOrm.RunDiscordAnnouncement.where({
+        sourceKey: cancelAnnouncementSourceKey,
+        status: "PENDING",
+      }).update({
+        status: "SKIPPED",
+        updatedAt: now,
+      });
+
+      const reactivateAnnouncement: CreateRunDiscordAnnouncementInput = {
+        runId,
+        type: "RUN_REACTIVATED",
+        sourceKey: runReactivatedChannelSourceKey(runId, cancelRevision),
+        previousScheduledStartAt: null,
+        scheduledStartAt: announcement.scheduledStartAt,
+        productLabel: announcement.productLabel,
+        difficulty: announcement.difficulty,
+        lootType: announcement.lootType,
+        status: "PENDING",
+      };
+      if (hooks.failAnnouncementInsert) {
+        await insertAnnouncementIgnoreDuplicateTx(txOrm, {
+          ...reactivateAnnouncement,
+          runId: "00000000-0000-4000-8000-000000000000",
+        });
+        return { cancelRevision, restoredStatus: fromStatus };
+      }
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, reactivateAnnouncement);
+      return { cancelRevision, restoredStatus: fromStatus };
     });
   },
 

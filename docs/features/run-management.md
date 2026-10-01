@@ -126,14 +126,50 @@ Allowed from `DRAFT`, `OPEN`, `ROSTERING`, `PUBLISHED`.
 
 Not allowed from `IN_PROGRESS`, `COMPLETED`, or `CANCELLED`.
 
-Effects:
+Effects (authoritative cancel transaction):
 
+- snapshot `cancelledFromStatus` / `cancelledFromSignupsOpen` from the current Run
+- bump `cancelRevision` (monotonic; identities cancel/reactivate notification cycles)
 - `status = CANCELLED`
 - `signupsOpen = false`
+- insert `RUN_CANCELLED` `RunDiscordAnnouncement` in the same transaction
 
-Preserved: Run row, signups, roster, BoosterAccess, lockouts, activity/history.
+Preserved: Run row, signups, roster, BoosterAccess, lockouts, activity/history, Discord identity until channel retirement.
 
 There is **no destructive Run delete**, including for drafts.
+
+## Reactivate Run
+
+Pre-start cancellation is reversible. **Reactivate Run** restores the exact lifecycle state captured immediately before Cancel — it is not a status picker and not Archive Restore.
+
+Allowed when:
+
+- `status === CANCELLED`
+- `cancelledFromStatus` is `DRAFT` | `OPEN` | `ROSTERING` | `PUBLISHED`
+- `archivedAt == null`
+- no Start evidence (`RunStartSnapshot`, `RunAttendance`, or `completedAt`)
+
+Legacy CANCELLED rows without a snapshot stay terminal (`canReactivate = false`).
+
+Restore semantics:
+
+| Snapshot | Restored status | Restored `signupsOpen` |
+| --- | --- | --- |
+| `DRAFT` | `DRAFT` | always `false` |
+| `OPEN` / `ROSTERING` / `PUBLISHED` | same | exact snapshotted value |
+
+Also:
+
+- clear snapshot fields (`cancelledFromStatus` / `cancelledFromSignupsOpen`); keep `cancelRevision`
+- skip still-PENDING cancel channel announcement + cancel Discord DMs for this revision
+- create `RUN_REACTIVATED` channel announcement + participant notifications (revisioned source keys; uses the cancel DM preference as the same lifecycle family)
+- clear active Discord archive artifact pointers (historical log messages stay)
+- do not recreate deleted Discord IDs; normal provisioning recreates infrastructure when needed
+- do not republish roster or re-send `ROSTER_SELECTED`
+
+Archive remains separate: archived CANCELLED → Restore Archive (still CANCELLED) → then Reactivate.
+
+Multiple cancel/reactivate cycles are supported; each cancel bumps `cancelRevision` so announcements and DMs are not suppressed by an earlier cycle.
 
 ## Canonical Run detail
 
@@ -143,6 +179,7 @@ Management actions live on `/runs/[runId]`:
 - Open Run
 - Close Signups / Reopen Signups
 - Cancel Run
+- Reactivate Run (pre-start CANCELLED with snapshot only)
 - Start Run / Complete Run (see [run-lifecycle-attendance.md](run-lifecycle-attendance.md))
 
 The Run Detail DTO includes server-derived `capabilities`. USER payloads keep `editor` null and capabilities false. USER still sees lifecycle status, signup window, metadata, own participation, and published roster.

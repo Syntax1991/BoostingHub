@@ -3,23 +3,28 @@ import { settingsRepository } from "@/repositories/settings.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import {
   runCancelledSourceKey,
+  runReactivatedSourceKey,
   runRescheduledSourceKey,
   userNotificationRepository,
 } from "@/repositories/user-notification.repository";
 import {
   resolveDiscordDelivery,
   runCancelledWebNotification,
+  runReactivatedWebNotification,
   runRescheduledWebNotification,
 } from "@/services/notification-content";
 import { userRepository } from "@/repositories/user.repository";
 
 /**
- * Creates durable RUN_CANCELLED / RUN_RESCHEDULED notifications for Users with
- * active signup relationships (PENDING | SELECTED). One notification per User.
+ * Creates durable RUN_CANCELLED / RUN_RESCHEDULED / RUN_REACTIVATED notifications
+ * for Users with active signup relationships (PENDING | SELECTED). One notification
+ * per User. Reactivate DMs reuse the cancel preference (`dmRunCancelledEnabled`)
+ * as the correction of the same lifecycle event family.
  */
 export const runLifecycleNotificationService = {
   async notifyRunCancelled(input: {
     runId: string;
+    cancelRevision: number;
     runTitle: string;
     scheduledStartAt: string;
     difficulty: RaidDifficulty;
@@ -30,6 +35,17 @@ export const runLifecycleNotificationService = {
       (ACTIVE_SIGNUP_STATUSES as readonly string[]).includes(signup.status),
     );
     const userIds = [...new Set(active.map((signup) => signup.userId))];
+
+    // A prior Reactivate cycle may still have undelivered Discord DMs.
+    // Retire those PENDING deliveries with this Cancel so they cannot linger.
+    // Keep the in-app UserNotification rows; only Discord delivery is skipped.
+    if (input.cancelRevision > 1) {
+      const previousRevision = input.cancelRevision - 1;
+      const priorReactivateKeys = userIds.map((userId) =>
+        runReactivatedSourceKey(input.runId, previousRevision, userId),
+      );
+      await userNotificationRepository.skipPendingDiscordDeliveryForSourceKeys(priorReactivateKeys);
+    }
 
     for (const userId of userIds) {
       const [prefs, user] = await Promise.all([
@@ -56,7 +72,65 @@ export const runLifecycleNotificationService = {
         type: "RUN_CANCELLED",
         runId: input.runId,
         signupId: null,
-        sourceKey: runCancelledSourceKey(input.runId, userId),
+        sourceKey: runCancelledSourceKey(input.runId, input.cancelRevision, userId),
+        title: copy.title,
+        message: copy.message,
+        href: copy.href,
+        discordDeliveryStatus: discordDmDelivery.status,
+        discordUserId: discordDmDelivery.discordUserId,
+        discordDeliverAfter: discordDmDelivery.discordDeliverAfter,
+      });
+    }
+  },
+
+  /**
+   * Suppress undelivered cancel DMs for this cancelRevision, then notify the
+   * same active-participant audience that the Run is active again.
+   */
+  async notifyRunReactivated(input: {
+    runId: string;
+    cancelRevision: number;
+    runTitle: string;
+    scheduledStartAt: string;
+    difficulty: RaidDifficulty;
+    lootType: RunLootType;
+  }): Promise<void> {
+    const signups = await signupRepository.listByRunId(input.runId);
+    const active = signups.filter((signup) =>
+      (ACTIVE_SIGNUP_STATUSES as readonly string[]).includes(signup.status),
+    );
+    const userIds = [...new Set(active.map((signup) => signup.userId))];
+
+    const cancelKeys = userIds.map((userId) =>
+      runCancelledSourceKey(input.runId, input.cancelRevision, userId),
+    );
+    await userNotificationRepository.skipPendingDiscordDeliveryForSourceKeys(cancelKeys);
+
+    for (const userId of userIds) {
+      const [prefs, user] = await Promise.all([
+        settingsRepository.getNotificationDmPreferences(userId),
+        userRepository.findById(userId),
+      ]);
+      const timeZone = await settingsRepository.getTimeZone(userId);
+      const copy = runReactivatedWebNotification({
+        runId: input.runId,
+        runTitle: input.runTitle,
+        scheduledStartAt: input.scheduledStartAt,
+        timeZone,
+      });
+      const discordDmDelivery = resolveDiscordDelivery({
+        discordDmEnabled: prefs.discordDmEnabled,
+        eventDmEnabled: prefs.dmRunCancelledEnabled,
+        discordUserId: user?.discordUserId ?? null,
+        quietHours: prefs.quietHours,
+        timeZone,
+      });
+      await userNotificationRepository.createIgnoreDuplicate({
+        userId,
+        type: "RUN_REACTIVATED",
+        runId: input.runId,
+        signupId: null,
+        sourceKey: runReactivatedSourceKey(input.runId, input.cancelRevision, userId),
         title: copy.title,
         message: copy.message,
         href: copy.href,

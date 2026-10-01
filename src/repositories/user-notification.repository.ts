@@ -116,12 +116,25 @@ export function raidInviteSourceKey(runId: string, signupId: string): string {
   return `raid-invite:${runId}:${signupId}`;
 }
 
-export function runCancelledSourceKey(runId: string, userId: string): string {
-  return `run-cancelled:${runId}:${userId}`;
+export function runCancelledSourceKey(runId: string, cancelRevision: number, userId: string): string {
+  return `run-cancelled:${runId}:${cancelRevision}:${userId}`;
+}
+
+export function runReactivatedSourceKey(runId: string, cancelRevision: number, userId: string): string {
+  return `run-reactivated:${runId}:${cancelRevision}:${userId}`;
 }
 
 export function runRescheduledSourceKey(runId: string, scheduleRevision: number, userId: string): string {
   return `run-rescheduled:${runId}:${scheduleRevision}:${userId}`;
+}
+
+/** Extract cancelRevision from personal cancel/reactivate notification source keys. */
+export function parseCancelRevisionFromNotificationSourceKey(sourceKey: string): number | null {
+  const parts = sourceKey.split(":");
+  if (parts.length < 3) return null;
+  if (parts[0] !== "run-cancelled" && parts[0] !== "run-reactivated") return null;
+  const revision = Number(parts[2]);
+  return Number.isInteger(revision) && revision > 0 ? revision : null;
 }
 
 export const userNotificationRepository = {
@@ -286,11 +299,37 @@ export const userNotificationRepository = {
   async updateDiscordDelivery(
     notificationId: string,
     status: Extract<DiscordDeliveryStatus, "SENT" | "FAILED_PERMANENT">,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date().toISOString();
+    const before = await this.findById(notificationId);
+    if (!before || before.discordDeliveryStatus !== "PENDING") return false;
     await orm.UserNotification.where({ id: notificationId, discordDeliveryStatus: "PENDING" }).update({
       discordDeliveryStatus: status,
       updatedAt: now,
     });
+    const after = await this.findById(notificationId);
+    return after?.discordDeliveryStatus === status;
+  },
+
+  /**
+   * Marks still-PENDING Discord DM deliveries SKIPPED for the given source keys
+   * (e.g. undelivered RUN_CANCELLED DMs when Reactivate commits). Does not
+   * delete rows or rewrite SENT history.
+   */
+  async skipPendingDiscordDeliveryForSourceKeys(sourceKeys: readonly string[]): Promise<number> {
+    if (sourceKeys.length === 0) return 0;
+    const now = new Date().toISOString();
+    let skipped = 0;
+    for (const sourceKey of sourceKeys) {
+      const row = (await orm.UserNotification.where({ sourceKey }).first()) as Record<string, unknown> | null;
+      if (!row) continue;
+      if (asString(row.discordDeliveryStatus) !== "PENDING") continue;
+      await orm.UserNotification.where({ id: asString(row.id) }).update({
+        discordDeliveryStatus: "SKIPPED",
+        updatedAt: now,
+      });
+      skipped += 1;
+    }
+    return skipped;
   },
 };

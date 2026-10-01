@@ -472,6 +472,10 @@
               {
                 "name": "ROSTER_WITHDRAWN",
                 "value": "ROSTER_WITHDRAWN"
+              },
+              {
+                "name": "RUN_REACTIVATED",
+                "value": "RUN_REACTIVATED"
               }
             ]
           },
@@ -541,6 +545,10 @@
               {
                 "name": "RUN_CANCELLED",
                 "value": "RUN_CANCELLED"
+              },
+              {
+                "name": "RUN_REACTIVATED",
+                "value": "RUN_REACTIVATED"
               }
             ]
           },
@@ -2761,6 +2769,33 @@
                   "kind": "scalar"
                 }
               },
+              "cancelRevision": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "cancelledFromSignupsOpen": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "cancelledFromStatus": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "completedAt": {
                 "nullable": true,
                 "type": {
@@ -3140,6 +3175,15 @@
                 },
                 "archivedById": {
                   "column": "archivedById"
+                },
+                "cancelRevision": {
+                  "column": "cancelRevision"
+                },
+                "cancelledFromSignupsOpen": {
+                  "column": "cancelledFromSignupsOpen"
+                },
+                "cancelledFromStatus": {
+                  "column": "cancelledFromStatus"
                 },
                 "completedAt": {
                   "column": "completedAt"
@@ -10375,6 +10419,11 @@
             "run": {
               "checks": [
                 {
+                  "expression": "\"cancelledFromStatus\" IN ('DRAFT', 'OPEN', 'ROSTERING', 'PUBLISHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')",
+                  "name": "run_cancelledFromStatus_check_30cdad8d",
+                  "prefix": "run_cancelledFromStatus_check"
+                },
+                {
                   "expression": "\"difficulty\" IN ('NORMAL', 'HEROIC', 'MYTHIC')",
                   "name": "run_difficulty_check_05ae26c2",
                   "prefix": "run_difficulty_check"
@@ -10400,6 +10449,31 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "cancelRevision": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "cancelledFromSignupsOpen": {
+                  "codecId": "pg/bool@1",
+                  "nativeType": "bool",
+                  "nullable": true
+                },
+                "cancelledFromStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "completedAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -11495,8 +11569,8 @@
                   "prefix": "run_discord_announcement_status_check"
                 },
                 {
-                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED')",
-                  "name": "run_discord_announcement_type_check_b8186a62",
+                  "expression": "\"type\" IN ('RUN_RESCHEDULED', 'RUN_CANCELLED', 'RUN_REACTIVATED')",
+                  "name": "run_discord_announcement_type_check_2be127eb",
                   "prefix": "run_discord_announcement_type_check"
                 }
               ],
@@ -14611,8 +14685,8 @@
                   "prefix": "user_notification_discordDeliveryStatus_check"
                 },
                 {
-                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN')",
-                  "name": "user_notification_type_check_6413e97d",
+                  "expression": "\"type\" IN ('ROSTER_SELECTED', 'RAID_INVITE', 'RUN_CANCELLED', 'RUN_RESCHEDULED', 'ROSTER_REMOVED', 'ROSTER_WITHDRAWN', 'RUN_REACTIVATED')",
+                  "name": "user_notification_type_check_c6b92315",
                   "prefix": "user_notification_type_check"
                 }
               ],
@@ -15215,7 +15289,8 @@
                 "RUN_CANCELLED",
                 "RUN_RESCHEDULED",
                 "ROSTER_REMOVED",
-                "ROSTER_WITHDRAWN"
+                "ROSTER_WITHDRAWN",
+                "RUN_REACTIVATED"
               ]
             },
             "ParticipationType": {
@@ -15251,7 +15326,8 @@
               "kind": "valueSet",
               "values": [
                 "RUN_RESCHEDULED",
-                "RUN_CANCELLED"
+                "RUN_CANCELLED",
+                "RUN_REACTIVATED"
               ]
             },
             "RunLootType": {
@@ -15361,7 +15437,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "786753873a13c54dae528bf9166f6cfdbfde274e041dd20fc370210795d0e3cc"
+    "storageHash": "a4ffcd2c3331ed35c1500027a7baa2bf28de8a8656c1c46ffd7aaefa43a26c23"
   },
   "execution": {
     "executionHash": "2ed16c5ec08d4972784d680e73b014ecc1ce9e869b6d198f8130cd3626cca8af",

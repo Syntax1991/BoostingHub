@@ -57,3 +57,26 @@ export function buildRunCancelledChannelEmbed(input: {
       ].join("\n"),
     );
 }
+
+export function buildRunReactivatedChannelEmbed(input: {
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+}): EmbedBuilder {
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  return new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle("✅ Run Reactivated")
+    .setDescription(
+      [
+        "The previously cancelled Run is active again.",
+        "",
+        `**${input.productLabel}**`,
+        `${when} · ${difficulty} · ${input.lootType}`,
+        "",
+        "Please check the Run channel for the current signup and roster state.",
+      ].join("\n"),
+    );
+}

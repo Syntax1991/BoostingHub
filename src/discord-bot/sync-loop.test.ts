@@ -1887,6 +1887,221 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     expect(logChannel.send).not.toHaveBeenCalled();
     expect(api.recordDiscordState).not.toHaveBeenCalled();
   });
+
+  it("refuses destructive retirement when current authority no longer allows it (post-Reactivate)", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-reactivated",
+          existingRunChannelId: "archive-chan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          retireChannel: true,
+          archiveArtifactsNeeded: true,
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: "lead-1",
+          panelName: "The Venomous Abyss",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+    (api.confirmChannelRetirement as ReturnType<typeof vi.fn>).mockResolvedValue({ retire: false });
+
+    await syncOnce(client, botEnv(), api);
+
+    const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn> };
+    expect(archivedChannel.delete).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalled();
+  });
+
+  it("stale RUN_CANCELLED announcement work does not send when delivery authority is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["run-chan", { id: "run-chan", name: "sat-2200-hc-vip", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-stale-cancel",
+          existingRunChannelId: "run-chan",
+          desiredChannelName: "sat-2200-hc-vip",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          retireChannel: false,
+        },
+      ],
+      signups: [],
+      roster: [],
+      runAnnouncements: [
+        {
+          announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa77",
+          runId: "run-stale-cancel",
+          type: "RUN_CANCELLED",
+          runChannelId: "run-chan",
+          previousScheduledStartAt: null,
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          productLabel: "Season 2 Bundle",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+        },
+      ],
+    });
+    (api.confirmRunAnnouncementDelivery as ReturnType<typeof vi.fn>).mockResolvedValue({ deliver: false });
+
+    await syncOnce(client, botEnv(), api);
+
+    const runChannel = client.channels.cache.get("run-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(runChannel.send).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-stale-cancel", {
+      kind: "run-announcement",
+      announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa77",
+      result: "SENT",
+    });
+  });
+
+  it("stale RUN_REACTIVATED announcement work does not send when delivery authority is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["run-chan", { id: "run-chan", name: "sat-2200-hc-vip", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-stale-reactivate",
+          existingRunChannelId: "run-chan",
+          desiredChannelName: "sat-2200-hc-vip",
+          targetBucket: "CURRENT",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          retireChannel: false,
+        },
+      ],
+      signups: [],
+      roster: [],
+      runAnnouncements: [
+        {
+          announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa79",
+          runId: "run-stale-reactivate",
+          type: "RUN_REACTIVATED",
+          runChannelId: "run-chan",
+          previousScheduledStartAt: null,
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          productLabel: "Season 2 Bundle",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+        },
+      ],
+    });
+    (api.confirmRunAnnouncementDelivery as ReturnType<typeof vi.fn>).mockResolvedValue({ deliver: false });
+
+    await syncOnce(client, botEnv(), api);
+
+    const runChannel = client.channels.cache.get("run-chan") as { send: ReturnType<typeof vi.fn> };
+    expect(runChannel.send).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-stale-reactivate", {
+      kind: "run-announcement",
+      announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa79",
+      result: "SENT",
+    });
+  });
+
+  it("stale RUN_REACTIVATED DM work does not send when delivery authority is false", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const sendDm = vi.fn().mockResolvedValue({ id: "dm-stale-reactivate" });
+    const { client } = makeDiscordClient(children);
+    (client as { users: { fetch: ReturnType<typeof vi.fn> } }).users = {
+      fetch: vi.fn().mockResolvedValue({ id: "discord-stale-reactivate", send: sendDm }),
+    };
+    const api = makeApi({ channels: [], signups: [], roster: [] });
+    (api.listSyncWork as ReturnType<typeof vi.fn>).mockResolvedValue({
+      channels: [],
+      signups: [],
+      roster: [],
+      start: [],
+      raidInvites: [],
+      notificationDms: [
+        {
+          notificationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa80",
+          type: "RUN_REACTIVATED",
+          discordUserId: "discord-stale-reactivate",
+          runId: "run-stale-reactivate-dm",
+          signupId: null,
+          runChannelId: null,
+          productLabel: "Season 2 Bundle",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          previousScheduledStartAt: null,
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          participationType: null,
+          selectedRole: null,
+          characterName: null,
+          wowClass: null,
+        },
+      ],
+      runAnnouncements: [],
+      schedules: [],
+    });
+    (api.confirmNotificationDmDelivery as ReturnType<typeof vi.fn>).mockResolvedValue({ deliver: false });
+
+    await syncOnce(client as never, botEnv(), api);
+
+    expect(sendDm).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-stale-reactivate-dm", {
+      kind: "notification-dm",
+      notificationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa80",
+      result: "SENT",
+    });
+  });
+
+  it("RUN_REACTIVATED with no channel yet stays PENDING (does not SKIP)", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+    ]);
+    const { client, createdIds } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [],
+      signups: [],
+      roster: [],
+      runAnnouncements: [
+        {
+          announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa88",
+          runId: "run-reactivate-pending",
+          type: "RUN_REACTIVATED",
+          runChannelId: null,
+          previousScheduledStartAt: null,
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          productLabel: "Season 2 Bundle",
+          difficulty: "HEROIC",
+          lootType: "VIP",
+        },
+      ],
+    });
+
+    await syncOnce(client, botEnv(), api);
+
+    expect(createdIds).toHaveLength(0);
+    expect(api.recordDiscordState).not.toHaveBeenCalledWith("run-reactivate-pending", {
+      kind: "run-announcement",
+      announcementId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa88",
+      result: "SKIPPED",
+    });
+  });
 });
 
 describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
@@ -2388,6 +2603,9 @@ function makeApi(input: {
     recordScheduleState: vi.fn().mockResolvedValue({ ok: true }),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
     getRunStartEmbedData: vi.fn().mockResolvedValue(null),
+    confirmChannelRetirement: vi.fn().mockResolvedValue({ retire: true }),
+    confirmRunAnnouncementDelivery: vi.fn().mockResolvedValue({ deliver: true }),
+    confirmNotificationDmDelivery: vi.fn().mockResolvedValue({ deliver: true }),
   } as unknown as BotApiClient;
 }
 

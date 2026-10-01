@@ -138,6 +138,40 @@ describe("run and signup state machines", () => {
       expect(terminal.canEdit).toBe(false);
       expect(terminal.canReassignRaidLead).toBe(false);
     }
+
+    expect(
+      getRunLifecycleCapabilities({
+        status: "CANCELLED",
+        signupsOpen: false,
+        actorIsAdmin: true,
+        cancelledFromStatus: "OPEN",
+      }).canReactivate,
+    ).toBe(true);
+    expect(
+      getRunLifecycleCapabilities({
+        status: "CANCELLED",
+        signupsOpen: false,
+        actorIsAdmin: true,
+        cancelledFromStatus: null,
+      }).canReactivate,
+    ).toBe(false);
+    expect(
+      getRunLifecycleCapabilities({
+        status: "CANCELLED",
+        signupsOpen: false,
+        actorIsAdmin: true,
+        cancelledFromStatus: "OPEN",
+        archivedAt: "2026-01-01T00:00:00.000Z",
+      }).canReactivate,
+    ).toBe(false);
+    expect(
+      getRunLifecycleCapabilities({
+        status: "OPEN",
+        signupsOpen: true,
+        actorIsAdmin: true,
+        cancelledFromStatus: "OPEN",
+      }).canReactivate,
+    ).toBe(false);
   });
 });
 

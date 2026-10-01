@@ -164,6 +164,7 @@ export class BotApiClient {
           | "ROSTER_SELECTED"
           | "RAID_INVITE"
           | "RUN_CANCELLED"
+          | "RUN_REACTIVATED"
           | "RUN_RESCHEDULED"
           | "ROSTER_REMOVED"
           | "ROSTER_WITHDRAWN";
@@ -209,7 +210,7 @@ export class BotApiClient {
       runAnnouncements: Array<{
         announcementId: string;
         runId: string;
-        type: "RUN_RESCHEDULED" | "RUN_CANCELLED";
+        type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED";
         runChannelId: string | null;
         previousScheduledStartAt: string | null;
         scheduledStartAt: string;
@@ -244,6 +245,28 @@ export class BotApiClient {
 
   getRunStartEmbedData(runId: string) {
     return this.request<unknown>(`/api/bot/runs/${runId}/start`);
+  }
+
+  /**
+   * Re-check current retirement authority before deleting a Run channel.
+   * A stale CANCELLED projection must not delete after Reactivate.
+   */
+  confirmChannelRetirement(runId: string) {
+    return this.request<{ retire: boolean }>(`/api/bot/runs/${runId}/discord-retirement`);
+  }
+
+  /** Fresh deliverability for a RunDiscordAnnouncement immediately before send. */
+  confirmRunAnnouncementDelivery(announcementId: string) {
+    return this.request<{ deliver: boolean }>(
+      `/api/bot/run-announcements/${announcementId}/delivery-authority`,
+    );
+  }
+
+  /** Fresh deliverability for a UserNotification Discord DM immediately before send. */
+  confirmNotificationDmDelivery(notificationId: string) {
+    return this.request<{ deliver: boolean }>(
+      `/api/bot/notifications/${notificationId}/delivery-authority`,
+    );
   }
 
   recordDiscordState(
