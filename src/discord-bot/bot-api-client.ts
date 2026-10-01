@@ -248,8 +248,8 @@ export class BotApiClient {
   }
 
   /**
-   * Re-check current retirement authority before deleting a Run channel.
-   * A stale CANCELLED projection must not delete after Reactivate.
+   * Re-check current TEXT-channel retirement authority before delete.
+   * Only `Run.archivedAt != null` on the live row authorizes deletion.
    */
   confirmChannelRetirement(runId: string) {
     return this.request<{ retire: boolean }>(`/api/bot/runs/${runId}/discord-retirement`);

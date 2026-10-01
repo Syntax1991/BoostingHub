@@ -1572,17 +1572,106 @@ describe("discordSyncService — weekly raid-ID target resolution", () => {
     expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(false);
   });
 
-  it("COMPLETED runs retire their Discord channel without requiring app archive", async () => {
+  it("COMPLETED / CANCELLED keep the Discord channel until app archive (closed naming only)", async () => {
     const id = await createRunAt(nextStart);
     await runService.openRun(lead, id);
     await discordSyncService.recordRunChannel({ runId: id, channelId: "completed-chan-1" });
     await runRepository.updateFields(id, { status: "COMPLETED" });
 
-    const work = await discordSyncService.listSyncWork(classificationNow);
-    const channelItem = work.channels.find((entry) => entry.runId === id);
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    let channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+
+    await runRepository.updateFields(id, { status: "CANCELLED" });
+    work = await discordSyncService.listSyncWork(classificationNow);
+    channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+
+    await runService.archiveRun(lead, id);
+    work = await discordSyncService.listSyncWork(classificationNow);
+    channelItem = work.channels.find((entry) => entry.runId === id);
     expect(channelItem?.retireChannel).toBe(true);
     expect(channelItem?.archiveArtifactsNeeded).toBe(true);
-    expect(channelItem?.desiredChannelName.startsWith("closed-")).toBe(true);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(true);
+  });
+
+  it("archive artifacts alone never authorize TEXT-channel retirement without archivedAt", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "art-only-chan" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await orm.RunDiscordPost.where({ runId: id }).update({
+      archiveCloseMessageId: "close-orphan",
+      archiveTranscriptMessageId: "transcript-orphan",
+      archiveTranscriptHtml: "<html>orphan</html>",
+      archiveTranscriptFilename: "orphan.html",
+      updatedAt: new Date().toISOString(),
+    });
+
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+  });
+
+  it("Restore Archive immediately revokes deletion authority (fresh check)", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "restore-race-chan" });
+    await runRepository.updateFields(id, { status: "COMPLETED" });
+    await runService.archiveRun(lead, id);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(true);
+
+    await runService.restoreRun(lead, id);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
+    const work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(channelItem?.archiveArtifactsNeeded).toBe(false);
+  });
+
+  it("Cancel → Reactivate keeps the same Run TEXT channel identity", async () => {
+    const id = await createRunAt(nextStart);
+    await runService.openRun(lead, id);
+    await runRepository.updateFields(id, { status: "PUBLISHED", signupsOpen: true });
+    await discordSyncService.recordRunChannel({ runId: id, channelId: "cancel-reactivate-chan" });
+    await discordSyncService.recordSignupPost({
+      runId: id,
+      channelId: "cancel-reactivate-chan",
+      messageId: "cancel-reactivate-signup",
+    });
+
+    await runService.cancelRun(lead, id);
+    let post = await runDiscordPostRepository.findByRunId(id);
+    expect(post?.runChannelId).toBe("cancel-reactivate-chan");
+    expect(post?.signupMessageId).toBe("cancel-reactivate-signup");
+    let work = await discordSyncService.listSyncWork(classificationNow);
+    expect(work.channels.find((entry) => entry.runId === id)?.retireChannel).toBe(false);
+
+    // Drain PENDING cancel announcement so it does not block later archive tests.
+    for (const announcement of work.runAnnouncements.filter((row) => row.runId === id)) {
+      await discordSyncService.recordRunAnnouncementDelivery({
+        announcementId: announcement.announcementId,
+        result: "SENT",
+      });
+    }
+
+    await runService.reactivateRun(lead, id);
+    post = await runDiscordPostRepository.findByRunId(id);
+    expect(post?.runChannelId).toBe("cancel-reactivate-chan");
+    expect(post?.signupChannelId).toBe("cancel-reactivate-chan");
+    expect(post?.signupMessageId).toBe("cancel-reactivate-signup");
+    work = await discordSyncService.listSyncWork(classificationNow);
+    const channelItem = work.channels.find((entry) => entry.runId === id);
+    expect(channelItem?.existingRunChannelId).toBe("cancel-reactivate-chan");
+    expect(channelItem?.retireChannel).toBe(false);
+    expect(await discordSyncService.shouldRetireRunChannel(id)).toBe(false);
   });
 
   it("clears archive artifact need after recordArchiveArtifacts and again after restore", async () => {

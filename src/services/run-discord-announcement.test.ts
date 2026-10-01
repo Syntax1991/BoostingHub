@@ -331,7 +331,7 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
     expect(work.channels.some((row) => row.runId === runId)).toBe(false);
   });
 
-  it("after SENT, retirement barrier lifts", async () => {
+  it("after SENT, CANCELLED alone does not retire; app archive does", async () => {
     const runId = await openSignedRun(futureIso());
     await discordSyncService.recordRunChannel({ runId, channelId: "announce-chan-2" });
     await runService.cancelRun(lead, runId);
@@ -341,10 +341,16 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
       announcementId: pending!.id,
       result: "SENT",
     });
-    const work = await discordSyncService.listSyncWork();
+    let work = await discordSyncService.listSyncWork();
     expect(work.runAnnouncements.some((row) => row.runId === runId)).toBe(false);
-    const channel = work.channels.find((row) => row.runId === runId);
+    let channel = work.channels.find((row) => row.runId === runId);
     expect(channel?.pendingLifecycleAnnouncements).toBe(false);
+    expect(channel?.retireChannel).toBe(false);
+    expect(channel?.desiredChannelName.startsWith("closed-")).toBe(true);
+
+    await runService.archiveRun(lead, runId);
+    work = await discordSyncService.listSyncWork();
+    channel = work.channels.find((row) => row.runId === runId);
     expect(channel?.retireChannel).toBe(true);
   });
 

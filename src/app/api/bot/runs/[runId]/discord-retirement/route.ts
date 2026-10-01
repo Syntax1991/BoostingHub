@@ -6,8 +6,10 @@ import { discordSyncService } from "@/services/discord-sync.service";
 /**
  * GET /api/bot/runs/:runId/discord-retirement
  *
- * Fresh retirement authority for the bot. Used immediately before destructive
- * channel delete so a stale CANCELLED work item cannot retire a reactivated Run.
+ * Fresh TEXT-channel retirement authority for the bot. Queried immediately
+ * before every irreversible channel.delete(). Only the current Run row's
+ * `archivedAt != null` returns `{ retire: true }` — COMPLETED/CANCELLED alone
+ * never authorize deletion, and Restore Archive revokes it immediately.
  */
 export async function GET(
   request: NextRequest,
