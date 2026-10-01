@@ -26,8 +26,6 @@ import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
 import { discordSyncService } from "@/services/discord-sync.service";
 import {
-  runCancelledChannelSourceKey,
-  runReactivatedChannelSourceKey,
   runRescheduledChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
 import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
@@ -993,6 +991,7 @@ export const runService = {
     }
 
     // Hard safety: never resurrect a Run that actually started.
+    // The repository rechecks under the shared roster lock — this is UX-fast.
     const [startSnapshot, attendanceCount] = await Promise.all([
       runStartSnapshotRepository.findByRunId(run.id),
       attendanceRepository.countByRunId(run.id),
@@ -1004,30 +1003,16 @@ export const runService = {
       );
     }
 
-    const fromStatus = run.cancelledFromStatus!;
-    const restoreSignupsOpen = fromStatus === "DRAFT" ? false : Boolean(run.cancelledFromSignupsOpen);
-    const cancelRevision = run.cancelRevision;
+    // Internal expected revision from this service read. The repository
+    // re-validates under lock and rejects ABA (rev1 intent against rev2).
+    const expectedCancelRevision = run.cancelRevision;
 
-    await runRepository.reactivateWithDiscordAnnouncement(
-      run.id,
-      {
-        status: fromStatus,
-        signupsOpen: restoreSignupsOpen,
-        cancelRevision,
-      },
-      {
-        runId: run.id,
-        type: "RUN_REACTIVATED",
-        sourceKey: runReactivatedChannelSourceKey(run.id, cancelRevision),
-        previousScheduledStartAt: null,
-        scheduledStartAt: run.scheduledStartAt,
-        productLabel: run.contentDisplay.productLabel || run.title,
-        difficulty: run.difficulty,
-        lootType: run.lootType,
-        status: "PENDING",
-      },
-      runCancelledChannelSourceKey(run.id, cancelRevision),
-    );
+    await runRepository.reactivateWithDiscordAnnouncement(run.id, expectedCancelRevision, {
+      scheduledStartAt: run.scheduledStartAt,
+      productLabel: run.contentDisplay.productLabel || run.title,
+      difficulty: run.difficulty,
+      lootType: run.lootType,
+    });
 
     // Historical archive pointers describe the cancelled channel's retirement,
     // not the currently active Run — clear so a later retirement can post again.
@@ -1035,7 +1020,7 @@ export const runService = {
 
     await runLifecycleNotificationService.notifyRunReactivated({
       runId: run.id,
-      cancelRevision,
+      cancelRevision: expectedCancelRevision,
       runTitle: run.title,
       scheduledStartAt: run.scheduledStartAt,
       difficulty: run.difficulty,
