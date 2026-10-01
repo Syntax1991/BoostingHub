@@ -1082,14 +1082,14 @@ export const discordSyncService = {
    * state.
    *
    * The *first* signup post for a Run only happens while signup is actually
-   * available (`isSignupWindowOpen` — OPEN or ROSTERING with `signupsOpen`
-   * true) AND the Run's schedule currently classifies CURRENT or NEXT — never
-   * merely because the Run left DRAFT, and never for a Run scheduled too far
-   * out (FUTURE): a Run the bot only sees for the first time after it already
-   * reached PUBLISHED/COMPLETED/CANCELLED (e.g. the bot was offline through
-   * its whole signup phase) must not get a brand-new "Signups: 0" post for a
-   * phase that's already over, and a Run scheduled weeks ahead must not get
-   * Discord infrastructure before its raid-ID week is even CURRENT/NEXT.
+   * available (`isSignupWindowOpen` — OPEN / ROSTERING / PUBLISHED with
+   * `signupsOpen` true) AND the Run's schedule currently classifies CURRENT or
+   * NEXT — never merely because the Run left DRAFT, and never for a Run
+   * scheduled too far out (FUTURE): a Run the bot only sees for the first time
+   * after it already reached COMPLETED/CANCELLED (or PUBLISHED with signups
+   * already closed) must not get a brand-new "Signups: 0" post for a phase
+   * that's already over, and a Run scheduled weeks ahead must not get Discord
+   * infrastructure before its raid-ID week is even CURRENT/NEXT.
    * Once a post exists, later updates are unconditional regardless of week
    * bucket — the same message keeps reflecting the Run's real state
    * (including signups closing, or the Run rolling PAST/into ARCHIVE

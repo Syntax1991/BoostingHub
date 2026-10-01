@@ -509,7 +509,13 @@ describe("signup window", () => {
     expect((await runRepository.findById(id))?.status).toBe("ROSTERING");
     expect(await runRepository.countSignups(id)).toBe(1);
 
-    await runRepository.updateFields(id, { status: "PUBLISHED", signupsOpen: false });
+    await runRepository.updateFields(id, { status: "PUBLISHED", signupsOpen: true });
+    await runService.setSignupWindow(lead, id, false);
+    expect((await runRepository.findById(id))?.signupsOpen).toBe(false);
+    await runService.setSignupWindow(lead, id, true);
+    expect((await runRepository.findById(id))?.signupsOpen).toBe(true);
+
+    await runRepository.updateFields(id, { status: "IN_PROGRESS", signupsOpen: false });
     await expectDomainCode(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");
     await runRepository.updateFields(id, { status: "CANCELLED" });
     await expectDomainCode(runService.setSignupWindow(lead, id, true), "RUN_INVALID_TRANSITION");

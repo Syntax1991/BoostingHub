@@ -58,7 +58,7 @@ async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus
   if (state.status || state.archived) {
     const now = new Date().toISOString();
     await orm.Run.where({ id }).update({
-      ...(state.status ? { status: state.status, signupsOpen: state.status === "OPEN" || state.status === "ROSTERING" } : {}),
+      ...(state.status ? { status: state.status, signupsOpen: state.status === "OPEN" || state.status === "ROSTERING" || state.status === "PUBLISHED" } : {}),
       ...(state.archived ? { archivedAt: now } : {}),
       updatedAt: now,
     });

@@ -194,7 +194,7 @@ In one database transaction:
 
 Self-withdrawal of a `SELECTED` signup on a `PUBLISHED` run remains forbidden (Phase 2 rule).
 
-A published run may still receive **new** `PENDING` signups if `signupsOpen` and run status allow it. Those wait for a later republish.
+A published run may still receive **new** `PENDING` signups while `signupsOpen` is true — publishing the roster does **not** close registration. Late Booster / Lootbuddy / Quick Signup offers stay `PENDING` and do **not** change the live published lineup, attendance, or Discord roster until the Raid Lead explicitly selects them and runs **Update Roster**. Start Run is the lifecycle freeze that atomically closes signups.
 
 ## Republish
 

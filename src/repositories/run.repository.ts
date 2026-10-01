@@ -389,13 +389,17 @@ export const runRepository = {
 
   /**
    * Discord sync: ids of Runs that may need Discord work even without any
-   * stored Discord identity — first signup provisioning (OPEN/ROSTERING; the
-   * week gate is applied by the sync itself, so a FUTURE Run is never lost)
-   * and temporary Voice provisioning (unarchived IN_PROGRESS). Ids only.
+   * stored Discord identity — first signup provisioning (OPEN/ROSTERING/
+   * PUBLISHED while the signup window can still be open; the week gate is
+   * applied by the sync itself, so a FUTURE Run is never lost) and temporary
+   * Voice provisioning (unarchived IN_PROGRESS). Ids only.
    */
   async listDiscordSyncBaseRunIds(): Promise<string[]> {
     const rows = await orm.Run.where((run) =>
-      or(run.status.in(["OPEN", "ROSTERING"]), and(run.status.eq("IN_PROGRESS"), run.archivedAt.isNull())),
+      or(
+        run.status.in(["OPEN", "ROSTERING", "PUBLISHED"]),
+        and(run.status.eq("IN_PROGRESS"), run.archivedAt.isNull()),
+      ),
     )
       .select("id")
       .all();

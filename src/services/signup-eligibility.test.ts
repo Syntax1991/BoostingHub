@@ -473,8 +473,11 @@ describe("signup creation rules", () => {
 
   it("rejects closed runs before a signup is created", () => {
     expect(assertSignupWindowOpen({ status: "OPEN", signupsOpen: false })).toBe(false);
-    expect(assertSignupWindowOpen({ status: "PUBLISHED", signupsOpen: true })).toBe(false);
+    expect(assertSignupWindowOpen({ status: "PUBLISHED", signupsOpen: false })).toBe(false);
+    expect(assertSignupWindowOpen({ status: "IN_PROGRESS", signupsOpen: true })).toBe(false);
     expect(assertSignupWindowOpen({ status: "OPEN", signupsOpen: true })).toBe(true);
+    expect(assertSignupWindowOpen({ status: "ROSTERING", signupsOpen: true })).toBe(true);
+    expect(assertSignupWindowOpen({ status: "PUBLISHED", signupsOpen: true })).toBe(true);
   });
 
   it("treats a non-withdrawn matching combination as an active duplicate", () => {
