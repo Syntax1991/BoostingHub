@@ -60,6 +60,7 @@ import {
 import { buildRaidInviteMessage } from "@/discord-bot/messages/raid-invite-message";
 import {
   buildRunCancelledChannelEmbed,
+  buildRunReactivatedChannelEmbed,
   buildRunRescheduledChannelEmbed,
 } from "@/discord-bot/embeds/run-lifecycle-announcement";
 import {
@@ -67,6 +68,7 @@ import {
   buildRosterRemovedDmMessage,
   buildRosterWithdrawnDmMessage,
   buildRunCancelledDmMessage,
+  buildRunReactivatedDmMessage,
   buildRunRescheduledDmMessage,
 } from "@/services/notification-content";
 import { finalSetupAllowedMentions, renderRunStartMessageText } from "@/discord-bot/messages/run-start-message";
@@ -1124,6 +1126,14 @@ async function syncNotificationDm(
         lootType: item.lootType,
       });
       break;
+    case "RUN_REACTIVATED":
+      content = buildRunReactivatedDmMessage({
+        productLabel: item.productLabel,
+        scheduledStartAt: item.scheduledStartAt,
+        difficulty: item.difficulty,
+        lootType: item.lootType,
+      });
+      break;
     case "RUN_RESCHEDULED":
       content = buildRunRescheduledDmMessage({
         productLabel: item.productLabel,
@@ -1191,12 +1201,19 @@ async function syncRunAnnouncement(
           difficulty: item.difficulty,
           lootType: item.lootType,
         })
-      : buildRunCancelledChannelEmbed({
-          productLabel: item.productLabel,
-          scheduledStartAt: item.scheduledStartAt,
-          difficulty: item.difficulty,
-          lootType: item.lootType,
-        });
+      : item.type === "RUN_REACTIVATED"
+        ? buildRunReactivatedChannelEmbed({
+            productLabel: item.productLabel,
+            scheduledStartAt: item.scheduledStartAt,
+            difficulty: item.difficulty,
+            lootType: item.lootType,
+          })
+        : buildRunCancelledChannelEmbed({
+            productLabel: item.productLabel,
+            scheduledStartAt: item.scheduledStartAt,
+            difficulty: item.difficulty,
+            lootType: item.lootType,
+          });
 
   try {
     const channel = await client.channels.fetch(runChannelId);
@@ -1475,6 +1492,15 @@ async function syncArchiveArtifacts(
 ): Promise<void> {
   if (!item.retireChannel) return;
 
+  // Stale CANCELLED work must not destroy a channel after Reactivate.
+  const retirement = await api.confirmChannelRetirement(item.runId);
+  if (!retirement.retire) {
+    console.warn(
+      `[discord-bot] skipping retirement of run ${item.runId}: current authority no longer allows channel retirement`,
+    );
+    return;
+  }
+
   const runChannelId = resolvedChannels.get(item.runId) ?? item.existingRunChannelId;
   if (!runChannelId) return;
 
@@ -1699,6 +1725,15 @@ async function deleteArchivedRunChannel(
   runId: string,
   channelId: string,
 ): Promise<void> {
+  // Final authority check immediately before irreversible delete.
+  const retirement = await api.confirmChannelRetirement(runId);
+  if (!retirement.retire) {
+    console.warn(
+      `[discord-bot] refusing to delete channel ${channelId} for run ${runId}: retirement no longer allowed`,
+    );
+    return;
+  }
+
   try {
     const channel = await client.channels.fetch(channelId);
     if (!channel || !("delete" in channel) || typeof channel.delete !== "function") {

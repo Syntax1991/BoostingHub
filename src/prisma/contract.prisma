@@ -180,6 +180,8 @@ enum NotificationType {
   ROSTER_REMOVED   = "ROSTER_REMOVED"
   /// To the Run's Raid Lead: a picked player withdrew (with their reason).
   ROSTER_WITHDRAWN = "ROSTER_WITHDRAWN"
+  /// Correction after Reactivate Run — same audience as RUN_CANCELLED.
+  RUN_REACTIVATED  = "RUN_REACTIVATED"
 }
 
 /// Discord DM delivery decision snapshotted at notification creation.
@@ -196,6 +198,7 @@ enum RunDiscordAnnouncementType {
   @@type("pg/text@1")
   RUN_RESCHEDULED = "RUN_RESCHEDULED"
   RUN_CANCELLED   = "RUN_CANCELLED"
+  RUN_REACTIVATED = "RUN_REACTIVATED"
 }
 
 /// Application account. Also serves as the Better Auth `user` table.
@@ -621,6 +624,14 @@ model Run {
   /// When true, first Discord channel provision pings Tank/Healer/DPS roles.
   discordRolePing    Boolean        @default(true)
   signupsOpen        Boolean        @default(false)
+  /// Monotonic cancellation-cycle identity. Incremented on each Cancel Run so
+  /// RUN_CANCELLED / RUN_REACTIVATED source keys stay distinct across cycles.
+  cancelRevision     Int            @default(0)
+  /// Snapshot of Run.status immediately before the latest Cancel (null when
+  /// not cancelled, or for legacy CANCELLED rows predating this field).
+  cancelledFromStatus RunStatus?
+  /// Snapshot of signupsOpen immediately before the latest Cancel.
+  cancelledFromSignupsOpen Boolean?
   /// Set when the Run transitions IN_PROGRESS → COMPLETED. Null for Runs
   /// completed before this existed (their end time is unknown).
   completedAt        TimestamptzString?

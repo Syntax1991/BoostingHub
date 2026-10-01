@@ -123,8 +123,11 @@ describe("lifecycle announcement atomicity", () => {
     await runService.cancelRun(lead, runId);
     const run = await runRepository.findById(runId);
     expect(run?.status).toBe("CANCELLED");
+    expect(run?.cancelRevision).toBe(1);
+    expect(run?.cancelledFromStatus).toBe("OPEN");
+    expect(run?.cancelledFromSignupsOpen).toBe(true);
     const announcement = await runDiscordAnnouncementRepository.findBySourceKey(
-      runCancelledChannelSourceKey(runId),
+      runCancelledChannelSourceKey(runId, 1),
     );
     expect(announcement?.type).toBe("RUN_CANCELLED");
     expect(announcement?.status).toBe("PENDING");
@@ -139,9 +142,14 @@ describe("lifecycle announcement atomicity", () => {
       runRepository.cancelWithDiscordAnnouncement(
         runId,
         {
+          cancelledFromStatus: "OPEN",
+          cancelledFromSignupsOpen: true,
+          nextCancelRevision: 1,
+        },
+        {
           runId,
           type: "RUN_CANCELLED",
-          sourceKey: runCancelledChannelSourceKey(runId),
+          sourceKey: runCancelledChannelSourceKey(runId, 1),
           previousScheduledStartAt: null,
           scheduledStartAt: before!.scheduledStartAt,
           productLabel: "x",
@@ -155,7 +163,7 @@ describe("lifecycle announcement atomicity", () => {
     const after = await runRepository.findById(runId);
     expect(after?.status).toBe("OPEN");
     expect(after?.signupsOpen).toBe(true);
-    expect(await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId))).toBeNull();
+    expect(await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 1))).toBeNull();
   });
 
   it("Run mutation failure during cancel creates no announcement", async () => {
@@ -166,9 +174,14 @@ describe("lifecycle announcement atomicity", () => {
       runRepository.cancelWithDiscordAnnouncement(
         runId,
         {
+          cancelledFromStatus: "OPEN",
+          cancelledFromSignupsOpen: true,
+          nextCancelRevision: 1,
+        },
+        {
           runId,
           type: "RUN_CANCELLED",
-          sourceKey: runCancelledChannelSourceKey(runId),
+          sourceKey: runCancelledChannelSourceKey(runId, 1),
           previousScheduledStartAt: null,
           scheduledStartAt: before!.scheduledStartAt,
           productLabel: "x",
@@ -181,7 +194,7 @@ describe("lifecycle announcement atomicity", () => {
 
     const after = await runRepository.findById(runId);
     expect(after?.status).toBe("OPEN");
-    expect(await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId))).toBeNull();
+    expect(await runDiscordAnnouncementRepository.findBySourceKey(runCancelledChannelSourceKey(runId, 1))).toBeNull();
   });
 
   it("successful reschedule persists scheduleRevision and RUN_RESCHEDULED together", async () => {

@@ -289,12 +289,12 @@ describe("RunDiscordAnnouncement enqueue", () => {
     const rows = (await runDiscordAnnouncementRepository.listPending(200)).filter((row) => row.runId === runId);
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe("RUN_CANCELLED");
-    expect(rows[0].sourceKey).toBe(runCancelledChannelSourceKey(runId));
+    expect(rows[0].sourceKey).toBe(runCancelledChannelSourceKey(runId, 1));
 
     const again = await runDiscordAnnouncementRepository.createIgnoreDuplicate({
       runId,
       type: "RUN_CANCELLED",
-      sourceKey: runCancelledChannelSourceKey(runId),
+      sourceKey: runCancelledChannelSourceKey(runId, 1),
       previousScheduledStartAt: null,
       scheduledStartAt: rows[0].scheduledStartAt,
       productLabel: "x",
@@ -364,7 +364,7 @@ describe("RunDiscordAnnouncement sync work + retirement barrier", () => {
     expect(pending.map((row) => row.sourceKey)).toEqual([
       runRescheduledChannelSourceKey(runId, 1),
       runRescheduledChannelSourceKey(runId, 2),
-      runCancelledChannelSourceKey(runId),
+      runCancelledChannelSourceKey(runId, 1),
     ]);
   });
 });

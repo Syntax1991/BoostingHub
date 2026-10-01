@@ -111,6 +111,20 @@ export function runCancelledWebNotification(input: {
   };
 }
 
+export function runReactivatedWebNotification(input: {
+  runId: string;
+  runTitle: string;
+  scheduledStartAt: string;
+  timeZone?: string;
+}): { title: string; message: string; href: string } {
+  const when = formatDateTime(input.scheduledStartAt, input.timeZone ?? DEFAULT_TIME_ZONE);
+  return {
+    title: "Run reactivated",
+    message: `${input.runTitle} is active again (${when}).`,
+    href: runDetailPath(input.runId),
+  };
+}
+
 export function runRescheduledWebNotification(input: {
   runId: string;
   productLabel: string;
@@ -292,6 +306,24 @@ export function buildRunCancelledDmMessage(input: {
     `${when} · ${difficulty} · ${input.lootType}`,
     "",
     "This run has been cancelled.",
+  ].join("\n");
+}
+
+export function buildRunReactivatedDmMessage(input: {
+  productLabel: string;
+  scheduledStartAt: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+}): string {
+  const when = discordTimestamp(input.scheduledStartAt, "F");
+  const difficulty = DIFFICULTY_LABELS[input.difficulty].toUpperCase();
+  return [
+    "✅ **Run Reactivated**",
+    "",
+    input.productLabel,
+    `${when} · ${difficulty} · ${input.lootType}`,
+    "",
+    "The previously cancelled Run is active again.",
   ].join("\n");
 }
 

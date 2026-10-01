@@ -142,9 +142,9 @@ Run statuses:
 | `PUBLISHED` | Roster is published. Signups may still be open when `signupsOpen` is true — publishing does not close registration. |
 | `IN_PROGRESS` | The run is happening. Signups are frozen (`signupsOpen = false`). |
 | `COMPLETED` | Finished. |
-| `CANCELLED` | Will not happen. |
+| `CANCELLED` | Will not happen until Reactivate restores a snapshotted pre-start state. |
 
-`signupsOpen` is independent of status. Run Management creates drafts, opens runs, toggles the signup window, and cancels. Roster Management owns `OPEN → ROSTERING` and publish to `PUBLISHED`. Start/complete owns `PUBLISHED → IN_PROGRESS → COMPLETED`. `DRAFT` is management-only; ordinary users do not discover it. See [run-management.md](features/run-management.md) and [run-lifecycle-attendance.md](features/run-lifecycle-attendance.md).
+`signupsOpen` is independent of status. Run Management creates drafts, opens runs, toggles the signup window, cancels, and reactivates. Roster Management owns `OPEN → ROSTERING` and publish to `PUBLISHED`. Start/complete owns `PUBLISHED → IN_PROGRESS → COMPLETED`. Cancel before Start is reversible via **Reactivate Run** (exact prior status + `signupsOpen`); Archive is a separate visibility operation. `DRAFT` is management-only; ordinary users do not discover it. See [run-management.md](features/run-management.md) and [run-lifecycle-attendance.md](features/run-lifecycle-attendance.md).
 
 ## RunSignup
 

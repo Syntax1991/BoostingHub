@@ -454,7 +454,7 @@ export type NotificationDmWorkItem = {
 export type RunAnnouncementWorkItem = {
   announcementId: string;
   runId: string;
-  type: "RUN_RESCHEDULED" | "RUN_CANCELLED";
+  type: "RUN_RESCHEDULED" | "RUN_CANCELLED" | "RUN_REACTIVATED";
   /** Dedicated Run channel when present — null means bot should mark SKIPPED. */
   runChannelId: string | null;
   previousScheduledStartAt: string | null;
@@ -550,7 +550,7 @@ export function isStartVoiceStale(
 
 /** App archive, completed, or cancelled — Discord channel is transcribed then deleted.
  * Terminal Runs must not get a new channel after retirement (`clear-channel`). */
-function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: string | null }): boolean {
+export function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: string | null }): boolean {
   if (run.archivedAt) return true;
   return run.status === "COMPLETED" || run.status === "CANCELLED";
 }
@@ -993,7 +993,7 @@ async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> 
       rosterUpdate: notification.sourceKey.startsWith(ROSTER_SWAPPED_SOURCE_KEY_PREFIX),
     };
 
-    if (notification.type === "RUN_CANCELLED") {
+    if (notification.type === "RUN_CANCELLED" || notification.type === "RUN_REACTIVATED") {
       notificationDmWorkItems.push(base);
       continue;
     }
@@ -1744,5 +1744,16 @@ export const discordSyncService = {
     await runDiscordAnnouncementRepository.updateStatus(input.announcementId, input.result, {
       sentAt: input.result === "SENT" ? new Date().toISOString() : null,
     });
+  },
+
+  /**
+   * Authoritative retirement gate for the bot. Re-checked immediately before
+   * destructive channel delete so a stale CANCELLED work projection cannot
+   * retire a Run that was reactivated mid-pass.
+   */
+  async shouldRetireRunChannel(runId: string): Promise<boolean> {
+    const run = await runRepository.findById(runId);
+    if (!run) return false;
+    return shouldRetireDiscordChannel(run);
   },
 };

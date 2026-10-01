@@ -1887,6 +1887,41 @@ describe("syncOnce — app-archive transcript artifacts", () => {
     expect(logChannel.send).not.toHaveBeenCalled();
     expect(api.recordDiscordState).not.toHaveBeenCalled();
   });
+
+  it("refuses destructive retirement when current authority no longer allows it (post-Reactivate)", async () => {
+    const children = new Map<string, Child>([
+      [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
+      [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 1, type: ChannelType.GuildText }],
+      ["archive-chan", { id: "archive-chan", name: "closed-sat-2200-hc-vip-7of9-titan", parentId: "archive-cat", position: 2, type: ChannelType.GuildText }],
+      ["archive-log-chan", { id: "archive-log-chan", name: "raid-open-channel-logs", parentId: "logs-cat", position: 3, type: ChannelType.GuildText }],
+    ]);
+    const { client } = makeDiscordClient(children);
+    const api = makeApi({
+      channels: [
+        {
+          runId: "run-reactivated",
+          existingRunChannelId: "archive-chan",
+          desiredChannelName: "closed-sat-2200-hc-vip-7of9-titan",
+          targetBucket: "ARCHIVE",
+          scheduledStartAt: "2026-09-12T20:00:00.000Z",
+          retireChannel: true,
+          archiveArtifactsNeeded: true,
+          raidLeadName: "Titan",
+          raidLeadDiscordUserId: "lead-1",
+          panelName: "The Venomous Abyss",
+        },
+      ],
+      signups: [],
+      roster: [],
+    });
+    (api.confirmChannelRetirement as ReturnType<typeof vi.fn>).mockResolvedValue({ retire: false });
+
+    await syncOnce(client, botEnv(), api);
+
+    const archivedChannel = client.channels.cache.get("archive-chan") as { delete: ReturnType<typeof vi.fn> };
+    expect(archivedChannel.delete).not.toHaveBeenCalled();
+    expect(api.recordDiscordState).not.toHaveBeenCalled();
+  });
 });
 
 describe("syncOnce — persistent CURRENT/NEXT Schedule posts", () => {
@@ -2388,6 +2423,7 @@ function makeApi(input: {
     recordScheduleState: vi.fn().mockResolvedValue({ ok: true }),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
     getRunStartEmbedData: vi.fn().mockResolvedValue(null),
+    confirmChannelRetirement: vi.fn().mockResolvedValue({ retire: true }),
   } as unknown as BotApiClient;
 }
 

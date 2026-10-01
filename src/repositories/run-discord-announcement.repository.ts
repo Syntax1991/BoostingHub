@@ -75,8 +75,12 @@ export function runRescheduledChannelSourceKey(runId: string, scheduleRevision: 
   return `run-rescheduled:${runId}:${scheduleRevision}`;
 }
 
-export function runCancelledChannelSourceKey(runId: string): string {
-  return `run-cancelled:${runId}`;
+export function runCancelledChannelSourceKey(runId: string, cancelRevision: number): string {
+  return `run-cancelled:${runId}:${cancelRevision}`;
+}
+
+export function runReactivatedChannelSourceKey(runId: string, cancelRevision: number): string {
+  return `run-reactivated:${runId}:${cancelRevision}`;
 }
 
 /** Insert announcement inside an open transaction; no-op when sourceKey already exists. */

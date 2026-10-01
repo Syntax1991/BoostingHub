@@ -8,6 +8,7 @@ import {
 } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { RunCancelDialog } from "@/components/runs/run-cancel-dialog";
+import { RunReactivateDialog } from "@/components/runs/run-reactivate-dialog";
 import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
 import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dialog";
@@ -47,6 +48,7 @@ export function RunManagerActions({
   const [addBoosterOpen, setAddBoosterOpen] = useState(false);
   const rosterHasUnsavedEdits = useRosterHasUnsavedEdits(run.id);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [reactivateOpen, setReactivateOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const runId = run.id;
@@ -71,6 +73,7 @@ export function RunManagerActions({
     capabilities.canCloseSignups ||
     capabilities.canReopenSignups ||
     capabilities.canCancel ||
+    capabilities.canReactivate ||
     capabilities.canStart ||
     capabilities.canComplete;
 
@@ -130,6 +133,11 @@ export function RunManagerActions({
             Cancel Run
           </Button>
         ) : null}
+        {capabilities.canReactivate ? (
+          <Button type="button" onClick={() => setReactivateOpen(true)}>
+            Reactivate Run
+          </Button>
+        ) : null}
         {capabilities.canStart ? (
           <Button type="button" onClick={() => setStartOpen(true)}>
             Start Run
@@ -169,6 +177,13 @@ export function RunManagerActions({
         />
       ) : null}
       {cancelOpen ? <RunCancelDialog runId={runId} onClose={() => setCancelOpen(false)} /> : null}
+      {reactivateOpen ? (
+        <RunReactivateDialog
+          runId={runId}
+          cancelledFromStatus={run.cancelledFromStatus ?? null}
+          onClose={() => setReactivateOpen(false)}
+        />
+      ) : null}
       {startOpen ? (
         <RunStartDialog
           runId={runId}

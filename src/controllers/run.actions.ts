@@ -98,6 +98,18 @@ export async function cancelRunAction(input: unknown): Promise<ActionResult> {
   }
 }
 
+export async function reactivateRunAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = runIdSchema.parse(input);
+    await runService.reactivateRun(user, parsed.runId);
+    revalidateRunSurfaces(parsed.runId);
+    return { ok: true, message: "Run reactivated." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export async function startRunAction(input: unknown): Promise<ActionResult> {
   try {
     const user = await requireUser();

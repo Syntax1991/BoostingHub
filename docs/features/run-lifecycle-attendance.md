@@ -21,7 +21,7 @@ This feature owns:
 
 There is no generic `RunStatus` dropdown.
 
-Cancellation before start remains Run Management policy (`DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`). Ordinary cancellation from `IN_PROGRESS` is still not offered.
+Cancellation before start remains Run Management policy (`DRAFT` / `OPEN` / `ROSTERING` / `PUBLISHED`) and is reversible via **Reactivate Run** when a pre-cancel snapshot exists. Ordinary cancellation from `IN_PROGRESS` is still not offered. Start and Complete remain irreversible operational freezes.
 
 ## Start Preconditions
 

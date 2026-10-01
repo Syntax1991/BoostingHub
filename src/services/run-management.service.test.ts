@@ -526,7 +526,11 @@ describe("cancel run", () => {
   it("cancels allowed states, closes signups, and preserves history", async () => {
     const draftId = await createDraft(lead, { title: "Cancel draft" });
     await runService.cancelRun(lead, draftId);
-    expect((await runRepository.findById(draftId))?.status).toBe("CANCELLED");
+    const cancelledDraft = await runRepository.findById(draftId);
+    expect(cancelledDraft?.status).toBe("CANCELLED");
+    expect(cancelledDraft?.cancelledFromStatus).toBe("DRAFT");
+    expect(cancelledDraft?.cancelledFromSignupsOpen).toBe(false);
+    expect(cancelledDraft?.cancelRevision).toBe(1);
     await expectDomainCode(runService.cancelRun(lead, draftId), "RUN_CANNOT_CANCEL");
 
     const openId = await createDraft(lead, { title: "Cancel open" });

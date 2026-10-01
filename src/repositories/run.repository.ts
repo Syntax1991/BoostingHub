@@ -129,6 +129,14 @@ export type RunListRecord = {
   /** Pure display projection from persisted contents (never regenerated from presets). */
   contentDisplay: RunContentDisplay;
   signupsOpen: boolean;
+  /** Cancellation-cycle identity; increments on each Cancel Run. */
+  cancelRevision: number;
+  /** Pre-cancel status snapshot (null when not cancelled / legacy). */
+  cancelledFromStatus: RunStatus | null;
+  /** Pre-cancel signupsOpen snapshot. */
+  cancelledFromSignupsOpen: boolean | null;
+  /** Set when IN_PROGRESS → COMPLETED. */
+  completedAt: string | null;
   archivedAt: string | null;
   archivedById: string | null;
   signups: SignupOnRun[];
@@ -279,6 +287,15 @@ function mapRun(run: Record<string, unknown>): RunListRecord {
     contents,
     contentDisplay,
     signupsOpen: asBoolean(run.signupsOpen),
+    cancelRevision: asNumber(run.cancelRevision, 0),
+    cancelledFromStatus: run.cancelledFromStatus
+      ? mapRunStatus(run.cancelledFromStatus)
+      : null,
+    cancelledFromSignupsOpen:
+      run.cancelledFromSignupsOpen === null || run.cancelledFromSignupsOpen === undefined
+        ? null
+        : asBoolean(run.cancelledFromSignupsOpen),
+    completedAt: asStringOrNull(run.completedAt),
     archivedAt: asStringOrNull(run.archivedAt),
     archivedById: asStringOrNull(run.archivedById),
     signups: signups.map((row) => {
@@ -551,12 +568,18 @@ export const runRepository = {
   },
 
   /**
-   * Atomically cancel a Run and insert the RUN_CANCELLED channel announcement.
+   * Atomically cancel a Run (snapshotting pre-cancel state + bumping
+   * cancelRevision) and insert the RUN_CANCELLED channel announcement.
    * Either both commit or neither does — never cancel without the announcement
    * row the bot needs before retiring the Discord channel.
    */
   async cancelWithDiscordAnnouncement(
     runId: string,
+    snapshot: {
+      cancelledFromStatus: RunStatus;
+      cancelledFromSignupsOpen: boolean;
+      nextCancelRevision: number;
+    },
     announcement: CreateRunDiscordAnnouncementInput,
     hooks: LifecycleAnnouncementTxHooks = {},
   ): Promise<void> {
@@ -566,6 +589,9 @@ export const runRepository = {
       await txOrm.Run.where({ id: runId }).update({
         status: "CANCELLED",
         signupsOpen: false,
+        cancelledFromStatus: snapshot.cancelledFromStatus,
+        cancelledFromSignupsOpen: snapshot.cancelledFromSignupsOpen,
+        cancelRevision: snapshot.nextCancelRevision,
         updatedAt: now,
       });
       if (hooks.failAfterRunUpdate) {
@@ -577,6 +603,50 @@ export const runRepository = {
           runId: "00000000-0000-4000-8000-000000000000",
         });
         return;
+      }
+      await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
+    });
+  },
+
+  /**
+   * Atomically reactivate a CANCELLED Run to its snapshotted pre-cancel state,
+   * insert RUN_REACTIVATED channel announcement, and skip any still-PENDING
+   * RUN_CANCELLED announcement for this cancelRevision.
+   */
+  async reactivateWithDiscordAnnouncement(
+    runId: string,
+    restore: {
+      status: RunStatus;
+      signupsOpen: boolean;
+      cancelRevision: number;
+    },
+    announcement: CreateRunDiscordAnnouncementInput,
+    cancelAnnouncementSourceKey: string,
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+      const now = new Date().toISOString();
+      const current = (await txOrm.Run.where({ id: runId }).first()) as Record<string, unknown> | null;
+      if (!current || mapRunStatus(current.status) !== "CANCELLED") {
+        throw new DomainError("RUN_CANNOT_REACTIVATE", "Only a cancelled run can be reactivated.");
+      }
+      await txOrm.Run.where({ id: runId }).update({
+        status: restore.status,
+        signupsOpen: restore.signupsOpen,
+        cancelledFromStatus: null,
+        cancelledFromSignupsOpen: null,
+        updatedAt: now,
+      });
+      // Suppress undelivered cancel announcement for this cycle so the bot
+      // never posts a stale "Run cancelled" after Reactivate.
+      const pendingCancel = (await txOrm.RunDiscordAnnouncement.where({
+        sourceKey: cancelAnnouncementSourceKey,
+      }).first()) as Record<string, unknown> | null;
+      if (pendingCancel && asString(pendingCancel.status) === "PENDING") {
+        await txOrm.RunDiscordAnnouncement.where({ id: asString(pendingCancel.id) }).update({
+          status: "SKIPPED",
+          updatedAt: now,
+        });
       }
       await insertAnnouncementIgnoreDuplicateTx(txOrm, announcement);
     });
