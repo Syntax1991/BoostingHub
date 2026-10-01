@@ -139,8 +139,8 @@ Run statuses:
 | `DRAFT` | Lead is preparing the run. Not an open signup. |
 | `OPEN` | Signups may be accepted when `signupsOpen` is true. |
 | `ROSTERING` | Lead is selecting. Signups may still be open or closed independently. |
-| `PUBLISHED` | Roster is published. Signup window is expected closed. |
-| `IN_PROGRESS` | The run is happening. |
+| `PUBLISHED` | Roster is published. Signups may still be open when `signupsOpen` is true — publishing does not close registration. |
+| `IN_PROGRESS` | The run is happening. Signups are frozen (`signupsOpen = false`). |
 | `COMPLETED` | Finished. |
 | `CANCELLED` | Will not happen. |
 

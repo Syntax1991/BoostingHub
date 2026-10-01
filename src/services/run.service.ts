@@ -34,6 +34,7 @@ import {
   assertValidPlannedBossCount,
   assertValidRunLootType,
   canArchiveRun,
+  canToggleSignupWindow,
   emptyRunCapabilities,
   getRunLifecycleCapabilities,
   isSignupWindowOpen,
@@ -906,7 +907,7 @@ export const runService = {
     if (run.status === "DRAFT") {
       throw new DomainError("RUN_INVALID_TRANSITION", "Open the run before changing the signup window.");
     }
-    if (run.status !== "OPEN" && run.status !== "ROSTERING") {
+    if (!canToggleSignupWindow(run.status)) {
       throw new DomainError("RUN_INVALID_TRANSITION", "The signup window cannot be changed in this run state.");
     }
     if (open && run.signupsOpen) {

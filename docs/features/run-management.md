@@ -79,12 +79,13 @@ Do not send an arbitrary status from the client. Transitions are explicit domain
 
 `RunStatus` is not `signupsOpen`.
 
-A run may be `OPEN` or `ROSTERING` with `signupsOpen = false`. Closing the window does not withdraw signups, change `SELECTED`, delete rows, or alter roster / BoosterAccess.
+A run may be `OPEN`, `ROSTERING`, or `PUBLISHED` with `signupsOpen = false`. Closing the window does not withdraw signups, change `SELECTED`, delete rows, or alter roster / BoosterAccess.
 
 - **Open Run** (`DRAFT → OPEN`) sets `signupsOpen = true` atomically.
-- **Close Signups** / **Reopen Signups** are allowed on `OPEN` and `ROSTERING` only.
+- **Close Signups** / **Reopen Signups** are allowed on `OPEN`, `ROSTERING`, and `PUBLISHED` (until Start).
 - Drafts use **Open Run**, not Reopen.
-- `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, and `CANCELLED` cannot reopen signups.
+- Publishing the roster does **not** close signup registration — `signupsOpen` stays whatever the Raid Lead set.
+- `IN_PROGRESS`, `COMPLETED`, and `CANCELLED` cannot reopen signups. Start Run atomically sets `signupsOpen = false`.
 
 ## Editability matrix
 

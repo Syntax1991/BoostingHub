@@ -64,10 +64,16 @@ describe("run and signup state machines", () => {
     expect(canSelfWithdrawSignup("PENDING", "OPEN")).toBe(true);
   });
 
-  it("opens the signup window only for OPEN or ROSTERING runs with the flag set", () => {
+  it("opens the signup window for OPEN / ROSTERING / PUBLISHED when the flag is set", () => {
     expect(isSignupWindowOpen("OPEN", true)).toBe(true);
     expect(isSignupWindowOpen("OPEN", false)).toBe(false);
-    expect(isSignupWindowOpen("PUBLISHED", true)).toBe(false);
+    expect(isSignupWindowOpen("ROSTERING", true)).toBe(true);
+    expect(isSignupWindowOpen("PUBLISHED", true)).toBe(true);
+    expect(isSignupWindowOpen("PUBLISHED", false)).toBe(false);
+    expect(isSignupWindowOpen("IN_PROGRESS", true)).toBe(false);
+    expect(isSignupWindowOpen("COMPLETED", true)).toBe(false);
+    expect(isSignupWindowOpen("CANCELLED", true)).toBe(false);
+    expect(isSignupWindowOpen("DRAFT", true)).toBe(false);
   });
 
   it("derives lifecycle capabilities from status — editable until Start, signup history never locks", () => {
@@ -107,7 +113,14 @@ describe("run and signup state machines", () => {
     expect(
       getRunLifecycleCapabilities({ status: "PUBLISHED", signupsOpen: false, actorIsAdmin: false }).canReassignRaidLead,
     ).toBe(false);
-    expect(published.canReopenSignups).toBe(false);
+    expect(published.canReopenSignups).toBe(true);
+    expect(published.canCloseSignups).toBe(false);
+    expect(
+      getRunLifecycleCapabilities({ status: "PUBLISHED", signupsOpen: true, actorIsAdmin: true }).canCloseSignups,
+    ).toBe(true);
+    expect(
+      getRunLifecycleCapabilities({ status: "PUBLISHED", signupsOpen: true, actorIsAdmin: true }).canReopenSignups,
+    ).toBe(false);
 
     const inProgress = getRunLifecycleCapabilities({
       status: "IN_PROGRESS",

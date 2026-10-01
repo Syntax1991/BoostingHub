@@ -30,7 +30,12 @@ export const RUN_SCHEDULE_PAST_GRACE_MS = 5 * 60_000;
  * not lock anything. IN_PROGRESS / COMPLETED / CANCELLED are immutable.
  */
 export const PRE_START_RUN_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
-const SIGNUP_WINDOW_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING"];
+/**
+ * Pre-start signup registration statuses. Publishing the roster does not close
+ * signups — Start Run / IN_PROGRESS is the hard freeze. `signupsOpen` remains
+ * the manager-controlled override within this set.
+ */
+export const SIGNUP_WINDOW_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
 const CANCELLABLE_STATUSES: readonly RunStatus[] = ["DRAFT", "OPEN", "ROSTERING", "PUBLISHED"];
 /** Archive is administrative state, not a RunStatus — only a terminal Run may be archived. */
 const ARCHIVABLE_STATUSES: readonly RunStatus[] = ["COMPLETED", "CANCELLED"];
@@ -49,7 +54,7 @@ export function assertRunTransition(from: RunStatus, to: RunStatus): void {
 }
 
 export function isSignupWindowOpen(status: RunStatus, signupsOpen: boolean): boolean {
-  return signupsOpen && (status === "OPEN" || status === "ROSTERING");
+  return signupsOpen && SIGNUP_WINDOW_STATUSES.includes(status);
 }
 
 /**

@@ -58,7 +58,7 @@ async function createRunAt(scheduledStartAt: string, state: { status?: RunStatus
   if (state.status || state.archived) {
     const now = new Date().toISOString();
     await orm.Run.where({ id }).update({
-      ...(state.status ? { status: state.status, signupsOpen: state.status === "OPEN" || state.status === "ROSTERING" } : {}),
+      ...(state.status ? { status: state.status, signupsOpen: state.status === "OPEN" || state.status === "ROSTERING" || state.status === "PUBLISHED" } : {}),
       ...(state.archived ? { archivedAt: now } : {}),
       updatedAt: now,
     });
@@ -203,20 +203,23 @@ describe("Discord sync candidate selection", () => {
     expectNoWork(work, cancelled);
   });
 
-  it("2. OPEN / ROSTERING without a post stay discoverable; FUTURE → CURRENT needs no DB write", async () => {
+  it("2. OPEN / ROSTERING / PUBLISHED without a post stay discoverable; FUTURE → CURRENT needs no DB write", async () => {
     const open = await createRunAt(followingStart, { status: "OPEN" });
     const rostering = await createRunAt(followingStart, { status: "ROSTERING" });
+    const published = await createRunAt(followingStart, { status: "PUBLISHED" });
 
     let { work, loaded } = await loadedRunIds(classificationNow);
     expect(loaded.has(open)).toBe(true);
     expect(loaded.has(rostering)).toBe(true);
+    expect(loaded.has(published)).toBe(true);
     // FUTURE: the week gate blocks first provisioning.
     expect(lanesFor(work, open).signups).toHaveLength(0);
     expect(lanesFor(work, rostering).signups).toHaveLength(0);
+    expect(lanesFor(work, published).signups).toHaveLength(0);
 
     // Only `now` moves: the same Runs are now CURRENT and eligible.
     ({ work, loaded } = await loadedRunIds(new Date(followingStart)));
-    for (const runId of [open, rostering]) {
+    for (const runId of [open, rostering, published]) {
       const [signup] = lanesFor(work, runId).signups;
       expect(signup).toMatchObject({ targetBucket: "CURRENT", allowChannelCreate: true, existingRunChannelId: null });
     }
@@ -233,12 +236,14 @@ describe("Discord sync candidate selection", () => {
     ]);
   });
 
-  it("4. PUBLISHED without any Discord presence is excluded and never provisioned retroactively", async () => {
+  it("4. PUBLISHED with signups closed and no Discord presence is loaded but not first-provisioned", async () => {
     const runId = await createRunAt(nextStart, { status: "PUBLISHED" });
+    await orm.Run.where({ id: runId }).update({ signupsOpen: false, updatedAt: new Date().toISOString() });
 
     const { work, loaded } = await loadedRunIds(classificationNow);
-    expect(loaded.has(runId)).toBe(false);
-    expectNoWork(work, runId);
+    expect(loaded.has(runId)).toBe(true);
+    expect(lanesFor(work, runId).signups).toHaveLength(0);
+    expect(lanesFor(work, runId).channels).toHaveLength(0);
     expect(await runDiscordPostRepository.findByRunId(runId)).toBeNull();
   });
 

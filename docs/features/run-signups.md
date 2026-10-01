@@ -4,6 +4,22 @@
 
 Let a signed-in user persist **Booster** and/or **Lootbuddy** participation for a specific run. Participation type belongs to the signup row, not the account. A User may hold Booster and any number of Lootbuddy entries on the **same** Run simultaneously. Web and Discord are both clients of the same domain — see [discord-bot.md](discord-bot.md).
 
+## Signup window lifecycle
+
+Authoritative helper: `isSignupWindowOpen(status, signupsOpen)` (`SIGNUP_WINDOW_STATUSES` in `run-state.ts`).
+
+| Run status | Signup registration |
+| --- | --- |
+| `DRAFT` | Closed |
+| `OPEN` | Available when `signupsOpen = true` |
+| `ROSTERING` | Available when `signupsOpen = true` |
+| `PUBLISHED` | Available when `signupsOpen = true` |
+| `IN_PROGRESS` | Closed |
+| `COMPLETED` | Closed |
+| `CANCELLED` | Closed |
+
+Publishing a roster does **not** close signup registration. Late signups remain `PENDING` until the Raid Lead explicitly updates the roster. The Raid Lead may still manually close/reopen signups on `OPEN` / `ROSTERING` / `PUBLISHED`. **Start Run** is the lifecycle freeze point and atomically sets `signupsOpen = false`.
+
 ## Participation identity
 
 Where multiplicity matters, identity is `RunSignup.id` — not `userId`, not class, not class+mode, and not `characterId`.
@@ -116,7 +132,7 @@ Required: run, user (server session), character, role, `isBackup`, status `PENDI
 3. The User holds the Booster role (`User.isBooster`, valid for every run difficulty)
 4. Offered role is valid for the character's class
 5. Progress lockouts are informational only (never a hard blocker at signup). Target reset is the Character region's regional WoW reset window containing `Run.scheduledStartAt` (`lockoutService.getResetIdentifierForRun`). Verified `0/x` is Unsaved; missing row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
-6. Run signup window is open (`OPEN` or `ROSTERING` **and** `signupsOpen`)
+6. Run signup window is open (`OPEN` / `ROSTERING` / `PUBLISHED` **and** `signupsOpen`)
 7. No active duplicate for run + user + character + BOOSTER
 8. Cross-run Character reservation (BOOSTER only): a Character that is **draft-selected** or **SELECTED** on another upcoming Run blocks reuse when that Run's `scheduledStartAt` is **less than 2 hours** from the target Run's start (`Math.abs(Δt) < 2h`). Exact **2 hours or more** is allowed. Comparison is symmetric on absolute start timestamps — there is **no** Run-duration / end-time model. Same-Run self-edits are excluded. Mere PENDING offers (not draft-selected / SELECTED) do not reserve. Characterless Lootbuddies are unaffected. Raid lockouts remain informational and never hard-block.
 

@@ -8,7 +8,7 @@ import { emptyRunCapabilities, getRunLifecycleCapabilities } from "@/services/ru
 function caps(status: Parameters<typeof getRunLifecycleCapabilities>[0]["status"], actorIsAdmin = false) {
   return getRunLifecycleCapabilities({
     status,
-    signupsOpen: status === "OPEN" || status === "ROSTERING",
+    signupsOpen: status === "OPEN" || status === "ROSTERING" || status === "PUBLISHED",
     actorIsAdmin,
     archivedAt: null,
   });
