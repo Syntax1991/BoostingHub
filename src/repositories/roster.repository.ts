@@ -59,6 +59,8 @@ export type RosterCharacterSnapshot = {
   wowClass: WowClass;
   specialization: string | null;
   primaryRole: CharacterRole;
+  /** Additional playable specializations beyond primary (never includes primary). */
+  playableSpecs: string[];
   itemLevel: number | null;
   isActive: boolean;
   /** Informational WCL profile id — never a schedule or eligibility gate. */
@@ -125,6 +127,14 @@ export type RosterRecord = {
   postRevision: number;
 };
 
+function mapPlayableSpecs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => asStringOrNull((row as Record<string, unknown>).specialization))
+    .filter((spec): spec is string => Boolean(spec))
+    .sort((a, b) => a.localeCompare(b, "en-US"));
+}
+
 function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
   const lockouts = Array.isArray(row.lockouts) ? row.lockouts : [];
   return {
@@ -135,6 +145,7 @@ function mapCharacter(row: Record<string, unknown>): RosterCharacterSnapshot {
     wowClass: mapWowClass(row.wowClass),
     specialization: asStringOrNull(row.specialization),
     primaryRole: mapCharacterRole(row.primaryRole),
+    playableSpecs: mapPlayableSpecs(row.playableSpecs),
     itemLevel: asNumberOrNull(row.itemLevel),
     isActive: asBoolean(row.isActive, true),
     warcraftLogsId: asStringOrNull(row.warcraftLogsId),
@@ -505,7 +516,7 @@ export const rosterRepository = {
     const rows = await orm.RunSignup
       .where({ runId })
       .include("user")
-      .include("character", (character) => character.include("lockouts"))
+      .include("character", (character) => character.include("lockouts").include("playableSpecs"))
       .include("offeredRoles")
       .include("rosterEntries")
       .orderBy((signup) => signup.createdAt.asc())

@@ -112,6 +112,35 @@ describe("validateRosterDraft", () => {
     });
     expect(result.canPublish).toBe(true);
   });
+  it("19. publish rejects unresolved historic DPS and stored generic DPS", () => {
+    const unresolved = validateRosterDraft({
+      runStatus: "ROSTERING",
+      selected: [
+        member({
+          characterName: "Synblast-Antonidas",
+          selectedRole: null,
+          requiresConcreteDpsChoice: true,
+        }),
+      ],
+      targets: { tanks: 0, healers: 0, dps: 1 },
+    });
+    expect(unresolved.canPublish).toBe(false);
+    expect(unresolved.blockers.map((item) => item.message)).toContain(
+      "Choose Melee or Ranged DPS for Synblast-Antonidas.",
+    );
+
+    const generic = validateRosterDraft({
+      runStatus: "ROSTERING",
+      selected: [member({ characterName: "Frostbite-Antonidas", selectedRole: "DPS" })],
+      targets: { tanks: 0, healers: 0, dps: 1 },
+    });
+    expect(generic.canPublish).toBe(false);
+    expect(generic.blockers.map((item) => item.message)).toContain(
+      "Choose Melee or Ranged DPS for Frostbite-Antonidas.",
+    );
+    expect(generic.composition.dps.selected).toBe(0);
+  });
+
   it("raid lockouts are informational only — a locked/saved character never blocks publish", () => {
     // RosterValidationMember carries no lockout field at all anymore; this
     // documents the invariant that validateRosterDraft has nothing left that

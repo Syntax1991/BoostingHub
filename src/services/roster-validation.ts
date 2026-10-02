@@ -1,3 +1,5 @@
+import { isConcreteCharacterRole } from "@/lib/character-roles";
+import { unresolvedHistoricDpsMessage } from "@/lib/signup-assignable-roles";
 import type { CharacterRole, ParticipationType, RunStatus, SignupStatus } from "@/models/enums";
 import { composeRoster, compositionWarnings, type RosterComposition } from "@/services/roster-composition";
 
@@ -22,6 +24,11 @@ export type RosterValidationMember = {
   participationType: ParticipationType;
   /** The Raid Lead's assignment for this slot; required for BOOSTER, always null for LOOTBUDDY. */
   selectedRole: CharacterRole | null;
+  /**
+   * Selected historic generic DPS whose concrete subtype is still ambiguous.
+   * Publish asks for Melee or Ranged instead of the generic missing-role line.
+   */
+  requiresConcreteDpsChoice?: boolean;
   status: SignupStatus;
   characterActive: boolean;
   boosterApproved: boolean;
@@ -38,7 +45,11 @@ export function validateRosterDraft(input: {
   selected: RosterValidationMember[];
   targets: { tanks: number; healers: number; dps: number; lootbuddies?: number };
   /** Unregistered boosters/lootbuddies added by hand — count toward composition, nothing else to check. */
-  externalBoosters?: ReadonlyArray<{ participationType?: ParticipationType; role: CharacterRole | null }>;
+  externalBoosters?: ReadonlyArray<{
+    participationType?: ParticipationType;
+    role: CharacterRole | null;
+    name?: string;
+  }>;
 }): RosterValidationResult {
   const composition = composeRoster(
     [
@@ -89,11 +100,24 @@ export function validateRosterDraft(input: {
       });
     }
     // A published BOOSTER slot is what attendance and payout are grouped by,
-    // so it can never ship without the Raid Lead's role assignment.
+    // so it can never ship without a concrete role assignment.
     if (item.participationType === "BOOSTER" && !item.selectedRole) {
       blockers.push({
         code: "INVALID_ROSTER_SELECTION",
-        message: `${item.characterName} needs an assigned role before the roster can be published.`,
+        message: item.requiresConcreteDpsChoice
+          ? unresolvedHistoricDpsMessage(item.characterName)
+          : `${item.characterName} needs an assigned role before the roster can be published.`,
+        signupId: item.signupId,
+      });
+    }
+    if (
+      item.participationType === "BOOSTER" &&
+      item.selectedRole &&
+      !isConcreteCharacterRole(item.selectedRole)
+    ) {
+      blockers.push({
+        code: "INVALID_ROSTER_SELECTION",
+        message: unresolvedHistoricDpsMessage(item.characterName),
         signupId: item.signupId,
       });
     }
@@ -108,6 +132,17 @@ export function validateRosterDraft(input: {
       } else {
         seenBoosterUsers.set(item.userId, item.signupId);
       }
+    }
+  }
+
+  for (const booster of input.externalBoosters ?? []) {
+    const participation = booster.participationType ?? "BOOSTER";
+    if (participation === "BOOSTER" && booster.role && !isConcreteCharacterRole(booster.role)) {
+      const name = booster.name?.trim() ? booster.name.trim() : null;
+      blockers.push({
+        code: "INVALID_ROSTER_SELECTION",
+        message: unresolvedHistoricDpsMessage(name ? `@${name}` : "the external booster"),
+      });
     }
   }
 

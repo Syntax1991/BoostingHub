@@ -25,6 +25,19 @@ describe("composeRoster", () => {
     expect(composition.total).toBe(6);
   });
 
+  it("does not count unresolved generic DPS as a concrete DPS slot", () => {
+    const composition = composeRoster(
+      [
+        { participationType: "BOOSTER", selectedRole: "MELEE_DPS" },
+        { participationType: "BOOSTER", selectedRole: "RANGED_DPS" },
+        { participationType: "BOOSTER", selectedRole: "DPS" },
+        { participationType: "BOOSTER", selectedRole: null },
+      ],
+      { tanks: 0, healers: 0, dps: 11 },
+    );
+    expect(composition.dps).toEqual({ selected: 2, target: 11, delta: -9 });
+  });
+
   it("reports under, exact, and over target deltas", () => {
     expect(composeRoster([{ participationType: "BOOSTER", selectedRole: "HEALER" }], { tanks: 2, healers: 4, dps: 14 }).healers.delta).toBe(-3);
     expect(
@@ -89,9 +102,9 @@ describe("compositionWarnings", () => {
 });
 
 describe("lootbuddy target (Run.desiredLootbuddyCount)", () => {
-  const booster = (role: "TANK" | "HEALER" | "DPS") => ({ participationType: "BOOSTER" as const, selectedRole: role });
+  const booster = (role: "TANK" | "HEALER" | "RANGED_DPS") => ({ participationType: "BOOSTER" as const, selectedRole: role });
   const lootbuddy = { participationType: "LOOTBUDDY" as const, selectedRole: null };
-  const full = [booster("TANK"), booster("TANK"), ...Array(4).fill(booster("HEALER")), ...Array(12).fill(booster("DPS"))];
+  const full = [booster("TANK"), booster("TANK"), ...Array(4).fill(booster("HEALER")), ...Array(12).fill(booster("RANGED_DPS"))];
   const withTargets = (lootbuddies: number) => ({ tanks: 2, healers: 4, dps: 12, lootbuddies });
 
   it("counts selected lootbuddies against their own target; never in Tank/Healer/DPS", () => {
