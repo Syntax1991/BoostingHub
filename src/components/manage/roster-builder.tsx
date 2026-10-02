@@ -37,6 +37,7 @@ import {
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
+import { formatCharacterRosterMetadata } from "@/lib/character-roster-metadata";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import { isConcreteCharacterRole } from "@/lib/character-roles";
 import { countRolesByBucket, externalBoosterRosterBucket } from "@/lib/roster-role-buckets";
@@ -1111,8 +1112,13 @@ function SignupRowCard({
         >
           {character ? (
             <span>
-              {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"} ilvl ·{" "}
-              {character.specialization ?? character.primaryRole}
+              {formatCharacterRosterMetadata({
+                itemLevel: character.itemLevel,
+                specialization: character.specialization,
+                primaryRole: character.primaryRole,
+                wowClass: character.wowClass,
+                playableSpecs: character.playableSpecs,
+              })}
             </span>
           ) : null}
           {signup.participationType === "BOOSTER" && signup.boosterApproved ? (
