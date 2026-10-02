@@ -16,7 +16,6 @@ import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import {
   attackTypeForSpecialization,
-  defaultDpsAttackTypeForClass,
 } from "@/lib/wow-specializations";
 import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
 import { runDetailPath } from "@/lib/run-routes";
@@ -1546,12 +1545,9 @@ export const discordSyncService = {
     const externals = run.roster.externalBoosters;
     const externalMembers = (predicate: (booster: ExternalBooster) => boolean) =>
       externals.filter(predicate).map(externalRosterEmbedMember);
-    const externalIsMelee = (booster: ExternalBooster) =>
-      booster.role === "MELEE_DPS" ||
-      (booster.role === "DPS" && defaultDpsAttackTypeForClass(booster.wowClass) === "MELEE");
-    const externalIsRanged = (booster: ExternalBooster) =>
-      booster.role === "RANGED_DPS" ||
-      (booster.role === "DPS" && defaultDpsAttackTypeForClass(booster.wowClass) === "RANGED");
+    const externalIsMelee = (booster: ExternalBooster) => booster.role === "MELEE_DPS";
+    const externalIsRanged = (booster: ExternalBooster) => booster.role === "RANGED_DPS";
+    const externalIsLegacyDps = (booster: ExternalBooster) => booster.role === "DPS";
 
     return {
       runId: run.id,
@@ -1581,7 +1577,10 @@ export const discordSyncService = {
           ...legacyRanged.map(toMember),
           ...externalMembers(externalIsRanged),
         ],
-        unspecifiedDps: legacyUnspecified.map(toMember),
+        unspecifiedDps: [
+          ...legacyUnspecified.map(toMember),
+          ...externalMembers(externalIsLegacyDps),
+        ],
         lootbuddies: [
           ...selected.filter((row) => row.participationType === "LOOTBUDDY").map(toMember),
           ...externalMembers((b) => b.participationType === "LOOTBUDDY"),

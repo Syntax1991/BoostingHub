@@ -694,7 +694,12 @@ export const rosterService = {
         healers: boosterCardsFor(candidates, "HEALER"),
         meleeDps: boosterCardsFor(candidates, "MELEE_DPS"),
         rangedDps: boosterCardsFor(candidates, "RANGED_DPS"),
-        /** @deprecated Prefer meleeDps/rangedDps — kept for consumers still reading `dps`. */
+        /**
+         * Historic offers that still list generic DPS. Shown as Legacy DPS —
+         * never remapped into Melee/Ranged. New offers cannot write DPS.
+         */
+        legacyDps: boosterCardsFor(candidates, "DPS"),
+        /** @deprecated Prefer meleeDps/rangedDps/legacyDps — aggregate for older consumers. */
         dps: [
           ...boosterCardsFor(candidates, "MELEE_DPS"),
           ...boosterCardsFor(candidates, "RANGED_DPS"),
@@ -707,6 +712,17 @@ export const rosterService = {
       summary: {
         tanks: composition.tanks.selected,
         healers: composition.healers.selected,
+        meleeDps:
+          selected.filter((row) => row.selectedRole === "MELEE_DPS").length +
+          roster.externalBoosters.filter((b) => b.participationType === "BOOSTER" && b.role === "MELEE_DPS")
+            .length,
+        rangedDps:
+          selected.filter((row) => row.selectedRole === "RANGED_DPS").length +
+          roster.externalBoosters.filter((b) => b.participationType === "BOOSTER" && b.role === "RANGED_DPS")
+            .length,
+        legacyDps:
+          selected.filter((row) => row.selectedRole === "DPS").length +
+          roster.externalBoosters.filter((b) => b.participationType === "BOOSTER" && b.role === "DPS").length,
         dps: composition.dps.selected,
         lootbuddies: composition.lootbuddies,
         boosters: composition.boosterTotal,
