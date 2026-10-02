@@ -3,6 +3,7 @@ import { assertOfferedRolesAllowed, availableRoles } from "@/lib/character-capab
 import { assertConcreteRosterRole } from "@/lib/character-roles";
 import { externalBoosterInputError } from "@/lib/external-booster";
 import {
+  resolveEffectivePersistedSelectedRole,
   resolveSignupAssignableRoles,
   rosterRoleSectionsForSignup,
 } from "@/lib/signup-assignable-roles";
@@ -235,5 +236,64 @@ describe("roster buckets for historic DPS", () => {
         playableSpecs: ["Elemental", "Enhancement"],
       }).sections,
     ).toEqual(["HEALER", "RANGED_DPS"]);
+  });
+});
+
+describe("resolveEffectivePersistedSelectedRole", () => {
+  const frost = {
+    offeredRoles: ["DPS"] as CharacterRole[],
+    characterClass: "MAGE" as WowClass,
+    primarySpecialization: "Frost",
+  };
+
+  it("keeps a concrete stored role without re-deriving it", () => {
+    expect(
+      resolveEffectivePersistedSelectedRole({
+        storedSelectedRole: "HEALER",
+        signup: { ...frost, offeredRoles: ["HEALER", "DPS"] },
+      }),
+    ).toBe("HEALER");
+  });
+
+  it("normalizes a unique historic DPS assignment to that subtype", () => {
+    expect(resolveEffectivePersistedSelectedRole({ storedSelectedRole: "DPS", signup: frost })).toBe("RANGED_DPS");
+    expect(
+      resolveEffectivePersistedSelectedRole({
+        storedSelectedRole: "DPS",
+        signup: {
+          offeredRoles: ["DPS"],
+          characterClass: "ROGUE",
+          primarySpecialization: "Subtlety",
+        },
+      }),
+    ).toBe("MELEE_DPS");
+  });
+
+  it("keeps Synblast's stored DPS intent as Ranged, not Healer", () => {
+    expect(
+      resolveEffectivePersistedSelectedRole({
+        storedSelectedRole: "DPS",
+        signup: {
+          offeredRoles: ["HEALER", "DPS"],
+          characterClass: "SHAMAN",
+          primarySpecialization: "Restoration",
+          playableSpecs: ["Elemental"],
+        },
+      }),
+    ).toBe("RANGED_DPS");
+  });
+
+  it("leaves an ambiguous stored DPS assignment unresolved", () => {
+    expect(
+      resolveEffectivePersistedSelectedRole({
+        storedSelectedRole: "DPS",
+        signup: {
+          offeredRoles: ["HEALER", "DPS"],
+          characterClass: "SHAMAN",
+          primarySpecialization: "Restoration",
+          playableSpecs: [],
+        },
+      }),
+    ).toBeNull();
   });
 });
