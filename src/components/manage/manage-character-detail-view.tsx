@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { BoostingRoleBadges, ClassBadge, DifficultyBadge } from "@/components/ui/badges";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
+import { additionalPlayableSpecLabels } from "@/lib/character-roster-metadata";
 import { formatDateTime } from "@/lib/datetime";
 import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
 import type { RaidDifficulty } from "@/models/enums";
@@ -41,6 +42,11 @@ function ExactTime({ value }: { value: string | null }) {
 export function ManageCharacterDetailView({ data }: { data: Data }) {
   const { row, identity, weeklyAvailability, ownerBoostingRoles, currentReset } = data;
   const ineligibleCopy = row.syncIneligibleReason ? SYNC_INELIGIBLE_COPY[row.syncIneligibleReason] : null;
+  const playableOffspecs = additionalPlayableSpecLabels({
+    specialization: row.specialization,
+    wowClass: row.wowClass,
+    playableSpecs: row.playableSpecs,
+  });
 
   return (
     <div className="min-w-0">
@@ -78,6 +84,7 @@ export function ManageCharacterDetailView({ data }: { data: Data }) {
               <ClassBadge wowClass={row.wowClass} />
             </Field>
             <Field label="Specialization">{row.specialization ?? "—"}</Field>
+            <Field label="Playable offspecs">{playableOffspecs.length > 0 ? playableOffspecs.join(", ") : "—"}</Field>
             <Field label="Role">{CHARACTER_ROLE_LABELS[identity.primaryRole]}</Field>
             <Field label="Item level">{row.itemLevel ?? "Unknown"}</Field>
             <Field label="Status">

@@ -47,6 +47,8 @@ export type OperationsCharacterRecord = {
   lastSyncErrorCode: CharacterSyncErrorCode | null;
   syncFailureCount: number;
   owner: { id: string; name: string; discordUsername: string | null };
+  /** Additional playable specializations. Display sanitizes primary duplicates. */
+  playableSpecs: string[];
   /** Current-reset rows of current-for-lockouts raids, for this Character's region only. */
   currentLockouts: Array<{
     raidId: string;
@@ -93,6 +95,11 @@ function mapRecord(row: Record<string, unknown>, resets: Record<WowRegion, strin
       name: asString(user.name),
       discordUsername: asStringOrNull(user.discordUsername),
     },
+    playableSpecs: Array.isArray(row.playableSpecs)
+      ? (row.playableSpecs as Array<Record<string, unknown>>)
+          .map((spec) => asStringOrNull(spec.specialization))
+          .filter((spec): spec is string => Boolean(spec))
+      : [],
     // The query already limited rows to both regions' current resets; keep only this region's.
     currentLockouts: lockouts
       .filter((lockout) => asString(lockout.resetIdentifier) === resets[region])
@@ -110,14 +117,16 @@ function characterQuery() {
   const currentRaidIds = getCurrentLockoutRaids().map((raid) => raid.id);
   return {
     resets,
-    query: orm.Character.include("user", (user) => user.select("id", "name", "discordUsername")).include(
-      "lockouts",
-      (lockout) =>
-        lockout
-          .where((row) => row.resetIdentifier.in([resets.EU, resets.US]))
-          .where((row) => row.raidId.in(currentRaidIds))
-          .select("raidId", "difficulty", "resetIdentifier", "bossesDefeated", "isComplete"),
-    ),
+    query: orm.Character.include("user", (user) => user.select("id", "name", "discordUsername"))
+      .include("playableSpecs")
+      .include(
+        "lockouts",
+        (lockout) =>
+          lockout
+            .where((row) => row.resetIdentifier.in([resets.EU, resets.US]))
+            .where((row) => row.raidId.in(currentRaidIds))
+            .select("raidId", "difficulty", "resetIdentifier", "bossesDefeated", "isComplete"),
+      ),
   };
 }
 

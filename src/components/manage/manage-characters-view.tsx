@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ClassIcon } from "@/components/ui/badges";
 import { CLASS_COLORS, CLASS_LABELS } from "@/lib/labels";
+import { formatCharacterPageSpecLine } from "@/lib/character-roster-metadata";
 import { formatRetryIn } from "@/lib/blizzard/sync-backoff";
 import { formatDateTime } from "@/lib/datetime";
 import { WOW_CLASSES, WOW_REGIONS } from "@/models/enums";
@@ -38,6 +39,13 @@ function CharacterCell({ row }: { row: OperationsRow }) {
         </Link>
         <div className="text-xs text-muted tabular-nums">
           {row.itemLevel != null ? `ilvl ${row.itemLevel}` : "ilvl Unknown"}
+        </div>
+        <div className="text-xs text-muted">
+          {formatCharacterPageSpecLine({
+            specialization: row.specialization,
+            wowClass: row.wowClass,
+            playableSpecs: row.playableSpecs,
+          })}
         </div>
       </div>
     </div>

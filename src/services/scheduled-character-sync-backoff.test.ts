@@ -286,6 +286,7 @@ describe("admin projection uses the same helper", () => {
         lastSyncErrorCode: "PROFILE_UNAVAILABLE",
         syncFailureCount: 50,
         owner: { id: "u1", name: "Owner", discordUsername: null },
+        playableSpecs: [],
         currentLockouts: [],
       },
       { ownerHasRegionConnection: false, now: new Date(), staleMinutes: 120 },
