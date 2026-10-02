@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import type { GuildRoleIndicators, RoleDiscordEmojiKey } from "@/discord-bot/class-emoji-lookup";
 import { characterLabel } from "@/discord-bot/format";
+import { absoluteRunUrl } from "@/lib/app-url";
 import { classIndicator } from "@/lib/run-start-message";
 import type { RosterEmbedData, RosterEmbedMember } from "@/services/discord-sync.service";
 import type { WowClass } from "@/models/enums";
@@ -82,7 +83,7 @@ export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmb
       : String(data.groups.lootbuddies.length);
   const stateLabel = data.publishedAt ? "Published" : "Draft";
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle("Roster")
     .setDescription(
       `${data.runTitle}\n${DIFFICULTY_LABEL[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`,
@@ -125,4 +126,7 @@ export function buildRosterEmbed(data: RosterEmbedData, options?: BuildRosterEmb
     .setFooter({
       text: `${stateLabel} · Selected ${data.totalSelected} · DPS ${dpsSelected}/${data.targets.dps} · Roster version ${data.version}`,
     });
+  const runUrl = absoluteRunUrl(data.runId);
+  if (runUrl) embed.setURL(runUrl);
+  return embed;
 }

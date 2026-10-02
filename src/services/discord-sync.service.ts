@@ -17,7 +17,7 @@ import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
 import {
   attackTypeForSpecialization,
 } from "@/lib/wow-specializations";
-import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
+import { absoluteAppUrl } from "@/lib/app-url";
 import { runDetailPath } from "@/lib/run-routes";
 import type { ExternalBooster } from "@/lib/external-booster";
 import { classifyRunWeek } from "@/lib/wow-run-week";
@@ -986,15 +986,6 @@ function toStartMember(
     participationType: row.participationType,
     selectedRole: row.publishedRole,
   };
-}
-
-/** Public website link for DMs; null when the canonical origin is not configured. */
-function absoluteAppUrl(path: string): string | null {
-  try {
-    return `${resolveBetterAuthBaseURL().replace(/\/$/, "")}${path}`;
-  } catch {
-    return null;
-  }
 }
 
 async function buildPendingNotificationDms(): Promise<NotificationDmWorkItem[]> {

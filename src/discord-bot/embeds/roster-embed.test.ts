@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RosterEmbedData } from "@/services/discord-sync.service";
 import { buildRosterEmbed, formatRosterParticipantLine } from "@/discord-bot/embeds/roster-embed";
 
@@ -77,6 +77,10 @@ describe("formatRosterParticipantLine", () => {
 });
 
 describe("buildRosterEmbed", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("titles the embed Roster and keeps Tank/Healer targets with melee/ranged DPS counts", () => {
     const embed = buildRosterEmbed(data).toJSON();
     expect(embed.title).toBe("Roster");
@@ -176,5 +180,29 @@ describe("buildRosterEmbed", () => {
     const embed = buildRosterEmbed(empty).toJSON();
     expect(embed.footer?.text).toContain("Draft");
     expect(embed.fields?.every((field) => field.value === "No players selected yet.")).toBe(true);
+  });
+
+  it("links the embed title to the canonical run page", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
+    const embed = buildRosterEmbed({ ...data, runId: "run-123" }).toJSON();
+    expect(embed.title).toBe("Roster");
+    expect(embed.url).toBe("https://example.test/runs/run-123");
+  });
+
+  it("does not double a trailing slash on the application origin", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test/");
+    const embed = buildRosterEmbed({ ...data, runId: "run-123" }).toJSON();
+    expect(embed.url).toBe("https://example.test/runs/run-123");
+  });
+
+  it("still builds the embed and omits the URL when production has no base URL", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BETTER_AUTH_URL", "");
+    const embed = buildRosterEmbed({ ...data, runId: "run-123" }).toJSON();
+    expect(embed.title).toBe("Roster");
+    expect(embed.description).toContain("Weekend Heroic Catch-up");
+    expect(embed.url).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   prepareRosterEditAction,
@@ -30,6 +31,7 @@ import {
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatDateTime } from "@/lib/datetime";
+import { runDetailPath } from "@/lib/run-routes";
 import {
   CHARACTER_ROLE_LABELS,
   CLASS_COLORS,
@@ -531,7 +533,11 @@ function RosterBuilderEditor({
       {embedded ? null : (
       <Card>
         <CardHeader
-          title={data.run.title}
+          title={
+            <Link href={runDetailPath(data.run.id)} className="hover:underline underline-offset-2">
+              {data.run.title}
+            </Link>
+          }
           description={`${data.run.productLabel}${
             data.run.contentSummary ? ` · ${data.run.contentSummary}` : ""
           } · ${formatDateTime(data.run.scheduledStartAt)} · Lead ${data.run.raidLeadName}`}
