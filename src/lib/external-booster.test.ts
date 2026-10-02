@@ -58,6 +58,15 @@ describe("external booster input", () => {
     expect(externalBoosterInputError({ name: "dawn", wowClass: "PALADIN", role: "TANK" })).toBeNull();
   });
 
+  it("rejects legacy generic DPS on new booster writes", () => {
+    expect(externalBoosterInputError({ name: "dawn", wowClass: "MAGE", role: "DPS" })).toMatch(
+      /generic DPS|Melee DPS|Ranged DPS/i,
+    );
+    expect(externalBoosterInputError({ name: "dawn", wowClass: "ROGUE", role: "DPS" })).not.toBeNull();
+    expect(externalBoosterInputError({ name: "dawn", wowClass: "MAGE", role: "RANGED_DPS" })).toBeNull();
+    expect(externalBoosterInputError({ name: "dawn", wowClass: "ROGUE", role: "MELEE_DPS" })).toBeNull();
+  });
+
   it("maps persisted rows in the order they were added", () => {
     expect(
       mapExternalBoosters([

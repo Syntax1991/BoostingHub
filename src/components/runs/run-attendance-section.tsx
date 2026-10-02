@@ -7,7 +7,8 @@ import { AttendanceStatusBadge, ClassBadge, ParticipationBadge, RoleBadge } from
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { ATTENDANCE_STATUS_LABELS, CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { EXTERNAL_BOOSTER_NAME_MAX_LENGTH, externalBoosterInputError } from "@/lib/external-booster";
-import { isDpsRole } from "@/lib/character-roles";
+import { isDpsRole, isConcreteCharacterRole } from "@/lib/character-roles";
+import { preferredRoleForClass } from "@/lib/external-booster-staging";
 import { rolesForClass } from "@/lib/wow-specializations";
 import {
   ATTENDANCE_STATUSES,
@@ -364,14 +365,18 @@ function ReplaceParticipantDialog({
   const [mode, setMode] = useState<"signup" | "external">(matching.length > 0 ? "signup" : "external");
   const [signupId, setSignupId] = useState(matching[0]?.signupId ?? "");
   const [name, setName] = useState("");
-  const role: CharacterRole = row?.selectedRole ?? "DPS";
-  const classSupportsRole = (option: WowClass) => {
+  /** Assigned roster role for this attendance row — may still be legacy generic DPS. */
+  const slotRole = row?.selectedRole ?? null;
+  const classSupportsSlot = (option: WowClass) => {
     const roles = rolesForClass(option);
-    if (isDpsRole(role)) return roles.some((r) => isDpsRole(r));
-    return (roles as readonly CharacterRole[]).includes(role);
+    if (slotRole && isConcreteCharacterRole(slotRole)) {
+      return (roles as readonly CharacterRole[]).includes(slotRole);
+    }
+    // Legacy DPS / missing: any class that can fill a DPS composition slot.
+    return roles.some((r) => isDpsRole(r));
   };
   const [wowClass, setWowClass] = useState<WowClass>(
-    () => WOW_CLASSES.find((option) => classSupportsRole(option)) ?? "MAGE",
+    () => WOW_CLASSES.find((option) => classSupportsSlot(option)) ?? "MAGE",
   );
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -390,7 +395,9 @@ function ReplaceParticipantDialog({
   const lootbuddySlot = row.participationType === "LOOTBUDDY";
   const classesForRole = lootbuddySlot
     ? WOW_CLASSES
-    : WOW_CLASSES.filter((option) => classSupportsRole(option));
+    : WOW_CLASSES.filter((option) => classSupportsSlot(option));
+  const externalRole =
+    slotRole && isConcreteCharacterRole(slotRole) ? slotRole : preferredRoleForClass(wowClass);
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -406,13 +413,13 @@ function ReplaceParticipantDialog({
       name,
       wowClass,
       participationType: lootbuddySlot ? "LOOTBUDDY" : "BOOSTER",
-      role: lootbuddySlot ? null : role,
+      role: lootbuddySlot ? null : externalRole,
     });
     if (problem) {
       setFormError(problem);
       return;
     }
-    onReplace({ kind: "external", name, wowClass, role });
+    onReplace({ kind: "external", name, wowClass, role: externalRole });
   }
 
   return (
@@ -490,7 +497,7 @@ function ReplaceParticipantDialog({
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs text-muted">
-                  Class ({lootbuddySlot ? "Lootbuddy" : CHARACTER_ROLE_LABELS[role]})
+                  Class ({lootbuddySlot ? "Lootbuddy" : CHARACTER_ROLE_LABELS[externalRole]})
                 </span>
                 <select
                   value={wowClass}

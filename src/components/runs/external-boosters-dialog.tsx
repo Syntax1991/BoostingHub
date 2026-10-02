@@ -82,6 +82,13 @@ export function ExternalBoostersDialog({
     setRole((current) => preferredRoleForClass(next, current));
   }
 
+  function changeKind(next: ParticipationType) {
+    setKind(next);
+    if (next === "BOOSTER") {
+      setRole((current) => preferredRoleForClass(wowClass, current));
+    }
+  }
+
   function startEdit(booster: StagedExternalBooster) {
     if (pending || editingKey) return;
     setError(null);
@@ -364,7 +371,7 @@ export function ExternalBoostersDialog({
             <span className="mb-1 block text-xs text-muted">Type</span>
             <select
               value={kind}
-              onChange={(event) => setKind(event.target.value as ParticipationType)}
+              onChange={(event) => changeKind(event.target.value as ParticipationType)}
               className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
               disabled={pending || editingKey !== null}
             >
