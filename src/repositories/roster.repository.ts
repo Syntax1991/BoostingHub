@@ -369,6 +369,7 @@ async function writeDraftSelectionsInTx(
       version: roster.version + 1,
       selections,
       now,
+      alreadyDraftSelectedSignupIds: new Set(current.keys()),
     });
   }
 }
@@ -436,11 +437,18 @@ async function publishSelectionsInTx(txOrm: TxOrm, mapped: RosterRecord, input: 
     selections: input.selectedSelections,
     now,
   });
+  const draftRole = new Map(mapped.selections.map((selection) => [selection.signupId, selection.selectedRole]));
   for (const selection of input.selectedSelections) {
     await txOrm.RunSignup.where({ id: selection.signupId }).update({
       status: "SELECTED",
       publishedRole: selection.selectedRole,
     });
+    if (draftRole.get(selection.signupId) !== selection.selectedRole) {
+      await txOrm.RunRosterEntry.where({ rosterId: mapped.id, signupId: selection.signupId }).update({
+        selectedRole: selection.selectedRole,
+        updatedAt: now,
+      });
+    }
   }
   for (const signupId of input.notSelectedSignupIds) {
     await txOrm.RunSignup.where({ id: signupId }).update({
@@ -1125,6 +1133,11 @@ async function notifyRosterSelectionChangesInTx(
     version: number;
     selections: RosterNotificationSelection[];
     now: string;
+    /**
+     * Signups that already had a draft slot before this write. Changing only
+     * their role (including historic DPS → concrete) is not a new selection.
+     */
+    alreadyDraftSelectedSignupIds?: ReadonlySet<string>;
   },
 ): Promise<void> {
   const lastBySignupId = new Map<string, { version: number; selected: boolean }>();
@@ -1174,8 +1187,9 @@ async function notifyRosterSelectionChangesInTx(
       .filter((signup) => signup?.participationType === "BOOSTER")
       .map((signup) => signup!.userId),
   );
+  const alreadyDraftSelected = input.alreadyDraftSelectedSignupIds ?? new Set<string>();
   for (const selection of input.selections) {
-    if (!isNotifiedSelected(selection.signupId)) {
+    if (!isNotifiedSelected(selection.signupId) && !alreadyDraftSelected.has(selection.signupId)) {
       const signup = signupById.get(selection.signupId);
       const swap = signup?.participationType === "BOOSTER" && boosterUsersLeaving.has(signup.userId);
       await createRosterSelectedNotificationInTx(txOrm, { ...input, selection, swap });

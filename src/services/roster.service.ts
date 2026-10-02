@@ -38,10 +38,11 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupService } from "@/services/signup.service";
 import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
-import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
+import { isConcreteCharacterRole, isLegacyGenericDps, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
 import {
+  resolveEffectivePersistedSelectedRole,
   resolveSignupAssignableRoles,
   rosterRoleSectionsForSignup,
   unresolvedHistoricDpsMessage,
@@ -122,6 +123,73 @@ function signupAssignmentInput(signup: RosterSignupRow): SignupAssignableRoleInp
 function assignableRolesForSignup(signup: RosterSignupRow): ConcreteCharacterRole[] {
   if (signup.participationType !== "BOOSTER") return [];
   return resolveSignupAssignableRoles(signupAssignmentInput(signup));
+}
+
+/** Read projection: historic stored DPS becomes its effective draft role. Does not write. */
+function withEffectiveDraftRole(signup: RosterSignupRow): RosterSignupRow {
+  if (!signup.selectedRole || !isLegacyGenericDps(signup.selectedRole)) return signup;
+  return {
+    ...signup,
+    selectedRole: resolveEffectivePersistedSelectedRole({
+      storedSelectedRole: signup.selectedRole,
+      signup: signupAssignmentInput(signup),
+    }),
+  };
+}
+
+/**
+ * Role written for one selected slot.
+ * A submitted generic DPS is accepted only when that slot is already stored as
+ * legacy DPS, and then only as the effective concrete (or unresolved) role.
+ * Ambiguous historic DPS may stay selected with a null role on a draft save.
+ * Publish still rejects that null. A brand-new DPS assignment is rejected.
+ */
+function resolveDraftWriteRole(
+  signup: RosterSignupRow,
+  requested: CharacterRole | null | undefined,
+  persistedRole: CharacterRole | null | undefined,
+  allowUnresolved: boolean,
+): CharacterRole | null {
+  if (requested && isLegacyGenericDps(requested)) {
+    if (persistedRole != null && isLegacyGenericDps(persistedRole)) {
+      return resolveEffectivePersistedSelectedRole({
+        storedSelectedRole: requested,
+        signup: signupAssignmentInput(signup),
+      });
+    }
+  }
+  if (
+    requested == null &&
+    allowUnresolved &&
+    signup.participationType === "BOOSTER" &&
+    needsHistoricDpsChoice(signup, null)
+  ) {
+    return null;
+  }
+  return resolveSelectedRole(signup, requested);
+}
+
+function effectiveSelectionMap(
+  signups: RosterSignupRow[],
+  selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>,
+): Map<string, CharacterRole | null> {
+  const byId = new Map(signups.map((signup) => [signup.id, signup]));
+  const effective = new Map<string, CharacterRole | null>();
+  for (const selection of selections) {
+    const signup = byId.get(selection.signupId);
+    if (!signup || !selection.selectedRole || !isLegacyGenericDps(selection.selectedRole)) {
+      effective.set(selection.signupId, selection.selectedRole);
+      continue;
+    }
+    effective.set(
+      selection.signupId,
+      resolveEffectivePersistedSelectedRole({
+        storedSelectedRole: selection.selectedRole,
+        signup: signupAssignmentInput(signup),
+      }),
+    );
+  }
+  return effective;
 }
 
 /**
@@ -624,7 +692,7 @@ export const rosterService = {
     assertCanManageRun(user, run);
 
     const roster = await rosterRepository.ensure(runId);
-    const signups = await rosterRepository.listSignups(runId);
+    const signups = (await rosterRepository.listSignups(runId)).map(withEffectiveDraftRole);
     const boosterCharacters = signups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.character)
       .map((signup) => ({
@@ -795,7 +863,7 @@ export const rosterService = {
           roster.externalBoosters.filter((b) => b.participationType === "BOOSTER" && b.role === "RANGED_DPS")
             .length,
         legacyDps:
-          selected.filter((row) => row.selectedRole === "DPS").length +
+          selected.filter((row) => needsHistoricDpsChoice(row, row.selectedRole)).length +
           roster.externalBoosters.filter((b) => b.participationType === "BOOSTER" && b.role === "DPS").length,
         dps: composition.dps.selected,
         lootbuddies: composition.lootbuddies,
@@ -886,12 +954,15 @@ export const rosterService = {
             .map((item) => item.id)
         : [];
 
+    const persistedRole = roster.selections.find((selection) => selection.signupId === input.signupId)?.selectedRole;
     await rosterRepository.setSignupSelected({
       rosterId: roster.id,
       expectedVersion: input.version,
       signupId: input.signupId,
       selected: input.selected,
-      selectedRole: input.selected ? resolveSelectedRole(signup, input.selectedRole) : null,
+      selectedRole: input.selected
+        ? resolveDraftWriteRole(signup, input.selectedRole, persistedRole, false)
+        : null,
       replaceSignupIds,
       characterId: signup.participationType === "BOOSTER" ? (signup.character?.id ?? null) : null,
       targetRunId: input.runId,
@@ -994,6 +1065,7 @@ export const rosterService = {
     const selectedIds = [...requested.keys()];
     const signups = await rosterRepository.listSignups(input.runId);
     const byId = new Map(signups.map((item) => [item.id, item]));
+    const persistedRole = new Map(roster.selections.map((selection) => [selection.signupId, selection.selectedRole]));
     const selectedRows: RosterSignupRow[] = [];
     const selections: RosterSelection[] = [];
 
@@ -1026,7 +1098,7 @@ export const rosterService = {
       selectedRows.push(signup);
       selections.push({
         signupId,
-        selectedRole: resolveSelectedRole(signup, requested.get(signupId)),
+        selectedRole: resolveDraftWriteRole(signup, requested.get(signupId), persistedRole.get(signupId), true),
       });
     }
 
@@ -1280,7 +1352,13 @@ export const rosterService = {
       );
     }
 
-    const plan = await planAuthoritativeRoster(run, roster, signups, new Map(roster.selections.map((row) => [row.signupId, row.selectedRole])), input.acknowledgeWarnings);
+    const plan = await planAuthoritativeRoster(
+      run,
+      roster,
+      signups,
+      effectiveSelectionMap(signups, roster.selections),
+      input.acknowledgeWarnings,
+    );
 
     await rosterRepository.publishAtomic({
       runId: run.id,
@@ -1330,8 +1408,18 @@ export const rosterService = {
       }
       requested.set(selection.signupId, selection.selectedRole);
     }
+    const byId = new Map(signups.map((signup) => [signup.id, signup]));
+    const persistedRole = new Map(roster.selections.map((selection) => [selection.signupId, selection.selectedRole]));
+    const canonical = new Map<string, CharacterRole | null>();
+    for (const [signupId, role] of requested) {
+      const signup = byId.get(signupId);
+      canonical.set(
+        signupId,
+        signup ? resolveDraftWriteRole(signup, role, persistedRole.get(signupId), true) : role,
+      );
+    }
 
-    const plan = await planAuthoritativeRoster(run, roster, signups, requested, input.acknowledgeWarnings);
+    const plan = await planAuthoritativeRoster(run, roster, signups, canonical, input.acknowledgeWarnings);
 
     await rosterRepository.updatePublishedAtomic({
       runId: run.id,

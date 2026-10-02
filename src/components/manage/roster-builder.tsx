@@ -256,7 +256,14 @@ function RosterBuilderEditor({
     const externalRoles = externalBoosters
       .filter((booster) => booster.participationType === "BOOSTER")
       .map((booster) => booster.role);
-    return countRolesByBucket([...stagedRoles, ...externalRoles]);
+    const counts = countRolesByBucket([...stagedRoles, ...externalRoles]);
+    const unresolvedHistoric = domainSignups.filter((signup) => {
+      if (!stagedSelections.has(signup.id) || signup.participationType !== "BOOSTER") return false;
+      if ((stagedSelections.get(signup.id) ?? null) != null) return false;
+      const dpsChoices = signup.assignableRoles.filter((role) => role === "MELEE_DPS" || role === "RANGED_DPS");
+      return signup.offeredRoles.includes("DPS") && dpsChoices.length > 1;
+    }).length;
+    return { ...counts, legacyDps: counts.legacyDps + unresolvedHistoric };
   }, [domainSignups, stagedSelections, externalBoosters]);
 
   function isStagedSelected(signupId: string) {

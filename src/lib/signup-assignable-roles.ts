@@ -113,3 +113,23 @@ export function rosterRoleSectionsForSignup(input: SignupAssignableRoleInput): {
 export function unresolvedHistoricDpsMessage(characterLabel: string): string {
   return `Choose Melee or Ranged DPS for ${characterLabel}.`;
 }
+
+/**
+ * What an already-saved RunRosterEntry.selectedRole means now.
+ * Concrete stored roles stay as written. Historic generic DPS keeps its DPS
+ * intent: exactly one concrete DPS candidate fills it in; both subtypes stay
+ * unresolved (null). Healer and Tank are not inferred from the offer.
+ * This does not write anything.
+ */
+export function resolveEffectivePersistedSelectedRole(input: {
+  storedSelectedRole: CharacterRole | null;
+  signup: SignupAssignableRoleInput;
+}): ConcreteCharacterRole | null {
+  const stored = input.storedSelectedRole;
+  if (stored == null) return null;
+  if (isConcreteCharacterRole(stored)) return stored;
+  if (!isLegacyGenericDps(stored)) return null;
+
+  const dpsCandidates = resolveSignupAssignableRoles(input.signup).filter(isDpsSubtype);
+  return dpsCandidates.length === 1 ? dpsCandidates[0]! : null;
+}
