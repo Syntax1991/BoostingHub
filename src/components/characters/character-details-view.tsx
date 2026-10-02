@@ -13,6 +13,7 @@ import { CharacterLifecycleButton } from "@/components/characters/character-life
 import { CharacterScheduleCommitmentsSection } from "@/components/characters/character-schedule-commitments-section";
 import { WeeklyAvailabilityDialog } from "@/components/characters/weekly-availability-dialog";
 import { formatWeeklyAvailabilityDetailSummary } from "@/lib/weekly-availability-display";
+import { additionalPlayableSpecLabels } from "@/lib/character-roster-metadata";
 import { projectCurrentRaidLockoutSlots } from "@/lib/lockout-display";
 import { DiscordBoosterApplicationCta } from "@/components/characters/discord-booster-application-cta";
 import { WarcraftLogsLink } from "@/components/characters/warcraft-logs-link";
@@ -72,6 +73,11 @@ export function CharacterDetailsView({ data }: { data: Details }) {
     data.lockouts,
     data.currentLockoutRaids ?? [],
   );
+  const playableOffspecs = additionalPlayableSpecLabels({
+    specialization: data.specialization,
+    wowClass: data.wowClass,
+    playableSpecs: data.playableSpecs,
+  });
   return (
     <div>
       <PageHeader
@@ -132,10 +138,8 @@ export function CharacterDetailsView({ data }: { data: Details }) {
               <dd className="mt-1">{data.specialization ?? "None"}</dd>
             </div>
             <div>
-              <dt className="text-muted">Other playable specs</dt>
-              <dd className="mt-1">
-                {(data.playableSpecs?.length ?? 0) > 0 ? data.playableSpecs!.join(", ") : "None"}
-              </dd>
+              <dt className="text-muted">Playable offspecs</dt>
+              <dd className="mt-1">{playableOffspecs.length > 0 ? playableOffspecs.join(", ") : "None"}</dd>
             </div>
             <div>
               <dt className="text-muted">Primary role</dt>

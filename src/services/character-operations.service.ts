@@ -88,6 +88,8 @@ export type OperationsRow = {
   region: WowRegion;
   wowClass: WowClass;
   specialization: string | null;
+  /** Raw additional playable specs from the list/detail query. Views sanitize display. */
+  playableSpecs: readonly string[];
   itemLevel: number | null;
   isActive: boolean;
   owner: { id: string; name: string; discordUsername: string | null };
@@ -165,6 +167,7 @@ export function deriveOperationsRow(
     region: record.region,
     wowClass: record.wowClass,
     specialization: record.specialization,
+    playableSpecs: record.playableSpecs,
     itemLevel: record.itemLevel,
     isActive: record.isActive,
     owner: record.owner,

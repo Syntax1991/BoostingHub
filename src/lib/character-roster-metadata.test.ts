@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { countRolesByBucket } from "@/lib/roster-role-buckets";
 import {
   additionalPlayableSpecLabels,
+  formatCharacterPageSpecLine,
   formatCharacterRosterMetadata,
   type CharacterRosterMetadataInput,
 } from "@/lib/character-roster-metadata";
@@ -167,5 +168,56 @@ describe("character roster metadata (offspec display)", () => {
     expect(sections).toEqual(["HEALER", "RANGED_DPS"]);
     expect(sections.map(() => metadata)).toEqual([metadata, metadata]);
     expect(metadata).toBe("325 ilvl · Restoration · Offspecs: Elemental, Enhancement");
+  });
+
+  it("character page spec line uses the same offspec order and wording as roster cards", () => {
+    const syndraco = {
+      itemLevel: 321,
+      specialization: "Preservation",
+      primaryRole: "HEALER" as const,
+      wowClass: "EVOKER" as const,
+      playableSpecs: ["Augmentation", "Devastation"],
+    };
+    expect(formatCharacterPageSpecLine(syndraco)).toBe("Preservation · Offspecs: Devastation, Augmentation");
+    expect(formatCharacterRosterMetadata(syndraco)).toBe(
+      "321 ilvl · Preservation · Offspecs: Devastation, Augmentation",
+    );
+
+    const synvoid = {
+      specialization: "Holy",
+      wowClass: "PRIEST" as const,
+      playableSpecs: ["Shadow", "Discipline"],
+    };
+    expect(formatCharacterPageSpecLine(synvoid)).toBe("Holy · Offspecs: Discipline, Shadow");
+    expect(additionalPlayableSpecLabels(synvoid)).toEqual(["Discipline", "Shadow"]);
+
+    expect(
+      formatCharacterPageSpecLine({
+        specialization: "Restoration",
+        wowClass: "SHAMAN",
+        playableSpecs: ["Restoration", "Elemental"],
+      }),
+    ).toBe("Restoration · Offspec: Elemental");
+    expect(formatCharacterPageSpecLine({ specialization: "Marksmanship", wowClass: "HUNTER" })).toBe("Marksmanship");
+    expect(formatCharacterPageSpecLine({ specialization: null })).toBe("No spec");
+  });
+
+  it("character page spec text does not change offered roles or a stored selection", () => {
+    const signup = {
+      offeredRoles: ["HEALER", "RANGED_DPS"] as const,
+      characterClass: "SHAMAN" as const,
+      primarySpecialization: "Restoration",
+      playableSpecs: ["Elemental", "Enhancement"],
+    };
+    const text = formatCharacterPageSpecLine({
+      specialization: "Restoration",
+      wowClass: "SHAMAN",
+      playableSpecs: signup.playableSpecs,
+    });
+    expect(text).toBe("Restoration · Offspecs: Elemental, Enhancement");
+    expect(resolveSignupAssignableRoles(signup)).toEqual(["HEALER", "RANGED_DPS"]);
+    expect(resolveEffectivePersistedSelectedRole({ storedSelectedRole: "RANGED_DPS", signup })).toBe("RANGED_DPS");
+    expect(signup.offeredRoles).toEqual(["HEALER", "RANGED_DPS"]);
+    expect(signup.playableSpecs).toEqual(["Elemental", "Enhancement"]);
   });
 });

@@ -46,6 +46,7 @@ import { parseCharacterOperationsFilters } from "@/validators/character-operatio
 import type { OperationsCharacterRecord } from "@/repositories/character-operations.repository";
 
 const { ManageCharactersView } = await import("@/components/manage/manage-characters-view");
+const { ManageCharacterDetailView } = await import("@/components/manage/manage-character-detail-view");
 
 /* ------------------------------------------------------------------ fixtures */
 
@@ -209,6 +210,7 @@ afterAll(async () => {
   for (const id of createdCharacterIds) {
     await orm.CharacterRaidLockout.where({ characterId: id }).deleteAll();
     await orm.CharacterWeeklyUnavailability.where({ characterId: id }).deleteAll();
+    await orm.CharacterPlayableSpec.where({ characterId: id }).deleteAll();
     await orm.Character.where({ id }).deleteAll();
   }
   for (const id of createdUserIds) {
@@ -334,6 +336,36 @@ describe("admin list read model", () => {
     expect(html).not.toContain("UPSTREAM_UNAVAILABLE");
     expect(html).toContain("Public API");
   });
+
+  it("shows configured playable specs on the list and detail without opening edit", async () => {
+    const character = await createCharacter(ownerA, "Offspec");
+    const now = new Date().toISOString();
+    for (const specialization of ["Arcane", "Frost", "Fire"]) {
+      await orm.CharacterPlayableSpec.create({
+        id: crypto.randomUUID(),
+        characterId: character.id,
+        specialization,
+        createdAt: now,
+      });
+    }
+    const page = await characterOperationsService.getListPage(
+      admin,
+      parseCharacterOperationsFilters({ query: character.name }),
+    );
+    const row = page.rows.find((item) => item.id === character.id);
+    expect(row?.specialization).toBe("Arcane");
+    expect(row?.playableSpecs).toEqual(expect.arrayContaining(["Arcane", "Fire", "Frost"]));
+    const html = renderToStaticMarkup(createElement(ManageCharactersView, { data: page }));
+    expect(html).toContain("Arcane · Offspecs: Fire, Frost");
+    expect(html).not.toContain("Offspecs: Arcane");
+
+    const detail = await characterOperationsService.getDetail(admin, character.id);
+    expect(detail.row.playableSpecs).toEqual(expect.arrayContaining(["Arcane", "Fire", "Frost"]));
+    const detailHtml = renderToStaticMarkup(createElement(ManageCharacterDetailView, { data: detail }));
+    expect(detailHtml).toContain("Playable offspecs");
+    expect(detailHtml).toContain("Fire, Frost");
+    expect(detailHtml).not.toContain("Arcane, Fire, Frost");
+  });
 });
 
 /* ------------------------------------------- pure: filters, sort, summary */
@@ -356,6 +388,7 @@ function record(overrides: Partial<OperationsCharacterRecord> & { id: string; na
     lastSyncErrorCode: null,
     syncFailureCount: 0,
     owner: { id: "u1", name: "Alpha", discordUsername: "alpha" },
+    playableSpecs: [],
     currentLockouts: [],
     ...overrides,
   };

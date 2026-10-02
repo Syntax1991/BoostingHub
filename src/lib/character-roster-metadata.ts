@@ -1,13 +1,17 @@
 import type { CharacterRole, WowClass } from "@/models/enums";
 import { WOW_SPECIALIZATIONS } from "@/lib/wow-specializations";
 
-export type CharacterRosterMetadataInput = {
-  itemLevel: number | null;
+/** Shared display input for primary + additional playable specs. */
+export type CharacterPlayableSpecInput = {
   specialization: string | null;
-  primaryRole: CharacterRole;
   wowClass?: WowClass | null;
   /** Additional playable specs. Primary is omitted even if a stale row repeats it. */
   playableSpecs?: readonly string[];
+};
+
+export type CharacterRosterMetadataInput = CharacterPlayableSpecInput & {
+  itemLevel: number | null;
+  primaryRole: CharacterRole;
 };
 
 function primarySpecLabel(input: CharacterRosterMetadataInput): string {
@@ -29,7 +33,7 @@ function catalogIndex(wowClass: WowClass | null | undefined, spec: string): numb
  * Display only: does not change offered roles, assignment, or stored rows.
  * Catalog order when the class is known; unknown names stay after those, sorted.
  */
-export function additionalPlayableSpecLabels(input: CharacterRosterMetadataInput): string[] {
+export function additionalPlayableSpecLabels(input: CharacterPlayableSpecInput): string[] {
   const primaryKey = specKey(input.specialization ?? "");
   const seen = new Set<string>();
   const labels: string[] = [];
@@ -56,9 +60,17 @@ export function formatCharacterOffspecSuffix(offspecs: readonly string[]): strin
   return ` · Offspecs: ${offspecs.join(", ")}`;
 }
 
+/**
+ * Character page spec line: primary, then Offspec / Offspecs when configured.
+ * Missing primary stays "No spec". Does not fall back to the role label.
+ */
+export function formatCharacterPageSpecLine(input: CharacterPlayableSpecInput): string {
+  const primary = input.specialization?.trim() || "No spec";
+  return `${primary}${formatCharacterOffspecSuffix(additionalPlayableSpecLabels(input))}`;
+}
+
 /** Raid Lead roster card metadata: ilvl · primary · optional offspecs. */
 export function formatCharacterRosterMetadata(input: CharacterRosterMetadataInput): string {
   const ilvl = typeof input.itemLevel === "number" ? String(input.itemLevel) : "Unknown";
-  const offspecs = additionalPlayableSpecLabels(input);
-  return `${ilvl} ilvl · ${primarySpecLabel(input)}${formatCharacterOffspecSuffix(offspecs)}`;
+  return `${ilvl} ilvl · ${primarySpecLabel(input)}${formatCharacterOffspecSuffix(additionalPlayableSpecLabels(input))}`;
 }

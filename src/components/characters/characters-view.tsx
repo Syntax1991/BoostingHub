@@ -17,6 +17,7 @@ import { LinkWarcraftLogsButton } from "@/components/characters/link-warcraft-lo
 import { FindMissingWarcraftLogsButton } from "@/components/characters/find-missing-warcraft-logs-button";
 import { WeeklyAvailabilityDialog } from "@/components/characters/weekly-availability-dialog";
 import { formatWeeklyAvailabilityButtonLabel } from "@/lib/weekly-availability-display";
+import { formatCharacterPageSpecLine } from "@/lib/character-roster-metadata";
 import { cn } from "@/lib/cn";
 import {
   BLIZZARD_PROFILE_UNAVAILABLE_HINT,
@@ -123,7 +124,13 @@ export function CharactersView({ data }: { data: Page }) {
                     </td>
                     <td className="px-4 py-3">
                       <ClassBadge wowClass={character.wowClass} />
-                      <div className="text-xs text-muted">{character.specialization ?? "No spec"}</div>
+                      <div className="text-xs text-muted">
+                        {formatCharacterPageSpecLine({
+                          specialization: character.specialization,
+                          wowClass: character.wowClass,
+                          playableSpecs: character.playableSpecs,
+                        })}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <RoleBadge role={character.primaryRole} />
