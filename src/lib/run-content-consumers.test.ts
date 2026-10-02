@@ -184,7 +184,7 @@ describe("Discord Bundle content labels", () => {
       publishedAt: "2026-09-18T12:00:00.000Z",
       version: 1,
       targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
-      groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
+      groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], unspecifiedDps: [], lootbuddies: [] },
       totalSelected: 0,
     }).toJSON();
 

@@ -11,9 +11,12 @@ import {
   effectiveRaidLeadChannelName,
   formatRunVoiceChannelName,
 } from "@/lib/discord-channel-name";
+import { isDpsRole } from "@/lib/character-roles";
 import { CLASS_LABELS } from "@/lib/labels";
 import { formatTargetRaidLockoutLabel } from "@/lib/raid-lockout-label";
-import { attackTypeForSpecialization, defaultDpsAttackTypeForClass } from "@/lib/wow-specializations";
+import {
+  attackTypeForSpecialization,
+} from "@/lib/wow-specializations";
 import { resolveBetterAuthBaseURL } from "@/auth/better-auth-base-url";
 import { runDetailPath } from "@/lib/run-routes";
 import type { ExternalBooster } from "@/lib/external-booster";
@@ -193,6 +196,11 @@ export type RosterEmbedData = {
     healers: RosterEmbedMember[];
     meleeDps: RosterEmbedMember[];
     rangedDps: RosterEmbedMember[];
+    /**
+     * Legacy generic `DPS` assignments whose specialization has no melee/ranged
+     * attack type (e.g. healer primary). Never silently folded into melee.
+     */
+    unspecifiedDps: RosterEmbedMember[];
     lootbuddies: RosterEmbedMember[];
   };
   totalSelected: number;
@@ -664,7 +672,10 @@ function buildSignupRoleProjection(
   );
   const signedDps = sortSignupEmbedMembers(
     activeSignups
-      .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("DPS"))
+      .filter(
+        (signup) =>
+          signup.participationType === "BOOSTER" && signup.offeredRoles.some((role) => isDpsRole(role)),
+      )
       .map(toSignupEmbedMember),
   );
   const signedLoot = sortSignupEmbedMembers(
@@ -691,10 +702,12 @@ function buildSignupRoleProjection(
   const pickedDps = [
     ...sortSignupEmbedMembers(
       pickedRows
-        .filter((signup) => signup.participationType === "BOOSTER" && signup.publishedRole === "DPS")
+        .filter((signup) => signup.participationType === "BOOSTER" && isDpsRole(signup.publishedRole))
         .map(toSignupEmbedMember),
     ),
-    ...pickedExternal("DPS"),
+    ...externals
+      .filter((booster) => booster.participationType === "BOOSTER" && isDpsRole(booster.role))
+      .map(externalSignupEmbedMember),
   ];
   const pickedLoot = [
     ...sortSignupEmbedMembers(
@@ -1505,17 +1518,36 @@ export const discordSyncService = {
       }
     }
 
-    const dps = boosterByRole(selected, "DPS");
-    const rangedDps = dps.filter(
-      (row) => attackTypeForSpecialization(row.character?.wowClass ?? "WARRIOR", row.character?.specialization ?? null) === "RANGED",
+    const meleeAssigned = selected.filter(
+      (row) => row.participationType === "BOOSTER" && row.publishedRole === "MELEE_DPS",
     );
-    const rangedIds = new Set(rangedDps.map((row) => row.id));
-    const meleeDps = dps.filter((row) => !rangedIds.has(row.id));
+    const rangedAssigned = selected.filter(
+      (row) => row.participationType === "BOOSTER" && row.publishedRole === "RANGED_DPS",
+    );
+    // Legacy generic DPS: subtype from specialization attack type when known.
+    // Null attack (healer/tank primary) → unspecifiedDps — never silent melee.
+    const legacyDps = selected.filter(
+      (row) => row.participationType === "BOOSTER" && row.publishedRole === "DPS",
+    );
+    const legacyRanged: RosterSignupRow[] = [];
+    const legacyMelee: RosterSignupRow[] = [];
+    const legacyUnspecified: RosterSignupRow[] = [];
+    for (const row of legacyDps) {
+      const attack = attackTypeForSpecialization(
+        row.character?.wowClass ?? "WARRIOR",
+        row.character?.specialization ?? null,
+      );
+      if (attack === "RANGED") legacyRanged.push(row);
+      else if (attack === "MELEE") legacyMelee.push(row);
+      else legacyUnspecified.push(row);
+    }
+
     const externals = run.roster.externalBoosters;
     const externalMembers = (predicate: (booster: ExternalBooster) => boolean) =>
       externals.filter(predicate).map(externalRosterEmbedMember);
-    const externalDpsRanged = (booster: ExternalBooster) =>
-      booster.role === "DPS" && defaultDpsAttackTypeForClass(booster.wowClass) === "RANGED";
+    const externalIsMelee = (booster: ExternalBooster) => booster.role === "MELEE_DPS";
+    const externalIsRanged = (booster: ExternalBooster) => booster.role === "RANGED_DPS";
+    const externalIsLegacyDps = (booster: ExternalBooster) => booster.role === "DPS";
 
     return {
       runId: run.id,
@@ -1536,10 +1568,19 @@ export const discordSyncService = {
         tanks: [...boosterByRole(selected, "TANK").map(toMember), ...externalMembers((b) => b.role === "TANK")],
         healers: [...boosterByRole(selected, "HEALER").map(toMember), ...externalMembers((b) => b.role === "HEALER")],
         meleeDps: [
-          ...meleeDps.map(toMember),
-          ...externalMembers((b) => b.role === "DPS" && !externalDpsRanged(b)),
+          ...meleeAssigned.map(toMember),
+          ...legacyMelee.map(toMember),
+          ...externalMembers(externalIsMelee),
         ],
-        rangedDps: [...rangedDps.map(toMember), ...externalMembers(externalDpsRanged)],
+        rangedDps: [
+          ...rangedAssigned.map(toMember),
+          ...legacyRanged.map(toMember),
+          ...externalMembers(externalIsRanged),
+        ],
+        unspecifiedDps: [
+          ...legacyUnspecified.map(toMember),
+          ...externalMembers(externalIsLegacyDps),
+        ],
         lootbuddies: [
           ...selected.filter((row) => row.participationType === "LOOTBUDDY").map(toMember),
           ...externalMembers((b) => b.participationType === "LOOTBUDDY"),
@@ -1647,7 +1688,9 @@ export const discordSyncService = {
 
     const tanks = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "TANK").sort(compareStartMembers);
     const healers = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "HEALER").sort(compareStartMembers);
-    const dps = members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "DPS").sort(compareStartMembers);
+    const dps = members
+      .filter((m) => m.participationType === "BOOSTER" && isDpsRole(m.selectedRole))
+      .sort(compareStartMembers);
     const lootbuddies = members.filter((m) => m.participationType === "LOOTBUDDY").sort(compareStartMembers);
 
     return {

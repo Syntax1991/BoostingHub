@@ -201,7 +201,7 @@ beforeAll(async () => {
     name: "LifeDps",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
   });
 });
 
@@ -235,7 +235,7 @@ describe("run lifecycle notifications", () => {
     await signupService.createBoosterSignup(lead, {
       runId: created.id,
       characterId: charLeadDps,
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
     });
     await signupService.createBoosterSignup(player, {

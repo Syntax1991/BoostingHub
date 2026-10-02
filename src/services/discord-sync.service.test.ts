@@ -103,7 +103,7 @@ async function createCharacter(
   name: string,
   wowClass: "PALADIN" | "PRIEST" | "WARRIOR" | "MAGE" | "HUNTER",
   specialization: string,
-  primaryRole: "TANK" | "HEALER" | "DPS",
+  primaryRole: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS",
 ) {
   const id = crypto.randomUUID();
   createdCharacterIds.push(id);
@@ -228,9 +228,9 @@ beforeAll(async () => {
 
   tankChar = await createCharacter(ids.tank, "Dstank", "PALADIN", "Protection", "TANK");
   healerChar = await createCharacter(ids.healer, "Dsheal", "PRIEST", "Holy", "HEALER");
-  meleeChar = await createCharacter(ids.melee, "Dsmelee", "WARRIOR", "Fury", "DPS");
-  rangedChar = await createCharacter(ids.ranged, "Dsranged", "MAGE", "Fire", "DPS");
-  lootChar = await createCharacter(ids.loot, "Dsloot", "HUNTER", "Beast Mastery", "DPS");
+  meleeChar = await createCharacter(ids.melee, "Dsmelee", "WARRIOR", "Fury", "MELEE_DPS");
+  rangedChar = await createCharacter(ids.ranged, "Dsranged", "MAGE", "Fire", "RANGED_DPS");
+  lootChar = await createCharacter(ids.loot, "Dsloot", "HUNTER", "Beast Mastery", "RANGED_DPS");
 
   await grantQualification(ids.tank);
   await grantQualification(ids.healer);
@@ -303,7 +303,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
       await createSignup({ runId: roleRunId, userId: ids.extra, characterId, participationType: "BOOSTER", role: "HEALER" });
     }
     const multiRole = (await orm.RunSignup.where({ runId: roleRunId, characterId: healAlt3 }).first()) as { id: string };
-    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId: multiRole.id, role: "DPS" });
+    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId: multiRole.id, role: "MELEE_DPS" });
     await createSignup({ runId: roleRunId, userId: ids.healer, characterId: healerChar, participationType: "BOOSTER", role: "HEALER" });
 
     const data = await discordSyncService.getSignupEmbedData(roleRunId);
@@ -373,7 +373,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     await orm.RunSignupRole.create({
       id: crypto.randomUUID(),
       signupId: signupRow.id,
-      role: "DPS",
+      role: "MELEE_DPS",
       createdAt: new Date().toISOString(),
     });
 
@@ -405,7 +405,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: freezeRunId,
       version: view.roster.version,
-      selections: [{ signupId: signupRow.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupRow.id, selectedRole: "MELEE_DPS" }],
     });
 
     embed = await discordSyncService.getSignupEmbedData(freezeRunId);
@@ -458,13 +458,13 @@ describe("discordSyncService.getSignupEmbedData", () => {
       participationType: "BOOSTER",
       role: "HEALER",
     });
-    const dpsOnly = await createCharacter(ids.melee, "DpsOnlyEmbed", "WARRIOR", "Fury", "DPS");
+    const dpsOnly = await createCharacter(ids.melee, "DpsOnlyEmbed", "WARRIOR", "Fury", "MELEE_DPS");
     await createSignup({
       runId: hybridRunId,
       userId: ids.melee,
       characterId: dpsOnly,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "MELEE_DPS",
     });
 
     let     embed = await discordSyncService.getSignupEmbedData(hybridRunId);
@@ -569,7 +569,7 @@ describe("discordSyncService.listSyncWork", () => {
   });
 
   it("flags UPDATE work again once the unique signup count changes", async () => {
-    await createSignup({ runId, userId: ids.melee, characterId: meleeChar, participationType: "BOOSTER", role: "DPS" });
+    await createSignup({ runId, userId: ids.melee, characterId: meleeChar, participationType: "BOOSTER", role: "MELEE_DPS" });
 
     const work = await discordSyncService.listSyncWork();
     const item = work.signups.find((entry) => entry.runId === runId);
@@ -648,7 +648,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
   });
 
   it("groups selected participants into tanks/healers/melee/ranged/lootbuddies with Discord mentions", async () => {
-    await createSignup({ runId, userId: ids.ranged, characterId: rangedChar, participationType: "BOOSTER", role: "DPS" });
+    await createSignup({ runId, userId: ids.ranged, characterId: rangedChar, participationType: "BOOSTER", role: "RANGED_DPS" });
     await createSignup({ runId, userId: ids.loot, characterId: lootChar, participationType: "LOOTBUDDY", role: null });
 
     const view = await rosterService.getRosterManagementView(lead, runId);
@@ -1992,10 +1992,10 @@ describe("discordSyncService — run start operational post", () => {
 
     const tank = await createCharacter(ids.tank, "StartTank", "PALADIN", "Protection", "TANK");
     const healer = await createCharacter(ids.healer, "StartHeal", "PRIEST", "Holy", "HEALER");
-    const dps = await createCharacter(ids.melee, "StartDps", "WARRIOR", "Arms", "DPS");
+    const dps = await createCharacter(ids.melee, "StartDps", "WARRIOR", "Arms", "MELEE_DPS");
     await createSignup({ runId: id, userId: ids.tank, characterId: tank, participationType: "BOOSTER", role: "TANK" });
     await createSignup({ runId: id, userId: ids.healer, characterId: healer, participationType: "BOOSTER", role: "HEALER" });
-    await createSignup({ runId: id, userId: ids.melee, characterId: dps, participationType: "BOOSTER", role: "DPS" });
+    await createSignup({ runId: id, userId: ids.melee, characterId: dps, participationType: "BOOSTER", role: "MELEE_DPS" });
     await createSignup({
       runId: id,
       userId: ids.loot,

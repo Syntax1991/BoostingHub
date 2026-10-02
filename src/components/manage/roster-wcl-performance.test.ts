@@ -114,14 +114,14 @@ describe("wclPerformanceMetricValue / matchesWclPerfFilter / compareByWclPerf", 
       {
         raidId: "a",
         raidName: "A",
-        roles: [{ role: "DPS", specLabel: null, bestPct: 90, avgPct: 60 }],
+        roles: [{ role: "MELEE_DPS", specLabel: null, bestPct: 90, avgPct: 60 }],
       },
     ];
     const low: WclPerformanceRaidSegment[] = [
       {
         raidId: "b",
         raidName: "B",
-        roles: [{ role: "DPS", specLabel: null, bestPct: 20, avgPct: 10 }],
+        roles: [{ role: "MELEE_DPS", specLabel: null, bestPct: 20, avgPct: 10 }],
       },
     ];
     const empty: WclPerformanceRaidSegment[] = [];

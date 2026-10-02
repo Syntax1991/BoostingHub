@@ -44,6 +44,7 @@ const data: RosterEmbedData = {
       },
     ],
     rangedDps: [],
+    unspecifiedDps: [],
     lootbuddies: [],
   },
   totalSelected: 3,
@@ -170,7 +171,7 @@ describe("buildRosterEmbed", () => {
       ...data,
       publishedAt: null,
       totalSelected: 0,
-      groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
+      groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], unspecifiedDps: [], lootbuddies: [] },
     };
     const embed = buildRosterEmbed(empty).toJSON();
     expect(embed.footer?.text).toContain("Draft");

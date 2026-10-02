@@ -87,15 +87,15 @@ export function characterIsRealDpsSpec(input: {
 }): boolean {
   if (input.specialization?.trim()) {
     const match = findSpecialization(input.wowClass, input.specialization);
-    return match?.role === "DPS";
+    return match != null && (match.role === "MELEE_DPS" || match.role === "RANGED_DPS");
   }
-  return input.primaryRole === "DPS";
+  return input.primaryRole === "MELEE_DPS" || input.primaryRole === "RANGED_DPS" || input.primaryRole === "DPS";
 }
 
 /**
  * Roles to query for WCL per offered role / roster column.
- * DPS is included only for real DPS specs — WCL otherwise returns healer damage
- * percentiles that look like "DPS" but are not.
+ * DPS subtypes are included only for real DPS specs — WCL otherwise returns
+ * healer damage percentiles that look like DPS but are not.
  * Tank/Healer stay queryable; missing parses simply stay empty in that column.
  */
 export function rolesRelevantForWclPerformance(input: {
@@ -107,7 +107,7 @@ export function rolesRelevantForWclPerformance(input: {
   const offered = [...new Set(input.offeredRoles)];
   const base = offered.length > 0 ? offered : [input.primaryRole];
   const allowDps = characterIsRealDpsSpec(input);
-  return base.filter((role) => (role === "DPS" ? allowDps : true));
+  return base.filter((role) => (role === "DPS" || role === "MELEE_DPS" || role === "RANGED_DPS" ? allowDps : true));
 }
 
 export function buildMetricKey(metricKeyBase: string, specName: string | null): string {

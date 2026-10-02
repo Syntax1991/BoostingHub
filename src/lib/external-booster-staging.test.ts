@@ -24,7 +24,7 @@ import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dial
 
 const original: ExternalBooster[] = [
   { id: "id-a", name: "Alpha", wowClass: "PALADIN", participationType: "BOOSTER", role: "HEALER" },
-  { id: "id-b", name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+  { id: "id-b", name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
   { id: "id-c", name: "Charlie", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null },
 ];
 
@@ -43,11 +43,11 @@ describe("external booster staging helpers", () => {
       name: "  @BravoPrime ",
       wowClass: "MAGE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
     });
     expect(error).toBeNull();
     expect(next.map((row) => row.key)).toEqual(["id-a", "id-b", "id-c"]);
-    expect(next[1]).toMatchObject({ key: "id-b", name: "BravoPrime", wowClass: "MAGE", role: "DPS" });
+    expect(next[1]).toMatchObject({ key: "id-b", name: "BravoPrime", wowClass: "MAGE", role: "RANGED_DPS" });
   });
 
   it("C. class change keeps a still-valid role", () => {
@@ -55,9 +55,67 @@ describe("external booster staging helpers", () => {
     expect(preferredRoleForClass("PRIEST", "HEALER")).toBe("HEALER");
   });
 
-  it("D. class change with invalid role picks DPS (or first valid)", () => {
-    expect(roleAfterClassChange("BOOSTER", "HEALER", "MAGE")).toBe("DPS");
-    expect(preferredRoleForClass("MAGE", "HEALER")).toBe("DPS");
+  it("D. class change with invalid role picks concrete DPS subtype (never generic DPS)", () => {
+    expect(roleAfterClassChange("BOOSTER", "HEALER", "MAGE")).toBe("RANGED_DPS");
+    expect(preferredRoleForClass("MAGE", "HEALER")).toBe("RANGED_DPS");
+  });
+
+  it("initial Mage default is unambiguous Ranged DPS (matches dialog useState)", () => {
+    expect(preferredRoleForClass("MAGE")).toBe("RANGED_DPS");
+  });
+
+  it("pure DPS classes get an unambiguous concrete subtype", () => {
+    expect(preferredRoleForClass("MAGE")).toBe("RANGED_DPS");
+    expect(preferredRoleForClass("WARLOCK")).toBe("RANGED_DPS");
+    expect(preferredRoleForClass("HUNTER")).toBe("RANGED_DPS");
+    expect(preferredRoleForClass("ROGUE")).toBe("MELEE_DPS");
+  });
+
+  it("hybrids prefer Tank/Healer over inventing Melee/Ranged DPS", () => {
+    expect(preferredRoleForClass("SHAMAN")).toBe("HEALER");
+    expect(preferredRoleForClass("PRIEST")).toBe("HEALER");
+    expect(preferredRoleForClass("DRUID")).toBe("TANK");
+    expect(preferredRoleForClass("PALADIN")).toBe("TANK");
+    expect(preferredRoleForClass("MONK")).toBe("TANK");
+    expect(preferredRoleForClass("DEMON_HUNTER")).toBe("TANK");
+    expect(preferredRoleForClass("WARRIOR")).toBe("TANK");
+    expect(preferredRoleForClass("DEATH_KNIGHT")).toBe("TANK");
+    expect(preferredRoleForClass("EVOKER")).toBe("HEALER");
+  });
+
+  it("class switch reconciles role when previous role is invalid", () => {
+    expect(preferredRoleForClass("ROGUE", "RANGED_DPS")).toBe("MELEE_DPS");
+    expect(preferredRoleForClass("MAGE", "MELEE_DPS")).toBe("RANGED_DPS");
+    expect(preferredRoleForClass("SHAMAN", "TANK")).toBe("HEALER");
+    expect(preferredRoleForClass("PALADIN", "RANGED_DPS")).toBe("TANK");
+  });
+
+  it("class switch keeps a still-valid preferred role", () => {
+    expect(preferredRoleForClass("SHAMAN", "HEALER")).toBe("HEALER");
+    expect(preferredRoleForClass("SHAMAN", "MELEE_DPS")).toBe("MELEE_DPS");
+    expect(preferredRoleForClass("HUNTER", "MELEE_DPS")).toBe("MELEE_DPS");
+    expect(preferredRoleForClass("HUNTER", "RANGED_DPS")).toBe("RANGED_DPS");
+  });
+
+  it("never returns legacy generic DPS", () => {
+    for (const wowClass of [
+      "MAGE",
+      "WARLOCK",
+      "HUNTER",
+      "ROGUE",
+      "SHAMAN",
+      "PRIEST",
+      "DRUID",
+      "PALADIN",
+      "WARRIOR",
+      "MONK",
+      "DEMON_HUNTER",
+      "DEATH_KNIGHT",
+      "EVOKER",
+    ] as const) {
+      expect(preferredRoleForClass(wowClass)).not.toBe("DPS");
+      expect(preferredRoleForClass(wowClass, "DPS")).not.toBe("DPS");
+    }
   });
 
   it("E. BOOSTER → LOOTBUDDY clears role", () => {
@@ -73,15 +131,15 @@ describe("external booster staging helpers", () => {
   });
 
   it("F. LOOTBUDDY → BOOSTER assigns a valid preferred role", () => {
-    expect(roleAfterTypeChange("BOOSTER", "ROGUE", null)).toBe("DPS");
+    expect(roleAfterTypeChange("BOOSTER", "ROGUE", null)).toBe("MELEE_DPS");
     const { next, error } = applyStagedExternalBoosterEdit(stagedFromOriginal(), "id-c", {
       name: "Charlie",
       wowClass: "ROGUE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "MELEE_DPS",
     });
     expect(error).toBeNull();
-    expect(next[2]).toMatchObject({ key: "id-c", participationType: "BOOSTER", role: "DPS" });
+    expect(next[2]).toMatchObject({ key: "id-c", participationType: "BOOSTER", role: "MELEE_DPS" });
   });
 
   it("G. invalid edited name rejects Apply and leaves staged unchanged", () => {
@@ -106,7 +164,7 @@ describe("external booster staging helpers", () => {
       name: "BravoTwo",
       wowClass: "WARLOCK",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
     });
     expect(next.map((row) => row.key)).toEqual(["id-a", "id-b", "id-c"]);
     expect(next[1]!.name).toBe("BravoTwo");
@@ -125,7 +183,7 @@ describe("external booster staging helpers", () => {
       name: "Bravo2",
       wowClass: "MAGE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
     });
     // Helpers allow sequential applies; the dialog prevents concurrent edit UI.
     expect(second.next.map((row) => row.name)).toEqual(["Alpha2", "Bravo2", "Charlie"]);
@@ -166,11 +224,11 @@ describe("external booster staging helpers", () => {
   it("O. Add still works", () => {
     const next = appendStagedExternalBooster(
       stagedFromOriginal(),
-      { name: "Delta", wowClass: "HUNTER", participationType: "BOOSTER", role: "DPS" },
+      { name: "Delta", wowClass: "HUNTER", participationType: "BOOSTER", role: "RANGED_DPS" },
       "new-key",
     );
     expect(next).toHaveLength(4);
-    expect(next[3]).toMatchObject({ key: "new-key", name: "Delta", role: "DPS" });
+    expect(next[3]).toMatchObject({ key: "new-key", name: "Delta", role: "RANGED_DPS" });
   });
 
   it("P. Save payload is the final edited values without keys", () => {
@@ -182,7 +240,7 @@ describe("external booster staging helpers", () => {
     });
     expect(stagedExternalBoostersForSave(next)).toEqual([
       { name: "AlphaFinal", wowClass: "PALADIN", participationType: "LOOTBUDDY", role: null },
-      { name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+      { name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
       { name: "Charlie", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null },
     ]);
   });
@@ -196,6 +254,36 @@ describe("external booster staging helpers", () => {
         role: "HEALER",
       }),
     ).toMatch(/cannot play/);
+  });
+
+  it("R. server-side validation rejects legacy generic DPS even if a stale client submits it", () => {
+    expect(
+      externalBoosterInputError({
+        name: "dawn",
+        wowClass: "MAGE",
+        participationType: "BOOSTER",
+        role: "DPS",
+      }),
+    ).toMatch(/generic DPS|Melee DPS|Ranged DPS/i);
+    expect(
+      externalBoosterInputError({
+        name: "dawn",
+        wowClass: "ROGUE",
+        participationType: "BOOSTER",
+        role: "DPS",
+      }),
+    ).not.toBeNull();
+  });
+
+  it("S. submitted pure-DPS staging rows use concrete subtypes", () => {
+    const staged = appendStagedExternalBooster(
+      [],
+      { name: "dawn", wowClass: "MAGE", participationType: "BOOSTER", role: preferredRoleForClass("MAGE") },
+      "k1",
+    );
+    expect(stagedExternalBoostersForSave(staged)).toEqual([
+      { name: "dawn", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
+    ]);
   });
 });
 
@@ -217,5 +305,19 @@ describe("ExternalBoostersDialog markup", () => {
     expect(html).toContain("Lootbuddy");
     expect(html).toContain(">Add<");
     expect(html).toContain(">Save<");
+  });
+
+  it("B. add form initial class is Mage with Ranged DPS selected (never generic DPS)", () => {
+    const html = renderToStaticMarkup(
+      createElement(ExternalBoostersDialog, {
+        runId: "run-1",
+        rosterVersion: 1,
+        boosters: [],
+        onClose: () => {},
+      }),
+    );
+    expect(html).toMatch(/<option[^>]*value="MAGE"[^>]*selected/);
+    expect(html).toMatch(/<option[^>]*value="RANGED_DPS"[^>]*selected/);
+    expect(html).not.toMatch(/value="DPS"/);
   });
 });

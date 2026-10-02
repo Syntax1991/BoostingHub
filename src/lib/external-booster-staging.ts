@@ -8,19 +8,36 @@ import {
   type ExternalBooster,
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
-import { rolesForClass } from "@/lib/wow-specializations";
+import { isDpsRole } from "@/lib/character-roles";
+import { defaultConcreteDpsRoleForClass, rolesForClass } from "@/lib/wow-specializations";
 import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
 
 export type StagedExternalBooster = ExternalBoosterInput & { key: string };
 
-/** Prefer current role when still valid; otherwise DPS when available, else first valid role. */
+/**
+ * Role to prefer for a class when only class is known (external boosters).
+ * - Keeps `preferred` when it is still valid for the class.
+ * - Pure DPS classes (Mage, Rogue, Hunter, …): unambiguous concrete subtype
+ *   via `defaultConcreteDpsRoleForClass` (never generic DPS).
+ * - Hybrids (Tank/Healer capable): never invent Melee/Ranged DPS — fall back to
+ *   the first Tank/Healer capability so the Raid Lead must explicitly pick DPS
+ *   when that is the intent.
+ */
 export function preferredRoleForClass(
   wowClass: WowClass,
   preferred: CharacterRole | null | undefined = null,
 ): CharacterRole {
   const roles = rolesForClass(wowClass);
-  if (preferred && roles.includes(preferred)) return preferred;
-  return roles.includes("DPS") ? "DPS" : roles[0]!;
+  if (preferred && (roles as readonly CharacterRole[]).includes(preferred)) return preferred;
+
+  const dpsOnly = roles.length > 0 && roles.every((role) => isDpsRole(role));
+  if (dpsOnly) {
+    const concreteDps = defaultConcreteDpsRoleForClass(wowClass);
+    return roles.includes(concreteDps) ? concreteDps : roles[0]!;
+  }
+
+  const nonDps = roles.find((role) => role === "TANK" || role === "HEALER");
+  return nonDps ?? roles[0]!;
 }
 
 /** Role after a class change while staying BOOSTER (LOOTBUDDY keeps null). */

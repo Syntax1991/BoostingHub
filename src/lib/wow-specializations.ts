@@ -1,83 +1,85 @@
 import type { CharacterRole, WowClass } from "@/models/enums";
 import { WOW_CLASSES } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
+import type { ConcreteCharacterRole } from "@/lib/character-roles";
+import { CONCRETE_CHARACTER_ROLES, isConcreteCharacterRole } from "@/lib/character-roles";
 
 /**
  * Retail specializations used to prevent impossible class/spec/role combinations.
  * This is a domain catalog, not Blizzard-synced talent data.
- * primaryRole is derived from specialization; BoosterAccess may still approve
- * additional roles for the same character.
+ * Spec → concrete roster role is authoritative; Character.playableSpecs declare
+ * which of these the player can actually play.
  */
 export type WowSpecialization = {
   name: string;
-  role: CharacterRole;
+  role: ConcreteCharacterRole;
 };
 
 export const WOW_SPECIALIZATIONS: Record<WowClass, readonly WowSpecialization[]> = {
   DEATH_KNIGHT: [
     { name: "Blood", role: "TANK" },
-    { name: "Frost", role: "DPS" },
-    { name: "Unholy", role: "DPS" },
+    { name: "Frost", role: "MELEE_DPS" },
+    { name: "Unholy", role: "MELEE_DPS" },
   ],
   DEMON_HUNTER: [
-    { name: "Havoc", role: "DPS" },
+    { name: "Havoc", role: "MELEE_DPS" },
     { name: "Vengeance", role: "TANK" },
-    { name: "Devourer", role: "DPS" },
+    { name: "Devourer", role: "RANGED_DPS" },
   ],
   DRUID: [
-    { name: "Balance", role: "DPS" },
-    { name: "Feral", role: "DPS" },
+    { name: "Balance", role: "RANGED_DPS" },
+    { name: "Feral", role: "MELEE_DPS" },
     { name: "Guardian", role: "TANK" },
     { name: "Restoration", role: "HEALER" },
   ],
   EVOKER: [
-    { name: "Devastation", role: "DPS" },
+    { name: "Devastation", role: "RANGED_DPS" },
     { name: "Preservation", role: "HEALER" },
-    { name: "Augmentation", role: "DPS" },
+    { name: "Augmentation", role: "RANGED_DPS" },
   ],
   HUNTER: [
-    { name: "Beast Mastery", role: "DPS" },
-    { name: "Marksmanship", role: "DPS" },
-    { name: "Survival", role: "DPS" },
+    { name: "Beast Mastery", role: "RANGED_DPS" },
+    { name: "Marksmanship", role: "RANGED_DPS" },
+    { name: "Survival", role: "MELEE_DPS" },
   ],
   MAGE: [
-    { name: "Arcane", role: "DPS" },
-    { name: "Fire", role: "DPS" },
-    { name: "Frost", role: "DPS" },
+    { name: "Arcane", role: "RANGED_DPS" },
+    { name: "Fire", role: "RANGED_DPS" },
+    { name: "Frost", role: "RANGED_DPS" },
   ],
   MONK: [
     { name: "Brewmaster", role: "TANK" },
     { name: "Mistweaver", role: "HEALER" },
-    { name: "Windwalker", role: "DPS" },
+    { name: "Windwalker", role: "MELEE_DPS" },
   ],
   PALADIN: [
     { name: "Holy", role: "HEALER" },
     { name: "Protection", role: "TANK" },
-    { name: "Retribution", role: "DPS" },
+    { name: "Retribution", role: "MELEE_DPS" },
   ],
   PRIEST: [
     { name: "Discipline", role: "HEALER" },
     { name: "Holy", role: "HEALER" },
-    { name: "Shadow", role: "DPS" },
+    { name: "Shadow", role: "RANGED_DPS" },
   ],
   ROGUE: [
-    { name: "Assassination", role: "DPS" },
-    { name: "Outlaw", role: "DPS" },
-    { name: "Subtlety", role: "DPS" },
+    { name: "Assassination", role: "MELEE_DPS" },
+    { name: "Outlaw", role: "MELEE_DPS" },
+    { name: "Subtlety", role: "MELEE_DPS" },
   ],
   SHAMAN: [
-    { name: "Elemental", role: "DPS" },
-    { name: "Enhancement", role: "DPS" },
+    { name: "Elemental", role: "RANGED_DPS" },
+    { name: "Enhancement", role: "MELEE_DPS" },
     { name: "Restoration", role: "HEALER" },
   ],
   WARLOCK: [
-    { name: "Affliction", role: "DPS" },
-    { name: "Demonology", role: "DPS" },
-    { name: "Destruction", role: "DPS" },
+    { name: "Affliction", role: "RANGED_DPS" },
+    { name: "Demonology", role: "RANGED_DPS" },
+    { name: "Destruction", role: "RANGED_DPS" },
   ],
   WARRIOR: [
-    { name: "Arms", role: "DPS" },
-    { name: "Fury", role: "DPS" },
+    { name: "Arms", role: "MELEE_DPS" },
+    { name: "Fury", role: "MELEE_DPS" },
     { name: "Protection", role: "TANK" },
   ],
 };
@@ -119,6 +121,11 @@ export function defaultDpsAttackTypeForClass(wowClass: WowClass): DpsAttackType 
   return ranged * 2 > types.length ? "RANGED" : "MELEE";
 }
 
+/** Concrete DPS role when only class is known (external boosters). Never generic DPS. */
+export function defaultConcreteDpsRoleForClass(wowClass: WowClass): "MELEE_DPS" | "RANGED_DPS" {
+  return defaultDpsAttackTypeForClass(wowClass) === "RANGED" ? "RANGED_DPS" : "MELEE_DPS";
+}
+
 /** Null for a non-DPS specialization (TANK/HEALER) or an unrecognized spec name. */
 export function attackTypeForSpecialization(wowClass: WowClass, specialization: string | null): DpsAttackType | null {
   if (!specialization) return null;
@@ -142,8 +149,20 @@ export function findSpecialization(
   );
 }
 
-export function roleForSpecialization(wowClass: WowClass, specialization: string): CharacterRole | null {
+/** Concrete roster role for a specialization — never generic DPS. */
+export function rosterRoleForSpecialization(
+  wowClass: WowClass,
+  specialization: string,
+): ConcreteCharacterRole | null {
   return findSpecialization(wowClass, specialization)?.role ?? null;
+}
+
+/**
+ * Spec → role. Returns the concrete catalog role (MELEE_DPS / RANGED_DPS / …).
+ * Prefer rosterRoleForSpecialization when assigning to a roster.
+ */
+export function roleForSpecialization(wowClass: WowClass, specialization: string): CharacterRole | null {
+  return rosterRoleForSpecialization(wowClass, specialization);
 }
 
 /**
@@ -217,7 +236,7 @@ export function knownSpecializationIds(): number[] {
 export function resolveClassSpecialization(
   wowClass: WowClass,
   specialization: string,
-): { specialization: string; primaryRole: CharacterRole } {
+): { specialization: string; primaryRole: ConcreteCharacterRole } {
   const match = findSpecialization(wowClass, specialization);
   if (!match) {
     throw new DomainError(
@@ -228,11 +247,13 @@ export function resolveClassSpecialization(
   return { specialization: match.name, primaryRole: match.role };
 }
 
-/** Roles this class can actually perform. BoosterAccess may approve any of these, not only primaryRole. */
-export function rolesForClass(wowClass: WowClass): CharacterRole[] {
-  return [...new Set(WOW_SPECIALIZATIONS[wowClass].map((entry) => entry.role))];
+/** Concrete roles this class can perform (from catalog specs). */
+export function rolesForClass(wowClass: WowClass): ConcreteCharacterRole[] {
+  const roles = new Set(WOW_SPECIALIZATIONS[wowClass].map((entry) => entry.role));
+  return CONCRETE_CHARACTER_ROLES.filter((role) => roles.has(role));
 }
 
 export function isRoleValidForClass(wowClass: WowClass, role: CharacterRole): boolean {
+  if (!isConcreteCharacterRole(role)) return false;
   return rolesForClass(wowClass).includes(role);
 }

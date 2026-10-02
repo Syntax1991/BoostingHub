@@ -1,6 +1,7 @@
 import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
 import { CHARACTER_ROLES, WOW_CLASSES } from "@/models/enums";
 import { asString, mapCharacterRole, mapParticipation, mapWowClass } from "@/lib/persistence";
+import { isLegacyGenericDps } from "@/lib/character-roles";
 import { isRoleValidForClass } from "@/lib/wow-specializations";
 
 /**
@@ -60,6 +61,9 @@ export function externalBoosterInputError(input: ExternalBoosterInput): string |
   }
   if (!input.role || !(CHARACTER_ROLES as readonly string[]).includes(input.role)) {
     return "External booster needs a role.";
+  }
+  if (isLegacyGenericDps(input.role)) {
+    return "Choose Melee DPS or Ranged DPS — generic DPS is not allowed.";
   }
   if (!isRoleValidForClass(input.wowClass, input.role)) {
     return `${name} cannot play that role on this class.`;

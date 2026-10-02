@@ -178,8 +178,8 @@ describe("booster access transitions", () => {
   });
 
   it("does not treat mage as a tank class", () => {
-    expect(rolesForClass("MAGE")).toEqual(["DPS"]);
-    expect(rolesForClass("PALADIN").sort()).toEqual(["DPS", "HEALER", "TANK"].sort());
+    expect(rolesForClass("MAGE")).toEqual(["RANGED_DPS"]);
+    expect(rolesForClass("PALADIN").sort()).toEqual(["HEALER", "MELEE_DPS", "TANK"].sort());
   });
 });
 

@@ -141,7 +141,7 @@ beforeAll(async () => {
     region: "EU",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: 700,
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -232,13 +232,13 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
 
     const result = await signupService.setCharacterOffers(target, {
       runId: runA,
-      offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
+      offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }],
     });
     expect(result.created + result.reactivated).toBeGreaterThan(0);
 
     const rows = await signupRepository.listByRunAndUser(runA, ids.target);
     const activeRow = rows.find((row) => row.character?.id === saved && row.status !== "WITHDRAWN");
-    expect(activeRow?.offeredRoles).toEqual(["DPS"]);
+    expect(activeRow?.offeredRoles).toEqual(["RANGED_DPS"]);
 
     // Still eligible and still shows the save after being offered — offering
     // is completely independent of eligibility.
@@ -250,7 +250,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
   it("a saved, draft-selected Character publishes normally — save context survives into the published roster view", async () => {
     const runA = await createOpenRun(futureIso(410));
     await markSaved(runA, saved);
-    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }] });
 
     const view = await rosterService.getRosterManagementView(lead, runA);
     const candidate = rosterBoosters(view).find((item) => item.character?.id === saved);
@@ -284,7 +284,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     expect(optionsB.booster.eligible.some((item) => item.characterId === saved)).toBe(true);
 
     // Reserve on runA via draft selection.
-    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] });
+    await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }] });
     const viewA = await rosterService.getRosterManagementView(lead, runA);
     const signupA = rosterBoosters(viewA).find((item) => item.character?.id === saved)!;
     await rosterService.setDraftSelection(lead, { runId: runA, signupId: signupA.id, selected: true, version: viewA.roster.version });
@@ -292,7 +292,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     // Now runB must block on the cross-run reservation reason, not lockout —
     // even though the Character is ALSO saved on runB's exact raid/difficulty/reset.
     await expectDomainCode(
-      signupService.setCharacterOffers(target, { runId: runB, offers: [{ characterId: saved, offeredRoles: ["DPS"] }] }),
+      signupService.setCharacterOffers(target, { runId: runB, offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }] }),
       "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
     );
 
@@ -325,7 +325,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
 
       await signupService.setCharacterOffers(target, {
         runId: tuesday,
-        offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
+        offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }],
       });
       const tuesdayView = await rosterService.getRosterManagementView(lead, tuesday);
       const candidate = rosterBoosters(tuesdayView).find((item) => item.character?.id === saved);
@@ -347,7 +347,7 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
 
       await signupService.setCharacterOffers(target, {
         runId,
-        offers: [{ characterId: saved, offeredRoles: ["DPS"] }],
+        offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }],
       });
       const view = await rosterService.getRosterManagementView(lead, runId);
       expect(rosterBoosters(view).find((item) => item.character?.id === saved)?.contentSaves[0]?.raidSave).toEqual({

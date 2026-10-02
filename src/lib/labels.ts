@@ -54,6 +54,9 @@ export const CLASS_LABELS: Record<WowClass, string> = {
 export const CHARACTER_ROLE_LABELS: Record<CharacterRole, string> = {
   TANK: "Tank",
   HEALER: "Healer",
+  MELEE_DPS: "Melee DPS",
+  RANGED_DPS: "Ranged DPS",
+  /** Legacy generic DPS — display only for historic rows. */
   DPS: "DPS",
 };
 

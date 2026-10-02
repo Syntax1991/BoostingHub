@@ -1,3 +1,4 @@
+import { isDpsRole } from "@/lib/character-roles";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
 import type { CharacterRole } from "@/models/enums";
 
@@ -30,9 +31,14 @@ export function wclPercentileColor(pct: number): string {
   return "#9d9d9d";
 }
 
-/** Metric-oriented label: Healer → HPS, DPS → DPS, Tank → Tank. */
+/** Metric-oriented label: Healer → HPS, DPS subtypes → DPS, Tank → Tank. */
 export function wclMetricLabel(role: CharacterRole, specLabel: string | null): string {
-  const base = role === "HEALER" ? "HPS" : role === "DPS" ? "DPS" : CHARACTER_ROLE_LABELS.TANK;
+  const base =
+    role === "HEALER"
+      ? "HPS"
+      : role === "DPS" || role === "MELEE_DPS" || role === "RANGED_DPS"
+        ? "DPS"
+        : CHARACTER_ROLE_LABELS.TANK;
   return specLabel ? `${base} (${specLabel})` : base;
 }
 
@@ -69,6 +75,13 @@ export function formatWclPerformanceRaidLine(segment: WclPerformanceRaidSegment)
  * Roster columns repeat multi-role signups — keep only the column's role.
  * Empty when that role has no parses (do not fall back to another metric).
  */
+function roleMatchesGroupColumn(role: CharacterRole, groupRole: CharacterRole): boolean {
+  if (role === groupRole) return true;
+  // Roster DPS column is a composition bucket covering concrete subtypes + legacy DPS.
+  if (groupRole === "DPS") return isDpsRole(role);
+  return false;
+}
+
 export function filterWclPerformanceForGroupRole(
   segments: WclPerformanceRaidSegment[],
   groupRole: CharacterRole | null,
@@ -77,7 +90,7 @@ export function filterWclPerformanceForGroupRole(
   return segments
     .map((segment) => ({
       ...segment,
-      roles: segment.roles.filter((role) => role.role === groupRole),
+      roles: segment.roles.filter((role) => roleMatchesGroupColumn(role.role, groupRole)),
     }))
     .filter((segment) => segment.roles.length > 0);
 }

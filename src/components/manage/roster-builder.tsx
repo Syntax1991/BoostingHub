@@ -38,6 +38,8 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
+import { isConcreteCharacterRole } from "@/lib/character-roles";
+import { countRolesByBucket, externalBoosterRosterBucket } from "@/lib/roster-role-buckets";
 import {
   filterWclPerformanceForGroupRole,
   compareByWclPerf,
@@ -241,6 +243,16 @@ function RosterBuilderEditor({
   );
   const liveComposition = liveValidation.composition;
 
+  const roleBreakdown = useMemo(() => {
+    const stagedRoles = domainSignups
+      .filter((signup) => stagedSelections.has(signup.id) && signup.participationType === "BOOSTER")
+      .map((signup) => stagedSelections.get(signup.id) ?? null);
+    const externalRoles = externalBoosters
+      .filter((booster) => booster.participationType === "BOOSTER")
+      .map((booster) => booster.role);
+    return countRolesByBucket([...stagedRoles, ...externalRoles]);
+  }, [domainSignups, stagedSelections, externalBoosters]);
+
   function isStagedSelected(signupId: string) {
     return stagedSelections.has(signupId);
   }
@@ -291,7 +303,9 @@ function RosterBuilderEditor({
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation === "LOOTBUDDY") return false;
     if (participation !== "ALL" && participation !== "BOOSTER") return false;
-    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) return false;
+    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) {
+      return false;
+    }
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
     if (backupFilter === "PRIMARY" && signup.isBackup) return false;
     const staged = isStagedSelected(signup.id);
@@ -320,7 +334,15 @@ function RosterBuilderEditor({
 
   const filteredTanks = sortByPerf(data.groups.tanks.filter(matchesProjection));
   const filteredHealers = sortByPerf(data.groups.healers.filter(matchesProjection));
-  const filteredDps = sortByPerf(data.groups.dps.filter(matchesProjection));
+  const filteredMeleeDps = sortByPerf(
+    (data.groups.meleeDps ?? []).filter(matchesProjection),
+  );
+  const filteredRangedDps = sortByPerf(
+    (data.groups.rangedDps ?? []).filter(matchesProjection),
+  );
+  const filteredLegacyDps = sortByPerf(
+    (data.groups.legacyDps ?? data.groups.dps.filter((s) => s.groupRole === "DPS")).filter(matchesProjection),
+  );
   const filteredLootbuddies = data.groups.lootbuddies.filter(matchesProjection);
   const uniqueFilteredBoosters = data.boosters.filter(matchesCanonicalBooster).length;
 
@@ -331,6 +353,8 @@ function RosterBuilderEditor({
   function toggleRoleCopy(signup: SignupRow, checked: boolean) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (signup.status === "WITHDRAWN") return;
+    // Historic generic DPS offers cannot be newly assigned — need a concrete role.
+    if (checked && signup.groupRole === "DPS") return;
     // Unselected schedule-conflicted Boosters cannot be newly staged.
     if (checked && !stagedSelections.has(signup.id) && (signup.scheduleConflicts?.length ?? 0) > 0) {
       return;
@@ -361,7 +385,9 @@ function RosterBuilderEditor({
 
   /** Reassigning a selected slot's role is its own edit — it never deselects the slot. */
   function assignRole(signup: SignupRow, role: CharacterRole) {
+    if (!isConcreteCharacterRole(role)) return;
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
+    if (!signup.offeredRoles.includes(role)) return;
     setError(null);
     setErrorCode(null);
     setStagedSelections((previous) => {
@@ -523,6 +549,12 @@ function RosterBuilderEditor({
           {/* Its own target, separate from the booster roles: a shortage here is never a DPS shortage. */}
           <CompositionMeter label="Lootbuddies" slot={liveComposition.lootbuddies} />
         </div>
+        <p className="border-t border-border px-4 py-3 text-xs text-muted">
+          Melee {roleBreakdown.meleeDps} · Ranged {roleBreakdown.rangedDps}
+          {roleBreakdown.legacyDps > 0 ? ` · Legacy DPS ${roleBreakdown.legacyDps}` : ""}
+          {" · "}
+          DPS total {roleBreakdown.dps} (target {liveComposition.dps.target})
+        </p>
       </Card>
 
       <ClassBuffChecker coverage={liveRaidBuffCoverage} />
@@ -540,7 +572,12 @@ function RosterBuilderEditor({
             />
           </label>
           <FilterSelect label="Participation" value={participation} onChange={setParticipation} options={["ALL", "BOOSTER", "LOOTBUDDY"]} />
-          <FilterSelect label="Role" value={roleFilter} onChange={setRoleFilter} options={["ALL", "TANK", "HEALER", "DPS"]} />
+          <FilterSelect
+            label="Role"
+            value={roleFilter}
+            onChange={setRoleFilter}
+            options={["ALL", "TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"]}
+          />
           <FilterSelect label="Offer" value={backupFilter} onChange={setBackupFilter} options={["ALL", "PRIMARY", "BACKUP"]} />
           <FilterSelect label="Draft" value={selectedFilter} onChange={setSelectedFilter} options={["ALL", "SELECTED", "UNSELECTED"]} />
           <FilterSelect
@@ -625,10 +662,12 @@ function RosterBuilderEditor({
         onAssignRole={assignRole}
       />
       <SignupSection
-        title="DPS"
-        empty="No DPS signups"
-        signups={filteredDps}
-        externals={externalBoosters.filter((booster) => booster.role === "DPS")}
+        title="Melee DPS"
+        empty="No melee DPS signups"
+        signups={filteredMeleeDps}
+        externals={externalBoosters.filter(
+          (booster) => externalBoosterRosterBucket(booster.role) === "MELEE_DPS",
+        )}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}
@@ -636,6 +675,37 @@ function RosterBuilderEditor({
         onToggle={toggleRoleCopy}
         onAssignRole={assignRole}
       />
+      <SignupSection
+        title="Ranged DPS"
+        empty="No ranged DPS signups"
+        signups={filteredRangedDps}
+        externals={externalBoosters.filter(
+          (booster) => externalBoosterRosterBucket(booster.role) === "RANGED_DPS",
+        )}
+        editing={editing}
+        locked={togglesLocked}
+        isRoleCopyChecked={isRoleCopyChecked}
+        stagedRole={stagedRole}
+        onToggle={toggleRoleCopy}
+        onAssignRole={assignRole}
+      />
+      {filteredLegacyDps.length > 0 ||
+      externalBoosters.some((booster) => externalBoosterRosterBucket(booster.role) === "LEGACY_DPS") ? (
+        <SignupSection
+          title="Legacy DPS"
+          empty="No legacy DPS signups"
+          signups={filteredLegacyDps}
+          externals={externalBoosters.filter(
+            (booster) => externalBoosterRosterBucket(booster.role) === "LEGACY_DPS",
+          )}
+          editing={false}
+          locked
+          isRoleCopyChecked={isRoleCopyChecked}
+          stagedRole={stagedRole}
+          onToggle={toggleRoleCopy}
+          onAssignRole={assignRole}
+        />
+      ) : null}
       <SignupSection
         title="Lootbuddies"
         empty="No lootbuddy signups"
@@ -786,6 +856,8 @@ function RosterBuilderEditor({
           )}
           <p>
             {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
+            {roleBreakdown.meleeDps} Melee · {roleBreakdown.rangedDps} Ranged
+            {roleBreakdown.legacyDps > 0 ? ` · ${roleBreakdown.legacyDps} Legacy DPS` : ""} ·{" "}
             {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies.selected} Lootbuddies
           </p>
           <p>
@@ -954,7 +1026,10 @@ function SignupRowCard({
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
-  const needsRoleChoice = signup.participationType === "BOOSTER" && signup.offeredRoles.length > 1;
+  const needsRoleChoice =
+    signup.participationType === "BOOSTER" &&
+    signup.offeredRoles.filter(isConcreteCharacterRole).length > 1;
+  const concreteOfferedRoles = signup.offeredRoles.filter(isConcreteCharacterRole);
   const rowPointer = disabled ? "cursor-not-allowed" : "cursor-pointer";
   const wclForColumn = filterWclPerformanceForGroupRole(signup.wclPerformance, signup.groupRole);
   const showWcl = Boolean(character?.warcraftLogsId) || wclForColumn.length > 0;
@@ -1024,7 +1099,7 @@ function SignupRowCard({
               className="h-8 rounded-md border border-border bg-surface px-2 text-xs"
             >
               <option value="">Choose assigned role…</option>
-              {signup.offeredRoles.map((role) => (
+              {concreteOfferedRoles.map((role) => (
                 <option key={role} value={role}>
                   {CHARACTER_ROLE_LABELS[role]}
                 </option>

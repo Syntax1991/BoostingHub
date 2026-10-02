@@ -102,6 +102,7 @@ export function CharacterDetailsView({ data }: { data: Details }) {
                 region: data.region,
                 wowClass: data.wowClass,
                 specialization: data.specialization ?? "",
+                playableSpecs: data.playableSpecs ?? [],
                 itemLevel: data.itemLevel,
               }}
             />
@@ -129,6 +130,12 @@ export function CharacterDetailsView({ data }: { data: Details }) {
             <div>
               <dt className="text-muted">Specialization</dt>
               <dd className="mt-1">{data.specialization ?? "None"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Other playable specs</dt>
+              <dd className="mt-1">
+                {(data.playableSpecs?.length ?? 0) > 0 ? data.playableSpecs!.join(", ") : "None"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Primary role</dt>

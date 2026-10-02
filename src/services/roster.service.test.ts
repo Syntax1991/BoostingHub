@@ -638,6 +638,12 @@ describe("rosterService publishedRole snapshot", () => {
       createdAt: now,
       updatedAt: now,
     });
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: shamanId,
+      specialization: "Elemental",
+      createdAt: now,
+    });
 
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }));
     createdRunIds.push(run.id);
@@ -645,7 +651,7 @@ describe("rosterService publishedRole snapshot", () => {
 
     await signupService.setCharacterOffers(kael, {
       runId: run.id,
-      offers: [{ characterId: shamanId, offeredRoles: ["HEALER", "DPS"] }],
+      offers: [{ characterId: shamanId, offeredRoles: ["HEALER", "RANGED_DPS"] }],
     });
     const signup = (await signupRepository.listByRunAndUser(run.id, ids.kael)).find(
       (row) => row.status === "PENDING",
@@ -654,10 +660,14 @@ describe("rosterService publishedRole snapshot", () => {
     let view = await rosterService.getRosterManagementView(thorne, run.id);
     // Multi-role offer projects into every offered role section (visual duplication).
     expect(view.groups.healers.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.groups.rangedDps.filter((item) => item.id === signup.id)).toHaveLength(1);
+    expect(view.groups.meleeDps.filter((item) => item.id === signup.id)).toHaveLength(0);
+    expect(view.groups.legacyDps.filter((item) => item.id === signup.id)).toHaveLength(0);
     expect(view.groups.dps.filter((item) => item.id === signup.id)).toHaveLength(1);
     expect(view.groups.tanks.filter((item) => item.id === signup.id)).toHaveLength(0);
     expect(view.groups.healers.find((item) => item.id === signup.id)?.groupRole).toBe("HEALER");
-    expect(view.groups.dps.find((item) => item.id === signup.id)?.groupRole).toBe("DPS");
+    expect(view.groups.rangedDps.find((item) => item.id === signup.id)?.groupRole).toBe("RANGED_DPS");
+    expect(view.groups.dps.find((item) => item.id === signup.id)?.groupRole).toBe("RANGED_DPS");
     // Domain identity remains one signup.
     expect(rosterBoosters(view).filter((item) => item.id === signup.id)).toHaveLength(1);
 
@@ -695,11 +705,11 @@ describe("rosterService publishedRole snapshot", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
       version: view.roster.version,
-      selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signup.id, selectedRole: "RANGED_DPS" }],
     });
 
     const draft = await rosterRepository.findByRunId(run.id);
-    expect(draft?.selections.find((s) => s.signupId === signup.id)?.selectedRole).toBe("DPS");
+    expect(draft?.selections.find((s) => s.signupId === signup.id)?.selectedRole).toBe("RANGED_DPS");
     live = await signupRepository.findById(signup.id);
     expect(live?.publishedRole).toBe("HEALER");
     expect((await rosterService.getPublishedRosterView(run.id))?.members.find((m) => m.signupId === signup.id)?.selectedRole).toBe(
@@ -717,9 +727,9 @@ describe("rosterService publishedRole snapshot", () => {
       acknowledgeWarnings: true,
     });
     live = await signupRepository.findById(signup.id);
-    expect(live?.publishedRole).toBe("DPS");
+    expect(live?.publishedRole).toBe("RANGED_DPS");
     expect((await rosterService.getPublishedRosterView(run.id))?.members.find((m) => m.signupId === signup.id)?.selectedRole).toBe(
-      "DPS",
+      "RANGED_DPS",
     );
 
     const detailAfter = await runDetailService.getRunDetail(thorne, run.id);
@@ -750,6 +760,18 @@ describe("rosterService publishedRole snapshot", () => {
       createdAt: now,
       updatedAt: now,
     });
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: paladinId,
+      specialization: "Protection",
+      createdAt: now,
+    });
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: paladinId,
+      specialization: "Retribution",
+      createdAt: now,
+    });
 
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }));
     createdRunIds.push(run.id);
@@ -757,7 +779,7 @@ describe("rosterService publishedRole snapshot", () => {
 
     await signupService.setCharacterOffers(kael, {
       runId: run.id,
-      offers: [{ characterId: paladinId, offeredRoles: ["TANK", "HEALER", "DPS"] }],
+      offers: [{ characterId: paladinId, offeredRoles: ["TANK", "HEALER", "MELEE_DPS"] }],
     });
     const signup = (await signupRepository.listByRunAndUser(run.id, ids.kael)).find(
       (row) => row.status === "PENDING",
@@ -792,10 +814,10 @@ describe("rosterService publishedRole snapshot", () => {
     const kael = asUser(ids.kael, "Kael Stormeye");
     const now = new Date().toISOString();
 
-    const defs: Array<{ name: string; wowClass: "MAGE" | "PRIEST" | "SHAMAN"; roles: Array<"TANK" | "HEALER" | "DPS">; primary: "DPS" | "HEALER" }> = [
-      { name: "CountA", wowClass: "MAGE", roles: ["DPS"], primary: "DPS" },
+    const defs: Array<{ name: string; wowClass: "MAGE" | "PRIEST" | "SHAMAN"; roles: Array<"TANK" | "HEALER" | "RANGED_DPS" | "RANGED_DPS">; primary: "RANGED_DPS" | "RANGED_DPS" | "HEALER" }> = [
+      { name: "CountA", wowClass: "MAGE", roles: ["RANGED_DPS"], primary: "RANGED_DPS" },
       { name: "CountB", wowClass: "PRIEST", roles: ["HEALER"], primary: "HEALER" },
-      { name: "CountC", wowClass: "SHAMAN", roles: ["HEALER", "DPS"], primary: "HEALER" },
+      { name: "CountC", wowClass: "SHAMAN", roles: ["HEALER", "RANGED_DPS"], primary: "HEALER" },
     ];
     const characterIds: string[] = [];
     for (const def of defs) {
@@ -811,13 +833,22 @@ describe("rosterService publishedRole snapshot", () => {
         normalizedRealm: "antonidas",
         region: "EU",
         wowClass: def.wowClass,
-        specialization: def.primary === "HEALER" ? "Restoration" : "Frost",
+        specialization:
+          def.wowClass === "MAGE" ? "Frost" : def.wowClass === "PRIEST" ? "Holy" : "Restoration",
         primaryRole: def.primary,
         itemLevel: 700,
         isActive: true,
         createdAt: now,
         updatedAt: now,
       });
+      if (def.wowClass === "SHAMAN" && def.roles.includes("RANGED_DPS")) {
+        await orm.CharacterPlayableSpec.create({
+          id: crypto.randomUUID(),
+          characterId,
+          specialization: "Elemental",
+          createdAt: now,
+        });
+      }
     }
 
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 2, desiredDpsCount: 2 }));
@@ -832,8 +863,91 @@ describe("rosterService publishedRole snapshot", () => {
     const view = await rosterService.getRosterManagementView(thorne, run.id);
     expect(view.boosters).toHaveLength(3);
     expect(view.groups.healers).toHaveLength(2);
+    expect(view.groups.rangedDps).toHaveLength(2);
+    expect(view.groups.meleeDps).toHaveLength(0);
+    expect(view.groups.legacyDps).toHaveLength(0);
     expect(view.groups.dps).toHaveLength(2);
     expect(view.groups.tanks).toHaveLength(0);
     expect(view.groups.healers.length + view.groups.dps.length).toBe(4);
+  });
+
+  it("rejects generic DPS assignment and buckets concrete external boosters", async () => {
+    const thorne = asUser(ids.thorne, "Thorne Ironvein", "RAID_LEAD");
+    const kael = asUser(ids.kael, "Kael Stormeye");
+    const now = new Date().toISOString();
+    const mageId = crypto.randomUUID();
+    createdCharacterIds.push(mageId);
+    await orm.Character.create({
+      id: mageId,
+      userId: ids.kael,
+      name: "Synmage",
+      realm: "Antonidas",
+      normalizedName: "synmage",
+      normalizedRealm: "antonidas",
+      region: "EU",
+      wowClass: "MAGE",
+      specialization: "Fire",
+      primaryRole: "RANGED_DPS",
+      itemLevel: 700,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const run = await runService.createRun(
+      thorne,
+      venomousCreateInput({
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        venomousPlannedBossCount: 8,
+        scheduledStartAt: new Date(Date.now() + 16 * 24 * 60 * 60 * 1000).toISOString(),
+        desiredTankCount: 0,
+        desiredHealerCount: 0,
+        desiredDpsCount: 2,
+      }),
+    );
+    createdRunIds.push(run.id);
+    await runService.openRun(thorne, run.id);
+
+    await signupService.setCharacterOffers(kael, {
+      runId: run.id,
+      offers: [{ characterId: mageId, offeredRoles: ["RANGED_DPS"] }],
+    });
+    const signup = (await signupRepository.listByRunAndUser(run.id, ids.kael)).find(
+      (row) => row.status === "PENDING",
+    )!;
+    let view = await rosterService.getRosterManagementView(thorne, run.id);
+
+    await expect(
+      rosterService.saveDraftSelection(thorne, {
+        runId: run.id,
+        version: view.roster.version,
+        selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
+
+    await rosterService.saveDraftSelection(thorne, {
+      runId: run.id,
+      version: view.roster.version,
+      selections: [{ signupId: signup.id, selectedRole: "RANGED_DPS" }],
+    });
+    view = await rosterService.getRosterManagementView(thorne, run.id);
+    await rosterService.saveExternalBoosters(thorne, {
+      runId: run.id,
+      version: view.roster.version,
+      externalBoosters: [
+        { name: "dawn", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
+        { name: "shadow", wowClass: "ROGUE", participationType: "BOOSTER", role: "MELEE_DPS" },
+      ],
+    });
+    view = await rosterService.getRosterManagementView(thorne, run.id);
+    expect(view.roster.externalBoosters.map((b) => [b.name, b.role])).toEqual([
+      ["dawn", "RANGED_DPS"],
+      ["shadow", "MELEE_DPS"],
+    ]);
+    expect(view.summary.rangedDps).toBe(2);
+    expect(view.summary.meleeDps).toBe(1);
+    expect(view.summary.legacyDps).toBe(0);
+    expect(view.summary.dps).toBe(3);
   });
 });

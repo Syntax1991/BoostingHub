@@ -49,7 +49,11 @@ export const WOW_CLASSES = [
 ] as const;
 export type WowClass = (typeof WOW_CLASSES)[number];
 
-export const CHARACTER_ROLES = ["TANK", "HEALER", "DPS"] as const;
+/**
+ * Roster / signup roles. MELEE_DPS and RANGED_DPS are authoritative for new
+ * writes. DPS is legacy-only (historic rows); never invent a subtype from it.
+ */
+export const CHARACTER_ROLES = ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS", "DPS"] as const;
 export type CharacterRole = (typeof CHARACTER_ROLES)[number];
 
 export const WOW_REGIONS = ["EU", "US"] as const;

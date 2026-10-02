@@ -336,7 +336,7 @@ describe("characterService ownership and update", () => {
     });
     expect(updated.wowClass).toBe("PALADIN");
     expect(updated.specialization).toBe("Retribution");
-    expect(updated.primaryRole).toBe("DPS");
+    expect(updated.primaryRole).toBe("MELEE_DPS");
     // Item level is Blizzard-authoritative and untouched by edits.
     expect(updated.itemLevel).toBe(650);
 

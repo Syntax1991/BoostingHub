@@ -298,7 +298,7 @@ beforeAll(async () => {
     name: "NLeadDps",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
   });
 });
 
@@ -327,7 +327,7 @@ describe("notification roster publish events", () => {
   it("does not notify on draft selection; notifies newly selected on publish with PENDING/SKIPPED", async () => {
     const runId = await createPublishedReadyRun(2);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -382,7 +382,7 @@ describe("notification roster publish events", () => {
   it("dedupes republish for already-selected signups and notifies on reselection after drop", async () => {
     const runId = await createPublishedReadyRun(1);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -499,7 +499,7 @@ describe("notification roster publish events", () => {
   it("creates ROSTER_REMOVED when published SELECTED becomes NOT_SELECTED", async () => {
     const runId = await createPublishedReadyRun(1);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -656,7 +656,7 @@ describe("notification roster publish events", () => {
     });
     const runId = await createPublishedReadyRun(1);
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "RANGED_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -710,15 +710,15 @@ describe("external boosters (hand-added, not registered)", () => {
       version: view.roster.version,
       selections,
       externalBoosters: [
-        { name: "@dawn", wowClass: "MAGE", role: "DPS" },
-        { name: "rogue guy", wowClass: "ROGUE", role: "DPS" },
+        { name: "@dawn", wowClass: "MAGE", role: "RANGED_DPS" },
+        { name: "rogue guy", wowClass: "ROGUE", role: "MELEE_DPS" },
       ],
     });
 
     view = await rosterService.getRosterManagementView(lead, runId);
     expect(view.roster.externalBoosters.map(({ name, wowClass, role }) => ({ name, wowClass, role }))).toEqual([
-      { name: "dawn", wowClass: "MAGE", role: "DPS" },
-      { name: "rogue guy", wowClass: "ROGUE", role: "DPS" },
+      { name: "dawn", wowClass: "MAGE", role: "RANGED_DPS" },
+      { name: "rogue guy", wowClass: "ROGUE", role: "MELEE_DPS" },
     ]);
     expect(view.composition.dps.selected).toBe(2);
 
@@ -736,8 +736,8 @@ describe("external boosters (hand-added, not registered)", () => {
 
     const published = await rosterService.getPublishedRosterView(runId);
     expect(published?.externalBoosters.map((booster) => [booster.name, booster.wowClass, booster.role])).toEqual([
-      ["dawn", "MAGE", "DPS"],
-      ["rogue guy", "ROGUE", "DPS"],
+      ["dawn", "MAGE", "RANGED_DPS"],
+      ["rogue guy", "ROGUE", "MELEE_DPS"],
     ]);
 
     const rosterEmbed = await discordSyncService.getRosterEmbedData(runId);
@@ -779,7 +779,7 @@ describe("external boosters (hand-added, not registered)", () => {
       runId,
       version: view.roster.version,
       selections,
-      externalBoosters: [{ name: "dawn", wowClass: "MAGE", role: "DPS" }],
+      externalBoosters: [{ name: "dawn", wowClass: "MAGE", role: "RANGED_DPS" }],
     });
     view = await rosterService.getRosterManagementView(lead, runId);
     await expect(
@@ -787,7 +787,7 @@ describe("external boosters (hand-added, not registered)", () => {
         runId,
         version: view.roster.version,
         selections,
-        externalBoosters: [{ name: "<@123>", wowClass: "MAGE", role: "DPS" }],
+        externalBoosters: [{ name: "<@123>", wowClass: "MAGE", role: "RANGED_DPS" }],
       }),
     ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
     await expect(
@@ -1026,7 +1026,7 @@ describe("External Boosters dialog (saved on their own)", () => {
       runId,
       version: view.roster.version,
       externalBoosters: [
-        { name: "@dawn", wowClass: "MAGE", role: "DPS" },
+        { name: "@dawn", wowClass: "MAGE", role: "RANGED_DPS" },
         { name: "holy", wowClass: "PRIEST", role: "HEALER" },
       ],
     });
@@ -1044,7 +1044,7 @@ describe("External Boosters dialog (saved on their own)", () => {
       rosterService.saveExternalBoosters(lead, {
         runId,
         version: after.roster.version,
-        externalBoosters: [{ name: "@everyone", wowClass: "MAGE", role: "DPS" }],
+        externalBoosters: [{ name: "@everyone", wowClass: "MAGE", role: "RANGED_DPS" }],
       }),
     ).rejects.toMatchObject({ code: "INVALID_ROSTER_SELECTION" });
     await expect(
@@ -1399,7 +1399,7 @@ describe("external lootbuddies", () => {
       version: view.roster.version,
       externalBoosters: [
         { name: "lootmage", wowClass: "MAGE", participationType: "LOOTBUDDY", role: null },
-        { name: "dawn", wowClass: "WARRIOR", participationType: "BOOSTER", role: "DPS" },
+        { name: "dawn", wowClass: "WARRIOR", participationType: "BOOSTER", role: "MELEE_DPS" },
       ],
     });
 

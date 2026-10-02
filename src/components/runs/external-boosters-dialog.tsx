@@ -59,7 +59,7 @@ export function ExternalBoostersDialog({
   const [name, setName] = useState("");
   const [wowClass, setWowClass] = useState<WowClass>("MAGE");
   const [kind, setKind] = useState<ParticipationType>("BOOSTER");
-  const [role, setRole] = useState<CharacterRole>("DPS");
+  const [role, setRole] = useState<CharacterRole>(() => preferredRoleForClass("MAGE"));
   const classRoles = rolesForClass(wowClass);
   const editClassRoles = editDraft ? rolesForClass(editDraft.wowClass) : [];
 
@@ -80,6 +80,13 @@ export function ExternalBoostersDialog({
   function changeClass(next: WowClass) {
     setWowClass(next);
     setRole((current) => preferredRoleForClass(next, current));
+  }
+
+  function changeKind(next: ParticipationType) {
+    setKind(next);
+    if (next === "BOOSTER") {
+      setRole((current) => preferredRoleForClass(wowClass, current));
+    }
   }
 
   function startEdit(booster: StagedExternalBooster) {
@@ -364,7 +371,7 @@ export function ExternalBoostersDialog({
             <span className="mb-1 block text-xs text-muted">Type</span>
             <select
               value={kind}
-              onChange={(event) => setKind(event.target.value as ParticipationType)}
+              onChange={(event) => changeKind(event.target.value as ParticipationType)}
               className="h-9 w-full rounded-md border border-border bg-surface-raised px-2"
               disabled={pending || editingKey !== null}
             >

@@ -11,6 +11,7 @@ import {
   prepareCharacterName,
   prepareRealmName,
 } from "@/lib/character-identity";
+import { normalizePlayableSpecs } from "@/lib/character-capabilities";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
@@ -36,6 +37,8 @@ export type CharacterWriteInput = {
   region: WowRegion;
   wowClass: WowClass;
   specialization: string;
+  /** Additional playable specs excluding primary. */
+  playableSpecs?: readonly string[];
   itemLevel: number | null;
 };
 
@@ -50,6 +53,7 @@ export type CharacterCreateFromBlizzardInput = {
   realm: string;
   region: WowRegion;
   specialization: string;
+  playableSpecs?: readonly string[];
 };
 
 function uniqueViolation(error: unknown): boolean {
@@ -174,6 +178,7 @@ export const characterService = {
           region: character.region,
           wowClass: character.wowClass,
           specialization: character.specialization,
+          playableSpecs: character.playableSpecs,
           primaryRole: character.primaryRole,
           itemLevel: character.itemLevel,
           isActive: character.isActive,
@@ -236,6 +241,7 @@ export const characterService = {
       wowClass: character.wowClass,
       specialization: character.specialization,
       primaryRole: character.primaryRole,
+      playableSpecs: character.playableSpecs,
       itemLevel: character.itemLevel,
       isActive: character.isActive,
       createdAt: character.createdAt,
@@ -264,6 +270,11 @@ export const characterService = {
   async createCharacter(user: AuthenticatedUser, input: CharacterWriteInput) {
     const identity = prepareIdentity(input);
     const spec = resolveClassSpecialization(input.wowClass, input.specialization);
+    const playableSpecs = normalizePlayableSpecs({
+      wowClass: input.wowClass,
+      primarySpecialization: spec.specialization,
+      playableSpecs: input.playableSpecs ?? [],
+    });
     await assertIdentityAvailable({
       userId: user.id,
       region: identity.region,
@@ -279,6 +290,7 @@ export const characterService = {
         wowClass: input.wowClass,
         specialization: spec.specialization,
         primaryRole: spec.primaryRole,
+        playableSpecs,
         itemLevel: input.itemLevel,
         isActive: true,
       });
@@ -339,6 +351,7 @@ export const characterService = {
       region: input.region,
       wowClass: resolved.wowClass,
       specialization: input.specialization,
+      playableSpecs: input.playableSpecs ?? [],
       itemLevel: resolved.itemLevel,
     });
   },
@@ -356,6 +369,11 @@ export const characterService = {
 
     const identity = prepareIdentity({ ...input, region: input.region });
     const spec = resolveClassSpecialization(character.wowClass, input.specialization);
+    const playableSpecs = normalizePlayableSpecs({
+      wowClass: character.wowClass,
+      primarySpecialization: spec.specialization,
+      playableSpecs: input.playableSpecs ?? [],
+    });
     // wowClass is taken from the stored row, not the write payload, so class
     // stays immutable even if a client forges a class field. Item level is
     // Blizzard-authoritative and is never part of an edit.
@@ -372,6 +390,7 @@ export const characterService = {
         ...identity,
         specialization: spec.specialization,
         primaryRole: spec.primaryRole,
+        playableSpecs,
       });
     } catch (error) {
       if (uniqueViolation(error)) {

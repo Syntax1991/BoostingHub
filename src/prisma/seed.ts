@@ -32,7 +32,7 @@ type FillerWowClass =
   | "WARLOCK"
   | "WARRIOR";
 
-type FillerBoosterRole = "TANK" | "HEALER" | "DPS";
+type FillerBoosterRole = "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS";
 
 type FillerBooster = {
   index: number;
@@ -62,20 +62,20 @@ const FILLER_BOOSTER_DEFS: Array<{
   { role: "HEALER", wowClass: "SHAMAN", specialization: "Restoration", name: "Fillhealb" },
   { role: "HEALER", wowClass: "DRUID", specialization: "Restoration", name: "Fillhealc" },
   { role: "HEALER", wowClass: "MONK", specialization: "Mistweaver", name: "Fillheald" },
-  { role: "DPS", wowClass: "MAGE", specialization: "Frost", name: "Filldpsa" },
-  { role: "DPS", wowClass: "WARLOCK", specialization: "Affliction", name: "Filldpsb" },
-  { role: "DPS", wowClass: "HUNTER", specialization: "Beast Mastery", name: "Filldpsc" },
-  { role: "DPS", wowClass: "ROGUE", specialization: "Assassination", name: "Filldpsd" },
-  { role: "DPS", wowClass: "DEMON_HUNTER", specialization: "Havoc", name: "Filldpse" },
-  { role: "DPS", wowClass: "EVOKER", specialization: "Devastation", name: "Filldpsf" },
-  { role: "DPS", wowClass: "DEATH_KNIGHT", specialization: "Unholy", name: "Filldpsg" },
-  { role: "DPS", wowClass: "WARRIOR", specialization: "Fury", name: "Filldpsh" },
-  { role: "DPS", wowClass: "PALADIN", specialization: "Retribution", name: "Filldpsi" },
-  { role: "DPS", wowClass: "PRIEST", specialization: "Shadow", name: "Filldpsj" },
-  { role: "DPS", wowClass: "SHAMAN", specialization: "Enhancement", name: "Filldpsk" },
-  { role: "DPS", wowClass: "DRUID", specialization: "Balance", name: "Filldpsl" },
-  { role: "DPS", wowClass: "MONK", specialization: "Windwalker", name: "Filldpsm" },
-  { role: "DPS", wowClass: "MAGE", specialization: "Fire", name: "Filldpsn" },
+  { role: "RANGED_DPS", wowClass: "MAGE", specialization: "Frost", name: "Filldpsa" },
+  { role: "RANGED_DPS", wowClass: "WARLOCK", specialization: "Affliction", name: "Filldpsb" },
+  { role: "RANGED_DPS", wowClass: "HUNTER", specialization: "Beast Mastery", name: "Filldpsc" },
+  { role: "MELEE_DPS", wowClass: "ROGUE", specialization: "Assassination", name: "Filldpsd" },
+  { role: "MELEE_DPS", wowClass: "DEMON_HUNTER", specialization: "Havoc", name: "Filldpse" },
+  { role: "RANGED_DPS", wowClass: "EVOKER", specialization: "Devastation", name: "Filldpsf" },
+  { role: "MELEE_DPS", wowClass: "DEATH_KNIGHT", specialization: "Unholy", name: "Filldpsg" },
+  { role: "MELEE_DPS", wowClass: "WARRIOR", specialization: "Fury", name: "Filldpsh" },
+  { role: "MELEE_DPS", wowClass: "PALADIN", specialization: "Retribution", name: "Filldpsi" },
+  { role: "RANGED_DPS", wowClass: "PRIEST", specialization: "Shadow", name: "Filldpsj" },
+  { role: "MELEE_DPS", wowClass: "SHAMAN", specialization: "Enhancement", name: "Filldpsk" },
+  { role: "RANGED_DPS", wowClass: "DRUID", specialization: "Balance", name: "Filldpsl" },
+  { role: "MELEE_DPS", wowClass: "MONK", specialization: "Windwalker", name: "Filldpsm" },
+  { role: "RANGED_DPS", wowClass: "MAGE", specialization: "Fire", name: "Filldpsn" },
 ];
 
 const FILLER_BOOSTERS: FillerBooster[] = FILLER_BOOSTER_DEFS.map((def, index) => ({
@@ -398,7 +398,7 @@ async function seed() {
     region: "EU",
     wowClass: "SHAMAN",
     specialization: "Elemental",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: 688,
     isActive: true,
     createdAt: SEED_NOW,
@@ -411,7 +411,7 @@ async function seed() {
     region: "EU",
     wowClass: "SHAMAN",
     specialization: "Enhancement",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
     // Unknown item level for QA: Blizzard never supplied one for this row.
     itemLevel: null,
     isActive: false,
@@ -490,7 +490,7 @@ async function seed() {
     region: "US",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: 684,
     isActive: true,
     createdAt: SEED_NOW,
@@ -538,7 +538,7 @@ async function seed() {
     userId: string;
     characterId: string;
     wowClass: "DEATH_KNIGHT" | "DEMON_HUNTER" | "DRUID" | "EVOKER" | "HUNTER" | "MAGE" | "MONK" | "PALADIN" | "PRIEST" | "ROGUE" | "SHAMAN" | "WARLOCK" | "WARRIOR";
-    role: "TANK" | "HEALER" | "DPS";
+    role: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS";
     difficulty: "NORMAL" | "HEROIC" | "MYTHIC";
     status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
     notes?: string;
@@ -902,7 +902,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "PENDING",
     },
@@ -962,7 +962,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "PENDING",
     },
@@ -984,7 +984,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "PENDING",
     },
@@ -994,7 +994,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1004,7 +1004,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1058,7 +1058,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "PENDING",
     },
@@ -1100,7 +1100,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "PENDING",
     },
@@ -1130,7 +1130,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1162,7 +1162,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: true,
       status: "SELECTED",
     },
@@ -1182,7 +1182,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1214,7 +1214,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1246,7 +1246,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: true,
       status: "SELECTED",
     },
@@ -1256,7 +1256,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1288,7 +1288,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: true,
       status: "SELECTED",
     },
@@ -1298,7 +1298,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1330,7 +1330,7 @@ async function seed() {
       userId: ids.users.sylva,
       characterId: ids.characters.sylvaHunter,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: true,
       status: "SELECTED",
     },
@@ -1350,7 +1350,7 @@ async function seed() {
       userId: ids.users.kael,
       characterId: ids.characters.kaelEle,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
       status: "SELECTED",
     },
@@ -1429,7 +1429,7 @@ async function seed() {
   // Prefer healers/DPS fillers so combined role minima stay at least 2/4/14.
   const settlementQaFillerDefs = [
     ...FILLER_BOOSTERS.filter((filler) => filler.role === "HEALER").slice(0, 3),
-    ...FILLER_BOOSTERS.filter((filler) => filler.role === "DPS").slice(0, 13),
+    ...FILLER_BOOSTERS.filter((filler) => filler.role === "MELEE_DPS" || filler.role === "RANGED_DPS").slice(0, 13),
   ];
   const settlementQaFillerSignups: Array<{
     id: string;
@@ -1473,10 +1473,16 @@ async function seed() {
   // Never SELECTED / never on roster — keeps payout, attendance, and roster tests stable.
   // Skip mira for lootbuddy padding: signup.service tests assert her PENDING counts.
   const lootbuddyFillerOwners = [ids.users.kael, ids.users.thorne, ids.users.aelira, ids.users.brann, ids.users.sylva];
-  const roleMinimums: Array<{ role: FillerBoosterRole; minimum: number }> = [
-    { role: "TANK", minimum: MIN_BOOSTER_TANKS },
-    { role: "HEALER", minimum: MIN_BOOSTER_HEALERS },
-    { role: "DPS", minimum: MIN_BOOSTER_DPS },
+  type CompositionBucket = "TANK" | "HEALER" | "DPS";
+  function compositionBucket(role: string): CompositionBucket | null {
+    if (role === "TANK" || role === "HEALER") return role;
+    if (role === "DPS" || role === "MELEE_DPS" || role === "RANGED_DPS") return "DPS";
+    return null;
+  }
+  const roleMinimums: Array<{ bucket: CompositionBucket; minimum: number }> = [
+    { bucket: "TANK", minimum: MIN_BOOSTER_TANKS },
+    { bucket: "HEALER", minimum: MIN_BOOSTER_HEALERS },
+    { bucket: "DPS", minimum: MIN_BOOSTER_DPS },
   ];
 
   for (const run of runs) {
@@ -1487,10 +1493,11 @@ async function seed() {
     const fillerStatus =
       run.status === "OPEN" || run.status === "DRAFT" || run.status === "ROSTERING" ? "PENDING" : "NOT_SELECTED";
 
-    const roleCounts: Record<FillerBoosterRole, number> = { TANK: 0, HEALER: 0, DPS: 0 };
+    const roleCounts: Record<CompositionBucket, number> = { TANK: 0, HEALER: 0, DPS: 0 };
     for (const signup of runSignups) {
       if (signup.participationType !== "BOOSTER" || signup.status === "WITHDRAWN" || signup.role == null) continue;
-      roleCounts[signup.role] += 1;
+      const bucket = compositionBucket(signup.role);
+      if (bucket) roleCounts[bucket] += 1;
     }
 
     // Characters already offered as BOOSTER on this run (named + settlement QA fillers).
@@ -1501,11 +1508,11 @@ async function seed() {
     );
 
     let created = 0;
-    for (const { role, minimum } of roleMinimums) {
-      let need = Math.max(0, minimum - roleCounts[role]);
+    for (const { bucket, minimum } of roleMinimums) {
+      let need = Math.max(0, minimum - roleCounts[bucket]);
       for (const filler of FILLER_BOOSTERS) {
         if (need <= 0) break;
-        if (filler.role !== role) continue;
+        if (compositionBucket(filler.role) !== bucket) continue;
         if (usedCharacterIds.has(filler.characterId)) continue;
         const fillerSignupId = crypto.randomUUID();
         await orm.RunSignup.create({
@@ -1528,10 +1535,10 @@ async function seed() {
         usedCharacterIds.add(filler.characterId);
         need -= 1;
         created += 1;
-        roleCounts[role] += 1;
+        roleCounts[bucket] += 1;
       }
       if (need > 0) {
-        throw new Error(`Seed filler pool exhausted for ${role} on run ${run.id} (still need ${need}).`);
+        throw new Error(`Seed filler pool exhausted for ${bucket} on run ${run.id} (still need ${need}).`);
       }
     }
 
@@ -1790,7 +1797,7 @@ async function seed() {
       characterRegion: "EU" | "US";
       participationType: "BOOSTER" | "LOOTBUDDY";
       attendanceStatus: "PRESENT" | "LATE" | "NO_SHOW" | "STANDBY";
-      role: "TANK" | "HEALER" | "DPS" | null;
+      role: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS" | null;
       isBackup: boolean;
       shareUnits: number;
       amountGold: number;
@@ -1892,7 +1899,7 @@ async function seed() {
       characterRegion: "EU" as const,
       participationType: "BOOSTER" as const,
       attendanceStatus: "PRESENT" as const,
-      role: "DPS" as const,
+      role: "RANGED_DPS" as const,
       isBackup: false,
     },
     mira: {
@@ -1928,7 +1935,7 @@ async function seed() {
       characterRegion: "US" as const,
       participationType: "BOOSTER" as const,
       attendanceStatus: "STANDBY" as const,
-      role: "DPS" as const,
+      role: "RANGED_DPS" as const,
       isBackup: true,
     },
   };

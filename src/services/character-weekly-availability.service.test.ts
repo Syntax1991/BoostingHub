@@ -372,6 +372,7 @@ describe("signup eligibility weekly unavailable", () => {
           region: "EU",
           wowClass: "SHAMAN",
           specialization: "Restoration",
+          playableSpecs: [],
           isActive: true,
           warcraftLogsId: null,
           ownerIsBooster: true,

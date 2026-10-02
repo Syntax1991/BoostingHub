@@ -50,6 +50,7 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
     region: "EU",
     wowClass: "SHAMAN",
     specialization: "Restoration",
+    playableSpecs: [],
     isActive: true,
     warcraftLogsId: null,
     ownerIsBooster: true,
@@ -61,63 +62,76 @@ function shaman(overrides: Partial<EligibilityCharacter> = {}): EligibilityChara
 }
 
 describe("booster eligibility", () => {
-  it("exposes every role the Character's class can perform, not just the specialization-derived default", () => {
+  it("exposes only roles from the Character's configured specializations", () => {
     const result = evaluateBoosterOptions([shaman()], heroicRun);
-    expect(result.eligible[0]?.roles).toEqual(["DPS", "HEALER"]);
+    expect(result.eligible[0]?.roles).toEqual(["HEALER"]);
     expect(result.eligible[0]?.defaultRole).toBe("HEALER");
   });
 
-  it("derives the correct default role for each Monk specialization (Mistweaver/Brewmaster/Windwalker), never class order", () => {
-    const monk = (specialization: string) => shaman({ wowClass: "MONK", specialization });
+  it("adds concrete DPS/tank roles only when matching playable specs are configured", () => {
+    const withElemental = evaluateBoosterOptions(
+      [shaman({ playableSpecs: ["Elemental"] })],
+      heroicRun,
+    ).eligible[0];
+    expect(withElemental?.roles).toEqual(["HEALER", "RANGED_DPS"]);
+
+    const withEnhancement = evaluateBoosterOptions(
+      [shaman({ playableSpecs: ["Enhancement"] })],
+      heroicRun,
+    ).eligible[0];
+    expect(withEnhancement?.roles).toEqual(["HEALER", "MELEE_DPS"]);
+  });
+
+  it("derives the correct default role for each Monk specialization (Mistweaver/Brewmaster/Windwalker)", () => {
+    const monk = (specialization: string) => shaman({ wowClass: "MONK", specialization, playableSpecs: [] });
     const mistweaver = evaluateBoosterOptions([monk("Mistweaver")], heroicRun).eligible[0];
     const brewmaster = evaluateBoosterOptions([monk("Brewmaster")], heroicRun).eligible[0];
     const windwalker = evaluateBoosterOptions([monk("Windwalker")], heroicRun).eligible[0];
     expect(mistweaver?.defaultRole).toBe("HEALER");
     expect(brewmaster?.defaultRole).toBe("TANK");
-    expect(windwalker?.defaultRole).toBe("DPS");
-    // Every Monk option allows all three roles regardless of which spec is imported.
-    expect(mistweaver?.roles).toEqual(["TANK", "HEALER", "DPS"]);
-    expect(brewmaster?.roles).toEqual(["TANK", "HEALER", "DPS"]);
-    expect(windwalker?.roles).toEqual(["TANK", "HEALER", "DPS"]);
+    expect(windwalker?.defaultRole).toBe("MELEE_DPS");
+    expect(mistweaver?.roles).toEqual(["HEALER"]);
+    expect(brewmaster?.roles).toEqual(["TANK"]);
+    expect(windwalker?.roles).toEqual(["MELEE_DPS"]);
   });
 
-  it("allows every role Holy Paladin and Restoration Shaman's classes can perform, defaulting to HEALER", () => {
+  it("allows every configured role for Holy Paladin and Restoration Shaman, defaulting to HEALER", () => {
     const paladin = evaluateBoosterOptions(
-      [shaman({ wowClass: "PALADIN", specialization: "Holy" })],
+      [shaman({ wowClass: "PALADIN", specialization: "Holy", playableSpecs: ["Protection", "Retribution"] })],
       heroicRun,
     ).eligible[0];
     expect(paladin?.defaultRole).toBe("HEALER");
-    expect(paladin?.roles).toEqual(["HEALER", "TANK", "DPS"]);
+    expect(paladin?.roles).toEqual(["TANK", "HEALER", "MELEE_DPS"]);
 
     const restoShaman = evaluateBoosterOptions([shaman()], heroicRun).eligible[0];
     expect(restoShaman?.defaultRole).toBe("HEALER");
-    expect(restoShaman?.roles).toEqual(["DPS", "HEALER"]);
+    expect(restoShaman?.roles).toEqual(["HEALER"]);
   });
 
-  it("Priest and Mage: allowed roles are bounded by class, never expanded beyond it", () => {
+  it("Priest and Mage: allowed roles are bounded by configured specs, never expanded beyond them", () => {
     const priest = evaluateBoosterOptions(
-      [shaman({ wowClass: "PRIEST", specialization: "Holy" })],
+      [shaman({ wowClass: "PRIEST", specialization: "Discipline", playableSpecs: ["Shadow"] })],
       heroicRun,
     ).eligible[0];
-    expect(priest?.roles).toEqual(["HEALER", "DPS"]);
+    expect(priest?.roles).toEqual(["HEALER", "RANGED_DPS"]);
     expect(priest?.roles).not.toContain("TANK");
 
     const mage = evaluateBoosterOptions(
-      [shaman({ wowClass: "MAGE", specialization: "Frost" })],
+      [shaman({ wowClass: "MAGE", specialization: "Frost", playableSpecs: [] })],
       heroicRun,
     ).eligible[0];
-    expect(mage?.roles).toEqual(["DPS"]);
+    expect(mage?.roles).toEqual(["RANGED_DPS"]);
   });
 
-  it("does not block eligibility for a missing or unrecognized specialization — it just leaves no default, so the User must choose explicitly", () => {
+  it("missing or unrecognized specialization yields no roles and no default", () => {
     const missing = evaluateBoosterOptions([shaman({ specialization: null })], heroicRun);
     expect(missing.eligible).toHaveLength(1);
     expect(missing.eligible[0]?.defaultRole).toBeNull();
-    expect(missing.eligible[0]?.roles).toEqual(["DPS", "HEALER"]);
+    expect(missing.eligible[0]?.roles).toEqual([]);
 
     const unrecognized = evaluateBoosterOptions([shaman({ specialization: "Not A Real Spec" })], heroicRun);
-    expect(unrecognized.eligible).toHaveLength(1);
     expect(unrecognized.eligible[0]?.defaultRole).toBeNull();
+    expect(unrecognized.eligible[0]?.roles).toEqual([]);
   });
 
   it.each(RUNS_BY_DIFFICULTY)("a Booster qualifies for a $difficulty run (account-level, not difficulty-scoped)", (run) => {

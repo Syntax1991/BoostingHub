@@ -369,7 +369,7 @@ describe("roster composition", () => {
       version: view.roster.version,
       externalBoosters: [
         { name: "Helper Loot", wowClass: "PRIEST", participationType: "LOOTBUDDY", role: null },
-        { name: "Helper Dps", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+        { name: "Helper Dps", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
       ],
     });
     view = await rosterService.getRosterManagementView(lead, id);

@@ -203,7 +203,7 @@ describe("schedule conflict integrity", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runA.id,
       characterId: character.id,
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
     });
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
@@ -211,13 +211,13 @@ describe("schedule conflict integrity", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupA.id, selectedRole: "RANGED_DPS" }],
     });
 
     await signupService.createBoosterSignup(owner, {
       runId: runB.id,
       characterId: character.id,
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
     });
     let viewB = await rosterService.getRosterManagementView(lead, runB.id);
@@ -226,7 +226,7 @@ describe("schedule conflict integrity", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runB.id,
       version: viewB.roster.version,
-      selections: [{ signupId: signupB.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupB.id, selectedRole: "RANGED_DPS" }],
     });
 
     const loadedB = await runRepository.findById(runB.id);

@@ -45,29 +45,31 @@ describe("isRoleValidForClass", () => {
   it("Monk can Tank, Heal, or DPS", () => {
     expect(isRoleValidForClass("MONK", "TANK")).toBe(true);
     expect(isRoleValidForClass("MONK", "HEALER")).toBe(true);
-    expect(isRoleValidForClass("MONK", "DPS")).toBe(true);
+    expect(isRoleValidForClass("MONK", "MELEE_DPS")).toBe(true);
   });
 
   it("Paladin can Tank, Heal, or DPS", () => {
     expect(isRoleValidForClass("PALADIN", "TANK")).toBe(true);
     expect(isRoleValidForClass("PALADIN", "HEALER")).toBe(true);
-    expect(isRoleValidForClass("PALADIN", "DPS")).toBe(true);
+    expect(isRoleValidForClass("PALADIN", "MELEE_DPS")).toBe(true);
   });
 
   it("Shaman can Heal or DPS, never Tank", () => {
     expect(isRoleValidForClass("SHAMAN", "HEALER")).toBe(true);
-    expect(isRoleValidForClass("SHAMAN", "DPS")).toBe(true);
+    expect(isRoleValidForClass("SHAMAN", "MELEE_DPS")).toBe(true);
     expect(isRoleValidForClass("SHAMAN", "TANK")).toBe(false);
   });
 
-  it("Priest can Heal or DPS, never Tank", () => {
+  it("Priest can Heal or Ranged DPS, never Tank or Melee", () => {
     expect(isRoleValidForClass("PRIEST", "HEALER")).toBe(true);
-    expect(isRoleValidForClass("PRIEST", "DPS")).toBe(true);
+    expect(isRoleValidForClass("PRIEST", "RANGED_DPS")).toBe(true);
+    expect(isRoleValidForClass("PRIEST", "MELEE_DPS")).toBe(false);
     expect(isRoleValidForClass("PRIEST", "TANK")).toBe(false);
   });
 
-  it("Mage can only DPS", () => {
-    expect(isRoleValidForClass("MAGE", "DPS")).toBe(true);
+  it("Mage can only Ranged DPS", () => {
+    expect(isRoleValidForClass("MAGE", "RANGED_DPS")).toBe(true);
+    expect(isRoleValidForClass("MAGE", "MELEE_DPS")).toBe(false);
     expect(isRoleValidForClass("MAGE", "HEALER")).toBe(false);
     expect(isRoleValidForClass("MAGE", "TANK")).toBe(false);
   });
@@ -75,11 +77,11 @@ describe("isRoleValidForClass", () => {
 
 describe("rolesForClass", () => {
   it("never depends on which specialization is currently imported — the same class always allows the same roles", () => {
-    expect(new Set(rolesForClass("MONK"))).toEqual(new Set(["TANK", "HEALER", "DPS"]));
-    expect(new Set(rolesForClass("PALADIN"))).toEqual(new Set(["TANK", "HEALER", "DPS"]));
-    expect(new Set(rolesForClass("SHAMAN"))).toEqual(new Set(["HEALER", "DPS"]));
-    expect(new Set(rolesForClass("PRIEST"))).toEqual(new Set(["HEALER", "DPS"]));
-    expect(rolesForClass("MAGE")).toEqual(["DPS"]);
+    expect(new Set(rolesForClass("MONK"))).toEqual(new Set(["TANK", "HEALER", "MELEE_DPS"]));
+    expect(new Set(rolesForClass("PALADIN"))).toEqual(new Set(["TANK", "HEALER", "MELEE_DPS"]));
+    expect(new Set(rolesForClass("SHAMAN"))).toEqual(new Set(["HEALER", "MELEE_DPS", "RANGED_DPS"]));
+    expect(new Set(rolesForClass("PRIEST"))).toEqual(new Set(["HEALER", "RANGED_DPS"]));
+    expect(rolesForClass("MAGE")).toEqual(["RANGED_DPS"]);
   });
 });
 
@@ -95,10 +97,10 @@ describe("specializationById (Warcraft Logs CombatantInfo specID)", () => {
 
   it("maps known ids (checked against the game's ChrSpecialization table)", () => {
     expect(specializationById(256)).toEqual({ wowClass: "PRIEST", name: "Discipline", role: "HEALER" });
-    expect(specializationById(258)).toEqual({ wowClass: "PRIEST", name: "Shadow", role: "DPS" });
+    expect(specializationById(258)).toEqual({ wowClass: "PRIEST", name: "Shadow", role: "RANGED_DPS" });
     expect(specializationById(73)).toEqual({ wowClass: "WARRIOR", name: "Protection", role: "TANK" });
     expect(specializationById(1468)).toEqual({ wowClass: "EVOKER", name: "Preservation", role: "HEALER" });
-    expect(specializationById(1480)).toEqual({ wowClass: "DEMON_HUNTER", name: "Devourer", role: "DPS" });
+    expect(specializationById(1480)).toEqual({ wowClass: "DEMON_HUNTER", name: "Devourer", role: "RANGED_DPS" });
   });
 
   it("an unknown id resolves to nothing (no guess)", () => {

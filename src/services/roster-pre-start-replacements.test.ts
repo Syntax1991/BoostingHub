@@ -97,7 +97,7 @@ async function createCharacter(userId: string, wowClass: "PRIEST" | "PALADIN" | 
   const id = crypto.randomUUID();
   const name = `Prst${userId.slice(-4)}${characterSeq++}`;
   const now = new Date().toISOString();
-  const spec = { PRIEST: ["Holy", "HEALER"], PALADIN: ["Protection", "TANK"], WARRIOR: ["Arms", "DPS"], SHAMAN: ["Restoration", "HEALER"] }[wowClass];
+  const spec = { PRIEST: ["Holy", "HEALER"], PALADIN: ["Protection", "TANK"], WARRIOR: ["Arms", "MELEE_DPS"], SHAMAN: ["Restoration", "HEALER"] }[wowClass];
   await orm.Character.create({
     id,
     userId,
@@ -114,6 +114,22 @@ async function createCharacter(userId: string, wowClass: "PRIEST" | "PALADIN" | 
     createdAt: now,
     updatedAt: now,
   });
+  if (wowClass === "PRIEST") {
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: id,
+      specialization: "Shadow",
+      createdAt: now,
+    });
+  }
+  if (wowClass === "SHAMAN") {
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: id,
+      specialization: "Elemental",
+      createdAt: now,
+    });
+  }
   return id;
 }
 
@@ -302,13 +318,13 @@ describe("manual registered participant (Add Player)", () => {
     const same = await addPlayer(runId, ids.b, bChar, "HEALER");
     expect(same).toEqual({ signupId: existing, created: false });
 
-    const extended = await addPlayer(runId, ids.b, bChar, "DPS");
+    const extended = await addPlayer(runId, ids.b, bChar, "RANGED_DPS");
     expect(extended).toEqual({ signupId: existing, created: false });
     const signups = await signupsFor(runId, ids.b);
     expect(signups).toHaveLength(1);
     const roles = (signups[0].offeredRoles as Array<{ role: string }>).map((row) => row.role).sort();
-    expect(roles).toEqual(["DPS", "HEALER"]);
-    expect((await view(runId)).boosters.find((row) => row.id === existing)?.selectedRole).toBe("DPS");
+    expect(roles).toEqual(["HEALER", "RANGED_DPS"]);
+    expect((await view(runId)).boosters.find((row) => row.id === existing)?.selectedRole).toBe("RANGED_DPS");
   });
 
   it("E. a WITHDRAWN signup is never revived; the character is listed as not eligible", async () => {
@@ -397,7 +413,7 @@ describe("manual registered participant (Add Player)", () => {
       return result;
     });
 
-    await expectCode(addPlayer(runId, ids.b, bChar, "DPS"), "ROSTER_ALREADY_CHANGED");
+    await expectCode(addPlayer(runId, ids.b, bChar, "RANGED_DPS"), "ROSTER_ALREADY_CHANGED");
 
     const signups = await signupsFor(runId, ids.b);
     expect(signups.map((row) => row.id)).toEqual([existing]);
@@ -448,7 +464,7 @@ describe("manual registered participant (Add Player)", () => {
     const options = await rosterService.getManualAddOptions(lead, { runId, userId: ids.b });
     expect(options.player).toEqual({ id: ids.b, name: "PreStart Player B" });
     const priest = options.eligible.find((row) => row.characterId === bChar);
-    expect(priest?.roles.sort()).toEqual(["DPS", "HEALER"]);
+    expect(priest?.roles.sort()).toEqual(["HEALER", "RANGED_DPS"]);
     expect(Object.keys(priest!).sort()).toEqual(["characterId", "characterName", "defaultRole", "realm", "roles", "specialization", "wowClass"]);
     const noAccess = await rosterService.getManualAddOptions(lead, { runId, userId: ids.noAccess });
     expect(noAccess.eligible).toHaveLength(0);
@@ -512,7 +528,7 @@ describe("published roster replacement and the Start lock", () => {
   it("commitments: a manually added player is RESERVED while draft-selected and COMMITTED once published", async () => {
     const { runId } = await publishedRun();
     const other = await createOpenRun(otherLead);
-    await addPlayer(runId, ids.b, bChar, "DPS");
+    await addPlayer(runId, ids.b, bChar, "RANGED_DPS");
     const reserved = (await commitmentsInRaidIdOf(runId, bChar, other.runId));
     expect(reserved?.find((row) => row.runId === runId)?.state).toBe("RESERVED");
     await publish(runId);
@@ -553,7 +569,7 @@ describe("published roster replacement and the Start lock", () => {
         rosterService.saveExternalBoosters(lead, {
           runId,
           version,
-          externalBoosters: [{ name: "late", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" }],
+          externalBoosters: [{ name: "late", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" }],
         }),
       () => rosterService.publishRoster(lead, { runId, version, acknowledgeWarnings: true }),
       () => rosterService.searchPlayers(lead, { runId, query: "prestart" }),
@@ -590,7 +606,7 @@ describe("published roster replacement and the Start lock", () => {
 
       const [started, changed] = await Promise.allSettled([
         runService.startRun(lead, { runId }),
-        rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "DPS" }),
+        rosterService.addRegisteredParticipant(lead, { runId, version, userId: ids.b, characterId: bChar, role: "MELEE_DPS" }),
       ]);
       const run = await runRepository.findById(runId);
       const selected = ((await orm.RunSignup.where({ runId, status: "SELECTED" }).select("id").all()) as Array<{ id: string }>)
@@ -666,7 +682,7 @@ describe("V. External Boosters (current semantics, pinned)", () => {
     await rosterService.saveExternalBoosters(lead, {
       runId,
       version: before.roster.version,
-      externalBoosters: [{ name: "dawn", wowClass: "WARRIOR", participationType: "BOOSTER", role: "DPS" }],
+      externalBoosters: [{ name: "dawn", wowClass: "WARRIOR", participationType: "BOOSTER", role: "MELEE_DPS" }],
     });
 
     const after = await view(runId);

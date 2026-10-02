@@ -100,7 +100,7 @@ async function createCharacter(userId: string, name: string, region: WowRegion =
     region,
     wowClass: "WARRIOR",
     specialization: "Arms",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
     itemLevel: 700,
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -187,7 +187,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runDraft.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const draftView = await rosterService.getRosterManagementView(lead, runDraft.id);
@@ -195,13 +195,13 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runDraft.id,
       version: draftView.roster.version,
-      selections: [{ signupId: draftSignup.id, selectedRole: "DPS" }],
+      selections: [{ signupId: draftSignup.id, selectedRole: "MELEE_DPS" }],
     });
 
     await signupService.createBoosterSignup(owner, {
       runId: runPub.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const pubView = await rosterService.getRosterManagementView(lead, runPub.id);
@@ -209,7 +209,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runPub.id,
       version: pubView.roster.version,
-      selections: [{ signupId: pubSignup.id, selectedRole: "DPS" }],
+      selections: [{ signupId: pubSignup.id, selectedRole: "MELEE_DPS" }],
     });
     await rosterService.publishRoster(lead, {
       runId: runPub.id,
@@ -220,7 +220,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runTarget.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
 
@@ -248,7 +248,7 @@ describe("character run commitments (roster informational)", () => {
       await signupService.createBoosterSignup(owner, {
         runId: run.id,
         characterId,
-        role: "DPS",
+        role: "MELEE_DPS",
         isBackup: false,
       });
       const view = await rosterService.getRosterManagementView(lead, run.id);
@@ -256,7 +256,7 @@ describe("character run commitments (roster informational)", () => {
       await rosterService.saveDraftSelection(lead, {
         runId: run.id,
         version: view.roster.version,
-        selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+        selections: [{ signupId: signup.id, selectedRole: "MELEE_DPS" }],
       });
       await rosterService.publishRoster(lead, {
         runId: run.id,
@@ -271,7 +271,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runTarget.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
@@ -289,7 +289,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runA.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
@@ -297,7 +297,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupA.id, selectedRole: "MELEE_DPS" }],
     });
     await rosterService.publishRoster(lead, {
       runId: runA.id,
@@ -308,7 +308,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runB.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const viewB = await rosterService.getRosterManagementView(lead, runB.id);
@@ -320,7 +320,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runB.id,
       version: viewB.roster.version,
-      selections: [{ signupId: rowB.id, selectedRole: "DPS" }],
+      selections: [{ signupId: rowB.id, selectedRole: "MELEE_DPS" }],
     });
     const saved = await rosterService.getRosterManagementView(lead, runB.id);
     expect(saved.boosters.find((item) => item.id === rowB.id)?.draftSelected).toBe(true);
@@ -335,7 +335,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runA.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
@@ -343,13 +343,13 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupA.id, selectedRole: "MELEE_DPS" }],
     });
 
     await signupService.createBoosterSignup(owner, {
       runId: runB.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const viewB = await rosterService.getRosterManagementView(lead, runB.id);
@@ -359,7 +359,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runB.id,
       version: viewB.roster.version,
-      selections: [{ signupId: rowB.id, selectedRole: "DPS" }],
+      selections: [{ signupId: rowB.id, selectedRole: "MELEE_DPS" }],
     });
   });
 
@@ -374,13 +374,13 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runA.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     await signupService.createBoosterSignup(owner, {
       runId: runB.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
 
@@ -389,7 +389,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupA.id, selectedRole: "MELEE_DPS" }],
     });
 
     const viewB = await rosterService.getRosterManagementView(lead, runB.id);
@@ -401,7 +401,7 @@ describe("character run commitments (roster informational)", () => {
       rosterService.saveDraftSelection(lead, {
         runId: runB.id,
         version: viewB.roster.version,
-        selections: [{ signupId: rowB.id, selectedRole: "DPS" }],
+        selections: [{ signupId: rowB.id, selectedRole: "MELEE_DPS" }],
       }),
       "CHARACTER_SCHEDULE_CONFLICT",
     );
@@ -418,7 +418,7 @@ describe("character run commitments (roster informational)", () => {
       await signupService.createBoosterSignup(owner, {
         runId: run.id,
         characterId,
-        role: "DPS",
+        role: "MELEE_DPS",
         isBackup: false,
       });
       const view = await rosterService.getRosterManagementView(lead, run.id);
@@ -426,14 +426,14 @@ describe("character run commitments (roster informational)", () => {
       await rosterService.saveDraftSelection(lead, {
         runId: run.id,
         version: view.roster.version,
-        selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+        selections: [{ signupId: signup.id, selectedRole: "MELEE_DPS" }],
       });
     }
 
     await signupService.createBoosterSignup(owner, {
       runId: runTarget.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
@@ -460,7 +460,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runA.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
@@ -468,7 +468,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: viewA.roster.version,
-      selections: [{ signupId: signupA.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupA.id, selectedRole: "MELEE_DPS" }],
     });
     await rosterService.publishRoster(lead, {
       runId: runA.id,
@@ -491,7 +491,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runTarget.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
@@ -511,13 +511,13 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runA.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     await signupService.createBoosterSignup(other, {
       runId: runA.id,
       characterId: otherChar,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const viewA = await rosterService.getRosterManagementView(lead, runA.id);
@@ -526,7 +526,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: viewA.roster.version,
-      selections: [{ signupId: signupOwner.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupOwner.id, selectedRole: "MELEE_DPS" }],
     });
     await rosterService.publishRoster(lead, {
       runId: runA.id,
@@ -543,7 +543,7 @@ describe("character run commitments (roster informational)", () => {
     await rosterService.saveDraftSelection(lead, {
       runId: runA.id,
       version: editing.roster.version,
-      selections: [{ signupId: signupOther.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signupOther.id, selectedRole: "MELEE_DPS" }],
     });
     await rosterService.publishRoster(lead, {
       runId: runA.id,
@@ -554,7 +554,7 @@ describe("character run commitments (roster informational)", () => {
     await signupService.createBoosterSignup(owner, {
       runId: runTarget.id,
       characterId,
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: false,
     });
     const targetView = await rosterService.getRosterManagementView(lead, runTarget.id);
@@ -575,13 +575,13 @@ describe("character run commitments (roster informational)", () => {
       await signupService.createBoosterSignup(user, {
         runId: runOther.id,
         characterId,
-        role: "DPS",
+        role: "MELEE_DPS",
         isBackup: false,
       });
       await signupService.createBoosterSignup(user, {
         runId: runTarget.id,
         characterId,
-        role: "DPS",
+        role: "MELEE_DPS",
         isBackup: false,
       });
     }
@@ -592,7 +592,7 @@ describe("character run commitments (roster informational)", () => {
       version: otherView.roster.version,
       selections: otherView.boosters
         .filter((row) => row.character?.id === charA || row.character?.id === charB)
-        .map((row) => ({ signupId: row.id, selectedRole: "DPS" as const })),
+        .map((row) => ({ signupId: row.id, selectedRole: "MELEE_DPS" as const })),
     });
 
     const spy = vi.spyOn(signupRepository, "listReservingCommitmentsByCharacterIds");
@@ -611,7 +611,7 @@ describe("projectCharacterRunCommitment", () => {
       characterId: "c1",
       status: "PENDING",
       draftSelected: true,
-      selectedRole: "DPS",
+      selectedRole: "MELEE_DPS",
       publishedRole: null,
       run: {
         id: "r1",
@@ -652,13 +652,13 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
     const runOther = await createOpenRun(lead, new Date(input.otherAt).toISOString());
     const runTarget = await createOpenRun(lead, new Date(input.targetAt).toISOString());
     for (const runId of [runOther.id, runTarget.id]) {
-      await signupService.createBoosterSignup(owner, { runId, characterId, role: "DPS", isBackup: false });
+      await signupService.createBoosterSignup(owner, { runId, characterId, role: "MELEE_DPS", isBackup: false });
     }
     const otherView = await rosterService.getRosterManagementView(lead, runOther.id);
     await rosterService.saveDraftSelection(lead, {
       runId: runOther.id,
       version: otherView.roster.version,
-      selections: [{ signupId: otherView.boosters.find((row) => row.character?.id === characterId)!.id, selectedRole: "DPS" }],
+      selections: [{ signupId: otherView.boosters.find((row) => row.character?.id === characterId)!.id, selectedRole: "MELEE_DPS" }],
     });
     if (input.publish) {
       await rosterService.publishRoster(lead, {
@@ -714,7 +714,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
       rosterService.saveDraftSelection(lead, {
         runId: runTarget.id,
         version: (await rosterService.getRosterManagementView(lead, runTarget.id)).roster.version,
-        selections: [{ signupId: row.id, selectedRole: "DPS" }],
+        selections: [{ signupId: row.id, selectedRole: "MELEE_DPS" }],
       }),
       "CHARACTER_SCHEDULE_CONFLICT",
     );
@@ -737,7 +737,7 @@ describe("commitments are scoped to the target Run's raid ID (not the 2h conflic
     await rosterService.saveDraftSelection(lead, {
       runId: runTarget.id,
       version: targetView.roster.version,
-      selections: [{ signupId: targetView.boosters.find((row) => row.character?.id === characterId)!.id, selectedRole: "DPS" }],
+      selections: [{ signupId: targetView.boosters.find((row) => row.character?.id === characterId)!.id, selectedRole: "MELEE_DPS" }],
     });
     const map = await getRunCommitmentsForCharacters({
       characters: [{ id: characterId, region: "EU" }],

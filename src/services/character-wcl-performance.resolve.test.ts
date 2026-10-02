@@ -133,7 +133,7 @@ describe("resolveRosterWclPerformance", () => {
       boosters: [
         {
           signupId: "signup-h",
-          offeredRoles: ["HEALER", "DPS"],
+          offeredRoles: ["HEALER", "RANGED_DPS"],
           character: {
             id: "char-h",
             wowClass: "PRIEST",
@@ -174,12 +174,12 @@ describe("resolveRosterWclPerformance", () => {
       boosters: [
         {
           signupId: "signup-s",
-          offeredRoles: ["HEALER", "DPS"],
+          offeredRoles: ["HEALER", "RANGED_DPS"],
           character: {
             id: "char-s",
             wowClass: "PRIEST",
             specialization: "Shadow",
-            primaryRole: "DPS",
+            primaryRole: "RANGED_DPS",
             warcraftLogsId: "333",
           },
         },
@@ -188,7 +188,7 @@ describe("resolveRosterWclPerformance", () => {
     });
 
     const roles = map.get("signup-s")?.[0]?.roles.map((r) => r.role) ?? [];
-    expect(roles).toEqual(["HEALER", "DPS"]);
+    expect(roles).toEqual(["HEALER", "RANGED_DPS"]);
     expect(fetchZoneRankings).toHaveBeenCalledTimes(2);
   });
 
@@ -220,12 +220,12 @@ describe("resolveRosterWclPerformance", () => {
       boosters: [
         {
           signupId: "signup-1",
-          offeredRoles: ["DPS"],
+          offeredRoles: ["RANGED_DPS"],
           character: {
             id: "char-1",
             wowClass: "MAGE",
             specialization: null,
-            primaryRole: "DPS",
+            primaryRole: "RANGED_DPS",
             warcraftLogsId: "111",
           },
         },

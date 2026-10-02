@@ -252,7 +252,7 @@ beforeAll(async () => {
     name: "Atkael",
     wowClass: "SHAMAN",
     specialization: "Elemental",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
   });
   characters.playerB = await createCharacter({
     userId: ids.playerB,
@@ -273,7 +273,7 @@ beforeAll(async () => {
     name: "Atsylva",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
   });
   characters.playerE = await createCharacter({
     userId: ids.playerE,
@@ -324,7 +324,7 @@ async function publishedRunWithRoster() {
     userId: ids.user,
     characterId: characters.user,
     participationType: "BOOSTER",
-    role: "DPS",
+    role: "MELEE_DPS",
   });
   const lootbuddy = await createSignup({
     runId,
@@ -338,7 +338,7 @@ async function publishedRunWithRoster() {
     userId: ids.playerD,
     characterId: characters.playerD,
     participationType: "BOOSTER",
-    role: "DPS",
+    role: "MELEE_DPS",
     isBackup: true,
   });
   const pending = await createSignup({
@@ -476,7 +476,7 @@ describe("attendance mutation and bulk present", () => {
       userId: ids.user,
       characterId: characters.user,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "MELEE_DPS",
     });
     const b = await createSignup({
       runId,
@@ -497,7 +497,7 @@ describe("attendance mutation and bulk present", () => {
       userId: ids.playerD,
       characterId: characters.playerD,
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "MELEE_DPS",
       isBackup: true,
     });
     const e = await createSignup({
@@ -628,7 +628,7 @@ describe("roster freeze after start", () => {
     await orm.RunSignupRole.create({
       id: crypto.randomUUID(),
       signupId,
-      role: "DPS",
+      role: "MELEE_DPS",
       createdAt: new Date().toISOString(),
     });
 
@@ -654,7 +654,7 @@ describe("roster freeze after start", () => {
     await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
-      selections: [{ signupId, selectedRole: "DPS" }],
+      selections: [{ signupId, selectedRole: "MELEE_DPS" }],
     });
 
     const preview = await runDetailService.getRunDetail(lead, runId);
@@ -673,7 +673,7 @@ describe("roster freeze after start", () => {
     await runService.startRun(lead, { runId });
     const manager = await attendanceService.getManagerAttendance(lead, runId);
     expect(manager.rows).toHaveLength(1);
-    expect(manager.rows[0]?.selectedRole).toBe("DPS");
+    expect(manager.rows[0]?.selectedRole).toBe("MELEE_DPS");
   });
 });
 
