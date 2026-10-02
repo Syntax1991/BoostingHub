@@ -59,7 +59,7 @@ export function ExternalBoostersDialog({
   const [name, setName] = useState("");
   const [wowClass, setWowClass] = useState<WowClass>("MAGE");
   const [kind, setKind] = useState<ParticipationType>("BOOSTER");
-  const [role, setRole] = useState<CharacterRole>("DPS");
+  const [role, setRole] = useState<CharacterRole>(() => preferredRoleForClass("MAGE"));
   const classRoles = rolesForClass(wowClass);
   const editClassRoles = editDraft ? rolesForClass(editDraft.wowClass) : [];
 
