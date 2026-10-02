@@ -5,7 +5,7 @@ import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
 import { RunDetailTabs } from "@/components/runs/run-detail-tabs";
 import { RunManagerActions } from "@/components/runs/run-manager-actions";
-import type { RunDetailTab } from "@/lib/run-routes";
+import { runDetailPath, type RunDetailTab } from "@/lib/run-routes";
 import type { RunDetailView as RunDetailData } from "@/services/run-detail.service";
 
 export function RunDetailView({
@@ -19,7 +19,11 @@ export function RunDetailView({
   return (
     <div>
       <PageHeader
-        title={run.title}
+        title={
+          <Link href={runDetailPath(run.id)} className="hover:underline underline-offset-4">
+            {run.title}
+          </Link>
+        }
         description={`${run.productLabel}${run.contentSummary ? ` · ${run.contentSummary}` : ""} · Lead ${run.raidLeadName}`}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">

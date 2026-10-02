@@ -20,7 +20,7 @@ export function CardHeader({
   description,
   action,
 }: {
-  title: string;
+  title: ReactNode;
   description?: string;
   action?: ReactNode;
 }) {
@@ -40,7 +40,7 @@ export function PageHeader({
   description,
   actions,
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   actions?: ReactNode;
 }) {

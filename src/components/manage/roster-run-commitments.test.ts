@@ -71,6 +71,7 @@ describe("RosterRunCommitmentsBlock", () => {
     expect(html).toContain("Season 2 Bundle");
     expect(html).toContain("/runs/run-draft-other");
     expect(html).toContain("Heroic");
+    expect(html).toMatch(/<a[^>]*href="\/runs\/run-draft-other"[^>]*>[\s\S]*Season 2 Bundle[\s\S]*Heroic[\s\S]*<\/a>/);
   });
 
   it("D–I: COMMITTED renders Other run · Published roster with warning styling and run details", () => {
@@ -95,6 +96,20 @@ describe("RosterRunCommitmentsBlock", () => {
     expect(html).toContain("text-warning");
     expect(html).not.toContain("Reserved elsewhere");
     expect(html).not.toContain("Committed elsewhere");
+    expect(html).toContain('href="/runs/run-draft-other"');
+    expect(html).toContain('href="/runs/run-pub-other"');
+  });
+
+  it("renders a commitment without a run id as plain text", () => {
+    const html = renderToStaticMarkup(
+      createElement(RosterRunCommitmentsBlock, {
+        commitments: [{ ...reserved, runId: "  ", productLabel: "Season 2 Bundle" }],
+      }),
+    );
+    expect(html).toContain("Season 2 Bundle");
+    expect(html).toContain("Draft roster");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain('href=');
   });
 });
 
@@ -112,7 +127,9 @@ describe("RosterScheduleConflictAlert", () => {
       createElement(RosterScheduleConflictAlert, { conflicts: [scheduleConflict] }),
     );
     expect(html).toContain("Schedule conflict");
-    expect(html).toContain("Another Manawyrm Hub Run: The Venomous Abyss");
+    expect(html).toContain("Another Manawyrm Hub Run:");
+    expect(html).toContain("The Venomous Abyss");
+    expect(html).toContain('href="/runs/run-pub-other"');
     expect(html).toContain("border-danger");
     expect(html).toContain("bg-danger");
     expect(html).toContain("text-danger");
@@ -135,7 +152,29 @@ describe("RosterScheduleConflictAlert", () => {
     expect(html).toContain("text-danger");
     expect(html).toMatch(/<svg[\s>]/i);
     expect(html).not.toMatch(/<label[^>]*>[\s\S]*?<div/i);
-    expect(html).toMatch(/^<label\b/);
+    const label = html.match(/<label\b[^>]*>[\s\S]*?<\/label>/)?.[0] ?? "";
+    expect(label).toContain('for="signup-checkbox-1"');
+    expect(label).not.toContain("<a");
+    expect(html).toContain('href="/runs/run-pub-other"');
+  });
+
+  it("keeps a weekly unavailability conflict as plain text", () => {
+    const html = renderToStaticMarkup(
+      createElement(RosterScheduleConflictAlert, {
+        conflicts: [
+          {
+            source: "WEEKLY_UNAVAILABLE",
+            resetIdentifier: "2026-W40",
+            difficulty: "HEROIC",
+            message: "Synlight is marked unavailable for Heroic during this reset (2026-W40).",
+          },
+        ],
+        htmlFor: "signup-checkbox-weekly",
+      }),
+    );
+    expect(html).toContain("Synlight is marked unavailable for Heroic during this reset (2026-W40).");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain('href=');
   });
 
   it("J/K: commitments without conflicts do not invent Schedule conflict copy", () => {
