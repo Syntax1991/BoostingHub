@@ -55,6 +55,7 @@ function baseDetails(overrides: Partial<Details> = {}): Details {
     wowClass: "SHAMAN",
     specialization: "Restoration",
     primaryRole: "HEALER",
+    playableSpecs: [] as string[],
     itemLevel: 640,
     isActive: true,
     createdAt: "2026-09-01T00:00:00.000Z",

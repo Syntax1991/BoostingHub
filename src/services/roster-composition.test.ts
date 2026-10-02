@@ -10,9 +10,9 @@ describe("composeRoster", () => {
         { participationType: "BOOSTER", selectedRole: "TANK" },
         { participationType: "BOOSTER", selectedRole: "TANK" },
         { participationType: "BOOSTER", selectedRole: "HEALER" },
-        { participationType: "BOOSTER", selectedRole: "DPS" },
+        { participationType: "BOOSTER", selectedRole: "MELEE_DPS" },
         { participationType: "LOOTBUDDY", selectedRole: null },
-        { participationType: "LOOTBUDDY", selectedRole: "DPS" },
+        { participationType: "LOOTBUDDY", selectedRole: "MELEE_DPS" },
       ],
       targets,
     );
@@ -57,7 +57,7 @@ describe("composeRoster", () => {
       [
         { participationType: "LOOTBUDDY", selectedRole: "TANK" },
         { participationType: "LOOTBUDDY", selectedRole: "HEALER" },
-        { participationType: "LOOTBUDDY", selectedRole: "DPS" },
+        { participationType: "LOOTBUDDY", selectedRole: "MELEE_DPS" },
       ],
       targets,
     );

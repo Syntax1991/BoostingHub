@@ -589,7 +589,7 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
     publishedAt: "2026-09-20T20:00:00.000Z",
     version: 3,
     targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 },
-    groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
+    groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], unspecifiedDps: [], lootbuddies: [] },
     totalSelected: 0,
   };
 
@@ -1398,7 +1398,7 @@ describe("syncOnce — UserNotification DMs", () => {
           difficulty: "HEROIC",
           lootType: "SAVED",
           participationType: "BOOSTER",
-          selectedRole: "DPS",
+          selectedRole: "MELEE_DPS",
           characterName: "Kael",
           wowClass: "MAGE",
         },

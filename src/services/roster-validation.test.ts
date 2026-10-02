@@ -22,7 +22,7 @@ describe("validateRosterDraft", () => {
       runStatus: "ROSTERING",
       selected: [member({ selectedRole: "HEALER" })],
       targets: { tanks: 1, healers: 1, dps: 2 },
-      externalBoosters: [{ role: "TANK" }, { role: "DPS" }, { role: "DPS" }],
+      externalBoosters: [{ role: "TANK" }, { role: "MELEE_DPS" }, { role: "MELEE_DPS" }],
     });
     expect(result.composition.tanks.selected).toBe(1);
     expect(result.composition.dps.selected).toBe(2);

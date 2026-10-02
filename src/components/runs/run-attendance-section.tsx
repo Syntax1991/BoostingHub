@@ -7,6 +7,7 @@ import { AttendanceStatusBadge, ClassBadge, ParticipationBadge, RoleBadge } from
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { ATTENDANCE_STATUS_LABELS, CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { EXTERNAL_BOOSTER_NAME_MAX_LENGTH, externalBoosterInputError } from "@/lib/external-booster";
+import { isDpsRole } from "@/lib/character-roles";
 import { rolesForClass } from "@/lib/wow-specializations";
 import {
   ATTENDANCE_STATUSES,
@@ -364,8 +365,13 @@ function ReplaceParticipantDialog({
   const [signupId, setSignupId] = useState(matching[0]?.signupId ?? "");
   const [name, setName] = useState("");
   const role: CharacterRole = row?.selectedRole ?? "DPS";
+  const classSupportsRole = (option: WowClass) => {
+    const roles = rolesForClass(option);
+    if (isDpsRole(role)) return roles.some((r) => isDpsRole(r));
+    return (roles as readonly CharacterRole[]).includes(role);
+  };
   const [wowClass, setWowClass] = useState<WowClass>(
-    () => WOW_CLASSES.find((option) => rolesForClass(option).includes(role)) ?? "MAGE",
+    () => WOW_CLASSES.find((option) => classSupportsRole(option)) ?? "MAGE",
   );
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -384,7 +390,7 @@ function ReplaceParticipantDialog({
   const lootbuddySlot = row.participationType === "LOOTBUDDY";
   const classesForRole = lootbuddySlot
     ? WOW_CLASSES
-    : WOW_CLASSES.filter((option) => rolesForClass(option).includes(role));
+    : WOW_CLASSES.filter((option) => classSupportsRole(option));
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

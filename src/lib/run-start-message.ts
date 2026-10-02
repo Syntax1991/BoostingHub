@@ -150,11 +150,13 @@ export function compareFinalSetupParticipants(a: FinalSetupParticipant, b: Final
   return a.userName.localeCompare(b.userName, "en");
 }
 
+import { isDpsRole } from "@/lib/character-roles";
+
 export function groupFinalSetupParticipants(members: FinalSetupParticipant[]): FinalSetupInput["groups"] {
   return {
     tanks: members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "TANK").sort(compareFinalSetupParticipants),
     healers: members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "HEALER").sort(compareFinalSetupParticipants),
-    dps: members.filter((m) => m.participationType === "BOOSTER" && m.selectedRole === "DPS").sort(compareFinalSetupParticipants),
+    dps: members.filter((m) => m.participationType === "BOOSTER" && isDpsRole(m.selectedRole)).sort(compareFinalSetupParticipants),
     lootbuddies: members.filter((m) => m.participationType === "LOOTBUDDY").sort(compareFinalSetupParticipants),
   };
 }

@@ -8,7 +8,8 @@ import {
   updateCharacterAction,
 } from "@/controllers/character.actions";
 import { Button } from "@/components/ui/button";
-import { CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
+import { remainingSpecsForClass } from "@/lib/character-capabilities";
 import { WOW_REGIONS, type WowClass, type WowRegion } from "@/models/enums";
 import { specializationsForClass } from "@/lib/wow-specializations";
 
@@ -21,6 +22,7 @@ type CharacterFormValues = {
   region: WowRegion;
   wowClass: WowClass;
   specialization: string;
+  playableSpecs: string[];
   itemLevel: number | null;
 };
 
@@ -53,6 +55,7 @@ export function CharacterFormDialog({
     initial ? { name: initial.name, realm: initial.realm, region: initial.region } : EMPTY_IDENTITY,
   );
   const [specialization, setSpecialization] = useState(initial?.specialization ?? "");
+  const [playableSpecs, setPlayableSpecs] = useState<string[]>(initial?.playableSpecs ?? []);
   const [lookup, setLookup] = useState<LookupResult>(
     initial ? { wowClass: initial.wowClass, itemLevel: initial.itemLevel } : null,
   );
@@ -64,6 +67,20 @@ export function CharacterFormDialog({
     [resolvedClass],
   );
   const derivedRole = specs.find((spec) => spec.name === specialization)?.role ?? specs[0]?.role;
+  const additionalOptions = useMemo(() => {
+    if (!resolvedClass || !specialization) return [];
+    return remainingSpecsForClass(resolvedClass, specialization).map((name) => {
+      const role = specs.find((spec) => spec.name === name)?.role;
+      return { name, role };
+    });
+  }, [resolvedClass, specialization, specs]);
+
+  function resetFromInitial() {
+    setIdentity(initial ? { name: initial.name, realm: initial.realm, region: initial.region } : EMPTY_IDENTITY);
+    setSpecialization(initial?.specialization ?? "");
+    setPlayableSpecs(initial?.playableSpecs ?? []);
+    setLookup(initial ? { wowClass: initial.wowClass, itemLevel: initial.itemLevel } : null);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -74,12 +91,11 @@ export function CharacterFormDialog({
       setOpen(false);
       setError(null);
       setSuccess(null);
-      setIdentity(initial ? { name: initial.name, realm: initial.realm, region: initial.region } : EMPTY_IDENTITY);
-      setSpecialization(initial?.specialization ?? "");
-      setLookup(initial ? { wowClass: initial.wowClass, itemLevel: initial.itemLevel } : null);
+      resetFromInitial();
     };
     dialog.addEventListener("close", onClose);
     return () => dialog.removeEventListener("close", onClose);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens / initial identity changes
   }, [open, initial]);
 
   function close() {
@@ -94,7 +110,24 @@ export function CharacterFormDialog({
       // up again so Class/Item Level always match what is being submitted.
       setLookup(null);
       setSpecialization("");
+      setPlayableSpecs([]);
     }
+  }
+
+  function changePrimarySpec(next: string) {
+    setSpecialization(next);
+    setPlayableSpecs((current) =>
+      current.filter((spec) => spec.toLocaleLowerCase("en-US") !== next.toLocaleLowerCase("en-US")),
+    );
+  }
+
+  function togglePlayableSpec(specName: string, checked: boolean) {
+    setPlayableSpecs((current) => {
+      if (checked) {
+        return current.includes(specName) ? current : [...current, specName];
+      }
+      return current.filter((spec) => spec !== specName);
+    });
   }
 
   function runLookup(event?: { preventDefault(): void }) {
@@ -109,6 +142,7 @@ export function CharacterFormDialog({
       }
       setLookup(result.data as LookupResult);
       setSpecialization((current) => current || "");
+      setPlayableSpecs([]);
     });
   }
 
@@ -119,11 +153,12 @@ export function CharacterFormDialog({
     startTransition(async () => {
       const result =
         mode === "create"
-          ? await createCharacterAction({ ...identity, specialization })
+          ? await createCharacterAction({ ...identity, specialization, playableSpecs })
           : await updateCharacterAction({
               characterId: initial?.id,
               ...identity,
               specialization,
+              playableSpecs,
             });
 
       if (!result.ok) {
@@ -144,9 +179,7 @@ export function CharacterFormDialog({
       <button
         type="button"
         onClick={() => {
-          setIdentity(initial ? { name: initial.name, realm: initial.realm, region: initial.region } : EMPTY_IDENTITY);
-          setSpecialization(initial?.specialization ?? "");
-          setLookup(initial ? { wowClass: initial.wowClass, itemLevel: initial.itemLevel } : null);
+          resetFromInitial();
           setError(null);
           setSuccess(null);
           setOpen(true);
@@ -170,7 +203,7 @@ export function CharacterFormDialog({
             </h2>
             <p className="mt-1 text-xs text-muted">
               {mode === "create"
-                ? "Look up a character by Region / Realm / Name. Blizzard supplies Class and Item Level; you choose the specialization."
+                ? "Look up a character by Region / Realm / Name. Blizzard supplies Class and Item Level; you choose which specializations you can play."
                 : "Class and Item Level are Blizzard-authoritative and cannot be edited here."}
             </p>
           </div>
@@ -246,26 +279,71 @@ export function CharacterFormDialog({
                   </div>
                 </div>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-muted">Specialization</span>
+                  <span className="mb-1 block text-muted">Primary specialization</span>
                   <select
-                    aria-label="Specialization"
+                    aria-label="Primary specialization"
                     value={specialization}
-                    onChange={(event) => setSpecialization(event.target.value)}
+                    onChange={(event) => changePrimarySpec(event.target.value)}
                     className="h-9 w-full rounded-md border border-border bg-surface px-2"
                   >
                     <option value="">Select…</option>
                     {specs.map((spec) => (
                       <option key={spec.name} value={spec.name}>
-                        {spec.name}
+                        {spec.name} — {CHARACTER_ROLE_LABELS[spec.role]}
                       </option>
                     ))}
                   </select>
                 </label>
+                {specialization && additionalOptions.length > 0 ? (
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm text-muted">Other playable specializations</legend>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-accent underline-offset-2 hover:underline"
+                        onClick={() => setPlayableSpecs(additionalOptions.map((option) => option.name))}
+                      >
+                        Select all remaining specs
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-muted underline-offset-2 hover:underline"
+                        onClick={() => setPlayableSpecs([])}
+                      >
+                        Clear additional
+                      </button>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {additionalOptions.map((option) => {
+                        const checked = playableSpecs.includes(option.name);
+                        return (
+                          <li key={option.name}>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) => togglePlayableSpec(option.name, event.target.checked)}
+                              />
+                              <span>
+                                {option.name}
+                                {option.role ? (
+                                  <span className="text-muted"> — {CHARACTER_ROLE_LABELS[option.role]}</span>
+                                ) : null}
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </fieldset>
+                ) : null}
                 <p className="text-sm">
                   <span className="text-muted">Primary role </span>
-                  <span className="font-medium">{derivedRole ?? "—"}</span>
+                  <span className="font-medium">
+                    {derivedRole ? CHARACTER_ROLE_LABELS[derivedRole] : "—"}
+                  </span>
                   <span className="mt-1 block text-xs text-muted">
-                    Derived from specialization. Other class roles can be offered at signup once your account has the Booster role.
+                    Signup roles come only from the specializations you configure here, and only if your account has the Booster role.
                   </span>
                 </p>
               </>

@@ -38,7 +38,7 @@ describe("formatRaidInviteAssignment", () => {
     expect(
       formatRaidInviteAssignment({
         participationType: "BOOSTER",
-        selectedRole: "DPS",
+        selectedRole: "MELEE_DPS",
         characterName: "Synvoid",
         wowClass: "MAGE",
         lootType: "UNSAVED",
@@ -110,7 +110,7 @@ describe("buildRaidInviteMessage", () => {
       difficulty: "NORMAL",
       lootType: "UNSAVED",
       participationType: "BOOSTER",
-      selectedRole: "DPS",
+      selectedRole: "MELEE_DPS",
       characterName: "Bob",
       wowClass: "HUNTER",
       runChannelId: "   ",

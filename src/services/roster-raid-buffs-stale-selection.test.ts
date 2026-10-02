@@ -109,7 +109,7 @@ describe("live composition from staged selection", () => {
     const selected = [
       { participationType: "BOOSTER" as const, selectedRole: "TANK" as const },
       { participationType: "BOOSTER" as const, selectedRole: "HEALER" as const },
-      { participationType: "BOOSTER" as const, selectedRole: "DPS" as const },
+      { participationType: "BOOSTER" as const, selectedRole: "MELEE_DPS" as const },
     ];
     const targets = { tanks: 2, healers: 4, dps: 14 };
     expect(composeRoster(selected, targets).tanks.selected).toBe(1);

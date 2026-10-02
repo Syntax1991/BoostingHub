@@ -38,6 +38,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupService } from "@/services/signup.service";
 import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
+import { isConcreteCharacterRole } from "@/lib/character-roles";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
@@ -172,6 +173,12 @@ function resolveSelectedRole(
       signup.offeredRoles.length === 0
         ? `${label} offered no role and cannot be rostered as a booster.`
         : `Choose a role for ${label} — offered ${formatOfferedRoles(signup.offeredRoles)}.`,
+    );
+  }
+  if (!isConcreteCharacterRole(role)) {
+    throw new DomainError(
+      "INVALID_ROSTER_SELECTION",
+      `Generic DPS cannot be assigned for ${label}. Choose Melee DPS or Ranged DPS.`,
     );
   }
   if (!signup.offeredRoles.includes(role)) {
@@ -685,7 +692,14 @@ export const rosterService = {
       groups: {
         tanks: boosterCardsFor(candidates, "TANK"),
         healers: boosterCardsFor(candidates, "HEALER"),
-        dps: boosterCardsFor(candidates, "DPS"),
+        meleeDps: boosterCardsFor(candidates, "MELEE_DPS"),
+        rangedDps: boosterCardsFor(candidates, "RANGED_DPS"),
+        /** @deprecated Prefer meleeDps/rangedDps — kept for consumers still reading `dps`. */
+        dps: [
+          ...boosterCardsFor(candidates, "MELEE_DPS"),
+          ...boosterCardsFor(candidates, "RANGED_DPS"),
+          ...boosterCardsFor(candidates, "DPS"),
+        ],
         lootbuddies: candidates
           .filter((item) => item.participationType === "LOOTBUDDY")
           .map((item): RosterSignupCard => ({ ...item, groupRole: null })),

@@ -20,7 +20,7 @@ function baseItem(overrides: Partial<MyRunsProjection["selected"][number]> = {})
     characterId: "char-1",
     characterName: "Synlight",
     characterRealm: "Thrall",
-    offeredRoles: ["HEALER", "DPS"],
+    offeredRoles: ["HEALER", "RANGED_DPS"],
     publishedRole: "HEALER",
     participationType: "BOOSTER",
     isBackup: false,

@@ -98,7 +98,7 @@ export function RoleBadge({ role }: { role: CharacterRole }) {
       className={cn(
         role === "TANK" && "bg-[#2c4d7a] text-[#cfe2ff]",
         role === "HEALER" && "bg-[#2f6a4a] text-[#c8f0d8]",
-        role === "DPS" && "bg-[#6a3a2f] text-[#f3d0c6]",
+        (role === "DPS" || role === "MELEE_DPS" || role === "RANGED_DPS") && "bg-[#6a3a2f] text-[#f3d0c6]",
       )}
     >
       {CHARACTER_ROLE_LABELS[role]}

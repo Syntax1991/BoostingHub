@@ -24,7 +24,7 @@ import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dial
 
 const original: ExternalBooster[] = [
   { id: "id-a", name: "Alpha", wowClass: "PALADIN", participationType: "BOOSTER", role: "HEALER" },
-  { id: "id-b", name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+  { id: "id-b", name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
   { id: "id-c", name: "Charlie", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null },
 ];
 
@@ -43,11 +43,11 @@ describe("external booster staging helpers", () => {
       name: "  @BravoPrime ",
       wowClass: "MAGE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
     });
     expect(error).toBeNull();
     expect(next.map((row) => row.key)).toEqual(["id-a", "id-b", "id-c"]);
-    expect(next[1]).toMatchObject({ key: "id-b", name: "BravoPrime", wowClass: "MAGE", role: "DPS" });
+    expect(next[1]).toMatchObject({ key: "id-b", name: "BravoPrime", wowClass: "MAGE", role: "RANGED_DPS" });
   });
 
   it("C. class change keeps a still-valid role", () => {
@@ -56,8 +56,8 @@ describe("external booster staging helpers", () => {
   });
 
   it("D. class change with invalid role picks DPS (or first valid)", () => {
-    expect(roleAfterClassChange("BOOSTER", "HEALER", "MAGE")).toBe("DPS");
-    expect(preferredRoleForClass("MAGE", "HEALER")).toBe("DPS");
+    expect(roleAfterClassChange("BOOSTER", "HEALER", "MAGE")).toBe("RANGED_DPS");
+    expect(preferredRoleForClass("MAGE", "HEALER")).toBe("RANGED_DPS");
   });
 
   it("E. BOOSTER → LOOTBUDDY clears role", () => {
@@ -73,15 +73,15 @@ describe("external booster staging helpers", () => {
   });
 
   it("F. LOOTBUDDY → BOOSTER assigns a valid preferred role", () => {
-    expect(roleAfterTypeChange("BOOSTER", "ROGUE", null)).toBe("DPS");
+    expect(roleAfterTypeChange("BOOSTER", "ROGUE", null)).toBe("MELEE_DPS");
     const { next, error } = applyStagedExternalBoosterEdit(stagedFromOriginal(), "id-c", {
       name: "Charlie",
       wowClass: "ROGUE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "MELEE_DPS",
     });
     expect(error).toBeNull();
-    expect(next[2]).toMatchObject({ key: "id-c", participationType: "BOOSTER", role: "DPS" });
+    expect(next[2]).toMatchObject({ key: "id-c", participationType: "BOOSTER", role: "MELEE_DPS" });
   });
 
   it("G. invalid edited name rejects Apply and leaves staged unchanged", () => {
@@ -106,7 +106,7 @@ describe("external booster staging helpers", () => {
       name: "BravoTwo",
       wowClass: "WARLOCK",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
     });
     expect(next.map((row) => row.key)).toEqual(["id-a", "id-b", "id-c"]);
     expect(next[1]!.name).toBe("BravoTwo");
@@ -125,7 +125,7 @@ describe("external booster staging helpers", () => {
       name: "Bravo2",
       wowClass: "MAGE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
     });
     // Helpers allow sequential applies; the dialog prevents concurrent edit UI.
     expect(second.next.map((row) => row.name)).toEqual(["Alpha2", "Bravo2", "Charlie"]);
@@ -166,11 +166,11 @@ describe("external booster staging helpers", () => {
   it("O. Add still works", () => {
     const next = appendStagedExternalBooster(
       stagedFromOriginal(),
-      { name: "Delta", wowClass: "HUNTER", participationType: "BOOSTER", role: "DPS" },
+      { name: "Delta", wowClass: "HUNTER", participationType: "BOOSTER", role: "RANGED_DPS" },
       "new-key",
     );
     expect(next).toHaveLength(4);
-    expect(next[3]).toMatchObject({ key: "new-key", name: "Delta", role: "DPS" });
+    expect(next[3]).toMatchObject({ key: "new-key", name: "Delta", role: "RANGED_DPS" });
   });
 
   it("P. Save payload is the final edited values without keys", () => {
@@ -182,7 +182,7 @@ describe("external booster staging helpers", () => {
     });
     expect(stagedExternalBoostersForSave(next)).toEqual([
       { name: "AlphaFinal", wowClass: "PALADIN", participationType: "LOOTBUDDY", role: null },
-      { name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+      { name: "Bravo", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
       { name: "Charlie", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: null },
     ]);
   });

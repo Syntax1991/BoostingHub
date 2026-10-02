@@ -51,6 +51,7 @@ function baseCharacter(overrides: Partial<CharacterRow> = {}): CharacterRow {
     wowClass: "SHAMAN",
     specialization: "Restoration",
     primaryRole: "HEALER",
+    playableSpecs: [] as string[],
     itemLevel: 640,
     isActive: true,
     lastSyncedAt: null,

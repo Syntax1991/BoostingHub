@@ -88,7 +88,7 @@ async function createCharacter(input: {
     normalizedRealm: normalizeCharacterIdentity(realm),
     wowClass: "MAGE",
     specialization: "Arcane",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: input.itemLevel ?? 600,
     isActive: input.isActive ?? true,
     blizzardCharacterId: input.blizzardCharacterId === undefined ? `bz-${id}` : input.blizzardCharacterId,
@@ -333,7 +333,7 @@ describe("scheduledCharacterSyncService.runOnce — data ownership and partial f
     const updated = await characterRepository.findById(character.id);
     expect(updated?.itemLevel).toBe(690);
     expect(updated?.specialization).toBe("Arcane");
-    expect(updated?.primaryRole).toBe("DPS");
+    expect(updated?.primaryRole).toBe("RANGED_DPS");
     expect(updated?.lastSyncedAt).toBeTruthy();
 
     const refreshedConnection = await battleNetConnectionRepository.findByUserAndRegion(userId, "EU");

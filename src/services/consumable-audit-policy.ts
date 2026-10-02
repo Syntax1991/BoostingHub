@@ -43,8 +43,11 @@ export const CONSUMABLE_AUDIT_POLICY = {
   /** Accepted combat potion categories per role PLAYED in that fight (from the log, not the roster). */
   combatPotionByRole: {
     TANK: ["DAMAGE_POTION"],
-    DPS: ["DAMAGE_POTION"],
     HEALER: ["DAMAGE_POTION", "MANA_POTION"],
+    MELEE_DPS: ["DAMAGE_POTION"],
+    RANGED_DPS: ["DAMAGE_POTION"],
+    /** Legacy generic DPS rows from older audits. */
+    DPS: ["DAMAGE_POTION"],
   } satisfies Record<CharacterRole, readonly ConsumableCategory[]>,
 } as const;
 

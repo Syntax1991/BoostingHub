@@ -47,7 +47,7 @@ describe("hasUnpublishedRosterChanges", () => {
         version: 5,
         draft: [
           { signupId: "a", selectedRole: "HEALER" },
-          { signupId: "b", selectedRole: "DPS" },
+          { signupId: "b", selectedRole: "MELEE_DPS" },
         ],
         signups: [booster("a", "SELECTED", "HEALER"), booster("b", "PENDING")],
       }),
@@ -70,7 +70,7 @@ describe("hasUnpublishedRosterChanges", () => {
         runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 5,
-        draft: [{ signupId: "a", selectedRole: "DPS" }],
+        draft: [{ signupId: "a", selectedRole: "MELEE_DPS" }],
         signups: [booster("a", "SELECTED", "HEALER")],
       }),
     ).toBe(true);
@@ -96,7 +96,7 @@ describe("hasUnpublishedRosterChanges", () => {
         version: 6,
         draft: [
           { signupId: "a", selectedRole: "HEALER" },
-          { signupId: "w", selectedRole: "DPS" },
+          { signupId: "w", selectedRole: "MELEE_DPS" },
         ],
         signups: [booster("a", "SELECTED", "HEALER"), booster("w", "WITHDRAWN")],
       }),
@@ -134,7 +134,7 @@ describe("hasUnpublishedRosterChanges", () => {
         runChangedSinceAck: false,
         publishedAt: PUBLISHED_AT,
         version: 6,
-        draft: [{ signupId: "l", selectedRole: "DPS" }],
+        draft: [{ signupId: "l", selectedRole: "MELEE_DPS" }],
         signups: [lootbuddy("l", "SELECTED")],
       }),
     ).toBe(false);

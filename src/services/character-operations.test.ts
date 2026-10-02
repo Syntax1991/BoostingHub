@@ -121,7 +121,7 @@ async function createCharacter(
     normalizedRealm: normalizeCharacterIdentity(realm),
     wowClass: "MAGE",
     specialization: "Arcane",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: 600,
     isActive: input.active ?? true,
     blizzardCharacterId: input.linked === false ? null : `bz-${id}`,
@@ -345,7 +345,7 @@ function record(overrides: Partial<OperationsCharacterRecord> & { id: string; na
     region: "EU",
     wowClass: "MAGE",
     specialization: null,
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: null,
     isActive: true,
     blizzardCharacterId: "b",
@@ -464,7 +464,7 @@ describe("detail", () => {
       lastSyncErrorLabel: "Blizzard API unavailable",
       syncFailureCount: 2,
     });
-    expect(detail.identity).toMatchObject({ primaryRole: "DPS", ownerHasRegionConnection: true });
+    expect(detail.identity).toMatchObject({ primaryRole: "RANGED_DPS", ownerHasRegionConnection: true });
     expect(detail.weeklyAvailability).toMatchObject({ characterId: fx.error!.id, status: "AVAILABLE" });
     // The owner's account-level Boosting Roles — no per-difficulty cells.
     expect(detail.ownerBoostingRoles).toEqual({ isBooster: expect.any(Boolean), isLootbuddy: expect.any(Boolean) });

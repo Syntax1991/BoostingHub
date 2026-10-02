@@ -59,7 +59,7 @@ beforeAll(async () => {
     normalizedRealm: "tarrenmill",
     wowClass: "SHAMAN",
     specialization: "Elemental",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
     itemLevel: 700,
     isActive: true,
     createdAt: nowIso,

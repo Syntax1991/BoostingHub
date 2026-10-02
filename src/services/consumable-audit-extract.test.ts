@@ -164,7 +164,7 @@ describe("extractConsumableAudit", () => {
     participants: [
       attended("Synlight", "Blackhand"),
       attended("Nobody", "Blackhand"),
-      { source: "EXTERNAL", externalBoosterId: "ext-1", displayName: "helper", wowClass: "MAGE", role: "DPS" },
+      { source: "EXTERNAL", externalBoosterId: "ext-1", displayName: "helper", wowClass: "MAGE", role: "RANGED_DPS" },
     ],
   });
 

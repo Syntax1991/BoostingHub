@@ -28,6 +28,8 @@ export type CharacterPageRecord = {
   wowClass: ReturnType<typeof mapWowClass>;
   specialization: string | null;
   primaryRole: ReturnType<typeof mapCharacterRole>;
+  /** Additional playable specializations beyond primary (never includes primary). */
+  playableSpecs: string[];
   /** Blizzard-authoritative equipped item level. Null when Blizzard has not supplied one. */
   itemLevel: number | null;
   isActive: boolean;
@@ -70,6 +72,8 @@ export type CharacterCreateInput = {
   wowClass: WowClass;
   specialization: string;
   primaryRole: CharacterRole;
+  /** Additional playable specs (excluding primary). Default []. */
+  playableSpecs?: readonly string[];
   /** Blizzard-authoritative; null when Blizzard has not supplied one yet. */
   itemLevel: number | null;
   isActive: boolean;
@@ -87,6 +91,8 @@ export type CharacterUpdateInput = {
   normalizedRealm: string;
   specialization: string;
   primaryRole: CharacterRole;
+  /** Replaces the full additional playable-spec set. */
+  playableSpecs: readonly string[];
 };
 
 export type CharacterBlizzardLinkInput = {
@@ -107,6 +113,14 @@ export type CharacterBlizzardSyncInput = {
   lastSyncedAt: string;
 };
 
+function mapPlayableSpecs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => asStringOrNull((row as Record<string, unknown>).specialization))
+    .filter((spec): spec is string => Boolean(spec))
+    .sort((a, b) => a.localeCompare(b, "en-US"));
+}
+
 function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
   const lockouts = Array.isArray(character.lockouts) ? character.lockouts : [];
 
@@ -121,6 +135,7 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     wowClass: mapWowClass(character.wowClass),
     specialization: asStringOrNull(character.specialization),
     primaryRole: mapCharacterRole(character.primaryRole),
+    playableSpecs: mapPlayableSpecs(character.playableSpecs),
     itemLevel: asNumberOrNull(character.itemLevel),
     isActive: asBoolean(character.isActive, true),
     lastSyncedAt: asStringOrNull(character.lastSyncedAt),
@@ -151,6 +166,19 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
   };
 }
 
+async function replacePlayableSpecs(characterId: string, specs: readonly string[]): Promise<void> {
+  await orm.CharacterPlayableSpec.where({ characterId }).delete();
+  const now = new Date().toISOString();
+  for (const specialization of specs) {
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId,
+      specialization,
+      createdAt: now,
+    });
+  }
+}
+
 /**
  * Attach each Character owner's Booster role (User.isBooster).
  * Booster eligibility is per User — not per Character, class, or difficulty.
@@ -171,6 +199,7 @@ export const characterRepository = {
   async listByUserId(userId: string): Promise<CharacterPageRecord[]> {
     const characters = await orm.Character
       .where({ userId })
+      .include("playableSpecs")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .orderBy((character) => character.name.asc())
       .all();
@@ -183,6 +212,7 @@ export const characterRepository = {
   async findById(characterId: string): Promise<CharacterPageRecord | null> {
     const character = await orm.Character
       .where({ id: characterId })
+      .include("playableSpecs")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
@@ -195,6 +225,7 @@ export const characterRepository = {
   async findOwnedById(userId: string, characterId: string): Promise<CharacterPageRecord | null> {
     const character = await orm.Character
       .where({ id: characterId, userId })
+      .include("playableSpecs")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
@@ -218,6 +249,7 @@ export const characterRepository = {
         blizzardRealmId,
         blizzardCharacterId,
       })
+      .include("playableSpecs")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
@@ -284,6 +316,10 @@ export const characterRepository = {
       updatedAt: now,
     });
 
+    if (input.playableSpecs && input.playableSpecs.length > 0) {
+      await replacePlayableSpecs(input.id, input.playableSpecs);
+    }
+
     const created = await this.findById(input.id);
     if (!created) {
       throw new Error("Character create did not persist.");
@@ -302,6 +338,7 @@ export const characterRepository = {
       primaryRole: input.primaryRole,
       updatedAt: new Date().toISOString(),
     });
+    await replacePlayableSpecs(characterId, input.playableSpecs);
   },
 
   async applyBlizzardLink(characterId: string, input: CharacterBlizzardLinkInput): Promise<void> {

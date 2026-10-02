@@ -638,6 +638,12 @@ describe("rosterService publishedRole snapshot", () => {
       createdAt: now,
       updatedAt: now,
     });
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: shamanId,
+      specialization: "Elemental",
+      createdAt: now,
+    });
 
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 1, desiredDpsCount: 0 }));
     createdRunIds.push(run.id);
@@ -645,7 +651,7 @@ describe("rosterService publishedRole snapshot", () => {
 
     await signupService.setCharacterOffers(kael, {
       runId: run.id,
-      offers: [{ characterId: shamanId, offeredRoles: ["HEALER", "DPS"] }],
+      offers: [{ characterId: shamanId, offeredRoles: ["HEALER", "RANGED_DPS"] }],
     });
     const signup = (await signupRepository.listByRunAndUser(run.id, ids.kael)).find(
       (row) => row.status === "PENDING",
@@ -657,7 +663,7 @@ describe("rosterService publishedRole snapshot", () => {
     expect(view.groups.dps.filter((item) => item.id === signup.id)).toHaveLength(1);
     expect(view.groups.tanks.filter((item) => item.id === signup.id)).toHaveLength(0);
     expect(view.groups.healers.find((item) => item.id === signup.id)?.groupRole).toBe("HEALER");
-    expect(view.groups.dps.find((item) => item.id === signup.id)?.groupRole).toBe("DPS");
+    expect(view.groups.dps.find((item) => item.id === signup.id)?.groupRole).toBe("RANGED_DPS");
     // Domain identity remains one signup.
     expect(rosterBoosters(view).filter((item) => item.id === signup.id)).toHaveLength(1);
 
@@ -695,11 +701,11 @@ describe("rosterService publishedRole snapshot", () => {
     await rosterService.saveDraftSelection(thorne, {
       runId: run.id,
       version: view.roster.version,
-      selections: [{ signupId: signup.id, selectedRole: "DPS" }],
+      selections: [{ signupId: signup.id, selectedRole: "RANGED_DPS" }],
     });
 
     const draft = await rosterRepository.findByRunId(run.id);
-    expect(draft?.selections.find((s) => s.signupId === signup.id)?.selectedRole).toBe("DPS");
+    expect(draft?.selections.find((s) => s.signupId === signup.id)?.selectedRole).toBe("RANGED_DPS");
     live = await signupRepository.findById(signup.id);
     expect(live?.publishedRole).toBe("HEALER");
     expect((await rosterService.getPublishedRosterView(run.id))?.members.find((m) => m.signupId === signup.id)?.selectedRole).toBe(
@@ -717,9 +723,9 @@ describe("rosterService publishedRole snapshot", () => {
       acknowledgeWarnings: true,
     });
     live = await signupRepository.findById(signup.id);
-    expect(live?.publishedRole).toBe("DPS");
+    expect(live?.publishedRole).toBe("RANGED_DPS");
     expect((await rosterService.getPublishedRosterView(run.id))?.members.find((m) => m.signupId === signup.id)?.selectedRole).toBe(
-      "DPS",
+      "RANGED_DPS",
     );
 
     const detailAfter = await runDetailService.getRunDetail(thorne, run.id);
@@ -750,6 +756,18 @@ describe("rosterService publishedRole snapshot", () => {
       createdAt: now,
       updatedAt: now,
     });
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: paladinId,
+      specialization: "Protection",
+      createdAt: now,
+    });
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: paladinId,
+      specialization: "Retribution",
+      createdAt: now,
+    });
 
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }));
     createdRunIds.push(run.id);
@@ -757,7 +775,7 @@ describe("rosterService publishedRole snapshot", () => {
 
     await signupService.setCharacterOffers(kael, {
       runId: run.id,
-      offers: [{ characterId: paladinId, offeredRoles: ["TANK", "HEALER", "DPS"] }],
+      offers: [{ characterId: paladinId, offeredRoles: ["TANK", "HEALER", "MELEE_DPS"] }],
     });
     const signup = (await signupRepository.listByRunAndUser(run.id, ids.kael)).find(
       (row) => row.status === "PENDING",
@@ -792,10 +810,10 @@ describe("rosterService publishedRole snapshot", () => {
     const kael = asUser(ids.kael, "Kael Stormeye");
     const now = new Date().toISOString();
 
-    const defs: Array<{ name: string; wowClass: "MAGE" | "PRIEST" | "SHAMAN"; roles: Array<"TANK" | "HEALER" | "DPS">; primary: "DPS" | "HEALER" }> = [
-      { name: "CountA", wowClass: "MAGE", roles: ["DPS"], primary: "DPS" },
+    const defs: Array<{ name: string; wowClass: "MAGE" | "PRIEST" | "SHAMAN"; roles: Array<"TANK" | "HEALER" | "RANGED_DPS" | "RANGED_DPS">; primary: "RANGED_DPS" | "RANGED_DPS" | "HEALER" }> = [
+      { name: "CountA", wowClass: "MAGE", roles: ["RANGED_DPS"], primary: "RANGED_DPS" },
       { name: "CountB", wowClass: "PRIEST", roles: ["HEALER"], primary: "HEALER" },
-      { name: "CountC", wowClass: "SHAMAN", roles: ["HEALER", "DPS"], primary: "HEALER" },
+      { name: "CountC", wowClass: "SHAMAN", roles: ["HEALER", "RANGED_DPS"], primary: "HEALER" },
     ];
     const characterIds: string[] = [];
     for (const def of defs) {
@@ -811,13 +829,22 @@ describe("rosterService publishedRole snapshot", () => {
         normalizedRealm: "antonidas",
         region: "EU",
         wowClass: def.wowClass,
-        specialization: def.primary === "HEALER" ? "Restoration" : "Frost",
+        specialization:
+          def.wowClass === "MAGE" ? "Frost" : def.wowClass === "PRIEST" ? "Holy" : "Restoration",
         primaryRole: def.primary,
         itemLevel: 700,
         isActive: true,
         createdAt: now,
         updatedAt: now,
       });
+      if (def.wowClass === "SHAMAN" && def.roles.includes("RANGED_DPS")) {
+        await orm.CharacterPlayableSpec.create({
+          id: crypto.randomUUID(),
+          characterId,
+          specialization: "Elemental",
+          createdAt: now,
+        });
+      }
     }
 
     const run = await runService.createRun(thorne, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), desiredTankCount: 0, desiredHealerCount: 2, desiredDpsCount: 2 }));

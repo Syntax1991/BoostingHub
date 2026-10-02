@@ -84,7 +84,7 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
           wowClass: "SHAMAN",
           classLabel: "Shaman",
           participationType: "BOOSTER",
-          selectedRole: "DPS",
+          selectedRole: "MELEE_DPS",
         }),
       ],
       lootbuddies: [
@@ -369,7 +369,7 @@ describe("Final Setup Discord length safety", () => {
         userName: `Dps${i}`,
         wowClass: classes[i % classes.length]!,
         participationType: "BOOSTER",
-        selectedRole: "DPS",
+        selectedRole: "MELEE_DPS",
       }),
     );
     const lootbuddies = Array.from({ length: 5 }, (_, i) =>

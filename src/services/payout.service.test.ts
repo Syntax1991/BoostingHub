@@ -257,7 +257,7 @@ beforeAll(async () => {
     name: "Pykael",
     wowClass: "SHAMAN",
     specialization: "Elemental",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
   });
   characters.playerB = await createCharacter({
     userId: ids.playerB,
@@ -278,7 +278,7 @@ beforeAll(async () => {
     name: "Pysylva",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
   });
   characters.playerE = await createCharacter({
     userId: ids.playerE,
@@ -360,7 +360,7 @@ const defaultRoster = [
     userId: ids.user,
     characterId: "",
     participationType: "BOOSTER" as const,
-    role: "DPS" as const,
+    role: "MELEE_DPS" as const,
     status: "PRESENT" as const,
   },
   {
@@ -381,7 +381,7 @@ const defaultRoster = [
     userId: ids.playerD,
     characterId: "",
     participationType: "BOOSTER" as const,
-    role: "DPS" as const,
+    role: "MELEE_DPS" as const,
     isBackup: true,
     status: "STANDBY" as const,
   },
@@ -460,7 +460,7 @@ describe("default share mapping", () => {
     expect(byStatus.LATE?.amountGold).toBe(0);
 
     const extraId = await completedRun([
-      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "LEFT_EARLY" },
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "MELEE_DPS", status: "LEFT_EARLY" },
       { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
     ]);
     await payoutService.prepareSettlement(lead, extraId, { totalGold: 100 });
@@ -474,10 +474,10 @@ describe("default share mapping", () => {
 describe("draft editing and calculation", () => {
   it("recalculates from totalGold and shareUnits with deterministic remainder", { timeout: 20_000 }, async () => {
     const runId = await completedRun([
-      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "MELEE_DPS", status: "PRESENT" },
       { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "LATE" },
       { userId: ids.playerC, characterId: characters.playerC, participationType: "BOOSTER", role: "TANK", status: "LEFT_EARLY" },
-      { userId: ids.playerD, characterId: characters.playerD, participationType: "BOOSTER", role: "DPS", isBackup: true, status: "EXCUSED" },
+      { userId: ids.playerD, characterId: characters.playerD, participationType: "BOOSTER", role: "MELEE_DPS", isBackup: true, status: "EXCUSED" },
     ]);
     await payoutService.prepareSettlement(lead, runId, { totalGold: 1000 });
     const prepared = (await payoutService.getPayoutView(lead, runId)).manager!;
@@ -644,7 +644,7 @@ describe("user payout DTO", () => {
 describe("raid lead cut KEEP / SHARE", () => {
   it("recalculates KEEP buckets when pot changes from 1.3M to 1.45M", { timeout: 20_000 }, async () => {
     const runId = await completedRun([
-      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "MELEE_DPS", status: "PRESENT" },
       { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
     ]);
     await payoutService.prepareSettlement(lead, runId, {
@@ -693,7 +693,7 @@ describe("raid lead cut KEEP / SHARE", () => {
 
   it("SHARE folds Raid Lead 3% into Booster Pool; KEEP pays dedicated 3%", { timeout: 20_000 }, async () => {
     const runId = await completedRun([
-      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "MELEE_DPS", status: "PRESENT" },
       { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
     ]);
     await payoutService.prepareSettlement(lead, runId, {
@@ -739,7 +739,7 @@ describe("raid lead cut KEEP / SHARE", () => {
       name: "Pylead",
       wowClass: "WARRIOR",
       specialization: "Arms",
-      primaryRole: "DPS",
+      primaryRole: "MELEE_DPS",
     });
     await approveAccess(leadCharacterId, ids.lead);
     const runId = await completedRun([
@@ -747,7 +747,7 @@ describe("raid lead cut KEEP / SHARE", () => {
         userId: ids.lead,
         characterId: leadCharacterId,
         participationType: "BOOSTER",
-        role: "DPS",
+        role: "MELEE_DPS",
         status: "PRESENT",
       },
       {
@@ -777,7 +777,7 @@ describe("raid lead cut KEEP / SHARE", () => {
 
   it("KEEP RL not in attendance still receives dedicated cut only", { timeout: 20_000 }, async () => {
     const runId = await completedRun([
-      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "MELEE_DPS", status: "PRESENT" },
       { userId: ids.playerB, characterId: characters.playerB, participationType: "LOOTBUDDY", role: null, status: "PRESENT" },
     ]);
     await payoutService.prepareSettlement(lead, runId, {
@@ -799,7 +799,7 @@ describe("raid lead cut KEEP / SHARE", () => {
 
   it("ordinary USER view does not expose manager community breakdown", { timeout: 20_000 }, async () => {
     const runId = await completedRun([
-      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "DPS", status: "PRESENT" },
+      { userId: ids.user, characterId: characters.user, participationType: "BOOSTER", role: "MELEE_DPS", status: "PRESENT" },
     ]);
     await payoutService.prepareSettlement(lead, runId, {
       totalGold: 5_000_000,

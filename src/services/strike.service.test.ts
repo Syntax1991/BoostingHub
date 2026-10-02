@@ -91,7 +91,7 @@ async function createCharacter(userId: string, name: string) {
     region: "EU",
     wowClass: "WARRIOR",
     specialization: "Fury",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
     itemLevel: 700,
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -126,7 +126,7 @@ async function createSignup(input: {
     await orm.RunSignupRole.create({
       id: crypto.randomUUID(),
       signupId: id,
-      role: "DPS",
+      role: "MELEE_DPS",
       createdAt: now,
     });
   }

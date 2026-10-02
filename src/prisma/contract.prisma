@@ -52,9 +52,12 @@ enum WowClass {
 
 enum CharacterRole {
   @@type("pg/text@1")
-  TANK   = "TANK"
-  HEALER = "HEALER"
-  DPS    = "DPS"
+  TANK       = "TANK"
+  HEALER     = "HEALER"
+  MELEE_DPS  = "MELEE_DPS"
+  RANGED_DPS = "RANGED_DPS"
+  /// Legacy generic DPS — readable on historic rows; never invent a subtype.
+  DPS        = "DPS"
 }
 
 enum WowRegion {
@@ -446,6 +449,8 @@ model Character {
   /// DEPRECATED: legacy external-interval blocks. Inert — ignored by scheduling.
   availabilityBlocks CharacterAvailabilityBlock[]
   weeklyUnavailability CharacterWeeklyUnavailability[]
+  /// Additional playable specializations (never includes primary `specialization`).
+  playableSpecs CharacterPlayableSpec[]
   signups       RunSignup[]
   boosterAccess BoosterAccess[]
   payoutEntries RunPayoutEntry[]
@@ -458,6 +463,20 @@ model Character {
   @@unique([region, blizzardRealmId, blizzardCharacterId])
   @@index([userId])
   @@map("character")
+}
+
+/// Extra specializations this Character can play beyond primary `specialization`.
+/// Specs are authoritative; roster roles are derived via the catalog.
+model CharacterPlayableSpec {
+  id             String    @id @default(uuid())
+  characterId    String
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  specialization String
+  createdAt      TimestamptzString @default(now())
+
+  @@unique([characterId, specialization])
+  @@index([characterId])
+  @@map("character_playable_spec")
 }
 
 /// Cached Warcraft Logs Best/Avg zone (or encounter) percentiles for roster UI.

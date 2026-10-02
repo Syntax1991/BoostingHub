@@ -28,8 +28,14 @@ const MAX_SELECT_OPTIONS = 25;
 /** Discord allows at most 5 action rows per message; one row is reserved for the Confirm/Cancel buttons. */
 const MAX_ROLE_SELECT_ROWS = 4;
 
-const ROLE_ORDER: readonly CharacterRole[] = ["TANK", "HEALER", "DPS"];
-const ROLE_LABELS: Record<CharacterRole, string> = { TANK: "Tank", HEALER: "Healer", DPS: "DPS" };
+const ROLE_ORDER: readonly CharacterRole[] = ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"];
+const ROLE_LABELS: Record<CharacterRole, string> = {
+  TANK: "Tank",
+  HEALER: "Healer",
+  MELEE_DPS: "Melee DPS",
+  RANGED_DPS: "Ranged DPS",
+  DPS: "DPS",
+};
 
 const CLASS_ORDER: readonly WowClass[] = [
   "DEATH_KNIGHT",

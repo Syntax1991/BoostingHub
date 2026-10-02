@@ -16,7 +16,7 @@ describe("external booster input", () => {
 
   it("accepts Discord-style names and Character names", () => {
     for (const name of ["dawn", "@dawn", "syntax_1991", "Dr.Heal", "Sÿntax", "big-pump 2"]) {
-      expect(externalBoosterInputError({ name, wowClass: "MAGE", role: "DPS" })).toBeNull();
+      expect(externalBoosterInputError({ name, wowClass: "MAGE", role: "RANGED_DPS" })).toBeNull();
     }
   });
 
@@ -35,7 +35,7 @@ describe("external booster input", () => {
       "@here",
     ];
     for (const name of invalid) {
-      expect(externalBoosterInputError({ name, wowClass: "MAGE", role: "DPS" }), name).not.toBeNull();
+      expect(externalBoosterInputError({ name, wowClass: "MAGE", role: "RANGED_DPS" }), name).not.toBeNull();
     }
   });
 
@@ -44,13 +44,13 @@ describe("external booster input", () => {
     expect(externalBoosterInputError({ name: "dawn", wowClass: "MAGE", participationType: "BOOSTER", role: null })).toMatch(
       /needs a role/,
     );
-    expect(normalizeExternalBoosterInput({ name: " @loot ", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: "DPS" })).toEqual({
+    expect(normalizeExternalBoosterInput({ name: " @loot ", wowClass: "ROGUE", participationType: "LOOTBUDDY", role: "MELEE_DPS" })).toEqual({
       name: "loot",
       wowClass: "ROGUE",
       participationType: "LOOTBUDDY",
       role: null,
     });
-    expect(normalizeExternalBoosterInput({ name: "dawn", wowClass: "MAGE", role: "DPS" }).participationType).toBe("BOOSTER");
+    expect(normalizeExternalBoosterInput({ name: "dawn", wowClass: "MAGE", role: "RANGED_DPS" }).participationType).toBe("BOOSTER");
   });
 
   it("rejects a role the class cannot play", () => {
@@ -62,10 +62,10 @@ describe("external booster input", () => {
     expect(
       mapExternalBoosters([
         { id: "b", name: "second", wowClass: "PRIEST", role: "HEALER", createdAt: "2026-09-24T18:00:00.001Z" },
-        { id: "a", name: "first", wowClass: "MAGE", role: "DPS", createdAt: "2026-09-24T18:00:00.000Z" },
+        { id: "a", name: "first", wowClass: "MAGE", role: "RANGED_DPS", createdAt: "2026-09-24T18:00:00.000Z" },
       ]),
     ).toEqual([
-      { id: "a", name: "first", wowClass: "MAGE", participationType: "BOOSTER", role: "DPS" },
+      { id: "a", name: "first", wowClass: "MAGE", participationType: "BOOSTER", role: "RANGED_DPS" },
       { id: "b", name: "second", wowClass: "PRIEST", participationType: "BOOSTER", role: "HEALER" },
     ]);
     expect(

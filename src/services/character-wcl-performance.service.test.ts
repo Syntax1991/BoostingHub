@@ -50,7 +50,7 @@ describe("specNameForOfferedRole / metric keys", () => {
     expect(specNameForOfferedRole("PALADIN", "Holy", "HEALER")).toBe("Holy");
     expect(specNameForOfferedRole("PALADIN", "Holy", "TANK")).toBeNull();
     expect(specNameForOfferedRole("PALADIN", "Protection", "TANK")).toBe("Protection");
-    expect(specNameForOfferedRole("MAGE", null, "DPS")).toBeNull();
+    expect(specNameForOfferedRole("MAGE", null, "RANGED_DPS")).toBeNull();
   });
 
   it("builds metric keys with optional spec", () => {
@@ -69,7 +69,7 @@ describe("rolesRelevantForWclPerformance", () => {
   it("drops DPS for healer specs (no healer-damage percentiles)", () => {
     expect(
       rolesRelevantForWclPerformance({
-        offeredRoles: ["HEALER", "DPS"],
+        offeredRoles: ["HEALER", "RANGED_DPS"],
         wowClass: "PRIEST",
         specialization: "Holy",
         primaryRole: "HEALER",
@@ -80,12 +80,12 @@ describe("rolesRelevantForWclPerformance", () => {
   it("keeps DPS only for real DPS specs", () => {
     expect(
       rolesRelevantForWclPerformance({
-        offeredRoles: ["HEALER", "DPS"],
+        offeredRoles: ["HEALER", "RANGED_DPS"],
         wowClass: "PRIEST",
         specialization: "Shadow",
-        primaryRole: "DPS",
+        primaryRole: "RANGED_DPS",
       }),
-    ).toEqual(["HEALER", "DPS"]);
+    ).toEqual(["HEALER", "RANGED_DPS"]);
   });
 
   it("keeps tank+healer for resto (tank column stays empty if no tank parses)", () => {
@@ -105,9 +105,9 @@ describe("rolesRelevantForWclPerformance", () => {
         offeredRoles: [],
         wowClass: "MAGE",
         specialization: null,
-        primaryRole: "DPS",
+        primaryRole: "RANGED_DPS",
       }),
-    ).toEqual(["DPS"]);
+    ).toEqual(["RANGED_DPS"]);
   });
 });
 

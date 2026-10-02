@@ -329,7 +329,7 @@ describe("delete after completed-run history (settlement / payout preservation)"
       createdAt: now,
       updatedAt: now,
     });
-    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role: "DPS", createdAt: now });
+    await orm.RunSignupRole.create({ id: crypto.randomUUID(), signupId, role: "MELEE_DPS", createdAt: now });
     const view = await rosterService.getRosterManagementView(lead, created.id);
     await rosterService.setDraftSelection(lead, { runId: created.id, signupId, selected: true, version: view.roster.version });
     const ready = await rosterService.getRosterManagementView(lead, created.id);
@@ -422,7 +422,7 @@ describe("delete after completed-run history (settlement / payout preservation)"
       userId: owner.id,
       characterId: character.id,
       wowClass: "MAGE",
-      role: "DPS",
+      role: "RANGED_DPS",
       difficulty: "MYTHIC",
       status: "APPROVED",
       approvedAt: now,

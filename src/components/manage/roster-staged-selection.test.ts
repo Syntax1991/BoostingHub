@@ -96,9 +96,9 @@ describe("role-copy toggle semantics", () => {
     let staged: Map<string, CharacterRole | null> = new Map();
     staged = applyRoleCopyToggle({ staged, signupId, groupRole: "TANK", checked: true });
     staged = applyRoleCopyToggle({ staged, signupId, groupRole: "HEALER", checked: true });
-    staged = applyRoleCopyToggle({ staged, signupId, groupRole: "DPS", checked: true });
+    staged = applyRoleCopyToggle({ staged, signupId, groupRole: "MELEE_DPS", checked: true });
     const payload = [...staged].map(([id, selectedRole]) => ({ signupId: id, selectedRole }));
-    expect(payload).toEqual([{ signupId, selectedRole: "DPS" }]);
+    expect(payload).toEqual([{ signupId, selectedRole: "MELEE_DPS" }]);
   });
 
   it("syncs dropdown reassignment with checked copies", () => {

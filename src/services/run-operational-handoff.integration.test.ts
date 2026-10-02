@@ -247,7 +247,7 @@ beforeAll(async () => {
     name: "Hokael",
     wowClass: "SHAMAN",
     specialization: "Elemental",
-    primaryRole: "DPS",
+    primaryRole: "MELEE_DPS",
   });
   characters.playerB = await createCharacter({
     userId: ids.playerB,
@@ -308,7 +308,7 @@ async function inProgressWithTwoBoosters(title: string) {
     userId: ids.user,
     characterId: characters.user,
     participationType: "BOOSTER",
-    role: "DPS",
+    role: "MELEE_DPS",
   });
   const b = await createSignup({
     runId,

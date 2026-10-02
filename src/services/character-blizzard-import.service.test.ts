@@ -501,7 +501,7 @@ describe("reconcileBattleNetCharactersForConnection (already-connected accounts,
     expect(linked.blizzardRealmId).toBe(owned.realmId);
     expect(linked.itemLevel).toBe(662);
     expect(linked.specialization).toBe("Elemental");
-    expect(linked.primaryRole).toBe("DPS");
+    expect(linked.primaryRole).toBe("RANGED_DPS");
     expect(linked.wowClass).toBe("SHAMAN");
     expect(await ownerCharacterCount()).toBe(1);
   });
@@ -795,7 +795,7 @@ describe("characterBlizzardImportService.importCharacters", () => {
     expect(Number(created?.itemLevel)).toBe(670);
     expect(created?.lastSyncedAt).toBeTruthy();
     expect(String(created?.specialization)).toBe("Enhancement");
-    expect(String(created?.primaryRole)).toBe("DPS");
+    expect(String(created?.primaryRole)).toBe("MELEE_DPS");
 
     const access = await orm.BoosterAccess.where({ userId: ids.owner }).all();
     expect(access).toHaveLength(0);
@@ -976,7 +976,7 @@ describe("characterBlizzardImportService.applySelections", () => {
 
     const created = await orm.Character.where({ id: result.importedCharacterIds[0] }).first();
     expect(String(created?.specialization)).toBe("Elemental");
-    expect(String(created?.primaryRole)).toBe("DPS");
+    expect(String(created?.primaryRole)).toBe("RANGED_DPS");
     expect(Number(created?.itemLevel)).toBe(318);
     expect(created?.lastSyncedAt).toBeTruthy();
   });
@@ -1044,7 +1044,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     expect(created.wowClass).toBe("SHAMAN");
     expect(created.itemLevel).toBe(326);
     expect(created.specialization).toBe("Elemental");
-    expect(created.primaryRole).toBe("DPS");
+    expect(created.primaryRole).toBe("RANGED_DPS");
     expect(created.blizzardCharacterId).toBeNull();
   });
 

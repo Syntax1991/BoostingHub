@@ -24,6 +24,12 @@ const realmSchema = z
   .min(CHARACTER_REALM_MIN, "Enter a realm.")
   .max(CHARACTER_REALM_MAX, "Realm name is too long.");
 
+const playableSpecsSchema = z
+  .array(z.string().trim().min(1))
+  .max(10)
+  .default([])
+  .transform((specs) => [...new Set(specs.map((spec) => spec.trim()).filter(Boolean))]);
+
 /** Region/Realm/Name only — wowClass and itemLevel are never client-supplied. */
 export const lookupCharacterSchema = z.object({
   name: nameSchema,
@@ -41,6 +47,7 @@ export const createCharacterSchema = z.object({
   realm: realmSchema,
   region: z.enum(WOW_REGIONS),
   specialization: z.string().trim().min(1, "Choose a specialization."),
+  playableSpecs: playableSpecsSchema,
 });
 
 /** Item level is never editable — it stays Blizzard-authoritative. */
@@ -50,4 +57,5 @@ export const updateCharacterSchema = z.object({
   realm: realmSchema,
   region: z.enum(WOW_REGIONS),
   specialization: z.string().trim().min(1, "Choose a specialization."),
+  playableSpecs: playableSpecsSchema,
 });

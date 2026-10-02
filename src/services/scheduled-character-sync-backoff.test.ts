@@ -275,7 +275,7 @@ describe("admin projection uses the same helper", () => {
         region: "EU",
         wowClass: "MAGE",
         specialization: null,
-        primaryRole: "DPS",
+        primaryRole: "RANGED_DPS",
         itemLevel: null,
         isActive: false,
         blizzardCharacterId: null,

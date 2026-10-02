@@ -19,11 +19,17 @@ import { requestImmediateSync } from "@/discord-bot/sync-loop";
 
 vi.mock("@/discord-bot/sync-loop", () => ({ requestImmediateSync: vi.fn() }));
 
-const mistweaver: { characterId: string; characterName: string; realm: string; roles: ("TANK" | "HEALER" | "DPS")[]; defaultRole: "HEALER" | null } = {
+const mistweaver: {
+  characterId: string;
+  characterName: string;
+  realm: string;
+  roles: ("TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS")[];
+  defaultRole: "HEALER" | null;
+} = {
   characterId: "c-mist",
   characterName: "Synmist",
   realm: "Antonidas",
-  roles: ["TANK", "HEALER", "DPS"],
+  roles: ["TANK", "HEALER", "MELEE_DPS"],
   defaultRole: "HEALER",
 };
 
@@ -57,7 +63,7 @@ describe("buildCharacterSelectOptions", () => {
 
   it("shows no role suffix for a Character with neither an existing offer nor a specialization default", () => {
     const options = buildCharacterSelectOptions(
-      [{ characterId: "c-1", characterName: "A", realm: "R", roles: ["DPS", "HEALER"] as ("TANK" | "HEALER" | "DPS")[], defaultRole: null }],
+      [{ characterId: "c-1", characterName: "A", realm: "R", roles: ["HEALER", "RANGED_DPS"] as ("TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS")[], defaultRole: null }],
       { characterIds: [], offeredRolesByCharacterId: {} },
     ).map((option) => option.toJSON());
     expect(options[0]?.label).toBe("A-R");
@@ -83,9 +89,9 @@ const SYNMIST = "c1111111-1111-4111-8111-111111111111"; // hybrid Monk
 const FROSTBOLT = "c2222222-2222-4222-8222-222222222222"; // single-role Mage
 
 function signupOptionsPayload(overrides: {
-  offeredRolesByCharacterId?: Record<string, ("TANK" | "HEALER" | "DPS")[]>;
+  offeredRolesByCharacterId?: Record<string, ("TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS")[]>;
   activeCharacterIds?: string[];
-  synmistDefaultRole?: "TANK" | "HEALER" | "DPS" | null;
+  synmistDefaultRole?: "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS" | null;
 } = {}) {
   return {
     run: {
@@ -101,15 +107,15 @@ function signupOptionsPayload(overrides: {
           characterId: SYNMIST,
           characterName: "Synmist",
           realm: "Antonidas",
-          roles: ["TANK", "HEALER", "DPS"],
+          roles: ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"],
           defaultRole: overrides.synmistDefaultRole === undefined ? "HEALER" : overrides.synmistDefaultRole,
         },
         {
           characterId: FROSTBOLT,
           characterName: "Frostbolt",
           realm: "Antonidas",
-          roles: ["DPS"],
-          defaultRole: "DPS",
+          roles: ["RANGED_DPS"],
+          defaultRole: "RANGED_DPS",
         },
       ],
       ineligible: [] as IneligibleCharacterOption[],
@@ -254,7 +260,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
 
     await characterSelect(interaction, api, RUN_ID);
 
-    expect(getSession("user-a", RUN_ID)!.offers.get(FROSTBOLT)).toEqual(["DPS"]);
+    expect(getSession("user-a", RUN_ID)!.offers.get(FROSTBOLT)).toEqual(["RANGED_DPS"]);
   });
 
   it("a hybrid Character with no specialization default stays unresolved — never guessed from class order", async () => {
@@ -292,7 +298,7 @@ describe("BOOSTER staging flow (character select -> next -> role select -> confi
     expect(body.offers).toEqual(
       expect.arrayContaining([
         { characterId: SYNMIST, offeredRoles: ["TANK"] },
-        { characterId: FROSTBOLT, offeredRoles: ["DPS"] },
+        { characterId: FROSTBOLT, offeredRoles: ["RANGED_DPS"] },
       ]),
     );
     expect(body.offers).toHaveLength(2);

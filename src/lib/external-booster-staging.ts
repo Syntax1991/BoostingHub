@@ -8,19 +8,20 @@ import {
   type ExternalBooster,
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
-import { rolesForClass } from "@/lib/wow-specializations";
+import { defaultConcreteDpsRoleForClass, rolesForClass } from "@/lib/wow-specializations";
 import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
 
 export type StagedExternalBooster = ExternalBoosterInput & { key: string };
 
-/** Prefer current role when still valid; otherwise DPS when available, else first valid role. */
+/** Prefer current role when still valid; otherwise concrete class DPS default, else first valid role. */
 export function preferredRoleForClass(
   wowClass: WowClass,
   preferred: CharacterRole | null | undefined = null,
 ): CharacterRole {
   const roles = rolesForClass(wowClass);
-  if (preferred && roles.includes(preferred)) return preferred;
-  return roles.includes("DPS") ? "DPS" : roles[0]!;
+  if (preferred && (roles as readonly CharacterRole[]).includes(preferred)) return preferred;
+  const concreteDps = defaultConcreteDpsRoleForClass(wowClass);
+  return roles.includes(concreteDps) ? concreteDps : roles[0]!;
 }
 
 /** Role after a class change while staying BOOSTER (LOOTBUDDY keeps null). */

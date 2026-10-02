@@ -59,6 +59,7 @@ function makeApi(voiceChannels: VoiceItem[], notificationDms: Array<Record<strin
     recordDiscordState: vi.fn().mockResolvedValue(undefined),
     getRosterEmbedData: vi.fn().mockResolvedValue(null),
     getRunStartEmbedData: vi.fn().mockResolvedValue(null),
+    confirmNotificationDmDelivery: vi.fn().mockResolvedValue({ deliver: true }),
   } as unknown as BotApiClient;
 }
 

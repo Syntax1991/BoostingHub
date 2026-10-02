@@ -32,6 +32,10 @@
       "model": "CharacterAvailabilityBlock",
       "namespace": "public"
     },
+    "character_playable_spec": {
+      "model": "CharacterPlayableSpec",
+      "namespace": "public"
+    },
     "character_raid_lockout": {
       "model": "CharacterRaidLockout",
       "namespace": "public"
@@ -279,6 +283,14 @@
               {
                 "name": "HEALER",
                 "value": "HEALER"
+              },
+              {
+                "name": "MELEE_DPS",
+                "value": "MELEE_DPS"
+              },
+              {
+                "name": "RANGED_DPS",
+                "value": "RANGED_DPS"
               },
               {
                 "name": "DPS",
@@ -1756,6 +1768,21 @@
                   "namespace": "public"
                 }
               },
+              "playableSpecs": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "characterId"
+                  ]
+                },
+                "to": {
+                  "model": "CharacterPlayableSpec",
+                  "namespace": "public"
+                }
+              },
               "signups": {
                 "cardinality": "1:N",
                 "on": {
@@ -1985,6 +2012,73 @@
               },
               "namespaceId": "public",
               "table": "character_availability_block"
+            }
+          },
+          "CharacterPlayableSpec": {
+            "fields": {
+              "characterId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "specialization": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "character": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "characterId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Character",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "characterId": {
+                  "column": "characterId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "specialization": {
+                  "column": "specialization"
+                }
+              },
+              "namespaceId": "public",
+              "table": "character_playable_spec"
             }
           },
           "CharacterRaidLockout": {
@@ -9263,8 +9357,8 @@
                   "prefix": "booster_access_difficulty_check"
                 },
                 {
-                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "booster_access_role_check_b1616ae6",
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "booster_access_role_check_e8a47be4",
                   "prefix": "booster_access_role_check"
                 },
                 {
@@ -9514,8 +9608,8 @@
                   "prefix": "character_lastSyncErrorCode_check"
                 },
                 {
-                  "expression": "\"primaryRole\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "character_primaryRole_check_1fa7067b",
+                  "expression": "\"primaryRole\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "character_primaryRole_check_490a2046",
                   "prefix": "character_primaryRole_check"
                 },
                 {
@@ -9806,6 +9900,76 @@
                 ]
               },
               "uniques": []
+            },
+            "character_playable_spec": {
+              "columns": {
+                "characterId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "specialization": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "characterId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character_playable_spec"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "character"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "characterId"
+                  ],
+                  "name": "character_playable_spec_characterId_idx_2423fe9d",
+                  "prefix": "character_playable_spec_characterId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "characterId",
+                    "specialization"
+                  ]
+                }
+              ]
             },
             "character_raid_lockout": {
               "checks": [
@@ -11375,8 +11539,8 @@
                   "prefix": "run_consumable_audit_player_matchStatus_check"
                 },
                 {
-                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_consumable_audit_player_role_check_b1616ae6",
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_consumable_audit_player_role_check_e8a47be4",
                   "prefix": "run_consumable_audit_player_role_check"
                 },
                 {
@@ -11912,8 +12076,8 @@
                   "prefix": "run_external_booster_participationType_check"
                 },
                 {
-                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_external_booster_role_check_b1616ae6",
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_external_booster_role_check_e8a47be4",
                   "prefix": "run_external_booster_role_check"
                 },
                 {
@@ -12044,8 +12208,8 @@
                   "prefix": "run_payout_entry_participationType_check"
                 },
                 {
-                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_payout_entry_role_check_b1616ae6",
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_payout_entry_role_check_e8a47be4",
                   "prefix": "run_payout_entry_role_check"
                 }
               ],
@@ -12597,8 +12761,8 @@
             "run_roster_entry": {
               "checks": [
                 {
-                  "expression": "\"selectedRole\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_roster_entry_selectedRole_check_e659d19f",
+                  "expression": "\"selectedRole\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_roster_entry_selectedRole_check_a4665995",
                   "prefix": "run_roster_entry_selectedRole_check"
                 }
               ],
@@ -13018,8 +13182,8 @@
                   "prefix": "run_signup_participationType_check"
                 },
                 {
-                  "expression": "\"publishedRole\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_signup_publishedRole_check_17f7e8a4",
+                  "expression": "\"publishedRole\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_signup_publishedRole_check_f7d3ea54",
                   "prefix": "run_signup_publishedRole_check"
                 },
                 {
@@ -13247,8 +13411,8 @@
             "run_signup_role": {
               "checks": [
                 {
-                  "expression": "\"role\" IN ('TANK', 'HEALER', 'DPS')",
-                  "name": "run_signup_role_role_check_b1616ae6",
+                  "expression": "\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS')",
+                  "name": "run_signup_role_role_check_e8a47be4",
                   "prefix": "run_signup_role_role_check"
                 }
               ],
@@ -15208,6 +15372,8 @@
               "values": [
                 "TANK",
                 "HEALER",
+                "MELEE_DPS",
+                "RANGED_DPS",
                 "DPS"
               ]
             },
@@ -15437,10 +15603,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "a4ffcd2c3331ed35c1500027a7baa2bf28de8a8656c1c46ffd7aaefa43a26c23"
+    "storageHash": "f8798188c4faa1922fa0f11503c7a1e1ec61828974d618286a9a350c3770e71a"
   },
   "execution": {
-    "executionHash": "2ed16c5ec08d4972784d680e73b014ecc1ce9e869b6d198f8130cd3626cca8af",
+    "executionHash": "640d8479da142c8a7b1e5001c6fccd6dda5fee8e73171b8114ba29d987de5974",
     "mutations": {
       "defaults": [
         {
@@ -15593,6 +15759,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "character_availability_block"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "character_playable_spec"
           }
         },
         {

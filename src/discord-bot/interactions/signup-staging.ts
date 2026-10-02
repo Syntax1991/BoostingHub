@@ -15,7 +15,7 @@
  * like a missing one everywhere it's read.
  */
 
-export type CharacterRole = "TANK" | "HEALER" | "DPS";
+export type CharacterRole = "TANK" | "HEALER" | "MELEE_DPS" | "RANGED_DPS" | "DPS";
 
 export type StagedBoosterSession = {
   discordUserId: string;

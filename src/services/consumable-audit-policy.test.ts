@@ -84,7 +84,13 @@ const death = (fightId: string, ms: number): AuditObservationFact => ({
 
 /** Blizzard spec ids: Shadow / Holy Priest, Protection Warrior. */
 const SPEC = { SHADOW: 258, HOLY: 257, PROT_WARRIOR: 73 } as const;
-const PLAYED_SPEC: Record<CharacterRole, number> = { DPS: SPEC.SHADOW, HEALER: SPEC.HOLY, TANK: SPEC.PROT_WARRIOR };
+const PLAYED_SPEC: Partial<Record<CharacterRole, number>> = {
+  DPS: SPEC.SHADOW,
+  RANGED_DPS: SPEC.SHADOW,
+  MELEE_DPS: 71, // Arms Warrior
+  HEALER: SPEC.HOLY,
+  TANK: SPEC.PROT_WARRIOR,
+};
 const withSpec = (row: AuditObservationFact, specId: number | null): AuditObservationFact => ({ ...row, specId });
 
 /**
@@ -92,17 +98,18 @@ const withSpec = (row: AuditObservationFact, specId: number | null): AuditObserv
  * COMBATANT rows without one) and the roster role alike — roster and log agree.
  */
 function player(role: CharacterRole | null, observations: AuditObservationFact[]): AuditPlayerFact {
+  const playedSpec = role ? PLAYED_SPEC[role] : undefined;
   return {
     id: "p1",
     displayName: "Synlight",
     characterName: "Synlight",
     characterRealm: "Blackhand",
-    wowClass: role === "TANK" ? "WARRIOR" : "PRIEST",
+    wowClass: role === "TANK" || role === "MELEE_DPS" ? "WARRIOR" : "PRIEST",
     rosterRole: role,
     matchStatus: "MATCHED",
     isExternal: false,
     observations: observations.map((row) =>
-      row.kind === "COMBATANT" && row.specId == null && role ? withSpec(row, PLAYED_SPEC[role]) : row,
+      row.kind === "COMBATANT" && row.specId == null && playedSpec != null ? withSpec(row, playedSpec) : row,
     ),
     gear: [],
   };
@@ -538,9 +545,9 @@ describe("played role — the role in the log, not the roster (Synlight: roster 
     rosterRole,
   });
 
-  it("A: roster Healer, played DPS → role DPS, a Mana Potion alone does not satisfy the DPS expectation", () => {
+  it("A: roster Healer, played DPS → role Ranged DPS, a Mana Potion alone does not satisfy the DPS expectation", () => {
     const view = evaluatePlayerConsumables(priest("HEALER", [withSpec(combatant("f1"), SPEC.SHADOW), manaPot("f1", 1_000)]), [F1]);
-    expect(view).toMatchObject({ rosterRole: "HEALER", playedRole: "DPS" });
+    expect(view).toMatchObject({ rosterRole: "HEALER", playedRole: "RANGED_DPS" });
     expect(view.combatPotion).toMatchObject({ status: "WARNING", accepted: ["DAMAGE_POTION"], killFightsChecked: 1 });
   });
 
@@ -568,18 +575,24 @@ describe("played role — the role in the log, not the roster (Synlight: roster 
     ];
     const view = evaluatePlayerConsumables(priest("HEALER", observations), [F1, F2]);
     expect(view.playedRole).toBe("MIXED");
-    expect(view.playedRoleByFight.map((row) => [row.fight.fightId, row.role])).toEqual([["f1", "HEALER"], ["f2", "DPS"]]);
+    expect(view.playedRoleByFight.map((row) => [row.fight.fightId, row.role])).toEqual([
+      ["f1", "HEALER"],
+      ["f2", "RANGED_DPS"],
+    ]);
     expect(view.combatPotion.status).toBe("WARNING");
     expect(view.combatPotion.missing.map((ref) => ref.fightId)).toEqual(["f2"]);
-    expect(view.combatPotion.acceptedByRole).toEqual({ HEALER: ["DAMAGE_POTION", "MANA_POTION"], DPS: ["DAMAGE_POTION"] });
+    expect(view.combatPotion.acceptedByRole).toEqual({
+      HEALER: ["DAMAGE_POTION", "MANA_POTION"],
+      RANGED_DPS: ["DAMAGE_POTION"],
+    });
     // Collapsing MIXED to Healer would have passed both kills.
     const fixed = evaluatePlayerConsumables(priest("HEALER", [...observations, damagePot("f2", 702_000)]), [F1, F2]);
     expect(fixed.combatPotion.status).toBe("PASS");
   });
 
   it("E: roster and log agree → unchanged, no roster hint needed", () => {
-    const view = evaluatePlayerConsumables(player("DPS", [combatant("f1"), damagePot("f1", 1_000)]), [F1]);
-    expect(view).toMatchObject({ rosterRole: "DPS", playedRole: "DPS" });
+    const view = evaluatePlayerConsumables(player("RANGED_DPS", [combatant("f1"), damagePot("f1", 1_000)]), [F1]);
+    expect(view).toMatchObject({ rosterRole: "RANGED_DPS", playedRole: "RANGED_DPS" });
     expect(view.combatPotion.status).toBe("PASS");
   });
 
@@ -595,7 +608,7 @@ describe("played role — the role in the log, not the roster (Synlight: roster 
       priest("HEALER", [withSpec(combatant("f1"), SPEC.SHADOW), damagePot("f1", 1_000), combatant("f2", 700_000)]),
       [F1, F2],
     );
-    expect(view.playedRole).toBe("DPS");
+    expect(view.playedRole).toBe("RANGED_DPS");
     expect(view.combatPotion).toMatchObject({ status: "PASS", killFightsChecked: 1 });
     expect(view.combatPotion.unknown.map((ref) => ref.fightId)).toEqual(["f2"]);
   });
@@ -630,7 +643,7 @@ describe("Light's Potential from a Potion Cauldron (production: Synlight, Retrib
 
   it("played Retribution + Light's Potential in the kill → DPS, combat potion PASS, shown by name", () => {
     const view = evaluatePlayerConsumables(synlight([withSpec(combatant("f1"), RETRIBUTION), lightsPotential("f1", 1_100)]), [F1]);
-    expect(view.playedRole).toBe("DPS");
+    expect(view.playedRole).toBe("MELEE_DPS");
     expect(view.combatPotion).toMatchObject({ status: "PASS", missing: [], killFightsChecked: 1 });
     expect(view.combatPotion.uses.map((use) => [use.category, use.spellName, use.atFightMs])).toEqual([
       ["DAMAGE_POTION", "Light's Potential", 1_100],

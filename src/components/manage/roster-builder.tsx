@@ -38,6 +38,7 @@ import {
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
+import { defaultDpsAttackTypeForClass } from "@/lib/wow-specializations";
 import {
   filterWclPerformanceForGroupRole,
   compareByWclPerf,
@@ -291,7 +292,13 @@ function RosterBuilderEditor({
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation === "LOOTBUDDY") return false;
     if (participation !== "ALL" && participation !== "BOOSTER") return false;
-    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) return false;
+    if (roleFilter === "DPS") {
+      if (!signup.offeredRoles.some((role) => role === "MELEE_DPS" || role === "RANGED_DPS" || role === "DPS")) {
+        return false;
+      }
+    } else if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) {
+      return false;
+    }
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
     if (backupFilter === "PRIMARY" && signup.isBackup) return false;
     const staged = isStagedSelected(signup.id);
@@ -320,7 +327,12 @@ function RosterBuilderEditor({
 
   const filteredTanks = sortByPerf(data.groups.tanks.filter(matchesProjection));
   const filteredHealers = sortByPerf(data.groups.healers.filter(matchesProjection));
-  const filteredDps = sortByPerf(data.groups.dps.filter(matchesProjection));
+  const filteredMeleeDps = sortByPerf(
+    (data.groups.meleeDps ?? data.groups.dps.filter((s) => s.groupRole === "MELEE_DPS")).filter(matchesProjection),
+  );
+  const filteredRangedDps = sortByPerf(
+    (data.groups.rangedDps ?? data.groups.dps.filter((s) => s.groupRole === "RANGED_DPS")).filter(matchesProjection),
+  );
   const filteredLootbuddies = data.groups.lootbuddies.filter(matchesProjection);
   const uniqueFilteredBoosters = data.boosters.filter(matchesCanonicalBooster).length;
 
@@ -540,7 +552,12 @@ function RosterBuilderEditor({
             />
           </label>
           <FilterSelect label="Participation" value={participation} onChange={setParticipation} options={["ALL", "BOOSTER", "LOOTBUDDY"]} />
-          <FilterSelect label="Role" value={roleFilter} onChange={setRoleFilter} options={["ALL", "TANK", "HEALER", "DPS"]} />
+          <FilterSelect
+            label="Role"
+            value={roleFilter}
+            onChange={setRoleFilter}
+            options={["ALL", "TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"]}
+          />
           <FilterSelect label="Offer" value={backupFilter} onChange={setBackupFilter} options={["ALL", "PRIMARY", "BACKUP"]} />
           <FilterSelect label="Draft" value={selectedFilter} onChange={setSelectedFilter} options={["ALL", "SELECTED", "UNSELECTED"]} />
           <FilterSelect
@@ -625,10 +642,30 @@ function RosterBuilderEditor({
         onAssignRole={assignRole}
       />
       <SignupSection
-        title="DPS"
-        empty="No DPS signups"
-        signups={filteredDps}
-        externals={externalBoosters.filter((booster) => booster.role === "DPS")}
+        title="Melee DPS"
+        empty="No melee DPS signups"
+        signups={filteredMeleeDps}
+        externals={externalBoosters.filter(
+          (booster) =>
+            booster.role === "MELEE_DPS" ||
+            (booster.role === "DPS" && defaultDpsAttackTypeForClass(booster.wowClass) === "MELEE"),
+        )}
+        editing={editing}
+        locked={togglesLocked}
+        isRoleCopyChecked={isRoleCopyChecked}
+        stagedRole={stagedRole}
+        onToggle={toggleRoleCopy}
+        onAssignRole={assignRole}
+      />
+      <SignupSection
+        title="Ranged DPS"
+        empty="No ranged DPS signups"
+        signups={filteredRangedDps}
+        externals={externalBoosters.filter(
+          (booster) =>
+            booster.role === "RANGED_DPS" ||
+            (booster.role === "DPS" && defaultDpsAttackTypeForClass(booster.wowClass) === "RANGED"),
+        )}
         editing={editing}
         locked={togglesLocked}
         isRoleCopyChecked={isRoleCopyChecked}

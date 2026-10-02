@@ -44,12 +44,12 @@ describe("signup-staging", () => {
       discordUserId: "user-a",
       runId: "run-2",
       isExistingSignup: false,
-      offers: [{ characterId: "c1", offeredRoles: ["DPS"] }],
+      offers: [{ characterId: "c1", offeredRoles: ["RANGED_DPS"] }],
     });
 
     expect(getSession("user-a", "run-1")?.offers.get("c1")).toEqual(["TANK"]);
     expect(getSession("user-b", "run-1")?.offers.get("c1")).toEqual(["HEALER"]);
-    expect(getSession("user-a", "run-2")?.offers.get("c1")).toEqual(["DPS"]);
+    expect(getSession("user-a", "run-2")?.offers.get("c1")).toEqual(["RANGED_DPS"]);
     expect(getSession("user-b", "run-2")).toBeUndefined();
   });
 
@@ -63,10 +63,10 @@ describe("signup-staging", () => {
         { characterId: "c2", offeredRoles: ["HEALER"] },
       ],
     });
-    expect(setStagedRoles("user-a", "run-1", "c2", ["DPS"])).toBe(true);
+    expect(setStagedRoles("user-a", "run-1", "c2", ["RANGED_DPS"])).toBe(true);
     const session = getSession("user-a", "run-1")!;
     expect(session.offers.get("c1")).toEqual(["TANK"]);
-    expect(session.offers.get("c2")).toEqual(["DPS"]);
+    expect(session.offers.get("c2")).toEqual(["RANGED_DPS"]);
   });
 
   it("setStagedRoles on a missing session returns false and creates nothing", () => {

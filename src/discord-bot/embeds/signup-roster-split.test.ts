@@ -55,7 +55,7 @@ function rosterData(overrides: Partial<RosterEmbedData> = {}): RosterEmbedData {
     publishedAt: null,
     version: 1,
     targets: { tanks: 2, healers: 4, dps: 14, lootbuddies: 3 },
-    groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], lootbuddies: [] },
+    groups: { tanks: [], healers: [], meleeDps: [], rangedDps: [], unspecifiedDps: [], lootbuddies: [] },
     totalSelected: 0,
     ...overrides,
   };
@@ -135,6 +135,7 @@ describe("Discord Signup vs Roster embeds", () => {
           ],
           meleeDps: [],
           rangedDps: [],
+          unspecifiedDps: [],
           lootbuddies: [],
         },
       }),
@@ -164,6 +165,7 @@ describe("Discord Signup vs Roster embeds", () => {
             },
           ],
           rangedDps: [],
+          unspecifiedDps: [],
           lootbuddies: [],
         },
       }),
@@ -204,6 +206,7 @@ describe("Discord Signup vs Roster embeds", () => {
           healers: [],
           meleeDps: [],
           rangedDps: [],
+          unspecifiedDps: [],
           lootbuddies: [
             {
               userId: "ulb",

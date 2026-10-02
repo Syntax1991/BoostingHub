@@ -16,7 +16,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     assertBotServiceAuthorized(request);
     const { runId } = await params;
     const data = await discordSyncService.getRosterEmbedData(runId);
-    if (!data) {
+    // Draft lineup may exist for management previews; Discord only consumes published.
+    if (!data?.publishedAt) {
       throw new DomainError("NOT_FOUND", "This run has no published roster.", 404);
     }
     return botApiOk(data);

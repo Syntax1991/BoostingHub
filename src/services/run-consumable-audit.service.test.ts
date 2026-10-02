@@ -627,7 +627,7 @@ describe("consumable facts per assigned fight", () => {
       name: rosterA[0]!.characterName, // same text as a real actor — still never matched
       wowClass: "MAGE",
       participationType: "BOOSTER",
-      role: "DPS",
+      role: "RANGED_DPS",
       createdAt: now,
       updatedAt: now,
     });

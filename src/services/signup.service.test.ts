@@ -59,7 +59,7 @@ describe("signupService create/withdraw", () => {
     const primary = await signupService.createBoosterSignup(kael, {
       runId: ids.weekend,
       characterId: ids.kaelEle,
-      role: "DPS",
+      role: "RANGED_DPS",
       isBackup: false,
     });
     createdIds.push(primary.id);
@@ -87,7 +87,7 @@ describe("signupService create/withdraw", () => {
       signupService.createBoosterSignup(kael, {
         runId: ids.weekend,
         characterId: ids.kaelEle,
-        role: "DPS",
+        role: "RANGED_DPS",
         isBackup: false,
       }),
       "DUPLICATE_SIGNUP",
@@ -157,7 +157,7 @@ describe("signupService create/withdraw", () => {
       signupService.createBoosterSignup(kael, {
         runId: ids.draft,
         characterId: ids.kaelEle,
-        role: "DPS",
+        role: "RANGED_DPS",
         isBackup: false,
       }),
       "SIGNUP_CLOSED",

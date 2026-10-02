@@ -255,7 +255,7 @@ beforeAll(async () => {
     name: "NILeadDps",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
   });
 });
 
@@ -281,7 +281,7 @@ describe("notification raid invite + bot delivery", () => {
     await runService.openRun(lead, runId);
 
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "MELEE_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,
@@ -396,7 +396,7 @@ describe("notification raid invite + bot delivery", () => {
     await runService.openRun(lead, runId);
 
     const tank = await createSignup({ runId, userId: ids.lead, characterId: charLeadTank, role: "TANK" });
-    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "DPS" });
+    const dps = await createSignup({ runId, userId: ids.lead, characterId: charLeadDps, role: "MELEE_DPS" });
     const healer = await createSignup({
       runId,
       userId: ids.player,

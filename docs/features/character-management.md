@@ -49,17 +49,19 @@ When linked, Blizzard identity is additionally scoped as `(region, blizzardRealm
 
 Specialization is a catalog string per class (for example Restoration Shaman, Protection Warrior). The server rejects combinations that are not in `src/lib/wow-specializations.ts`.
 
-`primaryRole` is **derived** from specialization (`TANK` / `HEALER` / `DPS`). It is the character's default identity, not the only role they may ever perform.
+`primaryRole` is **derived** from the primary specialization as a concrete roster role (`TANK` / `HEALER` / `MELEE_DPS` / `RANGED_DPS`). Historic rows may still show generic `DPS`.
 
-`BoosterAccess` remains the approved run-participation capability and may grant additional roles later. A Restoration Shaman stays primary HEALER even if a future approval allows DPS boosting.
+**Playable specializations** (`CharacterPlayableSpec`, additional specs beyond primary) are the authoritative capability set. Signup offered roles are the unique `rosterRoleForSpecialization` values over primary + playable specs. A Restoration Shaman can offer Healer only until Elemental or Enhancement is configured as playable — class-wide role lists are never used for signup eligibility.
 
-On Battle.net import, Blizzard active specialization is a **prefill only**. After create, specialization stays BoostingHub-owned; Refresh does not overwrite it.
+Booster approval is account-level `User.isBooster` (not role-scoped `BoosterAccess`). Capability ∩ approval is: configured concrete roles when `isBooster`, otherwise none.
+
+On Battle.net import, Blizzard active specialization is a **prefill only**. After create, specialization and playable specs stay BoostingHub-owned; Refresh does not overwrite them.
 
 ### Class edit policy
 
 Class is **immutable after creation**.
 
-Changing class while BoosterAccess and historical signups still point at the old class would corrupt eligibility history. Operators create a new character instead of editing class. Linked Refresh refuses if Blizzard reports a different class.
+Changing class while historical signups and playable-spec capability still point at the old class would corrupt eligibility history. Operators create a new character instead of editing class. Linked Refresh refuses if Blizzard reports a different class.
 
 ## Active lifecycle
 
@@ -67,7 +69,7 @@ New characters start `isActive = true`.
 
 **Deactivate** sets `isActive = false`. It does not delete the row.
 
-**Reactivate** sets `isActive = true`. It does not grant BoosterAccess, clear lockouts, or rewrite signups.
+**Reactivate** sets `isActive = true`. It does not grant the Booster role, clear lockouts, or rewrite signups.
 
 Inactive characters are excluded from **new** BOOSTER signup eligibility. New LOOTBUDDY signups are characterless (Class + Mode) and do not use Character eligibility. Historical My Runs and roster rows stay visible.
 
@@ -118,7 +120,7 @@ Full connect/import/link/security policy: [blizzard-integration.md](blizzard-int
 
 ## MVCS
 
-- Model: `Character` plus `WowClass` / `WowRegion` / `CharacterRole`; Blizzard fields on the same row
+- Model: `Character` + `CharacterPlayableSpec` plus `WowClass` / `WowRegion` / `CharacterRole` (`MELEE_DPS` / `RANGED_DPS` for new writes; `DPS` legacy-readable); Blizzard fields on the same row
 - View: `/characters`, `/characters/[characterId]`, add/edit dialog, lifecycle buttons, Battle.net panels, Refresh
 - Controller: `characterController`, `character.actions.ts`, `blizzard.actions.ts`
 - Service: `characterService` (ownership, identity, spec/role, lifecycle), `characterBlizzardImportService` (public lookup, Battle.net import/link), `characterBlizzardSyncService` (refresh, refresh-all, lockout sync)
@@ -131,7 +133,7 @@ Full connect/import/link/security policy: [blizzard-integration.md](blizzard-int
 - Duplicate identity is enforced in the service and the unique constraint
 - Class/spec/role rules are enforced in the service
 - Class and item level can never be client-supplied: `createCharacterSchema` / `updateCharacterSchema` have no such fields, and the server re-resolves both from Blizzard before persisting
-- Clients cannot forge BoosterAccess or lockouts through these actions
+- Clients cannot forge booster eligibility or lockouts through these actions
 - Battle.net OAuth tokens are never persisted; see [blizzard-integration.md](blizzard-integration.md)
 
 ## Deferred

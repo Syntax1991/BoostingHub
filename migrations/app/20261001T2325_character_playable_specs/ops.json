@@ -1,0 +1,836 @@
+[
+  {
+    "id": "dropCheckConstraint.booster_access.booster_access_role_check_b1616ae6",
+    "label": "Drop check constraint \"booster_access_role_check_b1616ae6\" on \"booster_access\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "booster_access_role_check_b1616ae6",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_access_role_check_b1616ae6\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_role_check_b1616ae6",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"booster_access_role_check_b1616ae6\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" DROP CONSTRAINT \"booster_access_role_check_b1616ae6\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_access_role_check_b1616ae6\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_role_check_b1616ae6",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.character.character_primaryRole_check_1fa7067b",
+    "label": "Drop check constraint \"character_primaryRole_check_1fa7067b\" on \"character\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "character_primaryRole_check_1fa7067b",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_primaryRole_check_1fa7067b\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_primaryRole_check_1fa7067b",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"character_primaryRole_check_1fa7067b\"",
+        "sql": "ALTER TABLE \"public\".\"character\" DROP CONSTRAINT \"character_primaryRole_check_1fa7067b\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_primaryRole_check_1fa7067b\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_primaryRole_check_1fa7067b",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_consumable_audit_player.run_consumable_audit_player_role_check_b1616ae6",
+    "label": "Drop check constraint \"run_consumable_audit_player_role_check_b1616ae6\" on \"run_consumable_audit_player\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_consumable_audit_player_role_check_b1616ae6",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_consumable_audit_player_role_check_b1616ae6\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_consumable_audit_player_role_check_b1616ae6\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_player\" DROP CONSTRAINT \"run_consumable_audit_player_role_check_b1616ae6\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_consumable_audit_player_role_check_b1616ae6\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_external_booster.run_external_booster_role_check_b1616ae6",
+    "label": "Drop check constraint \"run_external_booster_role_check_b1616ae6\" on \"run_external_booster\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_external_booster_role_check_b1616ae6",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_external_booster_role_check_b1616ae6\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_external_booster_role_check_b1616ae6\"",
+        "sql": "ALTER TABLE \"public\".\"run_external_booster\" DROP CONSTRAINT \"run_external_booster_role_check_b1616ae6\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_external_booster_role_check_b1616ae6\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_payout_entry.run_payout_entry_role_check_b1616ae6",
+    "label": "Drop check constraint \"run_payout_entry_role_check_b1616ae6\" on \"run_payout_entry\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_payout_entry_role_check_b1616ae6",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_payout_entry_role_check_b1616ae6\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_payout_entry_role_check_b1616ae6\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\" DROP CONSTRAINT \"run_payout_entry_role_check_b1616ae6\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_payout_entry_role_check_b1616ae6\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_roster_entry.run_roster_entry_selectedRole_check_e659d19f",
+    "label": "Drop check constraint \"run_roster_entry_selectedRole_check_e659d19f\" on \"run_roster_entry\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_roster_entry_selectedRole_check_e659d19f",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_roster_entry_selectedRole_check_e659d19f\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_selectedRole_check_e659d19f",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_roster_entry_selectedRole_check_e659d19f\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\" DROP CONSTRAINT \"run_roster_entry_selectedRole_check_e659d19f\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_roster_entry_selectedRole_check_e659d19f\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_selectedRole_check_e659d19f",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_signup.run_signup_publishedRole_check_17f7e8a4",
+    "label": "Drop check constraint \"run_signup_publishedRole_check_17f7e8a4\" on \"run_signup\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_publishedRole_check_17f7e8a4",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_publishedRole_check_17f7e8a4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_publishedRole_check_17f7e8a4",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_signup_publishedRole_check_17f7e8a4\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" DROP CONSTRAINT \"run_signup_publishedRole_check_17f7e8a4\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_publishedRole_check_17f7e8a4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_publishedRole_check_17f7e8a4",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.run_signup_role.run_signup_role_role_check_b1616ae6",
+    "label": "Drop check constraint \"run_signup_role_role_check_b1616ae6\" on \"run_signup_role\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_role_role_check_b1616ae6",
+        "table": "run_signup_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_role_role_check_b1616ae6\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"run_signup_role_role_check_b1616ae6\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup_role\" DROP CONSTRAINT \"run_signup_role_role_check_b1616ae6\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_role_role_check_b1616ae6\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_role_check_b1616ae6",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.character_playable_spec",
+    "label": "Create table \"character_playable_spec\"",
+    "summary": "Creates table \"character_playable_spec\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "character_playable_spec"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"character_playable_spec\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_playable_spec\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"character_playable_spec\"",
+        "sql": "CREATE TABLE \"public\".\"character_playable_spec\" (\n  \"characterId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"specialization\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"character_playable_spec\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_playable_spec\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.booster_access.booster_access_role_check_e8a47be4",
+    "label": "Add check constraint \"booster_access_role_check_e8a47be4\" on \"booster_access\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "booster_access_role_check_e8a47be4",
+        "table": "booster_access"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"booster_access_role_check_e8a47be4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_role_check_e8a47be4",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"booster_access_role_check_e8a47be4\"",
+        "sql": "ALTER TABLE \"public\".\"booster_access\" ADD CONSTRAINT \"booster_access_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"booster_access_role_check_e8a47be4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "booster_access_role_check_e8a47be4",
+          "public",
+          "\"public\".\"booster_access\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.character.character_primaryRole_check_490a2046",
+    "label": "Add check constraint \"character_primaryRole_check_490a2046\" on \"character\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "character_primaryRole_check_490a2046",
+        "table": "character"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_primaryRole_check_490a2046\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_primaryRole_check_490a2046",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"character_primaryRole_check_490a2046\"",
+        "sql": "ALTER TABLE \"public\".\"character\" ADD CONSTRAINT \"character_primaryRole_check_490a2046\" CHECK (\"primaryRole\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_primaryRole_check_490a2046\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_primaryRole_check_490a2046",
+          "public",
+          "\"public\".\"character\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character_playable_spec.character_playable_spec_characterId_specialization_key",
+    "label": "Add unique constraint on \"character_playable_spec\" (characterId, specialization)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_playable_spec_characterId_specialization_key",
+        "table": "character_playable_spec"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_playable_spec_characterId_specialization_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_playable_spec_characterId_specialization_key",
+          "public",
+          "\"public\".\"character_playable_spec\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_playable_spec_characterId_specialization_key\"",
+        "sql": "ALTER TABLE \"public\".\"character_playable_spec\" ADD CONSTRAINT \"character_playable_spec_characterId_specialization_key\" UNIQUE (\"characterId\", \"specialization\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_playable_spec_characterId_specialization_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_playable_spec_characterId_specialization_key",
+          "public",
+          "\"public\".\"character_playable_spec\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_consumable_audit_player.run_consumable_audit_player_role_check_e8a47be4",
+    "label": "Add check constraint \"run_consumable_audit_player_role_check_e8a47be4\" on \"run_consumable_audit_player\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_consumable_audit_player_role_check_e8a47be4",
+        "table": "run_consumable_audit_player"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_consumable_audit_player_role_check_e8a47be4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_consumable_audit_player_role_check_e8a47be4\"",
+        "sql": "ALTER TABLE \"public\".\"run_consumable_audit_player\" ADD CONSTRAINT \"run_consumable_audit_player_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_consumable_audit_player_role_check_e8a47be4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_consumable_audit_player_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_consumable_audit_player\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_external_booster.run_external_booster_role_check_e8a47be4",
+    "label": "Add check constraint \"run_external_booster_role_check_e8a47be4\" on \"run_external_booster\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_external_booster_role_check_e8a47be4",
+        "table": "run_external_booster"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_external_booster_role_check_e8a47be4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_external_booster_role_check_e8a47be4\"",
+        "sql": "ALTER TABLE \"public\".\"run_external_booster\" ADD CONSTRAINT \"run_external_booster_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_external_booster_role_check_e8a47be4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_external_booster_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_external_booster\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_payout_entry.run_payout_entry_role_check_e8a47be4",
+    "label": "Add check constraint \"run_payout_entry_role_check_e8a47be4\" on \"run_payout_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_payout_entry_role_check_e8a47be4",
+        "table": "run_payout_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_payout_entry_role_check_e8a47be4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_payout_entry_role_check_e8a47be4\"",
+        "sql": "ALTER TABLE \"public\".\"run_payout_entry\" ADD CONSTRAINT \"run_payout_entry_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_payout_entry_role_check_e8a47be4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_payout_entry_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_payout_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_roster_entry.run_roster_entry_selectedRole_check_a4665995",
+    "label": "Add check constraint \"run_roster_entry_selectedRole_check_a4665995\" on \"run_roster_entry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_roster_entry_selectedRole_check_a4665995",
+        "table": "run_roster_entry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_roster_entry_selectedRole_check_a4665995\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_selectedRole_check_a4665995",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_roster_entry_selectedRole_check_a4665995\"",
+        "sql": "ALTER TABLE \"public\".\"run_roster_entry\" ADD CONSTRAINT \"run_roster_entry_selectedRole_check_a4665995\" CHECK (\"selectedRole\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_roster_entry_selectedRole_check_a4665995\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_roster_entry_selectedRole_check_a4665995",
+          "public",
+          "\"public\".\"run_roster_entry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_signup.run_signup_publishedRole_check_f7d3ea54",
+    "label": "Add check constraint \"run_signup_publishedRole_check_f7d3ea54\" on \"run_signup\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_publishedRole_check_f7d3ea54",
+        "table": "run_signup"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_publishedRole_check_f7d3ea54\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_publishedRole_check_f7d3ea54",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_signup_publishedRole_check_f7d3ea54\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup\" ADD CONSTRAINT \"run_signup_publishedRole_check_f7d3ea54\" CHECK (\"publishedRole\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_publishedRole_check_f7d3ea54\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_publishedRole_check_f7d3ea54",
+          "public",
+          "\"public\".\"run_signup\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.run_signup_role.run_signup_role_role_check_e8a47be4",
+    "label": "Add check constraint \"run_signup_role_role_check_e8a47be4\" on \"run_signup_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "run_signup_role_role_check_e8a47be4",
+        "table": "run_signup_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_signup_role_role_check_e8a47be4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"run_signup_role_role_check_e8a47be4\"",
+        "sql": "ALTER TABLE \"public\".\"run_signup_role\" ADD CONSTRAINT \"run_signup_role_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_signup_role_role_check_e8a47be4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_signup_role_role_check_e8a47be4",
+          "public",
+          "\"public\".\"run_signup_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.character_playable_spec.character_playable_spec_characterId_idx_2423fe9d",
+    "label": "Create index \"character_playable_spec_characterId_idx_2423fe9d\" on \"character_playable_spec\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "character_playable_spec_characterId_idx_2423fe9d",
+        "table": "character_playable_spec"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"character_playable_spec_characterId_idx_2423fe9d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_playable_spec_characterId_idx_2423fe9d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"character_playable_spec_characterId_idx_2423fe9d\"",
+        "sql": "CREATE INDEX \"character_playable_spec_characterId_idx_2423fe9d\" ON \"public\".\"character_playable_spec\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"character_playable_spec_characterId_idx_2423fe9d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_playable_spec_characterId_idx_2423fe9d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.character_playable_spec.character_playable_spec_characterId_fkey",
+    "label": "Add foreign key \"character_playable_spec_characterId_fkey\" on \"character_playable_spec\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "character_playable_spec_characterId_fkey",
+        "table": "character_playable_spec"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"character_playable_spec_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_playable_spec_characterId_fkey",
+          "public",
+          "\"public\".\"character_playable_spec\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"character_playable_spec_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"character_playable_spec\"\nADD CONSTRAINT \"character_playable_spec_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"character_playable_spec_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_playable_spec_characterId_fkey",
+          "public",
+          "\"public\".\"character_playable_spec\""
+        ]
+      }
+    ]
+  }
+]

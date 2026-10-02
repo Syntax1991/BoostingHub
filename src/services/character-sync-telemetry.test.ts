@@ -70,7 +70,7 @@ async function createLinkedCharacter(name: string, input: { region?: WowRegion; 
     normalizedRealm: normalizeCharacterIdentity(realm),
     wowClass: "MAGE",
     specialization: "Arcane",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: 600,
     isActive: true,
     blizzardCharacterId: `bz-${id}`,

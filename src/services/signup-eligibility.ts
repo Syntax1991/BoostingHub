@@ -8,7 +8,8 @@ import type {
   WowClass,
   WowRegion,
 } from "@/models/enums";
-import { roleForSpecialization, rolesForClass } from "@/lib/wow-specializations";
+import { availableRoles } from "@/lib/character-capabilities";
+import { roleForSpecialization } from "@/lib/wow-specializations";
 import { projectRunContentLockouts, type RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
 import { isApprovedBooster } from "@/services/boosting-role.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -31,6 +32,8 @@ export type EligibilityCharacter = {
   region: WowRegion;
   wowClass: WowClass;
   specialization: string | null;
+  /** Additional playable specs beyond primary. */
+  playableSpecs: string[];
   isActive: boolean;
   /** Existing WCL character id when known — informational only for signup UI. */
   warcraftLogsId: string | null;
@@ -148,14 +151,13 @@ function findContentSaves(
  * Booster options require the owner to hold the Booster role (User.isBooster).
  * It is not scoped by difficulty: an approved Booster qualifies for Normal,
  * Heroic and Mythic Runs alike.
- * A Character's specialization determines only the DEFAULT signup role — the
- * User may choose any role the Character's class can actually perform
- * (`rolesForClass`), never restricted to specialization alone. A missing or
- * unrecognized specialization does not block an otherwise-eligible Character;
- * it just means no default is offered (`defaultRole: null`) and the User must
- * choose explicitly. Raid save/lockout
- * status is informational only (`contentSaves`) — a saved Character remains fully
- * eligible; the Raid Lead decides operationally whether to use it.
+ * Eligible roles come from the Character's configured primary + playable
+ * specializations (never the full class catalog). A missing or unrecognized
+ * specialization does not block an otherwise-eligible Character; it just means
+ * no default is offered (`defaultRole: null`) and the User must choose
+ * explicitly among configured roles. Raid save/lockout status is informational
+ * only (`contentSaves`) — a saved Character remains fully eligible; the Raid
+ * Lead decides operationally whether to use it.
  */
 export function evaluateBoosterOptions(
   characters: EligibilityCharacter[],
@@ -214,9 +216,19 @@ export function evaluateBoosterOptions(
       continue;
     }
 
-    const defaultRole = character.specialization
+    const capability = {
+      wowClass: character.wowClass,
+      specialization: character.specialization,
+      playableSpecs: character.playableSpecs ?? [],
+    };
+    const roles = availableRoles(capability);
+    const defaultFromPrimary = character.specialization
       ? roleForSpecialization(character.wowClass, character.specialization)
       : null;
+    const defaultRole =
+      defaultFromPrimary && roles.includes(defaultFromPrimary as (typeof roles)[number])
+        ? defaultFromPrimary
+        : roles[0] ?? null;
 
     const contentSaves = findContentSaves(character, run);
     eligible.push({
@@ -226,7 +238,7 @@ export function evaluateBoosterOptions(
       wowClass: character.wowClass,
       specialization: character.specialization,
       warcraftLogsId: character.warcraftLogsId,
-      roles: rolesForClass(character.wowClass),
+      roles,
       defaultRole,
       contentSaves,
     });

@@ -1,6 +1,6 @@
 import { CHARACTER_ROLES, type CharacterRole } from "@/models/enums";
 
-/** Deterministic order for volunteered booster roles: TANK → HEALER → DPS. */
+/** Deterministic order: TANK → HEALER → MELEE_DPS → RANGED_DPS → legacy DPS. */
 export function normalizeOfferedRoles(roles: readonly CharacterRole[]): CharacterRole[] {
   const unique = new Set(roles);
   return CHARACTER_ROLES.filter((role) => unique.has(role));

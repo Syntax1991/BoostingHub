@@ -94,7 +94,7 @@ async function createCharacter(userId: string, name: string) {
     region: "EU",
     wowClass: "HUNTER",
     specialization: "Beast Mastery",
-    primaryRole: "DPS",
+    primaryRole: "RANGED_DPS",
     itemLevel: 700,
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -204,7 +204,7 @@ describe("published-run signups", () => {
 
     await signupService.setCharacterOffers(early, {
       runId,
-      offers: [{ characterId: earlyChar, offeredRoles: ["DPS"] }],
+      offers: [{ characterId: earlyChar, offeredRoles: ["RANGED_DPS"] }],
     });
     const earlyRows = await signupRepository.listByRunAndUser(runId, ids.early);
     const earlySignupId = earlyRows.find((row) => row.status === "PENDING")!.id;
@@ -213,7 +213,7 @@ describe("published-run signups", () => {
     await rosterService.saveDraftSelection(lead, {
       runId,
       version: view.roster.version,
-      selections: [{ signupId: earlySignupId, selectedRole: "DPS" }],
+      selections: [{ signupId: earlySignupId, selectedRole: "RANGED_DPS" }],
     });
     view = await rosterService.getRosterManagementView(lead, runId);
     await rosterService.publishRoster(lead, {
@@ -241,7 +241,7 @@ describe("published-run signups", () => {
     // L — Booster signup after publish
     const booster = await signupService.setCharacterOffers(late, {
       runId,
-      offers: [{ characterId: lateChar, offeredRoles: ["DPS"] }],
+      offers: [{ characterId: lateChar, offeredRoles: ["RANGED_DPS"] }],
     });
     expect(booster.created + booster.reactivated).toBe(1);
     const lateBooster = (await signupRepository.listByRunAndUser(runId, ids.late)).find(
@@ -312,8 +312,8 @@ describe("published-run signups", () => {
       version: view.roster.version,
       acknowledgeWarnings: true,
       selections: [
-        { signupId: earlySignupId, selectedRole: "DPS" },
-        { signupId: lateBooster!.id, selectedRole: "DPS" },
+        { signupId: earlySignupId, selectedRole: "RANGED_DPS" },
+        { signupId: lateBooster!.id, selectedRole: "RANGED_DPS" },
       ],
     });
     const selectedFinal = (await signupRepository.listByRunId(runId)).filter((row) => row.status === "SELECTED");

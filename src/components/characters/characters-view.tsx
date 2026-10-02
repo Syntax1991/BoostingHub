@@ -189,6 +189,7 @@ export function CharactersView({ data }: { data: Page }) {
                             region: character.region,
                             wowClass: character.wowClass,
                             specialization: character.specialization ?? "",
+                            playableSpecs: character.playableSpecs ?? [],
                             itemLevel: character.itemLevel,
                           }}
                         />
