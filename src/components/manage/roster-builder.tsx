@@ -49,7 +49,7 @@ import {
   type WclPerfFilter,
   type WclPerfSort,
 } from "@/lib/wcl-performance-display";
-import { buildRosterSavedSelectionKey, applyRoleCopyToggle, isRoleCopyChecked as roleCopyIsChecked } from "@/components/manage/roster-staged-selection";
+import { buildRosterSavedSelectionKey, applyRoleCopyToggle, applyUnassignedDpsToggle, isRoleCopyChecked as roleCopyIsChecked, isUnassignedDpsCopyChecked } from "@/components/manage/roster-staged-selection";
 import type { rosterService } from "@/services/roster.service";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import type { RaidBuffCoverage } from "@/services/roster-raid-buffs";
@@ -218,6 +218,12 @@ function RosterBuilderEditor({
             participationType: signup.participationType,
             selectedRole:
               signup.participationType === "LOOTBUDDY" ? null : (stagedSelections.get(signup.id) ?? null),
+            requiresConcreteDpsChoice:
+              signup.participationType === "BOOSTER" &&
+              signup.offeredRoles.includes("DPS") &&
+              signup.assignableRoles.filter((role) => role === "MELEE_DPS" || role === "RANGED_DPS").length > 1 &&
+              (stagedSelections.get(signup.id) == null ||
+                !isConcreteCharacterRole(stagedSelections.get(signup.id) as CharacterRole)),
             status: signup.status,
             characterActive: signup.characterActive,
             boosterApproved: signup.boosterApproved,
@@ -263,8 +269,10 @@ function RosterBuilderEditor({
 
   /** Checked highlight follows the assigned role copy, not every projection of a selected signup. */
   function isRoleCopyChecked(signup: SignupRow) {
+    const staged = stagedSelections.has(signup.id) ? stagedRole(signup.id) : undefined;
+    if (signup.unassignedDps) return isUnassignedDpsCopyChecked(staged);
     return roleCopyIsChecked({
-      stagedRole: stagedSelections.has(signup.id) ? stagedRole(signup.id) : undefined,
+      stagedRole: staged,
       groupRole: signup.groupRole,
     });
   }
@@ -303,7 +311,7 @@ function RosterBuilderEditor({
     if (search && !haystack.includes(search.toLowerCase())) return false;
     if (participation === "LOOTBUDDY") return false;
     if (participation !== "ALL" && participation !== "BOOSTER") return false;
-    if (roleFilter !== "ALL" && !signup.offeredRoles.includes(roleFilter as CharacterRole)) {
+    if (roleFilter !== "ALL" && !signup.assignableRoles.includes(roleFilter as (typeof signup.assignableRoles)[number])) {
       return false;
     }
     if (backupFilter === "BACKUP" && !signup.isBackup) return false;
@@ -312,7 +320,7 @@ function RosterBuilderEditor({
     if (selectedFilter === "SELECTED" && !staged) return false;
     if (selectedFilter === "UNSELECTED" && staged) return false;
     const scopeRole =
-      roleFilter !== "ALL" && signup.offeredRoles.includes(roleFilter as CharacterRole)
+      roleFilter !== "ALL" && signup.assignableRoles.includes(roleFilter as (typeof signup.assignableRoles)[number])
         ? (roleFilter as CharacterRole)
         : null;
     if (!matchesWclPerfFilter(signup.wclPerformance, scopeRole, perfFilter)) return false;
@@ -340,8 +348,8 @@ function RosterBuilderEditor({
   const filteredRangedDps = sortByPerf(
     (data.groups.rangedDps ?? []).filter(matchesProjection),
   );
-  const filteredLegacyDps = sortByPerf(
-    (data.groups.legacyDps ?? data.groups.dps.filter((s) => s.groupRole === "DPS")).filter(matchesProjection),
+  const filteredUnassignedDps = sortByPerf(
+    (data.groups.unassignedDps ?? data.groups.legacyDps ?? []).filter(matchesProjection),
   );
   const filteredLootbuddies = data.groups.lootbuddies.filter(matchesProjection);
   const uniqueFilteredBoosters = data.boosters.filter(matchesCanonicalBooster).length;
@@ -353,26 +361,32 @@ function RosterBuilderEditor({
   function toggleRoleCopy(signup: SignupRow, checked: boolean) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (signup.status === "WITHDRAWN") return;
-    // Historic generic DPS offers cannot be newly assigned — need a concrete role.
-    if (checked && signup.groupRole === "DPS") return;
     // Unselected schedule-conflicted Boosters cannot be newly staged.
     if (checked && !stagedSelections.has(signup.id) && (signup.scheduleConflicts?.length ?? 0) > 0) {
       return;
     }
     setError(null);
     setErrorCode(null);
+    const replaceBoosterSignupIds =
+      signup.participationType === "BOOSTER"
+        ? domainSignups
+            .filter(
+              (other) =>
+                other.userId === signup.userId &&
+                other.participationType === "BOOSTER" &&
+                other.id !== signup.id,
+            )
+            .map((other) => other.id)
+        : [];
     setStagedSelections((previous) => {
-      const replaceBoosterSignupIds =
-        signup.participationType === "BOOSTER"
-          ? domainSignups
-              .filter(
-                (other) =>
-                  other.userId === signup.userId &&
-                  other.participationType === "BOOSTER" &&
-                  other.id !== signup.id,
-              )
-              .map((other) => other.id)
-          : [];
+      if (signup.unassignedDps) {
+        return applyUnassignedDpsToggle({
+          staged: previous,
+          signupId: signup.id,
+          checked,
+          replaceBoosterSignupIds,
+        });
+      }
       return applyRoleCopyToggle({
         staged: previous,
         signupId: signup.id,
@@ -387,7 +401,7 @@ function RosterBuilderEditor({
   function assignRole(signup: SignupRow, role: CharacterRole) {
     if (!isConcreteCharacterRole(role)) return;
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
-    if (!signup.offeredRoles.includes(role)) return;
+    if (!signup.assignableRoles.includes(role)) return;
     setError(null);
     setErrorCode(null);
     setStagedSelections((previous) => {
@@ -551,10 +565,17 @@ function RosterBuilderEditor({
         </div>
         <p className="border-t border-border px-4 py-3 text-xs text-muted">
           Melee {roleBreakdown.meleeDps} · Ranged {roleBreakdown.rangedDps}
-          {roleBreakdown.legacyDps > 0 ? ` · Legacy DPS ${roleBreakdown.legacyDps}` : ""}
+          {roleBreakdown.legacyDps > 0 ? ` · Unassigned DPS ${roleBreakdown.legacyDps}` : ""}
           {" · "}
-          DPS total {roleBreakdown.dps} (target {liveComposition.dps.target})
+          DPS {liveComposition.dps.selected} (target {liveComposition.dps.target})
         </p>
+        {liveValidation.blockers.length > 0 ? (
+          <div role="alert" className="space-y-1 border-t border-border px-4 py-3 text-xs text-danger">
+            {liveValidation.blockers.map((issue) => (
+              <p key={`${issue.code}:${issue.signupId ?? issue.message}`}>{issue.message}</p>
+            ))}
+          </div>
+        ) : null}
       </Card>
 
       <ClassBuffChecker coverage={liveRaidBuffCoverage} />
@@ -689,17 +710,17 @@ function RosterBuilderEditor({
         onToggle={toggleRoleCopy}
         onAssignRole={assignRole}
       />
-      {filteredLegacyDps.length > 0 ||
+      {filteredUnassignedDps.length > 0 ||
       externalBoosters.some((booster) => externalBoosterRosterBucket(booster.role) === "LEGACY_DPS") ? (
         <SignupSection
-          title="Legacy DPS"
-          empty="No legacy DPS signups"
-          signups={filteredLegacyDps}
+          title="Unassigned DPS"
+          empty="No unassigned DPS signups"
+          signups={filteredUnassignedDps}
           externals={externalBoosters.filter(
             (booster) => externalBoosterRosterBucket(booster.role) === "LEGACY_DPS",
           )}
-          editing={false}
-          locked
+          editing={editing}
+          locked={togglesLocked}
           isRoleCopyChecked={isRoleCopyChecked}
           stagedRole={stagedRole}
           onToggle={toggleRoleCopy}
@@ -857,7 +878,7 @@ function RosterBuilderEditor({
           <p>
             {liveComposition.tanks.selected} Tanks · {liveComposition.healers.selected} Healers ·{" "}
             {roleBreakdown.meleeDps} Melee · {roleBreakdown.rangedDps} Ranged
-            {roleBreakdown.legacyDps > 0 ? ` · ${roleBreakdown.legacyDps} Legacy DPS` : ""} ·{" "}
+            {roleBreakdown.legacyDps > 0 ? ` · ${roleBreakdown.legacyDps} Unassigned DPS` : ""} ·{" "}
             {liveComposition.dps.selected} DPS · {liveComposition.lootbuddies.selected} Lootbuddies
           </p>
           <p>
@@ -1001,6 +1022,27 @@ function SignupSection({
   );
 }
 
+function SignupRoleBadges({ signup }: { signup: SignupRow }) {
+  const historic = signup.offeredRoles.includes("DPS");
+  if (!historic) return <OfferedRolesBadges roles={signup.offeredRoles} />;
+  const dpsRoles = signup.assignableRoles.filter((role) => role === "MELEE_DPS" || role === "RANGED_DPS");
+  if (dpsRoles.length > 1) {
+    const others = signup.assignableRoles.filter((role) => role !== "MELEE_DPS" && role !== "RANGED_DPS");
+    return (
+      <>
+        <OfferedRolesBadges roles={others} />
+        <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted">Unassigned DPS</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <OfferedRolesBadges roles={signup.assignableRoles} />
+      <span className="text-xs text-muted">historic signup</span>
+    </>
+  );
+}
+
 function SignupRowCard({
   signup,
   editing,
@@ -1026,10 +1068,8 @@ function SignupRowCard({
   const scheduleConflicts = signup.scheduleConflicts ?? [];
   const scheduleBlocked = !selected && scheduleConflicts.length > 0;
   const disabled = !editing || locked || signup.status === "WITHDRAWN" || scheduleBlocked;
-  const needsRoleChoice =
-    signup.participationType === "BOOSTER" &&
-    signup.offeredRoles.filter(isConcreteCharacterRole).length > 1;
-  const concreteOfferedRoles = signup.offeredRoles.filter(isConcreteCharacterRole);
+  const needsRoleChoice = signup.participationType === "BOOSTER" && signup.assignableRoles.length > 1;
+  const assignableRoles = signup.assignableRoles;
   const rowPointer = disabled ? "cursor-not-allowed" : "cursor-pointer";
   const wclForColumn = filterWclPerformanceForGroupRole(signup.wclPerformance, signup.groupRole);
   const showWcl = Boolean(character?.warcraftLogsId) || wclForColumn.length > 0;
@@ -1053,7 +1093,7 @@ function SignupRowCard({
             {signupDisplayName(signup)}
           </label>
           {displayClass ? <ClassBadge wowClass={displayClass} /> : null}
-          <OfferedRolesBadges roles={signup.offeredRoles} />
+          <SignupRoleBadges signup={signup} />
           <ParticipationBadge type={signup.participationType} />
           <SignupStatusBadge status={signup.status} />
           {signup.isBackup ? <span className="text-xs text-warning">Backup</span> : <span className="text-xs text-muted">Primary</span>}
@@ -1099,7 +1139,7 @@ function SignupRowCard({
               className="h-8 rounded-md border border-border bg-surface px-2 text-xs"
             >
               <option value="">Choose assigned role…</option>
-              {concreteOfferedRoles.map((role) => (
+              {assignableRoles.map((role) => (
                 <option key={role} value={role}>
                   {CHARACTER_ROLE_LABELS[role]}
                 </option>

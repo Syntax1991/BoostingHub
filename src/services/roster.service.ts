@@ -38,9 +38,15 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupService } from "@/services/signup.service";
 import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
-import { isConcreteCharacterRole } from "@/lib/character-roles";
+import { isConcreteCharacterRole, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
+import {
+  resolveSignupAssignableRoles,
+  rosterRoleSectionsForSignup,
+  unresolvedHistoricDpsMessage,
+  type SignupAssignableRoleInput,
+} from "@/lib/signup-assignable-roles";
 import { rosterActionLabel } from "@/lib/run-routes";
 import type { CharacterRole, ParticipationType, RaidDifficulty, RunLootType, RunStatus, SignupStatus, WowClass } from "@/models/enums";
 import {
@@ -96,31 +102,85 @@ type InspectedSignup = RosterSignupRow & {
  * intentional. Domain identity stays `signup.id` (one staged/persisted slot).
  */
 type RosterSignupCard = InspectedSignup & {
-  /** Section this card is rendered in; null for LOOTBUDDY. */
+  /** Section this card is rendered in; null for LOOTBUDDY and the Unassigned DPS row. */
   groupRole: CharacterRole | null;
+  /** Concrete roles the Raid Lead may assign. Historic generic DPS is already resolved. */
+  assignableRoles: ConcreteCharacterRole[];
+  /** Ambiguous historic generic DPS projection. Not duplicated under Melee and Ranged. */
+  unassignedDps: boolean;
 };
 
-/**
- * Discovery grouping: a hybrid offering Healer and DPS appears under both role
- * sections. Selection identity remains the signup id — never the projection.
- */
-function boosterCardsFor(candidates: InspectedSignup[], role: CharacterRole): RosterSignupCard[] {
-  return candidates
-    .filter((item) => item.participationType === "BOOSTER" && item.offeredRoles.includes(role))
-    .map((item) => ({
-      ...item,
-      groupRole: role,
-    }));
+function signupAssignmentInput(signup: RosterSignupRow): SignupAssignableRoleInput {
+  return {
+    offeredRoles: signup.offeredRoles,
+    characterClass: signup.character?.wowClass ?? null,
+    primarySpecialization: signup.character?.specialization ?? null,
+    playableSpecs: signup.character?.playableSpecs ?? [],
+  };
 }
 
-/** Unique BOOSTER candidates — never flatten role projections to derive this. */
-function canonicalBoosters(candidates: InspectedSignup[]): RosterSignupCard[] {
-  return candidates
-    .filter((item) => item.participationType === "BOOSTER")
-    .map((item) => ({
-      ...item,
-      groupRole: null,
-    }));
+function assignableRolesForSignup(signup: RosterSignupRow): ConcreteCharacterRole[] {
+  if (signup.participationType !== "BOOSTER") return [];
+  return resolveSignupAssignableRoles(signupAssignmentInput(signup));
+}
+
+/**
+ * Role-section cards from the same assignable-role result the server validates.
+ * A modern hybrid still appears under every concrete offered role. Historic
+ * generic DPS with one resolved subtype is placed in that bucket. Two subtypes
+ * produce a single Unassigned DPS card plus any non-DPS offered role.
+ */
+function projectSignupCards(candidates: InspectedSignup[]): {
+  boosters: RosterSignupCard[];
+  tanks: RosterSignupCard[];
+  healers: RosterSignupCard[];
+  meleeDps: RosterSignupCard[];
+  rangedDps: RosterSignupCard[];
+  unassignedDps: RosterSignupCard[];
+  dps: RosterSignupCard[];
+  lootbuddies: RosterSignupCard[];
+} {
+  const boosters: RosterSignupCard[] = [];
+  const tanks: RosterSignupCard[] = [];
+  const healers: RosterSignupCard[] = [];
+  const meleeDps: RosterSignupCard[] = [];
+  const rangedDps: RosterSignupCard[] = [];
+  const unassignedDps: RosterSignupCard[] = [];
+  const lootbuddies: RosterSignupCard[] = [];
+
+  for (const item of candidates) {
+    if (item.participationType === "LOOTBUDDY") {
+      lootbuddies.push({ ...item, groupRole: null, assignableRoles: [], unassignedDps: false });
+      continue;
+    }
+    if (item.participationType !== "BOOSTER") continue;
+    const { assignableRoles, sections } = rosterRoleSectionsForSignup(signupAssignmentInput(item));
+    boosters.push({ ...item, groupRole: null, assignableRoles, unassignedDps: false });
+    for (const section of sections) {
+      if (section === "UNASSIGNED_DPS") {
+        unassignedDps.push({ ...item, groupRole: null, assignableRoles, unassignedDps: true });
+      } else if (section === "TANK") {
+        tanks.push({ ...item, groupRole: "TANK", assignableRoles, unassignedDps: false });
+      } else if (section === "HEALER") {
+        healers.push({ ...item, groupRole: "HEALER", assignableRoles, unassignedDps: false });
+      } else if (section === "MELEE_DPS") {
+        meleeDps.push({ ...item, groupRole: "MELEE_DPS", assignableRoles, unassignedDps: false });
+      } else if (section === "RANGED_DPS") {
+        rangedDps.push({ ...item, groupRole: "RANGED_DPS", assignableRoles, unassignedDps: false });
+      }
+    }
+  }
+
+  return {
+    boosters,
+    tanks,
+    healers,
+    meleeDps,
+    rangedDps,
+    unassignedDps,
+    dps: [...meleeDps, ...rangedDps, ...unassignedDps],
+    lootbuddies,
+  };
 }
 
 /** Prefer character name; characterless Lootbuddy falls back to Class label. */
@@ -147,9 +207,10 @@ function resolvedLootbuddyClass(signup: RosterSignupRow): WowClass | null {
 
 /**
  * The Raid Lead's role assignment for one slot being selected. A BOOSTER slot
- * must end up with exactly one of the roles its offer volunteered — an offer
- * with only one such role resolves itself, so a raid lead never has to
- * restate the obvious. A LOOTBUDDY slot has no booster role at all.
+ * must end up with exactly one concrete assignable role. A single resolved
+ * role fills itself in, including a historic generic DPS offer whose spec
+ * determines Melee or Ranged. Generic DPS is never written. A LOOTBUDDY slot
+ * has no booster role at all.
  */
 function resolveSelectedRole(
   signup: RosterSignupRow,
@@ -166,8 +227,12 @@ function resolveSelectedRole(
     return null;
   }
 
-  const role = requested ?? (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null);
+  const assignable = assignableRolesForSignup(signup);
+  const role = requested ?? (assignable.length === 1 ? assignable[0]! : null);
   if (!role) {
+    if (rosterRoleSectionsForSignup(signupAssignmentInput(signup)).sections.includes("UNASSIGNED_DPS")) {
+      throw new DomainError("INVALID_ROSTER_SELECTION", unresolvedHistoricDpsMessage(label));
+    }
     throw new DomainError(
       "INVALID_ROSTER_SELECTION",
       signup.offeredRoles.length === 0
@@ -181,13 +246,30 @@ function resolveSelectedRole(
       `Generic DPS cannot be assigned for ${label}. Choose Melee DPS or Ranged DPS.`,
     );
   }
-  if (!signup.offeredRoles.includes(role)) {
+  if (!assignable.includes(role)) {
     throw new DomainError(
       "INVALID_ROSTER_SELECTION",
-      `${label} did not offer ${CHARACTER_ROLE_LABELS[role]}.`,
+      `${label} cannot be assigned as ${CHARACTER_ROLE_LABELS[role]}.`,
     );
   }
   return role;
+}
+
+/** Publish planning: a unique assignable role resolves itself; ambiguity stays unset for validation. */
+function plannedSelectedRole(
+  signup: RosterSignupRow,
+  requested: CharacterRole | null | undefined,
+): CharacterRole | null {
+  if (signup.participationType !== "BOOSTER") return null;
+  if (requested) return resolveSelectedRole(signup, requested);
+  const assignable = assignableRolesForSignup(signup);
+  return assignable.length === 1 ? assignable[0]! : null;
+}
+
+function needsHistoricDpsChoice(signup: RosterSignupRow, selectedRole: CharacterRole | null): boolean {
+  if (signup.participationType !== "BOOSTER") return false;
+  if (selectedRole && isConcreteCharacterRole(selectedRole)) return false;
+  return rosterRoleSectionsForSignup(signupAssignmentInput(signup)).sections.includes("UNASSIGNED_DPS");
 }
 
 function inspectSignup(
@@ -268,6 +350,7 @@ function asMember(row: InspectedSignup) {
     status: row.status,
     characterActive: row.characterActive,
     boosterApproved: row.boosterApproved,
+    requiresConcreteDpsChoice: needsHistoricDpsChoice(row, row.selectedRole),
   };
 }
 
@@ -337,13 +420,7 @@ async function planAuthoritativeRoster(
     // validateRosterDraft reports as a missing-role blocker.
     selectedRole: !selections.has(signup.id)
       ? signup.selectedRole
-      : signup.participationType !== "BOOSTER"
-        ? null
-        : selections.get(signup.id)
-          ? resolveSelectedRole(signup, selections.get(signup.id))
-          : signup.offeredRoles.length === 1
-            ? signup.offeredRoles[0]!
-            : null,
+      : plannedSelectedRole(signup, selections.get(signup.id)),
     draftSelected: selections.has(signup.id),
     scheduleConflicts: [] as CharacterScheduleConflict[],
     runCommitments: [] as CharacterRunCommitment[],
@@ -628,6 +705,7 @@ export const rosterService = {
     // candidate. NOT_SELECTED stays here deliberately: a raid lead re-editing a
     // published roster can still re-select someone who wasn't picked last time.
     const candidates = inspected.filter((item) => item.status !== "WITHDRAWN");
+    const projected = projectSignupCards(candidates);
 
     return {
       run: {
@@ -688,26 +766,22 @@ export const rosterService = {
        * Canonical unique BOOSTER candidates (one card per RunSignup).
        * Role sections below are visual projections and may repeat the same id.
        */
-      boosters: canonicalBoosters(candidates),
+      boosters: projected.boosters,
       groups: {
-        tanks: boosterCardsFor(candidates, "TANK"),
-        healers: boosterCardsFor(candidates, "HEALER"),
-        meleeDps: boosterCardsFor(candidates, "MELEE_DPS"),
-        rangedDps: boosterCardsFor(candidates, "RANGED_DPS"),
+        tanks: projected.tanks,
+        healers: projected.healers,
+        meleeDps: projected.meleeDps,
+        rangedDps: projected.rangedDps,
         /**
-         * Historic offers that still list generic DPS. Shown as Legacy DPS —
-         * never remapped into Melee/Ranged. New offers cannot write DPS.
+         * Historic generic DPS that resolves to both Melee and Ranged.
+         * Resolved subtypes are already in meleeDps / rangedDps.
+         * `legacyDps` is the same list for older consumers.
          */
-        legacyDps: boosterCardsFor(candidates, "DPS"),
-        /** @deprecated Prefer meleeDps/rangedDps/legacyDps — aggregate for older consumers. */
-        dps: [
-          ...boosterCardsFor(candidates, "MELEE_DPS"),
-          ...boosterCardsFor(candidates, "RANGED_DPS"),
-          ...boosterCardsFor(candidates, "DPS"),
-        ],
-        lootbuddies: candidates
-          .filter((item) => item.participationType === "LOOTBUDDY")
-          .map((item): RosterSignupCard => ({ ...item, groupRole: null })),
+        unassignedDps: projected.unassignedDps,
+        legacyDps: projected.unassignedDps,
+        /** Aggregate of concrete DPS sections plus ambiguous historic rows. */
+        dps: projected.dps,
+        lootbuddies: projected.lootbuddies,
       },
       summary: {
         tanks: composition.tanks.selected,
@@ -1141,18 +1215,24 @@ export const rosterService = {
     const signups = await rosterRepository.listSignups(input.runId);
     // Seeds the replacement draft from the live published selection and its
     // publishedRole snapshot — never from a previously mutated draft role.
-    // A published slot predating assigned roles falls back only when the offer
-    // has exactly one volunteered role.
+    // A historic generic published role is not copied forward. A single
+    // concrete assignable role (resolved spec) fills itself in.
     const selections: RosterSelection[] = signups
       .filter((signup) => signup.status === "SELECTED")
-      .map((signup) => ({
-        signupId: signup.id,
-        selectedRole:
-          signup.participationType !== "BOOSTER"
-            ? null
-            : (signup.publishedRole ??
-              (signup.offeredRoles.length === 1 ? signup.offeredRoles[0] : null)),
-      }));
+      .map((signup) => {
+        const assignable = assignableRolesForSignup(signup);
+        return {
+          signupId: signup.id,
+          selectedRole:
+            signup.participationType !== "BOOSTER"
+              ? null
+              : signup.publishedRole && isConcreteCharacterRole(signup.publishedRole)
+                ? signup.publishedRole
+                : assignable.length === 1
+                  ? assignable[0]!
+                  : null,
+        };
+      });
     await rosterRepository.replaceSelectedSignupIds(view.roster.id, input.version, selections);
   },
 

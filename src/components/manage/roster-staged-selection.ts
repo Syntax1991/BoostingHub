@@ -80,3 +80,32 @@ export function isRoleCopyChecked(args: {
   if (args.groupRole == null) return true;
   return args.stagedRole === args.groupRole;
 }
+
+/** Ambiguous historic DPS copy is checked while the slot is awaiting or holding a DPS subtype. */
+export function isUnassignedDpsCopyChecked(stagedRole: CharacterRole | null | undefined): boolean {
+  if (stagedRole === undefined) return false;
+  return stagedRole == null || stagedRole === "MELEE_DPS" || stagedRole === "RANGED_DPS";
+}
+
+/**
+ * Checking the Unassigned DPS row selects the signup without guessing a subtype.
+ * Unchecking it clears the slot only when this copy is the checked one.
+ */
+export function applyUnassignedDpsToggle(args: {
+  staged: Map<string, CharacterRole | null>;
+  signupId: string;
+  checked: boolean;
+  replaceBoosterSignupIds?: Iterable<string>;
+}): Map<string, CharacterRole | null> {
+  const next = new Map(args.staged);
+  const current = next.has(args.signupId) ? (next.get(args.signupId) ?? null) : undefined;
+  if (!args.checked) {
+    if (isUnassignedDpsCopyChecked(current)) next.delete(args.signupId);
+    return next;
+  }
+  for (const otherId of args.replaceBoosterSignupIds ?? []) {
+    if (otherId !== args.signupId) next.delete(otherId);
+  }
+  next.set(args.signupId, null);
+  return next;
+}

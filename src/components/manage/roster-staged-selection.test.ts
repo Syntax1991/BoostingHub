@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyRoleCopyToggle,
+  applyUnassignedDpsToggle,
   buildRosterSavedSelectionKey,
   isRoleCopyChecked,
+  isUnassignedDpsCopyChecked,
   syncStagedSelectionIds,
 } from "@/components/manage/roster-staged-selection";
 import type { CharacterRole } from "@/models/enums";
@@ -106,5 +108,30 @@ describe("role-copy toggle semantics", () => {
     staged.set(signupId, "HEALER");
     expect(isRoleCopyChecked({ stagedRole: staged.get(signupId), groupRole: "TANK" })).toBe(false);
     expect(isRoleCopyChecked({ stagedRole: staged.get(signupId), groupRole: "HEALER" })).toBe(true);
+  });
+});
+
+describe("unassigned historic DPS toggle", () => {
+  const signupId = "signup-shaman";
+
+  it("17. checks an ambiguous historic DPS row without inventing a subtype", () => {
+    const staged = applyUnassignedDpsToggle({
+      staged: new Map(),
+      signupId,
+      checked: true,
+    });
+    expect(staged.get(signupId)).toBeNull();
+    expect(isUnassignedDpsCopyChecked(staged.get(signupId))).toBe(true);
+    expect(isRoleCopyChecked({ stagedRole: "HEALER", groupRole: "HEALER" })).toBe(true);
+    expect(isUnassignedDpsCopyChecked("HEALER")).toBe(false);
+  });
+
+  it("keeps a chosen Melee or Ranged assignment on the unassigned copy", () => {
+    let staged: Map<string, CharacterRole | null> = new Map([[signupId, null]]);
+    staged = applyUnassignedDpsToggle({ staged, signupId, checked: true });
+    staged.set(signupId, "MELEE_DPS");
+    expect(isUnassignedDpsCopyChecked(staged.get(signupId))).toBe(true);
+    staged = applyUnassignedDpsToggle({ staged, signupId, checked: false });
+    expect(staged.has(signupId)).toBe(false);
   });
 });

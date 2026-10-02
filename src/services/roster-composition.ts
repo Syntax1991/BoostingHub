@@ -1,4 +1,3 @@
-import { isDpsRole } from "@/lib/character-roles";
 import type { CharacterRole, ParticipationType } from "@/models/enums";
 
 export type RosterCompositionSlot = {
@@ -30,7 +29,8 @@ function slot(selected: number, target: number): RosterCompositionSlot {
 /**
  * LOOT_ONLY and PLAYING lootbuddies are never counted as Tank/Healer/DPS.
  * PLAYING has no assigned booster role in Phase 2, so it stays in the lootbuddy bucket.
- * MELEE_DPS + RANGED_DPS (+ legacy DPS) all count toward the DPS target.
+ * Only concrete MELEE_DPS and RANGED_DPS count toward the DPS target.
+ * A historic generic DPS assignment is unresolved until the Raid Lead picks a subtype.
  */
 export function composeRoster(
   selected: CompositionMember[],
@@ -39,7 +39,9 @@ export function composeRoster(
   const boosters = selected.filter((item) => item.participationType === "BOOSTER");
   const tanks = boosters.filter((item) => item.selectedRole === "TANK").length;
   const healers = boosters.filter((item) => item.selectedRole === "HEALER").length;
-  const dps = boosters.filter((item) => isDpsRole(item.selectedRole)).length;
+  const dps = boosters.filter(
+    (item) => item.selectedRole === "MELEE_DPS" || item.selectedRole === "RANGED_DPS",
+  ).length;
   const lootbuddies = selected.filter((item) => item.participationType === "LOOTBUDDY").length;
 
   return {

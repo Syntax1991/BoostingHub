@@ -79,6 +79,8 @@ function roleMatchesGroupColumn(role: CharacterRole, groupRole: CharacterRole): 
   if (role === groupRole) return true;
   // Roster DPS column is a composition bucket covering concrete subtypes + legacy DPS.
   if (groupRole === "DPS") return isDpsRole(role);
+  // Historic offers were stored as generic DPS. A resolved Melee/Ranged column still shows those parses.
+  if ((groupRole === "MELEE_DPS" || groupRole === "RANGED_DPS") && role === "DPS") return true;
   return false;
 }
 
