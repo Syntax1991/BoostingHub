@@ -10,6 +10,7 @@ import {
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
 import { AddStrikeButton } from "@/components/runs/add-strike-button";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import { formatCharacterRosterMetadata } from "@/lib/character-roster-metadata";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import type { RunDetailView } from "@/services/run-detail.service";
 import type { RosterManagementView } from "@/services/roster.service";
@@ -215,7 +216,12 @@ function ManagerSignupList({
                   const lockoutAttention = signup.contentSaves?.some((row) => row.label.attention) ?? false;
                   return (
                   <li key={signup.id} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span>{characterLabel(signup)}</span>
+                    <div className="min-w-0">
+                      <span>{characterLabel(signup)}</span>
+                      {signup.character ? (
+                        <p className="text-xs text-muted">{formatCharacterRosterMetadata(signup.character)}</p>
+                      ) : null}
+                    </div>
                     {wowClass ? <ClassBadge wowClass={wowClass} /> : null}
                     <OfferedRolesBadges roles={signup.offeredRoles} />
                     {signup.selectedRole ? (

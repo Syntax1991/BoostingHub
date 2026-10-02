@@ -37,6 +37,7 @@ import {
   LOOTBUDDY_MODE_LABELS,
   LOOTBUDDY_VERIFICATION_LABELS,
 } from "@/lib/labels";
+import { formatCharacterRosterMetadata } from "@/lib/character-roster-metadata";
 import { formatContentLockoutLines, formatContentLockoutTooltip } from "@/lib/run-content-lockouts";
 import { isConcreteCharacterRole } from "@/lib/character-roles";
 import { countRolesByBucket, externalBoosterRosterBucket } from "@/lib/roster-role-buckets";
@@ -1062,12 +1063,7 @@ function SignupRowCard({
           htmlFor={checkboxId}
           className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted ${rowPointer}`}
         >
-          {character ? (
-            <span>
-              {typeof character.itemLevel === "number" ? character.itemLevel : "Unknown"} ilvl ·{" "}
-              {character.specialization ?? character.primaryRole}
-            </span>
-          ) : null}
+          {character ? <span>{formatCharacterRosterMetadata(character)}</span> : null}
           {signup.participationType === "BOOSTER" && signup.boosterApproved ? (
             <AccessBadge status="APPROVED" />
           ) : null}
