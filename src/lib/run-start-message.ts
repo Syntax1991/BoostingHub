@@ -41,13 +41,9 @@ export function escapeDiscordInlineText(value: string): string {
     .replace(/@/g, `@${ZERO_WIDTH_SPACE}`);
 }
 
-/**
- * LFG footer naming the Run's assigned Raid Lead. `raidLeadDisplayName` is the
- * human-readable effective name (see `effectiveRaidLeadChannelName`), not a slug;
- * it is escaped so it cannot change the footer's markdown, lines or mentions.
- */
-export function formatFinalSetupLfgLine(raidLeadDisplayName: string): string {
-  return `**LFG HM ${escapeDiscordInlineText(raidLeadDisplayName)} write your discord name in the note!**`;
+/** Fixed Manawyrm community LFG footer for Final Setup / Start Run posts. */
+export function formatFinalSetupLfgLine(): string {
+  return "**LFG Manawyrm write your discord name in the note!**";
 }
 
 export type FinalSetupRenderOptions = {
@@ -94,11 +90,6 @@ export type FinalSetupInput = {
   contentSummary?: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  /**
-   * The Run's assigned Raid Lead as shown to players: Discord Run channel
-   * nickname, else the Raid Lead's name. Never the user who started the Run.
-   */
-  raidLeadDisplayName: string;
   targets: {
     tanks: number;
     healers: number;
@@ -184,12 +175,12 @@ export function formatFinalSetup(data: FinalSetupInput, options?: FinalSetupRend
 
 /**
  * Authoritative plain-text Final Setup for Discord content / web Copy message.
- * Title uses Discord markdown bold. Appends the Raid Lead's LFG line once at the bottom.
+ * Title uses Discord markdown bold. Appends the Manawyrm LFG line once at the bottom.
  */
 export function renderFinalSetupText(data: FinalSetupInput, options?: FinalSetupRenderOptions): string {
   const message = formatFinalSetup(data, options);
   const voiceChannelId = options?.voiceChannelId?.trim() || null;
   // Channel mention (<#id>): clickable, and never a user/role ping.
   const voiceLine = voiceChannelId ? `\n\nVoice: <#${voiceChannelId}>` : "";
-  return `**${message.title}**\n\n${message.body}${voiceLine}\n\n${formatFinalSetupLfgLine(data.raidLeadDisplayName)}`;
+  return `**${message.title}**\n\n${message.body}${voiceLine}\n\n${formatFinalSetupLfgLine()}`;
 }

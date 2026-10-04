@@ -32,7 +32,6 @@ function sampleInput(overrides: Partial<FinalSetupInput> = {}): FinalSetupInput 
     contentSummary: "The Venomous Abyss 8/8",
     difficulty: "HEROIC",
     lootType: "UNSAVED",
-    raidLeadDisplayName: "Syntax",
     targets: { tanks: 2, healers: 2, dps: 8 },
     groups: {
       tanks: [
@@ -122,7 +121,6 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
     difficulty: input.difficulty,
     lootType: input.lootType,
     scheduledStartAt: "2026-09-18T17:00:00.000Z",
-    raidLeadDisplayName: input.raidLeadDisplayName,
     targets: input.targets,
     groups: {
       tanks: input.groups.tanks.map((m, i) => ({ signupId: `t${i}`, userId: `u${i}`, ...m, saveLabel: "Unsaved" })),
@@ -140,17 +138,21 @@ function sampleEmbedData(overrides: Partial<RunStartEmbedData> = {}): RunStartEm
   };
 }
 
-describe("formatFinalSetupLfgLine — Run Raid Lead footer", () => {
-  it("renders the exact footer for Syntax", () => {
-    expect(formatFinalSetupLfgLine("Syntax")).toBe("**LFG HM Syntax write your discord name in the note!**");
+describe("formatFinalSetupLfgLine — Manawyrm community footer", () => {
+  it("renders the exact branded footer", () => {
+    expect(formatFinalSetupLfgLine()).toBe("**LFG Manawyrm write your discord name in the note!**");
   });
 
-  it("renders the exact footer for Kiri", () => {
-    expect(formatFinalSetupLfgLine("Kiri")).toBe("**LFG HM Kiri write your discord name in the note!**");
+  it("does not include a Raid Lead name or HM", () => {
+    const line = formatFinalSetupLfgLine();
+    expect(line).not.toContain("Syntax");
+    expect(line).not.toContain("SomeOtherLead");
+    expect(line).not.toContain("HM");
+    expect(line.match(/\*\*/g)).toHaveLength(2);
   });
 });
 
-describe("escapeDiscordInlineText — dynamic Raid Lead text safety", () => {
+describe("escapeDiscordInlineText — dynamic Discord text safety", () => {
   const ZWSP = String.fromCharCode(0x200b);
 
   it("leaves ordinary names unchanged", () => {
@@ -159,56 +161,50 @@ describe("escapeDiscordInlineText — dynamic Raid Lead text safety", () => {
     }
   });
 
-  it("escapes markdown so the name cannot close or change the surrounding bold footer", () => {
-    const line = formatFinalSetupLfgLine("**Admin**");
-    expect(line).toBe("**LFG HM \\*\\*Admin\\*\\* write your discord name in the note!**");
-    // Only the footer's own opening/closing ** remain unescaped.
-    expect(line.match(/(?<!\\)\*\*/g)).toHaveLength(2);
+  it("escapes markdown and mention syntax for other dynamic Discord text", () => {
+    expect(escapeDiscordInlineText("**Admin**")).toBe("\\*\\*Admin\\*\\*");
     expect(escapeDiscordInlineText("_x_ ~~y~~ `z` ||s|| [l](u) > q # h \\")).toBe(
       "\\_x\\_ \\~\\~y\\~\\~ \\`z\\` \\|\\|s\\|\\| \\[l\\](u) \\> q \\# h \\\\",
     );
   });
 
-  it("collapses CR/LF (and U+2028/2029) so the footer stays one logical line", () => {
+  it("collapses CR/LF (and U+2028/2029) into spaces", () => {
     const hostile = `Syntax\r\n**Admin says** hi\n\n@everyone${String.fromCharCode(0x2028)}bye\r`;
-    const line = formatFinalSetupLfgLine(hostile);
-    expect(line).not.toMatch(/[\r\n]/);
-    expect(line.includes(String.fromCharCode(0x2028))).toBe(false);
-    const text = renderFinalSetupText(sampleInput({ raidLeadDisplayName: hostile }));
-    const normal = renderFinalSetupText(sampleInput());
-    expect(text.split("\n")).toHaveLength(normal.split("\n").length);
-    expect(text.endsWith(line)).toBe(true);
+    const escaped = escapeDiscordInlineText(hostile);
+    expect(escaped).not.toMatch(/[\r\n]/);
+    expect(escaped.includes(String.fromCharCode(0x2028))).toBe(false);
   });
 
-  it("neutralises raw @ mentions and mention markup in the Raid Lead name", () => {
-    expect(formatFinalSetupLfgLine("@everyone Syntax")).toBe(
-      `**LFG HM @${ZWSP}everyone Syntax write your discord name in the note!**`,
-    );
-    expect(formatFinalSetupLfgLine("@here Kiri")).not.toMatch(/@here/);
-    expect(formatFinalSetupLfgLine("<@123456789012345678>")).not.toContain("<@123456789012345678>");
+  it("neutralises raw @ mentions and mention markup", () => {
+    expect(escapeDiscordInlineText("@everyone Syntax")).toBe(`@${ZWSP}everyone Syntax`);
+    expect(escapeDiscordInlineText("@here Kiri")).not.toMatch(/@here/);
+    expect(escapeDiscordInlineText("<@123456789012345678>")).not.toContain("<@123456789012345678>");
   });
 });
 
 describe("renderFinalSetupText — plain Discord Final Setup", () => {
-  it("starts with bold Final Setup, role headers, and the Raid Lead LFG footer exactly once", () => {
+  it("starts with bold Final Setup, role headers, and the Manawyrm LFG footer exactly once", () => {
     const text = renderFinalSetupText(sampleInput());
     expect(text.startsWith("**Final Setup**\n\n")).toBe(true);
     expect(text).toContain("🛡 **Tanks** 🛡 2/2");
     expect(text).toContain("✚ **Healers** ✚ 2/2");
     expect(text).toContain("⚔ **DPS** ⚔ 1/8");
     expect(text).toContain("📦 **Lootbuddies** 📦 5");
-    expect(text.endsWith("\n\n**LFG HM Syntax write your discord name in the note!**")).toBe(true);
-    expect(text.match(/LFG HM/g)).toHaveLength(1);
+    expect(text.endsWith("\n\n**LFG Manawyrm write your discord name in the note!**")).toBe(true);
+    expect(text.match(/LFG Manawyrm/g)).toHaveLength(1);
+    expect(text).not.toContain("LFG HM");
     const lootIdx = text.indexOf("📦 **Lootbuddies**");
-    const lfgIdx = text.indexOf("**LFG HM Syntax");
+    const lfgIdx = text.indexOf("**LFG Manawyrm");
     expect(lfgIdx).toBeGreaterThan(lootIdx);
   });
 
-  it("uses the given Raid Lead, never a fixed name", () => {
-    const text = renderFinalSetupText(sampleInput({ raidLeadDisplayName: "Kiri" }));
-    expect(text.endsWith("**LFG HM Kiri write your discord name in the note!**")).toBe(true);
-    expect(text).not.toContain("Krum");
-    expect(text).not.toContain("LFG HM Syntax");
+  it("never includes a Raid Lead display name in the Manawyrm footer", () => {
+    const text = renderFinalSetupText(sampleInput());
+    expect(text.endsWith(formatFinalSetupLfgLine())).toBe(true);
+    expect(text).not.toContain("Syntax");
+    expect(text).not.toContain("SomeOtherLead");
+    expect(text).not.toContain("LFG HM");
+    expect(formatFinalSetupLfgLine()).toBe("**LFG Manawyrm write your discord name in the note!**");
   });
 
   it("renders compact booster rows: mention + class indicator, no character/realm", () => {
@@ -276,10 +272,10 @@ describe("renderFinalSetupText — plain Discord Final Setup", () => {
 describe("renderFinalSetupText — Run Voice channel line", () => {
   it("voice id present → clickable `Voice: <#id>` after the participant sections, right before the LFG footer", () => {
     const text = renderFinalSetupText(sampleInput(), { voiceChannelId: "1552000000000000001" });
-    expect(text).toContain("\n\nVoice: <#1552000000000000001>\n\n**LFG HM Syntax");
+    expect(text).toContain("\n\nVoice: <#1552000000000000001>\n\n**LFG Manawyrm write your discord name in the note!**");
     expect(text.match(/Voice:/g)).toHaveLength(1);
     expect(text.indexOf("Voice:")).toBeGreaterThan(text.indexOf("📦 **Lootbuddies**"));
-    expect(text.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+    expect(text.endsWith(formatFinalSetupLfgLine())).toBe(true);
   });
 
   it("voice id null / blank / absent → no Voice line, identical to the pre-voice output", () => {
@@ -304,27 +300,22 @@ describe("renderFinalSetupText — Run Voice channel line", () => {
 });
 
 describe("web / Discord Final Setup parity", () => {
-  it("shares the same plain-text body and Raid Lead footer from the formatter", () => {
-    const input = sampleInput({ raidLeadDisplayName: "Kiri" });
+  it("shares the same plain-text body and Manawyrm footer from the formatter", () => {
+    const input = sampleInput();
     const shared = formatFinalSetup(input);
-    const discordText = renderRunStartMessageText(sampleEmbedData({ raidLeadDisplayName: "Kiri" }));
+    const discordText = renderRunStartMessageText(sampleEmbedData());
     expect(discordText).toBe(renderFinalSetupText(input));
     expect(discordText).toContain(`**${shared.title}**`);
     expect(discordText).toContain(shared.body);
-    expect(discordText.endsWith(formatFinalSetupLfgLine("Kiri"))).toBe(true);
+    expect(discordText.endsWith(formatFinalSetupLfgLine())).toBe(true);
   });
 });
 
 describe("Final Setup Discord length safety", () => {
-  it("keeps a full 2/4/14 + 5 lootbuddy roster with a max-length Raid Lead under Discord's 2000-char content limit", () => {
+  it("keeps a full 2/4/14 + 5 lootbuddy roster under Discord's 2000-char content limit", () => {
     // Realistic worst case: 19-digit Discord snowflakes for every mention and
-    // custom emoji, and a 32-char Raid Lead name (Discord's display-name /
-    // username cap; the Run channel nickname is capped lower, at 24) made only
-    // of characters that escaping doubles — the longest possible footer.
+    // custom emoji. The LFG footer is fixed Manawyrm branding.
     const snowflake = (n: number) => `13${String(n).padStart(17, "0")}`;
-    const longestRaidLead = "@*_<".repeat(8);
-    expect(longestRaidLead).toHaveLength(32);
-    expect(escapeDiscordInlineText(longestRaidLead)).toHaveLength(64);
     const classes: WowClass[] = [
       "WARRIOR",
       "PALADIN",
@@ -382,7 +373,6 @@ describe("Final Setup Discord length safety", () => {
 
     const text = renderFinalSetupText(
       sampleInput({
-        raidLeadDisplayName: longestRaidLead,
         targets: { tanks: 2, healers: 4, dps: 14 },
         groups: { tanks, healers, dps, lootbuddies },
       }),
@@ -391,7 +381,7 @@ describe("Final Setup Discord length safety", () => {
 
     expect(text.length).toBeLessThan(2000);
     expect(text).toContain(`Voice: <#${snowflake(50_000)}>`);
-    expect(text.endsWith(formatFinalSetupLfgLine(longestRaidLead))).toBe(true);
+    expect(text.endsWith(formatFinalSetupLfgLine())).toBe(true);
     expect(text).toContain("🛡 **Tanks** 🛡 2/2");
     expect(text).toContain("✚ **Healers** ✚ 4/4");
     expect(text).toContain("⚔ **DPS** ⚔ 14/14");

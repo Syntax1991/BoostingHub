@@ -50,7 +50,6 @@ const startData = {
   difficulty: "HEROIC" as const,
   lootType: "UNSAVED" as const,
   scheduledStartAt: "2026-09-18T17:00:00.000Z",
-  raidLeadDisplayName: "Syntax",
   targets: { tanks: 2, healers: 2, dps: 8 },
   groups: {
     tanks: [
@@ -92,8 +91,9 @@ describe("syncOnce — Final Setup plain-text start posts", () => {
     const payload = send.mock.calls[0]![0] as { content?: string; embeds?: unknown };
     expect(payload.content).toContain("**Final Setup**");
     expect(payload.content).toContain("<@111> <:shaman:999>");
-    expect(payload.content?.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
-    expect(payload.content?.match(/LFG HM/g)).toHaveLength(1);
+    expect(payload.content?.endsWith(formatFinalSetupLfgLine())).toBe(true);
+    expect(payload.content?.match(/LFG Manawyrm/g)).toHaveLength(1);
+    expect(payload.content).not.toContain("LFG HM");
     expect(payload.embeds).toBeUndefined();
     expect(edit).not.toHaveBeenCalled();
     expect(api.recordDiscordState).toHaveBeenCalledWith("run-start-1", {
@@ -144,10 +144,9 @@ describe("syncOnce — Final Setup explicit allowedMentions", () => {
   }
 
   // Duplicate Discord ids (same user on two rows) and no-id rows whose fallback
-  // text would read "@everyone" / "@here"; hostile Raid Lead display name.
+  // text would read "@everyone" / "@here".
   const mentionData = {
     ...startData,
-    raidLeadDisplayName: "@everyone Syntax\n**pwned**",
     groups: {
       tanks: [member("t1", "111", "Dusk", "BOOSTER", "TANK")],
       healers: [member("h1", "222", "Mend", "BOOSTER", "HEALER"), member("h2", null, "everyone", "BOOSTER", "HEALER")],
@@ -174,12 +173,13 @@ describe("syncOnce — Final Setup explicit allowedMentions", () => {
     // The informational fallback text stays, but parse: [] keeps it inert.
     expect(payload.content).toContain("@everyone");
     expect(payload.content).toContain("@here");
-    // The hostile Raid Lead name stays on one footer line without a raw @everyone.
+    // The LFG footer is fixed Manawyrm branding — no Raid Lead name / HM.
     const footer = payload.content.slice(payload.content.lastIndexOf("\n") + 1);
-    expect(footer.startsWith("**LFG HM @")).toBe(true);
-    expect(footer).not.toMatch(/@everyone/);
-    expect(footer).toContain("\\*\\*pwned\\*\\*");
-    expect(payload.content.match(/LFG HM/g)).toHaveLength(1);
+    expect(footer).toBe(formatFinalSetupLfgLine());
+    expect(footer).not.toContain("Syntax");
+    expect(footer).not.toContain("pwned");
+    expect(payload.content.match(/LFG Manawyrm/g)).toHaveLength(1);
+    expect(payload.content).not.toContain("LFG HM");
   });
 
   it("edit: the existing Final Setup message receives the same allowedMentions policy", async () => {
@@ -238,7 +238,7 @@ describe("syncOnce — Final Setup links the Run's temporary Voice channel", () 
     const content = contentOf(send);
     expect(content).toContain("Voice: <#1552000000000000001>");
     expect(content.indexOf("Voice:")).toBeGreaterThan(content.indexOf("🛡 **Tanks**"));
-    expect(content.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
+    expect(content.endsWith(formatFinalSetupLfgLine())).toBe(true);
     expect(startRecords(api)).toEqual([
       { kind: "start", channelId: CHANNEL_ID, messageId: "msg-new", voiceChannelId: "1552000000000000001" },
     ]);
@@ -448,6 +448,8 @@ describe("Signup / Roster embeds unchanged by Final Setup LFG", () => {
     const signupBlob = JSON.stringify(signup.data);
     const rosterBlob = JSON.stringify(roster.data);
     // The Raid Lead LFG footer belongs to Final Setup only.
+    expect(signupBlob).not.toContain("LFG Manawyrm");
+    expect(rosterBlob).not.toContain("LFG Manawyrm");
     expect(signupBlob).not.toContain("LFG HM");
     expect(rosterBlob).not.toContain("LFG HM");
     expect(signup.data.title || signup.data.description).toBeTruthy();
