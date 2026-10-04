@@ -757,7 +757,6 @@ describe("external boosters (hand-added, not registered)", () => {
       raidName: start!.raidName,
       difficulty: start!.difficulty,
       lootType: start!.lootType,
-      raidLeadDisplayName: start!.raidLeadDisplayName,
       targets: start!.targets,
       groups: start!.groups,
     });
@@ -1424,7 +1423,6 @@ describe("external lootbuddies", () => {
       raidName: start!.raidName,
       difficulty: start!.difficulty,
       lootType: start!.lootType,
-      raidLeadDisplayName: start!.raidLeadDisplayName,
       targets: start!.targets,
       groups: start!.groups,
     });

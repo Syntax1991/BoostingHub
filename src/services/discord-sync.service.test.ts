@@ -2053,14 +2053,7 @@ describe("discordSyncService — run start operational post", () => {
   });
 });
 
-describe("Final Setup LFG footer uses the assigned Run Raid Lead", () => {
-  async function setLeadNickname(nickname: string | null) {
-    await orm.User.where({ id: ids.lead }).update({
-      discordRunChannelNickname: nickname,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
+describe("Final Setup LFG footer uses Manawyrm branding", () => {
   async function publishedRunWithLootbuddy(): Promise<string> {
     const id = await runService
       .createRun(lead, venomousCreateInput({ difficulty: "HEROIC", lootType: "UNSAVED", venomousPlannedBossCount: 8, scheduledStartAt: futureIso(9), desiredTankCount: 1, desiredHealerCount: 1, desiredDpsCount: 1 }))
@@ -2086,42 +2079,34 @@ describe("Final Setup LFG footer uses the assigned Run Raid Lead", () => {
     return id;
   }
 
-  it("web preview and Discord Final Setup name the assigned Raid Lead (nickname first), not the ADMIN who started the Run", async () => {
-    try {
-      await setLeadNickname("Syntax");
-      const id = await publishedRunWithLootbuddy();
+  it("web preview and Discord Final Setup share the Manawyrm LFG footer after Start", async () => {
+    const id = await publishedRunWithLootbuddy();
 
-      // Web Start Run preview / Copy message (PUBLISHED).
-      const detail = await runDetailService.getRunDetail(lead, id);
-      expect(detail.finalSetupPreview?.raidLeadDisplayName).toBe("Syntax");
-      const previewText = renderFinalSetupText(detail.finalSetupPreview!);
-      expect(previewText.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
-      expect(previewText).not.toContain("Krum");
+    // Web Start Run preview / Copy message (PUBLISHED).
+    const detail = await runDetailService.getRunDetail(lead, id);
+    expect(detail.finalSetupPreview).not.toBeNull();
+    expect(detail.finalSetupPreview).not.toHaveProperty("raidLeadDisplayName");
+    const previewText = renderFinalSetupText(detail.finalSetupPreview!);
+    expect(previewText.endsWith(formatFinalSetupLfgLine())).toBe(true);
+    expect(previewText).not.toContain("LFG HM");
 
-      // An ADMIN — not the assigned Raid Lead — clicks Start Run.
-      await runService.startRun(admin, { runId: id });
-      const snapshot = await runStartSnapshotRepository.findByRunId(id);
-      expect(snapshot?.startedById).toBe(ids.admin);
+    // An ADMIN — not the assigned Raid Lead — clicks Start Run.
+    await runService.startRun(admin, { runId: id });
+    const snapshot = await runStartSnapshotRepository.findByRunId(id);
+    expect(snapshot?.startedById).toBe(ids.admin);
 
-      // Discord projection still uses the assigned Raid Lead.
-      const embed = await discordSyncService.getRunStartEmbedData(id);
-      expect(embed?.raidLeadDisplayName).toBe("Syntax");
-      expect(embed?.raidLeadDisplayName).not.toBe("Discord Admin");
-      const discordText = renderRunStartMessageText(embed!);
-      expect(discordText.endsWith(formatFinalSetupLfgLine("Syntax"))).toBe(true);
-      expect(discordText.match(/LFG HM/g)).toHaveLength(1);
+    // Discord projection uses the same fixed Manawyrm footer.
+    const embed = await discordSyncService.getRunStartEmbedData(id);
+    expect(embed).not.toBeNull();
+    expect(embed).not.toHaveProperty("raidLeadDisplayName");
+    const discordText = renderRunStartMessageText(embed!);
+    expect(discordText.endsWith(formatFinalSetupLfgLine())).toBe(true);
+    expect(discordText.match(/LFG Manawyrm/g)).toHaveLength(1);
+    expect(discordText).not.toContain("LFG HM");
+    expect(discordText).not.toContain("Discord Admin");
 
-      // Same footer on both paths.
-      expect(discordText.slice(discordText.lastIndexOf("\n") + 1)).toBe(previewText.slice(previewText.lastIndexOf("\n") + 1));
-
-      // Nickname null or blank → falls back to the Raid Lead's name.
-      await setLeadNickname(null);
-      expect((await discordSyncService.getRunStartEmbedData(id))?.raidLeadDisplayName).toBe("Discord Lead");
-      await setLeadNickname("   ");
-      expect((await discordSyncService.getRunStartEmbedData(id))?.raidLeadDisplayName).toBe("Discord Lead");
-    } finally {
-      await setLeadNickname(null);
-    }
+    // Same footer on both paths.
+    expect(discordText.slice(discordText.lastIndexOf("\n") + 1)).toBe(previewText.slice(previewText.lastIndexOf("\n") + 1));
   });
 });
 

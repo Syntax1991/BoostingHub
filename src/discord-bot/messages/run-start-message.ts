@@ -12,7 +12,6 @@ export function toFinalSetupInput(data: RunStartEmbedData): FinalSetupInput {
     contentSummary: data.contentSummary,
     difficulty: data.difficulty,
     lootType: data.lootType,
-    raidLeadDisplayName: data.raidLeadDisplayName,
     targets: data.targets,
     groups: data.groups,
   };
