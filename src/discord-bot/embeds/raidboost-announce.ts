@@ -1,4 +1,5 @@
 import { EmbedBuilder } from "discord.js";
+import { absoluteRunUrl } from "@/lib/app-url";
 import { DIFFICULTY_ABBREVIATIONS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import type { RaidDifficulty, RunLootType } from "@/models/enums";
 
@@ -16,6 +17,8 @@ const LOOT_EMOJIS: Record<RunLootType, string> = {
 };
 
 export type RaidboostAnnounceInput = {
+  /** BoostingHub Run this announce was posted for. */
+  runId: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   /** Resolved `<:PhoenixStarDiscord:id>` markup, or null when missing. */
@@ -47,6 +50,8 @@ export function buildRaidboostAnnounce(input: RaidboostAnnounceInput): {
     .setDescription(
       `**${abbrev}** ${lootEmoji} ${difficultyLabel} ${lootLabel} - *Please refer to the channel name for the time* 🕒`,
     );
+  const runUrl = absoluteRunUrl(input.runId);
+  if (runUrl) embed.setURL(runUrl);
 
   const roleIds = input.roleMentions
     .map((mention) => {
