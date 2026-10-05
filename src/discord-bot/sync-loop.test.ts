@@ -594,7 +594,11 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
   };
 
   /** Run channel whose CURRENT roster message can be fetched + edited (unless `messageGone`). */
-  function setup(item: { mode?: "POST" | "REFRESH"; postRevision?: number | null; existingMessageId: string | null }, messageGone = false) {
+  function setup(
+    item: { mode?: "POST" | "REFRESH"; postRevision?: number | null; existingMessageId: string | null },
+    options: { messageGone?: boolean; editError?: unknown } = {},
+  ) {
+    const { messageGone = false, editError } = options;
     const { client } = makeDiscordClient(
       new Map<string, Child>([
         [CURRENT_MARKER, { id: CURRENT_MARKER, name: "current-id", parentId: CATEGORY_ID, position: 0, type: ChannelType.GuildText }],
@@ -602,7 +606,9 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
         [NEXT_MARKER, { id: NEXT_MARKER, name: "next-id", parentId: CATEGORY_ID, position: 2, type: ChannelType.GuildText }],
       ]),
     );
-    const edit = vi.fn().mockResolvedValue(undefined);
+    const edit = editError
+      ? vi.fn().mockRejectedValue(editError)
+      : vi.fn().mockResolvedValue(undefined);
     const fetchChannel = client.channels.fetch;
     client.channels.fetch = vi.fn(async (id: string) => {
       const channel = await fetchChannel(id);
@@ -611,7 +617,9 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
         ...channel,
         messages: {
           fetch: async (messageId: string) => {
-            if (messageGone || messageId !== CURRENT_MSG) throw new Error("Unknown Message");
+            if (messageGone || messageId !== CURRENT_MSG) {
+              throw Object.assign(new Error("Unknown Message"), { code: 10008 });
+            }
             return { id: messageId, edit };
           },
         },
@@ -675,7 +683,7 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
   });
 
   it("POST whose stored Roster message was deleted re-sends once and records the fulfilled postRevision", async () => {
-    const { client, api, send } = setup({ mode: "POST", postRevision: 2, existingMessageId: CURRENT_MSG }, true);
+    const { client, api, send } = setup({ mode: "POST", postRevision: 2, existingMessageId: CURRENT_MSG }, { messageGone: true });
     await syncOnce(client, botEnv(), api);
     expect(send()).toHaveBeenCalledTimes(1);
     expect(recorded(api)).toEqual([
@@ -700,7 +708,7 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
   });
 
   it("REFRESH whose current message was deleted re-sends it (recovery) without claiming a postRevision", async () => {
-    const { client, api, send } = setup({ mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG }, true);
+    const { client, api, send } = setup({ mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG }, { messageGone: true });
     await syncOnce(client, botEnv(), api);
     expect(send()).toHaveBeenCalledTimes(1);
     expect(recorded(api)).toEqual([
@@ -713,11 +721,56 @@ describe("syncOnce — roster post: persistent message + Publish ack", () => {
     ]);
   });
 
+  it("permission failure keeps the stored Roster message id and does not replace", async () => {
+    const { client, api, send } = setup(
+      { mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG },
+      { editError: Object.assign(new Error("Missing Permissions"), { code: 50013 }) },
+    );
+    await syncOnce(client, botEnv(), api);
+    expect(send()).not.toHaveBeenCalled();
+    expect(recorded(api)).toEqual([]);
+  });
+
+  it("transient Discord failure keeps the stored Roster message id and does not replace", async () => {
+    const { client, api, send } = setup(
+      { mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG },
+      { editError: new Error("ECONNRESET") },
+    );
+    await syncOnce(client, botEnv(), api);
+    expect(send()).not.toHaveBeenCalled();
+    expect(recorded(api)).toEqual([]);
+  });
+
+  it("untyped missing-message errors do not auto-replace (only Discord 10008 does)", async () => {
+    const { client, api, send } = setup(
+      { mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG },
+      { editError: new Error("Unknown Message") },
+    );
+    await syncOnce(client, botEnv(), api);
+    expect(send()).not.toHaveBeenCalled();
+    expect(recorded(api)).toEqual([]);
+  });
+
   it("a work item without a mode (older web build) keeps the legacy edit-in-place behaviour", async () => {
     const { client, api, edit, send } = setup({ existingMessageId: CURRENT_MSG });
     await syncOnce(client, botEnv(), api);
     expect(edit).toHaveBeenCalledTimes(1);
     expect(send()).not.toHaveBeenCalled();
+  });
+
+  it("production stuck shape: channels match + draft embed data + null fingerprint → edit same message id", async () => {
+    // Known production case 16e9d032-… was NOT wrong-channel: run/signup/roster
+    // channel ids matched; the bot could fetch the message. Root cause was the
+    // unpublished roster API 404. With draft data available, edit converges.
+    const draft = { ...rosterData, publishedAt: null };
+    const { client, api, edit, send } = setup({ mode: "REFRESH", postRevision: null, existingMessageId: CURRENT_MSG });
+    (api.getRosterEmbedData as ReturnType<typeof vi.fn>).mockResolvedValue(draft);
+    await syncOnce(client, botEnv(), api);
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(send()).not.toHaveBeenCalled();
+    expect(recorded(api)).toEqual([
+      { kind: "roster", channelId: RUN_CHAN, messageId: CURRENT_MSG, classEmojiFingerprint: listedFingerprint(api) },
+    ]);
   });
 });
 

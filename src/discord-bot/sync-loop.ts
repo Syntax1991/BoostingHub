@@ -427,8 +427,23 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
 
     for (const item of work.roster) {
       try {
-        const data = (await api.getRosterEmbedData(item.runId).catch(() => null)) as RosterEmbedData | null;
-        if (!data) continue;
+        let data: RosterEmbedData | null = null;
+        try {
+          data = (await api.getRosterEmbedData(item.runId)) as RosterEmbedData | null;
+        } catch (error) {
+          console.error(
+            `[discord-bot] roster embed data unavailable for run ${item.runId} — keeping message identity, retry next poll`,
+            error,
+          );
+          messagePhaseError ??= error;
+          continue;
+        }
+        if (!data) {
+          console.warn(
+            `[discord-bot] roster embed data null for run ${item.runId} — keeping message identity, retry next poll`,
+          );
+          continue;
+        }
         await syncRosterPost(
           client,
           env,
@@ -773,9 +788,9 @@ async function syncSignupPost(
     const existingId = item.existingMessageId;
     const isLegacyMulti = Boolean(existingId && existingId.includes(","));
 
-    if (existingId && !isLegacyMulti) {
+    if (existingId && !isLegacyMulti && !created) {
       const edited = await tryEditMessage(client, channelId, existingId, payload);
-      if (edited) {
+      if (edited.status === "EDITED") {
         await api.recordDiscordState(data.runId, {
           kind: "signup",
           channelId,
@@ -784,7 +799,14 @@ async function syncSignupPost(
         });
         return section;
       }
-      // The stored message is gone (deleted in Discord) — fall through and repost.
+      if (edited.status === "FAILED") {
+        console.error(
+          `[discord-bot] signup message edit failed for run ${data.runId} (channel ${channelId}, message ${existingId}) — keeping identity, retry next poll`,
+          edited.error,
+        );
+        return section;
+      }
+      // MESSAGE_MISSING — fall through and repost once.
     }
 
     const channel = await client.channels.fetch(channelId);
@@ -968,10 +990,12 @@ async function syncRosterPost(
 
   // Always edit the single persistent Roster message when it exists. Publish
   // only acknowledges postRevision on that same message — never appends a
-  // second historical Roster post. Missing / deleted → send exactly one.
+  // second historical Roster post. Confirmed Discord Unknown Message (10008)
+  // → send exactly one replacement. Permission/transient failures keep the
+  // stored id and retry next poll (never duplicate).
   if (item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, { embeds: [embed] });
-    if (edited) {
+    if (edited.status === "EDITED") {
       await api.recordDiscordState(item.runId, {
         kind: "roster",
         channelId,
@@ -981,7 +1005,14 @@ async function syncRosterPost(
       });
       return;
     }
-    // The current message is gone (deleted in Discord) — fall through and re-send (recovery).
+    if (edited.status === "FAILED") {
+      console.error(
+        `[discord-bot] roster message edit failed for run ${item.runId} (channel ${channelId}, message ${item.existingMessageId}) — keeping identity, retry next poll`,
+        edited.error,
+      );
+      return;
+    }
+    // MESSAGE_MISSING — fall through and re-send once (recovery).
   }
 
   const channel = await client.channels.fetch(channelId);
@@ -1019,7 +1050,7 @@ async function syncStartPost(
 
   if (item.existingMessageId) {
     const edited = await tryEditMessage(client, channelId, item.existingMessageId, editPayload);
-    if (edited) {
+    if (edited.status === "EDITED") {
       await api.recordDiscordState(item.runId, {
         kind: "start",
         channelId,
@@ -1028,6 +1059,14 @@ async function syncStartPost(
       });
       return;
     }
+    if (edited.status === "FAILED") {
+      console.error(
+        `[discord-bot] start message edit failed for run ${item.runId} (channel ${channelId}, message ${item.existingMessageId}) — keeping identity, retry next poll`,
+        edited.error,
+      );
+      return;
+    }
+    // MESSAGE_MISSING — fall through and send once.
   }
 
   const channel = await client.channels.fetch(channelId);
@@ -1523,20 +1562,36 @@ async function bestEffortDeleteScheduleMessage(
   }
 }
 
+type MessageEditResult =
+  | { status: "EDITED" }
+  | { status: "MESSAGE_MISSING" }
+  | { status: "FAILED"; error: unknown };
+
+/**
+ * Edit an existing Discord message with explicit failure classification.
+ * Only Discord Unknown Message (10008) is MESSAGE_MISSING (safe to replace).
+ * Permission / transient / malformed channel failures are FAILED — callers
+ * must keep the stored message id and retry (never treat as deleted).
+ */
 async function tryEditMessage(
   client: Client,
   channelId: string,
   messageId: string,
   payload: MessageEditOptions,
-): Promise<boolean> {
+): Promise<MessageEditResult> {
   try {
     const channel = await client.channels.fetch(channelId);
-    if (!channel?.isTextBased() || !("messages" in channel)) return false;
+    if (!channel?.isTextBased() || !("messages" in channel)) {
+      return { status: "FAILED", error: new Error(`channel ${channelId} is not text-based`) };
+    }
     const message = await channel.messages.fetch(messageId);
     await message.edit(payload);
-    return true;
-  } catch {
-    return false;
+    return { status: "EDITED" };
+  } catch (error) {
+    if (isDiscordUnknownMessageError(error)) {
+      return { status: "MESSAGE_MISSING" };
+    }
+    return { status: "FAILED", error };
   }
 }
 

@@ -16,9 +16,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     assertBotServiceAuthorized(request);
     const { runId } = await params;
     const data = await discordSyncService.getRosterEmbedData(runId);
-    // Draft lineup may exist for management previews; Discord only consumes published.
-    if (!data?.publishedAt) {
-      throw new DomainError("NOT_FOUND", "This run has no published roster.", 404);
+    // Draft and published lineups both power the persistent Roster Discord
+    // message (`listSyncWork` maintains that message before Publish). Returning
+    // 404 for unpublished drafts stranded REFRESH work forever: the bot could
+    // never edit, never advance lastRosterEmojiFingerprint / lastRosterVersion.
+    if (!data) {
+      throw new DomainError("NOT_FOUND", "This run has no roster.", 404);
     }
     return botApiOk(data);
   } catch (error) {
