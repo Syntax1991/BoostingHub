@@ -343,8 +343,18 @@ export const characterService = {
       throw new DomainError("VALIDATION_FAILED", parsed.error.message);
     }
 
+    // Same WoW Character name contract as manual Add Character — reject before
+    // any Blizzard call. Do not lowercase; diacritics stay intact (Éowyn).
+    const name = prepareCharacterName(parsed.value.characterName);
+    if (!isValidCharacterName(name)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_NAME",
+        "Enter a character name using letters only, 2 to 16 characters.",
+      );
+    }
+
     const preview = await characterBlizzardImportService.lookupPublicCharacterProfile(
-      parsed.value.characterName,
+      name,
       parsed.value.realmSlug,
       parsed.value.region,
       { realmSlug: parsed.value.realmSlug },

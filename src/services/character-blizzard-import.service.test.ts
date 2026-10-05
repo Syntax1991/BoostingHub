@@ -1210,6 +1210,50 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
   });
 
+  it("rejects a decoded Character name that fails identity rules before Blizzard", async () => {
+    apiMocks.getCharacterProfileStatus.mockClear();
+    apiMocks.getCharacterProfileSummary.mockClear();
+
+    // Digits are outside NAME_PATTERN; must fail with INVALID_CHARACTER_NAME.
+    await expectDomainCode(
+      characterService.previewCharacterFromRaiderIoUrl(
+        "https://raider.io/characters/eu/antonidas/Synblast1",
+      ),
+      "INVALID_CHARACTER_NAME",
+    );
+    expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
+    expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
+
+    await expectDomainCode(
+      characterService.previewCharacterFromRaiderIoUrl(
+        "https://raider.io/characters/eu/antonidas/ThisNameIsWayTooLong",
+      ),
+      "INVALID_CHARACTER_NAME",
+    );
+    expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
+  });
+
+  it("passes a valid Unicode Character name through prepareCharacterName unchanged", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400013", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400013",
+      name: "Éowyn",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "PALADIN",
+      equippedItemLevel: 600,
+      activeSpecialization: "Holy",
+    });
+
+    const preview = await characterService.previewCharacterFromRaiderIoUrl(
+      "https://raider.io/characters/eu/antonidas/%C3%89owyn",
+    );
+
+    expect(preview.name).toBe("Éowyn");
+    expect(apiMocks.getCharacterProfileSummary).toHaveBeenCalledWith("EU", "antonidas", "Éowyn");
+  });
+
   it("final create after Raider.IO preview still re-resolves Blizzard and stays unlinked", async () => {
     apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400012", isValid: true });
     apiMocks.getCharacterProfileSummary.mockResolvedValue({

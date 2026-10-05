@@ -187,6 +187,14 @@ export function CharacterFormDialog({
     });
   }
 
+  /** Enter in the Raider.IO URL field must not fall through to manual Name/Realm lookup. */
+  function onRaiderIoKeyDown(event: { key: string; preventDefault(): void }) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (lookingUp || !raiderIoUrl.trim()) return;
+    runRaiderIoLookup(event);
+  }
+
   function submit(event?: { preventDefault(): void }) {
     event?.preventDefault();
     setError(null);
@@ -273,6 +281,7 @@ export function CharacterFormDialog({
                     placeholder="https://raider.io/characters/eu/antonidas/Synblast"
                     value={raiderIoUrl}
                     onChange={(event) => changeRaiderIoUrl(event.target.value)}
+                    onKeyDown={onRaiderIoKeyDown}
                     aria-invalid={Boolean(error)}
                     aria-describedby={error ? errorId : undefined}
                     className="h-9 w-full rounded-md border border-border bg-surface px-2"

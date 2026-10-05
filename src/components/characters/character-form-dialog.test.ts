@@ -20,6 +20,17 @@ describe("CharacterFormDialog — Raider.IO Add Character", () => {
     expect(source).toContain('aria-label="Region"');
   });
 
+  it("routes Enter on the Raider.IO URL field to Raider.IO lookup, not manual lookup", () => {
+    expect(source).toContain("onKeyDown={onRaiderIoKeyDown}");
+    expect(source).toMatch(
+      /function onRaiderIoKeyDown[\s\S]*key !== "Enter"[\s\S]*preventDefault\(\)[\s\S]*runRaiderIoLookup/,
+    );
+    // Pre-preview form submit remains the manual Name/Realm/Region path.
+    expect(source).toContain("onSubmit={mode === \"create\" && !lookup ? runLookup : submit}");
+    expect(source).toContain("lookupCharacterFromRaiderIoAction");
+    expect(source).toContain("lookupCharacterAction");
+  });
+
   it("populates Blizzard-canonical identity and leaves specs empty after Raider.IO lookup", () => {
     expect(source).toContain("data.name");
     expect(source).toContain("data.realm");
@@ -31,6 +42,8 @@ describe("CharacterFormDialog — Raider.IO Add Character", () => {
   it("still creates via createCharacterAction (server re-resolves Blizzard)", () => {
     expect(source).toContain("createCharacterAction");
     expect(source).toContain("{ ...identity, specialization, playableSpecs }");
+    // After preview, form submit is create — not another lookup.
+    expect(source).toContain("onSubmit={mode === \"create\" && !lookup ? runLookup : submit}");
   });
 
   it("invalidates lookup when identity fields change", () => {
