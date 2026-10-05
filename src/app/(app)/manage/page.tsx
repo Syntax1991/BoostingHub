@@ -3,5 +3,5 @@ import { ManageHomeView } from "@/components/manage/manage-home-view";
 
 export default async function ManagePage() {
   const data = await managementController.getManageHomePage();
-  return <ManageHomeView cards={data.cards} />;
+  return <ManageHomeView cards={data.cards} communityStats={data.communityStats} />;
 }

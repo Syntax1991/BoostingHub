@@ -6,10 +6,15 @@ import {
   canManageUsers,
   canManageBoostingRoles,
   getManagementNavItems,
+  hasAdminAccess,
   hasRaidLeadAccess,
 } from "@/auth/authorization";
 import { boosterAccessRepository } from "@/repositories/booster-access.repository";
 import { userRepository } from "@/repositories/user.repository";
+import {
+  communityStatsService,
+  type CommunityStats,
+} from "@/services/community-stats.service";
 import { listManagedRunOperationalHandoffs } from "@/services/managed-run-operational.service";
 
 export type ManagementOverviewCard = {
@@ -21,14 +26,21 @@ export type ManagementOverviewCard = {
   metrics: Array<{ label: string; value: number | string }>;
 };
 
+export type ManagementOverview = {
+  nav: ReturnType<typeof getManagementNavItems>;
+  cards: ManagementOverviewCard[];
+  /**
+   * Community / Booster Coverage. ADMIN / OWNER only.
+   * RAID_LEAD keeps the Overview route but never receives this payload.
+   */
+  communityStats: CommunityStats | null;
+};
+
 /**
  * Compact management hub metrics. Aggregates via repositories — Views never count rows.
  */
 export const managementHubService = {
-  async getOverview(user: AuthenticatedUser): Promise<{
-    nav: ReturnType<typeof getManagementNavItems>;
-    cards: ManagementOverviewCard[];
-  }> {
+  async getOverview(user: AuthenticatedUser): Promise<ManagementOverview> {
     const nav = getManagementNavItems(user.accountRole);
     const cards: ManagementOverviewCard[] = [];
 
@@ -112,6 +124,11 @@ export const managementHubService = {
       });
     }
 
-    return { nav, cards };
+    // ADMIN / OWNER only — do not fetch for RAID_LEAD (route stays shared).
+    const communityStats = hasAdminAccess(user.accountRole)
+      ? await communityStatsService.getStats()
+      : null;
+
+    return { nav, cards, communityStats };
   },
 };
