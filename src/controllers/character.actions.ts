@@ -7,6 +7,7 @@ import { characterService } from "@/services/character.service";
 import {
   characterIdSchema,
   createCharacterSchema,
+  lookupCharacterFromRaiderIoSchema,
   lookupCharacterSchema,
   updateCharacterSchema,
 } from "@/validators/character";
@@ -39,6 +40,34 @@ export async function lookupCharacterAction(
     await requireUser();
     const parsed = lookupCharacterSchema.parse(input);
     const data = await characterService.previewCharacterFromBlizzard(parsed);
+    return { ok: true, message: "Character found.", data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
+  }
+}
+
+/**
+ * Parse a Raider.IO Character profile URL and preview via Blizzard.
+ * Returns Blizzard-canonical name/realm — never the Raider.IO realm slug.
+ * Does not fetch Raider.IO and does not persist anything.
+ */
+export async function lookupCharacterFromRaiderIoAction(
+  input: unknown,
+): Promise<
+  ActionResult & {
+    data: {
+      name: string;
+      realm: string;
+      region: string;
+      wowClass: string;
+      itemLevel: number | null;
+    } | null;
+  }
+> {
+  try {
+    await requireUser();
+    const parsed = lookupCharacterFromRaiderIoSchema.parse(input);
+    const data = await characterService.previewCharacterFromRaiderIoUrl(parsed.url);
     return { ok: true, message: "Character found.", data };
   } catch (error) {
     return { ...mapActionError(error), data: null };

@@ -1135,6 +1135,128 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     const stored = await orm.Character.where({ userId: ids.owner, name: "Previewonly" }).all();
     expect(stored).toHaveLength(0);
   });
+
+  it("previewCharacterFromRaiderIoUrl returns Blizzard-canonical Twisting Nether, not the slug", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400010", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400010",
+      name: "Netherfoo",
+      realmId: "1092",
+      realmSlug: "twisting-nether",
+      realmName: "Twisting Nether",
+      wowClass: "MAGE",
+      equippedItemLevel: 640,
+      activeSpecialization: "Frost",
+    });
+
+    const preview = await characterService.previewCharacterFromRaiderIoUrl(
+      "https://raider.io/characters/eu/twisting-nether/Netherfoo",
+    );
+
+    expect(preview).toEqual({
+      name: "Netherfoo",
+      realm: "Twisting Nether",
+      region: "EU",
+      wowClass: "MAGE",
+      itemLevel: 640,
+    });
+    expect(apiMocks.getCharacterProfileSummary).toHaveBeenCalledWith(
+      "EU",
+      "twisting-nether",
+      "Netherfoo",
+    );
+    const stored = await orm.Character.where({ userId: ids.owner, name: "Netherfoo" }).all();
+    expect(stored).toHaveLength(0);
+  });
+
+  it("previewCharacterFromRaiderIoUrl returns Blizzard-canonical Mal'Ganis from malganis slug", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400011", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400011",
+      name: "Ganisfoo",
+      realmId: "1365",
+      realmSlug: "malganis",
+      realmName: "Mal'Ganis",
+      wowClass: "WARLOCK",
+      equippedItemLevel: 620,
+      activeSpecialization: "Affliction",
+    });
+
+    const preview = await characterService.previewCharacterFromRaiderIoUrl(
+      "https://www.raider.io/characters/us/malganis/Ganisfoo",
+    );
+
+    expect(preview).toEqual({
+      name: "Ganisfoo",
+      realm: "Mal'Ganis",
+      region: "US",
+      wowClass: "WARLOCK",
+      itemLevel: 620,
+    });
+    expect(apiMocks.getCharacterProfileSummary).toHaveBeenCalledWith("US", "malganis", "Ganisfoo");
+  });
+
+  it("rejects an invalid Raider.IO URL before any Blizzard call", async () => {
+    apiMocks.getCharacterProfileStatus.mockClear();
+    apiMocks.getCharacterProfileSummary.mockClear();
+
+    await expectDomainCode(
+      characterService.previewCharacterFromRaiderIoUrl(
+        "https://raider.io.evil.example/characters/eu/antonidas/Synblast",
+      ),
+      "VALIDATION_FAILED",
+    );
+    expect(apiMocks.getCharacterProfileStatus).not.toHaveBeenCalled();
+    expect(apiMocks.getCharacterProfileSummary).not.toHaveBeenCalled();
+  });
+
+  it("final create after Raider.IO preview still re-resolves Blizzard and stays unlinked", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400012", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400012",
+      name: "Riocreate",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "SHAMAN",
+      equippedItemLevel: 333,
+      activeSpecialization: "Elemental",
+    });
+
+    const preview = await characterService.previewCharacterFromRaiderIoUrl(
+      "https://raider.io/characters/eu/antonidas/Riocreate",
+    );
+    expect(preview.realm).toBe("Antonidas");
+
+    apiMocks.getCharacterProfileStatus.mockClear();
+    apiMocks.getCharacterProfileSummary.mockClear();
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400012", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400012",
+      name: "Riocreate",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "SHAMAN",
+      equippedItemLevel: 340,
+      activeSpecialization: "Elemental",
+    });
+
+    const created = await characterService.addCharacterFromBlizzard(owner, {
+      name: preview.name,
+      realm: preview.realm,
+      region: preview.region,
+      specialization: "Elemental",
+      playableSpecs: ["Restoration"],
+    });
+    createdCharacterIds.push(created.id);
+
+    expect(apiMocks.getCharacterProfileSummary).toHaveBeenCalled();
+    expect(created.wowClass).toBe("SHAMAN");
+    expect(created.itemLevel).toBe(340);
+    expect(created.blizzardCharacterId).toBeNull();
+    expect(created.playableSpecs).toEqual(["Restoration"]);
+  });
 });
 
 describe("Battle.net bulk import × Warcraft Logs batch enrichment", () => {

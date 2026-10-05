@@ -37,6 +37,11 @@ export const lookupCharacterSchema = z.object({
   region: z.enum(WOW_REGIONS),
 });
 
+/** Raider.IO Character profile URL for the Add Character convenience lookup. */
+export const lookupCharacterFromRaiderIoSchema = z.object({
+  url: z.string().trim().min(1, "Enter a Raider.IO character profile link.").max(500),
+});
+
 /**
  * wowClass and itemLevel are intentionally absent: the server always
  * re-resolves them from Blizzard's public Character Profile before
