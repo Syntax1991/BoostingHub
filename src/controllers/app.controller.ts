@@ -24,6 +24,8 @@ import { parseBoostingRolesPageFilters } from "@/validators/boosting-roles";
 import { parseAdminUserFilters } from "@/validators/user-management";
 import { characterOperationsService } from "@/services/character-operations.service";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
+import { systemHealthService } from "@/services/system-health.service";
+import { parseSystemHealthFilters } from "@/validators/system-health";
 import { isDomainError } from "@/lib/errors";
 import { runCreatePath } from "@/lib/run-routes";
 
@@ -288,5 +290,10 @@ export const managementController = {
   async getCharacterOperationsPage(characterId: string) {
     const user = await requireAdminOrRedirect("/manage/characters");
     return characterOperationsService.getDetail(user, characterId);
+  },
+
+  async getSystemHealthPage(searchParams: Record<string, string | string[] | undefined> = {}) {
+    const user = await requireAdminOrRedirect("/manage/system");
+    return systemHealthService.getPage(user, parseSystemHealthFilters(searchParams));
   },
 };
