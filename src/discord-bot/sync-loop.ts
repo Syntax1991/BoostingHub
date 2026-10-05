@@ -922,6 +922,7 @@ async function postRaidboostAnnounce(
   }
 
   const announce = buildRaidboostAnnounce({
+    runId: data.runId,
     difficulty: data.difficulty,
     lootType: data.lootType,
     phoenixEmoji,
@@ -1264,6 +1265,7 @@ async function syncRunAnnouncement(
   const embed =
     item.type === "RUN_RESCHEDULED"
       ? buildRunRescheduledChannelEmbed({
+          runId: item.runId,
           productLabel: item.productLabel,
           previousScheduledStartAt: item.previousScheduledStartAt ?? item.scheduledStartAt,
           scheduledStartAt: item.scheduledStartAt,
@@ -1272,12 +1274,14 @@ async function syncRunAnnouncement(
         })
       : item.type === "RUN_REACTIVATED"
         ? buildRunReactivatedChannelEmbed({
+            runId: item.runId,
             productLabel: item.productLabel,
             scheduledStartAt: item.scheduledStartAt,
             difficulty: item.difficulty,
             lootType: item.lootType,
           })
         : buildRunCancelledChannelEmbed({
+            runId: item.runId,
             productLabel: item.productLabel,
             scheduledStartAt: item.scheduledStartAt,
             difficulty: item.difficulty,

@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
+import { absoluteRunUrl } from "@/lib/app-url";
 import type {
   SignupEmbedData,
   SignupEmbedMember,
@@ -241,7 +242,7 @@ export function buildSignupEmbed(
   const emptyValue = data.uniqueSignupCount === 0 ? "No signups yet." : EMPTY_FIELD_VALUE;
   const windowLine = data.signupWindowOpen ? "Signups are open." : "Signups are closed.";
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle("Signups")
     .setDescription(description)
     .addFields(
@@ -255,6 +256,9 @@ export function buildSignupEmbed(
     )
     .setColor(color)
     .setFooter({ text: `${windowLine} Signup does not mean selected.` });
+  const runUrl = absoluteRunUrl(data.runId);
+  if (runUrl) embed.setURL(runUrl);
+  return embed;
 }
 
 /** Buttons disable once the signup window is no longer open — the server remains the real gate either way. */

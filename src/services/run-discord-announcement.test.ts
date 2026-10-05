@@ -431,6 +431,7 @@ describe("channel embed copy", () => {
     const oldIso = "2026-10-01T18:00:00.000Z";
     const newIso = "2026-10-01T20:00:00.000Z";
     const embed = buildRunRescheduledChannelEmbed({
+      runId: "run-123",
       productLabel: "Season 2 Bundle",
       previousScheduledStartAt: oldIso,
       scheduledStartAt: newIso,
@@ -447,6 +448,7 @@ describe("channel embed copy", () => {
   it("cancel embed includes product and schedule timestamp", () => {
     const when = "2026-10-02T19:00:00.000Z";
     const embed = buildRunCancelledChannelEmbed({
+      runId: "run-123",
       productLabel: "Season 2 Bundle",
       scheduledStartAt: when,
       difficulty: "HEROIC",
