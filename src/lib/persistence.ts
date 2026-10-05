@@ -16,6 +16,8 @@ import {
   RAID_LEAD_CUT_MODES,
   SETTLEMENT_STATUSES,
   STRIKE_STATUSES,
+  INTEGRATION_PROVIDERS,
+  INTEGRATION_EVENT_STATUSES,
   WOW_CLASSES,
   WOW_REGIONS,
   type AccountRole,
@@ -37,6 +39,8 @@ import {
   type SignupStatus,
   type WowClass,
   type WowRegion,
+  type IntegrationProvider,
+  type IntegrationEventStatus,
 } from "@/models/enums";
 
 function asString(value: unknown, fallback = ""): string {
@@ -141,6 +145,19 @@ export function mapRaidLeadCutMode(value: unknown): RaidLeadCutMode {
 
 export function mapStrikeStatus(value: unknown): StrikeStatus {
   return asEnum(value, STRIKE_STATUSES, "ACTIVE");
+}
+
+export function mapIntegrationProvider(value: unknown): IntegrationProvider {
+  return asEnum(value, INTEGRATION_PROVIDERS, "SYSTEM");
+}
+
+export function mapIntegrationEventStatus(value: unknown): IntegrationEventStatus {
+  return asEnum(value, INTEGRATION_EVENT_STATUSES, "ERROR");
+}
+
+export function mapWowRegionOrNull(value: unknown): WowRegion | null {
+  if (value == null) return null;
+  return asEnum(value, WOW_REGIONS, "EU");
 }
 
 export {

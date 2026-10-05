@@ -147,6 +147,21 @@ export type DiscordDeliveryStatus = (typeof DISCORD_DELIVERY_STATUSES)[number];
 
 /** Shared Run Discord channel lifecycle announcements (not User DMs). */
 export const RUN_DISCORD_ANNOUNCEMENT_TYPES = ["RUN_RESCHEDULED", "RUN_CANCELLED", "RUN_REACTIVATED"] as const;
+
+/** System Health / integration telemetry providers (IntegrationEvent.provider). */
+export const INTEGRATION_PROVIDERS = [
+  "BLIZZARD",
+  "WARCRAFT_LOGS",
+  "DISCORD",
+  "RAIDER_IO",
+  "SYSTEM",
+  "BACKUP",
+] as const;
+export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+
+/** IntegrationEvent.status — WARNING is degraded-but-continuing. */
+export const INTEGRATION_EVENT_STATUSES = ["SUCCESS", "WARNING", "ERROR"] as const;
+export type IntegrationEventStatus = (typeof INTEGRATION_EVENT_STATUSES)[number];
 export type RunDiscordAnnouncementType = (typeof RUN_DISCORD_ANNOUNCEMENT_TYPES)[number];
 
 export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(

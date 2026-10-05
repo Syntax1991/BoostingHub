@@ -1,0 +1,197 @@
+[
+  {
+    "id": "table.integration_event",
+    "label": "Create table \"integration_event\"",
+    "summary": "Creates table \"integration_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "integration_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"integration_event\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"integration_event\"",
+        "sql": "CREATE TABLE \"public\".\"integration_event\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"durationMs\" int4,\n  \"entityId\" text,\n  \"entityType\" text,\n  \"errorCode\" text,\n  \"httpStatus\" int4,\n  \"id\" text NOT NULL,\n  \"metadataJson\" text,\n  \"operation\" text NOT NULL,\n  \"provider\" text NOT NULL,\n  \"region\" text,\n  \"status\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"integration_event_provider_check_0cda3fe9\" CHECK (\"provider\" IN ('BLIZZARD', 'WARCRAFT_LOGS', 'DISCORD', 'RAIDER_IO', 'SYSTEM', 'BACKUP')),\n  CONSTRAINT \"integration_event_region_check_0ad0075e\" CHECK (\"region\" IN ('EU', 'US')),\n  CONSTRAINT \"integration_event_status_check_739674ef\" CHECK (\"status\" IN ('SUCCESS', 'WARNING', 'ERROR'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"integration_event\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.integration_event.integration_event_createdAt_idx_9575dbd7",
+    "label": "Create index \"integration_event_createdAt_idx_9575dbd7\" on \"integration_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "integration_event_createdAt_idx_9575dbd7",
+        "table": "integration_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"integration_event_createdAt_idx_9575dbd7\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_createdAt_idx_9575dbd7\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"integration_event_createdAt_idx_9575dbd7\"",
+        "sql": "CREATE INDEX \"integration_event_createdAt_idx_9575dbd7\" ON \"public\".\"integration_event\" (\"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"integration_event_createdAt_idx_9575dbd7\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_createdAt_idx_9575dbd7\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.integration_event.integration_event_provider_createdAt_idx_fd3b9fd1",
+    "label": "Create index \"integration_event_provider_createdAt_idx_fd3b9fd1\" on \"integration_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "integration_event_provider_createdAt_idx_fd3b9fd1",
+        "table": "integration_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"integration_event_provider_createdAt_idx_fd3b9fd1\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_provider_createdAt_idx_fd3b9fd1\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"integration_event_provider_createdAt_idx_fd3b9fd1\"",
+        "sql": "CREATE INDEX \"integration_event_provider_createdAt_idx_fd3b9fd1\" ON \"public\".\"integration_event\" (\"provider\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"integration_event_provider_createdAt_idx_fd3b9fd1\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_provider_createdAt_idx_fd3b9fd1\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.integration_event.integration_event_provider_operation_createdAt_idx_40fc1a5a",
+    "label": "Create index \"integration_event_provider_operation_createdAt_idx_40fc1a5a\" on \"integration_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "integration_event_provider_operation_createdAt_idx_40fc1a5a",
+        "table": "integration_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"integration_event_provider_operation_createdAt_idx_40fc1a5a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_provider_operation_createdAt_idx_40fc1a5a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"integration_event_provider_operation_createdAt_idx_40fc1a5a\"",
+        "sql": "CREATE INDEX \"integration_event_provider_operation_createdAt_idx_40fc1a5a\" ON \"public\".\"integration_event\" (\"provider\", \"operation\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"integration_event_provider_operation_createdAt_idx_40fc1a5a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_provider_operation_createdAt_idx_40fc1a5a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.integration_event.integration_event_status_createdAt_idx_58610442",
+    "label": "Create index \"integration_event_status_createdAt_idx_58610442\" on \"integration_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "integration_event_status_createdAt_idx_58610442",
+        "table": "integration_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"integration_event_status_createdAt_idx_58610442\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_status_createdAt_idx_58610442\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"integration_event_status_createdAt_idx_58610442\"",
+        "sql": "CREATE INDEX \"integration_event_status_createdAt_idx_58610442\" ON \"public\".\"integration_event\" (\"status\", \"createdAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"integration_event_status_createdAt_idx_58610442\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"integration_event_status_createdAt_idx_58610442\""
+        ]
+      }
+    ]
+  }
+]

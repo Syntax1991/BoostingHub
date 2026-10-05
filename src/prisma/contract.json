@@ -60,6 +60,10 @@
       "model": "DiscordSchedulePost",
       "namespace": "public"
     },
+    "integration_event": {
+      "model": "IntegrationEvent",
+      "namespace": "public"
+    },
     "raid": {
       "model": "Raid",
       "namespace": "public"
@@ -425,6 +429,52 @@
               {
                 "name": "NEXT",
                 "value": "NEXT"
+              }
+            ]
+          },
+          "IntegrationEventStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "SUCCESS",
+                "value": "SUCCESS"
+              },
+              {
+                "name": "WARNING",
+                "value": "WARNING"
+              },
+              {
+                "name": "ERROR",
+                "value": "ERROR"
+              }
+            ]
+          },
+          "IntegrationProvider": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "BLIZZARD",
+                "value": "BLIZZARD"
+              },
+              {
+                "name": "WARCRAFT_LOGS",
+                "value": "WARCRAFT_LOGS"
+              },
+              {
+                "name": "DISCORD",
+                "value": "DISCORD"
+              },
+              {
+                "name": "RAIDER_IO",
+                "value": "RAIDER_IO"
+              },
+              {
+                "name": "SYSTEM",
+                "value": "SYSTEM"
+              },
+              {
+                "name": "BACKUP",
+                "value": "BACKUP"
               }
             ]
           },
@@ -2646,6 +2696,155 @@
               },
               "namespaceId": "public",
               "table": "discord_schedule_post"
+            }
+          },
+          "IntegrationEvent": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "durationMs": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "entityId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "entityType": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "errorCode": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "httpStatus": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "metadataJson": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "operation": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "provider": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "IntegrationProvider",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "region": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WowRegion",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "IntegrationEventStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "durationMs": {
+                  "column": "durationMs"
+                },
+                "entityId": {
+                  "column": "entityId"
+                },
+                "entityType": {
+                  "column": "entityType"
+                },
+                "errorCode": {
+                  "column": "errorCode"
+                },
+                "httpStatus": {
+                  "column": "httpStatus"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "metadataJson": {
+                  "column": "metadataJson"
+                },
+                "operation": {
+                  "column": "operation"
+                },
+                "provider": {
+                  "column": "provider"
+                },
+                "region": {
+                  "column": "region"
+                },
+                "status": {
+                  "column": "status"
+                }
+              },
+              "namespaceId": "public",
+              "table": "integration_event"
             }
           },
           "Raid": {
@@ -10471,6 +10670,154 @@
                 }
               ]
             },
+            "integration_event": {
+              "checks": [
+                {
+                  "expression": "\"provider\" IN ('BLIZZARD', 'WARCRAFT_LOGS', 'DISCORD', 'RAIDER_IO', 'SYSTEM', 'BACKUP')",
+                  "name": "integration_event_provider_check_0cda3fe9",
+                  "prefix": "integration_event_provider_check"
+                },
+                {
+                  "expression": "\"region\" IN ('EU', 'US')",
+                  "name": "integration_event_region_check_0ad0075e",
+                  "prefix": "integration_event_region_check"
+                },
+                {
+                  "expression": "\"status\" IN ('SUCCESS', 'WARNING', 'ERROR')",
+                  "name": "integration_event_status_check_739674ef",
+                  "prefix": "integration_event_status_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "durationMs": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "entityId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "entityType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "errorCode": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "httpStatus": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "metadataJson": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "operation": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "provider": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "IntegrationProvider",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "region": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WowRegion",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "IntegrationEventStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "createdAt"
+                  ],
+                  "name": "integration_event_createdAt_idx_9575dbd7",
+                  "prefix": "integration_event_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "provider",
+                    "createdAt"
+                  ],
+                  "name": "integration_event_provider_createdAt_idx_fd3b9fd1",
+                  "prefix": "integration_event_provider_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "provider",
+                    "operation",
+                    "createdAt"
+                  ],
+                  "name": "integration_event_provider_operation_createdAt_idx_40fc1a5a",
+                  "prefix": "integration_event_provider_operation_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status",
+                    "createdAt"
+                  ],
+                  "name": "integration_event_status_createdAt_idx_58610442",
+                  "prefix": "integration_event_status_createdAt_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "raid": {
               "columns": {
                 "createdAt": {
@@ -15432,6 +15779,25 @@
                 "NEXT"
               ]
             },
+            "IntegrationEventStatus": {
+              "kind": "valueSet",
+              "values": [
+                "SUCCESS",
+                "WARNING",
+                "ERROR"
+              ]
+            },
+            "IntegrationProvider": {
+              "kind": "valueSet",
+              "values": [
+                "BLIZZARD",
+                "WARCRAFT_LOGS",
+                "DISCORD",
+                "RAIDER_IO",
+                "SYSTEM",
+                "BACKUP"
+              ]
+            },
             "LootbuddyMode": {
               "kind": "valueSet",
               "values": [
@@ -15603,10 +15969,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f8798188c4faa1922fa0f11503c7a1e1ec61828974d618286a9a350c3770e71a"
+    "storageHash": "af95e636c77ff4fcb33a3831d78a957f93394db80da993911405a18bb0346ae3"
   },
   "execution": {
-    "executionHash": "640d8479da142c8a7b1e5001c6fccd6dda5fee8e73171b8114ba29d987de5974",
+    "executionHash": "3a342430d1d88a1a7276c0c09b1c5461b2a20c65939dbb88d635489510bf068a",
     "mutations": {
       "defaults": [
         {
@@ -15904,6 +16270,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "discord_schedule_post"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "integration_event"
           }
         },
         {
