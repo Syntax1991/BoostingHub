@@ -7,6 +7,7 @@ import {
   warcraftLogsOAuthTokenUrl,
 } from "@/lib/warcraft-logs/config";
 import type { WowRegion } from "@/models/enums";
+import { recordWarcraftLogsOutcome } from "@/lib/integration-provider-events";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 /** Report event pages (CombatantInfo carries gear/talents) are much larger than profile lookups. */
@@ -650,19 +651,30 @@ export const warcraftLogsApiClient = {
     realm: string;
     region: WowRegion;
   }): Promise<WarcraftLogsFindCharacterResult> {
+    const started = Date.now();
+    const finish = async (result: WarcraftLogsFindCharacterResult) => {
+      await recordWarcraftLogsOutcome({
+        operation: "FIND_CHARACTER",
+        status: result.status,
+        region: input.region,
+        durationMs: Date.now() - started,
+      });
+      return result;
+    };
+
     if (!isWarcraftLogsConfigured()) {
-      return { status: "NOT_CONFIGURED" };
+      return finish({ status: "NOT_CONFIGURED" });
     }
 
     const serverRegion = toWarcraftLogsServerRegion(input.region);
     if (!serverRegion) {
-      return { status: "UNSUPPORTED_REGION" };
+      return finish({ status: "UNSUPPORTED_REGION" });
     }
 
     const name = input.name.trim();
     const serverSlug = warcraftLogsServerSlugFromRealm(input.realm);
     if (!name || !serverSlug) {
-      return { status: "NOT_FOUND" };
+      return finish({ status: "NOT_FOUND" });
     }
 
     try {
@@ -676,24 +688,24 @@ export const warcraftLogsApiClient = {
 
       if (Array.isArray(root.errors) && root.errors.length > 0) {
         const message = root.errors.map((row) => row.message).filter(Boolean).join("; ") || "GraphQL error";
-        return { status: "TEMPORARY_FAILURE", message };
+        return finish({ status: "TEMPORARY_FAILURE", message });
       }
 
       const characterRaw = root.data?.characterData?.character ?? null;
       if (!characterRaw) {
-        return { status: "NOT_FOUND" };
+        return finish({ status: "NOT_FOUND" });
       }
 
       const mapped = mapCharacter(characterRaw);
       if (!mapped) {
-        return { status: "TEMPORARY_FAILURE", message: "Warcraft Logs character payload was malformed." };
+        return finish({ status: "TEMPORARY_FAILURE", message: "Warcraft Logs character payload was malformed." });
       }
-      return { status: "SUCCESS", character: mapped };
+      return finish({ status: "SUCCESS", character: mapped });
     } catch (error) {
-      return {
+      return finish({
         status: "TEMPORARY_FAILURE",
         message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
-      };
+      });
     }
   },
 
@@ -783,8 +795,17 @@ export const warcraftLogsApiClient = {
    * characters in ONE request. Never throws for business outcomes.
    */
   async fetchReportMetadata(code: string): Promise<WarcraftLogsReportMetadataResult> {
+    const started = Date.now();
+    const finish = async (result: WarcraftLogsReportMetadataResult) => {
+      await recordWarcraftLogsOutcome({
+        operation: "FETCH_REPORT",
+        status: result.status,
+        durationMs: Date.now() - started,
+      });
+      return result;
+    };
     if (!isWarcraftLogsConfigured()) {
-      return { status: "NOT_CONFIGURED" };
+      return finish({ status: "NOT_CONFIGURED" });
     }
     try {
       const accessToken = await getAccessToken();
@@ -798,22 +819,22 @@ export const warcraftLogsApiClient = {
       const reportRaw = root.data?.reportData?.report ?? null;
       const errorMessage = graphqlErrorMessage(root);
       if (!reportRaw) {
-        if (!errorMessage || isMissingReportError(errorMessage)) return { status: "NOT_FOUND" };
-        return { status: "TEMPORARY_FAILURE", message: errorMessage };
+        if (!errorMessage || isMissingReportError(errorMessage)) return finish({ status: "NOT_FOUND" });
+        return finish({ status: "TEMPORARY_FAILURE", message: errorMessage });
       }
       if (errorMessage) {
-        return { status: "TEMPORARY_FAILURE", message: errorMessage };
+        return finish({ status: "TEMPORARY_FAILURE", message: errorMessage });
       }
       const report = mapReportMetadata(reportRaw);
       if (!report) {
-        return { status: "TEMPORARY_FAILURE", message: "Warcraft Logs report payload was malformed." };
+        return finish({ status: "TEMPORARY_FAILURE", message: "Warcraft Logs report payload was malformed." });
       }
-      return { status: "SUCCESS", report };
+      return finish({ status: "SUCCESS", report });
     } catch (error) {
-      return {
+      return finish({
         status: "TEMPORARY_FAILURE",
         message: error instanceof Error ? error.message : "Warcraft Logs request failed.",
-      };
+      });
     }
   },
 

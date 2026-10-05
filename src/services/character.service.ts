@@ -14,6 +14,7 @@ import {
 import { normalizePlayableSpecs } from "@/lib/character-capabilities";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { parseRaiderIoCharacterUrl } from "@/lib/raiderio-character-url";
+import { recordRaiderIoParseResult } from "@/lib/integration-provider-events";
 import {
   mapWithConcurrency,
   RAIDER_IO_BULK_MAX,
@@ -345,6 +346,7 @@ export const characterService = {
    */
   async previewCharacterFromRaiderIoUrl(url: string, user?: AuthenticatedUser) {
     const parsed = parseRaiderIoCharacterUrl(url);
+    void recordRaiderIoParseResult(parsed);
     if (!parsed.ok) {
       throw new DomainError("VALIDATION_FAILED", parsed.error.message);
     }
