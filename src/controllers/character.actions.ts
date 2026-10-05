@@ -7,8 +7,9 @@ import { characterService } from "@/services/character.service";
 import {
   characterIdSchema,
   createCharacterSchema,
+  createCharactersSchema,
   lookupCharacterFromRaiderIoSchema,
-  lookupCharacterSchema,
+  lookupCharactersFromRaiderIoSchema,
   updateCharacterSchema,
 } from "@/validators/character";
 
@@ -29,22 +30,14 @@ function revalidateCharacterSurfaces(characterId?: string) {
  * Client-supplied userId, class-on-edit, BoosterAccess, and lockouts are ignored.
  */
 
-/**
- * Read-only preview for the Add Character lookup step. Never persists
- * anything; the actual add re-resolves Blizzard data server-side again.
- */
-export async function lookupCharacterAction(
-  input: unknown,
-): Promise<ActionResult & { data: { wowClass: string; itemLevel: number | null } | null }> {
-  try {
-    await requireUser();
-    const parsed = lookupCharacterSchema.parse(input);
-    const data = await characterService.previewCharacterFromBlizzard(parsed);
-    return { ok: true, message: "Character found.", data };
-  } catch (error) {
-    return { ...mapActionError(error), data: null };
-  }
-}
+export type RaiderIoPreviewData = {
+  name: string;
+  realm: string;
+  region: string;
+  wowClass: string;
+  itemLevel: number | null;
+  alreadyOwned: boolean;
+};
 
 /**
  * Parse a Raider.IO Character profile URL and preview via Blizzard.
@@ -53,24 +46,36 @@ export async function lookupCharacterAction(
  */
 export async function lookupCharacterFromRaiderIoAction(
   input: unknown,
-): Promise<
-  ActionResult & {
-    data: {
-      name: string;
-      realm: string;
-      region: string;
-      wowClass: string;
-      itemLevel: number | null;
-    } | null;
-  }
-> {
+): Promise<ActionResult & { data: RaiderIoPreviewData | null }> {
   try {
-    await requireUser();
+    const user = await requireUser();
     const parsed = lookupCharacterFromRaiderIoSchema.parse(input);
-    const data = await characterService.previewCharacterFromRaiderIoUrl(parsed.url);
+    const data = await characterService.previewCharacterFromRaiderIoUrl(parsed.url, user);
     return { ok: true, message: "Character found.", data };
   } catch (error) {
     return { ...mapActionError(error), data: null };
+  }
+}
+
+/**
+ * Bulk Raider.IO → Blizzard preview. Server enforces 1–10 URLs.
+ * Per-URL failures are returned alongside successes (partial ok).
+ */
+export async function lookupCharactersFromRaiderIoAction(input: unknown): Promise<
+  ActionResult & {
+    results: Array<
+      | { ok: true; url: string; data: RaiderIoPreviewData }
+      | { ok: false; url: string; code: string; message: string }
+    > | null;
+  }
+> {
+  try {
+    const user = await requireUser();
+    const parsed = lookupCharactersFromRaiderIoSchema.parse(input);
+    const results = await characterService.previewCharactersFromRaiderIoUrls(user, parsed.urls);
+    return { ok: true, message: "Lookup finished.", results };
+  } catch (error) {
+    return { ...mapActionError(error), results: null };
   }
 }
 
@@ -87,6 +92,46 @@ export async function createCharacterAction(input: unknown): Promise<ActionResul
     return { ok: true, message: "Character added." };
   } catch (error) {
     return mapActionError(error);
+  }
+}
+
+/**
+ * Bulk Add Character. Each row re-resolves Blizzard. Partial success is
+ * returned per clientId so the UI can retry only failures.
+ */
+export async function createCharactersAction(input: unknown): Promise<
+  ActionResult & {
+    results: Array<
+      | { clientId: string; ok: true }
+      | { clientId: string; ok: false; code: string; message: string }
+    > | null;
+  }
+> {
+  try {
+    const user = await requireUser();
+    const parsed = createCharactersSchema.parse(input);
+    const results = await characterService.addCharactersFromBlizzard(user, parsed.characters);
+    const anyOk = results.some((row) => row.ok);
+    if (anyOk) {
+      revalidateCharacterSurfaces();
+    }
+    const allOk = results.every((row) => row.ok);
+    if (allOk) {
+      return {
+        ok: true,
+        message:
+          results.length === 1 ? "Character added." : `${results.length} characters added.`,
+        results,
+      };
+    }
+    return {
+      ok: false,
+      code: "PARTIAL_FAILURE",
+      message: "Some characters could not be added.",
+      results,
+    };
+  } catch (error) {
+    return { ...mapActionError(error), results: null };
   }
 }
 

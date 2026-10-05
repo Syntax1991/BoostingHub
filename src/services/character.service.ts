@@ -1,6 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import type { WowClass, WowRegion } from "@/models/enums";
-import { DomainError } from "@/lib/errors";
+import { DomainError, isDomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { defaultRaidBossTotal } from "@/lib/lockout-display";
 import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
@@ -14,6 +14,11 @@ import {
 import { normalizePlayableSpecs } from "@/lib/character-capabilities";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { parseRaiderIoCharacterUrl } from "@/lib/raiderio-character-url";
+import {
+  mapWithConcurrency,
+  RAIDER_IO_BULK_MAX,
+  RAIDER_IO_LOOKUP_CONCURRENCY,
+} from "@/lib/map-with-concurrency";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { settingsRepository } from "@/repositories/settings.repository";
@@ -318,9 +323,8 @@ export const characterService = {
   },
 
   /**
-   * Read-only Blizzard preview for the Add Character lookup step. Does not
-   * touch the database and proves nothing about account ownership — it is a
-   * public Character Profile read, not the authenticated Battle.net import.
+   * Read-only Blizzard preview for tests and internal callers. Does not
+   * touch the database — public Character Profile read only.
    */
   async previewCharacterFromBlizzard(input: CharacterLookupInput) {
     const identity = prepareIdentity(input);
@@ -336,8 +340,10 @@ export const characterService = {
    * Raider.IO Character profile URL → Blizzard public profile preview.
    * Parses the URL only (no Raider.IO fetch/API). Canonical Name/Realm come
    * from Blizzard's Character Profile Summary — never from the URL slug.
+   * When `user` is supplied, reports whether the account already owns the
+   * canonical identity (advisory; final create still re-checks).
    */
-  async previewCharacterFromRaiderIoUrl(url: string) {
+  async previewCharacterFromRaiderIoUrl(url: string, user?: AuthenticatedUser) {
     const parsed = parseRaiderIoCharacterUrl(url);
     if (!parsed.ok) {
       throw new DomainError("VALIDATION_FAILED", parsed.error.message);
@@ -360,13 +366,62 @@ export const characterService = {
       { realmSlug: parsed.value.realmSlug },
     );
 
+    const canonicalName = prepareCharacterName(preview.name);
+    const canonicalRealm = prepareRealmName(preview.realm);
+    let alreadyOwned = false;
+    if (user) {
+      const conflict = await characterRepository.findIdentityConflict({
+        userId: user.id,
+        region: parsed.value.region,
+        normalizedName: normalizeCharacterIdentity(canonicalName),
+        normalizedRealm: normalizeCharacterIdentity(canonicalRealm),
+      });
+      alreadyOwned = Boolean(conflict);
+    }
+
     return {
       name: preview.name,
       realm: preview.realm,
       region: parsed.value.region,
       wowClass: preview.wowClass,
       itemLevel: preview.itemLevel,
+      alreadyOwned,
     };
+  },
+
+  /**
+   * Bulk Raider.IO → Blizzard preview. Server enforces 1–10 URLs and looks
+   * them up with bounded concurrency. Per-URL failures do not abort siblings.
+   */
+  async previewCharactersFromRaiderIoUrls(user: AuthenticatedUser, urls: readonly string[]) {
+    if (urls.length < 1 || urls.length > RAIDER_IO_BULK_MAX) {
+      throw new DomainError(
+        "VALIDATION_FAILED",
+        `Enter between 1 and ${RAIDER_IO_BULK_MAX} Raider.IO character profile links.`,
+      );
+    }
+
+    return mapWithConcurrency(urls, RAIDER_IO_LOOKUP_CONCURRENCY, async (url) => {
+      try {
+        const data = await this.previewCharacterFromRaiderIoUrl(url, user);
+        return { ok: true as const, url, data };
+      } catch (error) {
+        if (isDomainError(error)) {
+          return {
+            ok: false as const,
+            url,
+            code: error.code,
+            message: error.message,
+          };
+        }
+        return {
+          ok: false as const,
+          url,
+          code: "UNEXPECTED",
+          message: "Something went wrong looking up this character.",
+        };
+      }
+    });
   },
 
   /**
@@ -393,6 +448,88 @@ export const characterService = {
       playableSpecs: input.playableSpecs ?? [],
       itemLevel: resolved.itemLevel,
     });
+  },
+
+  /**
+   * Bulk Add Character. Each item re-resolves Blizzard independently via
+   * addCharacterFromBlizzard. Server enforces 1–10. In-batch duplicate
+   * identities fail without creating; other rows continue (partial success).
+   */
+  async addCharactersFromBlizzard(
+    user: AuthenticatedUser,
+    items: ReadonlyArray<CharacterCreateFromBlizzardInput & { clientId: string }>,
+  ) {
+    if (items.length < 1 || items.length > RAIDER_IO_BULK_MAX) {
+      throw new DomainError(
+        "VALIDATION_FAILED",
+        `Add between 1 and ${RAIDER_IO_BULK_MAX} characters at once.`,
+      );
+    }
+
+    const seen = new Map<string, string>();
+    const results: Array<
+      | { clientId: string; ok: true }
+      | { clientId: string; ok: false; code: string; message: string }
+    > = [];
+
+    for (const item of items) {
+      let identityKey: string;
+      try {
+        const identity = prepareIdentity(item);
+        identityKey = `${identity.region}|${identity.normalizedRealm}|${identity.normalizedName}`;
+      } catch (error) {
+        if (isDomainError(error)) {
+          results.push({
+            clientId: item.clientId,
+            ok: false,
+            code: error.code,
+            message: error.message,
+          });
+          continue;
+        }
+        results.push({
+          clientId: item.clientId,
+          ok: false,
+          code: "UNEXPECTED",
+          message: "Something went wrong adding this character.",
+        });
+        continue;
+      }
+
+      if (seen.has(identityKey)) {
+        results.push({
+          clientId: item.clientId,
+          ok: false,
+          code: "CHARACTER_ALREADY_IN_BATCH",
+          message: "This character is already included in this batch.",
+        });
+        continue;
+      }
+      seen.set(identityKey, item.clientId);
+
+      try {
+        await this.addCharacterFromBlizzard(user, item);
+        results.push({ clientId: item.clientId, ok: true });
+      } catch (error) {
+        if (isDomainError(error)) {
+          results.push({
+            clientId: item.clientId,
+            ok: false,
+            code: error.code,
+            message: error.message,
+          });
+        } else {
+          results.push({
+            clientId: item.clientId,
+            ok: false,
+            code: "UNEXPECTED",
+            message: "Something went wrong adding this character.",
+          });
+        }
+      }
+    }
+
+    return results;
   },
 
   async updateCharacter(

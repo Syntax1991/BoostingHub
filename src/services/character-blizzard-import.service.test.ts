@@ -1159,6 +1159,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
       region: "EU",
       wowClass: "MAGE",
       itemLevel: 640,
+      alreadyOwned: false,
     });
     expect(apiMocks.getCharacterProfileSummary).toHaveBeenCalledWith(
       "EU",
@@ -1192,6 +1193,7 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
       region: "US",
       wowClass: "WARLOCK",
       itemLevel: 620,
+      alreadyOwned: false,
     });
     expect(apiMocks.getCharacterProfileSummary).toHaveBeenCalledWith("US", "malganis", "Ganisfoo");
   });
@@ -1300,6 +1302,256 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     expect(created.itemLevel).toBe(340);
     expect(created.blizzardCharacterId).toBeNull();
     expect(created.playableSpecs).toEqual(["Restoration"]);
+  });
+
+  it("bulk preview accepts 1 URL and rejects 11", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400020", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockResolvedValue({
+      id: "400020",
+      name: "Bulkone",
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "MAGE",
+      equippedItemLevel: 500,
+      activeSpecialization: "Frost",
+    });
+
+    const one = await characterService.previewCharactersFromRaiderIoUrls(owner, [
+      "https://raider.io/characters/eu/antonidas/Bulkone",
+    ]);
+    expect(one).toHaveLength(1);
+    expect(one[0]?.ok).toBe(true);
+
+    await expectDomainCode(
+      characterService.previewCharactersFromRaiderIoUrls(
+        owner,
+        Array.from({ length: 11 }, (_, i) => `https://raider.io/characters/eu/antonidas/Bulk${i}`),
+      ),
+      "VALIDATION_FAILED",
+    );
+  });
+
+  it("bulk preview keeps successes when one URL fails", async () => {
+    apiMocks.getCharacterProfileStatus.mockImplementation(async (_region, _realm, name) => {
+      if (name.toLowerCase() === "badname") return { id: "", isValid: false };
+      return { id: "400021", isValid: true };
+    });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
+      id: "400021",
+      name,
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "WARRIOR",
+      equippedItemLevel: 510,
+      activeSpecialization: "Arms",
+    }));
+
+    const results = await characterService.previewCharactersFromRaiderIoUrls(owner, [
+      "https://raider.io/characters/eu/antonidas/Okname",
+      "https://raider.io/characters/eu/antonidas/Badname",
+    ]);
+    expect(results[0]).toMatchObject({ ok: true });
+    expect(results[1]).toMatchObject({ ok: false, code: "BLIZZARD_CHARACTER_NOT_FOUND" });
+  });
+
+  it("bulk create enforces 1–10, independent specs, re-resolves Blizzard, and blocks batch duplicates", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400030", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
+      id: `id-${name}`,
+      name,
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "SHAMAN",
+      equippedItemLevel: 600,
+      activeSpecialization: "Elemental",
+    }));
+
+    const created = await characterService.addCharactersFromBlizzard(owner, [
+      {
+        clientId: "c1",
+        name: "BulkA",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Elemental",
+        playableSpecs: ["Restoration"],
+      },
+      {
+        clientId: "c2",
+        name: "BulkB",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Enhancement",
+        playableSpecs: [],
+      },
+      {
+        clientId: "c3",
+        name: "bulka",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Restoration",
+        playableSpecs: [],
+      },
+    ]);
+
+    expect(created[0]).toEqual({ clientId: "c1", ok: true });
+    expect(created[1]).toEqual({ clientId: "c2", ok: true });
+    expect(created[2]).toMatchObject({
+      clientId: "c3",
+      ok: false,
+      code: "CHARACTER_ALREADY_IN_BATCH",
+    });
+
+    const a = await characterRepository.findById(
+      String((await orm.Character.where({ userId: ids.owner, name: "BulkA" }).first())!.id),
+    );
+    const b = await characterRepository.findById(
+      String((await orm.Character.where({ userId: ids.owner, name: "BulkB" }).first())!.id),
+    );
+    createdCharacterIds.push(a!.id, b!.id);
+    expect(a?.specialization).toBe("Elemental");
+    expect(a?.playableSpecs).toEqual(["Restoration"]);
+    expect(b?.specialization).toBe("Enhancement");
+    expect(a?.blizzardCharacterId).toBeNull();
+    expect(b?.blizzardCharacterId).toBeNull();
+
+    await expectDomainCode(
+      characterService.addCharactersFromBlizzard(
+        owner,
+        Array.from({ length: 11 }, (_, i) => ({
+          clientId: `x${i}`,
+          name: `TooMany${i}`,
+          realm: "Antonidas",
+          region: "EU" as const,
+          specialization: "Elemental",
+        })),
+      ),
+      "VALIDATION_FAILED",
+    );
+  });
+
+  it("bulk create reports existing DB duplicates and continues siblings (partial failure)", async () => {
+    const existing = await characterService.createCharacter(owner, {
+      name: "Existsbulk",
+      realm: "Antonidas",
+      region: "EU",
+      wowClass: "MAGE",
+      specialization: "Frost",
+      itemLevel: 500,
+    });
+    createdCharacterIds.push(existing.id);
+
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400040", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
+      id: `id-${name}`,
+      name,
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: name.toLowerCase() === "existsbulk" ? "MAGE" : "PRIEST",
+      equippedItemLevel: 555,
+      activeSpecialization: null,
+    }));
+
+    const results = await characterService.addCharactersFromBlizzard(owner, [
+      {
+        clientId: "dup",
+        name: "Existsbulk",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Frost",
+      },
+      {
+        clientId: "new",
+        name: "Newbulk",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Holy",
+      },
+    ]);
+
+    expect(results[0]).toMatchObject({
+      clientId: "dup",
+      ok: false,
+      code: "CHARACTER_ALREADY_EXISTS",
+    });
+    expect(results[1]).toEqual({ clientId: "new", ok: true });
+    const created = await orm.Character.where({ userId: ids.owner, name: "Newbulk" }).first();
+    createdCharacterIds.push(String(created!.id));
+    expect(created?.wowClass).toBe("PRIEST");
+  });
+
+  it("bulk create accepts exactly 10 Characters", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400060", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
+      id: `id-${name}`,
+      name,
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "MAGE",
+      equippedItemLevel: 560,
+      activeSpecialization: "Frost",
+    }));
+
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      clientId: `ten-${i}`,
+      name: `Tenbulk${"ABCDEFGHIJ"[i]}`,
+      realm: "Antonidas",
+      region: "EU" as const,
+      specialization: "Frost",
+    }));
+    const results = await characterService.addCharactersFromBlizzard(owner, items);
+    expect(results).toHaveLength(10);
+    expect(results.every((row) => row.ok)).toBe(true);
+    for (const item of items) {
+      const row = await orm.Character.where({ userId: ids.owner, name: item.name }).first();
+      createdCharacterIds.push(String(row!.id));
+      expect(row?.blizzardCharacterId).toBeNull();
+    }
+  });
+
+  it("bulk create does not recreate already-successful rows when only failures are retried", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400050", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
+      id: `id-${name}`,
+      name,
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "HUNTER",
+      equippedItemLevel: 580,
+      activeSpecialization: "Beast Mastery",
+    }));
+
+    const first = await characterService.addCharactersFromBlizzard(owner, [
+      {
+        clientId: "ok1",
+        name: "Retryok",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Beast Mastery",
+      },
+    ]);
+    expect(first[0]?.ok).toBe(true);
+    const row = await orm.Character.where({ userId: ids.owner, name: "Retryok" }).first();
+    createdCharacterIds.push(String(row!.id));
+
+    // Retry payload contains only the (new) failure candidate — successful row omitted.
+    const second = await characterService.addCharactersFromBlizzard(owner, [
+      {
+        clientId: "fail1",
+        name: "Retryok",
+        realm: "Antonidas",
+        region: "EU",
+        specialization: "Marksmanship",
+      },
+    ]);
+    expect(second[0]).toMatchObject({ ok: false, code: "CHARACTER_ALREADY_EXISTS" });
+    const all = await orm.Character.where({ userId: ids.owner, name: "Retryok" }).all();
+    expect(all).toHaveLength(1);
   });
 });
 
