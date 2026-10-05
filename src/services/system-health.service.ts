@@ -19,12 +19,32 @@ const RECENT_PER_PROVIDER = 20;
 const EVENT_PAGE_DEFAULT = 25;
 const EVENT_PAGE_MAX = 100;
 
+export type SystemHealthDeepLink = {
+  href: string;
+  label: string;
+};
+
+export type BlizzardHealthExtras = {
+  lastScheduledPass: {
+    status: IntegrationEventStatus;
+    createdAt: string;
+    durationMs: number | null;
+    succeeded: number | null;
+    failed: number | null;
+    rateLimited: number | null;
+    backoffSkipped: number | null;
+    totalCandidates: number | null;
+  } | null;
+  characterOpsLinks: SystemHealthDeepLink[];
+};
+
 export type SystemHealthProviderCard = {
   provider: IntegrationProvider;
   label: string;
   state: SystemHealthState;
   configured: boolean;
   recentEventCount: number;
+  blizzard?: BlizzardHealthExtras;
 };
 
 export type SystemHealthPage = {
@@ -66,6 +86,41 @@ function isProviderConfigured(provider: IntegrationProvider): boolean {
   }
 }
 
+function readMetaNumber(metadataJson: string | null, key: string): number | null {
+  if (!metadataJson) return null;
+  try {
+    const parsed = JSON.parse(metadataJson) as Record<string, unknown>;
+    const value = parsed[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildBlizzardExtras(recent: IntegrationEventRecord[]): BlizzardHealthExtras {
+  const lastPass = recent.find((row) => row.operation === "SCHEDULED_SYNC_PASS") ?? null;
+  return {
+    lastScheduledPass: lastPass
+      ? {
+          status: lastPass.status,
+          createdAt: lastPass.createdAt,
+          durationMs: lastPass.durationMs,
+          succeeded: readMetaNumber(lastPass.metadataJson, "succeeded"),
+          failed: readMetaNumber(lastPass.metadataJson, "failed"),
+          rateLimited: readMetaNumber(lastPass.metadataJson, "rateLimited"),
+          backoffSkipped: readMetaNumber(lastPass.metadataJson, "backoffSkipped"),
+          totalCandidates: readMetaNumber(lastPass.metadataJson, "totalCandidates"),
+        }
+      : null,
+    characterOpsLinks: [
+      { href: "/manage/characters?status=active&health=ERROR", label: "Characters in ERROR" },
+      { href: "/manage/characters?status=active&health=STALE", label: "Stale Characters" },
+      { href: "/manage/characters?status=active&health=NEVER_SYNCED", label: "Never synced" },
+      { href: "/manage/characters?status=active&linkage=LINKED", label: "Linked Characters" },
+    ],
+  };
+}
+
 export type SystemHealthFilters = {
   provider?: IntegrationProvider | null;
   status?: IntegrationEventStatus | null;
@@ -97,7 +152,7 @@ export const systemHealthService = {
               limit: RECENT_PER_PROVIDER,
             })
           : [];
-        return {
+        const card: SystemHealthProviderCard = {
           provider,
           label: SYSTEM_HEALTH_PROVIDER_LABELS[provider],
           configured,
@@ -108,6 +163,10 @@ export const systemHealthService = {
             recentStatuses: recent.map((row) => row.status),
           }),
         };
+        if (provider === "BLIZZARD") {
+          card.blizzard = buildBlizzardExtras(recent);
+        }
+        return card;
       }),
     );
 

@@ -10,6 +10,7 @@ import { integrationEventService } from "@/services/integration-event.service";
 import type { ScheduledCharacterSyncCandidate } from "@/models/records";
 import { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
 import { isInSchedulerBackoff } from "@/lib/blizzard/sync-backoff";
+import { recordScheduledSyncPass } from "@/lib/blizzard/blizzard-integration-events";
 
 /**
  * Orchestrates the one-shot scheduled Blizzard character sync job. The app
@@ -184,7 +185,9 @@ export const scheduledCharacterSyncService = {
       SCHEDULED_CHARACTER_SYNC_LOCK_KEY.objectId,
     );
     if (!handle) {
-      return emptyResult("SKIPPED_ALREADY_RUNNING", Date.now() - start);
+      const skipped = emptyResult("SKIPPED_ALREADY_RUNNING", Date.now() - start);
+      await recordScheduledSyncPass(skipped);
+      return skipped;
     }
 
     try {
@@ -202,13 +205,28 @@ export const scheduledCharacterSyncService = {
         if (skippedBackoff > 0) {
           console.info(`[scheduled-character-sync] candidates=${stale.length} refreshed=0 skippedBackoff=${skippedBackoff}`);
         }
-        return { ...emptyResult("COMPLETED", Date.now() - start), totalCandidates: stale.length, skippedBackoff };
+        const empty = {
+          ...emptyResult("COMPLETED", Date.now() - start),
+          totalCandidates: stale.length,
+          skippedBackoff,
+        };
+        await recordScheduledSyncPass(empty);
+        return empty;
       }
 
       // A configuration problem (missing Blizzard credentials) is an
       // operational failure of the whole job, not 30 individual Character
       // failures — fail fast, before issuing any Blizzard calls.
       if (!isBlizzardConfigured()) {
+        const authFail = {
+          ...emptyResult("COMPLETED", Date.now() - start),
+          totalCandidates: stale.length,
+          skippedBackoff,
+        };
+        await recordScheduledSyncPass(authFail, {
+          errorCode: "BATTLENET_NOT_CONFIGURED",
+          authOrConfig: true,
+        });
         throw new DomainError(
           "BATTLENET_NOT_CONFIGURED",
           "Battle.net integration is not configured; scheduled character sync cannot run.",
@@ -269,7 +287,7 @@ export const scheduledCharacterSyncService = {
           `durationMs=${durationMs}`,
       );
 
-      return {
+      const completed: ScheduledCharacterSyncResult = {
         status: "COMPLETED",
         totalCandidates: stale.length,
         refreshed,
@@ -283,6 +301,8 @@ export const scheduledCharacterSyncService = {
         connectionsUpdated: refreshedConnectionIds.size,
         durationMs,
       };
+      await recordScheduledSyncPass(completed);
+      return completed;
     } finally {
       await scheduledJobLockRepository.releaseLock(handle);
       // Best-effort System Health telemetry retention (30 days). Never fails the sync job.

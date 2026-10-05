@@ -78,7 +78,7 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
                   {card.state.replaceAll("_", " ")}
                 </span>
               </div>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
                 <Link
                   href={buildFilterHref({
                     provider: card.provider,
@@ -90,6 +90,41 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
                   View events
                 </Link>
               </div>
+              {card.blizzard ? (
+                <div className="mt-3 space-y-2 border-t border-border/70 pt-3 text-xs">
+                  {card.blizzard.lastScheduledPass ? (
+                    <p className="text-muted">
+                      Last scheduled sync: {card.blizzard.lastScheduledPass.status}
+                      {card.blizzard.lastScheduledPass.succeeded != null
+                        ? ` · ${card.blizzard.lastScheduledPass.succeeded} ok`
+                        : ""}
+                      {card.blizzard.lastScheduledPass.failed != null
+                        ? ` · ${card.blizzard.lastScheduledPass.failed} failed`
+                        : ""}
+                      {card.blizzard.lastScheduledPass.rateLimited != null &&
+                      card.blizzard.lastScheduledPass.rateLimited > 0
+                        ? ` · ${card.blizzard.lastScheduledPass.rateLimited} rate-limited`
+                        : ""}
+                      {card.blizzard.lastScheduledPass.durationMs != null
+                        ? ` · ${card.blizzard.lastScheduledPass.durationMs}ms`
+                        : ""}
+                    </p>
+                  ) : (
+                    <p className="text-muted">No scheduled sync pass recorded in the recent window.</p>
+                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {card.blizzard.characterOpsLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className="font-medium text-accent hover:underline"
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </Card>
           ))}
         </div>

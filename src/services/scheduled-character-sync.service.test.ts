@@ -6,6 +6,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { battleNetConnectionRepository } from "@/repositories/battle-net-connection.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { raidRepository } from "@/repositories/raid.repository";
+import { integrationEventRepository } from "@/repositories/integration-event.repository";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { WowRegion } from "@/models/enums";
 
@@ -581,6 +582,30 @@ describe("scheduledCharacterSyncService.runOnce — overlap protection (advisory
     );
     expect(handle).not.toBeNull();
     await scheduledJobLockRepository.releaseLock(handle!);
+  });
+
+  it("records a SCHEDULED_SYNC_PASS IntegrationEvent for completed cycles", async () => {
+    const userId = await createUser("Owner Telemetry");
+    await createConnection(userId, "EU");
+    await createCharacter({
+      userId,
+      name: "Sctelemetry",
+      lastSyncedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+    });
+    mockProfileSuccess({ Sctelemetry: { itemLevel: 700 } });
+
+    const result = await scheduledCharacterSyncService.runOnce();
+    expect(result.status).toBe("COMPLETED");
+    expect(result.refreshed).toBe(1);
+
+    const rows = await integrationEventRepository.listRecent({
+      provider: "BLIZZARD",
+      operation: "SCHEDULED_SYNC_PASS",
+      limit: 5,
+    });
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0]?.status).toBe("SUCCESS");
+    expect(rows[0]?.metadataJson).toContain('"succeeded":1');
   });
 });
 
