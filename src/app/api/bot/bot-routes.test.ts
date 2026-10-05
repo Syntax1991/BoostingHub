@@ -619,12 +619,15 @@ describe("POST /api/bot/runs/:runId/signup/quick", () => {
 });
 
 describe("bot API roster and discord-state endpoints", () => {
-  it("returns NOT_FOUND for an unpublished roster", async () => {
+  it("returns draft roster embed data when the roster is unpublished", async () => {
     const res = await rosterGet(
       req(`/api/bot/runs/${runId}/roster`, { headers: { authorization: `Bearer ${TOKEN}` } }),
       params(runId),
     );
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.runId).toBe(runId);
+    expect(body.data.publishedAt).toBeNull();
   });
 
   it("records discord-state and reflects it in the next sync pass", async () => {

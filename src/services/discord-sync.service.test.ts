@@ -780,6 +780,52 @@ describe("discordSyncService.getRosterEmbedData", () => {
     });
   });
 
+  it("unpublished draft Roster with null fingerprint still refreshes then settles (production stuck shape)", async () => {
+    // Mirrors run 16e9d032-…: draft publishedAt=null, existing rosterMessageId,
+    // lastRosterEmojiFingerprint=null, channels already aligned. Service data must
+    // be available so the bot can edit and persist the current v4 fingerprint.
+    const now = new Date();
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-stuck",
+      classEmojiFingerprint: "emoji-b",
+    });
+    await orm.RunDiscordPost.where({ runId }).update({
+      lastRosterEmojiFingerprint: null,
+      lastRosterVersion: 0,
+    });
+    await orm.RunRoster.where({ runId }).update({ publishedAt: null });
+
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data?.publishedAt).toBeNull();
+
+    const refresh = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(refresh.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-stuck",
+      existingChannelId: "chan-2",
+      mode: "REFRESH",
+    });
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-stuck",
+      classEmojiFingerprint: "emoji-b",
+    });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.rosterMessageId).toBe("roster-msg-stuck");
+    expect(after?.lastRosterEmojiFingerprint).toBe(rosterEmbedRenderFingerprint("emoji-b"));
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+
+    // Restore publish state for later tests that share this runId.
+    await orm.RunRoster.where({ runId }).update({ publishedAt: new Date().toISOString() });
+  });
+
   it("legacy bare emoji fingerprints refresh once onto the presentation-format fingerprint", async () => {
     const now = new Date();
     await discordSyncService.recordRosterPost({
