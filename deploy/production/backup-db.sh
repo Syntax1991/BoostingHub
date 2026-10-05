@@ -106,8 +106,22 @@ echo "Writing backup to ${OUT}"
 if [[ -f "${PASS_FILE}" ]]; then
   export PGPASSFILE="${PASS_FILE}"
 fi
+record_backup_failure() {
+  local reason="$1"
+  local script="${APP_DIR}/scripts/record-backup-telemetry.mts"
+  if [[ ! -f "${script}" ]] || ! command -v sudo >/dev/null 2>&1; then
+    return 0
+  fi
+  sudo -u boostinghub -- env --chdir="${APP_DIR}" \
+    BACKUP_TELEMETRY_STATUS=ERROR \
+    BACKUP_TELEMETRY_RETENTION_DAYS="${RETENTION_DAYS}" \
+    BACKUP_TELEMETRY_REASON="${reason}" \
+    npx --yes tsx --env-file=.env "${script}" >/dev/null 2>&1 || true
+}
+
 if ! pg_dump --dbname="${CONNECTION_URI}" --format=custom --file="${OUT}"; then
   rm -f "${OUT}"
+  record_backup_failure pg_dump_failed
   echo "pg_dump failed" >&2
   exit 1
 fi
@@ -116,6 +130,7 @@ chmod 600 "${OUT}"
 SIZE="$(stat -c '%s' "${OUT}")"
 if [[ "${SIZE}" -le 0 ]]; then
   rm -f "${OUT}"
+  record_backup_failure empty_backup
   echo "backup file is empty" >&2
   exit 1
 fi
@@ -124,6 +139,7 @@ fi
 # dump is removed so it can never be mistaken for the newest good backup.
 if ! pg_restore --list "${OUT}" >/dev/null; then
   rm -f "${OUT}"
+  record_backup_failure list_validation_failed
   echo "backup failed pg_restore --list validation" >&2
   exit 1
 fi
@@ -133,3 +149,29 @@ echo "backup_ok bytes=${SIZE} file=${OUT}"
 # Retention: only this script's own dump files, only directly in BACKUP_DIR.
 find "${BACKUP_DIR}" -maxdepth 1 -type f -name 'boostinghub-*.dump' -mtime "+${RETENTION_DAYS}" -delete
 echo "retention_ok keep_days=${RETENTION_DAYS}"
+
+# Best-effort System Health telemetry (no dump paths / secrets in the payload).
+record_backup_telemetry() {
+  local status="$1"
+  local reason="${2:-}"
+  local script="${APP_DIR}/scripts/record-backup-telemetry.mts"
+  if [[ ! -f "${script}" ]]; then
+    echo "backup_telemetry_skipped reason=missing_script" >&2
+    return 0
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "backup_telemetry_skipped reason=no_sudo" >&2
+    return 0
+  fi
+  # App user owns the Node process + var/backup-status.json; never pass dump paths.
+  if ! sudo -u boostinghub -- env --chdir="${APP_DIR}" \
+    BACKUP_TELEMETRY_STATUS="${status}" \
+    BACKUP_TELEMETRY_SIZE_BYTES="${SIZE:-}" \
+    BACKUP_TELEMETRY_RETENTION_DAYS="${RETENTION_DAYS}" \
+    BACKUP_TELEMETRY_REASON="${reason}" \
+    npx --yes tsx --env-file=.env "${script}"; then
+    echo "backup_telemetry_failed status=${status}" >&2
+  fi
+}
+
+record_backup_telemetry SUCCESS

@@ -125,6 +125,48 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
                   </div>
                 </div>
               ) : null}
+              {card.backup ? (
+                <div className="mt-3 space-y-1 border-t border-border/70 pt-3 text-xs text-muted">
+                  <p>
+                    Retention:{" "}
+                    {card.backup.retentionDays != null ? `${card.backup.retentionDays} days` : "unknown"}
+                  </p>
+                  <p>
+                    Last success:{" "}
+                    {card.backup.lastSuccessAt
+                      ? `${formatWhen(card.backup.lastSuccessAt)}${
+                          card.backup.lastSuccessfulAgeHours != null
+                            ? ` (${card.backup.lastSuccessfulAgeHours}h ago)`
+                            : ""
+                        }`
+                      : "none recorded"}
+                  </p>
+                  <p>
+                    Last failure:{" "}
+                    {card.backup.lastFailureAt ? formatWhen(card.backup.lastFailureAt) : "none recorded"}
+                  </p>
+                  <p>
+                    Size:{" "}
+                    {card.backup.lastSuccessSizeBytes != null
+                      ? `${Math.round(card.backup.lastSuccessSizeBytes / 1024)} KiB`
+                      : "unknown"}
+                  </p>
+                  <p>
+                    Dump list validation:{" "}
+                    {card.backup.listValidated == null
+                      ? "unknown"
+                      : card.backup.listValidated
+                        ? "passed at backup time"
+                        : "not recorded"}
+                  </p>
+                  <p>
+                    Restore verification:{" "}
+                    {card.backup.lastRestoreVerificationAt
+                      ? formatWhen(card.backup.lastRestoreVerificationAt)
+                      : "not recorded (dump existence ≠ recoverable)"}
+                  </p>
+                </div>
+              ) : null}
             </Card>
           ))}
         </div>
