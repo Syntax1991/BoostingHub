@@ -8,7 +8,15 @@ import {
 describe("management navigation and user-management gates", () => {
   it("exposes ADMIN manage modules including users and boosting roles", () => {
     const items = getManagementNavItems("ADMIN");
-    expect(items.map((item) => item.module)).toEqual(["overview", "runs", "templates", "boosting-roles", "users", "characters"]);
+    expect(items.map((item) => item.module)).toEqual([
+      "overview",
+      "runs",
+      "templates",
+      "boosting-roles",
+      "users",
+      "characters",
+      "system",
+    ]);
     expect(items.map((item) => item.href)).toEqual([
       "/manage",
       "/manage/runs",
@@ -16,6 +24,7 @@ describe("management navigation and user-management gates", () => {
       "/manage/boosting-roles",
       "/manage/users",
       "/manage/characters",
+      "/manage/system",
     ]);
   });
 
@@ -24,6 +33,7 @@ describe("management navigation and user-management gates", () => {
     expect(items.map((item) => item.module)).toEqual(["overview", "runs"]);
     expect(items.some((item) => item.module === "users")).toBe(false);
     expect(items.some((item) => item.module === "boosting-roles")).toBe(false);
+    expect(items.some((item) => item.module === "system")).toBe(false);
   });
 
   it("returns no manage nav for USER", () => {
