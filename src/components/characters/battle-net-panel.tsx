@@ -301,7 +301,7 @@ function AccountProfileForbiddenCallout({
         ))}
         <div className="flex flex-wrap gap-2 pt-1">
           {/* The same Add Character flow as the page header; the Region rows below keep Connect. */}
-          <CharacterFormDialog mode="create" triggerLabel="Add character manually" />
+          <CharacterFormDialog mode="create" triggerLabel="Add Character" />
         </div>
       </div>
     </div>

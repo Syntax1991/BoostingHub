@@ -71,7 +71,7 @@ describe("BattleNetPanel — account profile denied", () => {
   });
 
   it("offers the manual Add Character flow as the action", () => {
-    expect(html).toContain('<button type="button" data-character-form="create">Add character manually</button>');
+    expect(html).toContain('<button type="button" data-character-form="create">Add Character</button>');
   });
 
   it("keeps the per-region Connect buttons available below the callout", () => {
@@ -86,6 +86,6 @@ describe("BattleNetPanel — other errors unchanged", () => {
     expect(visibleText(html)).toContain("Battle.net connection failed (BATTLENET_AUTH_FAILED).");
     expect(html).toMatch(/<p role="alert"[^>]*>Battle.net connection failed \(BATTLENET_AUTH_FAILED\)\.<\/p>/);
     expect(html).not.toContain("Battle.net character list unavailable");
-    expect(html).not.toContain("Add character manually");
+    expect(html).not.toContain("Add Character");
   });
 });
