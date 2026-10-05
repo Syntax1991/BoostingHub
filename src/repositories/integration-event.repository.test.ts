@@ -13,6 +13,17 @@ async function cleanup() {
   const operations = [
     "SCHEDULED_SYNC_PASS",
     "SYNC_ONCE",
+    "BOT_READY",
+    "SIGNUP_MESSAGE",
+    "ROSTER_MESSAGE",
+    "START_MESSAGE",
+    "RUN_ANNOUNCEMENT",
+    "RAID_INVITE_DM",
+    "NOTIFICATION_DM",
+    "WCL_CHANNEL_SCAN",
+    "WCL_LOG_CHANNEL_SCAN",
+    "VOICE_RECONCILE",
+    "SCHEDULE_SYNC",
     "RETENTION_TEST_OLD",
     "RETENTION_TEST_NEW",
     "FIND_CHARACTER",
@@ -60,18 +71,24 @@ describe("integrationEventRepository / service", () => {
       createdAt: "2026-10-05T11:00:00.000Z",
     });
 
-    const rows = await integrationEventRepository.listRecent({ limit: 10 });
+    const rows = await integrationEventRepository.listRecent({
+      provider: "DISCORD",
+      operation: "SYNC_ONCE",
+      limit: 10,
+    });
     expect(rows[0]?.provider).toBe("DISCORD");
-    expect(rows[1]?.provider).toBe("BLIZZARD");
-    expect(rows[1]?.metadataJson).toBe(JSON.stringify({ processed: 5 }));
-    expect(rows[1]?.metadataJson).not.toContain("SECRET");
+    expect(rows[0]?.errorCode).toBe("DISCORD_MISSING_PERMISSIONS");
+    expect(rows[0]?.httpStatus).toBe(403);
 
     const blizzardOnly = await integrationEventRepository.listRecent({
       provider: "BLIZZARD",
+      operation: "SCHEDULED_SYNC_PASS",
       limit: 10,
     });
     expect(blizzardOnly).toHaveLength(1);
     expect(blizzardOnly[0]?.operation).toBe("SCHEDULED_SYNC_PASS");
+    expect(blizzardOnly[0]?.metadataJson).toBe(JSON.stringify({ processed: 5 }));
+    expect(blizzardOnly[0]?.metadataJson).not.toContain("SECRET");
   });
 
   it("caps listRecent limit at 100", async () => {
