@@ -1538,3 +1538,50 @@ model DiscordGlobalAnnouncement {
 
   @@map("discord_global_announcement")
 }
+
+/// Integration / System Health telemetry providers.
+/// Distinct from ActivityEvent (user/domain feed). Never stores secrets.
+enum IntegrationProvider {
+  @@type("pg/text@1")
+  BLIZZARD       = "BLIZZARD"
+  WARCRAFT_LOGS  = "WARCRAFT_LOGS"
+  DISCORD        = "DISCORD"
+  RAIDER_IO      = "RAIDER_IO"
+  SYSTEM         = "SYSTEM"
+  BACKUP         = "BACKUP"
+}
+
+/// Outcome of one IntegrationEvent. WARNING is degraded-but-continuing.
+enum IntegrationEventStatus {
+  @@type("pg/text@1")
+  SUCCESS = "SUCCESS"
+  WARNING = "WARNING"
+  ERROR   = "ERROR"
+}
+
+/// Structured integration telemetry for System Health.
+/// Not a KPI warehouse and not ActivityEvent.
+/// Retention: purge events older than 30 days via scheduled maintenance.
+model IntegrationEvent {
+  id           String                 @id @default(uuid())
+  provider     IntegrationProvider
+  /// Stable operation key (e.g. SCHEDULED_SYNC_PASS, DISCORD_SYNC_ONCE).
+  operation    String
+  status       IntegrationEventStatus
+  createdAt    TimestamptzString      @default(now())
+  durationMs   Int?
+  httpStatus   Int?
+  /// Safe DomainError / provider code — never a raw stack or token.
+  errorCode    String?
+  entityType   String?
+  entityId     String?
+  region       WowRegion?
+  /// Sanitized JSON object string. Never tokens, Authorization, message bodies.
+  metadataJson String?
+
+  @@index([createdAt])
+  @@index([provider, createdAt])
+  @@index([status, createdAt])
+  @@index([provider, operation, createdAt])
+  @@map("integration_event")
+}

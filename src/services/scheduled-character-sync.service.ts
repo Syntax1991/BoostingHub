@@ -6,6 +6,7 @@ import { battleNetConnectionRepository } from "@/repositories/battle-net-connect
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { syncLinkedCharacterProfile } from "@/services/character-blizzard-sync.service";
 import { characterWarcraftLogsService } from "@/services/character-warcraft-logs.service";
+import { integrationEventService } from "@/services/integration-event.service";
 import type { ScheduledCharacterSyncCandidate } from "@/models/records";
 import { resolveScheduledSyncStaleMs } from "@/lib/blizzard/sync-stale";
 import { isInSchedulerBackoff } from "@/lib/blizzard/sync-backoff";
@@ -284,6 +285,20 @@ export const scheduledCharacterSyncService = {
       };
     } finally {
       await scheduledJobLockRepository.releaseLock(handle);
+      // Best-effort System Health telemetry retention (30 days). Never fails the sync job.
+      try {
+        const { purged, retentionDays } = await integrationEventService.purgeExpired();
+        if (purged > 0) {
+          console.info(
+            `[scheduled-character-sync] purged ${purged} integration event(s) older than ${retentionDays}d`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "[scheduled-character-sync] integration event purge failed:",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
   },
 };
