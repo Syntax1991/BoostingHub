@@ -48,6 +48,7 @@ coverage/
 .turbo/
 dist/
 .local/
+/var/
 
 # guide capture / publish scratch (never commit live Discord snapshots)
 docs/guides/screenshots/_*.html

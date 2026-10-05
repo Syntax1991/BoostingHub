@@ -38,6 +38,18 @@ export type BlizzardHealthExtras = {
   characterOpsLinks: SystemHealthDeepLink[];
 };
 
+export type BackupHealthExtras = {
+  configured: boolean;
+  retentionDays: number | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastSuccessSizeBytes: number | null;
+  lastSuccessfulAgeHours: number | null;
+  listValidated: boolean | null;
+  /** Explicit restore verification only — never inferred from dump existence. */
+  lastRestoreVerificationAt: string | null;
+};
+
 export type SystemHealthProviderCard = {
   provider: IntegrationProvider;
   label: string;
@@ -45,6 +57,7 @@ export type SystemHealthProviderCard = {
   configured: boolean;
   recentEventCount: number;
   blizzard?: BlizzardHealthExtras;
+  backup?: BackupHealthExtras;
 };
 
 export type SystemHealthPage = {
@@ -121,6 +134,64 @@ function buildBlizzardExtras(recent: IntegrationEventRecord[]): BlizzardHealthEx
   };
 }
 
+async function readBackupStatusFile(): Promise<Partial<BackupHealthExtras> | null> {
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const raw = await readFile(join(process.cwd(), "var", "backup-status.json"), "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      configured: parsed.configured !== false,
+      retentionDays: typeof parsed.retentionDays === "number" ? parsed.retentionDays : null,
+      lastSuccessAt: typeof parsed.lastSuccessAt === "string" ? parsed.lastSuccessAt : null,
+      lastFailureAt: typeof parsed.lastFailureAt === "string" ? parsed.lastFailureAt : null,
+      lastSuccessSizeBytes:
+        typeof parsed.lastSuccessSizeBytes === "number" ? parsed.lastSuccessSizeBytes : null,
+      listValidated: typeof parsed.listValidated === "boolean" ? parsed.listValidated : null,
+      lastRestoreVerificationAt:
+        typeof parsed.lastRestoreVerificationAt === "string" ? parsed.lastRestoreVerificationAt : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildBackupExtras(
+  recent: IntegrationEventRecord[],
+  fileStatus: Partial<BackupHealthExtras> | null,
+): BackupHealthExtras {
+  const lastSuccessEvent =
+    recent.find((row) => row.operation === "DATABASE_BACKUP" && row.status === "SUCCESS") ?? null;
+  const lastFailureEvent =
+    recent.find((row) => row.operation === "DATABASE_BACKUP" && row.status === "ERROR") ?? null;
+  const lastSuccessAt = fileStatus?.lastSuccessAt ?? lastSuccessEvent?.createdAt ?? null;
+  const lastFailureAt = fileStatus?.lastFailureAt ?? lastFailureEvent?.createdAt ?? null;
+  const lastSuccessSizeBytes =
+    fileStatus?.lastSuccessSizeBytes ??
+    (lastSuccessEvent ? readMetaNumber(lastSuccessEvent.metadataJson, "backupSizeBytes") : null);
+  const retentionDays =
+    fileStatus?.retentionDays ??
+    (lastSuccessEvent ? readMetaNumber(lastSuccessEvent.metadataJson, "retentionDays") : null) ??
+    (lastFailureEvent ? readMetaNumber(lastFailureEvent.metadataJson, "retentionDays") : null);
+  let lastSuccessfulAgeHours: number | null = null;
+  if (lastSuccessAt) {
+    const ageMs = Date.now() - new Date(lastSuccessAt).getTime();
+    if (Number.isFinite(ageMs) && ageMs >= 0) {
+      lastSuccessfulAgeHours = Math.floor(ageMs / (60 * 60 * 1000));
+    }
+  }
+  return {
+    configured: fileStatus?.configured ?? true,
+    retentionDays,
+    lastSuccessAt,
+    lastFailureAt,
+    lastSuccessSizeBytes,
+    lastSuccessfulAgeHours,
+    listValidated: fileStatus?.listValidated ?? (lastSuccessEvent ? true : null),
+    lastRestoreVerificationAt: fileStatus?.lastRestoreVerificationAt ?? null,
+  };
+}
+
 export type SystemHealthFilters = {
   provider?: IntegrationProvider | null;
   status?: IntegrationEventStatus | null;
@@ -140,6 +211,7 @@ export const systemHealthService = {
     const limit = Math.min(Math.max(1, Math.floor(filters.limit ?? EVENT_PAGE_DEFAULT)), EVENT_PAGE_MAX);
     const offset = Math.max(0, Math.floor(filters.offset ?? 0));
     const createdAfter = new Date(Date.now() - RECENT_WINDOW_MS).toISOString();
+    const backupFileStatus = await readBackupStatusFile();
 
     // Parallel bounded lookups — one capped query per provider (not sequential N+1).
     const providers: SystemHealthProviderCard[] = await Promise.all(
@@ -165,6 +237,9 @@ export const systemHealthService = {
         };
         if (provider === "BLIZZARD") {
           card.blizzard = buildBlizzardExtras(recent);
+        }
+        if (provider === "BACKUP") {
+          card.backup = buildBackupExtras(recent, backupFileStatus);
         }
         return card;
       }),
