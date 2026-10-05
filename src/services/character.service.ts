@@ -13,6 +13,7 @@ import {
 } from "@/lib/character-identity";
 import { normalizePlayableSpecs } from "@/lib/character-capabilities";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
+import { parseRaiderIoCharacterUrl } from "@/lib/raiderio-character-url";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
 import { settingsRepository } from "@/repositories/settings.repository";
@@ -323,11 +324,49 @@ export const characterService = {
    */
   async previewCharacterFromBlizzard(input: CharacterLookupInput) {
     const identity = prepareIdentity(input);
-    return characterBlizzardImportService.lookupPublicCharacterProfile(
+    const preview = await characterBlizzardImportService.lookupPublicCharacterProfile(
       identity.name,
       identity.realm,
       identity.region,
     );
+    return { wowClass: preview.wowClass, itemLevel: preview.itemLevel };
+  },
+
+  /**
+   * Raider.IO Character profile URL → Blizzard public profile preview.
+   * Parses the URL only (no Raider.IO fetch/API). Canonical Name/Realm come
+   * from Blizzard's Character Profile Summary — never from the URL slug.
+   */
+  async previewCharacterFromRaiderIoUrl(url: string) {
+    const parsed = parseRaiderIoCharacterUrl(url);
+    if (!parsed.ok) {
+      throw new DomainError("VALIDATION_FAILED", parsed.error.message);
+    }
+
+    // Same WoW Character name contract as manual Add Character — reject before
+    // any Blizzard call. Do not lowercase; diacritics stay intact (Éowyn).
+    const name = prepareCharacterName(parsed.value.characterName);
+    if (!isValidCharacterName(name)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_NAME",
+        "Enter a character name using letters only, 2 to 16 characters.",
+      );
+    }
+
+    const preview = await characterBlizzardImportService.lookupPublicCharacterProfile(
+      name,
+      parsed.value.realmSlug,
+      parsed.value.region,
+      { realmSlug: parsed.value.realmSlug },
+    );
+
+    return {
+      name: preview.name,
+      realm: preview.realm,
+      region: parsed.value.region,
+      wowClass: preview.wowClass,
+      itemLevel: preview.itemLevel,
+    };
   },
 
   /**

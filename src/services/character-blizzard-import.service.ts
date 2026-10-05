@@ -89,13 +89,18 @@ function findOwnedInSession(
  * and equipped item level — it does NOT prove BoostingHub-account ownership.
  * Ownership is only established through the authenticated Battle.net import
  * (battleNetService / applySelections below).
+ *
+ * When `options.realmSlug` is set (e.g. from a Raider.IO profile URL), that
+ * slug is used for the Blizzard path. The returned `realm` is always Blizzard's
+ * canonical display name — never the input slug.
  */
 async function lookupPublicCharacterProfile(
   name: string,
   realm: string,
   region: "EU" | "US",
-): Promise<{ wowClass: WowClass; itemLevel: number | null }> {
-  const realmSlug = realmSlugFromDisplayName(realm);
+  options?: { realmSlug?: string },
+): Promise<{ name: string; realm: string; wowClass: WowClass; itemLevel: number | null }> {
+  const realmSlug = options?.realmSlug?.trim() || realmSlugFromDisplayName(realm);
   const status = await blizzardApiClient.getCharacterProfileStatus(region, realmSlug, name);
   if (!status.isValid) {
     throw new DomainError(
@@ -106,15 +111,19 @@ async function lookupPublicCharacterProfile(
   }
 
   const summary = await blizzardApiClient.getCharacterProfileSummary(region, realmSlug, name);
-  if (!summary.wowClass) {
+  const canonicalName = summary.name?.trim() || "";
+  const canonicalRealm = summary.realmName?.trim() || "";
+  if (!summary.wowClass || !canonicalName || !canonicalRealm) {
     throw new DomainError(
       "BLIZZARD_PROFILE_UNAVAILABLE",
-      "Blizzard did not return a class for this character.",
+      "Blizzard did not return a usable identity for this character.",
       502,
     );
   }
 
   return {
+    name: canonicalName,
+    realm: canonicalRealm,
     wowClass: summary.wowClass,
     itemLevel:
       typeof summary.equippedItemLevel === "number" ? Math.floor(summary.equippedItemLevel) : null,

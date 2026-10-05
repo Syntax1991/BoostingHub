@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   createCharacterAction,
   lookupCharacterAction,
+  lookupCharacterFromRaiderIoAction,
   updateCharacterAction,
 } from "@/controllers/character.actions";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,8 @@ export function CharacterFormDialog({
   const [lookup, setLookup] = useState<LookupResult>(
     initial ? { wowClass: initial.wowClass, itemLevel: initial.itemLevel } : null,
   );
+  const [raiderIoUrl, setRaiderIoUrl] = useState("");
+  const [identityFromRaiderIo, setIdentityFromRaiderIo] = useState(false);
 
   const resolvedClass = mode === "edit" ? (initial?.wowClass ?? null) : lookup?.wowClass ?? null;
   const resolvedItemLevel = mode === "edit" ? (initial?.itemLevel ?? null) : lookup?.itemLevel ?? null;
@@ -75,11 +78,20 @@ export function CharacterFormDialog({
     });
   }, [resolvedClass, specialization, specs]);
 
+  function clearLookupState() {
+    setLookup(null);
+    setSpecialization("");
+    setPlayableSpecs([]);
+    setIdentityFromRaiderIo(false);
+  }
+
   function resetFromInitial() {
     setIdentity(initial ? { name: initial.name, realm: initial.realm, region: initial.region } : EMPTY_IDENTITY);
     setSpecialization(initial?.specialization ?? "");
     setPlayableSpecs(initial?.playableSpecs ?? []);
     setLookup(initial ? { wowClass: initial.wowClass, itemLevel: initial.itemLevel } : null);
+    setRaiderIoUrl("");
+    setIdentityFromRaiderIo(false);
   }
 
   useEffect(() => {
@@ -108,9 +120,14 @@ export function CharacterFormDialog({
     if (mode === "create") {
       // Any identity change invalidates a prior lookup; the User must look
       // up again so Class/Item Level always match what is being submitted.
-      setLookup(null);
-      setSpecialization("");
-      setPlayableSpecs([]);
+      clearLookupState();
+    }
+  }
+
+  function changeRaiderIoUrl(next: string) {
+    setRaiderIoUrl(next);
+    if (mode === "create" && lookup) {
+      clearLookupState();
     }
   }
 
@@ -134,6 +151,7 @@ export function CharacterFormDialog({
     event?.preventDefault();
     setError(null);
     setLookingUp(true);
+    setIdentityFromRaiderIo(false);
     void lookupCharacterAction(identity).then((result) => {
       setLookingUp(false);
       if (!result.ok || !result.data) {
@@ -141,9 +159,40 @@ export function CharacterFormDialog({
         return;
       }
       setLookup(result.data as LookupResult);
-      setSpecialization((current) => current || "");
+      setSpecialization("");
       setPlayableSpecs([]);
     });
+  }
+
+  function runRaiderIoLookup(event?: { preventDefault(): void }) {
+    event?.preventDefault();
+    setError(null);
+    setLookingUp(true);
+    void lookupCharacterFromRaiderIoAction({ url: raiderIoUrl }).then((result) => {
+      setLookingUp(false);
+      if (!result.ok || !result.data) {
+        setError(result.message);
+        return;
+      }
+      const data = result.data;
+      setIdentity({
+        name: data.name,
+        realm: data.realm,
+        region: data.region as WowRegion,
+      });
+      setLookup({ wowClass: data.wowClass as WowClass, itemLevel: data.itemLevel });
+      setSpecialization("");
+      setPlayableSpecs([]);
+      setIdentityFromRaiderIo(true);
+    });
+  }
+
+  /** Enter in the Raider.IO URL field must not fall through to manual Name/Realm lookup. */
+  function onRaiderIoKeyDown(event: { key: string; preventDefault(): void }) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (lookingUp || !raiderIoUrl.trim()) return;
+    runRaiderIoLookup(event);
   }
 
   function submit(event?: { preventDefault(): void }) {
@@ -203,11 +252,14 @@ export function CharacterFormDialog({
             </h2>
             <p className="mt-1 text-xs text-muted">
               {mode === "create"
-                ? "Look up a character by Region / Realm / Name. Blizzard supplies Class and Item Level; you choose which specializations you can play."
+                ? "Paste a Raider.IO character link to fill Region, Realm and Name automatically, or enter them manually. Blizzard supplies Class and Item Level; you choose which specializations you can play."
                 : "Class and Item Level are Blizzard-authoritative and cannot be edited here."}
             </p>
           </div>
-          <form className="space-y-3 px-4 py-4" onSubmit={mode === "create" && !lookup ? runLookup : submit}>
+          <form
+            className="space-y-3 px-4 py-4"
+            onSubmit={mode === "create" && !lookup ? runLookup : submit}
+          >
             {error ? (
               <p id={errorId} role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
                 {error}
@@ -218,6 +270,46 @@ export function CharacterFormDialog({
                 {success}
               </p>
             ) : null}
+
+            {mode === "create" && !lookup ? (
+              <>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-muted">Raider.IO character link</span>
+                  <input
+                    name="raiderIoUrl"
+                    autoComplete="off"
+                    placeholder="https://raider.io/characters/eu/antonidas/Synblast"
+                    value={raiderIoUrl}
+                    onChange={(event) => changeRaiderIoUrl(event.target.value)}
+                    onKeyDown={onRaiderIoKeyDown}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? errorId : undefined}
+                    className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                  />
+                  <span className="mt-1 block text-xs text-muted">
+                    Paste a Raider.IO character link to fill Region, Realm and Name automatically.
+                  </span>
+                </label>
+                <Button
+                  type="button"
+                  disabled={lookingUp || !raiderIoUrl.trim()}
+                  onClick={runRaiderIoLookup}
+                >
+                  {lookingUp ? "Looking up…" : "Look up from Raider.IO"}
+                </Button>
+
+                <div className="flex items-center gap-3 py-1 text-xs text-muted" role="separator">
+                  <span className="h-px flex-1 bg-border" />
+                  <span>or enter manually</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              </>
+            ) : null}
+
+            {mode === "create" && lookup && identityFromRaiderIo ? (
+              <p className="text-xs text-muted">Identity from Raider.IO link · verified by Blizzard</p>
+            ) : null}
+
             <label className="block text-sm">
               <span className="mb-1 block text-muted">Name</span>
               <input
