@@ -8,6 +8,8 @@ describe("CharacterFormDialog — Raider.IO bulk Add Character", () => {
     expect(source).toContain("emptyRow()");
     expect(source).toContain('useState<CreateRow[]>(() => [emptyRow("create-row-0")])');
     expect(source).toContain("Raider.IO character link");
+    expect(source).toContain('placeholder="Paste Raider.IO character link"');
+    expect(source).not.toContain("antonidas/Synblast");
     expect(source).toContain("Look up characters");
     expect(source).toContain("+ Add another character");
 

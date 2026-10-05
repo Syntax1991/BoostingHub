@@ -590,7 +590,7 @@ export function CharacterFormDialog({
                           <input
                             name={`raiderIoUrl-${row.id}`}
                             autoComplete="off"
-                            placeholder="https://raider.io/characters/eu/antonidas/Synblast"
+                            placeholder="Paste Raider.IO character link"
                             value={row.url}
                             disabled={row.createStatus === "added" || lookingUp || pending}
                             onChange={(event) => changeRowUrl(row.id, event.target.value)}
