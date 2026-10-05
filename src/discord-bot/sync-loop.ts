@@ -83,6 +83,12 @@ import {
   type WeekSectionItem,
 } from "@/discord-bot/channel-reconciliation";
 import type { RosterEmbedData, RunStartEmbedData, SignupEmbedData } from "@/services/discord-sync.service";
+import {
+  createDiscordSyncPassTelemetry,
+  recordDiscordLaneFailure,
+  recordDiscordSyncPass,
+  type DiscordSyncPassTelemetry,
+} from "@/lib/discord/discord-integration-events";
 
 type SyncWork = Awaited<ReturnType<BotApiClient["listSyncWork"]>>;
 
@@ -276,6 +282,31 @@ function makePositionSetter(client: Client, guildId: string): PositionSetter {
  * new CURRENT channel could remain below `#next-id` until the next poll.
  */
 export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): Promise<void> {
+  const pass = createDiscordSyncPassTelemetry();
+  const started = Date.now();
+  try {
+    await syncOnceInner(client, env, api, pass);
+  } catch (error) {
+    // Lane failures already recorded inside; only tag unexpected whole-pass throws.
+    if (pass.errorCount === 0 && pass.warningCount === 0) {
+      await recordDiscordLaneFailure(pass, {
+        operation: "SYNC_ONCE",
+        error,
+        messageKind: "pass",
+      });
+    }
+    throw error;
+  } finally {
+    await recordDiscordSyncPass(pass, Date.now() - started);
+  }
+}
+
+async function syncOnceInner(
+  client: Client,
+  env: BotEnv,
+  api: BotApiClient,
+  pass: DiscordSyncPassTelemetry,
+): Promise<void> {
   // One cached Guild emoji snapshot serves both class and role indicators.
   const { classIndicators, roleIndicators } = await resolveGuildEmojiIndicators(client, env.discordGuildId);
   const classEmojiFingerprint = [
@@ -307,7 +338,7 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
   // Temporary Run voice channels next — independent of text channels and of
   // their ordering — so Raid Invite DMs later in this same pass can link a
   // voice channel created now.
-  const resolvedVoiceChannels = await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? []);
+  const resolvedVoiceChannels = await syncRunVoiceChannels(client, env, api, work.voiceChannels ?? [], pass);
 
   // Trusted log-bot Warcraft Logs links in running / just-completed Run
   // channels: every message after the durable per-channel cursor, oldest →
@@ -333,6 +364,11 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     });
   } catch (error) {
     console.error("[discord-bot] Warcraft Logs link scan failed", error);
+    await recordDiscordLaneFailure(pass, {
+      operation: "WCL_CHANNEL_SCAN",
+      error,
+      channelKind: "run",
+    });
   }
 
   // Dedicated Warcraft Logs log channels: read once per pass (not per Run);
@@ -350,6 +386,11 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     });
   } catch (error) {
     console.error("[discord-bot] Warcraft Logs log channel scan failed", error);
+    await recordDiscordLaneFailure(pass, {
+      operation: "WCL_LOG_CHANNEL_SCAN",
+      error,
+      channelKind: "log",
+    });
   }
 
   // Lifecycle channel announcements that must land before retirement
@@ -394,6 +435,11 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
     await syncSchedulePosts(client, env, api, work.schedules ?? []);
   } catch (error) {
     console.error("[discord-bot] schedule sync failed", error);
+    await recordDiscordLaneFailure(pass, {
+      operation: "SCHEDULE_SYNC",
+      error,
+      messageKind: "schedule",
+    });
   }
 
   // CURRENT/NEXT section ordering runs once after provisioning so same-pass
@@ -421,6 +467,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
         if (createdSection) newlyProvisionedSections.push(createdSection);
       } catch (error) {
         console.error(`[discord-bot] signup sync failed for run ${item.runId}`, error);
+        await recordDiscordLaneFailure(pass, {
+          operation: "SIGNUP_MESSAGE",
+          error,
+          messageKind: "signup",
+          entityId: item.runId,
+        });
         messagePhaseError ??= error;
       }
     }
@@ -457,6 +509,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
         );
       } catch (error) {
         console.error(`[discord-bot] roster sync failed for run ${item.runId}`, error);
+        await recordDiscordLaneFailure(pass, {
+          operation: "ROSTER_MESSAGE",
+          error,
+          messageKind: "roster",
+          entityId: item.runId,
+        });
         messagePhaseError ??= error;
       }
     }
@@ -470,6 +528,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
           `[discord-bot] run announcement ${item.announcementId} failed for run ${item.runId}`,
           error,
         );
+        await recordDiscordLaneFailure(pass, {
+          operation: "RUN_ANNOUNCEMENT",
+          error,
+          messageKind: "lifecycle",
+          entityId: item.runId,
+        });
         messagePhaseError ??= error;
       }
     }
@@ -481,6 +545,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
         await syncStartPost(client, env, api, item, data, resolvedChannels, classIndicators, resolvedVoiceChannels);
       } catch (error) {
         console.error(`[discord-bot] start sync failed for run ${item.runId}`, error);
+        await recordDiscordLaneFailure(pass, {
+          operation: "START_MESSAGE",
+          error,
+          messageKind: "start",
+          entityId: item.runId,
+        });
         messagePhaseError ??= error;
       }
     }
@@ -494,6 +564,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
             `[discord-bot] raid invite DM failed for signup ${item.signupId} on run ${item.runId}`,
             error,
           );
+          await recordDiscordLaneFailure(pass, {
+            operation: "RAID_INVITE_DM",
+            error,
+            messageKind: "dm",
+            entityId: item.runId,
+          });
           messagePhaseError ??= error;
         }
       }
@@ -508,6 +584,12 @@ export async function syncOnce(client: Client, env: BotEnv, api: BotApiClient): 
             `[discord-bot] notification DM failed for ${item.notificationId} (${item.type})`,
             error,
           );
+          await recordDiscordLaneFailure(pass, {
+            operation: "NOTIFICATION_DM",
+            error,
+            messageKind: "dm",
+            entityId: item.runId,
+          });
           messagePhaseError ??= error;
         }
       }
@@ -575,6 +657,7 @@ async function syncRunVoiceChannels(
   env: BotEnv,
   api: BotApiClient,
   items: RunVoiceChannelWorkItem[],
+  pass: DiscordSyncPassTelemetry,
 ): Promise<ResolvedVoiceChannels> {
   if (items.length === 0) return new Map();
   const voiceCategoryId = env.discordRunVoiceCategoryId ?? null;
@@ -624,6 +707,11 @@ async function syncRunVoiceChannels(
     return await reconcileRunVoiceChannels(adapters, items);
   } catch (error) {
     console.error("[discord-bot] Run voice channel sync failed", error);
+    await recordDiscordLaneFailure(pass, {
+      operation: "VOICE_RECONCILE",
+      error,
+      channelKind: "voice",
+    });
     return new Map();
   }
 }

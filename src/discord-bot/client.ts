@@ -22,6 +22,7 @@ import { handleMySignupsCommand } from "@/discord-bot/commands/mysignups";
 import { probeMessageContentCapability } from "@/discord-bot/message-content";
 import { startSyncLoop } from "@/discord-bot/sync-loop";
 import { startWarcraftLogsAutoAuditLoop } from "@/discord-bot/warcraft-logs-links";
+import { recordDiscordBotReady } from "@/lib/discord/discord-integration-events";
 
 /**
  * Wires the gateway client to the pure embed/interaction modules. This file
@@ -34,6 +35,7 @@ export function createBotClient(env: BotEnv): Client {
 
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[discord-bot] logged in as ${readyClient.user.tag}`);
+    void recordDiscordBotReady();
     // One-time health line: can the bot read other members' message text?
     void probeMessageContentCapability(async () => (await readyClient.application.fetch()).flags?.bitfield ?? null);
     startSyncLoop(client, env, api);
