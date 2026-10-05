@@ -7,7 +7,9 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runRepository } from "@/repositories/run.repository";
-import { discordSyncService, planRunVoiceChannel, rosterEmbedRenderFingerprint, SIGNUP_MESSAGE_FORMAT_VERSION } from "@/services/discord-sync.service";
+import { discordSyncService, planRunVoiceChannel, rosterEmbedRenderFingerprint, ROSTER_EMBED_FORMAT_VERSION, SIGNUP_MESSAGE_FORMAT_VERSION } from "@/services/discord-sync.service";
+import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
+import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { runDetailService } from "@/services/run-detail.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { userNotificationRepository } from "@/repositories/user-notification.repository";
@@ -611,6 +613,40 @@ describe("discordSyncService.listSyncWork", () => {
     expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
   });
 
+  it("refreshes existing Signup once for the canonical Run URL format version, then settles (EDIT → NOOP)", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-url" });
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+
+    const post = await runDiscordPostRepository.findByRunId(runId);
+    expect(post?.signupMessageId).toBe("msg-url");
+    const previous = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
+    previous.messageFormatVersion = "v6-quick-signup";
+    await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(previous) });
+
+    const refresh = await discordSyncService.listSyncWork();
+    const item = refresh.signups.find((entry) => entry.runId === runId);
+    expect(item?.existingMessageId).toBe("msg-url");
+    expect(item?.existingChannelId).toBe("chan-1");
+
+    const data = await discordSyncService.getSignupEmbedData(runId);
+    expect(data).not.toBeNull();
+    const embed = buildSignupEmbed(data!).toJSON();
+    expect(embed.title).toBe("Signups");
+    expect(embed.url).toBe(`https://example.test/runs/${runId}`);
+
+    await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-url" });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.signupMessageId).toBe("msg-url");
+    expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
+    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe("v7-canonical-run-url");
+
+    expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
+    vi.unstubAllEnvs();
+  });
+
   it("also refreshes a closed-window Signup post once for the Quick Signup button layout", async () => {
     // Continuity path: post already exists; closing the window must still refresh presentation.
     await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-closed" });
@@ -768,6 +804,62 @@ describe("discordSyncService.getRosterEmbedData", () => {
         (item) => item.runId === runId,
       ),
     ).toBeUndefined();
+  });
+
+  it("refreshes existing Roster once for the canonical Run URL format version, then settles (EDIT → NOOP)", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
+    const now = new Date();
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-url",
+      classEmojiFingerprint: "emoji-b",
+    });
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+    expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe(
+      rosterEmbedRenderFingerprint("emoji-b"),
+    );
+    expect(ROSTER_EMBED_FORMAT_VERSION).toBe("v3-canonical-run-url");
+
+    await orm.RunDiscordPost.where({ runId }).update({
+      lastRosterEmojiFingerprint: "v2-persistent-split|emoji-b",
+    });
+
+    const refresh = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
+    expect(refresh.roster.find((item) => item.runId === runId)).toMatchObject({
+      existingMessageId: "roster-msg-url",
+      mode: "REFRESH",
+      postRevision: null,
+    });
+
+    const data = await discordSyncService.getRosterEmbedData(runId);
+    expect(data).not.toBeNull();
+    const embed = buildRosterEmbed(data!).toJSON();
+    expect(embed.title).toBe("Roster");
+    expect(embed.url).toBe(`https://example.test/runs/${runId}`);
+
+    await discordSyncService.recordRosterPost({
+      runId,
+      channelId: "chan-2",
+      messageId: "roster-msg-url",
+      classEmojiFingerprint: "emoji-b",
+    });
+    const after = await runDiscordPostRepository.findByRunId(runId);
+    expect(after?.rosterMessageId).toBe("roster-msg-url");
+    expect(after?.lastRosterEmojiFingerprint).toBe(`v3-canonical-run-url|emoji-b`);
+
+    expect(
+      (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(
+        (item) => item.runId === runId,
+      ),
+    ).toBeUndefined();
+    vi.unstubAllEnvs();
   });
 });
 
