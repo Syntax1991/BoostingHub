@@ -221,28 +221,55 @@ describe("buildSignupEmbed", () => {
     expect(embed.toJSON().description).toContain("Weekend Heroic Catch-up");
   });
 
-  it("links the embed title to the canonical run page", () => {
+  it("links the Run title in the description, not the Signups embed title", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
-    const embed = buildSignupEmbed(emptyData({ runId: "run-123" })).toJSON();
+    const embed = buildSignupEmbed(
+      emptyData({ runId: "run-123", runTitle: "Mon 19:30 HC VIP 7/9 Nyxara" }),
+    ).toJSON();
     expect(embed.title).toBe("Signups");
-    expect(embed.url).toBe("https://example.test/runs/run-123");
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toBe(
+      "[Mon 19:30 HC VIP 7/9 Nyxara](https://example.test/runs/run-123)",
+    );
   });
 
-  it("does not double a trailing slash on the application origin", () => {
+  it("does not double a trailing slash on the application origin in the Run title link", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BETTER_AUTH_URL", "https://example.test/");
-    const embed = buildSignupEmbed(emptyData({ runId: "run-123" })).toJSON();
-    expect(embed.url).toBe("https://example.test/runs/run-123");
+    const embed = buildSignupEmbed(
+      emptyData({ runId: "run-123", runTitle: "Mon 19:30 HC VIP 7/9 Nyxara" }),
+    ).toJSON();
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toBe(
+      "[Mon 19:30 HC VIP 7/9 Nyxara](https://example.test/runs/run-123)",
+    );
   });
 
-  it("still builds the embed and omits the URL when production has no base URL", () => {
+  it("still builds the embed with a plain Run title when production has no base URL", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BETTER_AUTH_URL", "");
-    const embed = buildSignupEmbed(emptyData({ runId: "run-123" })).toJSON();
+    const embed = buildSignupEmbed(
+      emptyData({ runId: "run-123", runTitle: "Mon 19:30 HC VIP 7/9 Nyxara" }),
+    ).toJSON();
     expect(embed.title).toBe("Signups");
-    expect(embed.description).toContain("Weekend Heroic Catch-up");
     expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toBe("Mon 19:30 HC VIP 7/9 Nyxara");
+    expect(embed.description).not.toContain("](");
+  });
+
+  it("keeps markdown-sensitive Run titles from breaking the description link", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
+    const embed = buildSignupEmbed(
+      emptyData({ runId: "run-123", runTitle: "Evil](https://evil.test) @everyone" }),
+    ).toJSON();
+    const first = embed.description?.split("\n")[0] ?? "";
+    expect(embed.url).toBeUndefined();
+    expect(first.startsWith("[")).toBe(true);
+    expect(first.endsWith("](https://example.test/runs/run-123)")).toBe(true);
+    expect(first).not.toMatch(/@everyone/);
+    expect(first).toContain("\\]");
   });
 
   it("renders Tank|Healer|DPS as the primary inline grid with Lootbuddy after, Signups then Roster", () => {
