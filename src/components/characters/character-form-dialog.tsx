@@ -31,7 +31,7 @@ type CharacterFormValues = {
 type LookupStatus = "idle" | "pending" | "resolved" | "error";
 type CreateStatus = "idle" | "pending" | "added" | "error";
 
-type CreateRow = {
+export type CreateRow = {
   id: string;
   url: string;
   /** URL that produced the current resolved preview (for skip-relookup). */
@@ -56,7 +56,7 @@ function newRowId() {
   return crypto.randomUUID();
 }
 
-function emptyRow(id?: string): CreateRow {
+export function emptyRow(id?: string): CreateRow {
   return {
     id: id ?? newRowId(),
     url: "",
@@ -74,6 +74,40 @@ function emptyRow(id?: string): CreateRow {
     createStatus: "idle",
     createError: null,
   };
+}
+
+/** Unused trailing input: blank URL and no lookup/create lifecycle worth keeping. */
+export function isUnusedEmptyCreateRow(row: CreateRow): boolean {
+  return (
+    row.url.trim() === "" &&
+    row.lookupStatus === "idle" &&
+    row.createStatus === "idle" &&
+    row.resolvedUrl === null &&
+    row.name === null &&
+    row.lookupError === null &&
+    row.createError === null
+  );
+}
+
+/**
+ * Keep exactly one trailing empty URL row when under the bulk max.
+ * Never zero rows, never more than RAIDER_IO_BULK_MAX, never multiple trailing empties.
+ */
+export function normalizeCreateRows(rows: CreateRow[]): CreateRow[] {
+  const kept = rows.filter((row) => !isUnusedEmptyCreateRow(row));
+  if (kept.length === 0) {
+    const reusable = rows.find(isUnusedEmptyCreateRow);
+    return [reusable ?? emptyRow()];
+  }
+
+  const capped = kept.slice(0, RAIDER_IO_BULK_MAX);
+  if (capped.length >= RAIDER_IO_BULK_MAX) return capped;
+
+  const last = capped[capped.length - 1]!;
+  if (last.url.trim() === "") return capped;
+
+  const reusable = rows.find(isUnusedEmptyCreateRow);
+  return [...capped, reusable ?? emptyRow()];
 }
 
 function identityKey(row: Pick<CreateRow, "name" | "realm" | "region">): string | null {
@@ -222,8 +256,8 @@ export function CharacterFormDialog({
   }
 
   function changeRowUrl(id: string, nextUrl: string) {
-    setRows((current) =>
-      current.map((row) => {
+    setRows((current) => {
+      const updated = current.map((row) => {
         if (row.id !== id) return row;
         if (row.createStatus === "added") return row;
         const trimmed = nextUrl;
@@ -231,22 +265,13 @@ export function CharacterFormDialog({
           return { ...row, url: trimmed };
         }
         return { ...clearRowPreview(row), url: trimmed };
-      }),
-    );
-  }
-
-  function addRow() {
-    setRows((current) => {
-      if (current.length >= RAIDER_IO_BULK_MAX) return current;
-      return [...current, emptyRow()];
+      });
+      return normalizeCreateRows(updated);
     });
   }
 
   function removeRow(id: string) {
-    setRows((current) => {
-      const next = current.filter((row) => row.id !== id);
-      return next.length === 0 ? [emptyRow()] : next;
-    });
+    setRows((current) => normalizeCreateRows(current.filter((row) => row.id !== id)));
   }
 
   function changeRowPrimarySpec(id: string, next: string) {
@@ -590,7 +615,7 @@ export function CharacterFormDialog({
                           <input
                             name={`raiderIoUrl-${row.id}`}
                             autoComplete="off"
-                            placeholder="https://raider.io/characters/eu/antonidas/Synblast"
+                            placeholder="Paste Raider.IO character link"
                             value={row.url}
                             disabled={row.createStatus === "added" || lookingUp || pending}
                             onChange={(event) => changeRowUrl(row.id, event.target.value)}
@@ -733,21 +758,13 @@ export function CharacterFormDialog({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  variant="secondary"
-                  disabled={lookingUp || pending || rows.length >= RAIDER_IO_BULK_MAX}
-                  onClick={addRow}
-                >
-                  + Add another character
-                </Button>
-                <Button
-                  type="button"
                   disabled={lookingUp || pending || rowsNeedingLookup(rows).length === 0}
                   onClick={() => void runBulkLookup()}
                 >
                   {lookingUp ? "Looking up…" : "Look up characters"}
                 </Button>
               </div>
-              {rows.length >= RAIDER_IO_BULK_MAX ? (
+              {rows.length >= RAIDER_IO_BULK_MAX && rows.every((row) => row.url.trim() !== "") ? (
                 <p className="text-xs text-muted">Maximum {RAIDER_IO_BULK_MAX} characters per batch.</p>
               ) : null}
 
