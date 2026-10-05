@@ -613,7 +613,7 @@ describe("discordSyncService.listSyncWork", () => {
     expect(settled.signups.some((entry) => entry.runId === runId)).toBe(false);
   });
 
-  it("refreshes existing Signup once for the canonical Run URL format version, then settles (EDIT → NOOP)", async () => {
+  it("refreshes existing Signup once for the Run-title link format version, then settles (EDIT → NOOP)", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
 
@@ -623,7 +623,7 @@ describe("discordSyncService.listSyncWork", () => {
     const post = await runDiscordPostRepository.findByRunId(runId);
     expect(post?.signupMessageId).toBe("msg-url");
     const previous = JSON.parse(post!.lastSignupSignature!) as Record<string, unknown>;
-    previous.messageFormatVersion = "v6-quick-signup";
+    previous.messageFormatVersion = "v7-canonical-run-url";
     await orm.RunDiscordPost.where({ runId }).update({ lastSignupSignature: JSON.stringify(previous) });
 
     const refresh = await discordSyncService.listSyncWork();
@@ -635,13 +635,14 @@ describe("discordSyncService.listSyncWork", () => {
     expect(data).not.toBeNull();
     const embed = buildSignupEmbed(data!).toJSON();
     expect(embed.title).toBe("Signups");
-    expect(embed.url).toBe(`https://example.test/runs/${runId}`);
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toMatch(/^\[.+\]\(https:\/\/example\.test\/runs\//);
 
     await discordSyncService.recordSignupPost({ runId, channelId: "chan-1", messageId: "msg-url" });
     const after = await runDiscordPostRepository.findByRunId(runId);
     expect(after?.signupMessageId).toBe("msg-url");
     expect(after?.lastSignupSignature).toContain(SIGNUP_MESSAGE_FORMAT_VERSION);
-    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe("v7-canonical-run-url");
+    expect(JSON.parse(after!.lastSignupSignature!).messageFormatVersion).toBe("v8-run-title-link");
 
     expect((await discordSyncService.listSyncWork()).signups.some((entry) => entry.runId === runId)).toBe(false);
     vi.unstubAllEnvs();
@@ -806,7 +807,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     ).toBeUndefined();
   });
 
-  it("refreshes existing Roster once for the canonical Run URL format version, then settles (EDIT → NOOP)", async () => {
+  it("refreshes existing Roster once for the Run-title link format version, then settles (EDIT → NOOP)", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
     const now = new Date();
@@ -825,10 +826,10 @@ describe("discordSyncService.getRosterEmbedData", () => {
     expect((await runDiscordPostRepository.findByRunId(runId))?.lastRosterEmojiFingerprint).toBe(
       rosterEmbedRenderFingerprint("emoji-b"),
     );
-    expect(ROSTER_EMBED_FORMAT_VERSION).toBe("v3-canonical-run-url");
+    expect(ROSTER_EMBED_FORMAT_VERSION).toBe("v4-run-title-link");
 
     await orm.RunDiscordPost.where({ runId }).update({
-      lastRosterEmojiFingerprint: "v2-persistent-split|emoji-b",
+      lastRosterEmojiFingerprint: "v3-canonical-run-url|emoji-b",
     });
 
     const refresh = await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" });
@@ -842,7 +843,8 @@ describe("discordSyncService.getRosterEmbedData", () => {
     expect(data).not.toBeNull();
     const embed = buildRosterEmbed(data!).toJSON();
     expect(embed.title).toBe("Roster");
-    expect(embed.url).toBe(`https://example.test/runs/${runId}`);
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toMatch(/^\[.+\]\(https:\/\/example\.test\/runs\//);
 
     await discordSyncService.recordRosterPost({
       runId,
@@ -852,7 +854,7 @@ describe("discordSyncService.getRosterEmbedData", () => {
     });
     const after = await runDiscordPostRepository.findByRunId(runId);
     expect(after?.rosterMessageId).toBe("roster-msg-url");
-    expect(after?.lastRosterEmojiFingerprint).toBe(`v3-canonical-run-url|emoji-b`);
+    expect(after?.lastRosterEmojiFingerprint).toBe(`v4-run-title-link|emoji-b`);
 
     expect(
       (await discordSyncService.listSyncWork(now, { classEmojiFingerprint: "emoji-b" })).roster.find(

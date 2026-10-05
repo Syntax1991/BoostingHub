@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
-import { absoluteRunUrl } from "@/lib/app-url";
+import { formatDiscordRunTitleLink } from "@/lib/discord-run-title-link";
 import type {
   SignupEmbedData,
   SignupEmbedMember,
@@ -237,12 +237,12 @@ export function buildSignupEmbed(
   const summary = data.contentSummary
     ? `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}\n${data.contentSummary}`
     : `${DIFFICULTY_LABELS[data.difficulty]} · ${data.productLabel}`;
-  const description = `${data.runTitle}\n${summary}`;
+  const description = `${formatDiscordRunTitleLink(data.runTitle, data.runId)}\n${summary}`;
   const raidLeadEmoji = roleEmoji("raidlead", roleIndicators);
   const emptyValue = data.uniqueSignupCount === 0 ? "No signups yet." : EMPTY_FIELD_VALUE;
   const windowLine = data.signupWindowOpen ? "Signups are open." : "Signups are closed.";
 
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setTitle("Signups")
     .setDescription(description)
     .addFields(
@@ -256,9 +256,6 @@ export function buildSignupEmbed(
     )
     .setColor(color)
     .setFooter({ text: `${windowLine} Signup does not mean selected.` });
-  const runUrl = absoluteRunUrl(data.runId);
-  if (runUrl) embed.setURL(runUrl);
-  return embed;
 }
 
 /** Buttons disable once the signup window is no longer open — the server remains the real gate either way. */

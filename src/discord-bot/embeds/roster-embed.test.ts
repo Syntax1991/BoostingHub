@@ -182,27 +182,46 @@ describe("buildRosterEmbed", () => {
     expect(embed.fields?.every((field) => field.value === "No players selected yet.")).toBe(true);
   });
 
-  it("links the embed title to the canonical run page", () => {
+  it("links the Run title in the description, not the Roster embed title", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BETTER_AUTH_URL", "https://example.test");
-    const embed = buildRosterEmbed({ ...data, runId: "run-123" }).toJSON();
+    const embed = buildRosterEmbed({
+      ...data,
+      runId: "run-123",
+      runTitle: "Mon 19:30 HC VIP 7/9 Nyxara",
+    }).toJSON();
     expect(embed.title).toBe("Roster");
-    expect(embed.url).toBe("https://example.test/runs/run-123");
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toBe(
+      "[Mon 19:30 HC VIP 7/9 Nyxara](https://example.test/runs/run-123)",
+    );
   });
 
-  it("does not double a trailing slash on the application origin", () => {
+  it("does not double a trailing slash on the application origin in the Run title link", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BETTER_AUTH_URL", "https://example.test/");
-    const embed = buildRosterEmbed({ ...data, runId: "run-123" }).toJSON();
-    expect(embed.url).toBe("https://example.test/runs/run-123");
+    const embed = buildRosterEmbed({
+      ...data,
+      runId: "run-123",
+      runTitle: "Mon 19:30 HC VIP 7/9 Nyxara",
+    }).toJSON();
+    expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toBe(
+      "[Mon 19:30 HC VIP 7/9 Nyxara](https://example.test/runs/run-123)",
+    );
   });
 
-  it("still builds the embed and omits the URL when production has no base URL", () => {
+  it("still builds the embed with a plain Run title when production has no base URL", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BETTER_AUTH_URL", "");
-    const embed = buildRosterEmbed({ ...data, runId: "run-123" }).toJSON();
+    const embed = buildRosterEmbed({
+      ...data,
+      runId: "run-123",
+      runTitle: "Mon 19:30 HC VIP 7/9 Nyxara",
+    }).toJSON();
     expect(embed.title).toBe("Roster");
-    expect(embed.description).toContain("Weekend Heroic Catch-up");
     expect(embed.url).toBeUndefined();
+    expect(embed.description?.split("\n")[0]).toBe("Mon 19:30 HC VIP 7/9 Nyxara");
+    expect(embed.description).not.toContain("](");
   });
 });
