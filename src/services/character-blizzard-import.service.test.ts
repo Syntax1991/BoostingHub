@@ -1483,6 +1483,36 @@ describe("characterService.addCharacterFromBlizzard (public lookup, no ownership
     expect(created?.wowClass).toBe("PRIEST");
   });
 
+  it("bulk create accepts exactly 10 Characters", async () => {
+    apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400060", isValid: true });
+    apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
+      id: `id-${name}`,
+      name,
+      realmId: "1301",
+      realmSlug: "antonidas",
+      realmName: "Antonidas",
+      wowClass: "MAGE",
+      equippedItemLevel: 560,
+      activeSpecialization: "Frost",
+    }));
+
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      clientId: `ten-${i}`,
+      name: `Tenbulk${"ABCDEFGHIJ"[i]}`,
+      realm: "Antonidas",
+      region: "EU" as const,
+      specialization: "Frost",
+    }));
+    const results = await characterService.addCharactersFromBlizzard(owner, items);
+    expect(results).toHaveLength(10);
+    expect(results.every((row) => row.ok)).toBe(true);
+    for (const item of items) {
+      const row = await orm.Character.where({ userId: ids.owner, name: item.name }).first();
+      createdCharacterIds.push(String(row!.id));
+      expect(row?.blizzardCharacterId).toBeNull();
+    }
+  });
+
   it("bulk create does not recreate already-successful rows when only failures are retried", async () => {
     apiMocks.getCharacterProfileStatus.mockResolvedValue({ id: "400050", isValid: true });
     apiMocks.getCharacterProfileSummary.mockImplementation(async (_region, _realm, name) => ({
