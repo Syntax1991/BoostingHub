@@ -355,19 +355,21 @@ export type SignupSyncWorkItem = {
 /**
  * Presentation version for the persistent Signup Discord message (embed +
  * component layout). Bump when existing Signup posts must refresh without any
- * domain/member-data change — e.g. adding Quick Signup to the button row.
+ * domain/member-data change — e.g. adding Quick Signup to the button row, or
+ * attaching a canonical Run URL to the embed title.
  * Folded into `lastSignupSignature` so existing messages refresh once after
  * deploy — no schema migration.
  */
-export const SIGNUP_MESSAGE_FORMAT_VERSION = "v6-quick-signup";
+export const SIGNUP_MESSAGE_FORMAT_VERSION = "v7-canonical-run-url";
 
 /**
  * Bumped when Roster Discord embed presentation changes without a domain
- * `RunRoster.version` bump (title/layout/targets/empty-state). Combined with
- * the Guild emoji fingerprint into `RunDiscordPost.lastRosterEmojiFingerprint`
- * so existing messages refresh once after deploy — no schema migration.
+ * `RunRoster.version` bump (title/layout/targets/empty-state, or attaching a
+ * canonical Run URL to the embed title). Combined with the Guild emoji
+ * fingerprint into `RunDiscordPost.lastRosterEmojiFingerprint` so existing
+ * messages refresh once after deploy — no schema migration.
  */
-export const ROSTER_EMBED_FORMAT_VERSION = "v2-persistent-split";
+export const ROSTER_EMBED_FORMAT_VERSION = "v3-canonical-run-url";
 
 /** Render fingerprint stored/compared for Roster message refresh detection. */
 export function rosterEmbedRenderFingerprint(classEmojiFingerprint: string): string {
