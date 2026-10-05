@@ -8,6 +8,10 @@ import {
   blizzardProfileNamespace,
   getBlizzardConfig,
 } from "@/lib/blizzard/config";
+import {
+  classifyBlizzardHttpFailure,
+  recordBlizzardBoundaryFailure,
+} from "@/lib/blizzard/blizzard-integration-events";
 import { mapPlayableClassId } from "@/lib/blizzard/playable-class";
 import type {
   BlizzardCharacterRaidEncounters,
@@ -37,7 +41,16 @@ type CachedClientToken = {
 
 let cachedClientToken: CachedClientToken | null = null;
 
-function mapHttpError(status: number, context: string): never {
+async function mapHttpError(status: number, context: string, durationMs: number): Promise<never> {
+  const classified = classifyBlizzardHttpFailure(status);
+  await recordBlizzardBoundaryFailure({
+    context,
+    httpStatus: status,
+    errorCode: classified.errorCode,
+    status: classified.status,
+    durationMs,
+  });
+
   // Only the account-wide WoW profile of the Connect flow: OAuth and userinfo already
   // succeeded, but Blizzard refuses this one account's character list. Not a sign-in failure.
   if (status === 403 && context === "account-profile") {
@@ -64,6 +77,7 @@ async function fetchJson(
   init: RequestInit,
   context: string,
 ): Promise<unknown> {
+  const started = Date.now();
   let response: Response;
   try {
     response = await fetch(url, {
@@ -71,16 +85,30 @@ async function fetchJson(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
+    await recordBlizzardBoundaryFailure({
+      context,
+      httpStatus: null,
+      errorCode: "TIMEOUT",
+      status: "ERROR",
+      durationMs: Date.now() - started,
+    });
     throw new DomainError("BATTLENET_API_UNAVAILABLE", `Battle.net request timed out (${context}).`, 503);
   }
 
   if (!response.ok) {
-    mapHttpError(response.status, context);
+    await mapHttpError(response.status, context, Date.now() - started);
   }
 
   try {
     return (await response.json()) as unknown;
   } catch {
+    await recordBlizzardBoundaryFailure({
+      context,
+      httpStatus: response.status,
+      errorCode: "INVALID_JSON",
+      status: "ERROR",
+      durationMs: Date.now() - started,
+    });
     throw new DomainError("BATTLENET_API_UNAVAILABLE", `Battle.net returned invalid JSON (${context}).`, 503);
   }
 }
