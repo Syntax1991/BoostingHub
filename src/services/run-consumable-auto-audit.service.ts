@@ -11,6 +11,7 @@ import {
   CONSUMABLE_AUTO_AUDIT_POLICY,
   PERMANENT_AUTO_AUDIT_FAILURES,
 } from "@/services/consumable-auto-audit-policy";
+import { recordWarcraftLogsJobSummary } from "@/lib/integration-provider-events";
 
 /**
  * Automatic Consumables Audit after a Run is COMPLETED. The last pulls are
@@ -43,6 +44,7 @@ export const runConsumableAutoAuditService = {
       CONSUMABLE_AUTO_AUDIT_LOCK_KEY.objectId,
     );
     if (!handle) return { status: "SKIPPED_ALREADY_RUNNING" };
+    const started = Date.now();
     try {
       const policy = CONSUMABLE_AUTO_AUDIT_POLICY;
       const completed = await runConsumableAuditRepository.listCompletedRunsBetween(
@@ -77,6 +79,16 @@ export const runConsumableAutoAuditService = {
       for (const item of due.slice(0, policy.maxRunsPerPass)) {
         runs.push(await auditOneRun(item.runId, item.reason, now));
       }
+      const succeeded = runs.filter((row) => row.status === "ANALYZED").length;
+      const failed = runs.length - succeeded;
+      await recordWarcraftLogsJobSummary({
+        operation: "AUTO_AUDIT_PASS",
+        status: failed > 0 ? "WARNING" : "SUCCESS",
+        durationMs: Date.now() - started,
+        processed: runs.length,
+        succeeded,
+        failed,
+      });
       return { status: "COMPLETED", due: due.length, runs };
     } finally {
       await scheduledJobLockRepository.releaseLock(handle);
