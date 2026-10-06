@@ -1,5 +1,7 @@
 import Link from "next/link";
 import {
+  Activity,
+  BarChart3,
   CalendarDays,
   ShieldCheck,
   Swords,
@@ -17,6 +19,8 @@ const ICONS = {
   "boosting-roles": ShieldCheck,
   users: Users,
   characters: Swords,
+  system: Activity,
+  analytics: BarChart3,
 } as const;
 
 function CommunityCoverageSection({ stats }: { stats: CommunityStats }) {

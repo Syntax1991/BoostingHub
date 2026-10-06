@@ -399,23 +399,24 @@ describe("raid lead lifecycle handoffs (managed runs)", () => {
   }, 120_000);
 
   it("management hub attention metrics use the same projection", async () => {
+    const rosterId = await createDraft(lead, "Handoff hub roster");
+    await runService.openRun(lead, rosterId);
     const needsAttendanceId = await inProgressWithTwoBoosters("Handoff hub unmarked");
     const readyId = await inProgressWithTwoBoosters("Handoff hub ready");
     await markAllPresent(readyId);
-    const settleId = await inProgressWithTwoBoosters("Handoff hub settle");
-    await markAllPresent(settleId);
-    await runService.completeRun(lead, settleId);
 
     const overview = await managementHubService.getOverview(lead);
     const runsCard = overview.cards.find((card) => card.id === "runs");
     expect(runsCard).toBeTruthy();
     const byLabel = Object.fromEntries(runsCard!.metrics.map((metric) => [metric.label, Number(metric.value)]));
+    expect(byLabel["Roster work"]).toBeGreaterThanOrEqual(1);
     expect(byLabel["Needs attendance"]).toBeGreaterThanOrEqual(1);
     expect(byLabel["Ready to complete"]).toBeGreaterThanOrEqual(1);
-    expect(byLabel["Needs settlement"]).toBeGreaterThanOrEqual(1);
+    expect(byLabel["Needs settlement"]).toBeUndefined();
 
     // Keep fixtures referenced for cleanup clarity.
     expect(needsAttendanceId).toBeTruthy();
+    expect(rosterId).toBeTruthy();
   }, 120_000);
 
   it("RAID_LEAD cannot mark paid; ADMIN can", async () => {
