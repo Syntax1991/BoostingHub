@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { COMMUNITY_WEEKDAYS } from "@/models/enums";
 import {
   createCommunityScheduleSlotAction,
   updateCommunityScheduleSlotAction,
 } from "@/controllers/community-schedule.actions";
+import type { CommunityScheduleTemplateOption } from "@/services/community-schedule.service";
 
 const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
   MONDAY: "Monday",
@@ -22,6 +23,7 @@ type RaidLeadOption = { id: string; name: string };
 type CreateProps = {
   mode: "create";
   raidLeads: RaidLeadOption[];
+  templates: CommunityScheduleTemplateOption[];
   defaultRaidLeadId?: string | null;
   triggerLabel?: string;
 };
@@ -29,6 +31,7 @@ type CreateProps = {
 type EditProps = {
   mode: "edit";
   raidLeads: RaidLeadOption[];
+  templates: CommunityScheduleTemplateOption[];
   initial: {
     slotId: string;
     weekday: (typeof COMMUNITY_WEEKDAYS)[number];
@@ -36,6 +39,8 @@ type EditProps = {
     label: string;
     notes: string | null;
     raidLeadId: string;
+    runTemplateId: string | null;
+    autoCreateRun: boolean;
   };
   triggerLabel?: string;
 };
@@ -44,6 +49,15 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [raidLeadId, setRaidLeadId] = useState(
+    props.mode === "edit" ? props.initial.raidLeadId : (props.defaultRaidLeadId ?? props.raidLeads[0]?.id ?? ""),
+  );
+  const [runTemplateId, setRunTemplateId] = useState<string>(
+    props.mode === "edit" ? (props.initial.runTemplateId ?? "") : "",
+  );
+  const [autoCreateRun, setAutoCreateRun] = useState(
+    props.mode === "edit" ? props.initial.autoCreateRun : false,
+  );
 
   const initial =
     props.mode === "edit"
@@ -55,7 +69,14 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
           label: "",
           notes: null as string | null,
           raidLeadId: props.defaultRaidLeadId ?? props.raidLeads[0]?.id ?? "",
+          runTemplateId: null as string | null,
+          autoCreateRun: false,
         };
+
+  const templatesForLead = useMemo(
+    () => props.templates.filter((template) => template.raidLeadId === raidLeadId),
+    [props.templates, raidLeadId],
+  );
 
   function submit(formData: FormData) {
     setError(null);
@@ -65,6 +86,8 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
       label: String(formData.get("label") ?? ""),
       notes: String(formData.get("notes") ?? ""),
       raidLeadId: String(formData.get("raidLeadId") ?? ""),
+      runTemplateId: runTemplateId.trim().length > 0 ? runTemplateId : null,
+      autoCreateRun,
     };
     startTransition(async () => {
       const result =
@@ -102,7 +125,8 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
               {props.mode === "create" ? "Add Schedule Slot" : "Edit Schedule Slot"}
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Recurring wall-clock time in Europe/Berlin. Does not create or change Runs.
+              Recurring wall-clock time in Europe/Berlin. Optional template links enable manual or automatic DRAFT
+              run creation per raid-ID window.
             </p>
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1 text-sm">
@@ -146,7 +170,11 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                 <select
                   name="raidLeadId"
                   required
-                  defaultValue={initial.raidLeadId}
+                  value={raidLeadId}
+                  onChange={(event) => {
+                    setRaidLeadId(event.target.value);
+                    setRunTemplateId("");
+                  }}
                   className="h-9 rounded-md border border-border bg-surface-raised px-2"
                 >
                   {props.raidLeads.map((lead) => (
@@ -155,6 +183,34 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs text-muted">Run Template (optional)</span>
+                <select
+                  value={runTemplateId}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setRunTemplateId(next);
+                    if (!next) setAutoCreateRun(false);
+                  }}
+                  className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                >
+                  <option value="">None</option>
+                  {templatesForLead.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={autoCreateRun}
+                  disabled={!runTemplateId}
+                  onChange={(event) => setAutoCreateRun(event.target.checked)}
+                />
+                <span>Auto-create DRAFT runs (hourly job)</span>
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Notes (optional)</span>

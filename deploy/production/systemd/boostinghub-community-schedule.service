@@ -1,0 +1,21 @@
+# One-shot community schedule DRAFT materialization, started by boostinghub-community-schedule.timer.
+#
+# Reference copy (docs/deployment-production.md). Install manually on the host as root:
+#   install -o root -g root -m 0644 deploy/production/systemd/boostinghub-community-schedule.service deploy/production/systemd/boostinghub-community-schedule.timer /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now boostinghub-community-schedule.timer
+#
+# Manual run: systemctl start boostinghub-community-schedule.service
+
+[Unit]
+Description=BoostingHub one-shot community schedule materialization
+After=network-online.target postgresql.service boostinghub-web.service
+
+[Service]
+Type=oneshot
+User=boostinghub
+WorkingDirectory=/var/www/boostinghub
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/boostinghub/.env
+ExecStart=/usr/bin/npm run materialize:community-schedule
+Nice=10

@@ -1,0 +1,14 @@
+# Timer for boostinghub-community-schedule.service (hourly).
+
+[Unit]
+Description=BoostingHub community schedule materialization hourly
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+AccuracySec=5min
+Persistent=true
+Unit=boostinghub-community-schedule.service
+
+[Install]
+WantedBy=timers.target
