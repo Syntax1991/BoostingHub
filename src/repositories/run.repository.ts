@@ -35,7 +35,9 @@ import {
   runReactivatedChannelSourceKey,
   type CreateRunDiscordAnnouncementInput,
 } from "@/repositories/run-discord-announcement.repository";
+import { isUniqueViolation } from "@/repositories/community-schedule-run.repository";
 import { lockRosterInTx } from "@/repositories/roster.repository";
+import type { RunDomainEventActorKind } from "@/models/enums";
 import { canCancelRun, canEditRunBeforeStart, REACTIVATABLE_FROM_STATUSES } from "@/services/run-state";
 
 /**
@@ -512,6 +514,79 @@ export const runRepository = {
       });
     });
     return id;
+  },
+
+  /**
+   * Atomic DRAFT Run + contents + roster + CommunityScheduleRun link.
+   * On unique (scheduleSlotId, windowStartAt), throws SCHEDULE_OCCURRENCE_ALREADY_CREATED.
+   */
+  async createDraftWithScheduleLink(input: {
+    draft: RunCreateWithContentsInput;
+    link: {
+      scheduleSlotId: string;
+      windowStartAt: string;
+      occurrenceStartAt: string;
+      createdById: string | null;
+      createdByKind: RunDomainEventActorKind;
+    };
+  }): Promise<{ runId: string; linkId: string }> {
+    const runId = crypto.randomUUID();
+    const linkId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    try {
+      await db.transaction(async (tx) => {
+        const txOrm = ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+        await txOrm.Run.create({
+          id: runId,
+          title: input.draft.title,
+          difficulty: input.draft.difficulty,
+          lootType: input.draft.lootType,
+          scheduledStartAt: input.draft.scheduledStartAt,
+          status: "DRAFT",
+          raidLeadId: input.draft.raidLeadId,
+          notes: input.draft.notes,
+          desiredTankCount: input.draft.desiredTankCount,
+          desiredHealerCount: input.draft.desiredHealerCount,
+          desiredDpsCount: input.draft.desiredDpsCount,
+          desiredLootbuddyCount: input.draft.desiredLootbuddyCount ?? 0,
+          discordRolePing: input.draft.discordRolePing ?? true,
+          signupsOpen: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await insertRaidContents(txOrm, runId, input.draft.contents, now);
+        await txOrm.RunRoster.create({
+          id: crypto.randomUUID(),
+          runId,
+          state: "DRAFT",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await txOrm.CommunityScheduleRun.create({
+          id: linkId,
+          scheduleSlotId: input.link.scheduleSlotId,
+          windowStartAt: input.link.windowStartAt,
+          occurrenceStartAt: input.link.occurrenceStartAt,
+          runId,
+          createdById: input.link.createdById,
+          createdByKind: input.link.createdByKind,
+          createdAt: now,
+        });
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new DomainError(
+          "SCHEDULE_OCCURRENCE_ALREADY_CREATED",
+          "A run draft already exists for this schedule occurrence.",
+          409,
+        );
+      }
+      throw error;
+    }
+
+    return { runId, linkId };
   },
 
   /**

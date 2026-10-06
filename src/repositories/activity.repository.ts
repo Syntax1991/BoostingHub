@@ -31,7 +31,7 @@ export const activityRepository = {
     return row ? { id: asString(row.id), occurredAt: asString(row.occurredAt) } : null;
   },
 
-  async create(input: { userId: string; type: string; message: string }) {
+  async create(input: { userId: string | null; type: string; message: string }) {
     await orm.ActivityEvent.create({
       id: crypto.randomUUID(),
       userId: input.userId,

@@ -75,6 +75,10 @@ export type ScheduleOccurrence = {
   /** Calendar Y-M-D in the community timezone for this occurrence. */
   localDate: string;
   window: RaidIdWindow;
+  /** Raid-ID window lower bound (from classifyRunWeek). */
+  windowStartAt: string;
+  /** Raid-ID window upper bound (exclusive). */
+  windowEndAt: string;
 };
 
 /**
@@ -153,6 +157,8 @@ export function resolveScheduleSlotOccurrence(input: {
     localStartTime,
     localDate: `${local.year}-${pad(local.month)}-${pad(local.day)}`,
     window: input.window,
+    windowStartAt: windowStartIso,
+    windowEndAt: windowEndIso,
   };
 }
 

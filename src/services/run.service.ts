@@ -20,7 +20,9 @@ import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunS
 import { activityRepository } from "@/repositories/activity.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
 import { raidRepository } from "@/repositories/raid.repository";
+import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import { runRepository, type RunCreateWithContentsInput } from "@/repositories/run.repository";
+import type { RunTemplateRecord } from "@/repositories/run-template.repository";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { userRepository } from "@/repositories/user.repository";
 import { attendanceService } from "@/services/attendance.service";
@@ -537,6 +539,105 @@ export const runService = {
     });
 
     return { id };
+  },
+
+  async prepareDraftFromTemplate(input: {
+    template: RunTemplateRecord;
+    scheduledStartAt: string;
+  }): Promise<RunCreateWithContentsInput> {
+    await raidRepository.ensureReferenceRaids();
+    const effective: EffectiveRunInput = {
+      raidId: input.template.raidId,
+      plannedBossCount: input.template.plannedBossCount,
+      difficulty: input.template.difficulty,
+      lootType: input.template.lootType,
+      scheduledStartAt: input.scheduledStartAt,
+      raidLeadId: input.template.raidLeadId,
+      notes: input.template.notes,
+      desiredTankCount: input.template.desiredTankCount,
+      desiredHealerCount: input.template.desiredHealerCount,
+      desiredDpsCount: input.template.desiredDpsCount,
+      desiredLootbuddyCount: input.template.desiredLootbuddyCount,
+      discordRolePing: true,
+    };
+    const contents = expandEffectiveContents(effective);
+    const raidById = await resolveRaidsForContents(contents);
+    const raidLead = await requireEligibleRaidLead(input.template.raidLeadId);
+    return prepareRunDraft(effective, {
+      contents,
+      raidById,
+      raidLeadId: input.template.raidLeadId,
+      raidLeadName: raidLead.name,
+    });
+  },
+
+  async createScheduleMaterializedDraft(input: {
+    template: RunTemplateRecord;
+    scheduledStartAt: string;
+    scheduleSlotId: string;
+    windowStartAt: string;
+    actor: { kind: "USER"; user: AuthenticatedUser } | { kind: "SYSTEM" };
+  }): Promise<{ runId: string; alreadyExisted: boolean }> {
+    const draft = await this.prepareDraftFromTemplate({
+      template: input.template,
+      scheduledStartAt: input.scheduledStartAt,
+    });
+
+    const createdByKind = input.actor.kind;
+    const createdById = input.actor.kind === "USER" ? input.actor.user.id : null;
+    const materializedBy = createdByKind;
+
+    try {
+      const { runId } = await runRepository.createDraftWithScheduleLink({
+        draft,
+        link: {
+          scheduleSlotId: input.scheduleSlotId,
+          windowStartAt: input.windowStartAt,
+          occurrenceStartAt: input.scheduledStartAt,
+          createdById,
+          createdByKind,
+        },
+      });
+
+      await runDomainEventService.record({
+        runId,
+        type: "RUN_CREATED",
+        summary: "Run draft created from community schedule.",
+        actorKind: createdByKind,
+        actorUser: input.actor.kind === "USER" ? input.actor.user : null,
+        payload: {
+          source: "COMMUNITY_SCHEDULE",
+          scheduleSlotId: input.scheduleSlotId,
+          scheduleWindowStartAt: input.windowStartAt,
+          occurrenceStartAt: input.scheduledStartAt,
+          materializedBy,
+          difficulty: draft.difficulty,
+          lootType: draft.lootType,
+        },
+      });
+
+      if (input.actor.kind === "USER") {
+        await activityRepository.create({
+          userId: input.actor.user.id,
+          type: "RUN_CREATED",
+          message: "Created a run draft from the community schedule.",
+        });
+      }
+
+      return { runId, alreadyExisted: false };
+    } catch (error) {
+      if (!isDomainError(error) || error.code !== "SCHEDULE_OCCURRENCE_ALREADY_CREATED") {
+        throw error;
+      }
+      const existing = await communityScheduleRunRepository.findBySlotAndWindow(
+        input.scheduleSlotId,
+        input.windowStartAt,
+      );
+      if (!existing) {
+        throw error;
+      }
+      return { runId: existing.runId, alreadyExisted: true };
+    }
   },
 
   async getCreateManyForm(user: AuthenticatedUser) {
