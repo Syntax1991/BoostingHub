@@ -85,7 +85,8 @@ function isProviderConfigured(provider: IntegrationProvider): boolean {
     case "DISCORD":
       return isDiscordBotConfigured();
     case "RAIDER_IO":
-      // Local URL parser — always available in-app.
+      // Local URL parser + optional soft API enrichment. Access key is optional
+      // (higher rate limits only) — never NOT_CONFIGURED when the key is absent.
       return true;
     case "SYSTEM":
       return true;
@@ -232,7 +233,11 @@ export const systemHealthService = {
           state: deriveProviderHealth({
             provider,
             configured,
-            recentStatuses: recent.map((row) => row.status),
+            recentEvents: recent.map((row) => ({
+              status: row.status,
+              operation: row.operation,
+              errorCode: row.errorCode,
+            })),
           }),
         };
         if (provider === "BLIZZARD") {

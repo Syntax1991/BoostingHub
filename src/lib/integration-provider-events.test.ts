@@ -7,6 +7,7 @@ vi.mock("@/services/integration-event.service", () => ({
 }));
 
 import {
+  recordRaiderIoApiOutcome,
   recordRaiderIoParseResult,
   recordWarcraftLogsOutcome,
 } from "@/lib/integration-provider-events";
@@ -72,6 +73,44 @@ describe("recordRaiderIoParseResult", () => {
         provider: "RAIDER_IO",
         errorCode: "WRONG_HOST",
         status: "WARNING",
+      }),
+    );
+  });
+});
+
+describe("recordRaiderIoApiOutcome", () => {
+  it("records TEMPORARY_FAILURE as WARNING without secrets", async () => {
+    await recordRaiderIoApiOutcome({
+      status: "TEMPORARY_FAILURE",
+      region: "EU",
+      durationMs: 40,
+      reason: "Raider.IO HTTP 503",
+    });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "RAIDER_IO",
+        operation: "CHARACTER_EQUIPPED_ILVL",
+        status: "WARNING",
+        errorCode: "RAIDER_IO_UNAVAILABLE",
+        region: "EU",
+      }),
+    );
+    const arg = record.mock.calls[0]![0] as Record<string, unknown>;
+    expect(JSON.stringify(arg)).not.toMatch(/access_key|Authorization|token/i);
+  });
+
+  it("records SUCCESS so health can recover after TEMPORARY_FAILURE", async () => {
+    await recordRaiderIoApiOutcome({
+      status: "SUCCESS",
+      region: "EU",
+      durationMs: 35,
+    });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "RAIDER_IO",
+        operation: "CHARACTER_EQUIPPED_ILVL",
+        status: "SUCCESS",
+        region: "EU",
       }),
     );
   });

@@ -111,6 +111,7 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
                       {card.blizzard.lastScheduledPass.durationMs != null
                         ? ` · ${card.blizzard.lastScheduledPass.durationMs}ms`
                         : ""}
+                      {` · ${formatWhen(card.blizzard.lastScheduledPass.createdAt)}`}
                     </p>
                   ) : (
                     <p className="text-muted">No scheduled sync pass recorded in the recent window.</p>

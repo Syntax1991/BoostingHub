@@ -1,11 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 const getCharacterEquippedItemLevel = vi.hoisted(() => vi.fn());
+const recordRaiderIoApiOutcome = vi.hoisted(() => vi.fn());
 
 vi.mock("@/integrations/raider-io/raider-io-api-client", () => ({
   raiderIoApiClient: {
     getCharacterEquippedItemLevel,
   },
+}));
+
+vi.mock("@/lib/integration-provider-events", () => ({
+  recordRaiderIoApiOutcome,
 }));
 
 import {
@@ -15,6 +20,8 @@ import {
 
 beforeEach(() => {
   getCharacterEquippedItemLevel.mockReset();
+  recordRaiderIoApiOutcome.mockReset();
+  recordRaiderIoApiOutcome.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -49,6 +56,9 @@ describe("resolveRaiderIoItemLevelEnrichment", () => {
         blizzardEquippedItemLevel: 272,
       }),
     ).resolves.toBe(312);
+    expect(recordRaiderIoApiOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "SUCCESS", region: "EU" }),
+    );
   });
 
   it("returns null when RIO is lower or equal", async () => {
@@ -65,9 +75,13 @@ describe("resolveRaiderIoItemLevelEnrichment", () => {
         blizzardEquippedItemLevel: 320,
       }),
     ).resolves.toBeNull();
+    // API succeeded — record SUCCESS for health recovery even when ilvl is not preferred.
+    expect(recordRaiderIoApiOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "SUCCESS", region: "EU" }),
+    );
   });
 
-  it("returns null on NOT_FOUND or TEMPORARY_FAILURE", async () => {
+  it("returns null on NOT_FOUND without API telemetry flood", async () => {
     getCharacterEquippedItemLevel.mockResolvedValue({ status: "NOT_FOUND" });
     await expect(
       resolveRaiderIoItemLevelEnrichment({
@@ -77,10 +91,13 @@ describe("resolveRaiderIoItemLevelEnrichment", () => {
         blizzardEquippedItemLevel: 272,
       }),
     ).resolves.toBeNull();
+    expect(recordRaiderIoApiOutcome).not.toHaveBeenCalled();
+  });
 
+  it("soft-fails TEMPORARY_FAILURE with telemetry and never throws", async () => {
     getCharacterEquippedItemLevel.mockResolvedValue({
       status: "TEMPORARY_FAILURE",
-      message: "boom",
+      message: "Raider.IO HTTP 503",
     });
     await expect(
       resolveRaiderIoItemLevelEnrichment({
@@ -90,5 +107,12 @@ describe("resolveRaiderIoItemLevelEnrichment", () => {
         blizzardEquippedItemLevel: 272,
       }),
     ).resolves.toBeNull();
+    expect(recordRaiderIoApiOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "TEMPORARY_FAILURE",
+        region: "EU",
+        reason: "Raider.IO HTTP 503",
+      }),
+    );
   });
 });
