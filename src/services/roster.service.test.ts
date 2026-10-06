@@ -941,7 +941,11 @@ describe("rosterService publishedRole snapshot", () => {
       ],
     });
     view = await rosterService.getRosterManagementView(thorne, run.id);
-    expect(view.roster.externalBoosters.map((b) => [b.name, b.role])).toEqual([
+    expect(
+      view.roster.externalBoosters
+        .map((b) => [b.name, b.role] as const)
+        .sort((a, b) => a[0].localeCompare(b[0])),
+    ).toEqual([
       ["dawn", "RANGED_DPS"],
       ["shadow", "MELEE_DPS"],
     ]);

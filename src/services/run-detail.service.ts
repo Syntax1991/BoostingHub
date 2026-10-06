@@ -28,6 +28,7 @@ import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.re
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runConsumableAuditService } from "@/services/run-consumable-audit.service";
 import { runPreflightService, type RunPreflightResult } from "@/services/run-preflight.service";
+import { runDomainEventService, type RunDomainEventView } from "@/services/run-domain-event.service";
 
 /** Hand-added unregistered booster: renders as `@name <class>` in the Final Setup. */
 function externalFinalSetupParticipant(booster: ExternalBooster): FinalSetupParticipant {
@@ -187,6 +188,7 @@ export const runDetailService = {
     const consumables = await runConsumableAuditService.getAuditViewForRunDetail(user, run);
     let archiveTranscript: { filename: string; downloadHref: string } | null = null;
     let preflight: RunPreflightResult | null = null;
+    let history: RunDomainEventView[] | null = null;
     if (manage && manager) {
       const discordPost = await runDiscordPostRepository.findByRunId(runId);
       if (discordPost?.archiveTranscriptHtml) {
@@ -196,6 +198,7 @@ export const runDetailService = {
         };
       }
       preflight = await runPreflightService.evaluateWithManager(user, runId, manager, discordPost);
+      history = await runDomainEventService.listForRun(runId, 50);
     }
 
     let finalSetupPreview: FinalSetupInput | null = null;
@@ -309,6 +312,7 @@ export const runDetailService = {
       publishedRoster,
       manager,
       preflight,
+      history,
       startSnapshot,
       archiveTranscript,
       finalSetupPreview,

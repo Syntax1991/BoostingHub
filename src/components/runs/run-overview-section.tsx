@@ -1,11 +1,13 @@
 import { formatDateTime } from "@/lib/datetime";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
+import { RunHistorySection } from "@/components/runs/run-history-section";
 import type { RunDetailView } from "@/services/run-detail.service";
 
 export function RunOverviewSection({ data }: { data: RunDetailView }) {
   const run = data.overview;
   return (
+    <div className="space-y-4">
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader title="Run" description="Status and signup window are changed through explicit manager actions, not this summary." />
@@ -85,6 +87,8 @@ export function RunOverviewSection({ data }: { data: RunDetailView }) {
           <p className="px-4 py-4 text-sm">{run.notes}</p>
         </Card>
       ) : null}
+    </div>
+    {data.permissions.canManageRun && data.history ? <RunHistorySection events={data.history} /> : null}
     </div>
   );
 }
