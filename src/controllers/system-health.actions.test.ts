@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { DomainError } from "@/lib/errors";
 
 const { requireAdmin, forceRefreshAll, runDuePass, record } = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
@@ -53,6 +54,61 @@ describe("system health admin actions", () => {
     );
   });
 
+  it("records bulk refresh cooldown as WARNING (not ERROR / outage)", async () => {
+    forceRefreshAll.mockRejectedValue(
+      new DomainError("CHARACTER_BULK_REFRESH_COOLDOWN", "Try again later.", 429),
+    );
+    const result = await adminSystemForceRefreshAllAction();
+    expect(result.ok).toBe(false);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "SYSTEM",
+        operation: "ADMIN_FORCE_REFRESH_ALL",
+        status: "WARNING",
+        errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
+      }),
+    );
+  });
+
+  it("records sync already running as WARNING", async () => {
+    forceRefreshAll.mockRejectedValue(
+      new DomainError("CHARACTER_SYNC_ALREADY_RUNNING", "Already running.", 409),
+    );
+    await adminSystemForceRefreshAllAction();
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "WARNING",
+        errorCode: "CHARACTER_SYNC_ALREADY_RUNNING",
+      }),
+    );
+  });
+
+  it("records authorization denial as WARNING (not SYSTEM DOWN telemetry)", async () => {
+    requireAdmin.mockRejectedValue(new DomainError("NOT_AUTHORIZED", "Admin required.", 403));
+    const result = await adminSystemForceRefreshAllAction();
+    expect(result.ok).toBe(false);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "SYSTEM",
+        status: "WARNING",
+        errorCode: "NOT_AUTHORIZED",
+      }),
+    );
+  });
+
+  it("records unexpected non-domain failure as ERROR", async () => {
+    forceRefreshAll.mockRejectedValue(new Error("disk exploded"));
+    await adminSystemForceRefreshAllAction();
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "SYSTEM",
+        operation: "ADMIN_FORCE_REFRESH_ALL",
+        status: "ERROR",
+        errorCode: "ADMIN_ACTION_FAILED",
+      }),
+    );
+  });
+
   it("WCL auto-audit pass records SUCCESS summary", async () => {
     runDuePass.mockResolvedValue({
       status: "COMPLETED",
@@ -66,6 +122,20 @@ describe("system health admin actions", () => {
         provider: "SYSTEM",
         operation: "ADMIN_WCL_AUTO_AUDIT_PASS",
         status: "SUCCESS",
+      }),
+    );
+  });
+
+  it("WCL auto-audit already running records WARNING ALREADY_RUNNING", async () => {
+    runDuePass.mockResolvedValue({ status: "SKIPPED_ALREADY_RUNNING" });
+    const result = await adminSystemWclAutoAuditPassAction();
+    expect(result.ok).toBe(true);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "SYSTEM",
+        operation: "ADMIN_WCL_AUTO_AUDIT_PASS",
+        status: "WARNING",
+        errorCode: "ALREADY_RUNNING",
       }),
     );
   });

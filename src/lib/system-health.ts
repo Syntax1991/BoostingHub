@@ -36,6 +36,32 @@ export const PROVIDER_AUTHORITATIVE_OPERATIONS: Partial<Record<IntegrationProvid
 };
 
 /**
+ * Explicit SYSTEM admin/control-plane codes that must not define provider outage.
+ * Verified from forceRefreshAll / runDuePass / requireAdmin — not broad matching.
+ * Events remain visible in Recent Events; only roll-up ignores them.
+ */
+export const SYSTEM_DOMAIN_NEUTRAL_ERROR_CODES = [
+  "CHARACTER_BULK_REFRESH_COOLDOWN",
+  "CHARACTER_SYNC_ALREADY_RUNNING",
+  "ALREADY_RUNNING",
+  "NOT_AUTHORIZED",
+  "NOT_AUTHENTICATED",
+  "ACCOUNT_DISABLED",
+  "VALIDATION_FAILED",
+  "BATTLENET_NOT_CONFIGURED",
+] as const;
+
+export type SystemDomainNeutralErrorCode = (typeof SYSTEM_DOMAIN_NEUTRAL_ERROR_CODES)[number];
+
+const SYSTEM_DOMAIN_NEUTRAL_ERROR_CODE_SET: ReadonlySet<string> = new Set(
+  SYSTEM_DOMAIN_NEUTRAL_ERROR_CODES,
+);
+
+export function isSystemDomainNeutralErrorCode(code: string | null | undefined): boolean {
+  return typeof code === "string" && SYSTEM_DOMAIN_NEUTRAL_ERROR_CODE_SET.has(code);
+}
+
+/**
  * Domain-neutral / user-input outcomes that must not mark the provider unhealthy.
  * They stay visible in the event table.
  */
@@ -54,6 +80,9 @@ export function isDomainNeutralHealthEvent(
   if (provider === "BLIZZARD") {
     // Character-level 404 telemetry (if present) is owned by Character Operations.
     return event.errorCode === "HTTP_404" || event.errorCode === "PROFILE_UNAVAILABLE";
+  }
+  if (provider === "SYSTEM") {
+    return isSystemDomainNeutralErrorCode(event.errorCode);
   }
   return false;
 }

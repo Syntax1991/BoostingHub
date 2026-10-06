@@ -234,6 +234,143 @@ describe("deriveProviderHealth — Warcraft Logs", () => {
   });
 });
 
+describe("deriveProviderHealth — SYSTEM domain neutrality", () => {
+  it("bulk refresh cooldown is domain-neutral (not DOWN)", () => {
+    expect(
+      isDomainNeutralHealthEvent("SYSTEM", {
+        status: "ERROR",
+        operation: "ADMIN_FORCE_REFRESH_ALL",
+        errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
+      }),
+    ).toBe(true);
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events({
+          status: "ERROR",
+          operation: "ADMIN_FORCE_REFRESH_ALL",
+          errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
+        }),
+      }),
+    ).toBe("HEALTHY");
+  });
+
+  it("production case: newest cooldown ERROR + older SUCCESS => HEALTHY; ERROR stays in event list", () => {
+    const recentEvents = events(
+      {
+        status: "ERROR",
+        operation: "ADMIN_FORCE_REFRESH_ALL",
+        errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
+      },
+      { status: "SUCCESS", operation: "ADMIN_FORCE_REFRESH_ALL" },
+      { status: "SUCCESS", operation: "TELEMETRY_FOUNDATION_SMOKE" },
+    );
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents,
+      }),
+    ).toBe("HEALTHY");
+    // Health roll-up ignores the guard; Recent Events still lists it.
+    expect(recentEvents[0]).toMatchObject({
+      status: "ERROR",
+      errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
+    });
+  });
+
+  it("sync already running is domain-neutral", () => {
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events({
+          status: "WARNING",
+          operation: "ADMIN_FORCE_REFRESH_ALL",
+          errorCode: "CHARACTER_SYNC_ALREADY_RUNNING",
+        }),
+      }),
+    ).toBe("HEALTHY");
+  });
+
+  it("WCL auto-audit already running is domain-neutral", () => {
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events({
+          status: "WARNING",
+          operation: "ADMIN_WCL_AUTO_AUDIT_PASS",
+          errorCode: "ALREADY_RUNNING",
+        }),
+      }),
+    ).toBe("HEALTHY");
+  });
+
+  it("authorization denial does not mark SYSTEM DOWN", () => {
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events({
+          status: "WARNING",
+          operation: "ADMIN_FORCE_REFRESH_ALL",
+          errorCode: "NOT_AUTHORIZED",
+        }),
+      }),
+    ).toBe("HEALTHY");
+  });
+
+  it("genuine unexpected ERROR remains DOWN", () => {
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events({
+          status: "ERROR",
+          operation: "ADMIN_FORCE_REFRESH_ALL",
+          errorCode: "ADMIN_ACTION_FAILED",
+        }),
+      }),
+    ).toBe("DOWN");
+  });
+
+  it("ERROR then SUCCESS recovery still works for genuine failures", () => {
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events(
+          { status: "SUCCESS", operation: "ADMIN_FORCE_REFRESH_ALL" },
+          { status: "ERROR", operation: "ADMIN_FORCE_REFRESH_ALL", errorCode: "ADMIN_ACTION_FAILED" },
+        ),
+      }),
+    ).toBe("HEALTHY");
+  });
+
+  it("neutral event alone does not falsely report DOWN", () => {
+    expect(
+      deriveProviderHealth({
+        provider: "SYSTEM",
+        configured: true,
+        recentEvents: events(
+          {
+            status: "WARNING",
+            operation: "ADMIN_FORCE_REFRESH_ALL",
+            errorCode: "CHARACTER_BULK_REFRESH_COOLDOWN",
+          },
+          {
+            status: "WARNING",
+            operation: "ADMIN_WCL_AUTO_AUDIT_PASS",
+            errorCode: "ALREADY_RUNNING",
+          },
+        ),
+      }),
+    ).toBe("HEALTHY");
+  });
+});
+
 describe("deriveProviderHealth — Raider.IO", () => {
   it("PARSE_URL signals alone stay HEALTHY (user input / parser, not outage)", () => {
     expect(
