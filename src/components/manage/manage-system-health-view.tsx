@@ -9,6 +9,7 @@ import {
 import type { SystemHealthPage } from "@/services/system-health.service";
 import type { SystemHealthState } from "@/lib/system-health";
 import { SYSTEM_HEALTH_PROVIDER_LABELS } from "@/lib/system-health";
+import { SystemHealthAdminActions } from "@/components/manage/system-health-admin-actions";
 
 const STATE_STYLES: Record<SystemHealthState, string> = {
   HEALTHY: "bg-emerald-500/15 text-emerald-700",
@@ -56,6 +57,8 @@ export function ManageSystemHealthView({ page }: { page: SystemHealthPage }) {
         title="System Health"
         description="Aggregate integration health and recent structured telemetry. Character-level Blizzard troubleshooting stays on Character Operations."
       />
+
+      <SystemHealthAdminActions />
 
       <section aria-labelledby="provider-health-heading" className="mb-8">
         <h2 id="provider-health-heading" className="mb-3 text-sm font-semibold">
