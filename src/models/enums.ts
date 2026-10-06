@@ -164,6 +164,30 @@ export const INTEGRATION_EVENT_STATUSES = ["SUCCESS", "WARNING", "ERROR"] as con
 export type IntegrationEventStatus = (typeof INTEGRATION_EVENT_STATUSES)[number];
 export type RunDiscordAnnouncementType = (typeof RUN_DISCORD_ANNOUNCEMENT_TYPES)[number];
 
+/** RunDomainEvent.actorKind — SYSTEM never fabricates a user actor. */
+export const RUN_DOMAIN_EVENT_ACTOR_KINDS = ["USER", "SYSTEM"] as const;
+export type RunDomainEventActorKind = (typeof RUN_DOMAIN_EVENT_ACTOR_KINDS)[number];
+
+/** Stable RunDomainEvent.type keys for meaningful lifecycle events. */
+export const RUN_DOMAIN_EVENT_TYPES = [
+  "RUN_CREATED",
+  "RUN_OPENED",
+  "RUN_SCHEDULE_CHANGED",
+  "RUN_CONTENT_CHANGED",
+  "RUN_RAID_LEAD_CHANGED",
+  "SIGNUPS_OPENED",
+  "SIGNUPS_CLOSED",
+  "ROSTER_PUBLISHED",
+  "ROSTER_SELECTION_CHANGED",
+  "EXTERNAL_BOOSTERS_UPDATED",
+  "RUN_STARTED",
+  "ATTENDANCE_CORRECTED",
+  "RUN_COMPLETED",
+  "RUN_CANCELLED",
+  "RUN_REACTIVATED",
+] as const;
+export type RunDomainEventType = (typeof RUN_DOMAIN_EVENT_TYPES)[number];
+
 export const MARKABLE_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.filter(
   (status) => status !== "UNMARKED",
 ) as readonly Exclude<AttendanceStatus, "UNMARKED">[];

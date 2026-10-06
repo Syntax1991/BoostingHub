@@ -18,6 +18,7 @@ import {
   STRIKE_STATUSES,
   INTEGRATION_PROVIDERS,
   INTEGRATION_EVENT_STATUSES,
+  RUN_DOMAIN_EVENT_ACTOR_KINDS,
   WOW_CLASSES,
   WOW_REGIONS,
   type AccountRole,
@@ -41,6 +42,7 @@ import {
   type WowRegion,
   type IntegrationProvider,
   type IntegrationEventStatus,
+  type RunDomainEventActorKind,
 } from "@/models/enums";
 
 function asString(value: unknown, fallback = ""): string {
@@ -153,6 +155,10 @@ export function mapIntegrationProvider(value: unknown): IntegrationProvider {
 
 export function mapIntegrationEventStatus(value: unknown): IntegrationEventStatus {
   return asEnum(value, INTEGRATION_EVENT_STATUSES, "ERROR");
+}
+
+export function mapRunDomainEventActorKind(value: unknown): RunDomainEventActorKind {
+  return asEnum(value, RUN_DOMAIN_EVENT_ACTOR_KINDS, "SYSTEM");
 }
 
 export function mapWowRegionOrNull(value: unknown): WowRegion | null {

@@ -12,6 +12,7 @@ import {
   type ExternalBoosterInput,
 } from "@/lib/external-booster";
 import type { CharacterRole, ParticipationType, WowClass } from "@/models/enums";
+import { runDomainEventService } from "@/services/run-domain-event.service";
 
 /** Who can step in for a participant after Start: active signups of this Run that are not on the roster. */
 export type ReplacementCandidate = {
@@ -221,12 +222,22 @@ export const attendanceService = {
       throw new DomainError("VALIDATION_FAILED", `Attendance notes must be ${ATTENDANCE_NOTE_MAX} characters or fewer.`);
     }
     const now = new Date().toISOString();
+    const previousStatus = row.status;
     await attendanceRepository.updateStatus(row.id, {
       status,
       note,
       markedAt: status === "UNMARKED" ? null : now,
       markedById: status === "UNMARKED" ? null : user.id,
     });
+    if (previousStatus !== status) {
+      await runDomainEventService.record({
+        runId: row.runId,
+        actorUser: user,
+        type: "ATTENDANCE_CORRECTED",
+        summary: `Attendance updated to ${status}.`,
+        payload: { fromStatus: previousStatus, toStatus: status },
+      });
+    }
     return { runId: row.runId };
   },
 

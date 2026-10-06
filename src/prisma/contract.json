@@ -108,6 +108,10 @@
       "model": "RunDiscordPost",
       "namespace": "public"
     },
+    "run_domain_event": {
+      "model": "RunDomainEvent",
+      "namespace": "public"
+    },
     "run_external_booster": {
       "model": "RunExternalBooster",
       "namespace": "public"
@@ -611,6 +615,19 @@
               {
                 "name": "RUN_REACTIVATED",
                 "value": "RUN_REACTIVATED"
+              }
+            ]
+          },
+          "RunDomainEventActorKind": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "USER",
+                "value": "USER"
+              },
+              {
+                "name": "SYSTEM",
+                "value": "SYSTEM"
               }
             ]
           },
@@ -3325,6 +3342,21 @@
                   "namespace": "public"
                 }
               },
+              "domainEvents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "RunDomainEvent",
+                  "namespace": "public"
+                }
+              },
               "notifications": {
                 "cardinality": "1:N",
                 "on": {
@@ -5071,6 +5103,134 @@
               },
               "namespaceId": "public",
               "table": "run_discord_post"
+            }
+          },
+          "RunDomainEvent": {
+            "fields": {
+              "actorKind": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunDomainEventActorKind",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "actorUserId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "occurredAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "payloadJson": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "summary": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "type": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "actorUser": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "actorUserId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "actorKind": {
+                  "column": "actorKind"
+                },
+                "actorUserId": {
+                  "column": "actorUserId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "occurredAt": {
+                  "column": "occurredAt"
+                },
+                "payloadJson": {
+                  "column": "payloadJson"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "summary": {
+                  "column": "summary"
+                },
+                "type": {
+                  "column": "type"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_domain_event"
             }
           },
           "RunExternalBooster": {
@@ -8374,6 +8534,21 @@
                 },
                 "to": {
                   "model": "Strike",
+                  "namespace": "public"
+                }
+              },
+              "runDomainEvents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "actorUserId"
+                  ]
+                },
+                "to": {
+                  "model": "RunDomainEvent",
                   "namespace": "public"
                 }
               },
@@ -12415,6 +12590,153 @@
                 }
               ]
             },
+            "run_domain_event": {
+              "checks": [
+                {
+                  "expression": "\"actorKind\" IN ('USER', 'SYSTEM')",
+                  "name": "run_domain_event_actorKind_check_2e50fd04",
+                  "prefix": "run_domain_event_actorKind_check"
+                }
+              ],
+              "columns": {
+                "actorKind": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunDomainEventActorKind",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "actorUserId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "occurredAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "payloadJson": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "summary": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "type": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_domain_event"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "actorUserId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_domain_event"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "actorUserId"
+                  ],
+                  "name": "run_domain_event_actorUserId_idx_96dac96c",
+                  "prefix": "run_domain_event_actorUserId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "occurredAt"
+                  ],
+                  "name": "run_domain_event_occurredAt_idx_c6b89167",
+                  "prefix": "run_domain_event_occurredAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId"
+                  ],
+                  "name": "run_domain_event_runId_idx_a6016437",
+                  "prefix": "run_domain_event_runId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runId",
+                    "occurredAt"
+                  ],
+                  "name": "run_domain_event_runId_occurredAt_idx_9e803df7",
+                  "prefix": "run_domain_event_runId_occurredAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "type",
+                    "occurredAt"
+                  ],
+                  "name": "run_domain_event_type_occurredAt_idx_4a74ac21",
+                  "prefix": "run_domain_event_type_occurredAt_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "run_external_booster": {
               "checks": [
                 {
@@ -15862,6 +16184,13 @@
                 "RUN_REACTIVATED"
               ]
             },
+            "RunDomainEventActorKind": {
+              "kind": "valueSet",
+              "values": [
+                "USER",
+                "SYSTEM"
+              ]
+            },
             "RunLootType": {
               "kind": "valueSet",
               "values": [
@@ -15969,10 +16298,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "af95e636c77ff4fcb33a3831d78a957f93394db80da993911405a18bb0346ae3"
+    "storageHash": "c61d6c9debd1aa276ddf258e7f0c7e6329fddb1af0a9b20ab2e52c05e51d9688"
   },
   "execution": {
-    "executionHash": "3a342430d1d88a1a7276c0c09b1c5461b2a20c65939dbb88d635489510bf068a",
+    "executionHash": "327c1f47c8d8cdc87aac7303f363d59bad389ab39ea8e86c1dc698f5804e4cdb",
     "mutations": {
       "defaults": [
         {
@@ -16492,6 +16821,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_discord_post"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_domain_event"
           }
         },
         {

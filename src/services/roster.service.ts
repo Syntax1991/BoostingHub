@@ -38,6 +38,7 @@ import { characterRepository } from "@/repositories/character.repository";
 import { signupService } from "@/services/signup.service";
 import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
 import { activityRepository } from "@/repositories/activity.repository";
+import { runDomainEventService } from "@/services/run-domain-event.service";
 import { isConcreteCharacterRole, isLegacyGenericDps, type ConcreteCharacterRole } from "@/lib/character-roles";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import { formatOfferedRoles } from "@/lib/offered-roles";
@@ -1015,6 +1016,13 @@ export const rosterService = {
     }
     const roster = await rosterRepository.ensure(input.runId);
     await rosterRepository.replaceExternalBoosters(roster.id, input.version, externalBoosters);
+    await runDomainEventService.record({
+      runId: input.runId,
+      actorUser: user,
+      type: "EXTERNAL_BOOSTERS_UPDATED",
+      summary: `External Boosters updated (${externalBoosters.length}).`,
+      payload: { externalBoosterCount: externalBoosters.length },
+    });
   },
 
   async saveDraftSelection(
@@ -1368,6 +1376,13 @@ export const rosterService = {
       publisherId: user.id,
       runTitle: run.title,
     });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "ROSTER_PUBLISHED",
+      summary: "Roster published.",
+      payload: { selectedCount: plan.publish.selectedSelections.length },
+    });
 
     return plan.validation;
   },
@@ -1429,6 +1444,13 @@ export const rosterService = {
       ...plan.publish,
       publisherId: user.id,
       runTitle: run.title,
+    });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "ROSTER_SELECTION_CHANGED",
+      summary: "Published roster selection updated.",
+      payload: { selectedCount: plan.publish.selectedSelections.length },
     });
     return plan.validation;
   },
