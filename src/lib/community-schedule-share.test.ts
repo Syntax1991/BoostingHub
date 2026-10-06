@@ -15,19 +15,17 @@ describe("isSelectableForRunSetup", () => {
 });
 
 describe("formatScheduleShareRunDescription", () => {
-  it("formats planned/total difficulty loot canonically", () => {
+  it("formats coverage difficulty loot canonically", () => {
     expect(
       formatScheduleShareRunDescription({
-        plannedBossCount: 7,
-        totalBossCount: 9,
+        titleCoverage: "7/9",
         difficulty: "HEROIC",
         lootType: "VIP",
       }),
     ).toBe("7/9 HC VIP");
     expect(
       formatScheduleShareRunDescription({
-        plannedBossCount: 1,
-        totalBossCount: 1,
+        titleCoverage: "1/1",
         difficulty: "HEROIC",
         lootType: "VIP",
       }),

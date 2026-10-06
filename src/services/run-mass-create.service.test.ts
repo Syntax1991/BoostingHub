@@ -94,7 +94,7 @@ const admin = asUser(ids.admin, "MassCreate Admin", "ADMIN");
 
 function defaultsFor(overrides: Partial<CreateManyRunsInput["defaults"]> = {}): CreateManyRunsInput["defaults"] {
   return {
-    contentPreset: "VENOMOUS_ABYSS",
+    contentPreset: "VENOMOUS_ABYSS" as const,
     venomousPlannedBossCount: 8,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
@@ -674,10 +674,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("RAID_LEAD applying their own template creates Runs whose raidLeadId is the template owner", async () => {
     const template = await runTemplateService.createTemplate(lead, {
       name: "Integration Own Template",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -707,10 +707,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("ADMIN applying another raid lead's template creates Runs owned by that raid lead, not the ADMIN", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Admin-Applied Template",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -733,10 +733,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("RAID_LEAD attempting to use another raid lead's template is rejected, 0 Runs created", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Forbidden Template",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -756,10 +756,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("a forged raidLeadId in defaults while a template is selected rejects the entire batch, 0 Runs created", async () => {
     const template = await runTemplateService.createTemplate(lead, {
       name: "Integration Defaults Mismatch",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -782,10 +782,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("a forged raidLeadId via a row override while a template is selected rejects the entire batch, 0 Runs created", async () => {
     const template = await runTemplateService.createTemplate(lead, {
       name: "Integration Row Mismatch",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -811,10 +811,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("using an inactive template is rejected before any row is prepared, 0 Runs created", async () => {
     const template = await runTemplateService.createTemplate(lead, {
       name: "Integration Inactive Template",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -834,10 +834,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("a row may still override other template-derived values while the raid lead stays the template owner", async () => {
     const template = await runTemplateService.createTemplate(lead, {
       name: "Integration Row Override",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -861,10 +861,10 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("a multi-row batch via a template shares the template's raid lead across every row, atomically", async () => {
     const template = await runTemplateService.createTemplate(lead, {
       name: "Integration Multi-Row",
-      raidId,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -894,10 +894,10 @@ describe("runService.createManyRuns — templateId integration", () => {
     it("editing the template after Run creation leaves the existing Run's fields unchanged", async () => {
       const template = await runTemplateService.createTemplate(lead, {
         name: "Snapshot Independence",
-        raidId,
+        contentPreset: "VENOMOUS_ABYSS" as const,
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-        plannedBossCount: 8,
+        venomousPlannedBossCount: 8,
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
@@ -916,10 +916,10 @@ describe("runService.createManyRuns — templateId integration", () => {
       await runTemplateService.updateTemplate(lead, {
         templateId: template.id,
         name: "Snapshot Independence (edited)",
-        raidId,
+        contentPreset: "VENOMOUS_ABYSS",
+        venomousPlannedBossCount: 3,
         difficulty: "MYTHIC",
         lootType: "VIP",
-        plannedBossCount: 3,
         desiredTankCount: 5,
         desiredHealerCount: 1,
         desiredDpsCount: 20,
@@ -940,10 +940,10 @@ describe("runService.createManyRuns — templateId integration", () => {
     it("deactivating the template after Run creation leaves the existing Run fully manageable and unchanged", async () => {
       const template = await runTemplateService.createTemplate(lead, {
         name: "Deactivation Independence",
-        raidId,
+        contentPreset: "VENOMOUS_ABYSS" as const,
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-        plannedBossCount: 8,
+        venomousPlannedBossCount: 8,
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,

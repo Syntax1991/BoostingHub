@@ -585,6 +585,7 @@ model Raid {
   bosses   RaidBoss[]
   lockouts CharacterRaidLockout[]
   runContents RunRaidContent[]
+  templateContents RunTemplateRaidContent[]
   templates RunTemplate[]
 
   @@map("raid")
@@ -738,18 +739,23 @@ model RunStartSnapshot {
 /// current field values into a new Run's own concrete planning fields at
 /// creation time. A later template edit, deactivation, or reassignment never
 /// rewrites any Run created from it — there is no Run.templateId anywhere.
-/// Stores planning defaults only (raid/difficulty/lootType/composition/
-/// plannedBossCount/notes) — never a schedule, status, or Discord state; a
-/// concrete schedule belongs to a Run, never a template.
+///
+/// Authoritative raid identity is ordered `contents` (RunTemplateRaidContent),
+/// mirroring RunRaidContent. Legacy singular `raidId` / `plannedBossCount` are
+/// dual-written mirrors of the primary (Venomous) content for transitional
+/// readers only — never invent Bundle from those columns alone.
 model RunTemplate {
   id                 String         @id @default(uuid())
   name               String
   raidLeadId         String
   raidLead           User           @relation("RunTemplateRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
+  /// Legacy dual-write mirror of the primary content raid (usually Venomous).
+  /// Prefer `contents` for product authority.
   raidId             String
   raid               Raid           @relation(fields: [raidId], references: [id], onDelete: Restrict)
   difficulty         RaidDifficulty
   lootType           RunLootType
+  /// Legacy dual-write mirror of the primary content plannedBossCount.
   plannedBossCount   Int
   desiredTankCount   Int
   desiredHealerCount Int
@@ -765,10 +771,31 @@ model RunTemplate {
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
   communityScheduleSlots CommunityScheduleSlot[]
+  contents           RunTemplateRaidContent[]
 
   @@index([raidLeadId, isActive])
   @@index([raidId])
   @@map("run_template")
+}
+
+/// Ordered real raid instances that belong to one RunTemplate (planning preset).
+/// A Bundle template has multiple contents — never a fake aggregated raid.
+model RunTemplateRaidContent {
+  id               String      @id @default(uuid())
+  runTemplateId    String
+  runTemplate      RunTemplate @relation(fields: [runTemplateId], references: [id], onDelete: Cascade)
+  raidId           String
+  raid             Raid        @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  /// 1-based deterministic order within the template.
+  sortOrder        Int
+  /// 1 <= plannedBossCount <= this content Raid's RaidBoss count.
+  plannedBossCount Int
+  createdAt        TimestamptzString @default(now())
+
+  @@unique([runTemplateId, raidId])
+  @@unique([runTemplateId, sortOrder])
+  @@index([raidId])
+  @@map("run_template_raid_content")
 }
 
 /// Recurring community weekly schedule weekday (wall-clock intent).

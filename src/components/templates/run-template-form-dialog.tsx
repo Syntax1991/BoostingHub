@@ -5,20 +5,24 @@ import { useRouter } from "next/navigation";
 import { createRunTemplateAction, updateRunTemplateAction } from "@/controllers/run-template.actions";
 import { Button } from "@/components/ui/button";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import {
+  titleCoverageFromPreset,
+  type RunContentPresetKey,
+} from "@/lib/run-content-presets";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 
 type FormMode = "create" | "edit";
 
-type RaidOption = { id: string; name: string; season: string; totalBossCount: number };
+type ContentPresetOption = { key: RunContentPresetKey; displayName: string };
 type RaidLeadOption = { id: string; name: string };
 
 export type RunTemplateFormValues = {
   templateId?: string;
   name: string;
-  raidId: string;
+  contentPreset: RunContentPresetKey;
+  venomousPlannedBossCount: number;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  plannedBossCount: number;
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
@@ -27,13 +31,17 @@ export type RunTemplateFormValues = {
   raidLeadId: string;
 };
 
-function emptyValues(raids: RaidOption[], raidLeads: RaidLeadOption[], defaultRaidLeadId: string): RunTemplateFormValues {
+function emptyValues(
+  contentPresets: ContentPresetOption[],
+  venomousBossMax: number,
+  defaultRaidLeadId: string,
+): RunTemplateFormValues {
   return {
     name: "",
-    raidId: raids[0]?.id ?? "",
+    contentPreset: contentPresets[0]?.key ?? "VENOMOUS_ABYSS",
+    venomousPlannedBossCount: venomousBossMax,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
-    plannedBossCount: raids[0]?.totalBossCount ?? 1,
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
@@ -50,7 +58,8 @@ type TemplateMutationResult =
 export function RunTemplateFormDialog({
   mode,
   initial,
-  raids,
+  contentPresets,
+  venomousBossMax,
   raidLeads,
   canAssignRaidLead,
   defaultRaidLeadId,
@@ -64,7 +73,8 @@ export function RunTemplateFormDialog({
 }: {
   mode: FormMode;
   initial?: RunTemplateFormValues;
-  raids: RaidOption[];
+  contentPresets: ContentPresetOption[];
+  venomousBossMax: number;
   raidLeads: RaidLeadOption[];
   canAssignRaidLead: boolean;
   defaultRaidLeadId: string;
@@ -86,12 +96,17 @@ export function RunTemplateFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const initialValues = useMemo(
-    () => initial ?? emptyValues(raids, raidLeads, defaultRaidLeadId),
-    [initial, raids, raidLeads, defaultRaidLeadId],
+    () => initial ?? emptyValues(contentPresets, venomousBossMax, defaultRaidLeadId),
+    [initial, contentPresets, venomousBossMax, defaultRaidLeadId],
   );
   const [values, setValues] = useState<RunTemplateFormValues>(initialValues);
 
-  const selectedRaid = raids.find((raid) => raid.id === values.raidId) ?? null;
+  const isBundle = values.contentPreset === "MIDNIGHT_S2_BUNDLE";
+  const coveragePreview = titleCoverageFromPreset({
+    preset: values.contentPreset,
+    venomousPlannedBossCount: values.venomousPlannedBossCount,
+    venomousTotalBossCount: venomousBossMax,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -124,10 +139,10 @@ export function RunTemplateFormDialog({
     startTransition(async () => {
       const payload = {
         name: values.name,
-        raidId: values.raidId,
+        contentPreset: values.contentPreset,
+        venomousPlannedBossCount: values.venomousPlannedBossCount,
         difficulty: values.difficulty,
         lootType: values.lootType,
-        plannedBossCount: values.plannedBossCount,
         desiredTankCount: values.desiredTankCount,
         desiredHealerCount: values.desiredHealerCount,
         desiredDpsCount: values.desiredDpsCount,
@@ -156,7 +171,7 @@ export function RunTemplateFormDialog({
   const dialogTitle = title ?? (mode === "create" ? "New Run Template" : "Edit Run Template");
   const dialogDescription =
     description ??
-    "Stores planning defaults only — raid, difficulty, run type, planned bosses, composition, and notes. Schedule and status are always set per Run.";
+    "Stores planning defaults only — run content, difficulty, loot, planned bosses, composition, and notes. Schedule and status are always set per Run.";
   const dialogSubmitLabel =
     submitLabel ?? (pending ? "Saving…" : mode === "create" ? "Create template" : "Save changes");
 
@@ -227,25 +242,40 @@ export function RunTemplateFormDialog({
               </label>
             ) : null}
             <label className="block text-sm">
-              <span className="mb-1 block text-muted">Raid</span>
+              <span className="mb-1 block text-muted">Run Content</span>
               <select
-                value={values.raidId}
-                onChange={(event) => {
-                  const raid = raids.find((candidate) => candidate.id === event.target.value);
-                  update({
-                    raidId: event.target.value,
-                    plannedBossCount: raid ? Math.min(values.plannedBossCount, raid.totalBossCount) : values.plannedBossCount,
-                  });
-                }}
+                value={values.contentPreset}
+                onChange={(event) =>
+                  update({ contentPreset: event.target.value as RunContentPresetKey })
+                }
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                aria-label="Run Content"
               >
-                {raids.map((raid) => (
-                  <option key={raid.id} value={raid.id}>
-                    {raid.name} ({raid.season})
+                {contentPresets.map((preset) => (
+                  <option key={preset.key} value={preset.key}>
+                    {preset.displayName}
                   </option>
                 ))}
               </select>
             </label>
+            {isBundle ? (
+              <div className="space-y-2 rounded-md border border-border bg-surface-raised px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span>Tidebound Grotto</span>
+                  <span className="text-muted">1/1 · Included</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span>The Venomous Abyss</span>
+                  <span>
+                    {values.venomousPlannedBossCount}/{venomousBossMax}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border pt-2 font-medium">
+                  <span>Total coverage</span>
+                  <span>{coveragePreview}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm">
                 <span className="mb-1 block text-muted">Difficulty</span>
@@ -278,15 +308,16 @@ export function RunTemplateFormDialog({
             </div>
             <label className="block text-sm">
               <span className="mb-1 block text-muted">
-                Planned bosses {selectedRaid ? `(max ${selectedRaid.totalBossCount})` : ""}
+                {isBundle ? "The Venomous Abyss bosses" : "Planned bosses"} (max {venomousBossMax})
               </span>
               <input
                 type="number"
                 min={1}
-                max={selectedRaid?.totalBossCount ?? undefined}
-                value={values.plannedBossCount}
-                onChange={(event) => update({ plannedBossCount: Number(event.target.value) })}
+                max={venomousBossMax}
+                value={values.venomousPlannedBossCount}
+                onChange={(event) => update({ venomousPlannedBossCount: Number(event.target.value) })}
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
+                aria-label={isBundle ? "The Venomous Abyss planned bosses" : "Planned bosses"}
               />
             </label>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -345,7 +376,7 @@ export function RunTemplateFormDialog({
               <Button type="button" variant="secondary" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending || !values.name.trim() || !values.raidId}>
+              <Button type="submit" disabled={pending || !values.name.trim() || contentPresets.length === 0}>
                 {pending ? "Saving…" : dialogSubmitLabel}
               </Button>
             </div>

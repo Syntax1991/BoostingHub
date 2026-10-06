@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
-import { compositionSchema, notesSchema, plannedBossCountSchema } from "@/validators/run";
+import {
+  compositionSchema,
+  notesSchema,
+  runContentPresetSchema,
+  venomousPlannedBossCountSchema,
+} from "@/validators/run";
 
 export const RUN_TEMPLATE_NAME_MAX = 80;
 
@@ -14,12 +19,14 @@ export const runTemplateNameSchema = z
 // raidLeadId is accepted here only so an ADMIN can target a specific Raid
 // Lead's template — the Service rejects/ignores it for a RAID_LEAD actor
 // (who may only ever own their own templates) rather than trusting it.
+//
+// Content uses the same commercial presets as Create Run (Venomous / Bundle).
 export const createRunTemplateSchema = z.object({
   name: runTemplateNameSchema,
-  raidId: entityIdSchema,
+  contentPreset: runContentPresetSchema,
+  venomousPlannedBossCount: venomousPlannedBossCountSchema,
   difficulty: z.enum(RAID_DIFFICULTIES),
   lootType: z.enum(RUN_LOOT_TYPES),
-  plannedBossCount: plannedBossCountSchema,
   desiredTankCount: compositionSchema,
   desiredHealerCount: compositionSchema,
   desiredDpsCount: compositionSchema,

@@ -1,22 +1,47 @@
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
 import { TemplateRowActions } from "@/components/templates/template-row-actions";
 import type { profileController } from "@/controllers/app.controller";
+import type { RunContentPresetKey } from "@/lib/run-content-presets";
 
 type MyTemplatesPage = Awaited<ReturnType<typeof profileController.getMyTemplatesPage>>;
+
+function formValuesFromTemplate(template: MyTemplatesPage["templates"][number]) {
+  const productKey = template.contentDisplay.productKey;
+  const contentPreset: RunContentPresetKey =
+    productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS";
+  const venomous =
+    template.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? template.contents[0];
+  return {
+    templateId: template.id,
+    name: template.name,
+    contentPreset,
+    venomousPlannedBossCount: venomous?.plannedBossCount ?? template.plannedBossCount,
+    difficulty: template.difficulty,
+    lootType: template.lootType,
+    desiredTankCount: template.desiredTankCount,
+    desiredHealerCount: template.desiredHealerCount,
+    desiredDpsCount: template.desiredDpsCount,
+    desiredLootbuddyCount: template.desiredLootbuddyCount,
+    notes: template.notes,
+    raidLeadId: template.raidLeadId,
+  };
+}
 
 export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
   return (
     <div>
       <PageHeader
         title="My Run Templates"
-        description="Reusable planning presets for your runs. A template only stores planning defaults — raid, difficulty, run type, planned bosses, composition, and notes. Schedule and status are always set per Run."
+        description="Reusable planning presets for your runs. A template only stores planning defaults — run content, difficulty, loot, planned bosses, composition, and notes. Schedule and status are always set per Run."
         actions={
           <RunTemplateFormDialog
             mode="create"
-            raids={data.raids}
+            contentPresets={data.contentPresets}
+            venomousBossMax={data.venomousBossMax}
             raidLeads={data.raidLeads}
             canAssignRaidLead={data.canAssignRaidLead}
             defaultRaidLeadId={data.defaultRaidLeadId}
@@ -46,10 +71,11 @@ export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-muted">
-                    {template.raidName} ({template.raidSeason}) · {template.plannedBossCount}/{template.totalBossCount} bosses ·{" "}
+                    {template.contentDisplay.productLabel} · {template.contentDisplay.titleCoverage} ·{" "}
                     {template.desiredTankCount}T {template.desiredHealerCount}H {template.desiredDpsCount}D
                     {template.desiredLootbuddyCount > 0 ? ` ${template.desiredLootbuddyCount}LB` : ""}
                   </p>
+                  <p className="mt-1 text-xs text-muted">{template.contentDisplay.summary}</p>
                   {template.notes ? <p className="mt-1 text-xs text-muted">{template.notes}</p> : null}
                   {template.isActive && !template.usable ? (
                     <p className="mt-1 text-xs text-warning">Needs attention: {template.unusableReason}</p>
@@ -58,21 +84,9 @@ export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <RunTemplateFormDialog
                     mode="edit"
-                    initial={{
-                      templateId: template.id,
-                      name: template.name,
-                      raidId: template.raidId,
-                      difficulty: template.difficulty,
-                      lootType: template.lootType,
-                      plannedBossCount: template.plannedBossCount,
-                      desiredTankCount: template.desiredTankCount,
-                      desiredHealerCount: template.desiredHealerCount,
-                      desiredDpsCount: template.desiredDpsCount,
-                      desiredLootbuddyCount: template.desiredLootbuddyCount,
-                      notes: template.notes,
-                      raidLeadId: template.raidLeadId,
-                    }}
-                    raids={data.raids}
+                    initial={formValuesFromTemplate(template)}
+                    contentPresets={data.contentPresets}
+                    venomousBossMax={data.venomousBossMax}
                     raidLeads={data.raidLeads}
                     canAssignRaidLead={data.canAssignRaidLead}
                     defaultRaidLeadId={data.defaultRaidLeadId}

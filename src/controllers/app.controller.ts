@@ -170,13 +170,14 @@ export const profileController = {
    */
   async getMyTemplatesPage() {
     const user = await requireManagerOrRedirect();
-    const [templates, { raids }] = await Promise.all([
+    const [templates, formData] = await Promise.all([
       runTemplateService.listOwn(user),
       runTemplateService.getCreateFormData(user),
     ]);
     return {
       templates,
-      raids,
+      contentPresets: formData.contentPresets,
+      venomousBossMax: formData.venomousBossMax,
       raidLeads: [{ id: user.id, name: user.name, accountRole: user.accountRole }],
       canAssignRaidLead: false,
       defaultRaidLeadId: user.id,

@@ -3,7 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
 import { orm } from "@/lib/prisma";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { AccountRole } from "@/models/enums";
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -288,10 +288,22 @@ describe("communityScheduleService domain", () => {
 
 const createSetupFields = {
   name: "Plan HC Setup",
-  raidId: VENOMOUS_ABYSS_RAID_ID,
+  contentPreset: "VENOMOUS_ABYSS" as const,
   difficulty: "HEROIC" as const,
   lootType: "UNSAVED" as const,
-  plannedBossCount: 8,
+  venomousPlannedBossCount: 8,
+  desiredTankCount: 2,
+  desiredHealerCount: 4,
+  desiredDpsCount: 14,
+  desiredLootbuddyCount: 0,
+  notes: null as string | null,
+};
+
+const repoTemplateFields = {
+  name: "Plan HC Setup",
+  difficulty: "HEROIC" as const,
+  lootType: "UNSAVED" as const,
+  contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
   desiredTankCount: 2,
   desiredHealerCount: 4,
   desiredDpsCount: 14,
@@ -326,7 +338,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
 
   it("adds slots to an existing Run Setup", async () => {
     const templateId = await runTemplateRepository.create({
-      ...createSetupFields,
+      ...repoTemplateFields,
       name: "Existing Setup",
       raidLeadId: ids.lead,
       createdById: ids.admin,
@@ -358,7 +370,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const group = page.runSetups.find((row) => row.runTemplateId === templateId);
     expect(group?.slots).toHaveLength(3);
     expect(group?.autoCreateSummary).toBe("MIXED");
-    expect(group?.runSetupName).toBe("Existing Setup");
+    expect(group?.runSetupName).toBe("HC Unsaved · The Venomous Abyss");
   });
 
   it("rolls back template + slots when a later slot create fails", async () => {
@@ -481,7 +493,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     });
 
     const templateId = await runTemplateRepository.create({
-      ...createSetupFields,
+      ...repoTemplateFields,
       name: "Mixed Setup",
       raidLeadId: ids.lead,
       createdById: ids.admin,
@@ -507,7 +519,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(unconfigured?.runSetupName).toBe("Unconfigured Schedule");
     const mixed = page.runSetups.find((row) => row.runTemplateId === templateId);
     expect(mixed?.autoCreateSummary).toBe("MIXED");
-    expect(page.raids.length).toBeGreaterThan(0);
+    expect(page.contentPresets.length).toBeGreaterThan(0);
   });
 
   it("RAID_LEAD cannot create schedule plans", async () => {
@@ -539,10 +551,10 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       communityScheduleService.updateRunSetup(lead, {
         templateId: plan.templateId,
         name: "Hacked",
-        raidId: VENOMOUS_ABYSS_RAID_ID,
+        contentPreset: "VENOMOUS_ABYSS" as const,
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-        plannedBossCount: 8,
+        venomousPlannedBossCount: 8,
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
@@ -556,10 +568,10 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     await communityScheduleService.updateRunSetup(admin, {
       templateId: plan.templateId,
       name: "Edited Setup Name",
-      raidId: VENOMOUS_ABYSS_RAID_ID,
+      contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 7,
+      venomousPlannedBossCount: 7,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -570,21 +582,22 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
 
     const page = await communityScheduleService.getPage(admin);
     const group = page.runSetups.find((row) => row.runTemplateId === plan.templateId);
-    expect(group?.runSetupName).toBe("Edited Setup Name");
+    expect(group?.runSetupName).toContain("The Venomous Abyss");
     expect(group?.slots).toHaveLength(2);
     const option = page.templates.find((row) => row.id === plan.templateId);
-    expect(option?.plannedBossCount).toBe(7);
+    expect(option?.venomousPlannedBossCount).toBe(7);
     expect(option?.notes).toBe("updated notes");
-    expect(page.raids.some((raid) => raid.name.includes("Venomous"))).toBe(true);
-    expect(page.raids.some((raid) => raid.name.includes("Tidebound"))).toBe(true);
+    expect(page.contentPresets.some((preset) => preset.key === "VENOMOUS_ABYSS")).toBe(true);
+    expect(page.contentPresets.some((preset) => preset.key === "MIDNIGHT_S2_BUNDLE")).toBe(true);
   });
 
-  it("includes Tide in selectable Run Setup raids and can create a Tide schedule plan", async () => {
-    const { TIDEBOUND_GROTTO_RAID_ID } = await import("@/lib/wow-raid-catalog");
+  it("exposes Season 2 Bundle product and materializes multi-content DRAFT Runs", async () => {
     await raidRepository.ensureReferenceRaids();
-    const selectable = await raidRepository.listSelectableRunSetupRaids();
-    expect(selectable.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(true);
-    expect(selectable.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
+    const page = await communityScheduleService.getPage(admin);
+    expect(page.contentPresets.map((preset) => preset.key)).toEqual([
+      "VENOMOUS_ABYSS",
+      "MIDNIGHT_S2_BUNDLE",
+    ]);
 
     const now = new Date("2027-01-15T12:00:00.000Z");
     const result = await communityScheduleService.createSchedulePlan(
@@ -593,11 +606,11 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
         raidLeadId: ids.lead,
         runSetup: {
           mode: "create",
-          name: "Tide Setup",
-          raidId: TIDEBOUND_GROTTO_RAID_ID,
+          name: "Bundle Setup",
+          contentPreset: "MIDNIGHT_S2_BUNDLE",
+          venomousPlannedBossCount: 8,
           difficulty: "HEROIC",
           lootType: "VIP",
-          plannedBossCount: 1,
           desiredTankCount: 2,
           desiredHealerCount: 4,
           desiredDpsCount: 14,
@@ -612,14 +625,16 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     );
     expect(result.materialization.created).toBeGreaterThan(0);
     const template = await runTemplateRepository.findById(result.templateId);
-    expect(template?.raidId).toBe(TIDEBOUND_GROTTO_RAID_ID);
-    expect(template?.plannedBossCount).toBe(1);
+    expect(template?.contents).toHaveLength(2);
+    expect(template?.contents.map((row) => row.raidId).sort()).toEqual(
+      [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
+    );
   });
 
   it("persists per-row Run Mode and Share uses authoritative template description", async () => {
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
-      runSetup: { mode: "create", ...createSetupFields, name: "Share Setup", plannedBossCount: 7, lootType: "VIP" },
+      runSetup: { mode: "create", ...createSetupFields, name: "Share Setup", venomousPlannedBossCount: 7, lootType: "VIP" },
       slots: [
         { weekday: "FRIDAY", localStartTime: "23:00", runMode: "TEAM_RUN" },
         { weekday: "SATURDAY", localStartTime: "23:00", runMode: "INHOUSE" },
