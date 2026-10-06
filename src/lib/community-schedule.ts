@@ -5,6 +5,8 @@ import { COMMUNITY_WEEKDAYS, type CommunityWeekday } from "@/models/enums";
 export const COMMUNITY_SCHEDULE_TIME_ZONE = DEFAULT_TIME_ZONE;
 export const COMMUNITY_SCHEDULE_LABEL_MAX = 80;
 export const COMMUNITY_SCHEDULE_NOTES_MAX = 500;
+/** Max weekly slots in one Create Schedule / Add times batch. */
+export const MAX_SLOTS_PER_PLAN = 20;
 
 const LOCAL_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 

@@ -50,6 +50,8 @@ export type CommunityScheduleSlotUpdate = {
   updatedById: string;
 };
 
+type TxOrm = typeof orm;
+
 function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
   const raidLead = (row.raidLead ?? {}) as Record<string, unknown>;
   const runTemplate = row.runTemplate ? (row.runTemplate as Record<string, unknown>) : null;
@@ -76,8 +78,8 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
   };
 }
 
-function baseSlotQuery() {
-  return orm.CommunityScheduleSlot.include("raidLead").include("runTemplate");
+function baseSlotQuery(client: TxOrm = orm) {
+  return client.CommunityScheduleSlot.include("raidLead").include("runTemplate");
 }
 
 export const communityScheduleRepository = {
@@ -90,8 +92,8 @@ export const communityScheduleRepository = {
     return rows.map((row) => mapSlot(row as Record<string, unknown>));
   },
 
-  async findById(id: string): Promise<CommunityScheduleSlotRecord | null> {
-    const row = await baseSlotQuery().where({ id }).first();
+  async findById(id: string, txOrm?: TxOrm): Promise<CommunityScheduleSlotRecord | null> {
+    const row = await baseSlotQuery(txOrm).where({ id }).first();
     return row ? mapSlot(row as Record<string, unknown>) : null;
   },
 
@@ -115,6 +117,18 @@ export const communityScheduleRepository = {
     return match ? mapSlot(match as Record<string, unknown>) : null;
   },
 
+  async findDuplicatesForLead(
+    raidLeadId: string,
+    pairs: ReadonlyArray<{ weekday: CommunityWeekday; localStartTime: string }>,
+  ): Promise<CommunityScheduleSlotRecord[]> {
+    if (pairs.length === 0) return [];
+    const rows = await baseSlotQuery().where({ raidLeadId }).all();
+    const wanted = new Set(pairs.map((pair) => `${pair.weekday}\0${pair.localStartTime}`));
+    return rows
+      .map((row) => mapSlot(row as Record<string, unknown>))
+      .filter((slot) => wanted.has(`${slot.weekday}\0${slot.localStartTime}`));
+  },
+
   async listActiveAutoCreateSlots(): Promise<CommunityScheduleSlotRecord[]> {
     const rows = await baseSlotQuery()
       .where({ isActive: true, autoCreateRun: true })
@@ -126,10 +140,14 @@ export const communityScheduleRepository = {
       .filter((slot) => slot.runTemplateId != null);
   },
 
-  async create(input: CommunityScheduleSlotWrite): Promise<CommunityScheduleSlotRecord> {
+  async create(
+    input: CommunityScheduleSlotWrite,
+    txOrm?: TxOrm,
+  ): Promise<CommunityScheduleSlotRecord> {
+    const client = txOrm ?? orm;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await orm.CommunityScheduleSlot.create({
+    await client.CommunityScheduleSlot.create({
       id,
       weekday: input.weekday,
       localStartTime: input.localStartTime,
@@ -144,7 +162,7 @@ export const communityScheduleRepository = {
       createdAt: now,
       updatedAt: now,
     });
-    const created = await this.findById(id);
+    const created = await this.findById(id, client);
     if (!created) {
       throw new Error("Community schedule slot create failed.");
     }

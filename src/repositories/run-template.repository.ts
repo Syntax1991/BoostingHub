@@ -125,9 +125,12 @@ function mapTemplate(row: Record<string, unknown>): RunTemplateRecord {
  * owner eligibility, composition/loot-type/boss-count bounds). Those live in
  * run-template.service.ts, which is the only caller.
  */
+type TxOrm = typeof orm;
+
 export const runTemplateRepository = {
-  async findById(id: string): Promise<RunTemplateRecord | null> {
-    const row = await orm.RunTemplate
+  async findById(id: string, txOrm?: TxOrm): Promise<RunTemplateRecord | null> {
+    const client = txOrm ?? orm;
+    const row = await client.RunTemplate
       .where({ id })
       .include("raidLead")
       .include("raid", (raid) => raid.include("bosses"))
@@ -162,10 +165,11 @@ export const runTemplateRepository = {
     return rows.map((row) => mapTemplate(row as Record<string, unknown>));
   },
 
-  async create(fields: CreateRunTemplateFields): Promise<string> {
+  async create(fields: CreateRunTemplateFields, txOrm?: TxOrm): Promise<string> {
+    const client = txOrm ?? orm;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await orm.RunTemplate.create({
+    await client.RunTemplate.create({
       id,
       name: fields.name,
       raidLeadId: fields.raidLeadId,

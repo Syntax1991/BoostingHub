@@ -163,6 +163,18 @@ export const runTemplateService = {
   },
 
   async createTemplate(user: AuthenticatedUser, input: CreateRunTemplateInput) {
+    return this.createTemplateInTx(user, input);
+  },
+
+  /**
+   * Validate + persist a RunTemplate, optionally inside an outer transaction
+   * (e.g. Community Schedule plan create). Same rules as createTemplate.
+   */
+  async createTemplateInTx(
+    user: AuthenticatedUser,
+    input: CreateRunTemplateInput,
+    txOrm?: typeof import("@/lib/prisma").orm,
+  ) {
     requireManagerRole(user);
     const raidLeadId = resolveTemplateOwnerId(user, input.raidLeadId);
     await requireEligibleOwner(raidLeadId);
@@ -175,21 +187,24 @@ export const runTemplateService = {
     assertValidRunLootType(input.difficulty, input.lootType);
     assertValidPlannedBossCount(input.plannedBossCount, raid.totalBossCount);
 
-    const id = await runTemplateRepository.create({
-      name: input.name.trim(),
-      raidLeadId,
-      raidId: raid.id,
-      difficulty: input.difficulty,
-      lootType: input.lootType,
-      plannedBossCount: input.plannedBossCount,
-      desiredTankCount: input.desiredTankCount,
-      desiredHealerCount: input.desiredHealerCount,
-      desiredDpsCount: input.desiredDpsCount,
-      desiredLootbuddyCount: input.desiredLootbuddyCount ?? 0,
-      notes: notesValue(input.notes),
-      createdById: user.id,
-      updatedById: user.id,
-    });
+    const id = await runTemplateRepository.create(
+      {
+        name: input.name.trim(),
+        raidLeadId,
+        raidId: raid.id,
+        difficulty: input.difficulty,
+        lootType: input.lootType,
+        plannedBossCount: input.plannedBossCount,
+        desiredTankCount: input.desiredTankCount,
+        desiredHealerCount: input.desiredHealerCount,
+        desiredDpsCount: input.desiredDpsCount,
+        desiredLootbuddyCount: input.desiredLootbuddyCount ?? 0,
+        notes: notesValue(input.notes),
+        createdById: user.id,
+        updatedById: user.id,
+      },
+      txOrm,
+    );
 
     return { id };
   },
