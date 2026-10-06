@@ -629,6 +629,74 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(template?.contents.map((row) => row.raidId).sort()).toEqual(
       [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
     );
+
+    const slotId = result.slotIds[0]!;
+    const links = await orm.CommunityScheduleRun.where({ scheduleSlotId: slotId }).all();
+    expect(links.length).toBeGreaterThan(0);
+    const runId = String((links[0] as { runId: string }).runId);
+    const runContents = await orm.RunRaidContent.where({ runId }).all();
+    expect(runContents).toHaveLength(2);
+    expect(
+      runContents.map((row) => String((row as { raidId: string }).raidId)).sort(),
+    ).toEqual([TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort());
+
+    // Regression: Prisma timestamptz readback must not hide linked DRAFTs as AUTO_WAITING.
+    // Fri Jan 15 → Wed 22:30 CURRENT is past (no link); NEXT must resolve as RUN_CREATED.
+    const afterPage = await communityScheduleService.getPage(admin, now);
+    const nextProjected = afterPage.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === slotId);
+    expect(nextProjected?.materialization.state).toBe("RUN_CREATED");
+    expect(nextProjected?.materialization.runId).toBeTruthy();
+  });
+
+  it("Wed 00:30 auto-create at 00:33 skips CURRENT past and creates NEXT; page shows Open Run", async () => {
+    await raidRepository.ensureReferenceRaids();
+    // Wed 07 Oct 2026 00:33 Europe/Berlin
+    const now = new Date("2026-10-06T22:33:00.000Z");
+    const result = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runSetup: {
+          mode: "create",
+          name: "Wed Boundary Bundle",
+          contentPreset: "MIDNIGHT_S2_BUNDLE",
+          venomousPlannedBossCount: 8,
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          desiredTankCount: 2,
+          desiredHealerCount: 4,
+          desiredDpsCount: 14,
+          desiredLootbuddyCount: 0,
+          notes: null,
+        },
+        slots: [{ weekday: "WEDNESDAY", localStartTime: "00:30", runMode: "INHOUSE" }],
+        autoCreateRun: true,
+        notes: null,
+      },
+      now,
+    );
+    expect(result.materialization.created).toBe(1);
+    expect(result.materialization.failed).toBe(0);
+
+    const slotId = result.slotIds[0]!;
+    const page = await communityScheduleService.getPage(admin, now);
+    const current = page.current.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === slotId);
+    const next = page.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === slotId);
+
+    expect(current?.materialization.state).toBe("PAST");
+    expect(current?.occurrence.scheduledStartAt).toBe("2026-10-06T22:30:00.000Z");
+    expect(next?.materialization.state).toBe("RUN_CREATED");
+    expect(next?.materialization.runId).toBeTruthy();
+    expect(next?.occurrence.scheduledStartAt).toBe("2026-10-13T22:30:00.000Z");
+
+    const runContents = await orm.RunRaidContent.where({ runId: next!.materialization.runId! }).all();
+    expect(runContents).toHaveLength(2);
   });
 
   it("persists per-row Run Mode and Share uses authoritative template description", async () => {

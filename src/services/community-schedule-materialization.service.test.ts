@@ -6,9 +6,10 @@ import {
 } from "@/lib/community-schedule";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
+import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
@@ -538,6 +539,273 @@ describe("communityScheduleMaterializationService.runPass", () => {
     if (pass.status === "COMPLETED") {
       expect(pass.created).toBe(0);
     }
+  });
+
+  it("CURRENT past + NEXT future: skip CURRENT only, create NEXT (hourly + page)", async () => {
+    // Wed 07 Oct 2026 00:33 Europe/Berlin — CURRENT Wed 00:30 is past; NEXT is +1 week.
+    const now = new Date("2026-10-06T22:33:00.000Z");
+    const plan = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "existing", templateId },
+      slots: [{ weekday: "WEDNESDAY", localStartTime: "00:30", runMode: "INHOUSE" }],
+      autoCreateRun: false,
+      notes: null,
+    });
+    const slotId = plan.slotIds[0]!;
+    await communityScheduleRepository.update(slotId, {
+      weekday: "WEDNESDAY",
+      localStartTime: "00:30",
+      label: "Boundary",
+      notes: null,
+      raidLeadId: ids.lead,
+      runTemplateId: templateId,
+      autoCreateRun: true,
+      runMode: "INHOUSE",
+      updatedById: ids.admin,
+    });
+
+    const pass = await communityScheduleMaterializationService.runPass(now);
+    expect(pass.status).toBe("COMPLETED");
+    if (pass.status === "COMPLETED") {
+      expect(pass.skippedPast).toBe(1);
+      expect(pass.created).toBe(1);
+      expect(pass.failed).toBe(0);
+    }
+
+    const nextOccurrence = resolveScheduleSlotOccurrence({
+      weekday: "WEDNESDAY",
+      localStartTime: "00:30",
+      window: "NEXT",
+      now,
+      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+    });
+    expect(nextOccurrence.scheduledStartAt).toBe("2026-10-13T22:30:00.000Z");
+
+    const nextLink = await communityScheduleRunRepository.findBySlotAndWindow(
+      slotId,
+      nextOccurrence.windowStartAt,
+    );
+    expect(nextLink).toBeTruthy();
+    expect(nextLink!.windowStartAt).toBe(nextOccurrence.windowStartAt);
+    expect(nextLink!.occurrenceStartAt).toBe(nextOccurrence.scheduledStartAt);
+
+    const currentOccurrence = resolveScheduleSlotOccurrence({
+      weekday: "WEDNESDAY",
+      localStartTime: "00:30",
+      window: "CURRENT",
+      now,
+      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+    });
+    const currentLink = await communityScheduleRunRepository.findBySlotAndWindow(
+      slotId,
+      currentOccurrence.windowStartAt,
+    );
+    expect(currentLink).toBeNull();
+
+    const page = await communityScheduleService.getPage(admin, now);
+    const nextView = page.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === slotId);
+    expect(nextView?.materialization.state).toBe("RUN_CREATED");
+    expect(nextView?.materialization.runId).toBe(nextLink!.runId);
+
+    const second = await communityScheduleMaterializationService.runPass(now);
+    expect(second.status).toBe("COMPLETED");
+    if (second.status === "COMPLETED") {
+      expect(second.created).toBe(0);
+      expect(second.alreadyCreated).toBe(1);
+      expect(second.skippedPast).toBe(1);
+    }
+  });
+
+  it("CURRENT future + NEXT future: creates both windows", async () => {
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runSetup: { mode: "existing", templateId },
+        slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
+        autoCreateRun: true,
+        notes: null,
+      },
+      now,
+    );
+    expect(plan.materialization.created).toBe(2);
+
+    const second = await communityScheduleMaterializationService.materializeSlotWindows(plan.slotIds, {
+      now,
+    });
+    expect(second.created).toBe(0);
+    expect(second.alreadyCreated).toBe(2);
+  });
+
+  it("Bundle template materializes Tide + Venomous contents; Venomous-only still works", async () => {
+    await raidRepository.ensureReferenceRaids();
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const bundleTemplateId = await runTemplateRepository.create({
+      name: "CSM Bundle Template",
+      raidLeadId: ids.lead,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      contents: [
+        { raidId: TIDEBOUND_GROTTO_RAID_ID, sortOrder: 1, plannedBossCount: 1 },
+        { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 2, plannedBossCount: 6 },
+      ],
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+      createdById: ids.admin,
+      updatedById: ids.admin,
+    });
+
+    const bundlePlan = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runSetup: { mode: "existing", templateId: bundleTemplateId },
+        slots: [{ weekday: "FRIDAY", localStartTime: "21:00", runMode: "INHOUSE" }],
+        autoCreateRun: true,
+        notes: null,
+      },
+      now,
+    );
+    expect(bundlePlan.materialization.created).toBe(2);
+    const bundleLinks = await communityScheduleRunRepository.listBySlotIds(bundlePlan.slotIds);
+    expect(bundleLinks).toHaveLength(2);
+    for (const link of bundleLinks) {
+      const contents = await orm.RunRaidContent.where({ runId: link.runId }).all();
+      expect(contents).toHaveLength(2);
+    }
+
+    const venomousPlan = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runSetup: { mode: "existing", templateId },
+        slots: [{ weekday: "SATURDAY", localStartTime: "21:00", runMode: "INHOUSE" }],
+        autoCreateRun: true,
+        notes: null,
+      },
+      now,
+    );
+    expect(venomousPlan.materialization.created).toBe(2);
+    const venomousLinks = await communityScheduleRunRepository.listBySlotIds(venomousPlan.slotIds);
+    for (const link of venomousLinks) {
+      const contents = await orm.RunRaidContent.where({ runId: link.runId }).all();
+      expect(contents).toHaveLength(1);
+      expect(String((contents[0] as { raidId: string }).raidId)).toBe(VENOMOUS_ABYSS_RAID_ID);
+    }
+  });
+
+  it("addTimes and enable Auto-create immediately materialize NEXT", async () => {
+    const now = new Date("2026-10-06T22:33:00.000Z");
+    const existing = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "existing", templateId },
+      slots: [{ weekday: "THURSDAY", localStartTime: "18:00", runMode: "INHOUSE" }],
+      autoCreateRun: false,
+      notes: null,
+    });
+
+    const added = await communityScheduleService.addTimesToSetup(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runTemplateId: templateId,
+        slots: [{ weekday: "WEDNESDAY", localStartTime: "00:30", runMode: "INHOUSE" }],
+        autoCreateRun: false,
+        notes: null,
+      },
+      now,
+    );
+    expect(added.materialization.created).toBe(0);
+    const wedSlotId = added.slotIds[0]!;
+
+    const enabled = await communityScheduleService.updateSlot(
+      admin,
+      {
+        slotId: wedSlotId,
+        weekday: "WEDNESDAY",
+        localStartTime: "00:30",
+        label: "Enabled Auto",
+        raidLeadId: ids.lead,
+        notes: null,
+        runTemplateId: templateId,
+        autoCreateRun: true,
+        runMode: "INHOUSE",
+      },
+      now,
+    );
+    expect(enabled.materialization.created).toBe(1);
+
+    const page = await communityScheduleService.getPage(admin, now);
+    const nextView = page.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === wedSlotId);
+    expect(nextView?.materialization.state).toBe("RUN_CREATED");
+
+    // Keep existing plan slot referenced so cleanup still finds lead-owned rows.
+    expect(existing.slotIds.length).toBe(1);
+  });
+
+  it("manual Create Run and SYSTEM auto-create race to one link (no orphans)", async () => {
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const plan = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "existing", templateId },
+      slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
+      autoCreateRun: false,
+      notes: null,
+    });
+    const slotId = plan.slotIds[0]!;
+
+    const manual = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: lead },
+      { scheduleSlotId: slotId, window: "NEXT", now },
+    );
+    expect(manual.alreadyExisted).toBe(false);
+
+    await communityScheduleRepository.update(slotId, {
+      weekday: "FRIDAY",
+      localStartTime: "19:45",
+      label: "Race",
+      notes: null,
+      raidLeadId: ids.lead,
+      runTemplateId: templateId,
+      autoCreateRun: true,
+      runMode: "INHOUSE",
+      updatedById: ids.admin,
+    });
+    const auto = await communityScheduleMaterializationService.materializeSlotWindows([slotId], {
+      now,
+      windows: ["NEXT"],
+    });
+    expect(auto.created).toBe(0);
+    expect(auto.alreadyCreated).toBe(1);
+
+    const links = await communityScheduleRunRepository.listBySlotIds([slotId]);
+    const nextLinks = links.filter((link) => {
+      const occurrence = resolveScheduleSlotOccurrence({
+        weekday: "FRIDAY",
+        localStartTime: "19:45",
+        window: "NEXT",
+        now,
+        timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+      });
+      return link.windowStartAt === occurrence.windowStartAt;
+    });
+    expect(nextLinks).toHaveLength(1);
+    expect(nextLinks[0]!.runId).toBe(manual.runId);
+
+    const run = await orm.Run.where({ id: manual.runId }).first();
+    expect(run).toBeTruthy();
+    const orphanLinks = (await orm.CommunityScheduleRun.all()).filter((row) => {
+      const link = row as { runId: string; scheduleSlotId: string };
+      return link.scheduleSlotId === slotId && link.runId !== manual.runId;
+    });
+    expect(orphanLinks).toHaveLength(0);
   });
 
   it("editing Run Setup after materialize does not change the existing Run snapshot", async () => {
