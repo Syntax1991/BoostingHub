@@ -6,18 +6,29 @@ import { mapActionError, type ActionResult } from "@/lib/action-result";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
 import {
+  addScheduleTimesSchema,
   communityScheduleSlotIdSchema,
   createCommunityScheduleSlotSchema,
+  createSchedulePlanSchema,
   materializeCommunityScheduleOccurrenceSchema,
   updateCommunityScheduleSlotSchema,
 } from "@/validators/community-schedule";
 
 function revalidateSchedule() {
   revalidatePath("/manage/schedule");
+  revalidatePath("/manage/templates");
 }
 
 export type CreateCommunityScheduleSlotActionResult =
   | { ok: true; message: string; slotId: string }
+  | { ok: false; code: string; message: string };
+
+export type CreateCommunitySchedulePlanActionResult =
+  | { ok: true; message: string; templateId: string; slotIds: string[] }
+  | { ok: false; code: string; message: string };
+
+export type AddCommunityScheduleTimesActionResult =
+  | { ok: true; message: string; templateId: string; slotIds: string[] }
   | { ok: false; code: string; message: string };
 
 export async function createCommunityScheduleSlotAction(
@@ -29,6 +40,44 @@ export async function createCommunityScheduleSlotAction(
     const created = await communityScheduleService.createSlot(user, parsed);
     revalidateSchedule();
     return { ok: true, message: "Schedule slot created.", slotId: created.id };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function createCommunitySchedulePlanAction(
+  input: unknown,
+): Promise<CreateCommunitySchedulePlanActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = createSchedulePlanSchema.parse(input);
+    const result = await communityScheduleService.createSchedulePlan(user, parsed);
+    revalidateSchedule();
+    return {
+      ok: true,
+      message: `Schedule created with ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
+      templateId: result.templateId,
+      slotIds: result.slotIds,
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function addCommunityScheduleTimesAction(
+  input: unknown,
+): Promise<AddCommunityScheduleTimesActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = addScheduleTimesSchema.parse(input);
+    const result = await communityScheduleService.addTimesToSetup(user, parsed);
+    revalidateSchedule();
+    return {
+      ok: true,
+      message: `Added ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
+      templateId: result.templateId,
+      slotIds: result.slotIds,
+    };
   } catch (error) {
     return mapActionError(error);
   }

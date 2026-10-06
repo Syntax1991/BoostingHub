@@ -482,4 +482,95 @@ describe("communityScheduleMaterializationService.runPass", () => {
     } | null;
     expect(Date.parse(run?.scheduledStartAt ?? "")).toBe(Date.parse(linkBefore!.occurrenceStartAt));
   });
+
+  it("bulk auto-create plan slots still materialize via runPass", async () => {
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const plan = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "existing", templateId },
+      slots: [
+        { weekday: "FRIDAY", localStartTime: "19:45" },
+        { weekday: "SATURDAY", localStartTime: "20:00" },
+      ],
+      autoCreateRun: true,
+      notes: null,
+    });
+    expect(plan.slotIds).toHaveLength(2);
+
+    const pass = await communityScheduleMaterializationService.runPass(now);
+    expect(pass.status).toBe("COMPLETED");
+
+    for (const slotId of plan.slotIds) {
+      const links = await orm.CommunityScheduleRun.where({ scheduleSlotId: slotId }).all();
+      expect(links.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("editing Run Setup after materialize does not change the existing Run snapshot", async () => {
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const plan = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "existing", templateId },
+      slots: [{ weekday: "FRIDAY", localStartTime: "19:45" }],
+      autoCreateRun: false,
+      notes: null,
+    });
+    const slotId = plan.slotIds[0]!;
+    const result = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: lead },
+      { scheduleSlotId: slotId, window: "NEXT", now },
+    );
+
+    const before = (await orm.Run.where({ id: result.runId }).first()) as {
+      difficulty: string;
+      lootType: string;
+      title: string;
+    } | null;
+    const beforeContent = (await orm.RunRaidContent.where({ runId: result.runId }).first()) as {
+      plannedBossCount: number;
+    } | null;
+    expect(before?.difficulty).toBe("HEROIC");
+    expect(beforeContent?.plannedBossCount).toBe(8);
+
+    await runTemplateRepository.update(templateId, {
+      name: "CSM Materialize Template Edited",
+      raidLeadId: ids.lead,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "MYTHIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 4,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+      updatedById: ids.admin,
+    });
+
+    const after = (await orm.Run.where({ id: result.runId }).first()) as {
+      difficulty: string;
+      lootType: string;
+      title: string;
+    } | null;
+    const afterContent = (await orm.RunRaidContent.where({ runId: result.runId }).first()) as {
+      plannedBossCount: number;
+    } | null;
+    expect(after?.difficulty).toBe(before?.difficulty);
+    expect(after?.lootType).toBe(before?.lootType);
+    expect(after?.title).toBe(before?.title);
+    expect(afterContent?.plannedBossCount).toBe(beforeContent?.plannedBossCount);
+
+    await runTemplateRepository.update(templateId, {
+      name: "CSM Materialize Template",
+      raidLeadId: ids.lead,
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 8,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      notes: null,
+      updatedById: ids.admin,
+    });
+  });
 });

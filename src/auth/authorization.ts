@@ -122,7 +122,6 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
   ];
   if (hasAdminAccess(role)) {
     items.push(
-      { href: "/manage/templates", label: "Templates", module: "templates" },
       { href: "/manage/boosting-roles", label: "Boosting Roles", module: "boosting-roles" },
       { href: "/manage/users", label: "Users", module: "users" },
       { href: "/manage/characters", label: "Characters", module: "characters" },

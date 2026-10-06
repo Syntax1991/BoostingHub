@@ -125,7 +125,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
               {props.mode === "create" ? "Add Schedule Slot" : "Edit Schedule Slot"}
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Recurring wall-clock time in Europe/Berlin. Optional template links enable manual or automatic DRAFT
+              Recurring wall-clock time in Europe/Berlin. Optional Run Setup links enable manual or automatic DRAFT
               run creation per raid-ID window.
             </p>
             <div className="mt-4 grid gap-3">
@@ -185,7 +185,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                 </select>
               </label>
               <label className="grid gap-1 text-sm">
-                <span className="text-xs text-muted">Run Template (optional)</span>
+                <span className="text-xs text-muted">Run Setup (optional)</span>
                 <select
                   value={runTemplateId}
                   onChange={(event) => {

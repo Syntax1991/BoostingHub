@@ -8,6 +8,7 @@ import {
 } from "@/auth/authorization";
 import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
+  MAX_SLOTS_PER_PLAN,
   compareScheduleOccurrences,
   resolveScheduleSlotOccurrence,
   type RaidIdWindow,
@@ -16,18 +17,25 @@ import {
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { DomainError } from "@/lib/errors";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { db, orm } from "@/lib/prisma";
+import { COMMUNITY_WEEKDAYS, type CommunityWeekday } from "@/models/enums";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import {
   communityScheduleRepository,
   type CommunityScheduleSlotRecord,
 } from "@/repositories/community-schedule.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
 import { userRepository } from "@/repositories/user.repository";
-import { computeUsability } from "@/services/run-template.service";
+import { computeUsability, runTemplateService } from "@/services/run-template.service";
 import type {
+  AddScheduleTimesInput,
   CreateCommunityScheduleSlotInput,
+  CreateSchedulePlanInput,
   UpdateCommunityScheduleSlotInput,
 } from "@/validators/community-schedule";
+
+type TxOrm = typeof orm;
 
 export type ScheduleOccurrenceMaterializationState =
   | "RUN_CREATED"
@@ -72,14 +80,44 @@ export type CommunityScheduleTemplateOption = {
   unusableReason: string | null;
 };
 
+export type CommunityScheduleRunSetupSlot = {
+  id: string;
+  weekday: CommunityWeekday;
+  localStartTime: string;
+  isActive: boolean;
+  autoCreateRun: boolean;
+  label: string;
+  notes: string | null;
+};
+
+export type CommunityScheduleRunSetupGroup = {
+  key: string;
+  runTemplateId: string | null;
+  runSetupName: string;
+  raidLeadId: string;
+  raidLeadName: string;
+  slots: CommunityScheduleRunSetupSlot[];
+  autoCreateSummary: "ON" | "OFF" | "MIXED";
+  canEdit: boolean;
+};
+
+export type CommunityScheduleRaidOption = {
+  id: string;
+  name: string;
+  season: string;
+  totalBossCount: number;
+};
+
 export type CommunitySchedulePage = {
   canEdit: boolean;
   timeZone: string;
   current: CommunityScheduleWindowView;
   next: CommunityScheduleWindowView;
   slots: CommunityScheduleSlotRecord[];
+  runSetups: CommunityScheduleRunSetupGroup[];
   eligibleRaidLeads: Array<{ id: string; name: string }>;
   templates: CommunityScheduleTemplateOption[];
+  raids: CommunityScheduleRaidOption[];
 };
 
 function requireView(user: AuthenticatedUser): void {
@@ -119,10 +157,49 @@ async function assertNoDuplicate(input: {
   if (existing) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_DUPLICATE",
-      "This raid lead already has a schedule slot at that weekday and time.",
+      `${existing.raidLeadName} already has a schedule slot on ${existing.weekday} at ${existing.localStartTime}.`,
       409,
     );
   }
+}
+
+function assertBatchSlotLimits(slots: ReadonlyArray<{ weekday: string; localStartTime: string }>): void {
+  if (slots.length === 0) {
+    throw new DomainError("COMMUNITY_SCHEDULE_SLOTS_EMPTY", "Add at least one weekly time.", 400);
+  }
+  if (slots.length > MAX_SLOTS_PER_PLAN) {
+    throw new DomainError(
+      "COMMUNITY_SCHEDULE_SLOTS_TOO_MANY",
+      `At most ${MAX_SLOTS_PER_PLAN} times per plan.`,
+      400,
+    );
+  }
+  const seen = new Set<string>();
+  for (const slot of slots) {
+    const key = `${slot.weekday}\0${slot.localStartTime}`;
+    if (seen.has(key)) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_BATCH_DUPLICATE",
+        "Duplicate weekday and time in this batch.",
+        400,
+      );
+    }
+    seen.add(key);
+  }
+}
+
+async function assertNoConflictsForLead(
+  raidLeadId: string,
+  pairs: ReadonlyArray<{ weekday: CommunityWeekday; localStartTime: string }>,
+): Promise<void> {
+  const conflicts = await communityScheduleRepository.findDuplicatesForLead(raidLeadId, pairs);
+  if (conflicts.length === 0) return;
+  const first = conflicts[0]!;
+  throw new DomainError(
+    "COMMUNITY_SCHEDULE_DUPLICATE",
+    `${first.raidLeadName} already has a schedule slot on ${first.weekday} at ${first.localStartTime}.`,
+    409,
+  );
 }
 
 function templateLabel(template: RunTemplateRecord): string {
@@ -133,29 +210,29 @@ async function validateTemplateLink(input: {
   raidLeadId: string;
   runTemplateId: string | null;
   autoCreateRun: boolean;
-}): Promise<void> {
+}): Promise<RunTemplateRecord | null> {
   if (input.autoCreateRun && !input.runTemplateId) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_TEMPLATE_REQUIRED",
-      "Choose a run template when auto-create is enabled.",
+      "Choose a run setup when auto-create is enabled.",
       400,
     );
   }
   if (!input.runTemplateId) {
-    return;
+    return null;
   }
   const template = await runTemplateRepository.findById(input.runTemplateId);
   if (!template) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
-      "Choose a valid run template.",
+      "Choose a valid run setup.",
       400,
     );
   }
   if (template.raidLeadId !== input.raidLeadId) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH",
-      "The run template must belong to the selected raid lead.",
+      "The run setup must belong to the selected raid lead.",
       400,
     );
   }
@@ -163,10 +240,76 @@ async function validateTemplateLink(input: {
   if (input.autoCreateRun && !usability.usable) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
-      usability.unusableReason ?? "This template is not usable for auto-create.",
+      usability.unusableReason ?? "This run setup is not usable for auto-create.",
       400,
     );
   }
+  return template;
+}
+
+function weekdaySortIndex(weekday: CommunityWeekday): number {
+  return COMMUNITY_WEEKDAYS.indexOf(weekday);
+}
+
+function compareSetupSlots(a: CommunityScheduleRunSetupSlot, b: CommunityScheduleRunSetupSlot): number {
+  const byDay = weekdaySortIndex(a.weekday) - weekdaySortIndex(b.weekday);
+  if (byDay !== 0) return byDay;
+  const byTime = a.localStartTime.localeCompare(b.localStartTime);
+  if (byTime !== 0) return byTime;
+  return a.id.localeCompare(b.id);
+}
+
+function autoCreateSummary(slots: ReadonlyArray<{ autoCreateRun: boolean }>): "ON" | "OFF" | "MIXED" {
+  if (slots.length === 0) return "OFF";
+  const onCount = slots.filter((slot) => slot.autoCreateRun).length;
+  if (onCount === 0) return "OFF";
+  if (onCount === slots.length) return "ON";
+  return "MIXED";
+}
+
+function groupRunSetups(
+  slots: CommunityScheduleSlotRecord[],
+  canEdit: boolean,
+): CommunityScheduleRunSetupGroup[] {
+  const groups = new Map<string, CommunityScheduleRunSetupGroup>();
+  for (const slot of slots) {
+    const key = `${slot.runTemplateId ?? "none"}:${slot.raidLeadId}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        runTemplateId: slot.runTemplateId,
+        runSetupName: slot.runTemplateName ?? "Unconfigured Schedule",
+        raidLeadId: slot.raidLeadId,
+        raidLeadName: slot.raidLeadName,
+        slots: [],
+        autoCreateSummary: "OFF",
+        canEdit,
+      };
+      groups.set(key, group);
+    }
+    group.slots.push({
+      id: slot.id,
+      weekday: slot.weekday,
+      localStartTime: slot.localStartTime,
+      isActive: slot.isActive,
+      autoCreateRun: slot.autoCreateRun,
+      label: slot.label,
+      notes: slot.notes,
+    });
+  }
+
+  const result = [...groups.values()];
+  for (const group of result) {
+    group.slots.sort(compareSetupSlots);
+    group.autoCreateSummary = autoCreateSummary(group.slots);
+  }
+  result.sort((a, b) => {
+    const byName = a.runSetupName.localeCompare(b.runSetupName);
+    if (byName !== 0) return byName;
+    return a.raidLeadName.localeCompare(b.raidLeadName);
+  });
+  return result;
 }
 
 function buildMaterializationView(input: {
@@ -234,7 +377,7 @@ function buildMaterializationView(input: {
     }
     return {
       state: "AUTO_BLOCKED",
-      blockedReason: input.templateUnusableReason ?? "Template is not usable.",
+      blockedReason: input.templateUnusableReason ?? "Run Setup is not usable.",
       templateLabel: input.templateLabel ?? undefined,
       autoCreateRun,
       canMaterialize: false,
@@ -345,6 +488,41 @@ async function listTemplateOptions(user: AuthenticatedUser): Promise<CommunitySc
   });
 }
 
+function resolveTxOrm(tx: { orm: unknown }): TxOrm {
+  return ((tx.orm as { public?: TxOrm }).public ?? (tx.orm as unknown as TxOrm)) as TxOrm;
+}
+
+async function createSlotsInTx(input: {
+  txOrm: TxOrm;
+  slots: ReadonlyArray<{ weekday: CommunityWeekday; localStartTime: string }>;
+  label: string;
+  notes: string | null;
+  raidLeadId: string;
+  runTemplateId: string;
+  autoCreateRun: boolean;
+  actorId: string;
+}): Promise<string[]> {
+  const slotIds: string[] = [];
+  for (const slot of input.slots) {
+    const created = await communityScheduleRepository.create(
+      {
+        weekday: slot.weekday,
+        localStartTime: slot.localStartTime,
+        label: input.label,
+        notes: input.notes,
+        raidLeadId: input.raidLeadId,
+        runTemplateId: input.runTemplateId,
+        autoCreateRun: input.autoCreateRun,
+        createdById: input.actorId,
+        updatedById: input.actorId,
+      },
+      input.txOrm,
+    );
+    slotIds.push(created.id);
+  }
+  return slotIds;
+}
+
 /**
  * Community Weekly Schedule — recurring planning intent with optional DRAFT Run
  * materialization per raid-ID window. Never auto-opens Runs or Discord state.
@@ -353,10 +531,13 @@ export const communityScheduleService = {
   async getPage(user: AuthenticatedUser, now = new Date()): Promise<CommunitySchedulePage> {
     requireView(user);
     const canEdit = canManageCommunitySchedule(user.accountRole);
-    const [slots, eligibleRaidLeads, templates] = await Promise.all([
+    const [slots, eligibleRaidLeads, templates, raids] = await Promise.all([
       communityScheduleRepository.listAll(),
       canEdit ? userRepository.listEligibleRaidLeads() : Promise.resolve([]),
       listTemplateOptions(user),
+      canEdit
+        ? raidRepository.ensureReferenceRaids().then(() => raidRepository.listAvailableForRuns())
+        : Promise.resolve([]),
     ]);
 
     const templateMetaById = new Map<
@@ -377,17 +558,140 @@ export const communityScheduleService = {
       linksByKey.set(`${link.scheduleSlotId}\0${link.windowStartAt}`, link.runId);
     }
 
+    const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
+
     return {
       canEdit,
       timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
       current: projectWindow(user, slots, "CURRENT", now, linksByKey, templateMetaById),
       next: projectWindow(user, slots, "NEXT", now, linksByKey, templateMetaById),
-      slots: canEdit ? slots : slots.filter((slot) => slot.isActive),
+      slots: visibleSlots,
+      runSetups: groupRunSetups(visibleSlots, canEdit),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
       templates: canEdit
         ? templates.filter((row) => row.usable)
         : templates.filter((row) => row.usable && row.raidLeadId === user.id),
+      raids: raids.map((raid) => ({
+        id: raid.id,
+        name: raid.name,
+        season: raid.season,
+        totalBossCount: raid.totalBossCount,
+      })),
     };
+  },
+
+  async createSchedulePlan(
+    user: AuthenticatedUser,
+    input: CreateSchedulePlanInput,
+  ): Promise<{ templateId: string; slotIds: string[] }> {
+    requireManage(user);
+    assertBatchSlotLimits(input.slots);
+    await requireEligibleRaidLead(input.raidLeadId);
+    await assertNoConflictsForLead(input.raidLeadId, input.slots);
+
+    let templateId: string;
+    let templateName: string;
+
+    if (input.runSetup.mode === "existing") {
+      const template = await validateTemplateLink({
+        raidLeadId: input.raidLeadId,
+        runTemplateId: input.runSetup.templateId,
+        autoCreateRun: input.autoCreateRun,
+      });
+      if (!template) {
+        throw new DomainError(
+          "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
+          "Choose a valid run setup.",
+          400,
+        );
+      }
+      templateId = template.id;
+      templateName = template.name;
+    } else {
+      templateId = "";
+      templateName = input.runSetup.name.trim();
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const txOrm = resolveTxOrm(tx);
+      let resolvedTemplateId = templateId;
+      let resolvedName = templateName;
+
+      if (input.runSetup.mode === "create") {
+        const created = await runTemplateService.createTemplateInTx(
+          user,
+          {
+            ...input.runSetup,
+            raidLeadId: input.raidLeadId,
+          },
+          txOrm,
+        );
+        resolvedTemplateId = created.id;
+        resolvedName = input.runSetup.name.trim();
+      }
+
+      const slotIds = await createSlotsInTx({
+        txOrm,
+        slots: input.slots,
+        label: resolvedName,
+        notes: input.notes,
+        raidLeadId: input.raidLeadId,
+        runTemplateId: resolvedTemplateId,
+        autoCreateRun: input.autoCreateRun,
+        actorId: user.id,
+      });
+
+      return { templateId: resolvedTemplateId, slotIds };
+    });
+
+    return result;
+  },
+
+  async addTimesToSetup(
+    user: AuthenticatedUser,
+    input: AddScheduleTimesInput,
+  ): Promise<{ templateId: string; slotIds: string[] }> {
+    requireManage(user);
+    assertBatchSlotLimits(input.slots);
+    await requireEligibleRaidLead(input.raidLeadId);
+
+    const template = await validateTemplateLink({
+      raidLeadId: input.raidLeadId,
+      runTemplateId: input.runTemplateId,
+      autoCreateRun: input.autoCreateRun,
+    });
+    if (!template) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
+        "Choose a valid run setup.",
+        400,
+      );
+    }
+    if (template.raidLeadId !== input.raidLeadId) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH",
+        "The run setup must belong to the selected raid lead.",
+        400,
+      );
+    }
+
+    await assertNoConflictsForLead(input.raidLeadId, input.slots);
+
+    const slotIds = await db.transaction(async (tx) => {
+      const txOrm = resolveTxOrm(tx);
+      return createSlotsInTx({
+        txOrm,
+        slots: input.slots,
+        label: template.name,
+        notes: input.notes,
+        raidLeadId: input.raidLeadId,
+        runTemplateId: template.id,
+        autoCreateRun: input.autoCreateRun,
+        actorId: user.id,
+      });
+    });
+
+    return { templateId: template.id, slotIds };
   },
 
   async createSlot(

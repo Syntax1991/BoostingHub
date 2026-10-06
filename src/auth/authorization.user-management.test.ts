@@ -12,7 +12,6 @@ describe("management navigation and user-management gates", () => {
       "overview",
       "runs",
       "schedule",
-      "templates",
       "boosting-roles",
       "users",
       "characters",
@@ -23,13 +22,14 @@ describe("management navigation and user-management gates", () => {
       "/manage",
       "/manage/runs",
       "/manage/schedule",
-      "/manage/templates",
       "/manage/boosting-roles",
       "/manage/users",
       "/manage/characters",
       "/manage/analytics",
       "/manage/system",
     ]);
+    expect(items.some((item) => item.module === "templates")).toBe(false);
+    expect(items.some((item) => item.href === "/manage/templates")).toBe(false);
   });
 
   it("limits RAID_LEAD to overview, runs, and schedule", () => {
