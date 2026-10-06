@@ -98,6 +98,7 @@ export type ManagementNavItem = {
   module:
     | "overview"
     | "runs"
+    | "schedule"
     | "templates"
     | "boosting-roles"
     | "users"
@@ -117,6 +118,7 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
   const items: ManagementNavItem[] = [
     { href: "/manage", label: "Overview", module: "overview" },
     { href: "/manage/runs", label: "Runs", module: "runs" },
+    { href: "/manage/schedule", label: "Schedule", module: "schedule" },
   ];
   if (hasAdminAccess(role)) {
     items.push(
@@ -129,6 +131,15 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
     );
   }
   return items;
+}
+
+/** RAID_LEAD+ may read Community Schedule. Mutations require ADMIN/OWNER. */
+export function canViewCommunitySchedule(role: AccountRole): boolean {
+  return canAccessManagement(role);
+}
+
+export function canManageCommunitySchedule(role: AccountRole): boolean {
+  return hasAdminAccess(role);
 }
 
 export function isManagementNavActive(pathname: string, href: string): boolean {

@@ -27,6 +27,7 @@ import { parseCharacterOperationsFilters } from "@/validators/character-operatio
 import { systemHealthService } from "@/services/system-health.service";
 import { parseSystemHealthFilters } from "@/validators/system-health";
 import { operationalAnalyticsService } from "@/services/operational-analytics.service";
+import { communityScheduleService } from "@/services/community-schedule.service";
 import { isDomainError } from "@/lib/errors";
 import { runCreatePath } from "@/lib/run-routes";
 
@@ -209,6 +210,12 @@ export const managementController = {
   async getCreateManyRunsPage() {
     const user = await requireManagerOrRedirect();
     return runService.getCreateManyForm(user);
+  },
+
+  /** RAID_LEAD+ read Community Schedule; ADMIN/OWNER may mutate via actions. */
+  async getManageSchedulePage() {
+    const user = await requireManagerOrRedirect();
+    return communityScheduleService.getPage(user);
   },
 
   /** ADMIN-only global view across every Raid Lead's templates. */

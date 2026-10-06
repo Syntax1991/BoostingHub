@@ -62,6 +62,18 @@ export type WowRegion = (typeof WOW_REGIONS)[number];
 export const RAID_DIFFICULTIES = ["NORMAL", "HEROIC", "MYTHIC"] as const;
 export type RaidDifficulty = (typeof RAID_DIFFICULTIES)[number];
 
+/** Community Schedule recurring weekday (wall-clock intent, Europe/Berlin). */
+export const COMMUNITY_WEEKDAYS = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+] as const;
+export type CommunityWeekday = (typeof COMMUNITY_WEEKDAYS)[number];
+
 /**
  * Independent of RaidDifficulty. Compatibility (e.g. MYTHIC cannot be SAVED)
  * is a domain rule enforced in the Service layer — see run-state.ts.
