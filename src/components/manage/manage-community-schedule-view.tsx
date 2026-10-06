@@ -7,6 +7,7 @@ import { CommunityScheduleOccurrenceActions } from "@/components/manage/communit
 import { CommunitySchedulePlanDialog } from "@/components/manage/community-schedule-plan-dialog";
 import { CommunityScheduleShareDialog } from "@/components/manage/community-schedule-share-dialog";
 import { CommunityScheduleSlotFormDialog } from "@/components/manage/community-schedule-slot-form-dialog";
+import { CommunityScheduleDeleteSetupButton } from "@/components/manage/community-schedule-delete-setup-button";
 import { CommunityScheduleSlotActions } from "@/components/manage/community-schedule-slot-actions";
 import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
 import { updateCommunityScheduleRunSetupAction } from "@/controllers/community-schedule.actions";
@@ -185,6 +186,14 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
                     runSetupName={group.runSetupName}
                   />
                   <EditRunSetupButton page={page} runTemplateId={group.runTemplateId} />
+                  <CommunityScheduleDeleteSetupButton
+                    runTemplateId={group.runTemplateId}
+                    runSetupName={group.runSetupName}
+                    raidLeadName={group.raidLeadName}
+                    slotCount={group.slotCount}
+                    canDelete={group.canDelete}
+                    deleteBlockedReason={group.deleteBlockedReason}
+                  />
                 </div>
               ) : null}
             </div>
@@ -207,7 +216,17 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
                     {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
                   </div>
                   {page.canEdit ? (
-                    <CommunityScheduleSlotActions slotId={slot.id} isActive={slot.isActive} />
+                    <CommunityScheduleSlotActions
+                      slotId={slot.id}
+                      isActive={slot.isActive}
+                      canDelete={slot.canDelete}
+                      deleteBlockedReason={slot.deleteBlockedReason}
+                      weekday={slot.weekday}
+                      localStartTime={slot.localStartTime}
+                      runMode={slot.runMode}
+                      runSetupName={group.runSetupName}
+                      raidLeadName={group.raidLeadName}
+                    />
                   ) : null}
                 </li>
               ))}

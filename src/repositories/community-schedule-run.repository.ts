@@ -29,15 +29,24 @@ function mapRow(row: Record<string, unknown>): CommunityScheduleRunRecord {
   };
 }
 
-/** Postgres unique violation (23505), including wrapped driver errors. */
-export function isUniqueViolation(error: unknown): boolean {
+function hasPgErrorCode(error: unknown, code: string): boolean {
   let current: unknown = error;
   for (let depth = 0; current && depth < 6; depth += 1) {
     const record = current as { code?: unknown; sqlState?: unknown; cause?: unknown };
-    if (record.code === "23505" || record.sqlState === "23505") return true;
+    if (record.code === code || record.sqlState === code) return true;
     current = record.cause;
   }
   return false;
+}
+
+/** Postgres unique violation (23505), including wrapped driver errors. */
+export function isUniqueViolation(error: unknown): boolean {
+  return hasPgErrorCode(error, "23505");
+}
+
+/** Postgres foreign-key violation (23503), including wrapped driver errors. */
+export function isForeignKeyViolation(error: unknown): boolean {
+  return hasPgErrorCode(error, "23503");
 }
 
 export const communityScheduleRunRepository = {
@@ -59,6 +68,27 @@ export const communityScheduleRunRepository = {
     if (unique.length === 0) return [];
     const rows = await orm.CommunityScheduleRun.where((link) => link.scheduleSlotId.in(unique)).all();
     return rows.map((row) => mapRow(row as Record<string, unknown>));
+  },
+
+  /**
+   * Batch: which of the given slots already have at least one CommunityScheduleRun.
+   * Single query — never N+1 per slot.
+   */
+  async slotIdsWithMaterialization(
+    slotIds: readonly string[],
+    txOrm?: TxOrm,
+  ): Promise<Set<string>> {
+    const unique = [...new Set(slotIds)];
+    if (unique.length === 0) return new Set();
+    const client = txOrm ?? orm;
+    const rows = await client.CommunityScheduleRun.where((link) =>
+      link.scheduleSlotId.in(unique),
+    ).all();
+    const out = new Set<string>();
+    for (const row of rows) {
+      out.add(asString((row as Record<string, unknown>).scheduleSlotId));
+    }
+    return out;
   },
 
   async create(

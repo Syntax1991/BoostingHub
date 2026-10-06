@@ -154,6 +154,19 @@ export const communityScheduleRepository = {
       .filter((slot) => slot.runTemplateId != null);
   },
 
+  async listByTemplateId(
+    runTemplateId: string,
+    txOrm?: TxOrm,
+  ): Promise<CommunityScheduleSlotRecord[]> {
+    const rows = await baseSlotQuery(txOrm)
+      .where({ runTemplateId })
+      .orderBy((slot) => slot.weekday.asc())
+      .orderBy((slot) => slot.localStartTime.asc())
+      .orderBy((slot) => slot.id.asc())
+      .all();
+    return rows.map((row) => mapSlot(row as Record<string, unknown>));
+  },
+
   async create(
     input: CommunityScheduleSlotWrite,
     txOrm?: TxOrm,
@@ -219,5 +232,10 @@ export const communityScheduleRepository = {
       throw new Error("Community schedule slot setActive failed.");
     }
     return updated;
+  },
+
+  async deleteById(id: string, txOrm?: TxOrm): Promise<void> {
+    const client = txOrm ?? orm;
+    await client.CommunityScheduleSlot.where({ id }).delete();
   },
 };
