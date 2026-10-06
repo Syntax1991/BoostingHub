@@ -1,0 +1,320 @@
+[
+  {
+    "id": "table.run_domain_event",
+    "label": "Create table \"run_domain_event\"",
+    "summary": "Creates table \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"run_domain_event\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"run_domain_event\"",
+        "sql": "CREATE TABLE \"public\".\"run_domain_event\" (\n  \"actorKind\" text NOT NULL,\n  \"actorUserId\" text,\n  \"id\" text NOT NULL,\n  \"occurredAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"payloadJson\" text,\n  \"runId\" text NOT NULL,\n  \"summary\" text NOT NULL,\n  \"type\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"run_domain_event_actorKind_check_2e50fd04\" CHECK (\"actorKind\" IN ('USER', 'SYSTEM'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"run_domain_event\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_domain_event.run_domain_event_actorUserId_idx_96dac96c",
+    "label": "Create index \"run_domain_event_actorUserId_idx_96dac96c\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_domain_event_actorUserId_idx_96dac96c",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_domain_event_actorUserId_idx_96dac96c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_actorUserId_idx_96dac96c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_domain_event_actorUserId_idx_96dac96c\"",
+        "sql": "CREATE INDEX \"run_domain_event_actorUserId_idx_96dac96c\" ON \"public\".\"run_domain_event\" (\"actorUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_domain_event_actorUserId_idx_96dac96c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_actorUserId_idx_96dac96c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_domain_event.run_domain_event_occurredAt_idx_c6b89167",
+    "label": "Create index \"run_domain_event_occurredAt_idx_c6b89167\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_domain_event_occurredAt_idx_c6b89167",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_domain_event_occurredAt_idx_c6b89167\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_occurredAt_idx_c6b89167\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_domain_event_occurredAt_idx_c6b89167\"",
+        "sql": "CREATE INDEX \"run_domain_event_occurredAt_idx_c6b89167\" ON \"public\".\"run_domain_event\" (\"occurredAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_domain_event_occurredAt_idx_c6b89167\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_occurredAt_idx_c6b89167\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_domain_event.run_domain_event_runId_idx_a6016437",
+    "label": "Create index \"run_domain_event_runId_idx_a6016437\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_domain_event_runId_idx_a6016437",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_domain_event_runId_idx_a6016437\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_runId_idx_a6016437\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_domain_event_runId_idx_a6016437\"",
+        "sql": "CREATE INDEX \"run_domain_event_runId_idx_a6016437\" ON \"public\".\"run_domain_event\" (\"runId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_domain_event_runId_idx_a6016437\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_runId_idx_a6016437\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_domain_event.run_domain_event_runId_occurredAt_idx_9e803df7",
+    "label": "Create index \"run_domain_event_runId_occurredAt_idx_9e803df7\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_domain_event_runId_occurredAt_idx_9e803df7",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_domain_event_runId_occurredAt_idx_9e803df7\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_runId_occurredAt_idx_9e803df7\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_domain_event_runId_occurredAt_idx_9e803df7\"",
+        "sql": "CREATE INDEX \"run_domain_event_runId_occurredAt_idx_9e803df7\" ON \"public\".\"run_domain_event\" (\"runId\", \"occurredAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_domain_event_runId_occurredAt_idx_9e803df7\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_runId_occurredAt_idx_9e803df7\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_domain_event.run_domain_event_type_occurredAt_idx_4a74ac21",
+    "label": "Create index \"run_domain_event_type_occurredAt_idx_4a74ac21\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_domain_event_type_occurredAt_idx_4a74ac21",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_domain_event_type_occurredAt_idx_4a74ac21\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_type_occurredAt_idx_4a74ac21\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_domain_event_type_occurredAt_idx_4a74ac21\"",
+        "sql": "CREATE INDEX \"run_domain_event_type_occurredAt_idx_4a74ac21\" ON \"public\".\"run_domain_event\" (\"type\", \"occurredAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_domain_event_type_occurredAt_idx_4a74ac21\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_domain_event_type_occurredAt_idx_4a74ac21\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_domain_event.run_domain_event_runId_fkey",
+    "label": "Add foreign key \"run_domain_event_runId_fkey\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_domain_event_runId_fkey",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_domain_event_runId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_domain_event_runId_fkey",
+          "public",
+          "\"public\".\"run_domain_event\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_domain_event_runId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_domain_event\"\nADD CONSTRAINT \"run_domain_event_runId_fkey\"\nFOREIGN KEY (\"runId\")\nREFERENCES \"public\".\"run\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_domain_event_runId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_domain_event_runId_fkey",
+          "public",
+          "\"public\".\"run_domain_event\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.run_domain_event.run_domain_event_actorUserId_fkey",
+    "label": "Add foreign key \"run_domain_event_actorUserId_fkey\" on \"run_domain_event\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_domain_event_actorUserId_fkey",
+        "table": "run_domain_event"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"run_domain_event_actorUserId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_domain_event_actorUserId_fkey",
+          "public",
+          "\"public\".\"run_domain_event\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"run_domain_event_actorUserId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_domain_event\"\nADD CONSTRAINT \"run_domain_event_actorUserId_fkey\"\nFOREIGN KEY (\"actorUserId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"run_domain_event_actorUserId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_domain_event_actorUserId_fkey",
+          "public",
+          "\"public\".\"run_domain_event\""
+        ]
+      }
+    ]
+  }
+]

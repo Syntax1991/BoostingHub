@@ -280,6 +280,7 @@ model User {
   analyzedConsumableAudits RunConsumableAudit[] @relation("ConsumableAuditAnalyzer")
   attachedWarcraftLogsReports RunWarcraftLogsReport[] @relation("WarcraftLogsReportAttacher")
   decidedWarcraftLogsFights   RunWarcraftLogsFight[]  @relation("WarcraftLogsFightDecider")
+  runDomainEvents          RunDomainEvent[] @relation("RunDomainEventActor")
 
   /// At most one OWNER, enforced by the database: a partial unique index over
   /// the OWNER rows only, so two concurrent owner bootstraps cannot both commit.
@@ -673,6 +674,7 @@ model Run {
   consumableAudit RunConsumableAudit?
   warcraftLogsReports RunWarcraftLogsReport[]
   warcraftLogsFights  RunWarcraftLogsFight[]
+  domainEvents        RunDomainEvent[]
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -1584,4 +1586,34 @@ model IntegrationEvent {
   @@index([status, createdAt])
   @@index([provider, operation, createdAt])
   @@map("integration_event")
+}
+
+/// Who produced a RunDomainEvent. SYSTEM never fabricates a user actor.
+enum RunDomainEventActorKind {
+  @@type("pg/text@1")
+  USER   = "USER"
+  SYSTEM = "SYSTEM"
+}
+
+/// Run-scoped business audit trail. Not ActivityEvent and not IntegrationEvent.
+/// Meaningful lifecycle events only — never every persistence write.
+model RunDomainEvent {
+  id          String                 @id @default(uuid())
+  runId       String
+  run         Run                    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actorUser   User?                  @relation("RunDomainEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorKind   RunDomainEventActorKind
+  /// Stable event type key (e.g. RUN_CREATED, ROSTER_PUBLISHED).
+  type        String
+  /// Short human-readable summary for History UI.
+  summary     String
+  /// Sanitized JSON object string for optional before/after detail. Never secrets.
+  payloadJson String?
+  occurredAt  TimestamptzString      @default(now())
+
+  @@index([runId, occurredAt])
+  @@index([occurredAt])
+  @@index([type, occurredAt])
+  @@map("run_domain_event")
 }

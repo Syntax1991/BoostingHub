@@ -29,6 +29,7 @@ import {
   runRescheduledChannelSourceKey,
 } from "@/repositories/run-discord-announcement.repository";
 import { runLifecycleNotificationService } from "@/services/run-lifecycle-notifications.service";
+import { runDomainEventService } from "@/services/run-domain-event.service";
 import { runTemplateService } from "@/services/run-template.service";
 import {
   assertComposition,
@@ -527,6 +528,13 @@ export const runService = {
       type: "RUN_CREATED",
       message: "Created a run draft.",
     });
+    await runDomainEventService.record({
+      runId: id,
+      actorUser: user,
+      type: "RUN_CREATED",
+      summary: "Run draft created.",
+      payload: { difficulty: draft.difficulty, lootType: draft.lootType },
+    });
 
     return { id };
   },
@@ -884,6 +892,46 @@ export const runService = {
       type: "RUN_UPDATED",
       message: "Updated run planning.",
     });
+    if (scheduleChanged) {
+      await runDomainEventService.record({
+        runId: run.id,
+        actorUser: user,
+        type: "RUN_SCHEDULE_CHANGED",
+        summary: "Run schedule changed.",
+        payload: {
+          fromScheduledStartAt: previousScheduledStartAt,
+          toScheduledStartAt: scheduledStartAt,
+          scheduleRevision: nextScheduleRevision,
+        },
+      });
+    }
+    if (contentChanged || input.difficulty !== run.difficulty || input.lootType !== run.lootType) {
+      await runDomainEventService.record({
+        runId: run.id,
+        actorUser: user,
+        type: "RUN_CONTENT_CHANGED",
+        summary: "Run content or difficulty changed.",
+        payload: {
+          contentSummary: display.summary,
+          difficulty,
+          lootType: input.lootType,
+        },
+      });
+    }
+    if (leadChanged) {
+      await runDomainEventService.record({
+        runId: run.id,
+        actorUser: user,
+        type: "RUN_RAID_LEAD_CHANGED",
+        summary: `Raid Lead changed to ${raidLeadName}.`,
+        payload: {
+          fromRaidLeadId: run.raidLeadId,
+          toRaidLeadId: raidLeadId,
+          fromRaidLeadName: run.raidLeadName,
+          toRaidLeadName: raidLeadName,
+        },
+      });
+    }
 
     return { id: run.id };
   },
@@ -906,6 +954,13 @@ export const runService = {
       userId: user.id,
       type: "RUN_OPENED",
       message: "Opened a run for signups.",
+    });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "RUN_OPENED",
+      summary: "Run opened for signups.",
+      payload: { fromStatus: "DRAFT", toStatus: "OPEN", signupsOpen: true },
     });
     return { id: run.id };
   },
@@ -930,6 +985,13 @@ export const runService = {
       userId: user.id,
       type: open ? "RUN_SIGNUPS_REOPENED" : "RUN_SIGNUPS_CLOSED",
       message: open ? "Reopened the signup window." : "Closed the signup window.",
+    });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: open ? "SIGNUPS_OPENED" : "SIGNUPS_CLOSED",
+      summary: open ? "Signup window reopened." : "Signup window closed.",
+      payload: { signupsOpen: open },
     });
     return { id: run.id };
   },
@@ -971,6 +1033,13 @@ export const runService = {
       userId: user.id,
       type: "RUN_CANCELLED",
       message: "Cancelled a run.",
+    });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "RUN_CANCELLED",
+      summary: "Run cancelled.",
+      payload: { fromStatus: run.status, toStatus: "CANCELLED", cancelRevision },
     });
     return { id: run.id };
   },
@@ -1031,6 +1100,13 @@ export const runService = {
       type: "RUN_REACTIVATED",
       message: "Reactivated a cancelled run.",
     });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "RUN_REACTIVATED",
+      summary: "Cancelled run reactivated.",
+      payload: { fromStatus: "CANCELLED", cancelRevision: expectedCancelRevision },
+    });
     return { id: run.id };
   },
 
@@ -1058,6 +1134,13 @@ export const runService = {
       type: "RUN_STARTED",
       message: "Started a run.",
     });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "RUN_STARTED",
+      summary: "Run started.",
+      payload: { fromStatus: "PUBLISHED", toStatus: "IN_PROGRESS", selectedCount: selectedSignupIds.length },
+    });
     return { id: run.id };
   },
 
@@ -1075,6 +1158,13 @@ export const runService = {
       userId: user.id,
       type: "RUN_COMPLETED",
       message: "Completed a run.",
+    });
+    await runDomainEventService.record({
+      runId: run.id,
+      actorUser: user,
+      type: "RUN_COMPLETED",
+      summary: "Run completed.",
+      payload: { fromStatus: "IN_PROGRESS", toStatus: "COMPLETED" },
     });
     return { id: run.id };
   },
