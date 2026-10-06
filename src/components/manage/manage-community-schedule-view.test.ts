@@ -9,7 +9,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     id: "slot-1",
     weekday: "FRIDAY" as const,
     localStartTime: "19:45",
-    label: "HC VIP",
+    label: "Default HC",
     notes: null,
     raidLeadId: "lead-1",
     raidLeadName: "Synblast",
@@ -50,6 +50,47 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         unusableReason: null,
       },
     ],
+    raids: [{ id: "raid-1", name: "Venomous Abyss", season: "Midnight", totalBossCount: 8 }],
+    runSetups: [
+      {
+        key: "template-1:lead-1",
+        runTemplateId: "template-1",
+        runSetupName: "Default HC",
+        raidLeadId: "lead-1",
+        raidLeadName: "Synblast",
+        autoCreateSummary: "MIXED",
+        canEdit,
+        slots: [
+          {
+            id: "slot-1",
+            weekday: "FRIDAY",
+            localStartTime: "19:45",
+            isActive: true,
+            autoCreateRun: true,
+            label: "Default HC",
+            notes: null,
+          },
+          {
+            id: "slot-2",
+            weekday: "SATURDAY",
+            localStartTime: "20:00",
+            isActive: true,
+            autoCreateRun: false,
+            label: "Default HC",
+            notes: null,
+          },
+          {
+            id: "slot-inactive",
+            weekday: "SUNDAY",
+            localStartTime: "18:00",
+            isActive: false,
+            autoCreateRun: false,
+            label: "Default HC",
+            notes: null,
+          },
+        ],
+      },
+    ],
     current: {
       window: "CURRENT",
       windowStart: "2026-01-14T05:00:00.000Z",
@@ -84,9 +125,18 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
       slot,
       {
         ...slot,
+        id: "slot-2",
+        weekday: "SATURDAY",
+        localStartTime: "20:00",
+        autoCreateRun: false,
+      },
+      {
+        ...slot,
         id: "slot-inactive",
+        weekday: "SUNDAY",
+        localStartTime: "18:00",
         isActive: false,
-        label: "Old Slot",
+        autoCreateRun: false,
       },
     ],
     eligibleRaidLeads: [{ id: "lead-1", name: "Synblast" }],
@@ -94,19 +144,25 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
 }
 
 describe("ManageCommunityScheduleView", () => {
-  it("renders Current and Next Raid ID sections with chronological slots", () => {
+  it("renders Run Setups grouping, Create Schedule, and Current/Next windows", () => {
     const html = renderToStaticMarkup(
       createElement(ManageCommunityScheduleView, { page: samplePage(true) }),
     );
+    expect(html).toContain("Create Schedule");
+    expect(html).toContain("Run Setups / Weekly Plan");
+    expect(html).toContain("Default HC · Synblast");
+    expect(html).toContain("Auto-create: MIXED");
+    expect(html).toContain("Auto ✓");
+    expect(html).toContain("Auto ✗");
+    expect(html).toContain("Add times");
+    expect(html).toContain("Edit Run Setup");
+    expect(html).toContain("Inactive");
     expect(html).toContain("Current Raid ID");
     expect(html).toContain("Next Raid ID");
-    expect(html).toContain("19:45 · HC VIP · Synblast");
+    expect(html).toContain("19:45 · Default HC · Synblast");
     expect(html).toContain("Auto-create waiting");
-    expect(html).toContain("Auto-create: ON");
+    expect(html).toContain("Run Setup:");
     expect(html).toContain("Create Run");
-    expect(html).toContain("Add Schedule Slot");
-    expect(html).toContain("Inactive slots");
-    expect(html).toContain("Old Slot");
   });
 
   it("hides ADMIN edit controls for RAID_LEAD read-only page", () => {
@@ -114,9 +170,10 @@ describe("ManageCommunityScheduleView", () => {
       createElement(ManageCommunityScheduleView, { page: samplePage(false) }),
     );
     expect(html).toContain("Current Raid ID");
-    expect(html).toContain("19:45 · HC VIP · Synblast");
-    expect(html).not.toContain("Add Schedule Slot");
-    expect(html).not.toContain("Inactive slots");
+    expect(html).toContain("19:45 · Default HC · Synblast");
+    expect(html).toContain("Run Setups / Weekly Plan");
+    expect(html).not.toContain("Create Schedule");
+    expect(html).not.toContain("Add times");
     expect(html).not.toContain("Deactivate");
   });
 
@@ -125,7 +182,9 @@ describe("ManageCommunityScheduleView", () => {
     page.current.days = [];
     page.next.days = [];
     page.slots = [];
+    page.runSetups = [];
     const html = renderToStaticMarkup(createElement(ManageCommunityScheduleView, { page }));
     expect(html).toContain("No active schedule slots in this window.");
+    expect(html).toContain("No run setups yet.");
   });
 });

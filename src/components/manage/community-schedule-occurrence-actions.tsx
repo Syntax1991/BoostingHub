@@ -45,7 +45,7 @@ export function CommunityScheduleOccurrenceActions({
         {STATE_LABELS[materialization.state]}
       </span>
       {materialization.templateLabel ? (
-        <p className="text-[10px] text-muted">Template: {materialization.templateLabel}</p>
+        <p className="text-[10px] text-muted">Run Setup: {materialization.templateLabel}</p>
       ) : null}
       <p className="text-[10px] text-muted">
         Auto-create: {materialization.autoCreateRun ? "ON" : "OFF"}

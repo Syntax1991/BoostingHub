@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { communityWeekdayShortLabel } from "@/lib/community-schedule";
+import { CommunityScheduleAddTimesDialog } from "@/components/manage/community-schedule-add-times-dialog";
 import { CommunityScheduleOccurrenceActions } from "@/components/manage/community-schedule-occurrence-actions";
+import { CommunitySchedulePlanDialog } from "@/components/manage/community-schedule-plan-dialog";
 import { CommunityScheduleSlotFormDialog } from "@/components/manage/community-schedule-slot-form-dialog";
 import { CommunityScheduleSlotActions } from "@/components/manage/community-schedule-slot-actions";
 import type { CommunitySchedulePage } from "@/services/community-schedule.service";
@@ -90,9 +93,91 @@ function WindowSection({
   );
 }
 
-export function ManageCommunityScheduleView({ page }: { page: CommunitySchedulePage }) {
-  const inactive = page.slots.filter((slot) => !slot.isActive);
+function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
+  if (page.runSetups.length === 0) {
+    return (
+      <Card className="overflow-hidden">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold">Run Setups / Weekly Plan</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Groups of weekly times sharing the same Run Setup and raid lead.
+          </p>
+        </div>
+        <EmptyState
+          title="No run setups yet."
+          description="Create a schedule to group weekly times under a Run Setup."
+        />
+      </Card>
+    );
+  }
 
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Run Setups / Weekly Plan</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Groups of weekly times sharing the same Run Setup and raid lead.
+        </p>
+      </div>
+      <ul className="divide-y divide-border">
+        {page.runSetups.map((group) => (
+          <li key={group.key} className="px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {group.runSetupName} · {group.raidLeadName}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Auto-create: {group.autoCreateSummary}
+                  {group.runTemplateId ? "" : " · No Run Setup linked"}
+                </p>
+              </div>
+              {page.canEdit && group.runTemplateId ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <CommunityScheduleAddTimesDialog
+                    runTemplateId={group.runTemplateId}
+                    raidLeadId={group.raidLeadId}
+                    runSetupName={group.runSetupName}
+                  />
+                  <Link
+                    href="/manage/templates"
+                    className="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
+                  >
+                    Edit Run Setup
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {group.slots.map((slot) => (
+                <li
+                  key={slot.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <span className={!slot.isActive ? "opacity-70" : undefined}>
+                      {communityWeekdayShortLabel(slot.weekday)} {slot.localStartTime}
+                      {!slot.isActive ? " · Inactive" : ""}
+                    </span>
+                    <span className="ml-2 text-xs text-muted">
+                      Auto {slot.autoCreateRun ? "✓" : "✗"}
+                    </span>
+                    {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
+                  </div>
+                  {page.canEdit ? (
+                    <CommunityScheduleSlotActions slotId={slot.id} isActive={slot.isActive} />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+export function ManageCommunityScheduleView({ page }: { page: CommunitySchedulePage }) {
   return (
     <div>
       <PageHeader
@@ -100,10 +185,10 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
         description="Recurring community run times with optional DRAFT run materialization per raid-ID window. Does not open Runs or post to Discord Schedule automatically."
         actions={
           page.canEdit ? (
-            <CommunityScheduleSlotFormDialog
-              mode="create"
+            <CommunitySchedulePlanDialog
               raidLeads={page.eligibleRaidLeads}
               templates={page.templates}
+              raids={page.raids}
               defaultRaidLeadId={page.eligibleRaidLeads[0]?.id}
             />
           ) : null
@@ -111,6 +196,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
       />
 
       <div className="grid gap-4">
+        <RunSetupsSection page={page} />
         <WindowSection
           title="Current Raid ID"
           window={page.current}
@@ -126,55 +212,6 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
           templates={page.templates}
         />
       </div>
-
-      {page.canEdit && inactive.length > 0 ? (
-        <Card className="mt-4 overflow-hidden">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Inactive slots</h2>
-            <p className="mt-0.5 text-xs text-muted">
-              Deactivated slots stay available for reactivation. They do not appear in Current/Next.
-            </p>
-          </div>
-          <ul className="divide-y divide-border">
-            {inactive.map((slot) => (
-              <li
-                key={slot.id}
-                className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 opacity-80"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    {communityWeekdayShortLabel(slot.weekday)} {slot.localStartTime} · {slot.label} ·{" "}
-                    {slot.raidLeadName}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Inactive
-                    {slot.runTemplateName ? ` · Template: ${slot.runTemplateName}` : ""}
-                    {slot.autoCreateRun ? " · Auto-create ON" : ""}
-                  </p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CommunityScheduleSlotFormDialog
-                    mode="edit"
-                    raidLeads={page.eligibleRaidLeads}
-                    templates={page.templates}
-                    initial={{
-                      slotId: slot.id,
-                      weekday: slot.weekday,
-                      localStartTime: slot.localStartTime,
-                      label: slot.label,
-                      notes: slot.notes,
-                      raidLeadId: slot.raidLeadId,
-                      runTemplateId: slot.runTemplateId,
-                      autoCreateRun: slot.autoCreateRun,
-                    }}
-                  />
-                  <CommunityScheduleSlotActions slotId={slot.id} isActive={slot.isActive} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
     </div>
   );
 }
