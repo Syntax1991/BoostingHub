@@ -65,6 +65,9 @@ describe("resolveScheduleSlotOccurrence — normal weeks", () => {
     expect(wall.minute).toBe(45);
     expect(wall.date).toBe("2026-01-16");
     expect(result.window).toBe("CURRENT");
+    expect(result.windowStartAt).toBeTruthy();
+    expect(result.windowEndAt).toBeTruthy();
+    expect(Date.parse(result.windowEndAt)).toBeGreaterThan(Date.parse(result.windowStartAt));
   });
 
   it("summer CEST: Friday 19:45 stays 19:45 local in CURRENT", () => {
@@ -101,6 +104,7 @@ describe("resolveScheduleSlotOccurrence — normal weeks", () => {
     expect(next.localDate).toBe("2026-01-24");
     expect(localWall(current.scheduledStartAt).hour).toBe(18);
     expect(localWall(next.scheduledStartAt).hour).toBe(18);
+    expect(current.windowStartAt).not.toBe(next.windowStartAt);
   });
 });
 

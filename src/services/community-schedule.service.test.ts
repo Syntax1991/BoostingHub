@@ -46,9 +46,28 @@ async function createUser(
   });
 }
 
+const slotExtras = { runTemplateId: null as string | null, autoCreateRun: false };
+
+const testUserIds = new Set(Object.values(ids));
+
 async function cleanupSlots() {
   const rows = await orm.CommunityScheduleSlot.all();
-  for (const row of rows) {
+  const ownSlots = rows.filter((row) => {
+    const slot = row as { id: string; raidLeadId: string; createdById: string };
+    return testUserIds.has(slot.raidLeadId) || testUserIds.has(slot.createdById);
+  });
+  const ownSlotIds = new Set(ownSlots.map((row) => String((row as { id: string }).id)));
+
+  const links = await orm.CommunityScheduleRun.all();
+  for (const row of links) {
+    const link = row as { id: string; runId: string; scheduleSlotId: string };
+    if (!ownSlotIds.has(link.scheduleSlotId)) continue;
+    await orm.CommunityScheduleRun.where({ id: link.id }).delete().catch(() => {});
+    await orm.RunRoster.where({ runId: link.runId }).delete().catch(() => {});
+    await orm.RunRaidContent.where({ runId: link.runId }).delete().catch(() => {});
+    await orm.Run.where({ id: link.runId }).delete().catch(() => {});
+  }
+  for (const row of ownSlots) {
     await orm.CommunityScheduleSlot.where({ id: String((row as { id: string }).id) })
       .delete()
       .catch(() => {});
@@ -105,6 +124,7 @@ describe("communityScheduleService authorization", () => {
         label: "HC VIP",
         raidLeadId: ids.lead,
         notes: null,
+        ...slotExtras,
       }),
       "NOT_AUTHORIZED",
     );
@@ -122,6 +142,7 @@ describe("communityScheduleService authorization", () => {
         label: "HC VIP",
         raidLeadId: ids.lead,
         notes: null,
+        ...slotExtras,
       }),
       "NOT_AUTHORIZED",
     );
@@ -135,6 +156,7 @@ describe("communityScheduleService authorization", () => {
       label: "HC VIP",
       raidLeadId: ids.lead,
       notes: "Primary",
+      ...slotExtras,
     });
     expect(created.isActive).toBe(true);
 
@@ -145,6 +167,7 @@ describe("communityScheduleService authorization", () => {
       label: "HC VIP Late",
       raidLeadId: ids.lead,
       notes: null,
+      ...slotExtras,
     });
     expect(updated.localStartTime).toBe("20:00");
     expect(updated.label).toBe("HC VIP Late");
@@ -165,6 +188,7 @@ describe("communityScheduleService domain", () => {
         label: "Gear",
         raidLeadId: ids.user,
         notes: null,
+        ...slotExtras,
       }),
       "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID",
     );
@@ -175,6 +199,7 @@ describe("communityScheduleService domain", () => {
         label: "Gear",
         raidLeadId: ids.inactiveLead,
         notes: null,
+        ...slotExtras,
       }),
       "COMMUNITY_SCHEDULE_RAID_LEAD_INVALID",
     );
@@ -187,6 +212,7 @@ describe("communityScheduleService domain", () => {
       label: "HC VIP A",
       raidLeadId: ids.lead,
       notes: null,
+      ...slotExtras,
     });
     await expectCode(
       communityScheduleService.createSlot(admin, {
@@ -195,6 +221,7 @@ describe("communityScheduleService domain", () => {
         label: "HC VIP B",
         raidLeadId: ids.lead,
         notes: null,
+        ...slotExtras,
       }),
       "COMMUNITY_SCHEDULE_DUPLICATE",
     );
@@ -204,6 +231,7 @@ describe("communityScheduleService domain", () => {
       label: "HC VIP Parallel",
       raidLeadId: ids.leadB,
       notes: null,
+      ...slotExtras,
     });
     expect(parallel.raidLeadId).toBe(ids.leadB);
   });
@@ -216,6 +244,7 @@ describe("communityScheduleService domain", () => {
       label: "HC VIP",
       raidLeadId: ids.lead,
       notes: null,
+      ...slotExtras,
     });
     const page = await communityScheduleService.getPage(admin, now);
     expect(page.current.days.some((d) => d.slots.some((s) => s.slot.id === slot.id))).toBe(true);
@@ -237,6 +266,7 @@ describe("communityScheduleService domain", () => {
       label: "NM VIP",
       raidLeadId: ids.lead,
       notes: "test",
+      ...slotExtras,
     });
     const after = await orm.Run.select("id").all();
     expect(after.length).toBe(beforeCount);
