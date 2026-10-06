@@ -1,5 +1,5 @@
 import { orm } from "@/lib/prisma";
-import { asString, mapRunDomainEventActorKind } from "@/lib/persistence";
+import { asIsoTimestamp, asString, mapRunDomainEventActorKind } from "@/lib/persistence";
 import type { RunDomainEventActorKind } from "@/models/enums";
 
 export type CommunityScheduleRunRecord = {
@@ -19,12 +19,13 @@ function mapRow(row: Record<string, unknown>): CommunityScheduleRunRecord {
   return {
     id: asString(row.id),
     scheduleSlotId: asString(row.scheduleSlotId),
-    windowStartAt: asString(row.windowStartAt),
-    occurrenceStartAt: asString(row.occurrenceStartAt),
+    // ISO normalize — Postgres/Prisma readbacks are not always `Date.toISOString()`.
+    windowStartAt: asIsoTimestamp(row.windowStartAt),
+    occurrenceStartAt: asIsoTimestamp(row.occurrenceStartAt),
     runId: asString(row.runId),
     createdById: row.createdById == null ? null : asString(row.createdById),
     createdByKind: mapRunDomainEventActorKind(row.createdByKind),
-    createdAt: asString(row.createdAt),
+    createdAt: asIsoTimestamp(row.createdAt),
   };
 }
 

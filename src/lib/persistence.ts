@@ -53,6 +53,25 @@ function asStringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * Normalize Prisma/Postgres timestamptz readbacks to canonical ISO-8601 UTC.
+ * Prisma Next may return `"YYYY-MM-DD HH:MM:SS+00"`; domain code emits
+ * `"YYYY-MM-DDTHH:MM:SS.000Z"`. Strict string equality between those forms
+ * must not break Schedule link lookups.
+ */
+function asIsoTimestamp(value: unknown, fallback = ""): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (typeof value === "string" && value.length > 0) {
+    const ms = Date.parse(value);
+    if (!Number.isNaN(ms)) {
+      return new Date(ms).toISOString();
+    }
+  }
+  return fallback;
+}
+
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
 }
@@ -168,6 +187,7 @@ export function mapWowRegionOrNull(value: unknown): WowRegion | null {
 
 export {
   asBoolean,
+  asIsoTimestamp,
   asNumber,
   asNumberOrNull,
   asString,

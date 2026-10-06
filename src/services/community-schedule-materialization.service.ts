@@ -249,6 +249,7 @@ async function materializeSlotWindowsInternal(input: {
           counters.created += 1;
         }
       } catch {
+        // Per-window failure: count and continue so NEXT still evaluates after CURRENT.
         counters.failed += 1;
       }
     }
