@@ -81,8 +81,8 @@ export async function recordWarcraftLogsJobSummary(input: {
 }
 
 /**
- * Raider.IO is local URL parsing only — never an API health signal.
- * Do not persist the full pasted URL.
+ * Local Raider.IO profile URL parse. Do not persist the full pasted URL.
+ * Parse outcomes are user-input signals — not treated as provider outage in health roll-up.
  */
 export async function recordRaiderIoParseResult(result: ParseRaiderIoCharacterUrlResult): Promise<void> {
   if (result.ok) {
@@ -102,5 +102,40 @@ export async function recordRaiderIoParseResult(result: ParseRaiderIoCharacterUr
     status: "WARNING",
     errorCode: result.error.code,
     metadata: { parseFailure: result.error.code },
+  });
+}
+
+/**
+ * Soft Raider.IO API enrichment outcomes (equipped ilvl).
+ * - SUCCESS: recorded so health recovers after TEMPORARY_FAILURE
+ * - NOT_FOUND: not recorded (domain absence, not provider outage)
+ * - TEMPORARY_FAILURE: WARNING — never fails Blizzard sync; access key absence is not NOT_CONFIGURED
+ * Never persist access keys or query strings.
+ */
+export async function recordRaiderIoApiOutcome(input: {
+  status: "SUCCESS" | "TEMPORARY_FAILURE";
+  region?: WowRegion | null;
+  durationMs?: number | null;
+  reason?: string | null;
+}): Promise<void> {
+  if (input.status === "SUCCESS") {
+    await safeRecord({
+      provider: "RAIDER_IO",
+      operation: "CHARACTER_EQUIPPED_ILVL",
+      status: "SUCCESS",
+      region: input.region ?? null,
+      durationMs: input.durationMs ?? null,
+    });
+    return;
+  }
+  const reason = input.reason?.trim().slice(0, 120) || "TEMPORARY_FAILURE";
+  await safeRecord({
+    provider: "RAIDER_IO",
+    operation: "CHARACTER_EQUIPPED_ILVL",
+    status: "WARNING",
+    errorCode: "RAIDER_IO_UNAVAILABLE",
+    region: input.region ?? null,
+    durationMs: input.durationMs ?? null,
+    metadata: { reason },
   });
 }
