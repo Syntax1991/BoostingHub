@@ -26,6 +26,7 @@ import { characterOperationsService } from "@/services/character-operations.serv
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 import { systemHealthService } from "@/services/system-health.service";
 import { parseSystemHealthFilters } from "@/validators/system-health";
+import { operationalAnalyticsService } from "@/services/operational-analytics.service";
 import { isDomainError } from "@/lib/errors";
 import { runCreatePath } from "@/lib/run-routes";
 
@@ -295,5 +296,13 @@ export const managementController = {
   async getSystemHealthPage(searchParams: Record<string, string | string[] | undefined> = {}) {
     const user = await requireAdminOrRedirect("/manage/system");
     return systemHealthService.getPage(user, parseSystemHealthFilters(searchParams));
+  },
+
+  async getAnalyticsPage(searchParams: Record<string, string | string[] | undefined> = {}) {
+    const user = await requireAdminOrRedirect("/manage/analytics");
+    return operationalAnalyticsService.getReport(user, {
+      from: firstParam(searchParams.from),
+      to: firstParam(searchParams.to),
+    });
   },
 };

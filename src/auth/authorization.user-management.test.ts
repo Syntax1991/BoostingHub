@@ -15,6 +15,7 @@ describe("management navigation and user-management gates", () => {
       "boosting-roles",
       "users",
       "characters",
+      "analytics",
       "system",
     ]);
     expect(items.map((item) => item.href)).toEqual([
@@ -24,6 +25,7 @@ describe("management navigation and user-management gates", () => {
       "/manage/boosting-roles",
       "/manage/users",
       "/manage/characters",
+      "/manage/analytics",
       "/manage/system",
     ]);
   });
