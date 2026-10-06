@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { summarizePreflightChecks, type PreflightCheck } from "@/services/run-preflight.service";
 
-function check(status: PreflightCheck["status"], id = status): PreflightCheck {
+function check(status: PreflightCheck["status"], id: string = status): PreflightCheck {
   return { id, label: id, status, summary: id };
 }
 
@@ -25,5 +25,11 @@ describe("summarizePreflightChecks", () => {
       overall: "BLOCKED",
       attentionCount: 2,
     });
+  });
+
+  it("counts every non-PASS check when blocked", () => {
+    expect(
+      summarizePreflightChecks([check("ERROR", "a"), check("ERROR", "b"), check("WARNING", "c")]).attentionCount,
+    ).toBe(3);
   });
 });

@@ -5,6 +5,7 @@ import { DifficultyBadge, RunStatusBadge } from "@/components/ui/badges";
 import { RunSignupButton } from "@/components/runs/signup-dialog";
 import { RunDetailTabs } from "@/components/runs/run-detail-tabs";
 import { RunManagerActions } from "@/components/runs/run-manager-actions";
+import { RunPreflightPanel } from "@/components/runs/run-preflight-panel";
 import { runDetailPath, type RunDetailTab } from "@/lib/run-routes";
 import type { RunDetailView as RunDetailData } from "@/services/run-detail.service";
 
@@ -44,6 +45,7 @@ export function RunDetailView({
           </div>
         }
       />
+      {data.permissions.canManageRun && data.preflight ? <RunPreflightPanel preflight={data.preflight} /> : null}
       {data.permissions.canManageRun ? (
         <div className="mb-4">
           <RunManagerActions

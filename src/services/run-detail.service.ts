@@ -27,6 +27,7 @@ import { signupService } from "@/services/signup.service";
 import { runStartSnapshotRepository } from "@/repositories/run-start-snapshot.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import { runConsumableAuditService } from "@/services/run-consumable-audit.service";
+import { runPreflightService, type RunPreflightResult } from "@/services/run-preflight.service";
 
 /** Hand-added unregistered booster: renders as `@name <class>` in the Final Setup. */
 function externalFinalSetupParticipant(booster: ExternalBooster): FinalSetupParticipant {
@@ -185,7 +186,8 @@ export const runDetailService = {
     // null without the audit tables ever being read. Database-only: never a WCL call.
     const consumables = await runConsumableAuditService.getAuditViewForRunDetail(user, run);
     let archiveTranscript: { filename: string; downloadHref: string } | null = null;
-    if (manage) {
+    let preflight: RunPreflightResult | null = null;
+    if (manage && manager) {
       const discordPost = await runDiscordPostRepository.findByRunId(runId);
       if (discordPost?.archiveTranscriptHtml) {
         archiveTranscript = {
@@ -193,6 +195,7 @@ export const runDetailService = {
           downloadHref: `/runs/${runId}/archive-transcript`,
         };
       }
+      preflight = await runPreflightService.evaluateWithManager(user, runId, manager, discordPost);
     }
 
     let finalSetupPreview: FinalSetupInput | null = null;
@@ -305,6 +308,7 @@ export const runDetailService = {
       viewerSignups,
       publishedRoster,
       manager,
+      preflight,
       startSnapshot,
       archiveTranscript,
       finalSetupPreview,
