@@ -61,7 +61,8 @@ export function CommunitySchedulePlanDialog({
   const [planNotes, setPlanNotes] = useState("");
 
   const templatesForLead = useMemo(
-    () => templates.filter((template) => template.raidLeadId === raidLeadId),
+    () =>
+      templates.filter((template) => template.raidLeadId === raidLeadId && template.usable),
     [templates, raidLeadId],
   );
 

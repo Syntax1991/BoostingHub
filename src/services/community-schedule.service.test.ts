@@ -520,4 +520,59 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       "NOT_AUTHORIZED",
     );
   });
+
+  it("updateRunSetup edits the shared template for ADMIN and rejects RAID_LEAD", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "create", ...createSetupFields, name: "Edit Setup Target" },
+      slots: [
+        { weekday: "FRIDAY", localStartTime: "19:51" },
+        { weekday: "SATURDAY", localStartTime: "18:51" },
+      ],
+      autoCreateRun: false,
+      notes: null,
+    });
+
+    await expectCode(
+      communityScheduleService.updateRunSetup(lead, {
+        templateId: plan.templateId,
+        name: "Hacked",
+        raidId: VENOMOUS_ABYSS_RAID_ID,
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
+        notes: null,
+        raidLeadId: ids.lead,
+      }),
+      "NOT_AUTHORIZED",
+    );
+
+    await communityScheduleService.updateRunSetup(admin, {
+      templateId: plan.templateId,
+      name: "Edited Setup Name",
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 7,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      desiredLootbuddyCount: 0,
+      notes: "updated notes",
+      raidLeadId: ids.lead,
+    });
+
+    const page = await communityScheduleService.getPage(admin);
+    const group = page.runSetups.find((row) => row.runTemplateId === plan.templateId);
+    expect(group?.runSetupName).toBe("Edited Setup Name");
+    expect(group?.slots).toHaveLength(2);
+    const option = page.templates.find((row) => row.id === plan.templateId);
+    expect(option?.plannedBossCount).toBe(7);
+    expect(option?.notes).toBe("updated notes");
+    expect(page.raids.some((raid) => raid.name.includes("Venomous"))).toBe(true);
+  });
 });

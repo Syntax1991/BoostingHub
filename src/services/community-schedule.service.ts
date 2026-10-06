@@ -18,7 +18,7 @@ import { classifyRunWeek } from "@/lib/wow-run-week";
 import { DomainError } from "@/lib/errors";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { db, orm } from "@/lib/prisma";
-import { COMMUNITY_WEEKDAYS, type CommunityWeekday } from "@/models/enums";
+import { COMMUNITY_WEEKDAYS, type CommunityWeekday, type RaidDifficulty, type RunLootType } from "@/models/enums";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import {
   communityScheduleRepository,
@@ -34,6 +34,7 @@ import type {
   CreateSchedulePlanInput,
   UpdateCommunityScheduleSlotInput,
 } from "@/validators/community-schedule";
+import type { UpdateRunTemplateInput } from "@/validators/run-template";
 
 type TxOrm = typeof orm;
 
@@ -78,6 +79,17 @@ export type CommunityScheduleTemplateOption = {
   label: string;
   usable: boolean;
   unusableReason: string | null;
+  /** Authoritative RunTemplate fields for in-schedule Edit Run Setup. */
+  name: string;
+  raidId: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  plannedBossCount: number;
+  desiredTankCount: number;
+  desiredHealerCount: number;
+  desiredDpsCount: number;
+  desiredLootbuddyCount: number;
+  notes: string | null;
 };
 
 export type CommunityScheduleRunSetupSlot = {
@@ -484,6 +496,16 @@ async function listTemplateOptions(user: AuthenticatedUser): Promise<CommunitySc
       label: templateLabel(template),
       usable: usability.usable,
       unusableReason: usability.unusableReason,
+      name: template.name,
+      raidId: template.raidId,
+      difficulty: template.difficulty,
+      lootType: template.lootType,
+      plannedBossCount: template.plannedBossCount,
+      desiredTankCount: template.desiredTankCount,
+      desiredHealerCount: template.desiredHealerCount,
+      desiredDpsCount: template.desiredDpsCount,
+      desiredLootbuddyCount: template.desiredLootbuddyCount,
+      notes: template.notes,
     };
   });
 }
@@ -531,7 +553,7 @@ export const communityScheduleService = {
   async getPage(user: AuthenticatedUser, now = new Date()): Promise<CommunitySchedulePage> {
     requireView(user);
     const canEdit = canManageCommunitySchedule(user.accountRole);
-    const [slots, eligibleRaidLeads, templates, raids] = await Promise.all([
+    const [slots, eligibleRaidLeads, templates, availableRaids] = await Promise.all([
       communityScheduleRepository.listAll(),
       canEdit ? userRepository.listEligibleRaidLeads() : Promise.resolve([]),
       listTemplateOptions(user),
@@ -539,6 +561,18 @@ export const communityScheduleService = {
         ? raidRepository.ensureReferenceRaids().then(() => raidRepository.listAvailableForRuns())
         : Promise.resolve([]),
     ]);
+
+    // Same authority as RunTemplate create/edit, plus any raid already linked to a
+    // schedule setup so editors can still open/save historical selections.
+    const raidsById = new Map(availableRaids.map((raid) => [raid.id, raid]));
+    if (canEdit) {
+      for (const template of templates) {
+        if (raidsById.has(template.raidId)) continue;
+        const linked = await raidRepository.findById(template.raidId);
+        if (linked) raidsById.set(linked.id, linked);
+      }
+    }
+    const raids = [...raidsById.values()].sort((a, b) => a.name.localeCompare(b.name));
 
     const templateMetaById = new Map<
       string,
@@ -569,7 +603,7 @@ export const communityScheduleService = {
       runSetups: groupRunSetups(visibleSlots, canEdit),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
       templates: canEdit
-        ? templates.filter((row) => row.usable)
+        ? templates
         : templates.filter((row) => row.usable && row.raidLeadId === user.id),
       raids: raids.map((raid) => ({
         id: raid.id,
@@ -578,6 +612,19 @@ export const communityScheduleService = {
         totalBossCount: raid.totalBossCount,
       })),
     };
+  },
+
+  /**
+   * Schedule-surface edit of a shared Run Setup (RunTemplate).
+   * ADMIN/OWNER only — does not widen RAID_LEAD schedule mutation rights.
+   * Reuses runTemplateService.updateTemplate validation; never mutates Runs.
+   */
+  async updateRunSetup(
+    user: AuthenticatedUser,
+    input: UpdateRunTemplateInput,
+  ): Promise<{ id: string }> {
+    requireManage(user);
+    return runTemplateService.updateTemplate(user, input);
   },
 
   async createSchedulePlan(

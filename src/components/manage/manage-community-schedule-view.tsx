@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { communityWeekdayShortLabel } from "@/lib/community-schedule";
@@ -7,6 +6,8 @@ import { CommunityScheduleOccurrenceActions } from "@/components/manage/communit
 import { CommunitySchedulePlanDialog } from "@/components/manage/community-schedule-plan-dialog";
 import { CommunityScheduleSlotFormDialog } from "@/components/manage/community-schedule-slot-form-dialog";
 import { CommunityScheduleSlotActions } from "@/components/manage/community-schedule-slot-actions";
+import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
+import { updateCommunityScheduleRunSetupAction } from "@/controllers/community-schedule.actions";
 import type { CommunitySchedulePage } from "@/services/community-schedule.service";
 
 function WindowSection({
@@ -93,6 +94,46 @@ function WindowSection({
   );
 }
 
+function EditRunSetupButton({
+  page,
+  runTemplateId,
+}: {
+  page: CommunitySchedulePage;
+  runTemplateId: string;
+}) {
+  const setup = page.templates.find((row) => row.id === runTemplateId);
+  if (!setup) return null;
+  return (
+    <RunTemplateFormDialog
+      mode="edit"
+      initial={{
+        templateId: setup.id,
+        name: setup.name,
+        raidId: setup.raidId,
+        difficulty: setup.difficulty,
+        lootType: setup.lootType,
+        plannedBossCount: setup.plannedBossCount,
+        desiredTankCount: setup.desiredTankCount,
+        desiredHealerCount: setup.desiredHealerCount,
+        desiredDpsCount: setup.desiredDpsCount,
+        desiredLootbuddyCount: setup.desiredLootbuddyCount,
+        notes: setup.notes,
+        raidLeadId: setup.raidLeadId,
+      }}
+      raids={page.raids}
+      raidLeads={page.eligibleRaidLeads}
+      canAssignRaidLead
+      defaultRaidLeadId={setup.raidLeadId}
+      triggerLabel="Edit Run Setup"
+      triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
+      title="Edit Run Setup"
+      description="Changes apply to future Runs only. Already materialized Runs stay unchanged. You remain on the Community Schedule."
+      submitLabel="Save Run Setup"
+      updateAction={updateCommunityScheduleRunSetupAction}
+    />
+  );
+}
+
 function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
   if (page.runSetups.length === 0) {
     return (
@@ -139,12 +180,7 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
                     raidLeadId={group.raidLeadId}
                     runSetupName={group.runSetupName}
                   />
-                  <Link
-                    href="/manage/templates"
-                    className="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
-                  >
-                    Edit Run Setup
-                  </Link>
+                  <EditRunSetupButton page={page} runTemplateId={group.runTemplateId} />
                 </div>
               ) : null}
             </div>
