@@ -328,4 +328,13 @@ export const runTemplateRepository = {
       updatedAt: new Date().toISOString(),
     });
   },
+
+  /**
+   * Hard-delete a RunTemplate. RunTemplateRaidContent rows cascade via FK.
+   * Callers must remove referencing CommunityScheduleSlots first (Restrict).
+   */
+  async deleteById(id: string, txOrm?: TxOrm): Promise<void> {
+    const client = txOrm ?? orm;
+    await client.RunTemplate.where({ id }).delete();
+  },
 };

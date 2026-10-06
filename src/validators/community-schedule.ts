@@ -102,6 +102,10 @@ export const communityScheduleSlotIdSchema = z.object({
   slotId: z.string().uuid(),
 });
 
+export const deleteCommunityScheduleRunSetupSchema = z.object({
+  runTemplateId: z.string().uuid(),
+});
+
 export const materializeCommunityScheduleOccurrenceSchema = z.object({
   scheduleSlotId: z.string().uuid(),
   window: z.enum(["CURRENT", "NEXT"]),
@@ -149,3 +153,6 @@ export type MaterializeCommunityScheduleOccurrenceInput = z.infer<
 >;
 export type CreateSchedulePlanInput = z.infer<typeof createSchedulePlanSchema>;
 export type AddScheduleTimesInput = z.infer<typeof addScheduleTimesSchema>;
+export type DeleteCommunityScheduleRunSetupInput = z.infer<
+  typeof deleteCommunityScheduleRunSetupSchema
+>;

@@ -10,6 +10,7 @@ import {
   communityScheduleSlotIdSchema,
   createCommunityScheduleSlotSchema,
   createSchedulePlanSchema,
+  deleteCommunityScheduleRunSetupSchema,
   materializeCommunityScheduleOccurrenceSchema,
   updateCommunityScheduleSlotSchema,
 } from "@/validators/community-schedule";
@@ -147,6 +148,44 @@ export async function reactivateCommunityScheduleSlotAction(input: unknown): Pro
     return {
       ok: true,
       message: withMaterializationMessage("Schedule slot reactivated.", result.materialization.warning),
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function deleteCommunityScheduleSlotAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = communityScheduleSlotIdSchema.parse(input);
+    await communityScheduleService.deleteSlot(user, parsed.slotId);
+    revalidateSchedule();
+    return { ok: true, message: "Schedule time deleted." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export type DeleteCommunityScheduleRunSetupActionResult =
+  | { ok: true; message: string; deletedSlotCount: number }
+  | { ok: false; code: string; message: string };
+
+export async function deleteCommunityScheduleRunSetupAction(
+  input: unknown,
+): Promise<DeleteCommunityScheduleRunSetupActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = deleteCommunityScheduleRunSetupSchema.parse(input);
+    const result = await communityScheduleService.deleteRunSetup(user, parsed.runTemplateId);
+    revalidateSchedule();
+    revalidatePath("/profile/templates");
+    return {
+      ok: true,
+      message:
+        result.deletedSlotCount === 0
+          ? "Run Setup deleted."
+          : `Run Setup and ${result.deletedSlotCount} Schedule time${result.deletedSlotCount === 1 ? "" : "s"} deleted.`,
+      deletedSlotCount: result.deletedSlotCount,
     };
   } catch (error) {
     return mapActionError(error);

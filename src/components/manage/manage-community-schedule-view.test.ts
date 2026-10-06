@@ -17,6 +17,8 @@ vi.mock("@/controllers/community-schedule.actions", () => ({
   updateCommunityScheduleSlotAction: vi.fn(),
   deactivateCommunityScheduleSlotAction: vi.fn(),
   reactivateCommunityScheduleSlotAction: vi.fn(),
+  deleteCommunityScheduleSlotAction: vi.fn(),
+  deleteCommunityScheduleRunSetupAction: vi.fn(),
 }));
 
 function samplePage(canEdit: boolean): CommunitySchedulePage {
@@ -67,6 +69,9 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         raidLeadName: "Synblast",
         autoCreateSummary: "MIXED" as const,
         canEdit,
+        slotCount: 3,
+        canDelete: false,
+        deleteBlockedReason: "Cannot delete — one or more times have already created a Run.",
         slots: [
           {
             id: "slot-1",
@@ -77,6 +82,8 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             runMode: "INHOUSE" as const,
             label: "Default HC",
             notes: null,
+            canDelete: false,
+            deleteBlockedReason: "Cannot delete — this time has already created a Run.",
           },
           {
             id: "slot-2",
@@ -87,6 +94,8 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             runMode: "TEAM_RUN" as const,
             label: "Default HC",
             notes: null,
+            canDelete: true,
+            deleteBlockedReason: null,
           },
           {
             id: "slot-inactive",
@@ -97,6 +106,8 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             runMode: "INHOUSE" as const,
             label: "Default HC",
             notes: null,
+            canDelete: true,
+            deleteBlockedReason: null,
           },
         ],
       },
@@ -196,6 +207,10 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Auto ✗");
     expect(html).toContain("Add times");
     expect(html).toContain("Edit Run Setup");
+    expect(html).toContain("Delete Run Setup");
+    expect(html).toContain("Delete");
+    expect(html).toContain("Deactivate");
+    expect(html).toContain("Reactivate");
     expect(html).not.toContain("/manage/templates");
     expect(html).toContain("Inactive");
     expect(html).toContain("Current Raid ID");
@@ -216,6 +231,7 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).not.toContain("Create Schedule");
     expect(html).not.toContain("Add times");
     expect(html).not.toContain("Edit Run Setup");
+    expect(html).not.toContain("Delete Run Setup");
     expect(html).not.toContain("Deactivate");
   });
 
