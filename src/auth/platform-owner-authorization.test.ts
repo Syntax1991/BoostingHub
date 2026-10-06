@@ -61,6 +61,7 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
       "boosting-roles",
       "users",
       "characters",
+      "analytics",
       "system",
     ]);
     // Any Run, not only assigned ones — like ADMIN.

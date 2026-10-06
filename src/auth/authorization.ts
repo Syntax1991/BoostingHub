@@ -95,7 +95,15 @@ export function assertCanManageCharacterOperations(user: AuthenticatedUser): voi
 export type ManagementNavItem = {
   href: string;
   label: string;
-  module: "overview" | "runs" | "templates" | "boosting-roles" | "users" | "characters" | "system";
+  module:
+    | "overview"
+    | "runs"
+    | "templates"
+    | "boosting-roles"
+    | "users"
+    | "characters"
+    | "analytics"
+    | "system";
 };
 
 /**
@@ -116,6 +124,7 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
       { href: "/manage/boosting-roles", label: "Boosting Roles", module: "boosting-roles" },
       { href: "/manage/users", label: "Users", module: "users" },
       { href: "/manage/characters", label: "Characters", module: "characters" },
+      { href: "/manage/analytics", label: "Analytics", module: "analytics" },
       { href: "/manage/system", label: "System", module: "system" },
     );
   }
