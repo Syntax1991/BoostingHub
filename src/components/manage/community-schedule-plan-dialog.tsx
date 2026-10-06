@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
-import type { RaidDifficulty, RunLootType } from "@/models/enums";
+import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
+import type { CommunityScheduleRunMode, RaidDifficulty, RunLootType } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
-import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import { createCommunitySchedulePlanAction } from "@/controllers/community-schedule.actions";
 import type {
   CommunityScheduleRaidOption,
@@ -23,10 +23,19 @@ const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
 
 type RaidLeadOption = { id: string; name: string };
 
-type SlotRow = { key: string; weekday: (typeof COMMUNITY_WEEKDAYS)[number]; localStartTime: string };
+type SlotRow = {
+  key: string;
+  weekday: (typeof COMMUNITY_WEEKDAYS)[number];
+  localStartTime: string;
+  runMode: CommunityScheduleRunMode;
+};
 
-function newSlotRow(weekday: (typeof COMMUNITY_WEEKDAYS)[number] = "FRIDAY", localStartTime = "19:45"): SlotRow {
-  return { key: crypto.randomUUID(), weekday, localStartTime };
+function newSlotRow(
+  weekday: (typeof COMMUNITY_WEEKDAYS)[number] = "FRIDAY",
+  localStartTime = "19:45",
+  runMode: CommunityScheduleRunMode = "INHOUSE",
+): SlotRow {
+  return { key: crypto.randomUUID(), weekday, localStartTime, runMode };
 }
 
 export function CommunitySchedulePlanDialog({
@@ -99,6 +108,7 @@ export function CommunitySchedulePlanDialog({
             slots: slots.map((slot) => ({
               weekday: slot.weekday,
               localStartTime: slot.localStartTime,
+              runMode: slot.runMode,
             })),
             autoCreateRun,
             notes: planNotes,
@@ -121,6 +131,7 @@ export function CommunitySchedulePlanDialog({
             slots: slots.map((slot) => ({
               weekday: slot.weekday,
               localStartTime: slot.localStartTime,
+              runMode: slot.runMode,
             })),
             autoCreateRun,
             notes: planNotes,
@@ -157,8 +168,8 @@ export function CommunitySchedulePlanDialog({
           >
             <h2 className="text-base font-semibold">Create Schedule</h2>
             <p className="mt-1 text-xs text-muted">
-              Link a Run Setup to one or more weekly times (Europe/Berlin). Auto-create is optional and runs via the
-              hourly job — this dialog does not materialize runs.
+              Link a Run Setup to one or more weekly times (Europe/Berlin). When Auto-create is on, CURRENT (if still
+              future) and NEXT DRAFT Runs are created immediately after save; the hourly job remains a safety net.
             </p>
 
             <div className="mt-4 grid gap-3">
@@ -398,6 +409,25 @@ export function CommunitySchedulePlanDialog({
                         className="h-9 rounded-md border border-border bg-surface-raised px-2"
                       />
                     </label>
+                    <label className="grid min-w-[7rem] flex-1 gap-1 text-sm">
+                      <span className="text-xs text-muted">Mode</span>
+                      <select
+                        value={slot.runMode}
+                        onChange={(event) => {
+                          const runMode = event.target.value as CommunityScheduleRunMode;
+                          setSlots((current) =>
+                            current.map((row) => (row.key === slot.key ? { ...row, runMode } : row)),
+                          );
+                        }}
+                        className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                      >
+                        {COMMUNITY_SCHEDULE_RUN_MODES.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[mode]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <button
                       type="button"
                       disabled={slots.length <= 1}
@@ -418,7 +448,7 @@ export function CommunitySchedulePlanDialog({
                   disabled={setupMode === "existing" && !templateId}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Auto-create DRAFT runs (hourly job)</span>
+                <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
               </label>
 
               <label className="grid gap-1 text-sm">

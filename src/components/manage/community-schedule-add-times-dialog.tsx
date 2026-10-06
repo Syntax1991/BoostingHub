@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { COMMUNITY_WEEKDAYS } from "@/models/enums";
+import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
+import type { CommunityScheduleRunMode } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
+import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
 import { addCommunityScheduleTimesAction } from "@/controllers/community-schedule.actions";
 
 const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
@@ -15,10 +17,19 @@ const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
   SUNDAY: "Sunday",
 };
 
-type SlotRow = { key: string; weekday: (typeof COMMUNITY_WEEKDAYS)[number]; localStartTime: string };
+type SlotRow = {
+  key: string;
+  weekday: (typeof COMMUNITY_WEEKDAYS)[number];
+  localStartTime: string;
+  runMode: CommunityScheduleRunMode;
+};
 
-function newSlotRow(weekday: (typeof COMMUNITY_WEEKDAYS)[number] = "FRIDAY", localStartTime = "19:45"): SlotRow {
-  return { key: crypto.randomUUID(), weekday, localStartTime };
+function newSlotRow(
+  weekday: (typeof COMMUNITY_WEEKDAYS)[number] = "FRIDAY",
+  localStartTime = "19:45",
+  runMode: CommunityScheduleRunMode = "INHOUSE",
+): SlotRow {
+  return { key: crypto.randomUUID(), weekday, localStartTime, runMode };
 }
 
 export function CommunityScheduleAddTimesDialog({
@@ -54,6 +65,7 @@ export function CommunityScheduleAddTimesDialog({
         slots: slots.map((slot) => ({
           weekday: slot.weekday,
           localStartTime: slot.localStartTime,
+          runMode: slot.runMode,
         })),
         autoCreateRun,
         notes,
@@ -87,7 +99,8 @@ export function CommunityScheduleAddTimesDialog({
           >
             <h2 className="text-base font-semibold">Add times</h2>
             <p className="mt-1 text-xs text-muted">
-              Add weekly times to <span className="font-medium text-foreground">{runSetupName}</span>.
+              Add weekly times to <span className="font-medium text-foreground">{runSetupName}</span>. Auto-create
+              materializes CURRENT/NEXT immediately when enabled.
             </p>
 
             <div className="mt-4 grid gap-3">
@@ -139,6 +152,25 @@ export function CommunityScheduleAddTimesDialog({
                         className="h-9 rounded-md border border-border bg-surface-raised px-2"
                       />
                     </label>
+                    <label className="grid min-w-[7rem] flex-1 gap-1 text-sm">
+                      <span className="text-xs text-muted">Mode</span>
+                      <select
+                        value={slot.runMode}
+                        onChange={(event) => {
+                          const runMode = event.target.value as CommunityScheduleRunMode;
+                          setSlots((current) =>
+                            current.map((row) => (row.key === slot.key ? { ...row, runMode } : row)),
+                          );
+                        }}
+                        className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                      >
+                        {COMMUNITY_SCHEDULE_RUN_MODES.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[mode]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <button
                       type="button"
                       disabled={slots.length <= 1}
@@ -158,7 +190,7 @@ export function CommunityScheduleAddTimesDialog({
                   checked={autoCreateRun}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Auto-create DRAFT runs (hourly job)</span>
+                <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
               </label>
 
               <label className="grid gap-1 text-sm">

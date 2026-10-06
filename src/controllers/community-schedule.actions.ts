@@ -20,6 +20,10 @@ function revalidateSchedule() {
   revalidatePath("/manage/templates");
 }
 
+function withMaterializationMessage(base: string, warning: string | null): string {
+  return warning ? `${base} ${warning}` : base;
+}
+
 export type CreateCommunityScheduleSlotActionResult =
   | { ok: true; message: string; slotId: string }
   | { ok: false; code: string; message: string };
@@ -38,9 +42,13 @@ export async function createCommunityScheduleSlotAction(
   try {
     const user = await requireUser();
     const parsed = createCommunityScheduleSlotSchema.parse(input);
-    const created = await communityScheduleService.createSlot(user, parsed);
+    const result = await communityScheduleService.createSlot(user, parsed);
     revalidateSchedule();
-    return { ok: true, message: "Schedule slot created.", slotId: created.id };
+    return {
+      ok: true,
+      message: withMaterializationMessage("Schedule slot created.", result.materialization.warning),
+      slotId: result.slot.id,
+    };
   } catch (error) {
     return mapActionError(error);
   }
@@ -56,7 +64,10 @@ export async function createCommunitySchedulePlanAction(
     revalidateSchedule();
     return {
       ok: true,
-      message: `Schedule created with ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
+      message: withMaterializationMessage(
+        `Schedule created with ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
+        result.materialization.warning,
+      ),
       templateId: result.templateId,
       slotIds: result.slotIds,
     };
@@ -75,7 +86,10 @@ export async function addCommunityScheduleTimesAction(
     revalidateSchedule();
     return {
       ok: true,
-      message: `Added ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
+      message: withMaterializationMessage(
+        `Added ${result.slotIds.length} weekly time${result.slotIds.length === 1 ? "" : "s"}.`,
+        result.materialization.warning,
+      ),
       templateId: result.templateId,
       slotIds: result.slotIds,
     };
@@ -101,9 +115,12 @@ export async function updateCommunityScheduleSlotAction(input: unknown): Promise
   try {
     const user = await requireUser();
     const parsed = updateCommunityScheduleSlotSchema.parse(input);
-    await communityScheduleService.updateSlot(user, parsed);
+    const result = await communityScheduleService.updateSlot(user, parsed);
     revalidateSchedule();
-    return { ok: true, message: "Schedule slot updated." };
+    return {
+      ok: true,
+      message: withMaterializationMessage("Schedule slot updated.", result.materialization.warning),
+    };
   } catch (error) {
     return mapActionError(error);
   }
@@ -125,9 +142,12 @@ export async function reactivateCommunityScheduleSlotAction(input: unknown): Pro
   try {
     const user = await requireUser();
     const parsed = communityScheduleSlotIdSchema.parse(input);
-    await communityScheduleService.reactivateSlot(user, parsed.slotId);
+    const result = await communityScheduleService.reactivateSlot(user, parsed.slotId);
     revalidateSchedule();
-    return { ok: true, message: "Schedule slot reactivated." };
+    return {
+      ok: true,
+      message: withMaterializationMessage("Schedule slot reactivated.", result.materialization.warning),
+    };
   } catch (error) {
     return mapActionError(error);
   }

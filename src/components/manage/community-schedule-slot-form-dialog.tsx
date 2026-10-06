@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { COMMUNITY_WEEKDAYS } from "@/models/enums";
+import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
+import type { CommunityScheduleRunMode } from "@/models/enums";
+import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
 import {
   createCommunityScheduleSlotAction,
   updateCommunityScheduleSlotAction,
@@ -41,6 +43,7 @@ type EditProps = {
     raidLeadId: string;
     runTemplateId: string | null;
     autoCreateRun: boolean;
+    runMode: CommunityScheduleRunMode;
   };
   triggerLabel?: string;
 };
@@ -58,6 +61,9 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
   const [autoCreateRun, setAutoCreateRun] = useState(
     props.mode === "edit" ? props.initial.autoCreateRun : false,
   );
+  const [runMode, setRunMode] = useState<CommunityScheduleRunMode>(
+    props.mode === "edit" ? props.initial.runMode : "INHOUSE",
+  );
 
   const initial =
     props.mode === "edit"
@@ -71,6 +77,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
           raidLeadId: props.defaultRaidLeadId ?? props.raidLeads[0]?.id ?? "",
           runTemplateId: null as string | null,
           autoCreateRun: false,
+          runMode: "INHOUSE" as const,
         };
 
   const templatesForLead = useMemo(
@@ -88,6 +95,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
       raidLeadId: String(formData.get("raidLeadId") ?? ""),
       runTemplateId: runTemplateId.trim().length > 0 ? runTemplateId : null,
       autoCreateRun,
+      runMode,
     };
     startTransition(async () => {
       const result =
@@ -125,8 +133,8 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
               {props.mode === "create" ? "Add Schedule Slot" : "Edit Schedule Slot"}
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Recurring wall-clock time in Europe/Berlin. Optional Run Setup links enable manual or automatic DRAFT
-              run creation per raid-ID window.
+              Recurring wall-clock time in Europe/Berlin. Auto-create materializes CURRENT/NEXT DRAFT Runs immediately
+              when enabled.
             </p>
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1 text-sm">
@@ -164,6 +172,20 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                   placeholder="HC VIP"
                   className="h-9 rounded-md border border-border bg-surface-raised px-2"
                 />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs text-muted">Mode</span>
+                <select
+                  value={runMode}
+                  onChange={(event) => setRunMode(event.target.value as CommunityScheduleRunMode)}
+                  className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                >
+                  {COMMUNITY_SCHEDULE_RUN_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[mode]}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Raid Lead</span>
@@ -210,7 +232,7 @@ export function CommunityScheduleSlotFormDialog(props: CreateProps | EditProps) 
                   disabled={!runTemplateId}
                   onChange={(event) => setAutoCreateRun(event.target.checked)}
                 />
-                <span>Auto-create DRAFT runs (hourly job)</span>
+                <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Notes (optional)</span>

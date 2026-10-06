@@ -1,0 +1,86 @@
+[
+  {
+    "id": "column.public.community_schedule_slot.runMode",
+    "label": "Add column \"runMode\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "runMode",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"runMode\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "runMode"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"runMode\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"runMode\" text DEFAULT 'INHOUSE' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"runMode\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "runMode"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.community_schedule_slot.community_schedule_slot_runMode_check_dc95dab2",
+    "label": "Add check constraint \"community_schedule_slot_runMode_check_dc95dab2\" on \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "community_schedule_slot_runMode_check_dc95dab2",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"community_schedule_slot_runMode_check_dc95dab2\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_slot_runMode_check_dc95dab2",
+          "public",
+          "\"public\".\"community_schedule_slot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"community_schedule_slot_runMode_check_dc95dab2\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD CONSTRAINT \"community_schedule_slot_runMode_check_dc95dab2\" CHECK (\"runMode\" IN ('INHOUSE', 'TEAM_RUN'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"community_schedule_slot_runMode_check_dc95dab2\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_slot_runMode_check_dc95dab2",
+          "public",
+          "\"public\".\"community_schedule_slot\""
+        ]
+      }
+    ]
+  }
+]

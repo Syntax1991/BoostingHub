@@ -13,6 +13,7 @@ import {
   RUN_COMPOSITION_MAX,
   RUN_COMPOSITION_MIN,
 } from "@/services/run-state";
+import { isSelectableForRunSetup } from "@/lib/wow-raid-catalog";
 import type {
   CreateRunTemplateInput,
   ManageTemplateFiltersInput,
@@ -57,13 +58,13 @@ async function requireEligibleOwner(raidLeadId: string): Promise<void> {
   }
 }
 
-/** New-selection boundary: create/edit may only target a currently available raid. */
-async function requireRaidAvailable(raidId: string) {
+/** Run Setup selection boundary — Venomous + Tide; not Create Run product list. */
+async function requireRaidSelectableForRunSetup(raidId: string) {
   const raid = await raidRepository.findById(raidId);
   if (!raid) {
     throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
   }
-  if (!raid.availableForRuns) {
+  if (!raid.availableForRuns && !isSelectableForRunSetup(raid.id)) {
     throw new DomainError(
       "RAID_NOT_AVAILABLE_FOR_RUNS",
       "This raid is no longer available for new templates.",
@@ -101,7 +102,7 @@ export function computeUsability(template: RunTemplateRecord): TemplateUsability
   if (!template.isActive) {
     return { usable: false, unusableReason: "This template has been deactivated." };
   }
-  if (!template.raidAvailableForRuns) {
+  if (!template.raidAvailableForRuns && !isSelectableForRunSetup(template.raidId)) {
     return { usable: false, unusableReason: "This template's raid is no longer available for new runs." };
   }
   if (!template.raidLeadEligible) {
@@ -150,7 +151,7 @@ export const runTemplateService = {
   async getCreateFormData(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const raids = await raidRepository.listAvailableForRuns();
+    const raids = await raidRepository.listSelectableRunSetupRaids();
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
       : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
@@ -178,7 +179,7 @@ export const runTemplateService = {
     requireManagerRole(user);
     const raidLeadId = resolveTemplateOwnerId(user, input.raidLeadId);
     await requireEligibleOwner(raidLeadId);
-    const raid = await requireRaidAvailable(input.raidId);
+    const raid = await requireRaidSelectableForRunSetup(input.raidId);
 
     assertComposition(input.desiredTankCount, "Desired tanks");
     assertComposition(input.desiredHealerCount, "Desired healers");
@@ -216,7 +217,7 @@ export const runTemplateService = {
     // Runs); a RAID_LEAD may only ever keep their own templates their own.
     const raidLeadId = resolveTemplateOwnerId(user, input.raidLeadId ?? existing.raidLeadId);
     await requireEligibleOwner(raidLeadId);
-    const raid = await requireRaidAvailable(input.raidId);
+    const raid = await requireRaidSelectableForRunSetup(input.raidId);
 
     assertComposition(input.desiredTankCount, "Desired tanks");
     assertComposition(input.desiredHealerCount, "Desired healers");

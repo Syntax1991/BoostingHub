@@ -783,6 +783,13 @@ enum CommunityWeekday {
   SUNDAY    = "SUNDAY"
 }
 
+/// Management Share classification for a Community Schedule slot (not Run domain).
+enum CommunityScheduleRunMode {
+  @@type("pg/text@1")
+  INHOUSE  = "INHOUSE"
+  TEAM_RUN = "TEAM_RUN"
+}
+
 /// Persistent COMMUNITY WEEKLY SCHEDULE slot — recurring planning intent.
 /// Stores weekday + local HH:mm (Europe/Berlin wall-clock), never a concrete
 /// UTC occurrence. Optional RunTemplate + autoCreateRun drive DRAFT Run
@@ -805,6 +812,8 @@ model CommunityScheduleSlot {
   /// When true, hourly reconciliation ensures CURRENT (if still future) and NEXT
   /// occurrences have DRAFT Runs. Turning off never deletes existing Runs.
   autoCreateRun  Boolean          @default(false)
+  /// Management Discord Share classification (Inhouse / Team Run). Independent of Run materialization.
+  runMode        CommunityScheduleRunMode @default(INHOUSE)
   isActive       Boolean          @default(true)
   createdById    String
   createdBy      User             @relation("CommunityScheduleCreator", fields: [createdById], references: [id], onDelete: Restrict)

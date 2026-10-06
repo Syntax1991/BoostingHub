@@ -20,3 +20,9 @@ export function getDiscordBoosterRoleSyncConfig(): DiscordBoosterRoleSyncConfig 
   }
   return { botToken, guildId, boosterRoleId };
 }
+
+/** Management role ping for Community Schedule Share copy (not auto-posted). */
+export function getDiscordManagementScheduleRoleId(): string | null {
+  const value = process.env.DISCORD_MANAGEMENT_SCHEDULE_ROLE_ID?.trim();
+  return value && value.length > 0 ? value : null;
+}

@@ -16,9 +16,21 @@ import {
 } from "@/lib/community-schedule";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { DomainError } from "@/lib/errors";
+import { getDiscordManagementScheduleRoleId } from "@/lib/discord-config";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import {
+  formatCommunityScheduleShare,
+  formatScheduleShareRunDescription,
+  type FormatCommunityScheduleShareResult,
+} from "@/lib/community-schedule-share";
 import { db, orm } from "@/lib/prisma";
-import { COMMUNITY_WEEKDAYS, type CommunityWeekday, type RaidDifficulty, type RunLootType } from "@/models/enums";
+import {
+  COMMUNITY_WEEKDAYS,
+  type CommunityScheduleRunMode,
+  type CommunityWeekday,
+  type RaidDifficulty,
+  type RunLootType,
+} from "@/models/enums";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import {
   communityScheduleRepository,
@@ -27,6 +39,11 @@ import {
 import { raidRepository } from "@/repositories/raid.repository";
 import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
 import { userRepository } from "@/repositories/user.repository";
+import {
+  COMMUNITY_SCHEDULE_MATERIALIZE_WARNING,
+  communityScheduleMaterializationService,
+  type MaterializeSlotWindowsResult,
+} from "@/services/community-schedule-materialization.service";
 import { computeUsability, runTemplateService } from "@/services/run-template.service";
 import type {
   AddScheduleTimesInput,
@@ -35,6 +52,16 @@ import type {
   UpdateCommunityScheduleSlotInput,
 } from "@/validators/community-schedule";
 import type { UpdateRunTemplateInput } from "@/validators/run-template";
+
+export type ScheduleMutationMaterialization = {
+  created: number;
+  failed: number;
+  warning: string | null;
+};
+
+type ScheduleMutationResult<T> = T & {
+  materialization: ScheduleMutationMaterialization;
+};
 
 type TxOrm = typeof orm;
 
@@ -98,6 +125,7 @@ export type CommunityScheduleRunSetupSlot = {
   localStartTime: string;
   isActive: boolean;
   autoCreateRun: boolean;
+  runMode: CommunityScheduleRunMode;
   label: string;
   notes: string | null;
 };
@@ -130,6 +158,7 @@ export type CommunitySchedulePage = {
   eligibleRaidLeads: Array<{ id: string; name: string }>;
   templates: CommunityScheduleTemplateOption[];
   raids: CommunityScheduleRaidOption[];
+  share: FormatCommunityScheduleShareResult;
 };
 
 function requireView(user: AuthenticatedUser): void {
@@ -306,6 +335,7 @@ function groupRunSetups(
       localStartTime: slot.localStartTime,
       isActive: slot.isActive,
       autoCreateRun: slot.autoCreateRun,
+      runMode: slot.runMode,
       label: slot.label,
       notes: slot.notes,
     });
@@ -516,7 +546,11 @@ function resolveTxOrm(tx: { orm: unknown }): TxOrm {
 
 async function createSlotsInTx(input: {
   txOrm: TxOrm;
-  slots: ReadonlyArray<{ weekday: CommunityWeekday; localStartTime: string }>;
+  slots: ReadonlyArray<{
+    weekday: CommunityWeekday;
+    localStartTime: string;
+    runMode: CommunityScheduleRunMode;
+  }>;
   label: string;
   notes: string | null;
   raidLeadId: string;
@@ -535,6 +569,7 @@ async function createSlotsInTx(input: {
         raidLeadId: input.raidLeadId,
         runTemplateId: input.runTemplateId,
         autoCreateRun: input.autoCreateRun,
+        runMode: slot.runMode,
         createdById: input.actorId,
         updatedById: input.actorId,
       },
@@ -543,6 +578,78 @@ async function createSlotsInTx(input: {
     slotIds.push(created.id);
   }
   return slotIds;
+}
+
+async function maybeImmediateMaterialize(
+  slotIds: ReadonlyArray<string>,
+  autoCreateRun: boolean,
+  now?: Date,
+): Promise<ScheduleMutationMaterialization> {
+  if (!autoCreateRun || slotIds.length === 0) {
+    return { created: 0, failed: 0, warning: null };
+  }
+  try {
+    const result = await communityScheduleMaterializationService.materializeSlotWindows(slotIds, {
+      now,
+    });
+    return summarizeMaterialization(result);
+  } catch {
+    return {
+      created: 0,
+      failed: slotIds.length,
+      warning: COMMUNITY_SCHEDULE_MATERIALIZE_WARNING,
+    };
+  }
+}
+
+function summarizeMaterialization(result: MaterializeSlotWindowsResult): ScheduleMutationMaterialization {
+  return {
+    created: result.created,
+    failed: result.failed,
+    warning: result.failed > 0 ? COMMUNITY_SCHEDULE_MATERIALIZE_WARNING : null,
+  };
+}
+
+function buildShareFromSlots(
+  slots: CommunityScheduleSlotRecord[],
+  templatesById: Map<string, RunTemplateRecord>,
+): FormatCommunityScheduleShareResult {
+  const active = slots.filter((slot) => slot.isActive);
+  let usedLabelFallback = false;
+  const shareSlots = active.map((slot) => {
+    const template = slot.runTemplateId ? templatesById.get(slot.runTemplateId) : null;
+    let runDescription: string;
+    if (template) {
+      runDescription = formatScheduleShareRunDescription({
+        plannedBossCount: template.plannedBossCount,
+        totalBossCount: template.totalBossCount,
+        difficulty: template.difficulty,
+        lootType: template.lootType,
+      });
+    } else {
+      usedLabelFallback = true;
+      runDescription = slot.label;
+    }
+    return {
+      id: slot.id,
+      weekday: slot.weekday,
+      localStartTime: slot.localStartTime,
+      runMode: slot.runMode,
+      runDescription,
+      raidLeadDiscordId: slot.raidLeadDiscordUserId,
+      raidLeadName: slot.raidLeadName,
+    };
+  });
+  const formatted = formatCommunityScheduleShare({
+    managementRoleId: getDiscordManagementScheduleRoleId(),
+    slots: shareSlots,
+  });
+  if (usedLabelFallback) {
+    formatted.warnings.push(
+      "Some Schedule entries have no Run Setup and were exported using their Schedule label.",
+    );
+  }
+  return formatted;
 }
 
 /**
@@ -558,7 +665,7 @@ export const communityScheduleService = {
       canEdit ? userRepository.listEligibleRaidLeads() : Promise.resolve([]),
       listTemplateOptions(user),
       canEdit
-        ? raidRepository.ensureReferenceRaids().then(() => raidRepository.listAvailableForRuns())
+        ? raidRepository.ensureReferenceRaids().then(() => raidRepository.listSelectableRunSetupRaids())
         : Promise.resolve([]),
     ]);
 
@@ -594,6 +701,19 @@ export const communityScheduleService = {
 
     const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
 
+    const templateIds = [
+      ...new Set(
+        visibleSlots
+          .map((slot) => slot.runTemplateId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
+    const templateRecords = await Promise.all(templateIds.map((id) => runTemplateRepository.findById(id)));
+    const templatesById = new Map<string, RunTemplateRecord>();
+    for (const record of templateRecords) {
+      if (record) templatesById.set(record.id, record);
+    }
+
     return {
       canEdit,
       timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
@@ -611,6 +731,7 @@ export const communityScheduleService = {
         season: raid.season,
         totalBossCount: raid.totalBossCount,
       })),
+      share: buildShareFromSlots(visibleSlots, templatesById),
     };
   },
 
@@ -630,7 +751,8 @@ export const communityScheduleService = {
   async createSchedulePlan(
     user: AuthenticatedUser,
     input: CreateSchedulePlanInput,
-  ): Promise<{ templateId: string; slotIds: string[] }> {
+    now?: Date,
+  ): Promise<ScheduleMutationResult<{ templateId: string; slotIds: string[] }>> {
     requireManage(user);
     assertBatchSlotLimits(input.slots);
     await requireEligibleRaidLead(input.raidLeadId);
@@ -691,13 +813,15 @@ export const communityScheduleService = {
       return { templateId: resolvedTemplateId, slotIds };
     });
 
-    return result;
+    const materialization = await maybeImmediateMaterialize(result.slotIds, input.autoCreateRun, now);
+    return { ...result, materialization };
   },
 
   async addTimesToSetup(
     user: AuthenticatedUser,
     input: AddScheduleTimesInput,
-  ): Promise<{ templateId: string; slotIds: string[] }> {
+    now?: Date,
+  ): Promise<ScheduleMutationResult<{ templateId: string; slotIds: string[] }>> {
     requireManage(user);
     assertBatchSlotLimits(input.slots);
     await requireEligibleRaidLead(input.raidLeadId);
@@ -738,13 +862,15 @@ export const communityScheduleService = {
       });
     });
 
-    return { templateId: template.id, slotIds };
+    const materialization = await maybeImmediateMaterialize(slotIds, input.autoCreateRun, now);
+    return { templateId: template.id, slotIds, materialization };
   },
 
   async createSlot(
     user: AuthenticatedUser,
     input: CreateCommunityScheduleSlotInput,
-  ): Promise<CommunityScheduleSlotRecord> {
+    now?: Date,
+  ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
     requireManage(user);
     await requireEligibleRaidLead(input.raidLeadId);
     await validateTemplateLink({
@@ -757,7 +883,7 @@ export const communityScheduleService = {
       weekday: input.weekday,
       localStartTime: input.localStartTime,
     });
-    return communityScheduleRepository.create({
+    const slot = await communityScheduleRepository.create({
       weekday: input.weekday,
       localStartTime: input.localStartTime,
       label: input.label,
@@ -765,15 +891,19 @@ export const communityScheduleService = {
       raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
+      runMode: input.runMode,
       createdById: user.id,
       updatedById: user.id,
     });
+    const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun, now);
+    return { slot, materialization };
   },
 
   async updateSlot(
     user: AuthenticatedUser,
     input: UpdateCommunityScheduleSlotInput,
-  ): Promise<CommunityScheduleSlotRecord> {
+    now?: Date,
+  ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
     requireManage(user);
     const existing = await communityScheduleRepository.findById(input.slotId);
     if (!existing) {
@@ -791,7 +921,7 @@ export const communityScheduleService = {
       localStartTime: input.localStartTime,
       excludeId: input.slotId,
     });
-    return communityScheduleRepository.update(input.slotId, {
+    const slot = await communityScheduleRepository.update(input.slotId, {
       weekday: input.weekday,
       localStartTime: input.localStartTime,
       label: input.label,
@@ -799,8 +929,11 @@ export const communityScheduleService = {
       raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
+      runMode: input.runMode,
       updatedById: user.id,
     });
+    const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun, now);
+    return { slot, materialization };
   },
 
   async deactivateSlot(user: AuthenticatedUser, slotId: string): Promise<CommunityScheduleSlotRecord> {
@@ -819,7 +952,10 @@ export const communityScheduleService = {
     return communityScheduleRepository.setActive(slotId, false, user.id);
   },
 
-  async reactivateSlot(user: AuthenticatedUser, slotId: string): Promise<CommunityScheduleSlotRecord> {
+  async reactivateSlot(
+    user: AuthenticatedUser,
+    slotId: string,
+  ): Promise<ScheduleMutationResult<{ slot: CommunityScheduleSlotRecord }>> {
     requireManage(user);
     const existing = await communityScheduleRepository.findById(slotId);
     if (!existing) {
@@ -839,6 +975,8 @@ export const communityScheduleService = {
       localStartTime: existing.localStartTime,
       excludeId: existing.id,
     });
-    return communityScheduleRepository.setActive(slotId, true, user.id);
+    const slot = await communityScheduleRepository.setActive(slotId, true, user.id);
+    const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun);
+    return { slot, materialization };
   },
 };

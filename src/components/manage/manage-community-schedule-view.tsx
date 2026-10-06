@@ -1,9 +1,11 @@
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { communityWeekdayShortLabel } from "@/lib/community-schedule";
+import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
 import { CommunityScheduleAddTimesDialog } from "@/components/manage/community-schedule-add-times-dialog";
 import { CommunityScheduleOccurrenceActions } from "@/components/manage/community-schedule-occurrence-actions";
 import { CommunitySchedulePlanDialog } from "@/components/manage/community-schedule-plan-dialog";
+import { CommunityScheduleShareDialog } from "@/components/manage/community-schedule-share-dialog";
 import { CommunityScheduleSlotFormDialog } from "@/components/manage/community-schedule-slot-form-dialog";
 import { CommunityScheduleSlotActions } from "@/components/manage/community-schedule-slot-actions";
 import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
@@ -77,6 +79,7 @@ function WindowSection({
                               raidLeadId: slot.raidLeadId,
                               runTemplateId: slot.runTemplateId,
                               autoCreateRun: slot.autoCreateRun,
+                              runMode: slot.runMode,
                             }}
                           />
                           <CommunityScheduleSlotActions slotId={slot.id} isActive={slot.isActive} />
@@ -193,6 +196,8 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
                   <div className="min-w-0">
                     <span className={!slot.isActive ? "opacity-70" : undefined}>
                       {communityWeekdayShortLabel(slot.weekday)} {slot.localStartTime}
+                      {" · "}
+                      {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[slot.runMode]}
                       {!slot.isActive ? " · Inactive" : ""}
                     </span>
                     <span className="ml-2 text-xs text-muted">
@@ -220,14 +225,17 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
         title="Operational Schedule"
         description="Recurring community run times with optional DRAFT run materialization per raid-ID window. Does not open Runs or post to Discord Schedule automatically."
         actions={
-          page.canEdit ? (
-            <CommunitySchedulePlanDialog
-              raidLeads={page.eligibleRaidLeads}
-              templates={page.templates}
-              raids={page.raids}
-              defaultRaidLeadId={page.eligibleRaidLeads[0]?.id}
-            />
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            <CommunityScheduleShareDialog share={page.share} />
+            {page.canEdit ? (
+              <CommunitySchedulePlanDialog
+                raidLeads={page.eligibleRaidLeads}
+                templates={page.templates}
+                raids={page.raids}
+                defaultRaidLeadId={page.eligibleRaidLeads[0]?.id}
+              />
+            ) : null}
+          </div>
         }
       />
 

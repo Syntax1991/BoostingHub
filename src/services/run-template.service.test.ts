@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { MANAFORGE_OMEGA_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import { MANAFORGE_OMEGA_RAID_ID, TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { computeUsability, runTemplateService } from "@/services/run-template.service";
@@ -180,8 +180,28 @@ describe("computeUsability — pure boolean logic", () => {
     expect(computeUsability(fakeTemplate({ isActive: false })).usable).toBe(false);
   });
 
-  it("a template whose raid is no longer available for runs is unusable", () => {
-    expect(computeUsability(fakeTemplate({ raidAvailableForRuns: false })).usable).toBe(false);
+  it("a template whose raid is no longer available for Run Setup is unusable", () => {
+    expect(
+      computeUsability(
+        fakeTemplate({
+          raidId: MANAFORGE_OMEGA_RAID_ID,
+          raidAvailableForRuns: false,
+        }),
+      ).usable,
+    ).toBe(false);
+  });
+
+  it("Tide remains usable for Run Setup even when availableForRuns is false", () => {
+    expect(
+      computeUsability(
+        fakeTemplate({
+          raidId: TIDEBOUND_GROTTO_RAID_ID,
+          raidAvailableForRuns: false,
+          totalBossCount: 1,
+          plannedBossCount: 1,
+        }),
+      ).usable,
+    ).toBe(true);
   });
 
   it("a template whose owner is no longer an eligible raid lead is unusable", () => {
@@ -372,12 +392,25 @@ describe("runTemplateService — active/inactive lifecycle", () => {
     await expectDomainCode(runTemplateService.reactivate(lead, created.id), "RUN_TEMPLATE_ALREADY_ACTIVE");
   });
 
-  it("reactivation re-validates the raid and fails if it has since gone historical, without flipping isActive", async () => {
+  it("reactivation re-validates the raid and fails if it is not Run Setup selectable, without flipping isActive", async () => {
     const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Raid goes historical" }));
     createdTemplateIds.push(created.id);
     await runTemplateService.deactivate(lead, created.id);
 
-    await setRaidAvailable(raidId, false);
+    await runTemplateRepository.update(created.id, {
+      name: "Raid goes historical",
+      raidLeadId: ids.lead,
+      raidId: MANAFORGE_OMEGA_RAID_ID,
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      plannedBossCount: 1,
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      desiredLootbuddyCount: 0,
+      notes: null,
+      updatedById: ids.lead,
+    });
     try {
       await expectDomainCode(runTemplateService.reactivate(lead, created.id), "RUN_TEMPLATE_UNUSABLE");
       expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
