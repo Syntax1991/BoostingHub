@@ -11,14 +11,12 @@ export function CommunityScheduleDeleteSetupButton({
   raidLeadName,
   slotCount,
   canDelete,
-  deleteBlockedReason,
 }: {
   runTemplateId: string;
   runSetupName: string;
   raidLeadName: string;
   slotCount: number;
   canDelete: boolean;
-  deleteBlockedReason: string | null;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -27,17 +25,7 @@ export function CommunityScheduleDeleteSetupButton({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  if (!canDelete) {
-    if (!deleteBlockedReason) return null;
-    return (
-      <span
-        title={deleteBlockedReason}
-        className="inline-flex h-8 cursor-not-allowed items-center rounded-md border border-border px-2 text-xs text-muted opacity-60"
-      >
-        Delete Run Setup
-      </span>
-    );
-  }
+  if (!canDelete) return null;
 
   function runDelete() {
     setError(null);
@@ -63,7 +51,7 @@ export function CommunityScheduleDeleteSetupButton({
         disabled={pending}
         className="inline-flex h-8 items-center rounded-md border border-danger/40 px-2 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-60"
       >
-        Delete Run Setup
+        Delete
       </button>
       <dialog
         ref={dialogRef}
@@ -79,14 +67,19 @@ export function CommunityScheduleDeleteSetupButton({
             <p className="font-medium text-foreground">
               {runSetupName} · {raidLeadName}
             </p>
-            <p>This will permanently delete:</p>
+            <p>This will permanently remove:</p>
             <ul className="list-disc space-y-0.5 pl-4">
               <li>this Run Setup</li>
-              <li>
-                {slotCount} recurring Schedule time{slotCount === 1 ? "" : "s"}
-              </li>
+              {slotCount > 0 ? (
+                <li>
+                  {slotCount} recurring Schedule time{slotCount === 1 ? "" : "s"}
+                </li>
+              ) : null}
             </ul>
-            <p>No Runs have ever been created from these times.</p>
+            <p>Existing Runs already created from this setup will NOT be changed.</p>
+            {slotCount > 0 ? (
+              <p>No future Runs will be created from these recurring times.</p>
+            ) : null}
           </div>
           {error ? (
             <p

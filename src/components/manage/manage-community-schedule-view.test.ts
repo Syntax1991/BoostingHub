@@ -11,6 +11,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/controllers/community-schedule.actions", () => ({
   updateCommunityScheduleRunSetupAction: vi.fn(),
   createCommunitySchedulePlanAction: vi.fn(),
+  createCommunityScheduleRunSetupAction: vi.fn(),
+  duplicateCommunityScheduleRunSetupAction: vi.fn(),
   addCommunityScheduleTimesAction: vi.fn(),
   materializeCommunityScheduleOccurrenceAction: vi.fn(),
   createCommunityScheduleSlotAction: vi.fn(),
@@ -60,6 +62,54 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
   return {
     canEdit,
     timeZone: "Europe/Berlin",
+    runSetupInventory: [
+      {
+        id: "template-1",
+        name: "Default HC",
+        raidLeadId: "lead-1",
+        raidLeadName: "Synblast",
+        productLabel: "The Venomous Abyss",
+        titleCoverage: "8/8",
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
+        notes: null,
+        isActive: true,
+        usable: true,
+        unusableReason: null,
+        slotCount: 3,
+        contentPreset: "VENOMOUS_ABYSS",
+        venomousPlannedBossCount: 8,
+        canEdit,
+        canDelete: canEdit,
+      },
+      {
+        id: "template-zero",
+        name: "Zero Slot Setup",
+        raidLeadId: "lead-1",
+        raidLeadName: "Synblast",
+        productLabel: "Season 2 Bundle",
+        titleCoverage: "9/9",
+        difficulty: "HEROIC",
+        lootType: "VIP",
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
+        notes: null,
+        isActive: true,
+        usable: true,
+        unusableReason: null,
+        slotCount: 0,
+        contentPreset: "MIDNIGHT_S2_BUNDLE",
+        venomousPlannedBossCount: 8,
+        canEdit,
+        canDelete: canEdit,
+      },
+    ],
     runSetups: [
       {
         key: "template-1:lead-1",
@@ -70,8 +120,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         autoCreateSummary: "MIXED" as const,
         canEdit,
         slotCount: 3,
-        canDelete: false,
-        deleteBlockedReason: "Cannot delete — one or more times have already created a Run.",
+        canDelete: canEdit,
         slots: [
           {
             id: "slot-1",
@@ -82,8 +131,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             runMode: "INHOUSE" as const,
             label: "Default HC",
             notes: null,
-            canDelete: false,
-            deleteBlockedReason: "Cannot delete — this time has already created a Run.",
+            canDelete: canEdit,
           },
           {
             id: "slot-2",
@@ -94,8 +142,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             runMode: "TEAM_RUN" as const,
             label: "Default HC",
             notes: null,
-            canDelete: true,
-            deleteBlockedReason: null,
+            canDelete: canEdit,
           },
           {
             id: "slot-inactive",
@@ -106,8 +153,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             runMode: "INHOUSE" as const,
             label: "Default HC",
             notes: null,
-            canDelete: true,
-            deleteBlockedReason: null,
+            canDelete: canEdit,
           },
         ],
       },
@@ -116,7 +162,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
       {
         id: "template-1",
         raidLeadId: "lead-1",
-        label: "Default HC · HC UNS 8/8",
+        label: "Default HC · HC Unsaved 8/8 · The Venomous Abyss",
         usable: true,
         unusableReason: null,
         name: "Default HC",
@@ -126,19 +172,38 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         titleCoverage: "8/8",
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-                desiredTankCount: 2,
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
+        notes: null,
+      },
+      {
+        id: "template-zero",
+        raidLeadId: "lead-1",
+        label: "Zero Slot Setup · HC VIP 9/9 · Season 2 Bundle",
+        usable: true,
+        unusableReason: null,
+        name: "Zero Slot Setup",
+        contentPreset: "MIDNIGHT_S2_BUNDLE" as const,
+        venomousPlannedBossCount: 8,
+        productLabel: "Season 2 Bundle",
+        titleCoverage: "9/9",
+        difficulty: "HEROIC",
+        lootType: "VIP",
+        desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
         desiredLootbuddyCount: 0,
         notes: null,
       },
     ],
-    contentPresets: [{ key: "VENOMOUS_ABYSS", displayName: "The Venomous Abyss" }, { key: "MIDNIGHT_S2_BUNDLE", displayName: "Season 2 Bundle" }],
+    contentPresets: [
+      { key: "VENOMOUS_ABYSS", displayName: "The Venomous Abyss" },
+      { key: "MIDNIGHT_S2_BUNDLE", displayName: "Season 2 Bundle" },
+    ],
     venomousBossMax: 8,
-    share: {
-      text: "<@&role>\n\nFriday: 19:45 8/8 HC Unsaved <@lead> inhouse\n\nPlease check which recurring Runs we have at the moment. 🙂",
-      warnings: [],
-    },
+    share: { text: "share", warnings: [] },
     current: {
       window: "CURRENT",
       windowStart: "2026-01-14T05:00:00.000Z",
@@ -192,32 +257,27 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
 }
 
 describe("ManageCommunityScheduleView", () => {
-  it("renders Run Setups grouping, Create Schedule, and Current/Next windows", () => {
+  it("renders Run Setup inventory, Weekly Plan, Create Run Setup, and windows", () => {
     const html = renderToStaticMarkup(
       createElement(ManageCommunityScheduleView, { page: samplePage(true) }),
     );
+    expect(html).toContain("Create Run Setup");
     expect(html).toContain("Create Schedule");
     expect(html).toContain("Share Schedule");
-    expect(html).toContain("Run Setups / Weekly Plan");
+    expect(html).toContain("Run Setups");
+    expect(html).toContain("Weekly Plan");
+    expect(html).toContain("Zero Slot Setup");
+    expect(html).toContain("Duplicate");
     expect(html).toContain("Inhouse");
     expect(html).toContain("Team Run");
-    expect(html).toContain("Default HC · Synblast");
     expect(html).toContain("Auto-create: MIXED");
-    expect(html).toContain("Auto ✓");
-    expect(html).toContain("Auto ✗");
     expect(html).toContain("Add times");
-    expect(html).toContain("Edit Run Setup");
-    expect(html).toContain("Delete Run Setup");
     expect(html).toContain("Delete");
     expect(html).toContain("Deactivate");
     expect(html).toContain("Reactivate");
-    expect(html).not.toContain("/manage/templates");
-    expect(html).toContain("Inactive");
     expect(html).toContain("Current Raid ID");
     expect(html).toContain("Next Raid ID");
-    expect(html).toContain("19:45 · Default HC · Synblast");
     expect(html).toContain("Auto-create waiting");
-    expect(html).toContain("Run Setup:");
     expect(html).toContain("Create Run");
   });
 
@@ -226,12 +286,12 @@ describe("ManageCommunityScheduleView", () => {
       createElement(ManageCommunityScheduleView, { page: samplePage(false) }),
     );
     expect(html).toContain("Current Raid ID");
-    expect(html).toContain("19:45 · Default HC · Synblast");
-    expect(html).toContain("Run Setups / Weekly Plan");
+    expect(html).toContain("Run Setups");
+    expect(html).toContain("Weekly Plan");
     expect(html).not.toContain("Create Schedule");
+    expect(html).not.toContain("Create Run Setup");
     expect(html).not.toContain("Add times");
-    expect(html).not.toContain("Edit Run Setup");
-    expect(html).not.toContain("Delete Run Setup");
+    expect(html).not.toContain("Duplicate");
     expect(html).not.toContain("Deactivate");
   });
 
@@ -241,8 +301,9 @@ describe("ManageCommunityScheduleView", () => {
     page.next.days = [];
     page.slots = [];
     page.runSetups = [];
+    page.runSetupInventory = [];
     const html = renderToStaticMarkup(createElement(ManageCommunityScheduleView, { page }));
-    expect(html).toContain("No active schedule slots in this window.");
-    expect(html).toContain("No run setups yet.");
+    expect(html).toContain("No Run Setups yet.");
+    expect(html).toContain("No weekly times yet.");
   });
 });

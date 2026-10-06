@@ -434,6 +434,105 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
   });
 });
 
+describe("runTemplateService.duplicateTemplate", () => {
+  it("copies Venomous content, composition, notes, and raid lead into a new id", async () => {
+    const created = await runTemplateService.createTemplate(
+      lead,
+      inputFor({
+        name: "HC VIP Venomous 8/8",
+        contentPreset: "VENOMOUS_ABYSS",
+        venomousPlannedBossCount: 8,
+        lootType: "VIP",
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
+        notes: "orig notes",
+      }),
+    );
+    createdTemplateIds.push(created.id);
+
+    const dup = await runTemplateService.duplicateTemplate(lead, created.id);
+    createdTemplateIds.push(dup.id);
+    expect(dup.id).not.toBe(created.id);
+
+    const original = await runTemplateRepository.findById(created.id);
+    const copy = await runTemplateRepository.findById(dup.id);
+    expect(copy?.raidLeadId).toBe(ids.lead);
+    expect(copy?.difficulty).toBe("HEROIC");
+    expect(copy?.lootType).toBe("VIP");
+    expect(copy?.desiredTankCount).toBe(2);
+    expect(copy?.desiredHealerCount).toBe(4);
+    expect(copy?.desiredDpsCount).toBe(14);
+    expect(copy?.desiredLootbuddyCount).toBe(0);
+    expect(copy?.notes).toBe("orig notes");
+    expect(copy?.contents).toHaveLength(1);
+    expect(copy?.contents[0]?.raidId).toBe(VENOMOUS_ABYSS_RAID_ID);
+    expect(copy?.contents[0]?.plannedBossCount).toBe(8);
+    expect(copy?.name).toContain("copy");
+
+    await runTemplateService.updateTemplate(lead, {
+      ...inputFor({
+        name: "HC VIP Venomous 7/8",
+        venomousPlannedBossCount: 7,
+        lootType: "VIP",
+        notes: "edited copy",
+      }),
+      templateId: dup.id,
+    });
+    const originalAfter = await runTemplateRepository.findById(created.id);
+    expect(originalAfter?.contents[0]?.plannedBossCount).toBe(original?.contents[0]?.plannedBossCount);
+    expect(originalAfter?.notes).toBe("orig notes");
+  });
+
+  it("copies ordered Bundle contents without sharing identity", async () => {
+    const created = await runTemplateService.createTemplate(
+      admin,
+      inputFor({
+        name: "HC VIP Bundle 9/9",
+        contentPreset: "MIDNIGHT_S2_BUNDLE",
+        venomousPlannedBossCount: 8,
+        lootType: "VIP",
+        raidLeadId: ids.lead,
+      }),
+    );
+    createdTemplateIds.push(created.id);
+
+    const dup = await runTemplateService.duplicateTemplate(admin, created.id);
+    createdTemplateIds.push(dup.id);
+
+    const copy = await runTemplateRepository.findById(dup.id);
+    expect(copy?.contents).toHaveLength(2);
+    expect(copy?.contents.map((row) => row.raidId)).toEqual([
+      TIDEBOUND_GROTTO_RAID_ID,
+      VENOMOUS_ABYSS_RAID_ID,
+    ]);
+    expect(copy?.contents.find((row) => row.raidId === TIDEBOUND_GROTTO_RAID_ID)?.plannedBossCount).toBe(1);
+    expect(copy?.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID)?.plannedBossCount).toBe(8);
+
+    await runTemplateService.updateTemplate(admin, {
+      ...inputFor({
+        name: "HC VIP Bundle 7/9",
+        contentPreset: "MIDNIGHT_S2_BUNDLE",
+        venomousPlannedBossCount: 6,
+        lootType: "VIP",
+        raidLeadId: ids.lead,
+      }),
+      templateId: dup.id,
+    });
+    const originalAfter = await runTemplateRepository.findById(created.id);
+    expect(
+      originalAfter?.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID)?.plannedBossCount,
+    ).toBe(8);
+  });
+
+  it("USER cannot duplicate", async () => {
+    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "No dup for user" }));
+    createdTemplateIds.push(created.id);
+    await expectDomainCode(runTemplateService.duplicateTemplate(user, created.id), "NOT_AUTHORIZED");
+  });
+});
+
 describe("runTemplateService.updateTemplate — ownership authorization", () => {
   it("RAID_LEAD may edit their own template", async () => {
     const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Owned" }));

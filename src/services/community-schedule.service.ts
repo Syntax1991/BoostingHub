@@ -15,7 +15,7 @@ import {
   type ScheduleOccurrence,
 } from "@/lib/community-schedule";
 import { classifyRunWeek } from "@/lib/wow-run-week";
-import { DomainError, isDomainError } from "@/lib/errors";
+import { DomainError } from "@/lib/errors";
 import { getDiscordManagementScheduleRoleId } from "@/lib/discord-config";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import {
@@ -38,10 +38,7 @@ import {
   type RaidDifficulty,
   type RunLootType,
 } from "@/models/enums";
-import {
-  communityScheduleRunRepository,
-  isForeignKeyViolation,
-} from "@/repositories/community-schedule-run.repository";
+import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import {
   communityScheduleRepository,
   type CommunityScheduleSlotRecord,
@@ -66,13 +63,7 @@ import type {
   CreateSchedulePlanInput,
   UpdateCommunityScheduleSlotInput,
 } from "@/validators/community-schedule";
-import type { UpdateRunTemplateInput } from "@/validators/run-template";
-
-const SLOT_DELETE_BLOCKED_MESSAGE =
-  "This Schedule time has already created one or more Runs and cannot be deleted. Deactivate it instead.";
-
-const SETUP_DELETE_BLOCKED_MESSAGE =
-  "This Run Setup has already been used to create one or more Runs and cannot be deleted. Deactivate its Schedule times instead.";
+import type { CreateRunTemplateInput, UpdateRunTemplateInput } from "@/validators/run-template";
 
 export type ScheduleMutationMaterialization = {
   created: number;
@@ -151,9 +142,8 @@ export type CommunityScheduleRunSetupSlot = {
   runMode: CommunityScheduleRunMode;
   label: string;
   notes: string | null;
-  /** Hard-delete allowed only when this slot has never materialized a Run. */
+  /** ADMIN/OWNER may hard-delete planning regardless of materialization history. */
   canDelete: boolean;
-  deleteBlockedReason: string | null;
 };
 
 export type CommunityScheduleRunSetupGroup = {
@@ -166,9 +156,33 @@ export type CommunityScheduleRunSetupGroup = {
   slotCount: number;
   autoCreateSummary: "ON" | "OFF" | "MIXED";
   canEdit: boolean;
-  /** Hard-delete Run Setup + all its slots when none have materialization history. */
+  /** ADMIN/OWNER may delete the setup + its slots; concrete Runs remain. */
   canDelete: boolean;
-  deleteBlockedReason: string | null;
+};
+
+/** Reusable Run Setup inventory (includes zero-slot presets). */
+export type CommunityScheduleRunSetupInventoryItem = {
+  id: string;
+  name: string;
+  raidLeadId: string;
+  raidLeadName: string;
+  productLabel: string;
+  titleCoverage: string;
+  difficulty: RaidDifficulty;
+  lootType: RunLootType;
+  desiredTankCount: number;
+  desiredHealerCount: number;
+  desiredDpsCount: number;
+  desiredLootbuddyCount: number;
+  notes: string | null;
+  isActive: boolean;
+  usable: boolean;
+  unusableReason: string | null;
+  slotCount: number;
+  contentPreset: RunContentPresetKey;
+  venomousPlannedBossCount: number;
+  canEdit: boolean;
+  canDelete: boolean;
 };
 
 export type CommunityScheduleContentPresetOption = {
@@ -182,7 +196,10 @@ export type CommunitySchedulePage = {
   current: CommunityScheduleWindowView;
   next: CommunityScheduleWindowView;
   slots: CommunityScheduleSlotRecord[];
+  /** Weekly Plan groups (slots only — zero-slot setups are not listed here). */
   runSetups: CommunityScheduleRunSetupGroup[];
+  /** Full reusable preset inventory including zero-slot setups. */
+  runSetupInventory: CommunityScheduleRunSetupInventoryItem[];
   eligibleRaidLeads: Array<{ id: string; name: string }>;
   templates: CommunityScheduleTemplateOption[];
   contentPresets: CommunityScheduleContentPresetOption[];
@@ -375,7 +392,6 @@ function groupRunSetups(
   slots: CommunityScheduleSlotRecord[],
   canEdit: boolean,
   templatesById: Map<string, RunTemplateRecord>,
-  materializedSlotIds: ReadonlySet<string>,
 ): CommunityScheduleRunSetupGroup[] {
   const groups = new Map<string, CommunityScheduleRunSetupGroup>();
   for (const slot of slots) {
@@ -396,12 +412,10 @@ function groupRunSetups(
         slotCount: 0,
         autoCreateSummary: "OFF",
         canEdit,
-        canDelete: false,
-        deleteBlockedReason: null,
+        canDelete: Boolean(canEdit && slot.runTemplateId),
       };
       groups.set(key, group);
     }
-    const slotCanDelete = canEdit && !materializedSlotIds.has(slot.id);
     group.slots.push({
       id: slot.id,
       weekday: slot.weekday,
@@ -411,12 +425,7 @@ function groupRunSetups(
       runMode: slot.runMode,
       label: slot.label,
       notes: slot.notes,
-      canDelete: slotCanDelete,
-      deleteBlockedReason: slotCanDelete
-        ? null
-        : canEdit
-          ? "Cannot delete — this time has already created a Run."
-          : null,
+      canDelete: canEdit,
     });
   }
 
@@ -425,17 +434,7 @@ function groupRunSetups(
     group.slots.sort(compareSetupSlots);
     group.slotCount = group.slots.length;
     group.autoCreateSummary = autoCreateSummary(group.slots);
-    if (!canEdit || !group.runTemplateId) {
-      group.canDelete = false;
-      group.deleteBlockedReason = null;
-    } else if (group.slots.some((slot) => !slot.canDelete)) {
-      group.canDelete = false;
-      group.deleteBlockedReason =
-        "Cannot delete — one or more times have already created a Run.";
-    } else {
-      group.canDelete = true;
-      group.deleteBlockedReason = null;
-    }
+    group.canDelete = Boolean(canEdit && group.runTemplateId);
   }
   result.sort((a, b) => {
     const byName = a.runSetupName.localeCompare(b.runSetupName);
@@ -443,6 +442,56 @@ function groupRunSetups(
     return a.raidLeadName.localeCompare(b.raidLeadName);
   });
   return result;
+}
+
+function buildRunSetupInventory(
+  templates: RunTemplateRecord[],
+  slots: CommunityScheduleSlotRecord[],
+  canEdit: boolean,
+): CommunityScheduleRunSetupInventoryItem[] {
+  const slotCountByTemplate = new Map<string, number>();
+  for (const slot of slots) {
+    if (!slot.runTemplateId) continue;
+    slotCountByTemplate.set(
+      slot.runTemplateId,
+      (slotCountByTemplate.get(slot.runTemplateId) ?? 0) + 1,
+    );
+  }
+
+  const items = templates.map((template) => {
+    const usability = computeUsability(template);
+    const product = templateProductFields(template);
+    return {
+      id: template.id,
+      name: template.name,
+      raidLeadId: template.raidLeadId,
+      raidLeadName: template.raidLeadName,
+      productLabel: product.productLabel,
+      titleCoverage: product.titleCoverage,
+      difficulty: template.difficulty,
+      lootType: template.lootType,
+      desiredTankCount: template.desiredTankCount,
+      desiredHealerCount: template.desiredHealerCount,
+      desiredDpsCount: template.desiredDpsCount,
+      desiredLootbuddyCount: template.desiredLootbuddyCount,
+      notes: template.notes,
+      isActive: template.isActive,
+      usable: usability.usable,
+      unusableReason: usability.unusableReason,
+      slotCount: slotCountByTemplate.get(template.id) ?? 0,
+      contentPreset: product.contentPreset,
+      venomousPlannedBossCount: product.venomousPlannedBossCount,
+      canEdit,
+      canDelete: canEdit,
+    };
+  });
+
+  items.sort((a, b) => {
+    const byLead = a.raidLeadName.localeCompare(b.raidLeadName);
+    if (byLead !== 0) return byLead;
+    return a.name.localeCompare(b.name);
+  });
+  return items;
 }
 
 function buildMaterializationView(input: {
@@ -784,13 +833,13 @@ export const communityScheduleService = {
     const slotIds = slots.map((slot) => slot.id);
     const links = await communityScheduleRunRepository.listBySlotIds(slotIds);
     const linksByKey = new Map<string, string>();
-    const materializedSlotIds = new Set<string>();
     for (const link of links) {
+      if (link.scheduleSlotId == null) continue;
       linksByKey.set(`${link.scheduleSlotId}\0${link.windowStartAt}`, link.runId);
-      materializedSlotIds.add(link.scheduleSlotId);
     }
 
     const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
+    const allTemplates = [...templatesById.values()];
 
     return {
       canEdit,
@@ -798,7 +847,8 @@ export const communityScheduleService = {
       current: projectWindow(user, slots, "CURRENT", now, linksByKey, templateMetaById),
       next: projectWindow(user, slots, "NEXT", now, linksByKey, templateMetaById),
       slots: visibleSlots,
-      runSetups: groupRunSetups(visibleSlots, canEdit, templatesById, materializedSlotIds),
+      runSetups: groupRunSetups(visibleSlots, canEdit, templatesById),
+      runSetupInventory: buildRunSetupInventory(allTemplates, visibleSlots, canEdit),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
       templates: canEdit
         ? templates
@@ -1055,49 +1105,26 @@ export const communityScheduleService = {
   },
 
   /**
-   * Hard-delete a Schedule time that has never materialized a Run.
-   * Active/inactive unused slots are both allowed. History is protected by
-   * CommunityScheduleRun Restrict FK + an in-transaction existence check.
+   * Permanently remove a recurring Schedule time.
+   * CommunityScheduleRun.scheduleSlotId is SET NULL; concrete Runs stay.
    */
   async deleteSlot(user: AuthenticatedUser, slotId: string): Promise<{ id: string }> {
     requireManage(user);
-    try {
-      await db.transaction(async (tx) => {
-        const txOrm = resolveTxOrm(tx);
-        const existing = await communityScheduleRepository.findById(slotId, txOrm);
-        if (!existing) {
-          throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
-        }
-        const materialized = await communityScheduleRunRepository.slotIdsWithMaterialization(
-          [slotId],
-          txOrm,
-        );
-        if (materialized.has(slotId)) {
-          throw new DomainError(
-            "COMMUNITY_SCHEDULE_DELETE_BLOCKED",
-            SLOT_DELETE_BLOCKED_MESSAGE,
-            409,
-          );
-        }
-        await communityScheduleRepository.deleteById(slotId, txOrm);
-      });
-    } catch (error) {
-      if (isDomainError(error)) throw error;
-      if (isForeignKeyViolation(error)) {
-        throw new DomainError(
-          "COMMUNITY_SCHEDULE_DELETE_BLOCKED",
-          SLOT_DELETE_BLOCKED_MESSAGE,
-          409,
-        );
+    await db.transaction(async (tx) => {
+      const txOrm = resolveTxOrm(tx);
+      const existing = await communityScheduleRepository.findById(slotId, txOrm);
+      if (!existing) {
+        throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
       }
-      throw error;
-    }
+      await communityScheduleRepository.deleteById(slotId, txOrm);
+    });
     return { id: slotId };
   },
 
   /**
-   * Hard-delete an unused Run Setup and all of its never-materialized Schedule
-   * times. Atomic: slots + template (+ cascaded contents) or nothing.
+   * Permanently remove a Run Setup and all of its Schedule times.
+   * Historical CommunityScheduleRun rows SET NULL on slot delete; Runs stay.
+   * Template contents cascade with the template.
    */
   async deleteRunSetup(
     user: AuthenticatedUser,
@@ -1105,46 +1132,38 @@ export const communityScheduleService = {
   ): Promise<{ id: string; deletedSlotCount: number }> {
     requireManage(user);
     let deletedSlotCount = 0;
-    try {
-      await db.transaction(async (tx) => {
-        const txOrm = resolveTxOrm(tx);
-        const template = await runTemplateRepository.findById(runTemplateId, txOrm);
-        if (!template) {
-          throw new DomainError("RUN_TEMPLATE_NOT_FOUND", "Run Setup was not found.", 404);
-        }
-
-        const slots = await communityScheduleRepository.listByTemplateId(runTemplateId, txOrm);
-        const slotIds = slots.map((slot) => slot.id);
-        if (slotIds.length > 0) {
-          const materialized = await communityScheduleRunRepository.slotIdsWithMaterialization(
-            slotIds,
-            txOrm,
-          );
-          if (materialized.size > 0) {
-            throw new DomainError(
-              "COMMUNITY_SCHEDULE_SETUP_DELETE_BLOCKED",
-              SETUP_DELETE_BLOCKED_MESSAGE,
-              409,
-            );
-          }
-          for (const slotId of slotIds) {
-            await communityScheduleRepository.deleteById(slotId, txOrm);
-          }
-        }
-        deletedSlotCount = slotIds.length;
-        await runTemplateRepository.deleteById(runTemplateId, txOrm);
-      });
-    } catch (error) {
-      if (isDomainError(error)) throw error;
-      if (isForeignKeyViolation(error)) {
-        throw new DomainError(
-          "COMMUNITY_SCHEDULE_SETUP_DELETE_BLOCKED",
-          SETUP_DELETE_BLOCKED_MESSAGE,
-          409,
-        );
+    await db.transaction(async (tx) => {
+      const txOrm = resolveTxOrm(tx);
+      const template = await runTemplateRepository.findById(runTemplateId, txOrm);
+      if (!template) {
+        throw new DomainError("RUN_TEMPLATE_NOT_FOUND", "Run Setup was not found.", 404);
       }
-      throw error;
-    }
+
+      const slots = await communityScheduleRepository.listByTemplateId(runTemplateId, txOrm);
+      for (const slot of slots) {
+        await communityScheduleRepository.deleteById(slot.id, txOrm);
+      }
+      deletedSlotCount = slots.length;
+      await runTemplateRepository.deleteById(runTemplateId, txOrm);
+    });
     return { id: runTemplateId, deletedSlotCount };
+  },
+
+  /** Create a reusable Run Setup without Schedule times (ADMIN/OWNER). */
+  async createRunSetup(
+    user: AuthenticatedUser,
+    input: CreateRunTemplateInput,
+  ): Promise<{ id: string }> {
+    requireManage(user);
+    return runTemplateService.createTemplate(user, input);
+  },
+
+  /** Duplicate a Run Setup into a new independent preset (no slots copied). */
+  async duplicateRunSetup(
+    user: AuthenticatedUser,
+    runTemplateId: string,
+  ): Promise<{ id: string }> {
+    requireManage(user);
+    return runTemplateService.duplicateTemplate(user, runTemplateId);
   },
 };

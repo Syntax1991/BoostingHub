@@ -1,16 +1,24 @@
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { communityWeekdayShortLabel } from "@/lib/community-schedule";
-import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS } from "@/lib/labels";
+import {
+  COMMUNITY_SCHEDULE_RUN_MODE_LABELS,
+  DIFFICULTY_ABBREVIATIONS,
+  RUN_LOOT_TYPE_LABELS,
+} from "@/lib/labels";
 import { CommunityScheduleAddTimesDialog } from "@/components/manage/community-schedule-add-times-dialog";
+import { CommunityScheduleDeleteSetupButton } from "@/components/manage/community-schedule-delete-setup-button";
+import { CommunityScheduleDuplicateSetupButton } from "@/components/manage/community-schedule-duplicate-setup-button";
 import { CommunityScheduleOccurrenceActions } from "@/components/manage/community-schedule-occurrence-actions";
 import { CommunitySchedulePlanDialog } from "@/components/manage/community-schedule-plan-dialog";
 import { CommunityScheduleShareDialog } from "@/components/manage/community-schedule-share-dialog";
 import { CommunityScheduleSlotFormDialog } from "@/components/manage/community-schedule-slot-form-dialog";
-import { CommunityScheduleDeleteSetupButton } from "@/components/manage/community-schedule-delete-setup-button";
 import { CommunityScheduleSlotActions } from "@/components/manage/community-schedule-slot-actions";
 import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
-import { updateCommunityScheduleRunSetupAction } from "@/controllers/community-schedule.actions";
+import {
+  createCommunityScheduleRunSetupAction,
+  updateCommunityScheduleRunSetupAction,
+} from "@/controllers/community-schedule.actions";
 import type { CommunitySchedulePage } from "@/services/community-schedule.service";
 
 function WindowSection({
@@ -101,35 +109,39 @@ function WindowSection({
 function EditRunSetupButton({
   page,
   runTemplateId,
+  triggerLabel = "Edit",
 }: {
   page: CommunitySchedulePage;
   runTemplateId: string;
+  triggerLabel?: string;
 }) {
   const setup = page.templates.find((row) => row.id === runTemplateId);
-  if (!setup) return null;
+  const inventory = page.runSetupInventory.find((row) => row.id === runTemplateId);
+  if (!setup && !inventory) return null;
+  const source = setup ?? inventory!;
   return (
     <RunTemplateFormDialog
       mode="edit"
       initial={{
-        templateId: setup.id,
-        name: setup.name,
-        contentPreset: setup.contentPreset,
-        venomousPlannedBossCount: setup.venomousPlannedBossCount,
-        difficulty: setup.difficulty,
-        lootType: setup.lootType,
-        desiredTankCount: setup.desiredTankCount,
-        desiredHealerCount: setup.desiredHealerCount,
-        desiredDpsCount: setup.desiredDpsCount,
-        desiredLootbuddyCount: setup.desiredLootbuddyCount,
-        notes: setup.notes,
-        raidLeadId: setup.raidLeadId,
+        templateId: source.id,
+        name: source.name,
+        contentPreset: source.contentPreset,
+        venomousPlannedBossCount: source.venomousPlannedBossCount,
+        difficulty: source.difficulty,
+        lootType: source.lootType,
+        desiredTankCount: source.desiredTankCount,
+        desiredHealerCount: source.desiredHealerCount,
+        desiredDpsCount: source.desiredDpsCount,
+        desiredLootbuddyCount: source.desiredLootbuddyCount,
+        notes: source.notes,
+        raidLeadId: source.raidLeadId,
       }}
       contentPresets={page.contentPresets}
       venomousBossMax={page.venomousBossMax}
       raidLeads={page.eligibleRaidLeads}
       canAssignRaidLead
-      defaultRaidLeadId={setup.raidLeadId}
-      triggerLabel="Edit Run Setup"
+      defaultRaidLeadId={source.raidLeadId}
+      triggerLabel={triggerLabel}
       triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
       title="Edit Run Setup"
       description="Changes apply to future Runs only. Already materialized Runs stay unchanged. You remain on the Community Schedule."
@@ -139,19 +151,76 @@ function EditRunSetupButton({
   );
 }
 
-function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
+function RunSetupInventorySection({ page }: { page: CommunitySchedulePage }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Run Setups</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Reusable planning presets — including setups with no Schedule times yet.
+        </p>
+      </div>
+      {page.runSetupInventory.length === 0 ? (
+        <EmptyState
+          title="No Run Setups yet."
+          description="Create a Run Setup to reuse across weekly Schedule times."
+        />
+      ) : (
+        <ul className="divide-y divide-border">
+          {page.runSetupInventory.map((setup) => (
+            <li key={setup.id} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {setup.name}
+                  {!setup.isActive ? " · Inactive" : ""}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {setup.productLabel} · {DIFFICULTY_ABBREVIATIONS[setup.difficulty]} ·{" "}
+                  {RUN_LOOT_TYPE_LABELS[setup.lootType]} · {setup.titleCoverage}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {setup.raidLeadName}
+                  {" · "}
+                  {setup.desiredTankCount}T · {setup.desiredHealerCount}H · {setup.desiredDpsCount}D
+                  · {setup.desiredLootbuddyCount}LB
+                  {" · "}
+                  {setup.slotCount} Schedule time{setup.slotCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              {page.canEdit ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <EditRunSetupButton page={page} runTemplateId={setup.id} />
+                  <CommunityScheduleDuplicateSetupButton runTemplateId={setup.id} />
+                  <CommunityScheduleDeleteSetupButton
+                    runTemplateId={setup.id}
+                    runSetupName={`${setup.name} · ${setup.productLabel}`}
+                    raidLeadName={setup.raidLeadName}
+                    slotCount={setup.slotCount}
+                    canDelete={setup.canDelete}
+                  />
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function WeeklyPlanSection({ page }: { page: CommunitySchedulePage }) {
   if (page.runSetups.length === 0) {
     return (
       <Card className="overflow-hidden">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Run Setups / Weekly Plan</h2>
+          <h2 className="text-sm font-semibold">Weekly Plan</h2>
           <p className="mt-0.5 text-xs text-muted">
-            Groups of weekly times sharing the same Run Setup and raid lead.
+            Recurring Schedule times grouped by Run Setup and raid lead.
           </p>
         </div>
         <EmptyState
-          title="No run setups yet."
-          description="Create a schedule to group weekly times under a Run Setup."
+          title="No weekly times yet."
+          description="Create a Schedule or add times to a Run Setup."
         />
       </Card>
     );
@@ -160,9 +229,9 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">Run Setups / Weekly Plan</h2>
+        <h2 className="text-sm font-semibold">Weekly Plan</h2>
         <p className="mt-0.5 text-xs text-muted">
-          Groups of weekly times sharing the same Run Setup and raid lead.
+          Recurring Schedule times grouped by Run Setup and raid lead.
         </p>
       </div>
       <ul className="divide-y divide-border">
@@ -185,14 +254,17 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
                     raidLeadId={group.raidLeadId}
                     runSetupName={group.runSetupName}
                   />
-                  <EditRunSetupButton page={page} runTemplateId={group.runTemplateId} />
+                  <EditRunSetupButton
+                    page={page}
+                    runTemplateId={group.runTemplateId}
+                    triggerLabel="Edit Run Setup"
+                  />
                   <CommunityScheduleDeleteSetupButton
                     runTemplateId={group.runTemplateId}
                     runSetupName={group.runSetupName}
                     raidLeadName={group.raidLeadName}
                     slotCount={group.slotCount}
                     canDelete={group.canDelete}
-                    deleteBlockedReason={group.deleteBlockedReason}
                   />
                 </div>
               ) : null}
@@ -220,7 +292,6 @@ function RunSetupsSection({ page }: { page: CommunitySchedulePage }) {
                       slotId={slot.id}
                       isActive={slot.isActive}
                       canDelete={slot.canDelete}
-                      deleteBlockedReason={slot.deleteBlockedReason}
                       weekday={slot.weekday}
                       localStartTime={slot.localStartTime}
                       runMode={slot.runMode}
@@ -242,11 +313,26 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
   return (
     <div>
       <PageHeader
-        title="Operational Schedule"
-        description="Recurring community run times with optional DRAFT run materialization per raid-ID window. Does not open Runs or post to Discord Schedule automatically."
+        title="Community Schedule"
+        description="Reusable Run Setups and recurring community times with optional DRAFT run materialization. Does not open Runs or post to Discord Schedule automatically."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <CommunityScheduleShareDialog share={page.share} />
+            {page.canEdit ? (
+              <RunTemplateFormDialog
+                mode="create"
+                contentPresets={page.contentPresets}
+                venomousBossMax={page.venomousBossMax}
+                raidLeads={page.eligibleRaidLeads}
+                canAssignRaidLead
+                defaultRaidLeadId={page.eligibleRaidLeads[0]?.id ?? ""}
+                triggerLabel="Create Run Setup"
+                triggerClassName="inline-flex h-9 items-center rounded-md border border-border bg-surface-raised px-3 text-sm font-medium hover:bg-[#222a3b]"
+                title="Create Run Setup"
+                description="Create a reusable planning preset. You can attach Schedule times later."
+                submitLabel="Create Run Setup"
+                createAction={createCommunityScheduleRunSetupAction}
+              />
+            ) : null}
             {page.canEdit ? (
               <CommunitySchedulePlanDialog
                 raidLeads={page.eligibleRaidLeads}
@@ -256,12 +342,14 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
                 defaultRaidLeadId={page.eligibleRaidLeads[0]?.id}
               />
             ) : null}
+            <CommunityScheduleShareDialog share={page.share} />
           </div>
         }
       />
 
       <div className="grid gap-4">
-        <RunSetupsSection page={page} />
+        <RunSetupInventorySection page={page} />
+        <WeeklyPlanSection page={page} />
         <WindowSection
           title="Current Raid ID"
           window={page.current}
