@@ -25,6 +25,9 @@ PostgreSQL 17 (host package)           postgresql.service
 Character sync (oneshot, every 15 min) boostinghub-character-sync.timer → .service
   → npm run sync:characters (overlap guarded by a PostgreSQL advisory lock)
 
+Community schedule materialization (oneshot, hourly) boostinghub-community-schedule.timer → .service
+  → npm run materialize:community-schedule (overlap guarded by advisory lock 837462/4)
+
 Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
   → /usr/local/libexec/boostinghub/backup-db.sh → /var/backups/boostinghub/*.dump
 ```
@@ -34,7 +37,7 @@ Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
 | Host OS | Debian 13 with systemd |
 | Runtime | Node.js 24.x / npm 11, Python 3 (ops scripts), PostgreSQL 17 client tools |
 | App checkout | `/var/www/boostinghub` (Git clone of `Syntax1991/BoostingHub`, branch `main`) |
-| Service user | `boostinghub` (owns the checkout, runs web, bot, character sync) |
+| Service user | `boostinghub` (owns the checkout, runs web, bot, character sync, community schedule materializer) |
 | Env file | `/var/www/boostinghub/.env`, owner `boostinghub`, mode `600` |
 | Backups | `/var/backups/boostinghub/`, owner `root`, mode `700` |
 | Root-owned ops executables | `/usr/local/libexec/boostinghub/` |
@@ -44,7 +47,7 @@ Database backup (oneshot, daily 03:15)  boostinghub-backup.timer → .service
 | Path | Purpose |
 | --- | --- |
 | `deploy/update-server.sh` | **The** release helper for normal updates (see below) |
-| `deploy/production/systemd/*.service`, `*.timer` | Reference copies of the six live units |
+| `deploy/production/systemd/*.service`, `*.timer` | Reference copies of the eight live units |
 | `deploy/production/backup-db.sh` | Backup script; production runs a root-owned installed copy |
 | `deploy/production/env-status.py` | Read-only `.env` check that never prints secret values. Database URLs show only scheme/user/host/port/database; the password and every query-parameter value are hidden. |
 | `deploy/production/*.test.sh` | Offline tests for the two scripts above (no DB, no credentials) |

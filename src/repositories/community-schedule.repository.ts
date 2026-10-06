@@ -17,6 +17,9 @@ export type CommunityScheduleSlotRecord = {
   raidLeadId: string;
   raidLeadName: string;
   raidLeadEligible: boolean;
+  runTemplateId: string | null;
+  autoCreateRun: boolean;
+  runTemplateName: string | null;
   isActive: boolean;
   createdById: string;
   updatedById: string;
@@ -30,6 +33,8 @@ export type CommunityScheduleSlotWrite = {
   label: string;
   notes: string | null;
   raidLeadId: string;
+  runTemplateId: string | null;
+  autoCreateRun: boolean;
   createdById: string;
   updatedById: string;
 };
@@ -40,11 +45,14 @@ export type CommunityScheduleSlotUpdate = {
   label: string;
   notes: string | null;
   raidLeadId: string;
+  runTemplateId: string | null;
+  autoCreateRun: boolean;
   updatedById: string;
 };
 
 function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
   const raidLead = (row.raidLead ?? {}) as Record<string, unknown>;
+  const runTemplate = row.runTemplate ? (row.runTemplate as Record<string, unknown>) : null;
   return {
     id: asString(row.id),
     weekday: asString(row.weekday) as CommunityWeekday,
@@ -57,6 +65,9 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
       accountRole: mapUserRole(raidLead.accountRole),
       accountStatus: asString(raidLead.accountStatus, "ACTIVE") as AccountStatus,
     }),
+    runTemplateId: asStringOrNull(row.runTemplateId),
+    autoCreateRun: asBoolean(row.autoCreateRun, false),
+    runTemplateName: runTemplate ? asString(runTemplate.name) : null,
     isActive: asBoolean(row.isActive, true),
     createdById: asString(row.createdById),
     updatedById: asString(row.updatedById),
@@ -65,9 +76,13 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
   };
 }
 
+function baseSlotQuery() {
+  return orm.CommunityScheduleSlot.include("raidLead").include("runTemplate");
+}
+
 export const communityScheduleRepository = {
   async listAll(): Promise<CommunityScheduleSlotRecord[]> {
-    const rows = await orm.CommunityScheduleSlot.include("raidLead")
+    const rows = await baseSlotQuery()
       .orderBy((slot) => slot.weekday.asc())
       .orderBy((slot) => slot.localStartTime.asc())
       .orderBy((slot) => slot.id.asc())
@@ -76,7 +91,7 @@ export const communityScheduleRepository = {
   },
 
   async findById(id: string): Promise<CommunityScheduleSlotRecord | null> {
-    const row = await orm.CommunityScheduleSlot.where({ id }).include("raidLead").first();
+    const row = await baseSlotQuery().where({ id }).first();
     return row ? mapSlot(row as Record<string, unknown>) : null;
   },
 
@@ -86,18 +101,29 @@ export const communityScheduleRepository = {
     localStartTime: string;
     excludeId?: string;
   }): Promise<CommunityScheduleSlotRecord | null> {
-    const rows = await orm.CommunityScheduleSlot.where({
-      raidLeadId: input.raidLeadId,
-      weekday: input.weekday,
-      localStartTime: input.localStartTime,
-    })
-      .include("raidLead")
+    const rows = await baseSlotQuery()
+      .where({
+        raidLeadId: input.raidLeadId,
+        weekday: input.weekday,
+        localStartTime: input.localStartTime,
+      })
       .all();
     const match = rows.find((row) => {
-      const id = asString((row as Record<string, unknown>).id);
-      return !input.excludeId || id !== input.excludeId;
+      const rowId = asString((row as Record<string, unknown>).id);
+      return !input.excludeId || rowId !== input.excludeId;
     });
     return match ? mapSlot(match as Record<string, unknown>) : null;
+  },
+
+  async listActiveAutoCreateSlots(): Promise<CommunityScheduleSlotRecord[]> {
+    const rows = await baseSlotQuery()
+      .where({ isActive: true, autoCreateRun: true })
+      .orderBy((slot) => slot.weekday.asc())
+      .orderBy((slot) => slot.localStartTime.asc())
+      .all();
+    return rows
+      .map((row) => mapSlot(row as Record<string, unknown>))
+      .filter((slot) => slot.runTemplateId != null);
   },
 
   async create(input: CommunityScheduleSlotWrite): Promise<CommunityScheduleSlotRecord> {
@@ -110,6 +136,8 @@ export const communityScheduleRepository = {
       label: input.label,
       notes: input.notes,
       raidLeadId: input.raidLeadId,
+      runTemplateId: input.runTemplateId,
+      autoCreateRun: input.autoCreateRun,
       isActive: true,
       createdById: input.createdById,
       updatedById: input.updatedById,
@@ -130,6 +158,8 @@ export const communityScheduleRepository = {
       label: input.label,
       notes: input.notes,
       raidLeadId: input.raidLeadId,
+      runTemplateId: input.runTemplateId,
+      autoCreateRun: input.autoCreateRun,
       updatedById: input.updatedById,
       updatedAt: new Date().toISOString(),
     });

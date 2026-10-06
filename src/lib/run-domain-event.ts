@@ -22,6 +22,11 @@ export const RUN_DOMAIN_EVENT_PAYLOAD_ALLOWLIST = [
   "difficulty",
   "lootType",
   "reason",
+  "source",
+  "scheduleSlotId",
+  "scheduleWindowStartAt",
+  "occurrenceStartAt",
+  "materializedBy",
 ] as const;
 
 export type RunDomainEventPayloadKey = (typeof RUN_DOMAIN_EVENT_PAYLOAD_ALLOWLIST)[number];

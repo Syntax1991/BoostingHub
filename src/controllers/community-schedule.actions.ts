@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
+import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
 import {
   communityScheduleSlotIdSchema,
   createCommunityScheduleSlotSchema,
+  materializeCommunityScheduleOccurrenceSchema,
   updateCommunityScheduleSlotSchema,
 } from "@/validators/community-schedule";
 
@@ -63,6 +65,35 @@ export async function reactivateCommunityScheduleSlotAction(input: unknown): Pro
     await communityScheduleService.reactivateSlot(user, parsed.slotId);
     revalidateSchedule();
     return { ok: true, message: "Schedule slot reactivated." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export type MaterializeCommunityScheduleOccurrenceActionResult =
+  | { ok: true; message: string; runId: string; alreadyExisted: boolean }
+  | { ok: false; code: string; message: string };
+
+export async function materializeCommunityScheduleOccurrenceAction(
+  input: unknown,
+): Promise<MaterializeCommunityScheduleOccurrenceActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = materializeCommunityScheduleOccurrenceSchema.parse(input);
+    const result = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user },
+      { scheduleSlotId: parsed.scheduleSlotId, window: parsed.window },
+    );
+    revalidateSchedule();
+    revalidatePath("/manage/runs");
+    return {
+      ok: true,
+      message: result.alreadyExisted
+        ? "A run draft already exists for this occurrence."
+        : "Run draft created from schedule.",
+      runId: result.runId,
+      alreadyExisted: result.alreadyExisted,
+    };
   } catch (error) {
     return mapActionError(error);
   }

@@ -14,6 +14,9 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     raidLeadId: "lead-1",
     raidLeadName: "Synblast",
     raidLeadEligible: true,
+    runTemplateId: "template-1",
+    autoCreateRun: true,
+    runTemplateName: "Default HC",
     isActive: true,
     createdById: "admin-1",
     updatedById: "admin-1",
@@ -26,10 +29,27 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     localStartTime: "19:45",
     localDate: "2026-01-16",
     window: "CURRENT" as const,
+    windowStartAt: "2026-01-14T05:00:00.000Z",
+    windowEndAt: "2026-01-21T05:00:00.000Z",
+  };
+  const materialization = {
+    state: "AUTO_WAITING" as const,
+    templateLabel: "Default HC · HC UNS 8/8",
+    autoCreateRun: true,
+    canMaterialize: true,
   };
   return {
     canEdit,
     timeZone: "Europe/Berlin",
+    templates: [
+      {
+        id: "template-1",
+        raidLeadId: "lead-1",
+        label: "Default HC · HC UNS 8/8",
+        usable: true,
+        unusableReason: null,
+      },
+    ],
     current: {
       window: "CURRENT",
       windowStart: "2026-01-14T05:00:00.000Z",
@@ -38,7 +58,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         {
           localDate: "2026-01-16",
           weekday: "FRIDAY",
-          slots: [{ slot, occurrence }],
+          slots: [{ slot, occurrence, materialization }],
         },
       ],
     },
@@ -54,6 +74,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             {
               slot,
               occurrence: { ...occurrence, localDate: "2026-01-23", window: "NEXT" },
+              materialization: { ...materialization, state: "NO_RUN_YET" },
             },
           ],
         },
@@ -80,6 +101,9 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Current Raid ID");
     expect(html).toContain("Next Raid ID");
     expect(html).toContain("19:45 · HC VIP · Synblast");
+    expect(html).toContain("Auto-create waiting");
+    expect(html).toContain("Auto-create: ON");
+    expect(html).toContain("Create Run");
     expect(html).toContain("Add Schedule Slot");
     expect(html).toContain("Inactive slots");
     expect(html).toContain("Old Slot");

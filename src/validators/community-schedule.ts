@@ -38,12 +38,21 @@ const notesSchema = z
     return trimmed.length > 0 ? trimmed : null;
   });
 
+const runTemplateIdSchema = z
+  .string()
+  .uuid("Choose a valid run template.")
+  .optional()
+  .nullable()
+  .transform((value) => value ?? null);
+
 export const createCommunityScheduleSlotSchema = z.object({
   weekday: weekdaySchema,
   localStartTime: localStartTimeSchema,
   label: labelSchema,
   raidLeadId: z.string().uuid("Choose an eligible raid lead."),
   notes: notesSchema,
+  runTemplateId: runTemplateIdSchema,
+  autoCreateRun: z.boolean().optional().default(false),
 });
 
 export const updateCommunityScheduleSlotSchema = createCommunityScheduleSlotSchema.extend({
@@ -54,5 +63,13 @@ export const communityScheduleSlotIdSchema = z.object({
   slotId: z.string().uuid(),
 });
 
+export const materializeCommunityScheduleOccurrenceSchema = z.object({
+  scheduleSlotId: z.string().uuid(),
+  window: z.enum(["CURRENT", "NEXT"]),
+});
+
 export type CreateCommunityScheduleSlotInput = z.infer<typeof createCommunityScheduleSlotSchema>;
 export type UpdateCommunityScheduleSlotInput = z.infer<typeof updateCommunityScheduleSlotSchema>;
+export type MaterializeCommunityScheduleOccurrenceInput = z.infer<
+  typeof materializeCommunityScheduleOccurrenceSchema
+>;

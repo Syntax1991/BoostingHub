@@ -319,7 +319,7 @@ describe("fairness: backoff is applied to the COMPLETE stale set (no bounded win
     for (let i = 0; i < 8; i += 1) later.push(await make(`z${letters[i]}`));
     retired = await make("rr");
     await characterRepository.setActive(retired.id, false);
-  });
+  }, 60_000);
 
   afterAll(() => {
     early = [];

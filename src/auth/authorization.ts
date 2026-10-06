@@ -142,6 +142,20 @@ export function canManageCommunitySchedule(role: AccountRole): boolean {
   return hasAdminAccess(role);
 }
 
+/** Manual Create Run from a schedule slot: ADMIN/OWNER any slot; RAID_LEAD own slots only. */
+export function canMaterializeCommunityScheduleOccurrence(
+  user: AuthenticatedUser,
+  slot: { raidLeadId: string },
+): boolean {
+  if (!canAccessManagement(user.accountRole)) {
+    return false;
+  }
+  if (hasAdminAccess(user.accountRole)) {
+    return true;
+  }
+  return user.id === slot.raidLeadId;
+}
+
 export function isManagementNavActive(pathname: string, href: string): boolean {
   if (href === "/manage") {
     return pathname === "/manage";

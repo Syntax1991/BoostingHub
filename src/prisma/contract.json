@@ -48,6 +48,10 @@
       "model": "CharacterWeeklyUnavailability",
       "namespace": "public"
     },
+    "community_schedule_run": {
+      "model": "CommunityScheduleRun",
+      "namespace": "public"
+    },
     "community_schedule_slot": {
       "model": "CommunityScheduleSlot",
       "namespace": "public"
@@ -2563,8 +2567,158 @@
               "table": "character_weekly_unavailability"
             }
           },
+          "CommunityScheduleRun": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdByKind": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "RunDomainEventActorKind",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "occurrenceStartAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "runId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "scheduleSlotId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "windowStartAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "createdBy": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "createdById"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "run": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Run",
+                  "namespace": "public"
+                }
+              },
+              "scheduleSlot": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "scheduleSlotId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "CommunityScheduleSlot",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdById": {
+                  "column": "createdById"
+                },
+                "createdByKind": {
+                  "column": "createdByKind"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "occurrenceStartAt": {
+                  "column": "occurrenceStartAt"
+                },
+                "runId": {
+                  "column": "runId"
+                },
+                "scheduleSlotId": {
+                  "column": "scheduleSlotId"
+                },
+                "windowStartAt": {
+                  "column": "windowStartAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "community_schedule_run"
+            }
+          },
           "CommunityScheduleSlot": {
             "fields": {
+              "autoCreateRun": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -2621,6 +2775,13 @@
                   "kind": "scalar"
                 }
               },
+              "runTemplateId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
@@ -2665,6 +2826,21 @@
                   "namespace": "public"
                 }
               },
+              "materializations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "scheduleSlotId"
+                  ]
+                },
+                "to": {
+                  "model": "CommunityScheduleRun",
+                  "namespace": "public"
+                }
+              },
               "raidLead": {
                 "cardinality": "N:1",
                 "on": {
@@ -2677,6 +2853,21 @@
                 },
                 "to": {
                   "model": "User",
+                  "namespace": "public"
+                }
+              },
+              "runTemplate": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runTemplateId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplate",
                   "namespace": "public"
                 }
               },
@@ -2698,6 +2889,9 @@
             },
             "storage": {
               "fields": {
+                "autoCreateRun": {
+                  "column": "autoCreateRun"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -2721,6 +2915,9 @@
                 },
                 "raidLeadId": {
                   "column": "raidLeadId"
+                },
+                "runTemplateId": {
+                  "column": "runTemplateId"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -3489,6 +3686,21 @@
                 },
                 "to": {
                   "model": "RunAttendance",
+                  "namespace": "public"
+                }
+              },
+              "communityScheduleRun": {
+                "cardinality": "1:1",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runId"
+                  ]
+                },
+                "to": {
+                  "model": "CommunityScheduleRun",
                   "namespace": "public"
                 }
               },
@@ -7275,6 +7487,21 @@
               }
             },
             "relations": {
+              "communityScheduleSlots": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runTemplateId"
+                  ]
+                },
+                "to": {
+                  "model": "CommunityScheduleSlot",
+                  "namespace": "public"
+                }
+              },
               "createdBy": {
                 "cardinality": "N:1",
                 "on": {
@@ -8534,6 +8761,21 @@
                 },
                 "to": {
                   "model": "CommunityScheduleSlot",
+                  "namespace": "public"
+                }
+              },
+              "createdCommunityScheduleRuns": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "createdById"
+                  ]
+                },
+                "to": {
+                  "model": "CommunityScheduleRun",
                   "namespace": "public"
                 }
               },
@@ -10962,6 +11204,165 @@
                 }
               ]
             },
+            "community_schedule_run": {
+              "checks": [
+                {
+                  "expression": "\"createdByKind\" IN ('USER', 'SYSTEM')",
+                  "name": "community_schedule_run_createdByKind_check_49bae75c",
+                  "prefix": "community_schedule_run_createdByKind_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "createdByKind": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "RunDomainEventActorKind",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "occurrenceStartAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "runId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "scheduleSlotId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "windowStartAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "scheduleSlotId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "community_schedule_run"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "community_schedule_slot"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "runId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "community_schedule_run"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run"
+                  }
+                },
+                {
+                  "onDelete": "setNull",
+                  "source": {
+                    "columns": [
+                      "createdById"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "community_schedule_run"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "createdById"
+                  ],
+                  "name": "community_schedule_run_createdById_idx_8bf640ed",
+                  "prefix": "community_schedule_run_createdById_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "scheduleSlotId"
+                  ],
+                  "name": "community_schedule_run_scheduleSlotId_idx_fcaf54ee",
+                  "prefix": "community_schedule_run_scheduleSlotId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "scheduleSlotId",
+                    "windowStartAt"
+                  ],
+                  "name": "csr_slot_window_201741f9",
+                  "prefix": "csr_slot_window",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runId"
+                  ]
+                },
+                {
+                  "columns": [
+                    "scheduleSlotId",
+                    "windowStartAt"
+                  ]
+                }
+              ]
+            },
             "community_schedule_slot": {
               "checks": [
                 {
@@ -10971,6 +11372,15 @@
                 }
               ],
               "columns": {
+                "autoCreateRun": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -11019,6 +11429,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "runTemplateId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -11057,6 +11472,23 @@
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "runTemplateId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "community_schedule_slot"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template"
                   }
                 },
                 {
@@ -11131,11 +11563,28 @@
                 },
                 {
                   "columns": [
+                    "autoCreateRun",
+                    "isActive"
+                  ],
+                  "name": "css_auto_active_c0fd5ccb",
+                  "prefix": "css_auto_active",
+                  "unique": false
+                },
+                {
+                  "columns": [
                     "raidLeadId",
                     "isActive"
                   ],
                   "name": "css_lead_active_584288ab",
                   "prefix": "css_lead_active",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runTemplateId"
+                  ],
+                  "name": "css_template_99c44c3d",
+                  "prefix": "css_template",
                   "unique": false
                 }
               ],
@@ -16757,10 +17206,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f5dd86968081fec0634a500b3fedabddb6d9517174a2691ff86edbcb7dadb564"
+    "storageHash": "883475348809d9f7a8306f4723a62f0d0e12f85c94ecc2c145ad2e31e4f14886"
   },
   "execution": {
-    "executionHash": "b086086d9f03a27f814142dc2eee79872fdc12c91957c1496e9bdcf005311298",
+    "executionHash": "ee7c808e430e2bdcff870a1abfc20fd163377e0473bcaab782bb1672017574a8",
     "mutations": {
       "defaults": [
         {
@@ -17002,6 +17451,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "character_weekly_unavailability"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "community_schedule_run"
           }
         },
         {

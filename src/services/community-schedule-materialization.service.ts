@@ -1,0 +1,302 @@
+import type { AuthenticatedUser } from "@/auth/authorization";
+import {
+  canMaterializeCommunityScheduleOccurrence,
+  hasAdminAccess,
+} from "@/auth/authorization";
+import {
+  COMMUNITY_SCHEDULE_TIME_ZONE,
+  resolveScheduleSlotOccurrence,
+  type RaidIdWindow,
+} from "@/lib/community-schedule";
+import { DomainError, isDomainError } from "@/lib/errors";
+import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
+import {
+  communityScheduleRepository,
+  type CommunityScheduleSlotRecord,
+} from "@/repositories/community-schedule.repository";
+import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
+import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
+import { computeUsability } from "@/services/run-template.service";
+import { integrationEventService } from "@/services/integration-event.service";
+import { runService } from "@/services/run.service";
+
+export const COMMUNITY_SCHEDULE_MATERIALIZE_LOCK_KEY = { classId: 837462, objectId: 4 } as const;
+
+export type MaterializePassResult =
+  | { status: "SKIPPED_ALREADY_RUNNING"; durationMs: number }
+  | {
+      status: "COMPLETED";
+      slots: number;
+      occurrencesConsidered: number;
+      created: number;
+      alreadyCreated: number;
+      skippedPast: number;
+      skippedInactive: number;
+      skippedNoTemplate: number;
+      skippedTemplateUnusable: number;
+      failed: number;
+      durationMs: number;
+    };
+
+async function loadTemplateForSlot(
+  slot: CommunityScheduleSlotRecord,
+  user: AuthenticatedUser | null,
+): Promise<RunTemplateRecord> {
+  if (!slot.runTemplateId) {
+    throw new DomainError(
+      "COMMUNITY_SCHEDULE_TEMPLATE_REQUIRED",
+      "Choose a run template before creating a run.",
+      400,
+    );
+  }
+  const template = await runTemplateRepository.findById(slot.runTemplateId);
+  if (!template) {
+    throw new DomainError(
+      "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
+      "The linked run template could not be found.",
+      400,
+    );
+  }
+  if (template.raidLeadId !== slot.raidLeadId) {
+    throw new DomainError(
+      "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH",
+      "The run template must belong to the same raid lead as this schedule slot.",
+      400,
+    );
+  }
+  if (user) {
+    if (!hasAdminAccess(user.accountRole) && template.raidLeadId !== user.id) {
+      throw new DomainError("NOT_AUTHORIZED", "You cannot use this template.", 403);
+    }
+    const usability = computeUsability(template);
+    if (!usability.usable) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
+        usability.unusableReason ?? "This template is no longer usable.",
+        400,
+      );
+    }
+  } else {
+    const usability = computeUsability(template);
+    if (!usability.usable) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
+        usability.unusableReason ?? "This template is no longer usable.",
+        400,
+      );
+    }
+  }
+  return template;
+}
+
+function assertSlotActive(slot: CommunityScheduleSlotRecord): void {
+  if (!slot.isActive) {
+    throw new DomainError("COMMUNITY_SCHEDULE_SLOT_INACTIVE", "This schedule slot is inactive.", 409);
+  }
+}
+
+async function recordMaterializePass(result: MaterializePassResult): Promise<void> {
+  if (result.status === "SKIPPED_ALREADY_RUNNING") {
+    try {
+      await integrationEventService.record({
+        provider: "SYSTEM",
+        operation: "COMMUNITY_SCHEDULE_MATERIALIZE_PASS",
+        status: "WARNING",
+        durationMs: result.durationMs,
+        metadata: { processed: 0, succeeded: 0, failed: 0, skipped: 1, reason: "SKIPPED_ALREADY_RUNNING" },
+      });
+    } catch {
+      // Telemetry must not break the job.
+    }
+    return;
+  }
+
+  const skipped =
+    result.alreadyCreated +
+    result.skippedPast +
+    result.skippedInactive +
+    result.skippedNoTemplate +
+    result.skippedTemplateUnusable;
+
+  try {
+    await integrationEventService.record({
+      provider: "SYSTEM",
+      operation: "COMMUNITY_SCHEDULE_MATERIALIZE_PASS",
+      status: result.failed > 0 ? "WARNING" : "SUCCESS",
+      durationMs: result.durationMs,
+      metadata: {
+        processed: result.occurrencesConsidered,
+        succeeded: result.created,
+        failed: result.failed,
+        skipped,
+      },
+    });
+  } catch {
+    // Telemetry must not break the job.
+  }
+}
+
+export const communityScheduleMaterializationService = {
+  async materializeOccurrence(
+    actor: { kind: "USER"; user: AuthenticatedUser } | { kind: "SYSTEM" },
+    input: { scheduleSlotId: string; window: RaidIdWindow; now?: Date },
+  ): Promise<{ runId: string; alreadyExisted: boolean }> {
+    const slot = await communityScheduleRepository.findById(input.scheduleSlotId);
+    if (!slot) {
+      throw new DomainError("COMMUNITY_SCHEDULE_NOT_FOUND", "Schedule slot was not found.", 404);
+    }
+
+    if (actor.kind === "USER") {
+      if (!canMaterializeCommunityScheduleOccurrence(actor.user, slot)) {
+        throw new DomainError("NOT_AUTHORIZED", "You cannot create a run for this schedule slot.", 403);
+      }
+    }
+
+    assertSlotActive(slot);
+    const template = await loadTemplateForSlot(slot, actor.kind === "USER" ? actor.user : null);
+
+    const now = input.now ?? new Date();
+    const occurrence = resolveScheduleSlotOccurrence({
+      weekday: slot.weekday,
+      localStartTime: slot.localStartTime,
+      window: input.window,
+      now,
+      timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+    });
+
+    if (input.window === "CURRENT" && Date.parse(occurrence.scheduledStartAt) < now.getTime()) {
+      throw new DomainError(
+        "COMMUNITY_SCHEDULE_OCCURRENCE_PAST",
+        "This occurrence has already passed — choose Next Raid ID instead.",
+        400,
+      );
+    }
+
+    return runService.createScheduleMaterializedDraft({
+      template,
+      scheduledStartAt: occurrence.scheduledStartAt,
+      scheduleSlotId: slot.id,
+      windowStartAt: occurrence.windowStartAt,
+      actor,
+    });
+  },
+
+  async runPass(now: Date = new Date()): Promise<MaterializePassResult> {
+    const started = Date.now();
+    const handle = await scheduledJobLockRepository.tryAcquireLock(
+      COMMUNITY_SCHEDULE_MATERIALIZE_LOCK_KEY.classId,
+      COMMUNITY_SCHEDULE_MATERIALIZE_LOCK_KEY.objectId,
+    );
+    if (!handle) {
+      const skipped: MaterializePassResult = { status: "SKIPPED_ALREADY_RUNNING", durationMs: Date.now() - started };
+      await recordMaterializePass(skipped);
+      return skipped;
+    }
+
+    const counters = {
+      slots: 0,
+      occurrencesConsidered: 0,
+      created: 0,
+      alreadyCreated: 0,
+      skippedPast: 0,
+      skippedInactive: 0,
+      skippedNoTemplate: 0,
+      skippedTemplateUnusable: 0,
+      failed: 0,
+    };
+
+    try {
+      const slots = await communityScheduleRepository.listActiveAutoCreateSlots();
+      counters.slots = slots.length;
+
+      for (const slot of slots) {
+        if (!slot.isActive) {
+          counters.skippedInactive += 2;
+          continue;
+        }
+        if (!slot.runTemplateId) {
+          counters.skippedNoTemplate += 2;
+          continue;
+        }
+
+        let template: RunTemplateRecord | null = null;
+        try {
+          template = await loadTemplateForSlot(slot, null);
+        } catch (error) {
+          if (
+            isDomainError(error) &&
+            (error.code === "COMMUNITY_SCHEDULE_TEMPLATE_INVALID" ||
+              error.code === "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH" ||
+              error.code === "COMMUNITY_SCHEDULE_TEMPLATE_REQUIRED")
+          ) {
+            if (error.code === "COMMUNITY_SCHEDULE_TEMPLATE_REQUIRED") {
+              counters.skippedNoTemplate += 2;
+            } else {
+              counters.skippedTemplateUnusable += 2;
+            }
+            continue;
+          }
+          counters.failed += 2;
+          continue;
+        }
+
+        if (!slot.raidLeadEligible) {
+          counters.skippedTemplateUnusable += 2;
+          continue;
+        }
+
+        for (const window of ["CURRENT", "NEXT"] as const) {
+          counters.occurrencesConsidered += 1;
+          try {
+            const occurrence = resolveScheduleSlotOccurrence({
+              weekday: slot.weekday,
+              localStartTime: slot.localStartTime,
+              window,
+              now,
+              timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
+            });
+
+            if (window === "CURRENT" && Date.parse(occurrence.scheduledStartAt) < now.getTime()) {
+              counters.skippedPast += 1;
+              continue;
+            }
+
+            const existing = await communityScheduleRunRepository.findBySlotAndWindow(
+              slot.id,
+              occurrence.windowStartAt,
+            );
+            if (existing) {
+              counters.alreadyCreated += 1;
+              continue;
+            }
+
+            const result = await runService.createScheduleMaterializedDraft({
+              template: template!,
+              scheduledStartAt: occurrence.scheduledStartAt,
+              scheduleSlotId: slot.id,
+              windowStartAt: occurrence.windowStartAt,
+              actor: { kind: "SYSTEM" },
+            });
+            if (result.alreadyExisted) {
+              counters.alreadyCreated += 1;
+            } else {
+              counters.created += 1;
+            }
+          } catch {
+            counters.failed += 1;
+          }
+        }
+      }
+
+      const completed: MaterializePassResult = {
+        status: "COMPLETED",
+        ...counters,
+        durationMs: Date.now() - started,
+      };
+      await recordMaterializePass(completed);
+      return completed;
+    } finally {
+      await scheduledJobLockRepository.releaseLock(handle);
+    }
+  },
+};
