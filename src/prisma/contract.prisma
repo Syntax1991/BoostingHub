@@ -261,6 +261,9 @@ model User {
   ownedRunTemplates    RunTemplate[] @relation("RunTemplateRaidLead")
   createdRunTemplates  RunTemplate[] @relation("RunTemplateCreator")
   updatedRunTemplates  RunTemplate[] @relation("RunTemplateUpdater")
+  communityScheduleSlots          CommunityScheduleSlot[] @relation("CommunityScheduleRaidLead")
+  createdCommunityScheduleSlots   CommunityScheduleSlot[] @relation("CommunityScheduleCreator")
+  updatedCommunityScheduleSlots   CommunityScheduleSlot[] @relation("CommunityScheduleUpdater")
   approvedAccess   BoosterAccess[] @relation("BoosterAccessApprover")
   reviewedAccess   BoosterAccess[] @relation("BoosterAccessReviewer")
   activity         ActivityEvent[]
@@ -762,6 +765,48 @@ model RunTemplate {
   @@index([raidLeadId, isActive])
   @@index([raidId])
   @@map("run_template")
+}
+
+/// Recurring community weekly schedule weekday (wall-clock intent).
+enum CommunityWeekday {
+  @@type("pg/text@1")
+  MONDAY    = "MONDAY"
+  TUESDAY   = "TUESDAY"
+  WEDNESDAY = "WEDNESDAY"
+  THURSDAY  = "THURSDAY"
+  FRIDAY    = "FRIDAY"
+  SATURDAY  = "SATURDAY"
+  SUNDAY    = "SUNDAY"
+}
+
+/// Persistent COMMUNITY WEEKLY SCHEDULE slot — planning intent only.
+/// Stores weekday + local HH:mm (Europe/Berlin wall-clock), never a concrete
+/// UTC occurrence and never a Run. Editing/deactivating a slot must never
+/// mutate existing Runs (snapshot independence, same principle as RunTemplate).
+/// Discord Schedule remains derived only from real Runs.
+model CommunityScheduleSlot {
+  id             String           @id @default(uuid())
+  weekday        CommunityWeekday
+  /// Local wall-clock HH:mm in Europe/Berlin (e.g. "19:45"). Never UTC time-of-day.
+  localStartTime String
+  label          String
+  notes          String?
+  raidLeadId     String
+  raidLead       User             @relation("CommunityScheduleRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
+  isActive       Boolean          @default(true)
+  createdById    String
+  createdBy      User             @relation("CommunityScheduleCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById    String
+  updatedBy      User             @relation("CommunityScheduleUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  /// Same Raid Lead cannot own two slots at the exact same weekday + local time.
+  /// Different Raid Leads at the same time are allowed (parallel teams).
+  @@unique([raidLeadId, weekday, localStartTime])
+  @@index([isActive, weekday, localStartTime], name: "css_active_day_time")
+  @@index([raidLeadId, isActive], name: "css_lead_active")
+  @@map("community_schedule_slot")
 }
 
 /// A user may offer more than one character for the same run.

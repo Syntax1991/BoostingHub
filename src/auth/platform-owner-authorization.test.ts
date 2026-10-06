@@ -57,6 +57,7 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
     expect(getManagementNavItems("OWNER").map((item) => item.module)).toEqual([
       "overview",
       "runs",
+      "schedule",
       "templates",
       "boosting-roles",
       "users",
@@ -76,7 +77,11 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
     expect(canReviewBoosterAccess("RAID_LEAD")).toBe(false);
     expect(canAccessManagement("USER")).toBe(false);
     expect(getManagementNavItems("USER")).toEqual([]);
-    expect(getManagementNavItems("RAID_LEAD").map((item) => item.module)).toEqual(["overview", "runs"]);
+    expect(getManagementNavItems("RAID_LEAD").map((item) => item.module)).toEqual([
+      "overview",
+      "runs",
+      "schedule",
+    ]);
     expect(canManageRun(actor("lead", "RAID_LEAD"), { raidLeadId: "lead" })).toBe(true);
     expect(canManageRun(actor("lead", "RAID_LEAD"), { raidLeadId: "other" })).toBe(false);
     expect(canManageRun(actor("admin", "ADMIN"), { raidLeadId: "other" })).toBe(true);

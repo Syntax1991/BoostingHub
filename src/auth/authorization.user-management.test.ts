@@ -11,6 +11,7 @@ describe("management navigation and user-management gates", () => {
     expect(items.map((item) => item.module)).toEqual([
       "overview",
       "runs",
+      "schedule",
       "templates",
       "boosting-roles",
       "users",
@@ -21,6 +22,7 @@ describe("management navigation and user-management gates", () => {
     expect(items.map((item) => item.href)).toEqual([
       "/manage",
       "/manage/runs",
+      "/manage/schedule",
       "/manage/templates",
       "/manage/boosting-roles",
       "/manage/users",
@@ -30,9 +32,9 @@ describe("management navigation and user-management gates", () => {
     ]);
   });
 
-  it("limits RAID_LEAD to overview and runs", () => {
+  it("limits RAID_LEAD to overview, runs, and schedule", () => {
     const items = getManagementNavItems("RAID_LEAD");
-    expect(items.map((item) => item.module)).toEqual(["overview", "runs"]);
+    expect(items.map((item) => item.module)).toEqual(["overview", "runs", "schedule"]);
     expect(items.some((item) => item.module === "users")).toBe(false);
     expect(items.some((item) => item.module === "boosting-roles")).toBe(false);
     expect(items.some((item) => item.module === "system")).toBe(false);
