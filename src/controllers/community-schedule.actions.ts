@@ -13,6 +13,7 @@ import {
   materializeCommunityScheduleOccurrenceSchema,
   updateCommunityScheduleSlotSchema,
 } from "@/validators/community-schedule";
+import { updateRunTemplateSchema } from "@/validators/run-template";
 
 function revalidateSchedule() {
   revalidatePath("/manage/schedule");
@@ -78,6 +79,19 @@ export async function addCommunityScheduleTimesAction(
       templateId: result.templateId,
       slotIds: result.slotIds,
     };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function updateCommunityScheduleRunSetupAction(input: unknown): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const parsed = updateRunTemplateSchema.parse(input);
+    await communityScheduleService.updateRunSetup(user, parsed);
+    revalidateSchedule();
+    revalidatePath("/profile/templates");
+    return { ok: true, message: "Run Setup updated." };
   } catch (error) {
     return mapActionError(error);
   }

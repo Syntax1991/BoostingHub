@@ -1,8 +1,23 @@
 import { createElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ManageCommunityScheduleView } from "@/components/manage/manage-community-schedule-view";
 import type { CommunitySchedulePage } from "@/services/community-schedule.service";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+}));
+
+vi.mock("@/controllers/community-schedule.actions", () => ({
+  updateCommunityScheduleRunSetupAction: vi.fn(),
+  createCommunitySchedulePlanAction: vi.fn(),
+  addCommunityScheduleTimesAction: vi.fn(),
+  materializeCommunityScheduleOccurrenceAction: vi.fn(),
+  createCommunityScheduleSlotAction: vi.fn(),
+  updateCommunityScheduleSlotAction: vi.fn(),
+  deactivateCommunityScheduleSlotAction: vi.fn(),
+  reactivateCommunityScheduleSlotAction: vi.fn(),
+}));
 
 function samplePage(canEdit: boolean): CommunitySchedulePage {
   const slot = {
@@ -48,9 +63,22 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         label: "Default HC · HC UNS 8/8",
         usable: true,
         unusableReason: null,
+        name: "Default HC",
+        raidId: "raid-1",
+        difficulty: "HEROIC",
+        lootType: "UNSAVED",
+        plannedBossCount: 8,
+        desiredTankCount: 2,
+        desiredHealerCount: 4,
+        desiredDpsCount: 14,
+        desiredLootbuddyCount: 0,
+        notes: null,
       },
     ],
-    raids: [{ id: "raid-1", name: "Venomous Abyss", season: "Midnight", totalBossCount: 8 }],
+    raids: [
+      { id: "raid-1", name: "The Venomous Abyss", season: "Midnight Season 2", totalBossCount: 8 },
+      { id: "raid-tide", name: "The Tidebound Grotto", season: "Midnight Season 2", totalBossCount: 1 },
+    ],
     runSetups: [
       {
         key: "template-1:lead-1",
@@ -156,6 +184,7 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Auto ✗");
     expect(html).toContain("Add times");
     expect(html).toContain("Edit Run Setup");
+    expect(html).not.toContain("/manage/templates");
     expect(html).toContain("Inactive");
     expect(html).toContain("Current Raid ID");
     expect(html).toContain("Next Raid ID");
@@ -174,6 +203,7 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Run Setups / Weekly Plan");
     expect(html).not.toContain("Create Schedule");
     expect(html).not.toContain("Add times");
+    expect(html).not.toContain("Edit Run Setup");
     expect(html).not.toContain("Deactivate");
   });
 

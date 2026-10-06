@@ -43,6 +43,10 @@ function emptyValues(raids: RaidOption[], raidLeads: RaidLeadOption[], defaultRa
   };
 }
 
+type TemplateMutationResult =
+  | { ok: true; message: string; templateId?: string }
+  | { ok: false; code: string; message: string };
+
 export function RunTemplateFormDialog({
   mode,
   initial,
@@ -52,6 +56,11 @@ export function RunTemplateFormDialog({
   defaultRaidLeadId,
   triggerLabel,
   triggerClassName,
+  title,
+  description,
+  submitLabel,
+  createAction = createRunTemplateAction,
+  updateAction = updateRunTemplateAction,
 }: {
   mode: FormMode;
   initial?: RunTemplateFormValues;
@@ -61,6 +70,12 @@ export function RunTemplateFormDialog({
   defaultRaidLeadId: string;
   triggerLabel: string;
   triggerClassName?: string;
+  /** Override dialog heading (defaults to New/Edit Run Template). */
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  createAction?: (input: unknown) => Promise<TemplateMutationResult>;
+  updateAction?: (input: unknown) => Promise<TemplateMutationResult>;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -125,8 +140,8 @@ export function RunTemplateFormDialog({
       };
       const result =
         mode === "create"
-          ? await createRunTemplateAction(payload)
-          : await updateRunTemplateAction({ ...payload, templateId: values.templateId });
+          ? await createAction(payload)
+          : await updateAction({ ...payload, templateId: values.templateId });
 
       if (!result.ok) {
         setError(result.message);
@@ -137,6 +152,13 @@ export function RunTemplateFormDialog({
       close();
     });
   }
+
+  const dialogTitle = title ?? (mode === "create" ? "New Run Template" : "Edit Run Template");
+  const dialogDescription =
+    description ??
+    "Stores planning defaults only — raid, difficulty, run type, planned bosses, composition, and notes. Schedule and status are always set per Run.";
+  const dialogSubmitLabel =
+    submitLabel ?? (pending ? "Saving…" : mode === "create" ? "Create template" : "Save changes");
 
   return (
     <>
@@ -163,12 +185,9 @@ export function RunTemplateFormDialog({
         >
           <div className="border-b border-border px-4 py-3">
             <h2 id={titleId} className="text-sm font-semibold">
-              {mode === "create" ? "New Run Template" : "Edit Run Template"}
+              {dialogTitle}
             </h2>
-            <p className="mt-1 text-xs text-muted">
-              Stores planning defaults only — raid, difficulty, run type, planned bosses, composition, and notes.
-              Schedule and status are always set per Run.
-            </p>
+            <p className="mt-1 text-xs text-muted">{dialogDescription}</p>
           </div>
           <form className="space-y-3 px-4 py-4" onSubmit={submit}>
             {error ? (
@@ -327,7 +346,7 @@ export function RunTemplateFormDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={pending || !values.name.trim() || !values.raidId}>
-                {pending ? "Saving…" : mode === "create" ? "Create template" : "Save changes"}
+                {pending ? "Saving…" : dialogSubmitLabel}
               </Button>
             </div>
           </form>
