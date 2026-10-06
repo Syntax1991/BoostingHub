@@ -9,13 +9,15 @@ import {
 import { DomainError } from "@/lib/errors";
 import { buildRunTitle } from "@/lib/run-title";
 import {
+  classifyRunContents,
   expandRunContentPreset,
   listCreateRunContentPresets,
+  projectRunContentCoverage,
   projectRunContentDisplay,
   type ExpandedRunContent,
   type RunContentPresetKey,
 } from "@/lib/run-content-presets";
-import { TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
+import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
@@ -546,9 +548,23 @@ export const runService = {
     scheduledStartAt: string;
   }): Promise<RunCreateWithContentsInput> {
     await raidRepository.ensureReferenceRaids();
+    // Authoritative template contents (RunTemplateRaidContent) — never reduce
+    // Bundle back to the singular dual-write mirror columns.
+    const contents: ExpandedRunContent[] =
+      input.template.contents.length > 0
+        ? input.template.contents.map((row) => ({
+            raidId: row.raidId,
+            sortOrder: row.sortOrder,
+            plannedBossCount: row.plannedBossCount,
+          }))
+        : [
+            {
+              raidId: input.template.raidId,
+              sortOrder: 1,
+              plannedBossCount: input.template.plannedBossCount,
+            },
+          ];
     const effective: EffectiveRunInput = {
-      raidId: input.template.raidId,
-      plannedBossCount: input.template.plannedBossCount,
       difficulty: input.template.difficulty,
       lootType: input.template.lootType,
       scheduledStartAt: input.scheduledStartAt,
@@ -560,7 +576,6 @@ export const runService = {
       desiredLootbuddyCount: input.template.desiredLootbuddyCount,
       discordRolePing: true,
     };
-    const contents = expandEffectiveContents(effective);
     const raidById = await resolveRaidsForContents(contents);
     const raidLead = await requireEligibleRaidLead(input.template.raidLeadId);
     return prepareRunDraft(effective, {
@@ -652,21 +667,41 @@ export const runService = {
     const scheduledStartAt = scheduled.toISOString();
 
     const usableTemplates = await runTemplateService.listUsableForCreation(user);
-    const templates = usableTemplates.map((template) => ({
-      id: template.id,
-      raidLeadId: template.raidLeadId,
-      // Templates remain Venomous-shaped; Bundle is selected via contentPreset.
-      contentPreset: "VENOMOUS_ABYSS" as RunContentPresetKey,
-      venomousPlannedBossCount: Math.min(8, Math.max(1, template.plannedBossCount)),
-      difficulty: template.difficulty,
-      lootType: template.lootType,
-      desiredTankCount: template.desiredTankCount,
-      desiredHealerCount: template.desiredHealerCount,
-      desiredDpsCount: template.desiredDpsCount,
-      desiredLootbuddyCount: template.desiredLootbuddyCount,
-      notes: template.notes,
-      label: `${template.raidLeadName} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${template.plannedBossCount}/${template.totalBossCount}`,
-    }));
+    const templates = usableTemplates.map((template) => {
+      const contentRows =
+        template.contents.length > 0
+          ? template.contents
+          : [
+              {
+                raidId: template.raidId,
+                sortOrder: 1,
+                plannedBossCount: template.plannedBossCount,
+                totalBossCount: template.totalBossCount,
+              },
+            ];
+      const productKey = classifyRunContents(contentRows);
+      const coverage = projectRunContentCoverage(contentRows);
+      const venomousRow = contentRows.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? contentRows[0];
+      const contentPreset: RunContentPresetKey =
+        productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS";
+      return {
+        id: template.id,
+        raidLeadId: template.raidLeadId,
+        contentPreset,
+        venomousPlannedBossCount: Math.min(
+          8,
+          Math.max(1, venomousRow?.plannedBossCount ?? template.plannedBossCount),
+        ),
+        difficulty: template.difficulty,
+        lootType: template.lootType,
+        desiredTankCount: template.desiredTankCount,
+        desiredHealerCount: template.desiredHealerCount,
+        desiredDpsCount: template.desiredDpsCount,
+        desiredLootbuddyCount: template.desiredLootbuddyCount,
+        notes: template.notes,
+        label: `${template.raidLeadName} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage}`,
+      };
+    });
 
     return {
       actorRole: user.accountRole,

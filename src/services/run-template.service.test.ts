@@ -94,10 +94,10 @@ const admin = asUser(ids.admin, "RTS Admin", "ADMIN");
 function inputFor(overrides: Partial<CreateRunTemplateInput> = {}): CreateRunTemplateInput {
   return {
     name: "Service Test Template",
-    raidId,
+    contentPreset: "VENOMOUS_ABYSS" as const,
     difficulty: "HEROIC",
     lootType: "UNSAVED",
-    plannedBossCount: 8,
+    venomousPlannedBossCount: 8,
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
@@ -155,6 +155,18 @@ function fakeTemplate(overrides: Partial<RunTemplateRecord> = {}): RunTemplateRe
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     plannedBossCount: 8,
+    contents: [
+      {
+        id: "fake-content",
+        raidId,
+        raidName: "Venomous Abyss",
+        raidSeason: "Season",
+        raidAvailableForRuns: true,
+        sortOrder: 1,
+        plannedBossCount: 8,
+        totalBossCount: 8,
+      },
+    ],
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
@@ -186,12 +198,55 @@ describe("computeUsability — pure boolean logic", () => {
         fakeTemplate({
           raidId: MANAFORGE_OMEGA_RAID_ID,
           raidAvailableForRuns: false,
+          contents: [
+            {
+              id: "mf",
+              raidId: MANAFORGE_OMEGA_RAID_ID,
+              raidName: "Manaforge Omega",
+              raidSeason: "TWW S3",
+              raidAvailableForRuns: false,
+              sortOrder: 1,
+              plannedBossCount: 8,
+              totalBossCount: 8,
+            },
+          ],
         }),
       ).usable,
     ).toBe(false);
   });
 
-  it("Tide remains usable for Run Setup even when availableForRuns is false", () => {
+  it("Bundle Tide remains usable even when Tide availableForRuns is false", () => {
+    expect(
+      computeUsability(
+        fakeTemplate({
+          contents: [
+            {
+              id: "tide",
+              raidId: TIDEBOUND_GROTTO_RAID_ID,
+              raidName: "The Tidebound Grotto",
+              raidSeason: "Midnight Season 2",
+              raidAvailableForRuns: false,
+              sortOrder: 1,
+              plannedBossCount: 1,
+              totalBossCount: 1,
+            },
+            {
+              id: "venom",
+              raidId: VENOMOUS_ABYSS_RAID_ID,
+              raidName: "The Venomous Abyss",
+              raidSeason: "Midnight Season 2",
+              raidAvailableForRuns: true,
+              sortOrder: 2,
+              plannedBossCount: 8,
+              totalBossCount: 8,
+            },
+          ],
+        }),
+      ).usable,
+    ).toBe(true);
+  });
+
+  it("standalone Tide content is not a supported product", () => {
     expect(
       computeUsability(
         fakeTemplate({
@@ -199,9 +254,21 @@ describe("computeUsability — pure boolean logic", () => {
           raidAvailableForRuns: false,
           totalBossCount: 1,
           plannedBossCount: 1,
+          contents: [
+            {
+              id: "tide",
+              raidId: TIDEBOUND_GROTTO_RAID_ID,
+              raidName: "The Tidebound Grotto",
+              raidSeason: "Midnight Season 2",
+              raidAvailableForRuns: false,
+              sortOrder: 1,
+              plannedBossCount: 1,
+              totalBossCount: 1,
+            },
+          ],
         }),
       ).usable,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("a template whose owner is no longer an eligible raid lead is unusable", () => {
@@ -213,8 +280,44 @@ describe("computeUsability — pure boolean logic", () => {
   });
 
   it("a planned boss count outside the raid's current total is unusable", () => {
-    expect(computeUsability(fakeTemplate({ plannedBossCount: 99 })).usable).toBe(false);
-    expect(computeUsability(fakeTemplate({ plannedBossCount: 0 })).usable).toBe(false);
+    expect(
+      computeUsability(
+        fakeTemplate({
+          plannedBossCount: 99,
+          contents: [
+            {
+              id: "fake-content",
+              raidId,
+              raidName: "Venomous Abyss",
+              raidSeason: "Season",
+              raidAvailableForRuns: true,
+              sortOrder: 1,
+              plannedBossCount: 99,
+              totalBossCount: 8,
+            },
+          ],
+        }),
+      ).usable,
+    ).toBe(false);
+    expect(
+      computeUsability(
+        fakeTemplate({
+          plannedBossCount: 0,
+          contents: [
+            {
+              id: "fake-content",
+              raidId,
+              raidName: "Venomous Abyss",
+              raidSeason: "Season",
+              raidAvailableForRuns: true,
+              sortOrder: 1,
+              plannedBossCount: 0,
+              totalBossCount: 8,
+            },
+          ],
+        }),
+      ).usable,
+    ).toBe(false);
   });
 
   it("an out-of-range composition value is unusable", () => {
@@ -235,7 +338,7 @@ describe("template → VENOMOUS_ABYSS preset expansion", () => {
   });
 
   it("getCreateManyForm maps templates to VENOMOUS_ABYSS contentPreset defaults", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Preset Map", plannedBossCount: 5 }));
+    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Preset Map", venomousPlannedBossCount: 5 }));
     createdTemplateIds.push(created.id);
     const form = await runService.getCreateManyForm(lead);
     const row = form.templates.find((template) => template.id === created.id);
@@ -297,11 +400,16 @@ describe("runTemplateService.createTemplate — authorization", () => {
 });
 
 describe("runTemplateService.createTemplate — domain validation reuses Run planning rules", () => {
-  it("a historical raid is rejected, nothing created", async () => {
-    await expectDomainCode(
-      runTemplateService.createTemplate(lead, inputFor({ raidId: MANAFORGE_OMEGA_RAID_ID })),
-      "RAID_NOT_AVAILABLE_FOR_RUNS",
+  it("creates Bundle contents with fixed Tide 1/1", async () => {
+    const created = await runTemplateService.createTemplate(
+      lead,
+      inputFor({ name: "Bundle create", contentPreset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 6 }),
     );
+    createdTemplateIds.push(created.id);
+    const template = await runTemplateRepository.findById(created.id);
+    expect(template?.contents).toHaveLength(2);
+    expect(template?.contents.find((row) => row.raidId === TIDEBOUND_GROTTO_RAID_ID)?.plannedBossCount).toBe(1);
+    expect(template?.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID)?.plannedBossCount).toBe(6);
   });
 
   it("an invalid difficulty/lootType combination is rejected", async () => {
@@ -313,7 +421,7 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
 
   it("a planned boss count exceeding the raid's total is rejected", async () => {
     await expectDomainCode(
-      runTemplateService.createTemplate(lead, inputFor({ plannedBossCount: 999 })),
+      runTemplateService.createTemplate(lead, inputFor({ venomousPlannedBossCount: 999 })),
       "RUN_BOSS_COUNT_INVALID",
     );
   });
@@ -400,10 +508,9 @@ describe("runTemplateService — active/inactive lifecycle", () => {
     await runTemplateRepository.update(created.id, {
       name: "Raid goes historical",
       raidLeadId: ids.lead,
-      raidId: MANAFORGE_OMEGA_RAID_ID,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 1,
+      contents: [{ raidId: MANAFORGE_OMEGA_RAID_ID, sortOrder: 1, plannedBossCount: 1 }],
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,

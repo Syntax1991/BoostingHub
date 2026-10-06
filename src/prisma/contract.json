@@ -160,6 +160,10 @@
       "model": "RunTemplate",
       "namespace": "public"
     },
+    "run_template_raid_content": {
+      "model": "RunTemplateRaidContent",
+      "namespace": "public"
+    },
     "run_warcraft_logs_fight": {
       "model": "RunWarcraftLogsFight",
       "namespace": "public"
@@ -3388,6 +3392,21 @@
                 },
                 "to": {
                   "model": "RunRaidContent",
+                  "namespace": "public"
+                }
+              },
+              "templateContents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidId"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplateRaidContent",
                   "namespace": "public"
                 }
               },
@@ -7531,6 +7550,21 @@
                   "namespace": "public"
                 }
               },
+              "contents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "runTemplateId"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplateRaidContent",
+                  "namespace": "public"
+                }
+              },
               "createdBy": {
                 "cardinality": "N:1",
                 "on": {
@@ -7648,6 +7682,108 @@
               },
               "namespaceId": "public",
               "table": "run_template"
+            }
+          },
+          "RunTemplateRaidContent": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "plannedBossCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "runTemplateId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sortOrder": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "raid": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Raid",
+                  "namespace": "public"
+                }
+              },
+              "runTemplate": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "runTemplateId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "RunTemplate",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "plannedBossCount": {
+                  "column": "plannedBossCount"
+                },
+                "raidId": {
+                  "column": "raidId"
+                },
+                "runTemplateId": {
+                  "column": "runTemplateId"
+                },
+                "sortOrder": {
+                  "column": "sortOrder"
+                }
+              },
+              "namespaceId": "public",
+              "table": "run_template_raid_content"
             }
           },
           "RunWarcraftLogsFight": {
@@ -15445,6 +15581,117 @@
               },
               "uniques": []
             },
+            "run_template_raid_content": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "plannedBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "raidId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "runTemplateId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sortOrder": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "runTemplateId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template_raid_content"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "raidId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "run_template_raid_content"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "raid"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "raidId"
+                  ],
+                  "name": "run_template_raid_content_raidId_idx_996eeca9",
+                  "prefix": "run_template_raid_content_raidId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "runTemplateId"
+                  ],
+                  "name": "run_template_raid_content_runTemplateId_idx_99c44c3d",
+                  "prefix": "run_template_raid_content_runTemplateId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "runTemplateId",
+                    "raidId"
+                  ]
+                },
+                {
+                  "columns": [
+                    "runTemplateId",
+                    "sortOrder"
+                  ]
+                }
+              ]
+            },
             "run_warcraft_logs_fight": {
               "checks": [
                 {
@@ -17262,10 +17509,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "348d8a8ee91b946265bf0c026db33325e99bc0943b9a46739f2f82d4cd026a3c"
+    "storageHash": "0e66c1fef0162ce4e3b958b28c3ed87e0ca500d00262092a14cb250d70b5a485"
   },
   "execution": {
-    "executionHash": "ee7c808e430e2bdcff870a1abfc20fd163377e0473bcaab782bb1672017574a8",
+    "executionHash": "e061fdcc9802efba48326f09b79dd1af6418648c3389cf809c91c340b41515d0",
     "mutations": {
       "defaults": [
         {
@@ -18063,6 +18310,17 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "run_template"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "run_template_raid_content"
           }
         },
         {

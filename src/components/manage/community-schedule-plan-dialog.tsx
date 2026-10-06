@@ -5,9 +5,13 @@ import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS, RAID_DIFFICULTIES, RU
 import type { CommunityScheduleRunMode, RaidDifficulty, RunLootType } from "@/models/enums";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
+import {
+  titleCoverageFromPreset,
+  type RunContentPresetKey,
+} from "@/lib/run-content-presets";
 import { createCommunitySchedulePlanAction } from "@/controllers/community-schedule.actions";
 import type {
-  CommunityScheduleRaidOption,
+  CommunityScheduleContentPresetOption,
   CommunityScheduleTemplateOption,
 } from "@/services/community-schedule.service";
 
@@ -41,12 +45,14 @@ function newSlotRow(
 export function CommunitySchedulePlanDialog({
   raidLeads,
   templates,
-  raids,
+  contentPresets,
+  venomousBossMax,
   defaultRaidLeadId,
 }: {
   raidLeads: RaidLeadOption[];
   templates: CommunityScheduleTemplateOption[];
-  raids: CommunityScheduleRaidOption[];
+  contentPresets: CommunityScheduleContentPresetOption[];
+  venomousBossMax: number;
   defaultRaidLeadId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -58,10 +64,12 @@ export function CommunitySchedulePlanDialog({
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [name, setName] = useState("");
-  const [raidId, setRaidId] = useState(raids[0]?.id ?? "");
+  const [contentPreset, setContentPreset] = useState<RunContentPresetKey>(
+    contentPresets[0]?.key ?? "VENOMOUS_ABYSS",
+  );
   const [difficulty, setDifficulty] = useState<RaidDifficulty>("HEROIC");
   const [lootType, setLootType] = useState<RunLootType>("UNSAVED");
-  const [plannedBossCount, setPlannedBossCount] = useState(raids[0]?.totalBossCount ?? 8);
+  const [venomousPlannedBossCount, setVenomousPlannedBossCount] = useState(venomousBossMax);
   const [desiredTankCount, setDesiredTankCount] = useState(2);
   const [desiredHealerCount, setDesiredHealerCount] = useState(4);
   const [desiredDpsCount, setDesiredDpsCount] = useState(14);
@@ -75,7 +83,12 @@ export function CommunitySchedulePlanDialog({
     [templates, raidLeadId],
   );
 
-  const selectedRaid = raids.find((raid) => raid.id === raidId) ?? null;
+  const isBundle = contentPreset === "MIDNIGHT_S2_BUNDLE";
+  const coveragePreview = titleCoverageFromPreset({
+    preset: contentPreset,
+    venomousPlannedBossCount,
+    venomousTotalBossCount: venomousBossMax,
+  });
 
   function resetForm() {
     setError(null);
@@ -85,10 +98,10 @@ export function CommunitySchedulePlanDialog({
     setAutoCreateRun(false);
     setSlots([newSlotRow()]);
     setName("");
-    setRaidId(raids[0]?.id ?? "");
+    setContentPreset(contentPresets[0]?.key ?? "VENOMOUS_ABYSS");
     setDifficulty("HEROIC");
     setLootType("UNSAVED");
-    setPlannedBossCount(raids[0]?.totalBossCount ?? 8);
+    setVenomousPlannedBossCount(venomousBossMax);
     setDesiredTankCount(2);
     setDesiredHealerCount(4);
     setDesiredDpsCount(14);
@@ -118,10 +131,10 @@ export function CommunitySchedulePlanDialog({
             runSetup: {
               mode: "create" as const,
               name,
-              raidId,
+              contentPreset,
+              venomousPlannedBossCount,
               difficulty,
               lootType,
-              plannedBossCount,
               desiredTankCount,
               desiredHealerCount,
               desiredDpsCount,
@@ -244,25 +257,39 @@ export function CommunitySchedulePlanDialog({
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
-                    <span className="text-xs text-muted">Raid</span>
+                    <span className="text-xs text-muted">Run Content</span>
                     <select
                       required
-                      value={raidId}
-                      onChange={(event) => {
-                        const next = event.target.value;
-                        const raid = raids.find((candidate) => candidate.id === next);
-                        setRaidId(next);
-                        if (raid) setPlannedBossCount(Math.min(plannedBossCount, raid.totalBossCount));
-                      }}
+                      value={contentPreset}
+                      onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
                       className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                      aria-label="Run Content"
                     >
-                      {raids.map((raid) => (
-                        <option key={raid.id} value={raid.id}>
-                          {raid.name} ({raid.season})
+                      {contentPresets.map((preset) => (
+                        <option key={preset.key} value={preset.key}>
+                          {preset.displayName}
                         </option>
                       ))}
                     </select>
                   </label>
+                  {isBundle ? (
+                    <div className="space-y-1.5 rounded-md border border-border bg-surface px-3 py-2 text-xs">
+                      <div className="flex justify-between gap-2">
+                        <span>Tidebound Grotto</span>
+                        <span className="text-muted">1/1 · Included</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span>The Venomous Abyss</span>
+                        <span>
+                          {venomousPlannedBossCount}/{venomousBossMax}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-2 border-t border-border pt-1.5 font-medium">
+                        <span>Total coverage</span>
+                        <span>{coveragePreview}</span>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-2">
                     <label className="grid gap-1 text-sm">
                       <span className="text-xs text-muted">Difficulty</span>
@@ -295,15 +322,16 @@ export function CommunitySchedulePlanDialog({
                   </div>
                   <label className="grid gap-1 text-sm">
                     <span className="text-xs text-muted">
-                      Boss count{selectedRaid ? ` (max ${selectedRaid.totalBossCount})` : ""}
+                      {isBundle ? "The Venomous Abyss bosses" : "Planned bosses"} (max {venomousBossMax})
                     </span>
                     <input
                       type="number"
                       min={1}
-                      max={selectedRaid?.totalBossCount ?? undefined}
-                      value={plannedBossCount}
-                      onChange={(event) => setPlannedBossCount(Number(event.target.value))}
+                      max={venomousBossMax}
+                      value={venomousPlannedBossCount}
+                      onChange={(event) => setVenomousPlannedBossCount(Number(event.target.value))}
                       className="h-9 rounded-md border border-border bg-surface-raised px-2"
+                      aria-label={isBundle ? "The Venomous Abyss planned bosses" : "Planned bosses"}
                     />
                   </label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

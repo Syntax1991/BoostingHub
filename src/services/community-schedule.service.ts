@@ -23,6 +23,13 @@ import {
   formatScheduleShareRunDescription,
   type FormatCommunityScheduleShareResult,
 } from "@/lib/community-schedule-share";
+import {
+  classifyRunContents,
+  listCreateRunContentPresets,
+  venomousBossMaxFromCatalog,
+  type RunContentPresetKey,
+} from "@/lib/run-content-presets";
+import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { db, orm } from "@/lib/prisma";
 import {
   COMMUNITY_WEEKDAYS,
@@ -44,7 +51,12 @@ import {
   communityScheduleMaterializationService,
   type MaterializeSlotWindowsResult,
 } from "@/services/community-schedule-materialization.service";
-import { computeUsability, runTemplateService } from "@/services/run-template.service";
+import {
+  computeUsability,
+  runTemplateService,
+  templateContentDisplay,
+  templateCoverage,
+} from "@/services/run-template.service";
 import type {
   AddScheduleTimesInput,
   CreateCommunityScheduleSlotInput,
@@ -108,10 +120,12 @@ export type CommunityScheduleTemplateOption = {
   unusableReason: string | null;
   /** Authoritative RunTemplate fields for in-schedule Edit Run Setup. */
   name: string;
-  raidId: string;
+  contentPreset: RunContentPresetKey;
+  venomousPlannedBossCount: number;
+  productLabel: string;
+  titleCoverage: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
-  plannedBossCount: number;
   desiredTankCount: number;
   desiredHealerCount: number;
   desiredDpsCount: number;
@@ -141,11 +155,9 @@ export type CommunityScheduleRunSetupGroup = {
   canEdit: boolean;
 };
 
-export type CommunityScheduleRaidOption = {
-  id: string;
-  name: string;
-  season: string;
-  totalBossCount: number;
+export type CommunityScheduleContentPresetOption = {
+  key: RunContentPresetKey;
+  displayName: string;
 };
 
 export type CommunitySchedulePage = {
@@ -157,7 +169,8 @@ export type CommunitySchedulePage = {
   runSetups: CommunityScheduleRunSetupGroup[];
   eligibleRaidLeads: Array<{ id: string; name: string }>;
   templates: CommunityScheduleTemplateOption[];
-  raids: CommunityScheduleRaidOption[];
+  contentPresets: CommunityScheduleContentPresetOption[];
+  venomousBossMax: number;
   share: FormatCommunityScheduleShareResult;
 };
 
@@ -244,7 +257,41 @@ async function assertNoConflictsForLead(
 }
 
 function templateLabel(template: RunTemplateRecord): string {
-  return `${template.name} · ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${template.plannedBossCount}/${template.totalBossCount}`;
+  const coverage = templateCoverage(template);
+  const display = templateContentDisplay(template);
+  return `${template.name} · ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage} · ${display.productLabel}`;
+}
+
+function templateProductFields(template: RunTemplateRecord): {
+  contentPreset: RunContentPresetKey;
+  venomousPlannedBossCount: number;
+  productLabel: string;
+  titleCoverage: string;
+} {
+  const contentRows =
+    template.contents.length > 0
+      ? template.contents
+      : [
+          {
+            raidId: template.raidId,
+            sortOrder: 1,
+            plannedBossCount: template.plannedBossCount,
+            totalBossCount: template.totalBossCount,
+          },
+        ];
+  const productKey = classifyRunContents(contentRows);
+  const coverage = templateCoverage(template);
+  const display = templateContentDisplay(template);
+  const venomousRow = contentRows.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? contentRows[0];
+  return {
+    contentPreset: productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS",
+    venomousPlannedBossCount: Math.min(
+      8,
+      Math.max(1, venomousRow?.plannedBossCount ?? template.plannedBossCount),
+    ),
+    productLabel: display.productLabel,
+    titleCoverage: coverage.titleCoverage,
+  };
 }
 
 async function validateTemplateLink(input: {
@@ -311,16 +358,21 @@ function autoCreateSummary(slots: ReadonlyArray<{ autoCreateRun: boolean }>): "O
 function groupRunSetups(
   slots: CommunityScheduleSlotRecord[],
   canEdit: boolean,
+  templatesById: Map<string, RunTemplateRecord>,
 ): CommunityScheduleRunSetupGroup[] {
   const groups = new Map<string, CommunityScheduleRunSetupGroup>();
   for (const slot of slots) {
     const key = `${slot.runTemplateId ?? "none"}:${slot.raidLeadId}`;
     let group = groups.get(key);
     if (!group) {
+      const template = slot.runTemplateId ? templatesById.get(slot.runTemplateId) : null;
+      const runSetupName = template
+        ? `${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} · ${templateContentDisplay(template).productLabel}`
+        : (slot.runTemplateName ?? "Unconfigured Schedule");
       group = {
         key,
         runTemplateId: slot.runTemplateId,
-        runSetupName: slot.runTemplateName ?? "Unconfigured Schedule",
+        runSetupName,
         raidLeadId: slot.raidLeadId,
         raidLeadName: slot.raidLeadName,
         slots: [],
@@ -513,13 +565,18 @@ function projectWindow(
   };
 }
 
-async function listTemplateOptions(user: AuthenticatedUser): Promise<CommunityScheduleTemplateOption[]> {
+async function listTemplateOptions(user: AuthenticatedUser): Promise<{
+  options: CommunityScheduleTemplateOption[];
+  recordsById: Map<string, RunTemplateRecord>;
+}> {
   const templates = hasAdminAccess(user.accountRole)
     ? await runTemplateRepository.listAll()
     : await runTemplateRepository.listByRaidLead(user.id);
 
-  return templates.map((template) => {
+  const recordsById = new Map(templates.map((template) => [template.id, template]));
+  const options = templates.map((template) => {
     const usability = computeUsability(template);
+    const product = templateProductFields(template);
     return {
       id: template.id,
       raidLeadId: template.raidLeadId,
@@ -527,10 +584,12 @@ async function listTemplateOptions(user: AuthenticatedUser): Promise<CommunitySc
       usable: usability.usable,
       unusableReason: usability.unusableReason,
       name: template.name,
-      raidId: template.raidId,
+      contentPreset: product.contentPreset,
+      venomousPlannedBossCount: product.venomousPlannedBossCount,
+      productLabel: product.productLabel,
+      titleCoverage: product.titleCoverage,
       difficulty: template.difficulty,
       lootType: template.lootType,
-      plannedBossCount: template.plannedBossCount,
       desiredTankCount: template.desiredTankCount,
       desiredHealerCount: template.desiredHealerCount,
       desiredDpsCount: template.desiredDpsCount,
@@ -538,6 +597,7 @@ async function listTemplateOptions(user: AuthenticatedUser): Promise<CommunitySc
       notes: template.notes,
     };
   });
+  return { options, recordsById };
 }
 
 function resolveTxOrm(tx: { orm: unknown }): TxOrm {
@@ -621,8 +681,7 @@ function buildShareFromSlots(
     let runDescription: string;
     if (template) {
       runDescription = formatScheduleShareRunDescription({
-        plannedBossCount: template.plannedBossCount,
-        totalBossCount: template.totalBossCount,
+        titleCoverage: templateCoverage(template).titleCoverage,
         difficulty: template.difficulty,
         lootType: template.lootType,
       });
@@ -660,26 +719,16 @@ export const communityScheduleService = {
   async getPage(user: AuthenticatedUser, now = new Date()): Promise<CommunitySchedulePage> {
     requireView(user);
     const canEdit = canManageCommunitySchedule(user.accountRole);
-    const [slots, eligibleRaidLeads, templates, availableRaids] = await Promise.all([
+    const [slots, eligibleRaidLeads, templateBundle] = await Promise.all([
       communityScheduleRepository.listAll(),
       canEdit ? userRepository.listEligibleRaidLeads() : Promise.resolve([]),
       listTemplateOptions(user),
-      canEdit
-        ? raidRepository.ensureReferenceRaids().then(() => raidRepository.listSelectableRunSetupRaids())
-        : Promise.resolve([]),
     ]);
-
-    // Same authority as RunTemplate create/edit, plus any raid already linked to a
-    // schedule setup so editors can still open/save historical selections.
-    const raidsById = new Map(availableRaids.map((raid) => [raid.id, raid]));
     if (canEdit) {
-      for (const template of templates) {
-        if (raidsById.has(template.raidId)) continue;
-        const linked = await raidRepository.findById(template.raidId);
-        if (linked) raidsById.set(linked.id, linked);
-      }
+      await raidRepository.ensureReferenceRaids();
     }
-    const raids = [...raidsById.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+    const { options: templates, recordsById: templatesById } = templateBundle;
 
     const templateMetaById = new Map<
       string,
@@ -701,36 +750,19 @@ export const communityScheduleService = {
 
     const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
 
-    const templateIds = [
-      ...new Set(
-        visibleSlots
-          .map((slot) => slot.runTemplateId)
-          .filter((id): id is string => typeof id === "string" && id.length > 0),
-      ),
-    ];
-    const templateRecords = await Promise.all(templateIds.map((id) => runTemplateRepository.findById(id)));
-    const templatesById = new Map<string, RunTemplateRecord>();
-    for (const record of templateRecords) {
-      if (record) templatesById.set(record.id, record);
-    }
-
     return {
       canEdit,
       timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
       current: projectWindow(user, slots, "CURRENT", now, linksByKey, templateMetaById),
       next: projectWindow(user, slots, "NEXT", now, linksByKey, templateMetaById),
       slots: visibleSlots,
-      runSetups: groupRunSetups(visibleSlots, canEdit),
+      runSetups: groupRunSetups(visibleSlots, canEdit, templatesById),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
       templates: canEdit
         ? templates
         : templates.filter((row) => row.usable && row.raidLeadId === user.id),
-      raids: raids.map((raid) => ({
-        id: raid.id,
-        name: raid.name,
-        season: raid.season,
-        totalBossCount: raid.totalBossCount,
-      })),
+      contentPresets: listCreateRunContentPresets(),
+      venomousBossMax: venomousBossMaxFromCatalog(),
       share: buildShareFromSlots(visibleSlots, templatesById),
     };
   },

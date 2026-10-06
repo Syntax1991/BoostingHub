@@ -112,10 +112,10 @@ function EditRunSetupButton({
       initial={{
         templateId: setup.id,
         name: setup.name,
-        raidId: setup.raidId,
+        contentPreset: setup.contentPreset,
+        venomousPlannedBossCount: setup.venomousPlannedBossCount,
         difficulty: setup.difficulty,
         lootType: setup.lootType,
-        plannedBossCount: setup.plannedBossCount,
         desiredTankCount: setup.desiredTankCount,
         desiredHealerCount: setup.desiredHealerCount,
         desiredDpsCount: setup.desiredDpsCount,
@@ -123,7 +123,8 @@ function EditRunSetupButton({
         notes: setup.notes,
         raidLeadId: setup.raidLeadId,
       }}
-      raids={page.raids}
+      contentPresets={page.contentPresets}
+      venomousBossMax={page.venomousBossMax}
       raidLeads={page.eligibleRaidLeads}
       canAssignRaidLead
       defaultRaidLeadId={setup.raidLeadId}
@@ -231,7 +232,8 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
               <CommunitySchedulePlanDialog
                 raidLeads={page.eligibleRaidLeads}
                 templates={page.templates}
-                raids={page.raids}
+                contentPresets={page.contentPresets}
+                venomousBossMax={page.venomousBossMax}
                 defaultRaidLeadId={page.eligibleRaidLeads[0]?.id}
               />
             ) : null}

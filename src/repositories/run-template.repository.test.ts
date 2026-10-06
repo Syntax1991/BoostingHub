@@ -63,10 +63,9 @@ function baseFields(overrides: Partial<Parameters<typeof runTemplateRepository.c
   return {
     name: "Repo Test Template",
     raidLeadId: ids.lead,
-    raidId,
     difficulty: "HEROIC" as const,
     lootType: "UNSAVED" as const,
-    plannedBossCount: 8,
+    contents: [{ raidId, sortOrder: 1, plannedBossCount: 8 }],
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
@@ -110,10 +109,9 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
     await runTemplateRepository.update(id, {
       name: "After update",
       raidLeadId: ids.lead,
-      raidId,
       difficulty: "MYTHIC",
       lootType: "VIP",
-      plannedBossCount: 5,
+      contents: [{ raidId, sortOrder: 1, plannedBossCount: 5 }],
       desiredTankCount: 3,
       desiredHealerCount: 5,
       desiredDpsCount: 12,

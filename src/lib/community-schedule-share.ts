@@ -45,14 +45,14 @@ const RUN_MODE_SHARE_LABEL: Record<CommunityScheduleRunMode, string> = {
   TEAM_RUN: "Teamrun",
 };
 
-/** Canonical Management Discord run description: `7/9 HC VIP`. */
+/** Canonical Management Discord run description: `7/9 HC VIP` (coverage from contents). */
 export function formatScheduleShareRunDescription(input: {
-  plannedBossCount: number;
-  totalBossCount: number;
+  /** Authoritative coverage token from projectRunContentCoverage — e.g. `7/9`. */
+  titleCoverage: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
 }): string {
-  return `${input.plannedBossCount}/${input.totalBossCount} ${DIFFICULTY_ABBREVIATIONS[input.difficulty]} ${RUN_LOOT_TYPE_LABELS[input.lootType]}`;
+  return `${input.titleCoverage} ${DIFFICULTY_ABBREVIATIONS[input.difficulty]} ${RUN_LOOT_TYPE_LABELS[input.lootType]}`;
 }
 
 function formatRaidLeadMention(slot: CommunityScheduleShareSlotInput): string {

@@ -124,10 +124,9 @@ beforeAll(async () => {
   templateId = await runTemplateRepository.create({
     name: "CSM Materialize Template",
     raidLeadId: ids.lead,
-    raidId: VENOMOUS_ABYSS_RAID_ID,
-    difficulty: "HEROIC",
-    lootType: "UNSAVED",
-    plannedBossCount: 8,
+    difficulty: "HEROIC" as const,
+    lootType: "UNSAVED" as const,
+    contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
@@ -141,19 +140,18 @@ beforeEach(async () => {
   await cleanupMaterializationData();
   if (!(await orm.RunTemplate.where({ id: templateId }).first())) {
     templateId = await runTemplateRepository.create({
-      name: "CSM Materialize Template",
-      raidLeadId: ids.lead,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
-      difficulty: "HEROIC",
-      lootType: "UNSAVED",
-      plannedBossCount: 8,
-      desiredTankCount: 2,
-      desiredHealerCount: 4,
-      desiredDpsCount: 14,
-      notes: null,
-      createdById: ids.lead,
-      updatedById: ids.lead,
-    });
+    name: "CSM Materialize Template",
+    raidLeadId: ids.lead,
+    difficulty: "HEROIC" as const,
+    lootType: "UNSAVED" as const,
+    contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
+    desiredTankCount: 2,
+    desiredHealerCount: 4,
+    desiredDpsCount: 14,
+    notes: null,
+    createdById: ids.lead,
+    updatedById: ids.lead,
+  });
   }
 });
 
@@ -347,10 +345,9 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
     const otherTemplateId = await runTemplateRepository.create({
       name: "Other Lead Template",
       raidLeadId: ids.otherLead,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -572,10 +569,9 @@ describe("communityScheduleMaterializationService.runPass", () => {
     await runTemplateRepository.update(templateId, {
       name: "CSM Materialize Template Edited",
       raidLeadId: ids.lead,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
       difficulty: "MYTHIC",
       lootType: "UNSAVED",
-      plannedBossCount: 4,
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 4 }],
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -599,10 +595,9 @@ describe("communityScheduleMaterializationService.runPass", () => {
     await runTemplateRepository.update(templateId, {
       name: "CSM Materialize Template",
       raidLeadId: ids.lead,
-      raidId: VENOMOUS_ABYSS_RAID_ID,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      plannedBossCount: 8,
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
