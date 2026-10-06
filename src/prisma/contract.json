@@ -347,6 +347,19 @@
               }
             ]
           },
+          "CommunityScheduleRunMode": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "INHOUSE",
+                "value": "INHOUSE"
+              },
+              {
+                "name": "TEAM_RUN",
+                "value": "TEAM_RUN"
+              }
+            ]
+          },
           "CommunityWeekday": {
             "codecId": "pg/text@1",
             "members": [
@@ -2775,6 +2788,19 @@
                   "kind": "scalar"
                 }
               },
+              "runMode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "CommunityScheduleRunMode",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "runTemplateId": {
                 "nullable": true,
                 "type": {
@@ -2915,6 +2941,9 @@
                 },
                 "raidLeadId": {
                   "column": "raidLeadId"
+                },
+                "runMode": {
+                  "column": "runMode"
                 },
                 "runTemplateId": {
                   "column": "runTemplateId"
@@ -11366,6 +11395,11 @@
             "community_schedule_slot": {
               "checks": [
                 {
+                  "expression": "\"runMode\" IN ('INHOUSE', 'TEAM_RUN')",
+                  "name": "community_schedule_slot_runMode_check_dc95dab2",
+                  "prefix": "community_schedule_slot_runMode_check"
+                },
+                {
                   "expression": "\"weekday\" IN ('MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY')",
                   "name": "community_schedule_slot_weekday_check_fe15739f",
                   "prefix": "community_schedule_slot_weekday_check"
@@ -11428,6 +11462,21 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "runMode": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "INHOUSE"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "CommunityScheduleRunMode",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "runTemplateId": {
                   "codecId": "pg/text@1",
@@ -16954,6 +17003,13 @@
                 "INTERNAL"
               ]
             },
+            "CommunityScheduleRunMode": {
+              "kind": "valueSet",
+              "values": [
+                "INHOUSE",
+                "TEAM_RUN"
+              ]
+            },
             "CommunityWeekday": {
               "kind": "valueSet",
               "values": [
@@ -17206,7 +17262,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "883475348809d9f7a8306f4723a62f0d0e12f85c94ecc2c145ad2e31e4f14886"
+    "storageHash": "348d8a8ee91b946265bf0c026db33325e99bc0943b9a46739f2f82d4cd026a3c"
   },
   "execution": {
     "executionHash": "ee7c808e430e2bdcff870a1abfc20fd163377e0473bcaab782bb1672017574a8",

@@ -51,7 +51,7 @@ async function createUser(
   });
 }
 
-const slotExtras = { runTemplateId: null as string | null, autoCreateRun: false };
+const slotExtras = { runTemplateId: null as string | null, autoCreateRun: false, runMode: "INHOUSE" as const };
 
 const testUserIds = new Set(Object.values(ids));
 
@@ -163,7 +163,7 @@ describe("communityScheduleService authorization", () => {
   });
 
   it("ADMIN and OWNER can create/edit/deactivate/reactivate", async () => {
-    const created = await communityScheduleService.createSlot(admin, {
+    const { slot: created } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -173,7 +173,7 @@ describe("communityScheduleService authorization", () => {
     });
     expect(created.isActive).toBe(true);
 
-    const updated = await communityScheduleService.updateSlot(owner, {
+    const { slot: updated } = await communityScheduleService.updateSlot(owner, {
       slotId: created.id,
       weekday: "FRIDAY",
       localStartTime: "20:00",
@@ -187,7 +187,7 @@ describe("communityScheduleService authorization", () => {
 
     const inactive = await communityScheduleService.deactivateSlot(admin, created.id);
     expect(inactive.isActive).toBe(false);
-    const active = await communityScheduleService.reactivateSlot(owner, created.id);
+    const { slot: active } = await communityScheduleService.reactivateSlot(owner, created.id);
     expect(active.isActive).toBe(true);
   });
 });
@@ -238,7 +238,7 @@ describe("communityScheduleService domain", () => {
       }),
       "COMMUNITY_SCHEDULE_DUPLICATE",
     );
-    const parallel = await communityScheduleService.createSlot(admin, {
+    const { slot: parallel } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP Parallel",
@@ -251,7 +251,7 @@ describe("communityScheduleService domain", () => {
 
   it("projects CURRENT and NEXT; inactive slots excluded from windows", async () => {
     const now = new Date("2026-01-15T12:00:00.000Z");
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -305,10 +305,10 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       raidLeadId: ids.lead,
       runSetup: { mode: "create", ...createSetupFields },
       slots: [
-        { weekday: "THURSDAY", localStartTime: "19:00" },
-        { weekday: "FRIDAY", localStartTime: "19:45" },
-        { weekday: "SATURDAY", localStartTime: "20:00" },
-        { weekday: "SUNDAY", localStartTime: "18:30" },
+        { weekday: "THURSDAY", localStartTime: "19:00", runMode: "INHOUSE" },
+        { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
+        { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE" },
+        { weekday: "SUNDAY", localStartTime: "18:30", runMode: "INHOUSE" },
       ],
       autoCreateRun: false,
       notes: "plan notes",
@@ -336,8 +336,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       raidLeadId: ids.lead,
       runSetup: { mode: "existing", templateId },
       slots: [
-        { weekday: "FRIDAY", localStartTime: "19:45" },
-        { weekday: "SATURDAY", localStartTime: "20:00" },
+        { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
+        { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE" },
       ],
       autoCreateRun: true,
       notes: null,
@@ -348,7 +348,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const added = await communityScheduleService.addTimesToSetup(admin, {
       runTemplateId: templateId,
       raidLeadId: ids.lead,
-      slots: [{ weekday: "SUNDAY", localStartTime: "17:00" }],
+      slots: [{ weekday: "SUNDAY", localStartTime: "17:00", runMode: "INHOUSE" }],
       autoCreateRun: false,
       notes: null,
     });
@@ -378,8 +378,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
           raidLeadId: ids.lead,
           runSetup: { mode: "create", ...createSetupFields, name: "Rollback Setup" },
           slots: [
-            { weekday: "FRIDAY", localStartTime: "19:45" },
-            { weekday: "SATURDAY", localStartTime: "20:00" },
+            { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
+            { weekday: "SATURDAY", localStartTime: "20:00", runMode: "INHOUSE" },
           ],
           autoCreateRun: false,
           notes: null,
@@ -401,8 +401,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
         raidLeadId: ids.lead,
         runSetup: { mode: "create", ...createSetupFields },
         slots: [
-          { weekday: "FRIDAY", localStartTime: "19:45" },
-          { weekday: "FRIDAY", localStartTime: "19:45" },
+          { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
+          { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
         ],
         autoCreateRun: false,
         notes: null,
@@ -424,6 +424,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const tooMany = Array.from({ length: MAX_SLOTS_PER_PLAN + 1 }, (_, index) => ({
       weekday: "FRIDAY" as const,
       localStartTime: `${String(10 + Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}`,
+      runMode: "INHOUSE" as const,
     }));
     await expectCode(
       communityScheduleService.createSchedulePlan(admin, {
@@ -441,7 +442,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
       runSetup: { mode: "create", ...createSetupFields, name: "Lead A Setup" },
-      slots: [{ weekday: "FRIDAY", localStartTime: "19:45" }],
+      slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
       autoCreateRun: false,
       notes: null,
     });
@@ -450,7 +451,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       communityScheduleService.createSchedulePlan(admin, {
         raidLeadId: ids.lead,
         runSetup: { mode: "create", ...createSetupFields, name: "Lead A Dup" },
-        slots: [{ weekday: "FRIDAY", localStartTime: "19:45" }],
+        slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
         autoCreateRun: false,
         notes: null,
       }),
@@ -460,7 +461,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const other = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.leadB,
       runSetup: { mode: "create", ...createSetupFields, name: "Lead B Setup" },
-      slots: [{ weekday: "FRIDAY", localStartTime: "19:45" }],
+      slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
       autoCreateRun: false,
       notes: null,
     });
@@ -476,6 +477,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       notes: null,
       runTemplateId: null,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
 
     const templateId = await runTemplateRepository.create({
@@ -488,14 +490,14 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
       runSetup: { mode: "existing", templateId },
-      slots: [{ weekday: "TUESDAY", localStartTime: "19:00" }],
+      slots: [{ weekday: "TUESDAY", localStartTime: "19:00", runMode: "INHOUSE" }],
       autoCreateRun: true,
       notes: null,
     });
     await communityScheduleService.addTimesToSetup(admin, {
       runTemplateId: templateId,
       raidLeadId: ids.lead,
-      slots: [{ weekday: "WEDNESDAY", localStartTime: "19:00" }],
+      slots: [{ weekday: "WEDNESDAY", localStartTime: "19:00", runMode: "INHOUSE" }],
       autoCreateRun: false,
       notes: null,
     });
@@ -513,7 +515,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       communityScheduleService.createSchedulePlan(lead, {
         raidLeadId: ids.lead,
         runSetup: { mode: "create", ...createSetupFields },
-        slots: [{ weekday: "FRIDAY", localStartTime: "19:45" }],
+        slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
         autoCreateRun: false,
         notes: null,
       }),
@@ -526,8 +528,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       raidLeadId: ids.lead,
       runSetup: { mode: "create", ...createSetupFields, name: "Edit Setup Target" },
       slots: [
-        { weekday: "FRIDAY", localStartTime: "19:51" },
-        { weekday: "SATURDAY", localStartTime: "18:51" },
+        { weekday: "FRIDAY", localStartTime: "19:51", runMode: "INHOUSE" },
+        { weekday: "SATURDAY", localStartTime: "18:51", runMode: "INHOUSE" },
       ],
       autoCreateRun: false,
       notes: null,
@@ -574,5 +576,64 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(option?.plannedBossCount).toBe(7);
     expect(option?.notes).toBe("updated notes");
     expect(page.raids.some((raid) => raid.name.includes("Venomous"))).toBe(true);
+    expect(page.raids.some((raid) => raid.name.includes("Tidebound"))).toBe(true);
+  });
+
+  it("includes Tide in selectable Run Setup raids and can create a Tide schedule plan", async () => {
+    const { TIDEBOUND_GROTTO_RAID_ID } = await import("@/lib/wow-raid-catalog");
+    await raidRepository.ensureReferenceRaids();
+    const selectable = await raidRepository.listSelectableRunSetupRaids();
+    expect(selectable.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(true);
+    expect(selectable.some((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)).toBe(true);
+
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const result = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runSetup: {
+          mode: "create",
+          name: "Tide Setup",
+          raidId: TIDEBOUND_GROTTO_RAID_ID,
+          difficulty: "HEROIC",
+          lootType: "VIP",
+          plannedBossCount: 1,
+          desiredTankCount: 2,
+          desiredHealerCount: 4,
+          desiredDpsCount: 14,
+          desiredLootbuddyCount: 0,
+          notes: null,
+        },
+        slots: [{ weekday: "WEDNESDAY", localStartTime: "22:30", runMode: "INHOUSE" }],
+        autoCreateRun: true,
+        notes: null,
+      },
+      now,
+    );
+    expect(result.materialization.created).toBeGreaterThan(0);
+    const template = await runTemplateRepository.findById(result.templateId);
+    expect(template?.raidId).toBe(TIDEBOUND_GROTTO_RAID_ID);
+    expect(template?.plannedBossCount).toBe(1);
+  });
+
+  it("persists per-row Run Mode and Share uses authoritative template description", async () => {
+    const plan = await communityScheduleService.createSchedulePlan(admin, {
+      raidLeadId: ids.lead,
+      runSetup: { mode: "create", ...createSetupFields, name: "Share Setup", plannedBossCount: 7, lootType: "VIP" },
+      slots: [
+        { weekday: "FRIDAY", localStartTime: "23:00", runMode: "TEAM_RUN" },
+        { weekday: "SATURDAY", localStartTime: "23:00", runMode: "INHOUSE" },
+      ],
+      autoCreateRun: false,
+      notes: null,
+    });
+    const slots = await Promise.all(plan.slotIds.map((id) => communityScheduleRepository.findById(id)));
+    expect(slots.map((slot) => slot?.runMode).sort()).toEqual(["INHOUSE", "TEAM_RUN"]);
+
+    const page = await communityScheduleService.getPage(admin);
+    expect(page.share.text).toContain("Teamrun");
+    expect(page.share.text).toContain("inhouse");
+    expect(page.share.text).toContain("7/8 HC VIP");
+    expect(page.share.text).toContain("Please check which recurring Runs we have at the moment. 🙂");
   });
 });

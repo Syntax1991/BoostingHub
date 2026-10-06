@@ -28,9 +28,11 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     notes: null,
     raidLeadId: "lead-1",
     raidLeadName: "Synblast",
+    raidLeadDiscordUserId: null,
     raidLeadEligible: true,
     runTemplateId: "template-1",
     autoCreateRun: true,
+    runMode: "INHOUSE" as const,
     runTemplateName: "Default HC",
     isActive: true,
     createdById: "admin-1",
@@ -95,6 +97,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             localStartTime: "19:45",
             isActive: true,
             autoCreateRun: true,
+            runMode: "INHOUSE",
             label: "Default HC",
             notes: null,
           },
@@ -104,6 +107,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             localStartTime: "20:00",
             isActive: true,
             autoCreateRun: false,
+            runMode: "TEAM_RUN",
             label: "Default HC",
             notes: null,
           },
@@ -113,12 +117,17 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             localStartTime: "18:00",
             isActive: false,
             autoCreateRun: false,
+            runMode: "INHOUSE",
             label: "Default HC",
             notes: null,
           },
         ],
       },
     ],
+    share: {
+      text: "<@&role>\n\nFriday: 19:45 8/8 HC Unsaved <@lead> inhouse\n\nPlease check which recurring Runs we have at the moment. 🙂",
+      warnings: [],
+    },
     current: {
       window: "CURRENT",
       windowStart: "2026-01-14T05:00:00.000Z",
@@ -177,7 +186,10 @@ describe("ManageCommunityScheduleView", () => {
       createElement(ManageCommunityScheduleView, { page: samplePage(true) }),
     );
     expect(html).toContain("Create Schedule");
+    expect(html).toContain("Share Schedule");
     expect(html).toContain("Run Setups / Weekly Plan");
+    expect(html).toContain("Inhouse");
+    expect(html).toContain("Team Run");
     expect(html).toContain("Default HC · Synblast");
     expect(html).toContain("Auto-create: MIXED");
     expect(html).toContain("Auto ✓");

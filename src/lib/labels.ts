@@ -4,6 +4,7 @@ import type {
   AttendanceStatus,
   BoosterAccessStatus,
   CharacterRole,
+  CommunityScheduleRunMode,
   LootbuddyMode,
   LootbuddyVerification,
   ParticipationType,
@@ -86,6 +87,11 @@ export const RUN_LOOT_TYPE_LABELS: Record<RunLootType, string> = {
   UNSAVED: "Unsaved",
   VIP: "VIP",
   COMMUNITY: "Community",
+};
+
+export const COMMUNITY_SCHEDULE_RUN_MODE_LABELS: Record<CommunityScheduleRunMode, string> = {
+  INHOUSE: "Inhouse",
+  TEAM_RUN: "Team Run",
 };
 
 /**

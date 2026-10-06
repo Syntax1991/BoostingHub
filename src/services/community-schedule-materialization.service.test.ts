@@ -8,6 +8,7 @@ import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
+import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
@@ -162,7 +163,7 @@ afterAll(async () => {
 
 describe("communityScheduleMaterializationService.materializeOccurrence", () => {
   it("USER cannot materialize", async () => {
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -170,6 +171,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
     await expectCode(
       communityScheduleMaterializationService.materializeOccurrence(
@@ -182,7 +184,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
 
   it("RAID_LEAD can materialize own slot into a DRAFT run from template fields", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "LABEL MUST NOT BECOME TITLE",
@@ -190,6 +192,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
     const result = await communityScheduleMaterializationService.materializeOccurrence(
       { kind: "USER", user: lead },
@@ -224,7 +227,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
 
   it("rejects CURRENT occurrence in the past", async () => {
     const now = new Date("2027-01-17T20:00:00.000Z");
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -232,6 +235,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
     await expectCode(
       communityScheduleMaterializationService.materializeOccurrence(
@@ -244,7 +248,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
 
   it("returns alreadyExisted on second materialize", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -252,6 +256,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
     const first = await communityScheduleMaterializationService.materializeOccurrence(
       { kind: "USER", user: lead },
@@ -267,7 +272,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
 
   it("edit localStartTime after materialize does not create a second Run for the same window", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -275,6 +280,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
 
     const beforeOccurrence = resolveScheduleSlotOccurrence({
@@ -304,6 +310,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
 
     const afterOccurrence = resolveScheduleSlotOccurrence({
@@ -351,7 +358,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       createdById: ids.otherLead,
       updatedById: ids.otherLead,
     });
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "HC VIP",
@@ -359,6 +366,7 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       runTemplateId: otherTemplateId,
       autoCreateRun: false,
+      runMode: "INHOUSE",
     });
     await expectCode(
       communityScheduleMaterializationService.materializeOccurrence(
@@ -373,7 +381,8 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
 describe("communityScheduleMaterializationService.runPass", () => {
   it("creates DRAFT runs for auto-create slots with SYSTEM actor (no fabricated USER)", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
-    await communityScheduleService.createSlot(admin, {
+    // Persist via repository so this test isolates the hourly pass (not post-save immediate create).
+    await communityScheduleRepository.create({
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "Auto HC",
@@ -381,6 +390,9 @@ describe("communityScheduleMaterializationService.runPass", () => {
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: true,
+      runMode: "INHOUSE",
+      createdById: ids.admin,
+      updatedById: ids.admin,
     });
     const before = await orm.Run.select("id").all();
     const result = await communityScheduleMaterializationService.runPass(now);
@@ -424,7 +436,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
 
   it("edit slot time after SYSTEM materialize still returns alreadyExisted for same window", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
-    const slot = await communityScheduleService.createSlot(admin, {
+    const { slot } = await communityScheduleService.createSlot(admin, {
       weekday: "FRIDAY",
       localStartTime: "19:45",
       label: "Auto HC",
@@ -432,6 +444,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: true,
+      runMode: "INHOUSE",
     });
 
     const nextOccurrence = resolveScheduleSlotOccurrence({
@@ -461,6 +474,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
       notes: null,
       runTemplateId: templateId,
       autoCreateRun: true,
+      runMode: "INHOUSE",
     });
 
     const rematerialize = await communityScheduleMaterializationService.materializeOccurrence(
@@ -483,26 +497,49 @@ describe("communityScheduleMaterializationService.runPass", () => {
     expect(Date.parse(run?.scheduledStartAt ?? "")).toBe(Date.parse(linkBefore!.occurrenceStartAt));
   });
 
-  it("bulk auto-create plan slots still materialize via runPass", async () => {
+  it("bulk auto-create plan slots materialize immediately; hourly pass is idempotent", async () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
       runSetup: { mode: "existing", templateId },
       slots: [
-        { weekday: "FRIDAY", localStartTime: "19:45" },
-        { weekday: "SATURDAY", localStartTime: "20:00" },
+        { weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" },
+        { weekday: "SATURDAY", localStartTime: "20:00", runMode: "TEAM_RUN" },
       ],
-      autoCreateRun: true,
+      autoCreateRun: false,
       notes: null,
     });
     expect(plan.slotIds).toHaveLength(2);
 
-    const pass = await communityScheduleMaterializationService.runPass(now);
-    expect(pass.status).toBe("COMPLETED");
+    // Enable auto + targeted materialize at a fixed now (same clock as runPass).
+    for (const slotId of plan.slotIds) {
+      const existing = await communityScheduleRepository.findById(slotId);
+      await communityScheduleRepository.update(slotId, {
+        weekday: existing!.weekday,
+        localStartTime: existing!.localStartTime,
+        label: existing!.label,
+        notes: existing!.notes,
+        raidLeadId: existing!.raidLeadId,
+        runTemplateId: existing!.runTemplateId,
+        autoCreateRun: true,
+        runMode: existing!.runMode,
+        updatedById: ids.admin,
+      });
+    }
+    const immediate = await communityScheduleMaterializationService.materializeSlotWindows(plan.slotIds, {
+      now,
+    });
+    expect(immediate.created).toBeGreaterThan(0);
 
     for (const slotId of plan.slotIds) {
       const links = await orm.CommunityScheduleRun.where({ scheduleSlotId: slotId }).all();
       expect(links.length).toBeGreaterThan(0);
+    }
+
+    const pass = await communityScheduleMaterializationService.runPass(now);
+    expect(pass.status).toBe("COMPLETED");
+    if (pass.status === "COMPLETED") {
+      expect(pass.created).toBe(0);
     }
   });
 
@@ -511,7 +548,7 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
       runSetup: { mode: "existing", templateId },
-      slots: [{ weekday: "FRIDAY", localStartTime: "19:45" }],
+      slots: [{ weekday: "FRIDAY", localStartTime: "19:45", runMode: "INHOUSE" }],
       autoCreateRun: false,
       notes: null,
     });

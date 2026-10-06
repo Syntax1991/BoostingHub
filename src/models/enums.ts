@@ -74,6 +74,21 @@ export const COMMUNITY_WEEKDAYS = [
 ] as const;
 export type CommunityWeekday = (typeof COMMUNITY_WEEKDAYS)[number];
 
+/** Raid-ID week order for Management Share (Wednesday-first). */
+export const COMMUNITY_RAID_ID_WEEK_WEEKDAYS = [
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+  "MONDAY",
+  "TUESDAY",
+] as const satisfies readonly CommunityWeekday[];
+
+/** Management Share classification for a Community Schedule slot. */
+export const COMMUNITY_SCHEDULE_RUN_MODES = ["INHOUSE", "TEAM_RUN"] as const;
+export type CommunityScheduleRunMode = (typeof COMMUNITY_SCHEDULE_RUN_MODES)[number];
+
 /**
  * Independent of RaidDifficulty. Compatibility (e.g. MYTHIC cannot be SAVED)
  * is a domain rule enforced in the Service layer — see run-state.ts.

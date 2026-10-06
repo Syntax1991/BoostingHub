@@ -6,7 +6,7 @@ import {
   isCommunityWeekday,
   parseCommunityLocalStartTime,
 } from "@/lib/community-schedule";
-import { COMMUNITY_WEEKDAYS } from "@/models/enums";
+import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
 import {
   createRunTemplateSchema,
 } from "@/validators/run-template";
@@ -49,9 +49,15 @@ const runTemplateIdSchema = z
   .nullable()
   .transform((value) => value ?? null);
 
+const runModeSchema = z
+  .enum(COMMUNITY_SCHEDULE_RUN_MODES)
+  .optional()
+  .default("INHOUSE");
+
 const planSlotSchema = z.object({
   weekday: weekdaySchema,
   localStartTime: localStartTimeSchema,
+  runMode: runModeSchema,
 });
 
 function refineUniquePlanSlots<T extends { slots: Array<{ weekday: string; localStartTime: string }> }>(
@@ -85,6 +91,7 @@ export const createCommunityScheduleSlotSchema = z.object({
   notes: notesSchema,
   runTemplateId: runTemplateIdSchema,
   autoCreateRun: z.boolean().optional().default(false),
+  runMode: runModeSchema,
 });
 
 export const updateCommunityScheduleSlotSchema = createCommunityScheduleSlotSchema.extend({

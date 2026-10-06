@@ -6,7 +6,8 @@ import {
   asStringOrNull,
   mapUserRole,
 } from "@/lib/persistence";
-import type { AccountStatus, CommunityWeekday } from "@/models/enums";
+import type { AccountStatus, CommunityScheduleRunMode, CommunityWeekday } from "@/models/enums";
+import { COMMUNITY_SCHEDULE_RUN_MODES } from "@/models/enums";
 
 export type CommunityScheduleSlotRecord = {
   id: string;
@@ -16,9 +17,11 @@ export type CommunityScheduleSlotRecord = {
   notes: string | null;
   raidLeadId: string;
   raidLeadName: string;
+  raidLeadDiscordUserId: string | null;
   raidLeadEligible: boolean;
   runTemplateId: string | null;
   autoCreateRun: boolean;
+  runMode: CommunityScheduleRunMode;
   runTemplateName: string | null;
   isActive: boolean;
   createdById: string;
@@ -35,6 +38,7 @@ export type CommunityScheduleSlotWrite = {
   raidLeadId: string;
   runTemplateId: string | null;
   autoCreateRun: boolean;
+  runMode: CommunityScheduleRunMode;
   createdById: string;
   updatedById: string;
 };
@@ -47,8 +51,16 @@ export type CommunityScheduleSlotUpdate = {
   raidLeadId: string;
   runTemplateId: string | null;
   autoCreateRun: boolean;
+  runMode: CommunityScheduleRunMode;
   updatedById: string;
 };
+
+function mapRunMode(value: unknown): CommunityScheduleRunMode {
+  const raw = asString(value, "INHOUSE");
+  return (COMMUNITY_SCHEDULE_RUN_MODES as readonly string[]).includes(raw)
+    ? (raw as CommunityScheduleRunMode)
+    : "INHOUSE";
+}
 
 type TxOrm = typeof orm;
 
@@ -63,12 +75,14 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
     notes: asStringOrNull(row.notes),
     raidLeadId: asString(row.raidLeadId ?? raidLead.id),
     raidLeadName: asString(raidLead.name, "Unknown raid lead"),
+    raidLeadDiscordUserId: asStringOrNull(raidLead.discordUserId),
     raidLeadEligible: isEligibleRaidLead({
       accountRole: mapUserRole(raidLead.accountRole),
       accountStatus: asString(raidLead.accountStatus, "ACTIVE") as AccountStatus,
     }),
     runTemplateId: asStringOrNull(row.runTemplateId),
     autoCreateRun: asBoolean(row.autoCreateRun, false),
+    runMode: mapRunMode(row.runMode),
     runTemplateName: runTemplate ? asString(runTemplate.name) : null,
     isActive: asBoolean(row.isActive, true),
     createdById: asString(row.createdById),
@@ -156,6 +170,7 @@ export const communityScheduleRepository = {
       raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
+      runMode: input.runMode,
       isActive: true,
       createdById: input.createdById,
       updatedById: input.updatedById,
@@ -178,6 +193,7 @@ export const communityScheduleRepository = {
       raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
+      runMode: input.runMode,
       updatedById: input.updatedById,
       updatedAt: new Date().toISOString(),
     });
