@@ -264,6 +264,7 @@ model User {
   communityScheduleSlots          CommunityScheduleSlot[] @relation("CommunityScheduleRaidLead")
   createdCommunityScheduleSlots   CommunityScheduleSlot[] @relation("CommunityScheduleCreator")
   updatedCommunityScheduleSlots   CommunityScheduleSlot[] @relation("CommunityScheduleUpdater")
+  createdCommunityScheduleRuns    CommunityScheduleRun[]  @relation("CommunityScheduleRunCreator")
   approvedAccess   BoosterAccess[] @relation("BoosterAccessApprover")
   reviewedAccess   BoosterAccess[] @relation("BoosterAccessReviewer")
   activity         ActivityEvent[]
@@ -678,6 +679,8 @@ model Run {
   warcraftLogsReports RunWarcraftLogsReport[]
   warcraftLogsFights  RunWarcraftLogsFight[]
   domainEvents        RunDomainEvent[]
+  /// At most one Community Schedule materialization link per Run.
+  communityScheduleRun CommunityScheduleRun?
 
   @@index([scheduledStartAt])
   @@index([status])
@@ -761,6 +764,7 @@ model RunTemplate {
   updatedBy          User           @relation("RunTemplateUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
   createdAt          TimestamptzString @default(now())
   updatedAt          temporal.updatedAtString()
+  communityScheduleSlots CommunityScheduleSlot[]
 
   @@index([raidLeadId, isActive])
   @@index([raidId])
@@ -779,11 +783,12 @@ enum CommunityWeekday {
   SUNDAY    = "SUNDAY"
 }
 
-/// Persistent COMMUNITY WEEKLY SCHEDULE slot — planning intent only.
+/// Persistent COMMUNITY WEEKLY SCHEDULE slot — recurring planning intent.
 /// Stores weekday + local HH:mm (Europe/Berlin wall-clock), never a concrete
-/// UTC occurrence and never a Run. Editing/deactivating a slot must never
-/// mutate existing Runs (snapshot independence, same principle as RunTemplate).
-/// Discord Schedule remains derived only from real Runs.
+/// UTC occurrence. Optional RunTemplate + autoCreateRun drive DRAFT Run
+/// materialization for CURRENT/NEXT raid-ID windows. Editing/deactivating a
+/// slot must never mutate already-materialized Runs (snapshot independence).
+/// Discord Schedule remains derived only from real Runs — never from slots.
 model CommunityScheduleSlot {
   id             String           @id @default(uuid())
   weekday        CommunityWeekday
@@ -793,6 +798,13 @@ model CommunityScheduleSlot {
   notes          String?
   raidLeadId     String
   raidLead       User             @relation("CommunityScheduleRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
+  /// Optional planning template. Required when autoCreateRun is true, and for
+  /// manual Create Run. Must be owned by the same raidLeadId (enforced in service).
+  runTemplateId  String?
+  runTemplate    RunTemplate?     @relation(fields: [runTemplateId], references: [id], onDelete: Restrict)
+  /// When true, hourly reconciliation ensures CURRENT (if still future) and NEXT
+  /// occurrences have DRAFT Runs. Turning off never deletes existing Runs.
+  autoCreateRun  Boolean          @default(false)
   isActive       Boolean          @default(true)
   createdById    String
   createdBy      User             @relation("CommunityScheduleCreator", fields: [createdById], references: [id], onDelete: Restrict)
@@ -800,13 +812,41 @@ model CommunityScheduleSlot {
   updatedBy      User             @relation("CommunityScheduleUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
   createdAt      TimestamptzString @default(now())
   updatedAt      temporal.updatedAtString()
+  materializations CommunityScheduleRun[]
 
   /// Same Raid Lead cannot own two slots at the exact same weekday + local time.
   /// Different Raid Leads at the same time are allowed (parallel teams).
   @@unique([raidLeadId, weekday, localStartTime])
   @@index([isActive, weekday, localStartTime], name: "css_active_day_time")
   @@index([raidLeadId, isActive], name: "css_lead_active")
+  @@index([runTemplateId], name: "css_template")
+  @@index([autoCreateRun, isActive], name: "css_auto_active")
   @@map("community_schedule_slot")
+}
+
+/// Durable link: one Community Schedule slot occurrence per raid-ID window → one Run.
+/// Identity is (scheduleSlotId, windowStartAt) so editing weekday/time after
+/// materialization cannot create a second Run in the same raid-ID window.
+/// occurrenceStartAt snapshots the concrete Run time at materialization.
+model CommunityScheduleRun {
+  id                 String                  @id @default(uuid())
+  scheduleSlotId     String
+  scheduleSlot       CommunityScheduleSlot   @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
+  /// Raid-ID window lower bound (Wed 06:00 Europe/Berlin) used for this occurrence.
+  windowStartAt      TimestamptzString
+  /// Concrete Run scheduledStartAt snapshot at materialization time.
+  occurrenceStartAt  TimestamptzString
+  runId              String                  @unique
+  run                Run                     @relation(fields: [runId], references: [id], onDelete: Restrict)
+  createdById        String?
+  createdBy          User?                   @relation("CommunityScheduleRunCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  /// USER = manual Create Run; SYSTEM = auto-create reconciliation job.
+  createdByKind      RunDomainEventActorKind
+  createdAt          TimestamptzString       @default(now())
+
+  @@unique([scheduleSlotId, windowStartAt])
+  @@index([scheduleSlotId, windowStartAt], name: "csr_slot_window")
+  @@map("community_schedule_run")
 }
 
 /// A user may offer more than one character for the same run.
