@@ -18,6 +18,10 @@ import {
   resolveEffectiveRunComposition,
   type EffectiveRunComposition,
 } from "@/lib/run-composition";
+import {
+  projectRunStaffingFromRun,
+  type RunStaffingProjection,
+} from "@/lib/run-staffing";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { DomainError } from "@/lib/errors";
 import { getDiscordManagementScheduleRoleId } from "@/lib/discord-config";
@@ -41,6 +45,7 @@ import {
   type CommunityWeekday,
   type RaidDifficulty,
   type RunLootType,
+  type RunStatus,
 } from "@/models/enums";
 import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import {
@@ -48,6 +53,7 @@ import {
   type CommunityScheduleSlotRecord,
 } from "@/repositories/community-schedule.repository";
 import { raidRepository } from "@/repositories/raid.repository";
+import { runRepository } from "@/repositories/run.repository";
 import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
 import { userRepository } from "@/repositories/user.repository";
 import {
@@ -97,10 +103,28 @@ export type CommunityScheduleOccurrenceView = {
   canMaterialize: boolean;
 };
 
+/**
+ * Read-only staffing overlay for one Schedule occurrence.
+ * MATERIALIZED → Run snapshot desired + authoritative selected roster.
+ * UNMATERIALIZED → planning target preview only (no fake Staffed/Missing).
+ */
+export type CommunityScheduleOccurrenceStaffing =
+  | {
+      kind: "RUN";
+      runStatus: RunStatus;
+      projection: RunStaffingProjection;
+    }
+  | {
+      kind: "PREVIEW";
+      target: EffectiveRunComposition;
+    }
+  | { kind: "NONE" };
+
 export type CommunityScheduleProjectedSlot = {
   slot: CommunityScheduleSlotRecord;
   occurrence: ScheduleOccurrence;
   materialization: CommunityScheduleOccurrenceView;
+  staffing: CommunityScheduleOccurrenceStaffing;
 };
 
 export type CommunityScheduleDayGroup = {
@@ -375,6 +399,58 @@ function slotEffectiveComposition(
   });
 }
 
+/**
+ * One batched Run/roster load for all materialized CURRENT/NEXT occurrences,
+ * then in-memory staffing projection. Unmaterialized rows get planning PREVIEW only.
+ */
+async function attachOccurrenceStaffing(
+  windows: CommunityScheduleWindowView[],
+  templatesById: Map<string, RunTemplateRecord>,
+): Promise<void> {
+  const runIds: string[] = [];
+  for (const window of windows) {
+    for (const day of window.days) {
+      for (const row of day.slots) {
+        const runId = row.materialization.runId;
+        if (runId) runIds.push(runId);
+      }
+    }
+  }
+
+  const runs = await runRepository.listManagedByIds(runIds);
+  const staffingByRunId = new Map(
+    runs.map((run) => [
+      run.id,
+      {
+        kind: "RUN" as const,
+        runStatus: run.status,
+        projection: projectRunStaffingFromRun(run),
+      },
+    ]),
+  );
+
+  for (const window of windows) {
+    for (const day of window.days) {
+      for (const row of day.slots) {
+        const runId = row.materialization.runId;
+        if (runId) {
+          row.staffing = staffingByRunId.get(runId) ?? { kind: "NONE" };
+          continue;
+        }
+        if (row.materialization.state === "PAST") {
+          row.staffing = { kind: "NONE" };
+          continue;
+        }
+        const template = row.slot.runTemplateId
+          ? templatesById.get(row.slot.runTemplateId)
+          : null;
+        const target = slotEffectiveComposition(row.slot, template);
+        row.staffing = target ? { kind: "PREVIEW", target } : { kind: "NONE" };
+      }
+    }
+  }
+}
+
 function weekdaySortIndex(weekday: CommunityWeekday): number {
   return COMMUNITY_WEEKDAYS.indexOf(weekday);
 }
@@ -624,6 +700,8 @@ function projectWindow(
         templateUnusableReason: templateMeta?.unusableReason ?? null,
         now,
       }),
+      // Filled in getPage after one batched roster load (or PREVIEW from planning).
+      staffing: { kind: "NONE" },
     });
   }
 
@@ -844,11 +922,15 @@ export const communityScheduleService = {
     const visibleSlots = canEdit ? slots : slots.filter((slot) => slot.isActive);
     const allTemplates = [...templatesById.values()];
 
+    const current = projectWindow(user, slots, "CURRENT", now, linksByKey, templateMetaById);
+    const next = projectWindow(user, slots, "NEXT", now, linksByKey, templateMetaById);
+    await attachOccurrenceStaffing([current, next], templatesById);
+
     return {
       canEdit,
       timeZone: COMMUNITY_SCHEDULE_TIME_ZONE,
-      current: projectWindow(user, slots, "CURRENT", now, linksByKey, templateMetaById),
-      next: projectWindow(user, slots, "NEXT", now, linksByKey, templateMetaById),
+      current,
+      next,
       slots: visibleSlots,
       runSetups: groupRunSetups(visibleSlots, canEdit, templatesById),
       runSetupInventory: buildRunSetupInventory(allTemplates, visibleSlots, canEdit),

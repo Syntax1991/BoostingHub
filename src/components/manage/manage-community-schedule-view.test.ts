@@ -73,6 +73,26 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     autoCreateRun: true,
     canMaterialize: true,
   };
+  const previewStaffing = {
+    kind: "PREVIEW" as const,
+    target: {
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      desiredLootbuddyCount: 0,
+    },
+  };
+  const runStaffing = {
+    kind: "RUN" as const,
+    runStatus: "DRAFT" as const,
+    projection: {
+      status: "NEEDS_STAFFING" as const,
+      desired: { tanks: 2, healers: 4, dps: 14, lootbuddies: 2 },
+      staffed: { tanks: 2, healers: 3, meleeDps: 5, rangedDps: 8, dps: 13, lootbuddies: 2 },
+      missing: { tanks: 0, healers: 1, dps: 1, lootbuddies: 0 },
+      overstaffed: { tanks: 0, healers: 0, dps: 0, lootbuddies: 0 },
+    },
+  };
   return {
     canEdit,
     timeZone: "Europe/Berlin",
@@ -223,7 +243,19 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         {
           localDate: "2026-01-16",
           weekday: "FRIDAY",
-          slots: [{ slot, occurrence, materialization }],
+          slots: [
+            {
+              slot,
+              occurrence,
+              materialization: {
+                ...materialization,
+                state: "RUN_CREATED",
+                runId: "run-1",
+                canMaterialize: false,
+              },
+              staffing: runStaffing,
+            },
+          ],
         },
       ],
     },
@@ -240,6 +272,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
               slot,
               occurrence: { ...occurrence, localDate: "2026-01-23", window: "NEXT" },
               materialization: { ...materialization, state: "NO_RUN_YET" },
+              staffing: previewStaffing,
             },
           ],
         },
@@ -288,8 +321,14 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Reactivate");
     expect(html).toContain("Current Raid ID");
     expect(html).toContain("Next Raid ID");
-    expect(html).toContain("Auto-create waiting");
-    expect(html).toContain("Create Run");
+    expect(html).toContain("Open Run");
+    expect(html).toContain("Target");
+    expect(html).toContain("Staffed");
+    expect(html).toContain("Missing");
+    expect(html).toContain("5 Melee · 8 Ranged");
+    expect(html).toContain("Not created yet");
+    expect(html).not.toContain("Missing Ranged");
+    expect(html).not.toContain("Missing Melee");
   });
 
   it("hides ADMIN edit controls for RAID_LEAD read-only page", () => {

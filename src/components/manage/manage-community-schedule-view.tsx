@@ -10,6 +10,7 @@ import { CommunityScheduleAddTimesDialog } from "@/components/manage/community-s
 import { CommunityScheduleDeleteSetupButton } from "@/components/manage/community-schedule-delete-setup-button";
 import { CommunityScheduleDuplicateSetupButton } from "@/components/manage/community-schedule-duplicate-setup-button";
 import { CommunityScheduleOccurrenceActions } from "@/components/manage/community-schedule-occurrence-actions";
+import { ScheduleOccurrenceStaffing } from "@/components/manage/schedule-occurrence-staffing";
 import { CommunitySchedulePlanDialog } from "@/components/manage/community-schedule-plan-dialog";
 import { CommunityScheduleShareDialog } from "@/components/manage/community-schedule-share-dialog";
 import { CommunityScheduleSlotFormDialog } from "@/components/manage/community-schedule-slot-form-dialog";
@@ -56,7 +57,7 @@ function WindowSection({
                 {communityWeekdayShortLabel(day.weekday)} · {day.localDate}
               </p>
               <ul className="mt-2 space-y-2">
-                {day.slots.map(({ slot, occurrence, materialization }) => (
+                {day.slots.map(({ slot, occurrence, materialization, staffing }) => (
                   <li
                     key={slot.id}
                     className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border px-3 py-2"
@@ -66,6 +67,7 @@ function WindowSection({
                         {occurrence.localStartTime} · {slot.label} · {slot.raidLeadName}
                       </p>
                       {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
+                      <ScheduleOccurrenceStaffing staffing={staffing} />
                     </div>
                     <div className="flex shrink-0 flex-wrap items-start justify-end gap-2">
                       <CommunityScheduleOccurrenceActions
