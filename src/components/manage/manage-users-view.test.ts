@@ -86,22 +86,27 @@ function samplePage() {
 }
 
 describe("ManageUsersView directory UX", () => {
-  it("renders read-only badges and Access/Manage actions without inline mutation controls", () => {
+  it("keeps directory columns without a Boosting Roles column", () => {
     const html = renderToStaticMarkup(
       createElement(ManageUsersView, { data: samplePage() as never }),
     );
 
     expect(html).toContain("Platform Role");
     expect(html).toContain("Boosting Access");
-    expect(html).toContain("Boosting Roles");
-    expect(html).toContain("Tank");
-    expect(html).toContain("Healer");
+    expect(html).toContain("Account Status");
+    expect(html).toContain("Characters");
+    expect(html).toContain("Pending");
+    expect(html).toContain("Actions");
     expect(html).toContain("Booster");
     expect(html).toContain("Access");
     expect(html).toContain("Manage");
     expect(html).toContain('href="/manage/users/user-1"');
     expect(html).toContain('href="/manage/users/user-2"');
     expect(html).toContain('href="/manage/users/user-owner"');
+
+    // Directory table/mobile must not surface Character roles as a column.
+    expect(html).not.toMatch(/<th[^>]*>Boosting Roles<\/th>/);
+    expect(html).not.toMatch(/<dt[^>]*>Boosting Roles<\/dt>/);
 
     expect(html).not.toContain("Change role");
     expect(html).not.toContain(">Grant<");
@@ -113,8 +118,17 @@ describe("ManageUsersView directory UX", () => {
     const html = renderToStaticMarkup(
       createElement(ManageUsersView, { data: samplePage() as never }),
     );
-    // Plain User has pendingAccessCount 1 and no booster / no character roles.
     expect(html).toContain("Plain User");
     expect(html).toMatch(/Pending[\s\S]*?>1</);
+  });
+
+  it("still passes Character roles into Access dialog context", () => {
+    const html = renderToStaticMarkup(
+      createElement(ManageUsersView, { data: samplePage() as never }),
+    );
+    // Access modal retains read-only role context (not a directory column).
+    expect(html).toContain("Manage Access");
+    expect(html).toContain("Tank");
+    expect(html).toContain("Healer");
   });
 });

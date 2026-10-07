@@ -51,7 +51,8 @@ export type AdminUserListRow = {
   isLootbuddy: boolean;
   /**
    * Distinct concrete roles across active Characters (informational).
-   * Independent of User.isBooster.
+   * Independent of User.isBooster. Used by Access modal context — not a
+   * directory table column.
    */
   characterRoles: ConcreteCharacterRole[];
   /** Unresolved legacy in-app requests (historical BoosterAccess). */
