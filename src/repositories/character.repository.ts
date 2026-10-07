@@ -209,6 +209,42 @@ export const characterRepository = {
     );
   },
 
+  /**
+   * Active Characters of ACTIVE approved Boosters — one User query + one Character
+   * query with lockouts/playableSpecs (Roster Assistant candidate pool; never N+1).
+   */
+  async listActiveBoosterCharacters(): Promise<
+    Array<CharacterPageRecord & { ownerName: string }>
+  > {
+    const boosterRows = (await orm.User.where({
+      accountStatus: "ACTIVE",
+      isBooster: true,
+    })
+      .select("id", "name")
+      .all()) as Array<Record<string, unknown>>;
+    if (boosterRows.length === 0) return [];
+
+    const ownerNameById = new Map(
+      boosterRows.map((row) => [asString(row.id), asString(row.name)]),
+    );
+    const boosterIds = [...ownerNameById.keys()];
+
+    const characters = await orm.Character.where({ isActive: true })
+      .where((character) => character.userId.in(boosterIds))
+      .include("playableSpecs")
+      .include("lockouts", (lockout) => lockout.include("raid"))
+      .orderBy((character) => character.name.asc())
+      .all();
+
+    const withAccess = await withOwnerBoosterRole(
+      characters.map((character) => mapCharacter(character as Record<string, unknown>)),
+    );
+    return withAccess.map((character) => ({
+      ...character,
+      ownerName: ownerNameById.get(character.userId) ?? "Unknown",
+    }));
+  },
+
   async findById(characterId: string): Promise<CharacterPageRecord | null> {
     const character = await orm.Character
       .where({ id: characterId })

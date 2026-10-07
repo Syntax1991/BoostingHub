@@ -67,7 +67,10 @@ function WindowSection({
                         {occurrence.localStartTime} · {slot.label} · {slot.raidLeadName}
                       </p>
                       {slot.notes ? <p className="mt-0.5 text-xs text-muted">{slot.notes}</p> : null}
-                      <ScheduleOccurrenceStaffing staffing={staffing} />
+                      <ScheduleOccurrenceStaffing
+                        staffing={staffing}
+                        runId={materialization.runId}
+                      />
                     </div>
                     <div className="flex shrink-0 flex-wrap items-start justify-end gap-2">
                       <CommunityScheduleOccurrenceActions

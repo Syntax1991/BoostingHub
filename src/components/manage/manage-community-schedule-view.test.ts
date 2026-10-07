@@ -326,6 +326,7 @@ describe("ManageCommunityScheduleView", () => {
     expect(html).toContain("Staffed");
     expect(html).toContain("Missing");
     expect(html).toContain("5 Melee · 8 Ranged");
+    expect(html).toContain("Roster Assistant");
     expect(html).toContain("Not created yet");
     expect(html).not.toContain("Missing Ranged");
     expect(html).not.toContain("Missing Melee");
