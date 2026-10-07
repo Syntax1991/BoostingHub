@@ -5,6 +5,7 @@ import {
   applyRosterBuilderAction,
   proposeRosterBuilderAction,
 } from "@/controllers/roster.actions";
+import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/datetime";
 import {
   formatCompositionCounts,
@@ -302,13 +303,9 @@ export function RosterBuilderTrigger({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex h-7 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
-      >
+      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
         Auto Build Roster
-      </button>
+      </Button>
       {open ? (
         <RosterBuilderDialog
           runId={runId}
