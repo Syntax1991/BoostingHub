@@ -1,3 +1,4 @@
+import { RosterAssistantTrigger } from "@/components/manage/roster-assistant-dialog";
 import {
   formatCompositionCounts,
   formatMissingCounts,
@@ -17,11 +18,14 @@ const RUN_STATUS_LABELS: Record<string, string> = {
 /**
  * Compact read-only staffing overlay for one Schedule occurrence.
  * Aggregate DPS only — Melee/Ranged split is informational.
+ * Roster Assistant opens on demand for materialized shortages.
  */
 export function ScheduleOccurrenceStaffing({
   staffing,
+  runId,
 }: {
   staffing: CommunityScheduleOccurrenceStaffing;
+  runId?: string;
 }) {
   if (staffing.kind === "NONE") return null;
 
@@ -44,7 +48,7 @@ export function ScheduleOccurrenceStaffing({
 
   const { projection, runStatus } = staffing;
   const target = formatCompositionCounts(projection.desired);
-  const staffed = formatCompositionCounts({
+  const staffedLine = formatCompositionCounts({
     tanks: projection.staffed.tanks,
     healers: projection.staffed.healers,
     dps: projection.staffed.dps,
@@ -57,7 +61,7 @@ export function ScheduleOccurrenceStaffing({
       : null;
 
   return (
-    <div className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-muted">
+    <div className="mt-1.5 space-y-1 text-[11px] leading-snug text-muted">
       <p className="text-[10px] uppercase tracking-wide">
         {RUN_STATUS_LABELS[runStatus] ?? runStatus}
       </p>
@@ -65,15 +69,22 @@ export function ScheduleOccurrenceStaffing({
         <span className="font-medium text-foreground/80">Target</span> {target}
       </p>
       <p>
-        <span className="font-medium text-foreground/80">Staffed</span> {staffed}
+        <span className="font-medium text-foreground/80">Staffed</span> {staffedLine}
       </p>
       {split ? <p className="text-muted">{split}</p> : null}
       {projection.status === "FULLY_STAFFED" ? (
         <p className="font-medium text-success">Fully staffed</p>
       ) : (
-        <p>
-          <span className="font-medium text-warning">Missing</span> {missing}
-        </p>
+        <>
+          <p>
+            <span className="font-medium text-warning">Missing</span> {missing}
+          </p>
+          {runId ? (
+            <div className="pt-0.5">
+              <RosterAssistantTrigger runId={runId} />
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

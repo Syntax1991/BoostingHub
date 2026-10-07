@@ -6,7 +6,6 @@ import type {
   WowClass,
 } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
-import type { CharacterRunReservationConflict } from "@/models/records";
 import { DomainError } from "@/lib/errors";
 import { preferDefaultCharacterId } from "@/lib/default-character-preference";
 import { CHARACTER_ROLE_LABELS } from "@/lib/labels";
@@ -22,6 +21,7 @@ import { signupRepository } from "@/repositories/signup.repository";
 import { userRepository } from "@/repositories/user.repository";
 import type { IneligibleBoosterCharacter } from "@/services/signup-eligibility";
 import { assertSignupWindowOpen, evaluateBoosterOptions } from "@/services/signup-eligibility";
+import { withSignupEligibilityContext } from "@/services/signup-eligibility-context";
 import { isApprovedBooster } from "@/services/boosting-role.service";
 import {
   assertSignupTransition,
@@ -37,60 +37,9 @@ import {
   getScheduleConflictsForCharacters,
   type CharacterScheduleConflict,
 } from "@/services/character-schedule-conflict.service";
-import { characterWeeklyAvailabilityService } from "@/services/character-weekly-availability.service";
 
 export type { QuickSignupBoostersResult } from "@/lib/quick-signup-message";
 export { formatQuickSignupBoostersMessage } from "@/lib/quick-signup-message";
-
-/**
- * Attaches cross-Run reservation info to a batch of Characters in one query
- * (never N+1 per Character). BOOSTER-only concern: characterless LOOTBUDDY
- * entries never enter this path; Character-backed legacy Lootbuddy rows are
- * also not reservation-checked (see roster draft selection).
- */
-async function withReservationConflicts<T extends { id: string }>(
-  characters: T[],
-  targetRunId: string,
-  scheduledStartAt: string,
-): Promise<Array<T & { reservationConflict: CharacterRunReservationConflict | null }>> {
-  if (characters.length === 0) {
-    return [];
-  }
-  const conflicts = await signupRepository.findReservationConflicts({
-    characterIds: characters.map((character) => character.id),
-    excludeRunId: targetRunId,
-    scheduledStartAt,
-  });
-  const byId = new Map(
-    conflicts.map((row) => [
-      row.characterId,
-      { runId: row.runId, runTitle: row.runTitle, scheduledStartAt: row.scheduledStartAt },
-    ]),
-  );
-  return characters.map((character) => ({ ...character, reservationConflict: byId.get(character.id) ?? null }));
-}
-
-async function withSignupEligibilityContext<
-  T extends { id: string; name: string; region: import("@/models/enums").WowRegion },
->(
-  characters: T[],
-  targetRunId: string,
-  scheduledStartAt: string,
-  difficulty: import("@/models/enums").RaidDifficulty,
-) {
-  const [withReservations, unavailableIds] = await Promise.all([
-    withReservationConflicts(characters, targetRunId, scheduledStartAt),
-    characterWeeklyAvailabilityService.listUnavailableForRun(
-      characters,
-      scheduledStartAt,
-      difficulty,
-    ),
-  ]);
-  return withReservations.map((character) => ({
-    ...character,
-    weeklyUnavailable: unavailableIds.has(character.id),
-  }));
-}
 
 function uniqueViolation(error: unknown): boolean {
   return error instanceof Error && /unique|duplicate|constraint/i.test(error.message);

@@ -2,6 +2,7 @@
 
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
+import { rosterAssistantService } from "@/services/roster-assistant.service";
 import { rosterService } from "@/services/roster.service";
 import {
   publishRosterSchema,
@@ -136,5 +137,21 @@ export async function repostRosterAction(input: unknown): Promise<ActionResult> 
     return { ok: true, message: "The roster will be posted to Discord again." };
   } catch (error) {
     return mapActionError(error);
+  }
+}
+
+type RosterAssistantData = Awaited<ReturnType<typeof rosterAssistantService.getRosterAssistant>>;
+
+/** Read-only deterministic candidate suggestions for staffing shortages. Never mutates roster. */
+export async function getRosterAssistantAction(
+  input: unknown,
+): Promise<ActionResult & { data: RosterAssistantData | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = rosterRunSchema.parse(input);
+    const data = await rosterAssistantService.getRosterAssistant(user, parsed.runId);
+    return { ok: true, message: "Roster assistant loaded.", data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
   }
 }
