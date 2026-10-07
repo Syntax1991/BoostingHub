@@ -442,6 +442,22 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
     expect(overrideRun?.desiredHealerCount).toBe(5);
     expect(overrideRun?.desiredDpsCount).toBe(12);
 
+    const pageBeforeEdit = await communityScheduleService.getPage(admin, now);
+    const inheritStaffing = pageBeforeEdit.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === inheritSlot.id)?.staffing;
+    const overrideStaffing = pageBeforeEdit.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === overrideSlot.id)?.staffing;
+    expect(inheritStaffing).toMatchObject({
+      kind: "RUN",
+      projection: { desired: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 } },
+    });
+    expect(overrideStaffing).toMatchObject({
+      kind: "RUN",
+      projection: { desired: { tanks: 3, healers: 5, dps: 12, lootbuddies: 0 } },
+    });
+
     await runTemplateRepository.update(sharedTemplateId, {
       name: "CSM Shared Composition Template",
       difficulty: "HEROIC",
@@ -454,6 +470,30 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       notes: null,
       updatedById: ids.admin,
     });
+
+    const pageAfterTemplateEdit = await communityScheduleService.getPage(admin, now);
+    const inheritStaffingAfter = pageAfterTemplateEdit.next.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === inheritSlot.id)?.staffing;
+    expect(inheritStaffingAfter).toMatchObject({
+      kind: "RUN",
+      projection: { desired: { tanks: 2, healers: 4, dps: 14, lootbuddies: 0 } },
+    });
+    // Unmaterialized CURRENT occurrence preview follows live planning (new template defaults).
+    const inheritCurrent = pageAfterTemplateEdit.current.days
+      .flatMap((day) => day.slots)
+      .find((row) => row.slot.id === inheritSlot.id);
+    if (inheritCurrent && !inheritCurrent.materialization.runId) {
+      expect(inheritCurrent.staffing).toMatchObject({
+        kind: "PREVIEW",
+        target: {
+          desiredTankCount: 4,
+          desiredHealerCount: 6,
+          desiredDpsCount: 10,
+          desiredLootbuddyCount: 0,
+        },
+      });
+    }
 
     const later = new Date("2027-02-12T12:00:00.000Z");
     const inheritSecond = await communityScheduleMaterializationService.materializeOccurrence(
