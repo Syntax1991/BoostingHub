@@ -1,12 +1,24 @@
 import Link from "next/link";
 import { hasOwnerAccess } from "@/auth/authorization";
 import { formatDateTime } from "@/lib/datetime";
-import { ROLE_LABELS, REGION_LABELS } from "@/lib/labels";
+import {
+  CHARACTER_ROLE_LABELS,
+  DIFFICULTY_LABELS,
+  ROLE_LABELS,
+  REGION_LABELS,
+} from "@/lib/labels";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
 import type { AccountRole, BoostingRole, CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { AccountRoleBadge, ClassBadge, RoleBadge } from "@/components/ui/badges";
+import {
+  AccountRoleBadge,
+  ClassBadge,
+  DifficultyBadge,
+  RoleBadge,
+} from "@/components/ui/badges";
 import { AccountRoleAction } from "@/components/manage/account-role-action";
+import { ApproveBoosterAccessButton } from "@/components/manage/approve-booster-access-button";
+import { BoosterAccessReviewDialog } from "@/components/manage/booster-access-review-dialog";
 import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
 import { AddStrikeDialog } from "@/components/manage/add-strike-dialog";
 import { RevokeStrikeDialog } from "@/components/manage/revoke-strike-dialog";
@@ -27,7 +39,15 @@ function asRegion(value: string): WowRegion {
 }
 
 export function ManageUserDetailView({ data }: { data: Page }) {
-  const { user, characters, boostingRoles, audit, strikes, currentLockoutRaids } = data;
+  const {
+    user,
+    characters,
+    boostingRoles,
+    audit,
+    strikes,
+    currentLockoutRaids,
+    pendingAccess,
+  } = data;
   const roleRows: Array<{ role: BoostingRole; label: string; enabled: boolean; description: string }> = [
     {
       role: "BOOSTER",
@@ -64,7 +84,10 @@ export function ManageUserDetailView({ data }: { data: Page }) {
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Overview" />
+          <CardHeader
+            title="Account"
+            description="Identity and account status."
+          />
           <dl className="grid grid-cols-2 gap-3 px-4 py-4 text-sm">
             <div className="col-span-2 flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-surface-raised text-sm font-semibold">
@@ -84,7 +107,9 @@ export function ManageUserDetailView({ data }: { data: Page }) {
             </div>
             <div>
               <dt className="text-muted">Status</dt>
-              <dd className="mt-1">{user.accountStatus}</dd>
+              <dd className="mt-1">
+                {user.accountStatus === "ACTIVE" ? "Active" : "Disabled"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Joined</dt>
@@ -103,7 +128,7 @@ export function ManageUserDetailView({ data }: { data: Page }) {
 
         <Card>
           <CardHeader
-            title="Account role"
+            title="Platform access"
             description={`${ROLE_LABELS[user.accountRole]} · platform permissions only.`}
             action={
               <AccountRoleAction
@@ -128,8 +153,8 @@ export function ManageUserDetailView({ data }: { data: Page }) {
 
         <Card className="lg:col-span-2">
           <CardHeader
-            title="Boosting roles"
-            description="Operational participation, independent of the account role and of each other. Not scoped by raid difficulty."
+            title="Boosting access"
+            description="Approved Booster / Lootbuddy roles and any unresolved historical requests. Not scoped by raid difficulty."
           />
           <ul className="divide-y divide-border">
             {roleRows.map((row) => (
@@ -155,6 +180,42 @@ export function ManageUserDetailView({ data }: { data: Page }) {
               </li>
             ))}
           </ul>
+          {pendingAccess.length > 0 ? (
+            <div className="border-t border-border px-4 py-4">
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted">
+                Pending requests · {pendingAccess.length}
+              </h3>
+              <ul className="mt-3 space-y-3">
+                {pendingAccess.map((row) => {
+                  const character = row.characterName
+                    ? `${row.characterName}${row.realm ? `-${row.realm}` : ""}`
+                    : null;
+                  const line = character
+                    ? `${character} · ${CHARACTER_ROLE_LABELS[row.role]} · ${DIFFICULTY_LABELS[row.difficulty]}`
+                    : `${CHARACTER_ROLE_LABELS[row.role]} · ${DIFFICULTY_LABELS[row.difficulty]}`;
+                  return (
+                    <li
+                      key={row.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border px-3 py-3 text-sm"
+                    >
+                      <div className="min-w-0 space-y-2">
+                        <p className="font-medium">{line}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <ClassBadge wowClass={row.wowClass} />
+                          <RoleBadge role={row.role} />
+                          <DifficultyBadge difficulty={row.difficulty} />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <ApproveBoosterAccessButton accessId={row.id} />
+                        <BoosterAccessReviewDialog accessId={row.id} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
         </Card>
 
         <Card className="lg:col-span-2">

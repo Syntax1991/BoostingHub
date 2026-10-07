@@ -27,6 +27,9 @@ export type AdminUserListFilters = {
   role?: AccountRole;
   /** Boosting Role filter: holds BOOSTER / holds LOOTBUDDY / holds neither. */
   boostingRole?: BoostingRole | "NONE";
+  accountStatus?: AccountStatus;
+  /** When true, only users with at least one PENDING BoosterAccess row. */
+  pendingAccess?: boolean;
   sort?: "name" | "joined_desc" | "joined_asc" | "role";
 };
 
@@ -525,6 +528,12 @@ export const userRepository = {
     }
     if (filters.boostingRole === "NONE") {
       rows = rows.filter((row) => !row.isBooster && !row.isLootbuddy);
+    }
+    if (filters.accountStatus) {
+      rows = rows.filter((row) => row.accountStatus === filters.accountStatus);
+    }
+    if (filters.pendingAccess) {
+      rows = rows.filter((row) => row.pendingAccessCount > 0);
     }
 
     const sort = filters.sort ?? "name";

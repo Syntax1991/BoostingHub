@@ -16,7 +16,6 @@ function revalidateAccessSurfaces(characterId?: string | null) {
   revalidatePath("/profile");
   revalidatePath("/runs");
   revalidatePath("/manage");
-  revalidatePath("/manage/boosting-roles");
   revalidatePath("/manage/users");
   if (characterId) {
     revalidatePath(`/characters/${characterId}`);

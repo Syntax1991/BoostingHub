@@ -58,7 +58,6 @@ describe("account role hierarchy — OWNER > ADMIN > RAID_LEAD > USER", () => {
       "overview",
       "runs",
       "schedule",
-      "boosting-roles",
       "users",
       "characters",
       "analytics",

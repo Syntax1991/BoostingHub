@@ -16,11 +16,8 @@ import { sessionManagementService } from "@/services/session-management.service"
 import { runTemplateService } from "@/services/run-template.service";
 import { requireAdminOrRedirect, requireManagerOrRedirect } from "@/auth/session";
 import { parseManageTemplateFilters } from "@/validators/run-template";
-import { boosterAccessService } from "@/services/booster-access.service";
 import { managementHubService } from "@/services/management-hub.service";
 import { userManagementService } from "@/services/user-management.service";
-import { userRepository } from "@/repositories/user.repository";
-import { parseBoostingRolesPageFilters } from "@/validators/boosting-roles";
 import { parseAdminUserFilters } from "@/validators/user-management";
 import { characterOperationsService } from "@/services/character-operations.service";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
@@ -238,52 +235,20 @@ export const managementController = {
     };
   },
 
-  async getBoostingRolesPage(searchParams: {
-    view?: string | string[];
-    role?: string | string[];
-    query?: string | string[];
-    difficulty?: string | string[];
-    requestedRole?: string | string[];
-  }) {
-    const user = await requireAdminOrRedirect("/manage/boosting-roles");
-    const filters = parseBoostingRolesPageFilters(searchParams);
-    const [counts, legacy] = await Promise.all([
-      userRepository.countBoostingRoles(),
-      boosterAccessService.listLegacyRequests(user, {
-        difficulty: filters.difficulty,
-        role: filters.requestedRole,
-        query: filters.view === "legacy" ? filters.query : undefined,
-      }),
-    ]);
-    const users =
-      filters.view === "roles"
-        ? await userManagementService.listUsers(user, {
-            query: filters.query,
-            boostingRole: filters.role === "ALL" ? undefined : filters.role,
-            sort: "name",
-          })
-        : [];
-    return {
-      filters,
-      counts,
-      users,
-      legacyPendingCount: legacy.pendingCount,
-      legacyRequests: filters.view === "legacy" ? legacy.requests : [],
-    };
-  },
-
   async getUsersPage(searchParams: {
+    view?: string | string[];
     query?: string | string[];
     role?: string | string[];
     boostingRole?: string | string[];
+    accountStatus?: string | string[];
+    pendingAccess?: string | string[];
     sort?: string | string[];
+    difficulty?: string | string[];
+    requestedRole?: string | string[];
   } = {}) {
     const user = await requireAdminOrRedirect("/manage/users");
     const filters = parseAdminUserFilters(searchParams);
-    return {
-      filters,
-      users: await userManagementService.listUsers(user, filters),
-    };
+    return userManagementService.getUsersAdminPage(user, filters);
   },
 
   async getUserDetailPage(userId: string) {

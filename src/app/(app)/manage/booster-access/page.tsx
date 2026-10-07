@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
 /**
- * Booster Access became Boosting Roles (User.isBooster / User.isLootbuddy).
- * Old links keep working: legacy-request links open the Legacy Requests tab.
+ * Historical /manage/booster-access URLs redirect into the canonical Users
+ * Pending Boosting Access view (via the former Boosting Roles legacy tab).
  */
 export default async function ManageBoosterAccessRedirect({
   searchParams,
@@ -11,6 +11,6 @@ export default async function ManageBoosterAccessRedirect({
 }) {
   const params = await searchParams;
   const first = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
-  const legacy = first(params.view) === "legacy" || first(params.status) === "PENDING";
-  redirect(legacy ? "/manage/boosting-roles?view=legacy" : "/manage/boosting-roles");
+  const pending = first(params.view) === "legacy" || first(params.status) === "PENDING";
+  redirect(pending ? "/manage/users?view=boosting-access" : "/manage/users");
 }

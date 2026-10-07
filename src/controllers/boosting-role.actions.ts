@@ -19,7 +19,6 @@ export async function setBoostingRoleAction(input: unknown): Promise<ActionResul
     const result = await boostingRoleService.setRole(admin, parsed);
 
     revalidatePath("/manage");
-    revalidatePath("/manage/boosting-roles");
     revalidatePath("/manage/users");
     revalidatePath(`/manage/users/${parsed.userId}`);
     revalidatePath("/manage/characters");

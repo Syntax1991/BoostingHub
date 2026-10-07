@@ -18,7 +18,7 @@ This is the long-term surface for participant information and, when authorized, 
 | `/manage/runs` | Manager Run index for existing Runs. Actions link to `/runs/[runId]` |
 | `/manage/runs/create` | Compatibility redirect to `/runs/create` |
 | `/manage/runs/[runId]` | Compatibility redirect to `/runs/[runId]` |
-| `/manage/boosting-roles` | Global ADMIN Boosting Roles + legacy request review (not moved onto a Run) |
+| `/manage/users` | Global ADMIN user directory + Boosting Roles / pending access review (not moved onto a Run) |
 
 Do not maintain a second independent Run detail implementation under `/manage`.
 
