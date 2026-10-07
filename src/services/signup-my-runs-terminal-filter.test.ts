@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import type { RunStatus, SignupStatus } from "@/models/enums";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
+import { rosterRepository } from "@/repositories/roster.repository";
 import type { SignupListRecord } from "@/repositories/signup.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import * as scheduleConflictService from "@/services/character-schedule-conflict.service";
@@ -70,6 +71,7 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
     vi.spyOn(scheduleConflictService, "getScheduleConflictsForCharacters").mockResolvedValue(
       new Map(),
     );
+    vi.spyOn(rosterRepository, "listDraftSelectedRolesBySignupIds").mockResolvedValue(new Map());
   });
 
   it("includes OPEN + PENDING under pending", async () => {
@@ -97,6 +99,23 @@ describe("signupService.getMyRuns — terminal Run filter", () => {
     ]);
     const mine = await signupService.getMyRuns(user);
     expect(mine.selected.map((row) => row.id)).toEqual(["s3"]);
+    expect(mine.selected[0]?.selectionState).toBe("PUBLISHED");
+  });
+
+  it("includes OPEN + PENDING draft pick under selected as DRAFT", async () => {
+    vi.spyOn(signupRepository, "listByUserId").mockResolvedValue([
+      makeSignup({ id: "s-draft", runId: "r-open-draft", runStatus: "OPEN", status: "PENDING" }),
+      makeSignup({ id: "s-offer", runId: "r-open-draft", runStatus: "OPEN", status: "PENDING" }),
+    ]);
+    vi.spyOn(rosterRepository, "listDraftSelectedRolesBySignupIds").mockResolvedValue(
+      new Map([["s-draft", "HEALER"]]),
+    );
+    const mine = await signupService.getMyRuns(user);
+    expect(mine.selected.map((row) => row.id)).toEqual(["s-draft"]);
+    expect(mine.selected[0]?.selectionState).toBe("DRAFT");
+    expect(mine.selected[0]?.displayRole).toBe("HEALER");
+    expect(mine.pending.map((row) => row.id)).toEqual(["s-offer"]);
+    expect(mine.pending[0]?.selectionState).toBe("OFFERED");
   });
 
   it("includes IN_PROGRESS + SELECTED under selected", async () => {

@@ -66,7 +66,8 @@ function toCommitment(item: MyRunSignupItem): DashboardPersonalCommitment {
     participationType: item.participationType,
     characterId: item.characterId,
     characterName: item.characterName,
-    publishedRole: item.publishedRole,
+    /** Authoritative selected role (draft selectedRole or publishedRole). */
+    publishedRole: item.displayRole ?? item.publishedRole,
     isBackup: item.isBackup,
     lootbuddyClass: item.lootbuddyClass,
     lootbuddyMode: item.lootbuddyMode,
@@ -76,7 +77,7 @@ function toCommitment(item: MyRunSignupItem): DashboardPersonalCommitment {
 
 /**
  * Pure personal attention projection from authoritative My Runs DTO.
- * SELECTED on upcoming statuses only; PENDING count excludes terminal Runs.
+ * Draft-selected and published-selected upcoming rows; PENDING count excludes terminal Runs.
  */
 export function projectPersonalDashboardAttention(myRuns: MyRunsProjection): DashboardPersonalAttention {
   const activeSelected = myRuns.selected
@@ -96,7 +97,7 @@ export function projectPersonalDashboardAttention(myRuns: MyRunsProjection): Das
       runTitle: item.runTitle,
       scheduledStartAt: item.scheduledStartAt,
       characterName: item.characterName,
-      publishedRole: item.publishedRole,
+      publishedRole: item.displayRole ?? item.publishedRole,
       messages: item.scheduleConflicts.map((conflict) => conflict.message),
     });
   }

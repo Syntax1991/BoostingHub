@@ -67,9 +67,25 @@ export function RunSignupsSection({ data }: { data: RunDetailView }) {
 
 function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] }) {
   const active = signups.filter((signup) => signup.status !== "WITHDRAWN");
-  const selected = active.find((signup) => signup.status === "SELECTED");
-  const stillPending = active.some((signup) => signup.status === "PENDING");
-  const selectedLabel = selected ? characterLabel(selected) : stillPending ? "Pending" : "Not selected";
+  const selected = active.find(
+    (signup) => signup.selectionState === "DRAFT" || signup.selectionState === "PUBLISHED",
+  );
+  const stillOffered = active.some((signup) => signup.selectionState === "OFFERED");
+  const selectedLabel = selected
+    ? [
+        characterLabel(selected),
+        selected.displayRole ? CHARACTER_ROLE_LABELS[selected.displayRole] : null,
+        selected.selectionState === "DRAFT"
+          ? "Draft"
+          : selected.selectionState === "PUBLISHED"
+            ? "Confirmed"
+            : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : stillOffered
+      ? "Pending"
+      : "Not selected";
 
   return (
     <Card>
@@ -104,6 +120,16 @@ function OwnSignupList({ signups }: { signups: RunDetailView["viewerSignups"] })
                   <ParticipationBadge type={signup.participationType} />
                   <OfferedRolesBadges roles={signup.offeredRoles} />
                   <SignupStatusBadge status={signup.status} />
+                  {signup.selectionState === "DRAFT" ? (
+                    <span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                      Selected · Draft
+                    </span>
+                  ) : null}
+                  {signup.selectionState === "PUBLISHED" ? (
+                    <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-success">
+                      Selected · Confirmed
+                    </span>
+                  ) : null}
                   {signup.participationType === "BOOSTER" ? (
                     <span>{signup.isBackup ? "Backup" : "Primary"}</span>
                   ) : null}

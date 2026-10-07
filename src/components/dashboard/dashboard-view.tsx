@@ -104,7 +104,7 @@ export function DashboardView({ data, timeZone }: { data: DashboardData; timeZon
         <Card>
           <CardHeader
             title="Next selected run"
-            description="Published SELECTED commitments only."
+            description="Draft-selected or published roster commitments."
             action={
               <Link href="/my-runs" className="text-xs text-accent hover:underline">
                 My Runs

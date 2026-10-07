@@ -492,6 +492,28 @@ export const rosterRepository = {
   },
 
   /**
+   * Batched current draft picks for many signups (one query).
+   * Key = signupId → selectedRole (null for LOOTBUDDY / unresolved).
+   * Only `selected: true` entries; deselected rows are deleted and absent.
+   */
+  async listDraftSelectedRolesBySignupIds(
+    signupIds: readonly string[],
+  ): Promise<Map<string, CharacterRole | null>> {
+    const unique = [...new Set(signupIds.filter(Boolean))];
+    if (unique.length === 0) return new Map();
+    const rows = (await orm.RunRosterEntry.where((entry) => entry.signupId.in(unique))
+      .where({ selected: true })
+      .select("signupId", "selectedRole")
+      .all()) as Array<Record<string, unknown>>;
+    return new Map(
+      rows.map((row) => [
+        asString(row.signupId),
+        row.selectedRole == null ? null : mapCharacterRole(row.selectedRole),
+      ]),
+    );
+  },
+
+  /**
    * Live published roster participants: roster entries that are selected and whose
    * signup is currently SELECTED. Replacement draft flags are ignored.
    */
