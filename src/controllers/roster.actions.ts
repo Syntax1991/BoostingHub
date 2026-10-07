@@ -2,9 +2,10 @@
 
 import { requireUser } from "@/auth/session";
 import { mapActionError, type ActionResult } from "@/lib/action-result";
-import { rosterAssistantService } from "@/services/roster-assistant.service";
+import { rosterBuilderService } from "@/services/roster-builder.service";
 import { rosterService } from "@/services/roster.service";
 import {
+  applyRosterBuilderSchema,
   publishRosterSchema,
   repostRosterSchema,
   updateRosterSchema,
@@ -140,17 +141,31 @@ export async function repostRosterAction(input: unknown): Promise<ActionResult> 
   }
 }
 
-type RosterAssistantData = Awaited<ReturnType<typeof rosterAssistantService.getRosterAssistant>>;
+type RosterBuilderData = Awaited<ReturnType<typeof rosterBuilderService.proposeRoster>>;
 
-/** Read-only deterministic candidate suggestions for staffing shortages. Never mutates roster. */
-export async function getRosterAssistantAction(
+/** On-demand deterministic roster proposal from Run signups. Does not mutate. */
+export async function proposeRosterBuilderAction(
   input: unknown,
-): Promise<ActionResult & { data: RosterAssistantData | null }> {
+): Promise<ActionResult & { data: RosterBuilderData | null }> {
   try {
     const user = await requireUser();
     const parsed = rosterRunSchema.parse(input);
-    const data = await rosterAssistantService.getRosterAssistant(user, parsed.runId);
-    return { ok: true, message: "Roster assistant loaded.", data };
+    const data = await rosterBuilderService.proposeRoster(user, parsed.runId);
+    return { ok: true, message: "Roster proposal ready.", data };
+  } catch (error) {
+    return { ...mapActionError(error), data: null };
+  }
+}
+
+/** Apply a generated proposal via authoritative draft selection. Revalidates server-side. */
+export async function applyRosterBuilderAction(
+  input: unknown,
+): Promise<ActionResult & { data: RosterBuilderData | null }> {
+  try {
+    const user = await requireUser();
+    const parsed = applyRosterBuilderSchema.parse(input);
+    const data = await rosterBuilderService.applyRosterProposal(user, parsed);
+    return { ok: true, message: "Roster proposal applied.", data };
   } catch (error) {
     return { ...mapActionError(error), data: null };
   }

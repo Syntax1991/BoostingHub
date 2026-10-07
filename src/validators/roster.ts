@@ -57,6 +57,13 @@ export const rosterVersionSchema = z.object({
   version: z.number().int().positive(),
 });
 
+/** Apply Auto Build Roster proposal — new picks only; server revalidates. */
+export const applyRosterBuilderSchema = z.object({
+  runId: entityIdSchema,
+  expectedVersion: z.number().int().positive(),
+  selections: z.array(rosterSelectionSchema).max(80),
+});
+
 export const publishRosterSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),
