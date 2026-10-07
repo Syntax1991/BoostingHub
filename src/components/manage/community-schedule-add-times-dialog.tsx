@@ -69,6 +69,11 @@ export function CommunityScheduleAddTimesDialog({
         })),
         autoCreateRun,
         notes,
+        compositionOverrideEnabled: false,
+        desiredTankCountOverride: null,
+        desiredHealerCountOverride: null,
+        desiredDpsCountOverride: null,
+        desiredLootbuddyCountOverride: null,
       });
       if (!result.ok) {
         setError(result.message);

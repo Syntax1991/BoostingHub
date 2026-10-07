@@ -89,6 +89,11 @@ function WindowSection({
                               runTemplateId: slot.runTemplateId,
                               autoCreateRun: slot.autoCreateRun,
                               runMode: slot.runMode,
+                              compositionOverrideEnabled: slot.compositionOverrideEnabled,
+                              desiredTankCountOverride: slot.desiredTankCountOverride,
+                              desiredHealerCountOverride: slot.desiredHealerCountOverride,
+                              desiredDpsCountOverride: slot.desiredDpsCountOverride,
+                              desiredLootbuddyCountOverride: slot.desiredLootbuddyCountOverride,
                             }}
                           />
                           <CommunityScheduleSlotActions slotId={slot.id} isActive={slot.isActive} />
@@ -134,13 +139,9 @@ function EditRunSetupButton({
         desiredDpsCount: source.desiredDpsCount,
         desiredLootbuddyCount: source.desiredLootbuddyCount,
         notes: source.notes,
-        raidLeadId: source.raidLeadId,
       }}
       contentPresets={page.contentPresets}
       venomousBossMax={page.venomousBossMax}
-      raidLeads={page.eligibleRaidLeads}
-      canAssignRaidLead
-      defaultRaidLeadId={source.raidLeadId}
       triggerLabel={triggerLabel}
       triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
       title="Edit Run Setup"
@@ -179,10 +180,8 @@ function RunSetupInventorySection({ page }: { page: CommunitySchedulePage }) {
                   {RUN_LOOT_TYPE_LABELS[setup.lootType]} · {setup.titleCoverage}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  {setup.raidLeadName}
-                  {" · "}
-                  {setup.desiredTankCount}T · {setup.desiredHealerCount}H · {setup.desiredDpsCount}D
-                  · {setup.desiredLootbuddyCount}LB
+                  {setup.desiredTankCount}T · {setup.desiredHealerCount}H · {setup.desiredDpsCount}D ·{" "}
+                  {setup.desiredLootbuddyCount}LB
                   {" · "}
                   {setup.slotCount} Schedule time{setup.slotCount === 1 ? "" : "s"}
                 </p>
@@ -194,7 +193,7 @@ function RunSetupInventorySection({ page }: { page: CommunitySchedulePage }) {
                   <CommunityScheduleDeleteSetupButton
                     runTemplateId={setup.id}
                     runSetupName={`${setup.name} · ${setup.productLabel}`}
-                    raidLeadName={setup.raidLeadName}
+                    raidLeadName="Global"
                     slotCount={setup.slotCount}
                     canDelete={setup.canDelete}
                   />
@@ -322,13 +321,10 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
                 mode="create"
                 contentPresets={page.contentPresets}
                 venomousBossMax={page.venomousBossMax}
-                raidLeads={page.eligibleRaidLeads}
-                canAssignRaidLead
-                defaultRaidLeadId={page.eligibleRaidLeads[0]?.id ?? ""}
                 triggerLabel="Create Run Setup"
                 triggerClassName="inline-flex h-9 items-center rounded-md border border-border bg-surface-raised px-3 text-sm font-medium hover:bg-[#222a3b]"
                 title="Create Run Setup"
-                description="Create a reusable planning preset. You can attach Schedule times later."
+                description="Create a global reusable planning preset with default composition. Attach Schedule times and Raid Leads later."
                 submitLabel="Create Run Setup"
                 createAction={createCommunityScheduleRunSetupAction}
               />

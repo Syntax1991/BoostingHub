@@ -78,9 +78,17 @@ export function CommunitySchedulePlanDialog({
   const [planNotes, setPlanNotes] = useState("");
 
   const templatesForLead = useMemo(
-    () =>
-      templates.filter((template) => template.raidLeadId === raidLeadId && template.usable),
-    [templates, raidLeadId],
+    () => templates.filter((template) => template.usable),
+    [templates],
+  );
+  const [useDefaults, setUseDefaults] = useState(true);
+  const [overrideTanks, setOverrideTanks] = useState(2);
+  const [overrideHealers, setOverrideHealers] = useState(4);
+  const [overrideDps, setOverrideDps] = useState(14);
+  const [overrideLootbuddies, setOverrideLootbuddies] = useState(0);
+  const selectedExisting = useMemo(
+    () => templatesForLead.find((template) => template.id === templateId),
+    [templatesForLead, templateId],
   );
 
   const isBundle = contentPreset === "MIDNIGHT_S2_BUNDLE";
@@ -108,11 +116,23 @@ export function CommunitySchedulePlanDialog({
     setDesiredLootbuddyCount(0);
     setTemplateNotes("");
     setPlanNotes("");
+    setUseDefaults(true);
+    setOverrideTanks(2);
+    setOverrideHealers(4);
+    setOverrideDps(14);
+    setOverrideLootbuddies(0);
   }
 
   function submit(event: { preventDefault(): void }) {
     event.preventDefault();
     setError(null);
+    const composition = {
+      compositionOverrideEnabled: !useDefaults,
+      desiredTankCountOverride: useDefaults ? null : overrideTanks,
+      desiredHealerCountOverride: useDefaults ? null : overrideHealers,
+      desiredDpsCountOverride: useDefaults ? null : overrideDps,
+      desiredLootbuddyCountOverride: useDefaults ? null : overrideLootbuddies,
+    };
     const payload =
       setupMode === "existing"
         ? {
@@ -125,6 +145,7 @@ export function CommunitySchedulePlanDialog({
             })),
             autoCreateRun,
             notes: planNotes,
+            ...composition,
           }
         : {
             raidLeadId,
@@ -148,6 +169,7 @@ export function CommunitySchedulePlanDialog({
             })),
             autoCreateRun,
             notes: planNotes,
+            ...composition,
           };
 
     startTransition(async () => {
@@ -239,7 +261,9 @@ export function CommunitySchedulePlanDialog({
                     <option value="">Select…</option>
                     {templatesForLead.map((template) => (
                       <option key={template.id} value={template.id}>
-                        {template.label}
+                        {template.name} · {template.productLabel} ·{" "}
+                        {template.difficulty === "HEROIC" ? "HC" : template.difficulty} ·{" "}
+                        {template.lootType}
                       </option>
                     ))}
                   </select>
@@ -478,6 +502,70 @@ export function CommunitySchedulePlanDialog({
                 />
                 <span>Auto-create DRAFT runs immediately (hourly job is a safety net)</span>
               </label>
+
+              <fieldset className="grid gap-2 rounded-md border border-border p-3">
+                <legend className="px-1 text-xs font-medium text-muted">Composition</legend>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={useDefaults}
+                    onChange={(event) => setUseDefaults(event.target.checked)}
+                  />
+                  <span>Use Run Setup defaults</span>
+                </label>
+                {useDefaults ? (
+                  <p className="text-xs text-muted">
+                    {setupMode === "existing" && selectedExisting
+                      ? `${selectedExisting.desiredTankCount} Tanks · ${selectedExisting.desiredHealerCount} Healers · ${selectedExisting.desiredDpsCount} DPS · ${selectedExisting.desiredLootbuddyCount} Lootbuddy`
+                      : setupMode === "create"
+                        ? `${desiredTankCount} Tanks · ${desiredHealerCount} Healers · ${desiredDpsCount} DPS · ${desiredLootbuddyCount} Lootbuddy`
+                        : "Select a Run Setup to see defaults."}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="grid gap-1 text-xs">
+                      <span className="text-muted">Tanks</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={overrideTanks}
+                        onChange={(event) => setOverrideTanks(Number(event.target.value))}
+                        className="h-8 rounded-md border border-border bg-surface-raised px-2"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs">
+                      <span className="text-muted">Healers</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={overrideHealers}
+                        onChange={(event) => setOverrideHealers(Number(event.target.value))}
+                        className="h-8 rounded-md border border-border bg-surface-raised px-2"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs">
+                      <span className="text-muted">DPS</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={overrideDps}
+                        onChange={(event) => setOverrideDps(Number(event.target.value))}
+                        className="h-8 rounded-md border border-border bg-surface-raised px-2"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs">
+                      <span className="text-muted">Lootbuddies</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={overrideLootbuddies}
+                        onChange={(event) => setOverrideLootbuddies(Number(event.target.value))}
+                        className="h-8 rounded-md border border-border bg-surface-raised px-2"
+                      />
+                    </label>
+                  </div>
+                )}
+              </fieldset>
 
               <label className="grid gap-1 text-sm">
                 <span className="text-xs text-muted">Slot notes (optional, applied to all new times)</span>

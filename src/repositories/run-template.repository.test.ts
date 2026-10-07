@@ -62,7 +62,6 @@ afterAll(async () => {
 function baseFields(overrides: Partial<Parameters<typeof runTemplateRepository.create>[0]> = {}) {
   return {
     name: "Repo Test Template",
-    raidLeadId: ids.lead,
     difficulty: "HEROIC" as const,
     lootType: "UNSAVED" as const,
     contents: [{ raidId, sortOrder: 1, plannedBossCount: 8 }],
@@ -77,16 +76,13 @@ function baseFields(overrides: Partial<Parameters<typeof runTemplateRepository.c
 }
 
 describe("runTemplateRepository — CRUD and joined reads", () => {
-  it("create + findById returns joined raid/raid-lead/audit fields", async () => {
+  it("create + findById returns joined raid and audit fields", async () => {
     const id = await runTemplateRepository.create(baseFields());
     createdTemplateIds.push(id);
 
     const template = await runTemplateRepository.findById(id);
     expect(template).toBeTruthy();
     expect(template?.name).toBe("Repo Test Template");
-    expect(template?.raidLeadId).toBe(ids.lead);
-    expect(template?.raidLeadName).toBe("RT Lead");
-    expect(template?.raidLeadEligible).toBe(true);
     expect(template?.raidId).toBe(raidId);
     expect(template?.raidAvailableForRuns).toBe(true);
     expect(template?.totalBossCount).toBe(8);
@@ -108,7 +104,6 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     await runTemplateRepository.update(id, {
       name: "After update",
-      raidLeadId: ids.lead,
       difficulty: "MYTHIC",
       lootType: "VIP",
       contents: [{ raidId, sortOrder: 1, plannedBossCount: 5 }],
@@ -160,32 +155,16 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
   });
 });
 
-describe("runTemplateRepository — scoped reads", () => {
-  it("listByRaidLead returns only that raid lead's templates", async () => {
-    const ownId = await runTemplateRepository.create(baseFields({ name: "Scoped Own" }));
-    const otherId = await runTemplateRepository.create(baseFields({ name: "Scoped Other", raidLeadId: ids.otherLead, createdById: ids.otherLead, updatedById: ids.otherLead }));
-    createdTemplateIds.push(ownId, otherId);
-
-    const own = await runTemplateRepository.listByRaidLead(ids.lead);
-    expect(own.some((t) => t.id === ownId)).toBe(true);
-    expect(own.some((t) => t.id === otherId)).toBe(false);
-
-    const other = await runTemplateRepository.listByRaidLead(ids.otherLead);
-    expect(other.some((t) => t.id === otherId)).toBe(true);
-    expect(other.some((t) => t.id === ownId)).toBe(false);
-  });
-
-  it("listAll with no filter includes templates across raid leads; with a raidLeadId filter it scopes", async () => {
+describe("runTemplateRepository — listAll", () => {
+  it("listAll returns every global template regardless of creator", async () => {
     const ownId = await runTemplateRepository.create(baseFields({ name: "ListAll Own" }));
-    const otherId = await runTemplateRepository.create(baseFields({ name: "ListAll Other", raidLeadId: ids.otherLead, createdById: ids.otherLead, updatedById: ids.otherLead }));
+    const otherId = await runTemplateRepository.create(
+      baseFields({ name: "ListAll Other", createdById: ids.otherLead, updatedById: ids.otherLead }),
+    );
     createdTemplateIds.push(ownId, otherId);
 
     const all = await runTemplateRepository.listAll();
     expect(all.some((t) => t.id === ownId)).toBe(true);
     expect(all.some((t) => t.id === otherId)).toBe(true);
-
-    const scoped = await runTemplateRepository.listAll({ raidLeadId: ids.lead });
-    expect(scoped.some((t) => t.id === ownId)).toBe(true);
-    expect(scoped.some((t) => t.id === otherId)).toBe(false);
   });
 });

@@ -44,6 +44,7 @@ function asUser(id: string, name: string, accountRole: AuthenticatedUser["accoun
 }
 
 const lead = asUser(ids.lead, "Lootbuddy Target Lead", "RAID_LEAD");
+const admin = asUser(ids.admin, "Lootbuddy Target Admin", "ADMIN");
 
 async function expectDomainCode(promise: Promise<unknown>, code: string) {
   try {
@@ -233,7 +234,7 @@ describe("create — mass create", () => {
 
 describe("templates", () => {
   it("create stores the target, update changes it, omitted update keeps it, and the create form exposes it", async () => {
-    const template = await runTemplateService.createTemplate(lead, {
+    const template = await runTemplateService.createTemplate(admin, {
       name: "Lootbuddy Target Template",
       contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",
@@ -260,10 +261,10 @@ describe("templates", () => {
       desiredDpsCount: 12,
       notes: null,
     };
-    await runTemplateService.updateTemplate(lead, { ...baseUpdate, desiredLootbuddyCount: 4 });
+    await runTemplateService.updateTemplate(admin, { ...baseUpdate, desiredLootbuddyCount: 4 });
     expect((await runTemplateRepository.findById(template.id))?.desiredLootbuddyCount).toBe(4);
     // An older client that does not know the field leaves the stored target alone.
-    await runTemplateService.updateTemplate(lead, baseUpdate);
+    await runTemplateService.updateTemplate(admin, baseUpdate);
     const form = await runService.getCreateManyForm(lead);
     const applied = form.templates.find((item) => item.id === template.id);
     expect(applied?.desiredLootbuddyCount).toBe(4);
@@ -274,7 +275,7 @@ describe("templates", () => {
   });
 
   it("a template created without the field defaults to 0", async () => {
-    const template = await runTemplateService.createTemplate(lead, {
+    const template = await runTemplateService.createTemplate(admin, {
       name: "Legacy Template",
       contentPreset: "VENOMOUS_ABYSS" as const,
       difficulty: "HEROIC",

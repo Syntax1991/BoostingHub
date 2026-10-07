@@ -38,11 +38,25 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     autoCreateRun: true,
     runMode: "INHOUSE" as const,
     runTemplateName: "Default HC",
+    compositionOverrideEnabled: false,
+    desiredTankCountOverride: null,
+    desiredHealerCountOverride: null,
+    desiredDpsCountOverride: null,
+    desiredLootbuddyCountOverride: null,
     isActive: true,
     createdById: "admin-1",
     updatedById: "admin-1",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const setupSlotExtras = {
+    compositionOverrideEnabled: false,
+    effectiveComposition: {
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      desiredLootbuddyCount: 0,
+    },
   };
   const occurrence = {
     scheduledStartAt: "2026-01-16T18:45:00.000Z",
@@ -66,8 +80,6 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
       {
         id: "template-1",
         name: "Default HC",
-        raidLeadId: "lead-1",
-        raidLeadName: "Synblast",
         productLabel: "The Venomous Abyss",
         titleCoverage: "8/8",
         difficulty: "HEROIC",
@@ -89,8 +101,6 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
       {
         id: "template-zero",
         name: "Zero Slot Setup",
-        raidLeadId: "lead-1",
-        raidLeadName: "Synblast",
         productLabel: "Season 2 Bundle",
         titleCoverage: "9/9",
         difficulty: "HEROIC",
@@ -132,6 +142,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             label: "Default HC",
             notes: null,
             canDelete: canEdit,
+            ...setupSlotExtras,
           },
           {
             id: "slot-2",
@@ -143,6 +154,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             label: "Default HC",
             notes: null,
             canDelete: canEdit,
+            ...setupSlotExtras,
           },
           {
             id: "slot-inactive",
@@ -154,6 +166,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
             label: "Default HC",
             notes: null,
             canDelete: canEdit,
+            ...setupSlotExtras,
           },
         ],
       },
@@ -161,7 +174,6 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
     templates: [
       {
         id: "template-1",
-        raidLeadId: "lead-1",
         label: "Default HC · HC Unsaved 8/8 · The Venomous Abyss",
         usable: true,
         unusableReason: null,
@@ -180,7 +192,6 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
       },
       {
         id: "template-zero",
-        raidLeadId: "lead-1",
         label: "Zero Slot Setup · HC VIP 9/9 · Season 2 Bundle",
         usable: true,
         unusableReason: null,

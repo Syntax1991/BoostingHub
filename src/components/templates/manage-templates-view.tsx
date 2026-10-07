@@ -28,7 +28,6 @@ function formValuesFromTemplate(template: ManageTemplatesPage["templates"][numbe
     desiredDpsCount: template.desiredDpsCount,
     desiredLootbuddyCount: template.desiredLootbuddyCount,
     notes: template.notes,
-    raidLeadId: template.raidLeadId,
   };
 }
 
@@ -37,24 +36,17 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
     <div>
       <PageHeader
         title="Run Templates"
-        description="Every Raid Lead's reusable planning presets. Templates never store schedule or status — only planning defaults."
+        description="Global reusable planning presets. Templates never store schedule, Raid Lead, or status — only planning defaults."
         actions={
           <RunTemplateFormDialog
             mode="create"
             contentPresets={data.contentPresets}
             venomousBossMax={data.venomousBossMax}
-            raidLeads={data.raidLeads}
-            canAssignRaidLead={data.canAssignRaidLead}
-            defaultRaidLeadId={data.defaultRaidLeadId}
             triggerLabel="New template"
           />
         }
       />
-      <ManageTemplatesFilters
-        status={data.filters.status}
-        raidLeadId={data.filters.raidLeadId}
-        raidLeads={data.raidLeads}
-      />
+      <ManageTemplatesFilters status={data.filters.status} />
       <Card>
         <CardHeader title="Templates" description={`${data.templates.length} template${data.templates.length === 1 ? "" : "s"}`} />
         {data.templates.length === 0 ? (
@@ -77,9 +69,8 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-muted">
-                    Owner: {template.raidLeadName} · {template.contentDisplay.productLabel} ·{" "}
-                    {template.contentDisplay.titleCoverage} · {template.desiredTankCount}T{" "}
-                    {template.desiredHealerCount}H {template.desiredDpsCount}D
+                    {template.contentDisplay.productLabel} · {template.contentDisplay.titleCoverage} ·{" "}
+                    {template.desiredTankCount}T {template.desiredHealerCount}H {template.desiredDpsCount}D
                     {template.desiredLootbuddyCount > 0 ? ` ${template.desiredLootbuddyCount}LB` : ""}
                   </p>
                   <p className="mt-1 text-xs text-muted">{template.contentDisplay.summary}</p>
@@ -97,9 +88,6 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
                     initial={formValuesFromTemplate(template)}
                     contentPresets={data.contentPresets}
                     venomousBossMax={data.venomousBossMax}
-                    raidLeads={data.raidLeads}
-                    canAssignRaidLead={data.canAssignRaidLead}
-                    defaultRaidLeadId={data.defaultRaidLeadId}
                     triggerLabel="Edit"
                     triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
                   />

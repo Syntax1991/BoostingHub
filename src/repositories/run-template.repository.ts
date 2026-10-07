@@ -1,6 +1,5 @@
 import { orm } from "@/lib/prisma";
-import type { AccountStatus, RaidDifficulty, RunLootType } from "@/models/enums";
-import { isEligibleRaidLead } from "@/auth/authorization";
+import type { RaidDifficulty, RunLootType } from "@/models/enums";
 import {
   asBoolean,
   asNumber,
@@ -8,16 +7,11 @@ import {
   asStringOrNull,
   mapDifficulty,
   mapLootType,
-  mapUserRole,
 } from "@/lib/persistence";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 
 /**
- * A joined, current-state read of a RunTemplate. `raidLeadEligible` and
- * per-content raid availability are derived from the *current* joined
- * User/Raid rows on every read — never cached on the template row itself —
- * so usability (see run-template.service.ts's computeUsability) always
- * reflects live state, not what was true when the template was created.
+ * A joined, current-state read of a global RunTemplate.
  *
  * Authoritative raid identity is ordered `contents`. Legacy singular
  * `raidId` / `plannedBossCount` / `totalBossCount` are dual-write mirrors of
@@ -37,9 +31,6 @@ export type RunTemplateContentRecord = {
 export type RunTemplateRecord = {
   id: string;
   name: string;
-  raidLeadId: string;
-  raidLeadName: string;
-  raidLeadEligible: boolean;
   /** @deprecated Prefer `contents`. Dual-write mirror of primary content raid. */
   raidId: string;
   /** @deprecated Prefer `contents`. */
@@ -77,7 +68,6 @@ export type RunTemplateContentWriteSpec = {
 
 export type CreateRunTemplateFields = {
   name: string;
-  raidLeadId: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   contents: RunTemplateContentWriteSpec[];
@@ -93,7 +83,6 @@ export type CreateRunTemplateFields = {
 
 export type UpdateRunTemplateFields = {
   name: string;
-  raidLeadId: string;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   contents: RunTemplateContentWriteSpec[];
@@ -136,7 +125,6 @@ function primaryContentMirror(contents: RunTemplateContentWriteSpec[]): {
 }
 
 function mapTemplate(row: Record<string, unknown>): RunTemplateRecord {
-  const raidLead = (row.raidLead ?? {}) as Record<string, unknown>;
   const raid = (row.raid ?? {}) as Record<string, unknown>;
   const createdBy = (row.createdBy ?? {}) as Record<string, unknown>;
   const updatedBy = (row.updatedBy ?? {}) as Record<string, unknown>;
@@ -155,12 +143,6 @@ function mapTemplate(row: Record<string, unknown>): RunTemplateRecord {
   return {
     id: asString(row.id),
     name: asString(row.name),
-    raidLeadId: asString(row.raidLeadId ?? raidLead.id),
-    raidLeadName: asString(raidLead.name, "Unknown raid lead"),
-    raidLeadEligible: isEligibleRaidLead({
-      accountRole: mapUserRole(raidLead.accountRole),
-      accountStatus: asString(raidLead.accountStatus, "ACTIVE") as AccountStatus,
-    }),
     raidId: primary?.raidId ?? legacyRaidId,
     raidName: primary?.raidName ?? asString(raid.name, "Unknown raid"),
     raidSeason: primary?.raidSeason ?? asString(raid.season),
@@ -225,8 +207,7 @@ async function replaceTemplateContents(
 
 /**
  * Persistence, scoped reads, relations, and mutations only — no role
- * authorization and no Run-planning business rules (raid availability,
- * owner eligibility, composition/loot-type/boss-count bounds). Those live in
+ * authorization and no Run-planning business rules. Those live in
  * run-template.service.ts, which is the only caller.
  */
 type TxOrm = typeof orm;
@@ -235,7 +216,6 @@ export const runTemplateRepository = {
   async findById(id: string, txOrm?: TxOrm): Promise<RunTemplateRecord | null> {
     const client = txOrm ?? orm;
     const row = await client.RunTemplate.where({ id })
-      .include("raidLead")
       .include("raid", (raid) => raid.include("bosses"))
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("createdBy")
@@ -244,28 +224,13 @@ export const runTemplateRepository = {
     return row ? mapTemplate(row as Record<string, unknown>) : null;
   },
 
-  async listByRaidLead(raidLeadId: string): Promise<RunTemplateRecord[]> {
-    const rows = await orm.RunTemplate.where({ raidLeadId })
-      .include("raidLead")
-      .include("raid", (raid) => raid.include("bosses"))
+  async listAll(): Promise<RunTemplateRecord[]> {
+    const rows = await orm.RunTemplate.include("raid", (raid) => raid.include("bosses"))
       .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
       .include("createdBy")
       .include("updatedBy")
       .orderBy((template) => template.name.asc())
       .all();
-    return rows.map((row) => mapTemplate(row as Record<string, unknown>));
-  },
-
-  async listAll(filters: { raidLeadId?: string } = {}): Promise<RunTemplateRecord[]> {
-    let query = orm.RunTemplate.include("raidLead")
-      .include("raid", (raid) => raid.include("bosses"))
-      .include("contents", (content) => content.include("raid", (raid) => raid.include("bosses")))
-      .include("createdBy")
-      .include("updatedBy");
-    if (filters.raidLeadId) {
-      query = query.where({ raidLeadId: filters.raidLeadId });
-    }
-    const rows = await query.orderBy((template) => template.name.asc()).all();
     return rows.map((row) => mapTemplate(row as Record<string, unknown>));
   },
 
@@ -277,7 +242,6 @@ export const runTemplateRepository = {
     await client.RunTemplate.create({
       id,
       name: fields.name,
-      raidLeadId: fields.raidLeadId,
       raidId: mirror.raidId,
       difficulty: fields.difficulty,
       lootType: fields.lootType,
@@ -303,7 +267,6 @@ export const runTemplateRepository = {
     const mirror = primaryContentMirror(fields.contents);
     await client.RunTemplate.where({ id }).update({
       name: fields.name,
-      raidLeadId: fields.raidLeadId,
       raidId: mirror.raidId,
       difficulty: fields.difficulty,
       lootType: fields.lootType,

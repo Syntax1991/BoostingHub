@@ -84,9 +84,11 @@ async function cleanupMaterializationData() {
     await orm.CommunityScheduleSlot.where({ id: String((row as { id: string }).id) }).delete().catch(() => {});
   }
 
-  for (const leadId of Object.values(ids)) {
-    const templates = await orm.RunTemplate.where({ raidLeadId: leadId }).all();
-    for (const row of templates) {
+  const testCreators = new Set(Object.values(ids));
+  const templates = await orm.RunTemplate.all();
+  for (const row of templates) {
+    const createdById = String((row as { createdById: string }).createdById);
+    if (testCreators.has(createdById)) {
       await orm.RunTemplate.where({ id: String((row as { id: string }).id) }).delete().catch(() => {});
     }
   }
@@ -124,7 +126,6 @@ beforeAll(async () => {
   await raidRepository.ensureReferenceRaids();
   templateId = await runTemplateRepository.create({
     name: "CSM Materialize Template",
-    raidLeadId: ids.lead,
     difficulty: "HEROIC" as const,
     lootType: "UNSAVED" as const,
     contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
@@ -142,7 +143,6 @@ beforeEach(async () => {
   if (!(await orm.RunTemplate.where({ id: templateId }).first())) {
     templateId = await runTemplateRepository.create({
     name: "CSM Materialize Template",
-    raidLeadId: ids.lead,
     difficulty: "HEROIC" as const,
     lootType: "UNSAVED" as const,
     contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
@@ -345,7 +345,6 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
   it("RAID_LEAD cannot materialize another lead's slot", async () => {
     const otherTemplateId = await runTemplateRepository.create({
       name: "Other Lead Template",
-      raidLeadId: ids.otherLead,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
@@ -373,6 +372,117 @@ describe("communityScheduleMaterializationService.materializeOccurrence", () => 
       ),
       "NOT_AUTHORIZED",
     );
+  });
+
+  it("shared template: inherit vs override composition; template edits affect only inherit", async () => {
+    const sharedTemplateId = await runTemplateRepository.create({
+      name: "CSM Shared Composition Template",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      desiredLootbuddyCount: 0,
+      notes: null,
+      createdById: ids.admin,
+      updatedById: ids.admin,
+    });
+    const now = new Date("2027-02-05T12:00:00.000Z");
+
+    const { slot: inheritSlot } = await communityScheduleService.createSlot(admin, {
+      weekday: "MONDAY",
+      localStartTime: "19:00",
+      label: "Inherit comp",
+      raidLeadId: ids.lead,
+      notes: null,
+      runTemplateId: sharedTemplateId,
+      autoCreateRun: false,
+      runMode: "INHOUSE",
+    });
+    const { slot: overrideSlot } = await communityScheduleService.createSlot(admin, {
+      weekday: "TUESDAY",
+      localStartTime: "19:00",
+      label: "Override comp",
+      raidLeadId: ids.otherLead,
+      notes: null,
+      runTemplateId: sharedTemplateId,
+      autoCreateRun: false,
+      runMode: "INHOUSE",
+      compositionOverrideEnabled: true,
+      desiredTankCountOverride: 3,
+      desiredHealerCountOverride: 5,
+      desiredDpsCountOverride: 12,
+      desiredLootbuddyCountOverride: 0,
+    });
+
+    const inheritFirst = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: admin },
+      { scheduleSlotId: inheritSlot.id, window: "NEXT", now },
+    );
+    const overrideFirst = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: admin },
+      { scheduleSlotId: overrideSlot.id, window: "NEXT", now },
+    );
+
+    const inheritRun = (await orm.Run.where({ id: inheritFirst.runId }).first()) as {
+      desiredTankCount: number;
+      desiredHealerCount: number;
+      desiredDpsCount: number;
+    } | null;
+    const overrideRun = (await orm.Run.where({ id: overrideFirst.runId }).first()) as {
+      desiredTankCount: number;
+      desiredHealerCount: number;
+      desiredDpsCount: number;
+    } | null;
+    expect(inheritRun?.desiredTankCount).toBe(2);
+    expect(inheritRun?.desiredHealerCount).toBe(4);
+    expect(inheritRun?.desiredDpsCount).toBe(14);
+    expect(overrideRun?.desiredTankCount).toBe(3);
+    expect(overrideRun?.desiredHealerCount).toBe(5);
+    expect(overrideRun?.desiredDpsCount).toBe(12);
+
+    await runTemplateRepository.update(sharedTemplateId, {
+      name: "CSM Shared Composition Template",
+      difficulty: "HEROIC",
+      lootType: "UNSAVED",
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],
+      desiredTankCount: 4,
+      desiredHealerCount: 6,
+      desiredDpsCount: 10,
+      desiredLootbuddyCount: 0,
+      notes: null,
+      updatedById: ids.admin,
+    });
+
+    const later = new Date("2027-02-12T12:00:00.000Z");
+    const inheritSecond = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: admin },
+      { scheduleSlotId: inheritSlot.id, window: "NEXT", now: later },
+    );
+    const overrideSecond = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: admin },
+      { scheduleSlotId: overrideSlot.id, window: "NEXT", now: later },
+    );
+    expect(inheritSecond.runId).not.toBe(inheritFirst.runId);
+    expect(overrideSecond.runId).not.toBe(overrideFirst.runId);
+
+    const inheritAfter = (await orm.Run.where({ id: inheritSecond.runId }).first()) as {
+      desiredTankCount: number;
+      desiredHealerCount: number;
+      desiredDpsCount: number;
+    } | null;
+    const overrideAfter = (await orm.Run.where({ id: overrideSecond.runId }).first()) as {
+      desiredTankCount: number;
+      desiredHealerCount: number;
+      desiredDpsCount: number;
+    } | null;
+    expect(inheritAfter?.desiredTankCount).toBe(4);
+    expect(inheritAfter?.desiredHealerCount).toBe(6);
+    expect(inheritAfter?.desiredDpsCount).toBe(10);
+    expect(overrideAfter?.desiredTankCount).toBe(3);
+    expect(overrideAfter?.desiredHealerCount).toBe(5);
+    expect(overrideAfter?.desiredDpsCount).toBe(12);
   });
 });
 
@@ -645,7 +755,6 @@ describe("communityScheduleMaterializationService.runPass", () => {
     const now = new Date("2027-01-15T12:00:00.000Z");
     const bundleTemplateId = await runTemplateRepository.create({
       name: "CSM Bundle Template",
-      raidLeadId: ids.lead,
       difficulty: "HEROIC",
       lootType: "VIP",
       contents: [
@@ -836,7 +945,6 @@ describe("communityScheduleMaterializationService.runPass", () => {
 
     await runTemplateRepository.update(templateId, {
       name: "CSM Materialize Template Edited",
-      raidLeadId: ids.lead,
       difficulty: "MYTHIC",
       lootType: "UNSAVED",
       contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 4 }],
@@ -862,7 +970,6 @@ describe("communityScheduleMaterializationService.runPass", () => {
 
     await runTemplateRepository.update(templateId, {
       name: "CSM Materialize Template",
-      raidLeadId: ids.lead,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }],

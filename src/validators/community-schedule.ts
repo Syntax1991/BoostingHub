@@ -7,9 +7,8 @@ import {
   parseCommunityLocalStartTime,
 } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODES, COMMUNITY_WEEKDAYS } from "@/models/enums";
-import {
-  createRunTemplateSchema,
-} from "@/validators/run-template";
+import { compositionSchema } from "@/validators/run";
+import { createRunTemplateSchema } from "@/validators/run-template";
 
 const weekdaySchema = z
   .string()
@@ -49,16 +48,54 @@ const runTemplateIdSchema = z
   .nullable()
   .transform((value) => value ?? null);
 
-const runModeSchema = z
-  .enum(COMMUNITY_SCHEDULE_RUN_MODES)
-  .optional()
-  .default("INHOUSE");
+const runModeSchema = z.enum(COMMUNITY_SCHEDULE_RUN_MODES).optional().default("INHOUSE");
 
 const planSlotSchema = z.object({
   weekday: weekdaySchema,
   localStartTime: localStartTimeSchema,
   runMode: runModeSchema,
 });
+
+/** Complete composition override (inherit when enabled is falsy / omitted). */
+export const scheduleCompositionSchema = z
+  .object({
+    compositionOverrideEnabled: z.boolean().optional(),
+    desiredTankCountOverride: compositionSchema.optional().nullable(),
+    desiredHealerCountOverride: compositionSchema.optional().nullable(),
+    desiredDpsCountOverride: compositionSchema.optional().nullable(),
+    desiredLootbuddyCountOverride: compositionSchema.optional().nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.compositionOverrideEnabled) return;
+    if (value.desiredTankCountOverride == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter default tanks for custom composition.",
+        path: ["desiredTankCountOverride"],
+      });
+    }
+    if (value.desiredHealerCountOverride == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter default healers for custom composition.",
+        path: ["desiredHealerCountOverride"],
+      });
+    }
+    if (value.desiredDpsCountOverride == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter default DPS for custom composition.",
+        path: ["desiredDpsCountOverride"],
+      });
+    }
+    if (value.desiredLootbuddyCountOverride == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter default lootbuddies for custom composition.",
+        path: ["desiredLootbuddyCountOverride"],
+      });
+    }
+  });
 
 function refineUniquePlanSlots<T extends { slots: Array<{ weekday: string; localStartTime: string }> }>(
   schema: z.ZodType<T>,
@@ -81,22 +118,26 @@ function refineUniquePlanSlots<T extends { slots: Array<{ weekday: string; local
   });
 }
 
-const createRunSetupFieldsSchema = createRunTemplateSchema.omit({ raidLeadId: true });
+const createRunSetupFieldsSchema = createRunTemplateSchema;
 
-export const createCommunityScheduleSlotSchema = z.object({
-  weekday: weekdaySchema,
-  localStartTime: localStartTimeSchema,
-  label: labelSchema,
-  raidLeadId: z.string().uuid("Choose an eligible raid lead."),
-  notes: notesSchema,
-  runTemplateId: runTemplateIdSchema,
-  autoCreateRun: z.boolean().optional().default(false),
-  runMode: runModeSchema,
-});
+export const createCommunityScheduleSlotSchema = z
+  .object({
+    weekday: weekdaySchema,
+    localStartTime: localStartTimeSchema,
+    label: labelSchema,
+    raidLeadId: z.string().uuid("Choose an eligible raid lead."),
+    notes: notesSchema,
+    runTemplateId: runTemplateIdSchema,
+    autoCreateRun: z.boolean().optional().default(false),
+    runMode: runModeSchema,
+  })
+  .and(scheduleCompositionSchema);
 
-export const updateCommunityScheduleSlotSchema = createCommunityScheduleSlotSchema.extend({
-  slotId: z.string().uuid(),
-});
+export const updateCommunityScheduleSlotSchema = createCommunityScheduleSlotSchema.and(
+  z.object({
+    slotId: z.string().uuid(),
+  }),
+);
 
 export const communityScheduleSlotIdSchema = z.object({
   slotId: z.string().uuid(),
@@ -112,38 +153,42 @@ export const materializeCommunityScheduleOccurrenceSchema = z.object({
 });
 
 export const createSchedulePlanSchema = refineUniquePlanSlots(
-  z.object({
-    raidLeadId: z.string().uuid("Choose an eligible raid lead."),
-    runSetup: z.discriminatedUnion("mode", [
-      z.object({
-        mode: z.literal("existing"),
-        templateId: z.string().uuid("Choose a valid run setup."),
-      }),
-      z.object({
-        mode: z.literal("create"),
-        ...createRunSetupFieldsSchema.shape,
-      }),
-    ]),
-    slots: z
-      .array(planSlotSchema)
-      .min(1, "Add at least one weekly time.")
-      .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
-    autoCreateRun: z.boolean(),
-    notes: notesSchema,
-  }),
+  z
+    .object({
+      raidLeadId: z.string().uuid("Choose an eligible raid lead."),
+      runSetup: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("existing"),
+          templateId: z.string().uuid("Choose a valid run setup."),
+        }),
+        z.object({
+          mode: z.literal("create"),
+          ...createRunSetupFieldsSchema.shape,
+        }),
+      ]),
+      slots: z
+        .array(planSlotSchema)
+        .min(1, "Add at least one weekly time.")
+        .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
+      autoCreateRun: z.boolean(),
+      notes: notesSchema,
+    })
+    .and(scheduleCompositionSchema),
 );
 
 export const addScheduleTimesSchema = refineUniquePlanSlots(
-  z.object({
-    runTemplateId: z.string().uuid("Choose a valid run setup."),
-    raidLeadId: z.string().uuid("Choose an eligible raid lead."),
-    slots: z
-      .array(planSlotSchema)
-      .min(1, "Add at least one weekly time.")
-      .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
-    autoCreateRun: z.boolean(),
-    notes: notesSchema,
-  }),
+  z
+    .object({
+      runTemplateId: z.string().uuid("Choose a valid run setup."),
+      raidLeadId: z.string().uuid("Choose an eligible raid lead."),
+      slots: z
+        .array(planSlotSchema)
+        .min(1, "Add at least one weekly time.")
+        .max(MAX_SLOTS_PER_PLAN, `At most ${MAX_SLOTS_PER_PLAN} times per plan.`),
+      autoCreateRun: z.boolean(),
+      notes: notesSchema,
+    })
+    .and(scheduleCompositionSchema),
 );
 
 export type CreateCommunityScheduleSlotInput = z.infer<typeof createCommunityScheduleSlotSchema>;

@@ -7,6 +7,7 @@ import {
   isEligibleRaidLead,
 } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
+import { resolveEffectiveRunComposition } from "@/lib/run-composition";
 import { buildRunTitle } from "@/lib/run-title";
 import {
   classifyRunContents,
@@ -546,6 +547,16 @@ export const runService = {
   async prepareDraftFromTemplate(input: {
     template: RunTemplateRecord;
     scheduledStartAt: string;
+    /** Concrete Run Raid Lead — from Schedule slot or Create Run selection. */
+    raidLeadId: string;
+    /** Optional Schedule composition override source. */
+    scheduleSlot?: {
+      compositionOverrideEnabled: boolean;
+      desiredTankCountOverride: number | null;
+      desiredHealerCountOverride: number | null;
+      desiredDpsCountOverride: number | null;
+      desiredLootbuddyCountOverride: number | null;
+    } | null;
   }): Promise<RunCreateWithContentsInput> {
     await raidRepository.ensureReferenceRaids();
     // Authoritative template contents (RunTemplateRaidContent) — never reduce
@@ -564,24 +575,28 @@ export const runService = {
               plannedBossCount: input.template.plannedBossCount,
             },
           ];
+    const composition = resolveEffectiveRunComposition({
+      template: input.template,
+      scheduleSlot: input.scheduleSlot,
+    });
     const effective: EffectiveRunInput = {
       difficulty: input.template.difficulty,
       lootType: input.template.lootType,
       scheduledStartAt: input.scheduledStartAt,
-      raidLeadId: input.template.raidLeadId,
+      raidLeadId: input.raidLeadId,
       notes: input.template.notes,
-      desiredTankCount: input.template.desiredTankCount,
-      desiredHealerCount: input.template.desiredHealerCount,
-      desiredDpsCount: input.template.desiredDpsCount,
-      desiredLootbuddyCount: input.template.desiredLootbuddyCount,
+      desiredTankCount: composition.desiredTankCount,
+      desiredHealerCount: composition.desiredHealerCount,
+      desiredDpsCount: composition.desiredDpsCount,
+      desiredLootbuddyCount: composition.desiredLootbuddyCount,
       discordRolePing: true,
     };
     const raidById = await resolveRaidsForContents(contents);
-    const raidLead = await requireEligibleRaidLead(input.template.raidLeadId);
+    const raidLead = await requireEligibleRaidLead(input.raidLeadId);
     return prepareRunDraft(effective, {
       contents,
       raidById,
-      raidLeadId: input.template.raidLeadId,
+      raidLeadId: input.raidLeadId,
       raidLeadName: raidLead.name,
     });
   },
@@ -591,11 +606,21 @@ export const runService = {
     scheduledStartAt: string;
     scheduleSlotId: string;
     windowStartAt: string;
+    raidLeadId: string;
+    scheduleSlot: {
+      compositionOverrideEnabled: boolean;
+      desiredTankCountOverride: number | null;
+      desiredHealerCountOverride: number | null;
+      desiredDpsCountOverride: number | null;
+      desiredLootbuddyCountOverride: number | null;
+    };
     actor: { kind: "USER"; user: AuthenticatedUser } | { kind: "SYSTEM" };
   }): Promise<{ runId: string; alreadyExisted: boolean }> {
     const draft = await this.prepareDraftFromTemplate({
       template: input.template,
       scheduledStartAt: input.scheduledStartAt,
+      raidLeadId: input.raidLeadId,
+      scheduleSlot: input.scheduleSlot,
     });
 
     const createdByKind = input.actor.kind;
@@ -686,7 +711,6 @@ export const runService = {
         productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS";
       return {
         id: template.id,
-        raidLeadId: template.raidLeadId,
         contentPreset,
         venomousPlannedBossCount: Math.min(
           8,
@@ -699,7 +723,7 @@ export const runService = {
         desiredDpsCount: template.desiredDpsCount,
         desiredLootbuddyCount: template.desiredLootbuddyCount,
         notes: template.notes,
-        label: `${template.raidLeadName} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage}`,
+        label: `${template.name} — ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage}`,
       };
     });
 
@@ -734,44 +758,40 @@ export const runService = {
    * the exact same `prepareRunDraft`/`resolveRequestedRaidLeadId` single
    * create uses — before any persistence is attempted.
    *
-   * When `input.templateId` is present, the template is resolved and
-   * authorized fresh from the DB (never trusting the browser's copy) BEFORE
-   * any row is prepared, and its raidLeadId becomes authoritative for every
-   * row — a defaults- or row-level raidLeadId that explicitly disagrees with
-   * it rejects the entire batch rather than being silently overridden.
+   * When `input.templateId` is present, the global template is resolved and
+   * authorized fresh from the DB. Default composition is applied
+   * server-authoritatively unless a row already overrides composition.
+   * Raid Lead remains independently selected on defaults/rows.
    */
   async createManyRuns(user: AuthenticatedUser, input: CreateManyRunsInput): Promise<{ ids: string[] }> {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
 
-    let templateRaidLeadId: string | undefined;
+    let templateDefaults: ReturnType<typeof resolveEffectiveRunComposition> | undefined;
     if (input.templateId) {
       const template = await runTemplateService.resolveTemplateForUse(user, input.templateId);
-      templateRaidLeadId = template.raidLeadId;
+      templateDefaults = resolveEffectiveRunComposition({ template, scheduleSlot: null });
+    }
 
-      if (input.defaults.raidLeadId && input.defaults.raidLeadId !== templateRaidLeadId) {
-        throw new DomainError(
-          "RUN_TEMPLATE_RAID_LEAD_MISMATCH",
-          "The selected template's raid lead cannot be overridden.",
-        );
-      }
-      input.runs.forEach((row, index) => {
-        const overrideRaidLeadId = row.overrides?.raidLeadId;
-        if (overrideRaidLeadId && overrideRaidLeadId !== templateRaidLeadId) {
-          throw new DomainError(
-            "RUN_TEMPLATE_RAID_LEAD_MISMATCH",
-            `Run ${index + 1}: the selected template's raid lead cannot be overridden.`,
-          );
+    const effectiveRows = input.runs.map((row) => {
+      const merged = mergeMassCreateRow(input.defaults, row);
+      if (templateDefaults) {
+        const overrides = row.overrides ?? {};
+        if (overrides.desiredTankCount === undefined) {
+          merged.desiredTankCount = templateDefaults.desiredTankCount;
         }
-      });
-    }
-
-    const effectiveRows = input.runs.map((row) => mergeMassCreateRow(input.defaults, row));
-    if (templateRaidLeadId) {
-      for (const row of effectiveRows) {
-        row.raidLeadId = templateRaidLeadId;
+        if (overrides.desiredHealerCount === undefined) {
+          merged.desiredHealerCount = templateDefaults.desiredHealerCount;
+        }
+        if (overrides.desiredDpsCount === undefined) {
+          merged.desiredDpsCount = templateDefaults.desiredDpsCount;
+        }
+        if (overrides.desiredLootbuddyCount === undefined) {
+          merged.desiredLootbuddyCount = templateDefaults.desiredLootbuddyCount;
+        }
       }
-    }
+      return merged;
+    });
 
     const expandedByRow = effectiveRows.map((row) => expandEffectiveContents(row));
     const allRaidIds = [...new Set(expandedByRow.flatMap((contents) => contents.map((c) => c.raidId)))];

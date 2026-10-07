@@ -3,7 +3,6 @@ import {
   canManageCommunitySchedule,
   canMaterializeCommunityScheduleOccurrence,
   canViewCommunitySchedule,
-  hasAdminAccess,
   isEligibleRaidLead,
 } from "@/auth/authorization";
 import {
@@ -14,6 +13,11 @@ import {
   type RaidIdWindow,
   type ScheduleOccurrence,
 } from "@/lib/community-schedule";
+import {
+  normalizeScheduleCompositionWrite,
+  resolveEffectiveRunComposition,
+  type EffectiveRunComposition,
+} from "@/lib/run-composition";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { DomainError } from "@/lib/errors";
 import { getDiscordManagementScheduleRoleId } from "@/lib/discord-config";
@@ -114,7 +118,6 @@ export type CommunityScheduleWindowView = {
 
 export type CommunityScheduleTemplateOption = {
   id: string;
-  raidLeadId: string;
   label: string;
   usable: boolean;
   unusableReason: string | null;
@@ -142,6 +145,9 @@ export type CommunityScheduleRunSetupSlot = {
   runMode: CommunityScheduleRunMode;
   label: string;
   notes: string | null;
+  compositionOverrideEnabled: boolean;
+  /** Resolved composition for display (template defaults or override). */
+  effectiveComposition: EffectiveRunComposition | null;
   /** ADMIN/OWNER may hard-delete planning regardless of materialization history. */
   canDelete: boolean;
 };
@@ -164,8 +170,6 @@ export type CommunityScheduleRunSetupGroup = {
 export type CommunityScheduleRunSetupInventoryItem = {
   id: string;
   name: string;
-  raidLeadId: string;
-  raidLeadName: string;
   productLabel: string;
   titleCoverage: string;
   difficulty: RaidDifficulty;
@@ -328,7 +332,6 @@ function templateProductFields(template: RunTemplateRecord): {
 }
 
 async function validateTemplateLink(input: {
-  raidLeadId: string;
   runTemplateId: string | null;
   autoCreateRun: boolean;
 }): Promise<RunTemplateRecord | null> {
@@ -350,13 +353,6 @@ async function validateTemplateLink(input: {
       400,
     );
   }
-  if (template.raidLeadId !== input.raidLeadId) {
-    throw new DomainError(
-      "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH",
-      "The run setup must belong to the selected raid lead.",
-      400,
-    );
-  }
   const usability = computeUsability(template);
   if (input.autoCreateRun && !usability.usable) {
     throw new DomainError(
@@ -366,6 +362,17 @@ async function validateTemplateLink(input: {
     );
   }
   return template;
+}
+
+function slotEffectiveComposition(
+  slot: CommunityScheduleSlotRecord,
+  template: RunTemplateRecord | null | undefined,
+): EffectiveRunComposition | null {
+  if (!template) return null;
+  return resolveEffectiveRunComposition({
+    template,
+    scheduleSlot: slot,
+  });
 }
 
 function weekdaySortIndex(weekday: CommunityWeekday): number {
@@ -416,6 +423,7 @@ function groupRunSetups(
       };
       groups.set(key, group);
     }
+    const template = slot.runTemplateId ? templatesById.get(slot.runTemplateId) : null;
     group.slots.push({
       id: slot.id,
       weekday: slot.weekday,
@@ -425,6 +433,8 @@ function groupRunSetups(
       runMode: slot.runMode,
       label: slot.label,
       notes: slot.notes,
+      compositionOverrideEnabled: slot.compositionOverrideEnabled,
+      effectiveComposition: slotEffectiveComposition(slot, template),
       canDelete: canEdit,
     });
   }
@@ -464,8 +474,6 @@ function buildRunSetupInventory(
     return {
       id: template.id,
       name: template.name,
-      raidLeadId: template.raidLeadId,
-      raidLeadName: template.raidLeadName,
       productLabel: product.productLabel,
       titleCoverage: product.titleCoverage,
       difficulty: template.difficulty,
@@ -486,11 +494,7 @@ function buildRunSetupInventory(
     };
   });
 
-  items.sort((a, b) => {
-    const byLead = a.raidLeadName.localeCompare(b.raidLeadName);
-    if (byLead !== 0) return byLead;
-    return a.name.localeCompare(b.name);
-  });
+  items.sort((a, b) => a.name.localeCompare(b.name));
   return items;
 }
 
@@ -653,13 +657,11 @@ function projectWindow(
   };
 }
 
-async function listTemplateOptions(user: AuthenticatedUser): Promise<{
+async function listTemplateOptions(_user: AuthenticatedUser): Promise<{
   options: CommunityScheduleTemplateOption[];
   recordsById: Map<string, RunTemplateRecord>;
 }> {
-  const templates = hasAdminAccess(user.accountRole)
-    ? await runTemplateRepository.listAll()
-    : await runTemplateRepository.listByRaidLead(user.id);
+  const templates = await runTemplateRepository.listAll();
 
   const recordsById = new Map(templates.map((template) => [template.id, template]));
   const options = templates.map((template) => {
@@ -667,7 +669,6 @@ async function listTemplateOptions(user: AuthenticatedUser): Promise<{
     const product = templateProductFields(template);
     return {
       id: template.id,
-      raidLeadId: template.raidLeadId,
       label: templateLabel(template),
       usable: usability.usable,
       unusableReason: usability.unusableReason,
@@ -704,6 +705,7 @@ async function createSlotsInTx(input: {
   raidLeadId: string;
   runTemplateId: string;
   autoCreateRun: boolean;
+  composition: ReturnType<typeof normalizeScheduleCompositionWrite>;
   actorId: string;
 }): Promise<string[]> {
   const slotIds: string[] = [];
@@ -718,6 +720,7 @@ async function createSlotsInTx(input: {
         runTemplateId: input.runTemplateId,
         autoCreateRun: input.autoCreateRun,
         runMode: slot.runMode,
+        composition: input.composition,
         createdById: input.actorId,
         updatedById: input.actorId,
       },
@@ -850,9 +853,7 @@ export const communityScheduleService = {
       runSetups: groupRunSetups(visibleSlots, canEdit, templatesById),
       runSetupInventory: buildRunSetupInventory(allTemplates, visibleSlots, canEdit),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
-      templates: canEdit
-        ? templates
-        : templates.filter((row) => row.usable && row.raidLeadId === user.id),
+      templates: canEdit ? templates : templates.filter((row) => row.usable),
       contentPresets: listCreateRunContentPresets(),
       venomousBossMax: venomousBossMaxFromCatalog(),
       share: buildShareFromSlots(visibleSlots, templatesById),
@@ -885,9 +886,10 @@ export const communityScheduleService = {
     let templateId: string;
     let templateName: string;
 
+    const composition = normalizeScheduleCompositionWrite(input);
+
     if (input.runSetup.mode === "existing") {
       const template = await validateTemplateLink({
-        raidLeadId: input.raidLeadId,
         runTemplateId: input.runSetup.templateId,
         autoCreateRun: input.autoCreateRun,
       });
@@ -913,10 +915,7 @@ export const communityScheduleService = {
       if (input.runSetup.mode === "create") {
         const created = await runTemplateService.createTemplateInTx(
           user,
-          {
-            ...input.runSetup,
-            raidLeadId: input.raidLeadId,
-          },
+          { ...input.runSetup },
           txOrm,
         );
         resolvedTemplateId = created.id;
@@ -931,6 +930,7 @@ export const communityScheduleService = {
         raidLeadId: input.raidLeadId,
         runTemplateId: resolvedTemplateId,
         autoCreateRun: input.autoCreateRun,
+        composition,
         actorId: user.id,
       });
 
@@ -951,7 +951,6 @@ export const communityScheduleService = {
     await requireEligibleRaidLead(input.raidLeadId);
 
     const template = await validateTemplateLink({
-      raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
     });
@@ -962,15 +961,9 @@ export const communityScheduleService = {
         400,
       );
     }
-    if (template.raidLeadId !== input.raidLeadId) {
-      throw new DomainError(
-        "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH",
-        "The run setup must belong to the selected raid lead.",
-        400,
-      );
-    }
 
     await assertNoConflictsForLead(input.raidLeadId, input.slots);
+    const composition = normalizeScheduleCompositionWrite(input);
 
     const slotIds = await db.transaction(async (tx) => {
       const txOrm = resolveTxOrm(tx);
@@ -982,6 +975,7 @@ export const communityScheduleService = {
         raidLeadId: input.raidLeadId,
         runTemplateId: template.id,
         autoCreateRun: input.autoCreateRun,
+        composition,
         actorId: user.id,
       });
     });
@@ -998,7 +992,6 @@ export const communityScheduleService = {
     requireManage(user);
     await requireEligibleRaidLead(input.raidLeadId);
     await validateTemplateLink({
-      raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
     });
@@ -1007,6 +1000,7 @@ export const communityScheduleService = {
       weekday: input.weekday,
       localStartTime: input.localStartTime,
     });
+    const composition = normalizeScheduleCompositionWrite(input);
     const slot = await communityScheduleRepository.create({
       weekday: input.weekday,
       localStartTime: input.localStartTime,
@@ -1016,6 +1010,7 @@ export const communityScheduleService = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      composition,
       createdById: user.id,
       updatedById: user.id,
     });
@@ -1035,7 +1030,6 @@ export const communityScheduleService = {
     }
     await requireEligibleRaidLead(input.raidLeadId);
     await validateTemplateLink({
-      raidLeadId: input.raidLeadId,
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
     });
@@ -1045,6 +1039,7 @@ export const communityScheduleService = {
       localStartTime: input.localStartTime,
       excludeId: input.slotId,
     });
+    const composition = normalizeScheduleCompositionWrite(input);
     const slot = await communityScheduleRepository.update(input.slotId, {
       weekday: input.weekday,
       localStartTime: input.localStartTime,
@@ -1054,6 +1049,7 @@ export const communityScheduleService = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      composition,
       updatedById: user.id,
     });
     const materialization = await maybeImmediateMaterialize([slot.id], slot.autoCreateRun, now);

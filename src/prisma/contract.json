@@ -2736,6 +2736,13 @@
                   "kind": "scalar"
                 }
               },
+              "compositionOverrideEnabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -2747,6 +2754,34 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredDpsCountOverride": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredHealerCountOverride": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredLootbuddyCountOverride": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "desiredTankCountOverride": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
@@ -2922,11 +2957,26 @@
                 "autoCreateRun": {
                   "column": "autoCreateRun"
                 },
+                "compositionOverrideEnabled": {
+                  "column": "compositionOverrideEnabled"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
                 "createdById": {
                   "column": "createdById"
+                },
+                "desiredDpsCountOverride": {
+                  "column": "desiredDpsCountOverride"
+                },
+                "desiredHealerCountOverride": {
+                  "column": "desiredHealerCountOverride"
+                },
+                "desiredLootbuddyCountOverride": {
+                  "column": "desiredLootbuddyCountOverride"
+                },
+                "desiredTankCountOverride": {
+                  "column": "desiredTankCountOverride"
                 },
                 "id": {
                   "column": "id"
@@ -7512,13 +7562,6 @@
                   "kind": "scalar"
                 }
               },
-              "raidLeadId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
@@ -7595,21 +7638,6 @@
                   "namespace": "public"
                 }
               },
-              "raidLead": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "raidLeadId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "User",
-                  "namespace": "public"
-                }
-              },
               "updatedBy": {
                 "cardinality": "N:1",
                 "on": {
@@ -7669,9 +7697,6 @@
                 },
                 "raidId": {
                   "column": "raidId"
-                },
-                "raidLeadId": {
-                  "column": "raidLeadId"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -9076,21 +9101,6 @@
                 },
                 "to": {
                   "model": "UserNotification",
-                  "namespace": "public"
-                }
-              },
-              "ownedRunTemplates": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "raidLeadId"
-                  ]
-                },
-                "to": {
-                  "model": "RunTemplate",
                   "namespace": "public"
                 }
               },
@@ -11551,6 +11561,15 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
+                "compositionOverrideEnabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -11564,6 +11583,26 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "desiredDpsCountOverride": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "desiredHealerCountOverride": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "desiredLootbuddyCountOverride": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "desiredTankCountOverride": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
                 },
                 "id": {
                   "codecId": "pg/text@1",
@@ -15445,11 +15484,6 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "raidLeadId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -15462,23 +15496,6 @@
                 }
               },
               "foreignKeys": [
-                {
-                  "onDelete": "restrict",
-                  "source": {
-                    "columns": [
-                      "raidLeadId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "run_template"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "user"
-                  }
-                },
                 {
                   "onDelete": "restrict",
                   "source": {
@@ -15542,27 +15559,18 @@
                 },
                 {
                   "columns": [
+                    "isActive"
+                  ],
+                  "name": "run_template_isActive_idx_77fe3ba1",
+                  "prefix": "run_template_isActive_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
                     "raidId"
                   ],
                   "name": "run_template_raidId_idx_996eeca9",
                   "prefix": "run_template_raidId_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "raidLeadId"
-                  ],
-                  "name": "run_template_raidLeadId_idx_e271c2cb",
-                  "prefix": "run_template_raidLeadId_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "raidLeadId",
-                    "isActive"
-                  ],
-                  "name": "run_template_raidLeadId_isActive_idx_584288ab",
-                  "prefix": "run_template_raidLeadId_isActive_idx",
                   "unique": false
                 },
                 {
@@ -17509,7 +17517,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "9a4b528d68b4bad608906c9fe9eea6e8c2d367549a41308c9dc6ffb440a30595"
+    "storageHash": "8f242b35db5fe36cfdada043c58c954d14a3429ebebef3745e05e0260a6e74ee"
   },
   "execution": {
     "executionHash": "e061fdcc9802efba48326f09b79dd1af6418648c3389cf809c91c340b41515d0",
