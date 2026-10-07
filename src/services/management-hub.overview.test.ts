@@ -131,17 +131,22 @@ afterAll(async () => {
 });
 
 describe("managementHubService balanced Overview cards", () => {
-  it("ADMIN receives six cards including system + analytics with correct links and metrics", async () => {
+  it("ADMIN receives five cards with Users consolidating boosting-access state", async () => {
     const overview = await managementHubService.getOverview(asUser(ids.admin, "OV Admin", "ADMIN"));
-    expect(overview.cards).toHaveLength(6);
+    expect(overview.cards).toHaveLength(5);
     expect(overview.cards.map((card) => card.id)).toEqual([
       "runs",
-      "boosting-roles",
       "users",
       "characters",
       "system",
       "analytics",
     ]);
+    const users = overview.cards.find((card) => card.id === "users")!;
+    expect(users.href).toBe("/manage/users");
+    expect(users.metrics.map((m) => m.label)).toEqual(
+      expect.arrayContaining(["Total", "Raid leads", "Admins", "Boosters", "Pending access"]),
+    );
+    expect(overview.cards.some((card) => card.id === ("boosting-roles" as never))).toBe(false);
 
     const system = overview.cards.find((card) => card.id === "system")!;
     expect(system.href).toBe("/manage/system");
@@ -182,7 +187,6 @@ describe("managementHubService balanced Overview cards", () => {
     const overview = await managementHubService.getOverview(asUser(ids.owner, "OV Owner", "OWNER"));
     expect(overview.cards.map((card) => card.id)).toEqual([
       "runs",
-      "boosting-roles",
       "users",
       "characters",
       "system",

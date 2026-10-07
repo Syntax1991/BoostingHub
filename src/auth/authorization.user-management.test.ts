@@ -6,13 +6,12 @@ import {
 } from "@/auth/authorization";
 
 describe("management navigation and user-management gates", () => {
-  it("exposes ADMIN manage modules including users and boosting roles", () => {
+  it("exposes ADMIN manage modules with Users as the canonical admin surface", () => {
     const items = getManagementNavItems("ADMIN");
     expect(items.map((item) => item.module)).toEqual([
       "overview",
       "runs",
       "schedule",
-      "boosting-roles",
       "users",
       "characters",
       "analytics",
@@ -22,7 +21,6 @@ describe("management navigation and user-management gates", () => {
       "/manage",
       "/manage/runs",
       "/manage/schedule",
-      "/manage/boosting-roles",
       "/manage/users",
       "/manage/characters",
       "/manage/analytics",
@@ -30,13 +28,13 @@ describe("management navigation and user-management gates", () => {
     ]);
     expect(items.some((item) => item.module === "templates")).toBe(false);
     expect(items.some((item) => item.href === "/manage/templates")).toBe(false);
+    expect(items.some((item) => item.href === "/manage/boosting-roles")).toBe(false);
   });
 
   it("limits RAID_LEAD to overview, runs, and schedule", () => {
     const items = getManagementNavItems("RAID_LEAD");
     expect(items.map((item) => item.module)).toEqual(["overview", "runs", "schedule"]);
     expect(items.some((item) => item.module === "users")).toBe(false);
-    expect(items.some((item) => item.module === "boosting-roles")).toBe(false);
     expect(items.some((item) => item.module === "system")).toBe(false);
   });
 

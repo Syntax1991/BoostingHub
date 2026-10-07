@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   assertCanManageUsers,
+  canReviewBoosterAccess,
   hasOwnerAccess,
   hasRaidLeadAccess,
   isEligibleRaidLead,
@@ -11,10 +12,16 @@ import { defaultRaidBossTotal } from "@/lib/lockout-display";
 import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { ACCOUNT_ROLES, type AccountRole } from "@/models/enums";
+import {
+  boosterAccessRepository,
+  type BoosterAccessAdminRecord,
+} from "@/repositories/booster-access.repository";
 import { activityRepository } from "@/repositories/activity.repository";
 import { userRepository, type AdminUserListFilters } from "@/repositories/user.repository";
+import { boosterAccessService } from "@/services/booster-access.service";
 import { lockoutService } from "@/services/lockout.service";
 import { strikeService } from "@/services/strike.service";
+import type { AdminUsersPageFilters } from "@/validators/user-management";
 
 function isAccountRole(value: string): value is AccountRole {
   return (ACCOUNT_ROLES as readonly string[]).includes(value);
@@ -29,10 +36,89 @@ function isAccountRole(value: string): value is AccountRole {
  * OWNER target is never changeable here — not even by the OWNER. Ownership is
  * only set by the explicit owner bootstrap (scripts/owner-bootstrap.mts).
  */
+export type PendingBoostingAccessGroup = {
+  userId: string;
+  userName: string;
+  requests: BoosterAccessAdminRecord[];
+};
+
+function groupPendingByUser(requests: BoosterAccessAdminRecord[]): PendingBoostingAccessGroup[] {
+  const byUser = new Map<string, PendingBoostingAccessGroup>();
+  for (const request of requests) {
+    const existing = byUser.get(request.userId);
+    if (existing) {
+      existing.requests.push(request);
+      continue;
+    }
+    byUser.set(request.userId, {
+      userId: request.userId,
+      userName: request.userName,
+      requests: [request],
+    });
+  }
+  return [...byUser.values()].sort((left, right) =>
+    left.userName.localeCompare(right.userName, "en-US", { sensitivity: "base" }),
+  );
+}
+
+/**
+ * Consolidated Users admin page read model. Writes stay in user-management /
+ * boosting-role / booster-access services — this only batches page reads.
+ */
 export const userManagementService = {
   async listUsers(admin: AuthenticatedUser, filters: AdminUserListFilters = {}) {
     assertCanManageUsers(admin);
     return userRepository.listAdminUsers(filters);
+  },
+
+  async getUsersAdminPage(admin: AuthenticatedUser, filters: AdminUsersPageFilters) {
+    assertCanManageUsers(admin);
+    const listFilters: AdminUserListFilters = {
+      query: filters.view === "users" ? filters.query : undefined,
+      role: filters.role,
+      boostingRole: filters.boostingRole,
+      accountStatus: filters.accountStatus,
+      pendingAccess: filters.pendingAccess,
+      sort: filters.sort,
+    };
+
+    if (filters.view === "boosting-access") {
+      if (!canReviewBoosterAccess(admin.accountRole)) {
+        throw new DomainError(
+          "NOT_AUTHORIZED",
+          "You are not allowed to review boosting access.",
+          403,
+        );
+      }
+      const legacy = await boosterAccessService.listLegacyRequests(admin, {
+        difficulty: filters.difficulty,
+        role: filters.requestedRole,
+        query: filters.query,
+      });
+      return {
+        filters,
+        users: [] as Awaited<ReturnType<typeof userRepository.listAdminUsers>>,
+        pendingAccessCount: legacy.pendingCount,
+        pendingGroups: groupPendingByUser(legacy.requests),
+        boostingCounts: await userRepository.countBoostingRoles(),
+      };
+    }
+
+    const [users, accessCounts, boostingCounts] = await Promise.all([
+      userRepository.listAdminUsers(listFilters),
+      canReviewBoosterAccess(admin.accountRole)
+        ? boosterAccessRepository.countByStatus()
+        : Promise.resolve(null),
+      userRepository.countBoostingRoles(),
+    ]);
+
+    return {
+      filters,
+      users,
+      pendingAccessCount: accessCounts?.PENDING ?? 0,
+      pendingGroups: [] as PendingBoostingAccessGroup[],
+      boostingCounts,
+    };
   },
 
   async getUserDetail(admin: AuthenticatedUser, userId: string) {
@@ -41,7 +127,12 @@ export const userManagementService = {
     if (!detail) {
       throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
     }
-    const strikes = await strikeService.listForUser(admin, userId);
+    const [strikes, pendingAccess] = await Promise.all([
+      strikeService.listForUser(admin, userId),
+      canReviewBoosterAccess(admin.accountRole)
+        ? boosterAccessService.listLegacyRequests(admin, { userId }).then((legacy) => legacy.requests)
+        : Promise.resolve([] as BoosterAccessAdminRecord[]),
+    ]);
     const currentRaids = getCurrentLockoutRaids();
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const currentLockoutRaids = currentRaids.map((raid) => ({
@@ -52,6 +143,7 @@ export const userManagementService = {
     return {
       ...detail,
       strikes,
+      pendingAccess,
       currentLockoutRaids,
       characters: detail.characters.map((character) => {
         const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;

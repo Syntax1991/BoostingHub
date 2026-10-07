@@ -3,7 +3,6 @@ import {
   Activity,
   BarChart3,
   CalendarDays,
-  ShieldCheck,
   Swords,
   Users,
 } from "lucide-react";
@@ -16,7 +15,6 @@ import type { ManagementOverviewCard } from "@/services/management-hub.service";
 
 const ICONS = {
   runs: CalendarDays,
-  "boosting-roles": ShieldCheck,
   users: Users,
   characters: Swords,
   system: Activity,

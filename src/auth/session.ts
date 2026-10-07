@@ -81,7 +81,7 @@ export async function requireManagerOrRedirect(): Promise<AuthenticatedUser> {
 }
 
 /** ADMIN-only destination. RAID_LEAD keeps /manage for runs but not this queue. */
-export async function requireAdminOrRedirect(callbackPath = "/manage/boosting-roles"): Promise<AuthenticatedUser> {
+export async function requireAdminOrRedirect(callbackPath = "/manage/users"): Promise<AuthenticatedUser> {
   const user = await requireUserOrRedirect(callbackPath);
   if (!hasAdminAccess(user.accountRole)) {
     redirect("/dashboard");

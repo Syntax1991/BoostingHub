@@ -49,10 +49,10 @@ Additionally, when `DISCORD_BOOSTER_ROLE_ID` is configured alongside the bot tok
 
 Surfaces:
 
-- **`/manage/users/[id]`** — primary place: a **Boosting roles** card with a Booster row and a Lootbuddy row, each Enabled/Disabled with Grant / Revoke (optional reason). No difficulty selector.
-- **`/manage/boosting-roles`** — overview of every User with inline Booster / Lootbuddy controls, search, and tabs All users · Boosters · Lootbuddies · Neither. A second tab, **Legacy Requests**, holds historical PENDING requests (below). The old `/manage/booster-access` URL redirects here.
-- **`/manage/users`** — Boosting roles column (badges for enabled roles only) and a Boosting role filter (Booster / Lootbuddy / Neither).
-- **Management hub** — Boosting Roles card: Boosters, Lootbuddies, Legacy pending.
+- **`/manage/users`** — canonical Admin surface: **All Users** (directory with platform role, account status, booster status, pending counts) and **Pending Boosting Access** (historical PENDING requests grouped by user). Filters include search, account status, platform role, booster status, and pending access.
+- **`/manage/users/[id]`** — primary grant/revoke place: **Boosting access** with Booster / Lootbuddy Grant·Revoke plus any pending historical requests for that user. No difficulty selector on the role itself.
+- **Legacy URLs** — `/manage/boosting-roles` and `/manage/booster-access` redirect into `/manage/users` (legacy/pending query → `?view=boosting-access`).
+- **Management hub** — single **Users** card: totals, boosters, and pending access (no separate Boosting Roles card).
 
 Audit: every change writes an `ActivityEvent` under the acting admin — `BOOSTER_GRANTED`, `BOOSTER_REVOKED`, `LOOTBUDDY_GRANTED`, `LOOTBUDDY_REVOKED` — with a `targetUserId=<id>` marker so it also appears in the target's audit trail on `/manage/users/[id]`. No difficulty is recorded.
 
@@ -82,7 +82,7 @@ Never shown: `Booster · Normal / Heroic / Mythic` — the Booster role has no d
 
 `BoosterAccess` rows are preserved as history and are **never read for eligibility**; nothing in current eligibility depends on them.
 
-**Legacy Requests · N** (`/manage/boosting-roles?view=legacy`) lists unresolved historical `PENDING` rows, filterable by requested difficulty and role:
+**Pending Boosting Access · N** (`/manage/users?view=boosting-access`) lists unresolved historical `PENDING` rows (grouped by user), filterable by requested difficulty and role:
 
 - **Approve** marks that row and every other PENDING row of the same User `APPROVED` (their recorded difficulty is kept) and grants the account-level Booster role (a no-op if the User already has it).
 - **Reject** marks the row `REJECTED`; it never changes Boosting Roles. Reviewed rows are never rewritten by a later approval.

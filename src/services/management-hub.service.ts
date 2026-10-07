@@ -20,7 +20,7 @@ import { operationalAnalyticsService } from "@/services/operational-analytics.se
 import { systemHealthService } from "@/services/system-health.service";
 
 export type ManagementOverviewCard = {
-  id: "runs" | "boosting-roles" | "users" | "characters" | "system" | "analytics";
+  id: "runs" | "users" | "characters" | "system" | "analytics";
   title: string;
   description: string;
   href: string;
@@ -65,12 +65,16 @@ export const managementHubService = {
       ? listManagedRunOperationalHandoffs(user)
       : Promise.resolve(null);
 
-    const boostingRolesPromise = canManageBoostingRoles(user.accountRole)
-      ? Promise.all([boosterAccessRepository.countByStatus(), userRepository.countBoostingRoles()])
-      : Promise.resolve(null);
-
     const usersPromise = canManageUsers(user.accountRole)
-      ? userRepository.countByRole()
+      ? Promise.all([
+          userRepository.countByRole(),
+          canManageBoostingRoles(user.accountRole)
+            ? Promise.all([
+                boosterAccessRepository.countByStatus(),
+                userRepository.countBoostingRoles(),
+              ])
+            : Promise.resolve(null),
+        ])
       : Promise.resolve(null);
 
     const charactersPromise = canManageCharacterOperations(user.accountRole)
@@ -88,15 +92,13 @@ export const managementHubService = {
 
     const [
       projected,
-      boostingRoles,
-      roleCounts,
+      usersBundle,
       characterPage,
       systemPage,
       analyticsReport,
       communityStats,
     ] = await Promise.all([
       runsPromise,
-      boostingRolesPromise,
       usersPromise,
       charactersPromise,
       systemPromise,
@@ -129,38 +131,31 @@ export const managementHubService = {
       });
     }
 
-    if (boostingRoles) {
-      const [accessCounts, boostingRoleCounts] = boostingRoles;
-      cards.push({
-        id: "boosting-roles",
-        title: "Boosting Roles",
-        description: "Grant or revoke the Booster and Lootbuddy roles after Discord review.",
-        href: "/manage/boosting-roles",
-        cta: "Manage Boosting Roles",
-        metrics: [
-          { label: "Boosters", value: boostingRoleCounts.boosters },
-          { label: "Lootbuddies", value: boostingRoleCounts.lootbuddies },
-          { label: "Legacy pending", value: accessCounts.PENDING },
-        ],
-      });
-    }
-
-    if (roleCounts) {
+    if (usersBundle) {
+      const [roleCounts, boostingBundle] = usersBundle;
       const total =
         roleCounts.USER + roleCounts.RAID_LEAD + roleCounts.ADMIN + roleCounts.OWNER;
+      const metrics: Array<{ label: string; value: number | string }> = [
+        { label: "Total", value: total },
+        { label: "Raid leads", value: roleCounts.RAID_LEAD },
+        // Admin-level accounts: Admins plus the Platform Owner.
+        { label: "Admins", value: roleCounts.ADMIN + roleCounts.OWNER },
+      ];
+      if (boostingBundle) {
+        const [accessCounts, boostingRoleCounts] = boostingBundle;
+        metrics.push(
+          { label: "Boosters", value: boostingRoleCounts.boosters },
+          { label: "Pending access", value: accessCounts.PENDING },
+        );
+      }
       cards.push({
         id: "users",
         title: "Users",
-        description: "Browse accounts, inspect characters, and assign platform roles.",
+        description:
+          "Accounts, platform roles, Boosting Roles, and pending boosting-access review.",
         href: "/manage/users",
         cta: "Manage Users",
-        metrics: [
-          { label: "Total", value: total },
-          { label: "Users", value: roleCounts.USER },
-          { label: "Raid leads", value: roleCounts.RAID_LEAD },
-          // Admin-level accounts: Admins plus the Platform Owner.
-          { label: "Admins", value: roleCounts.ADMIN + roleCounts.OWNER },
-        ],
+        metrics,
       });
     }
 

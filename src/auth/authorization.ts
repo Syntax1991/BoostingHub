@@ -100,7 +100,6 @@ export type ManagementNavItem = {
     | "runs"
     | "schedule"
     | "templates"
-    | "boosting-roles"
     | "users"
     | "characters"
     | "analytics"
@@ -110,6 +109,8 @@ export type ManagementNavItem = {
 /**
  * Management sub-navigation by account role.
  * Hidden links are not authorization — routes still enforce server-side.
+ * Boosting Roles live under Users (pending access + user detail), not as a
+ * separate top-level Manage module.
  */
 export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
   if (!canAccessManagement(role)) {
@@ -122,7 +123,6 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
   ];
   if (hasAdminAccess(role)) {
     items.push(
-      { href: "/manage/boosting-roles", label: "Boosting Roles", module: "boosting-roles" },
       { href: "/manage/users", label: "Users", module: "users" },
       { href: "/manage/characters", label: "Characters", module: "characters" },
       { href: "/manage/analytics", label: "Analytics", module: "analytics" },
