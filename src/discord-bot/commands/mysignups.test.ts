@@ -21,12 +21,46 @@ describe("formatMySignups", () => {
   it("shows the selected character when one offer is SELECTED among several", () => {
     const lines = formatMySignups({
       pending: [{ runId: "r1", runTitle: "Weekend Heroic", participationType: "BOOSTER", characterName: "Synblast", status: "PENDING" }],
-      selected: [{ runId: "r1", runTitle: "Weekend Heroic", participationType: "BOOSTER", characterName: "Synlight", status: "SELECTED" }],
+      selected: [
+        {
+          runId: "r1",
+          runTitle: "Weekend Heroic",
+          participationType: "BOOSTER",
+          characterName: "Synlight",
+          status: "SELECTED",
+          selectionState: "PUBLISHED",
+          displayRole: "HEALER",
+        },
+      ],
       notSelected: [],
     });
 
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("Selected: Synlight");
+    expect(lines[0]).toContain("Selected: Synlight · Healer · Confirmed");
+  });
+
+  it("shows draft selection before publish", () => {
+    const lines = formatMySignups({
+      pending: [
+        { runId: "r1", runTitle: "Weekend Heroic", participationType: "BOOSTER", characterName: "Synblast", status: "PENDING", selectionState: "OFFERED" },
+      ],
+      selected: [
+        {
+          runId: "r1",
+          runTitle: "Weekend Heroic",
+          participationType: "BOOSTER",
+          characterName: "Synmist",
+          status: "PENDING",
+          selectionState: "DRAFT",
+          displayRole: "HEALER",
+        },
+      ],
+      notSelected: [],
+    });
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("Offered: Synmist, Synblast");
+    expect(lines[0]).toContain("Selected: Synmist · Healer · Draft");
   });
 
   it("keeps different Runs as separate lines", () => {

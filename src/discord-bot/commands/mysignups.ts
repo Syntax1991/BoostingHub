@@ -1,8 +1,9 @@
 import type { ChatInputCommandInteraction } from "discord.js";
 import type { BotApiClient } from "@/discord-bot/bot-api-client";
 import { describeBotApiError } from "@/discord-bot/interactions/error-copy";
-import { CLASS_LABELS } from "@/lib/labels";
-import type { WowClass } from "@/models/enums";
+import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
+import type { CharacterRole, WowClass } from "@/models/enums";
+import type { UserRunSelectionState } from "@/services/user-run-participation";
 
 type MySignupItem = {
   runId: string;
@@ -11,6 +12,8 @@ type MySignupItem = {
   characterName: string | null;
   lootbuddyClass?: WowClass | null;
   status: "PENDING" | "SELECTED" | "NOT_SELECTED" | "WITHDRAWN";
+  selectionState?: UserRunSelectionState;
+  displayRole?: CharacterRole | null;
 };
 
 type MyRunsPayload = {
@@ -19,12 +22,34 @@ type MyRunsPayload = {
   notSelected: MySignupItem[];
 };
 
-type RunGroup = { runTitle: string; participationType: string; offers: string[]; selected: string | null };
+type RunGroup = {
+  runTitle: string;
+  participationType: string;
+  offers: string[];
+  selected: string | null;
+  selectedTone: "draft" | "published" | null;
+};
 
 function offerLabel(item: MySignupItem): string {
   if (item.characterName) return item.characterName;
   if (item.lootbuddyClass) return CLASS_LABELS[item.lootbuddyClass];
   return item.participationType === "LOOTBUDDY" ? "Lootbuddy" : "Unknown character";
+}
+
+function selectedLabel(item: MySignupItem): string {
+  const parts = [offerLabel(item)];
+  if (item.displayRole) parts.push(CHARACTER_ROLE_LABELS[item.displayRole]);
+  if (item.selectionState === "DRAFT") parts.push("Draft");
+  else if (item.selectionState === "PUBLISHED" || item.status === "SELECTED") parts.push("Confirmed");
+  return parts.join(" · ");
+}
+
+function isPickedItem(item: MySignupItem): boolean {
+  return (
+    item.selectionState === "DRAFT" ||
+    item.selectionState === "PUBLISHED" ||
+    (!item.selectionState && item.status === "SELECTED")
+  );
 }
 
 /**
@@ -42,10 +67,17 @@ export function formatMySignups(data: MyRunsPayload): string[] {
         participationType: item.participationType,
         offers: [],
         selected: null,
+        selectedTone: null,
       };
       group.offers.push(offerLabel(item));
-      if (item.status === "SELECTED") {
-        group.selected = offerLabel(item);
+      if (isPickedItem(item)) {
+        group.selected = selectedLabel(item);
+        group.selectedTone =
+          item.selectionState === "DRAFT"
+            ? "draft"
+            : item.selectionState === "PUBLISHED" || item.status === "SELECTED"
+              ? "published"
+              : group.selectedTone;
       }
       byRun.set(key, group);
     }

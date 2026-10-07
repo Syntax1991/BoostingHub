@@ -9,7 +9,12 @@ import {
   SignupStatusBadge,
 } from "@/components/ui/badges";
 import { WithdrawButton } from "@/components/my-runs/withdraw-button";
-import { CLASS_LABELS, LOOTBUDDY_MODE_LABELS, LOOTBUDDY_VERIFICATION_LABELS } from "@/lib/labels";
+import {
+  CHARACTER_ROLE_LABELS,
+  CLASS_LABELS,
+  LOOTBUDDY_MODE_LABELS,
+  LOOTBUDDY_VERIFICATION_LABELS,
+} from "@/lib/labels";
 import type { signupService } from "@/services/signup.service";
 
 type MyRuns = Awaited<ReturnType<typeof signupService.getMyRuns>>;
@@ -143,11 +148,23 @@ function SignupTable({ items, timeZone }: { items: SignupItem[]; timeZone: strin
         </thead>
         <tbody>
           {groups.map((group) => {
-            const selected = group.offers.find((offer) => offer.status === "SELECTED");
-            const stillPending = group.offers.some((offer) => offer.status === "PENDING");
+            const selected = group.offers.find(
+              (offer) => offer.selectionState === "DRAFT" || offer.selectionState === "PUBLISHED",
+            );
+            const stillOffered = group.offers.some((offer) => offer.selectionState === "OFFERED");
             const selectedLabel = selected
-              ? characterLabel(selected)
-              : stillPending
+              ? [
+                  characterLabel(selected),
+                  selected.displayRole ? CHARACTER_ROLE_LABELS[selected.displayRole] : null,
+                  selected.selectionState === "DRAFT"
+                    ? "Draft"
+                    : selected.selectionState === "PUBLISHED"
+                      ? "Confirmed"
+                      : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : stillOffered
                 ? "Pending"
                 : "Not selected";
             return (
@@ -169,7 +186,7 @@ function SignupTable({ items, timeZone }: { items: SignupItem[]; timeZone: strin
                   <p className="max-w-[240px] truncate">
                     <span className="text-muted">Offered:</span> {group.offers.map(characterLabel).join(", ")}
                   </p>
-                  <p className="mt-1 max-w-[240px] truncate text-xs text-muted">Selected: {selectedLabel}</p>
+                  <p className="mt-1 max-w-[280px] truncate text-xs text-muted">Selected: {selectedLabel}</p>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
@@ -194,6 +211,16 @@ function SignupTable({ items, timeZone }: { items: SignupItem[]; timeZone: strin
                           <OfferedRolesBadges roles={offer.offeredRoles} />
                         )}
                         <SignupStatusBadge status={offer.status} />
+                        {offer.selectionState === "DRAFT" ? (
+                          <span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                            Selected · Draft
+                          </span>
+                        ) : null}
+                        {offer.selectionState === "PUBLISHED" ? (
+                          <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-success">
+                            Selected · Confirmed
+                          </span>
+                        ) : null}
                         {offer.scheduleConflicts.length > 0 ? (
                           <span
                             className="text-xs text-warning"

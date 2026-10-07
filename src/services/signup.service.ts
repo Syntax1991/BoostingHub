@@ -37,6 +37,11 @@ import {
   getScheduleConflictsForCharacters,
   type CharacterScheduleConflict,
 } from "@/services/character-schedule-conflict.service";
+import {
+  isMyRunsPendingBucket,
+  isMyRunsSelectedBucket,
+  resolveUserRunParticipation,
+} from "@/services/user-run-participation";
 
 export type { QuickSignupBoostersResult } from "@/lib/quick-signup-message";
 export { formatQuickSignupBoostersMessage } from "@/lib/quick-signup-message";
@@ -93,58 +98,79 @@ export const signupService = {
     }
 
     const conflictsByRunCharacter = new Map<string, CharacterScheduleConflict[]>();
-    await Promise.all(
-      [...byRun.entries()].map(async ([runId, meta]) => {
-        const map = await getScheduleConflictsForCharacters({
-          targetRunId: runId,
-          scheduledStartAt: meta.scheduledStartAt,
-          difficulty: meta.difficulty,
-          characters: meta.characters,
-        });
-        for (const [characterId, conflicts] of map) {
-          conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
-        }
-      }),
-    );
+    const [draftBySignupId] = await Promise.all([
+      rosterRepository.listDraftSelectedRolesBySignupIds(upcomingSignups.map((signup) => signup.id)),
+      Promise.all(
+        [...byRun.entries()].map(async ([runId, meta]) => {
+          const map = await getScheduleConflictsForCharacters({
+            targetRunId: runId,
+            scheduledStartAt: meta.scheduledStartAt,
+            difficulty: meta.difficulty,
+            characters: meta.characters,
+          });
+          for (const [characterId, conflicts] of map) {
+            conflictsByRunCharacter.set(`${runId}:${characterId}`, conflicts);
+          }
+        }),
+      ),
+    ]);
 
-    const items = upcomingSignups.map((signup) => ({
-      id: signup.id,
-      runId: signup.run.id,
-      runTitle: signup.run.title,
-      productLabel: signup.run.productLabel,
-      contentSummary: signup.run.contentSummary,
-      difficulty: signup.run.difficulty,
-      scheduledStartAt: signup.run.scheduledStartAt,
-      runStatus: signup.run.status,
-      characterId: signup.character?.id ?? null,
-      characterName: signup.character?.name ?? null,
-      characterRealm: signup.character?.realm ?? null,
-      offeredRoles: signup.offeredRoles,
-      /** Authoritative published BOOSTER role when SELECTED; null otherwise / for LOOTBUDDY. */
-      publishedRole: signup.publishedRole,
-      participationType: signup.participationType,
-      isBackup: signup.isBackup,
-      status: signup.status,
-      /** Legacy Character-backed Lootbuddy rows have no lootbuddyClass — display falls back to the Character's class. */
-      lootbuddyClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
-      lootbuddyMode: signup.lootbuddyMode,
-      lootbuddyVerification: signup.lootbuddyVerification,
-      canWithdraw: signup.userId === user.id && canSelfWithdrawSignup(signup.status, signup.run.status),
-      /** Published pick: withdraws only with a reason. Draft picks find out via WITHDRAW_REASON_REQUIRED. */
-      canWithdrawWithReason:
-        signup.userId === user.id &&
-        signup.status === "SELECTED" &&
-        PICKED_WITHDRAW_RUN_STATUSES.includes(signup.run.status),
-      scheduleConflicts:
-        signup.participationType === "BOOSTER" && signup.character && signup.status !== "WITHDRAWN"
-          ? (conflictsByRunCharacter.get(`${signup.run.id}:${signup.character.id}`) ?? [])
-          : [],
-    }));
+    const items = upcomingSignups.map((signup) => {
+      const draftSelected = draftBySignupId.has(signup.id);
+      const selectedRole = draftSelected ? (draftBySignupId.get(signup.id) ?? null) : null;
+      const participation = resolveUserRunParticipation({
+        status: signup.status,
+        draftSelected,
+        selectedRole,
+        publishedRole: signup.publishedRole,
+      });
+      const picked = participation.picked;
+      return {
+        id: signup.id,
+        runId: signup.run.id,
+        runTitle: signup.run.title,
+        productLabel: signup.run.productLabel,
+        contentSummary: signup.run.contentSummary,
+        difficulty: signup.run.difficulty,
+        scheduledStartAt: signup.run.scheduledStartAt,
+        runStatus: signup.run.status,
+        characterId: signup.character?.id ?? null,
+        characterName: signup.character?.name ?? null,
+        characterRealm: signup.character?.realm ?? null,
+        offeredRoles: signup.offeredRoles,
+        /** Authoritative published BOOSTER role when SELECTED; null otherwise / for LOOTBUDDY. */
+        publishedRole: signup.publishedRole,
+        /** Current draft roster role when draft-selected. */
+        selectedRole,
+        selectionState: participation.selectionState,
+        displayRole: participation.displayRole,
+        selectedLabelTone: participation.selectedLabelTone,
+        participationType: signup.participationType,
+        isBackup: signup.isBackup,
+        status: signup.status,
+        /** Legacy Character-backed Lootbuddy rows have no lootbuddyClass — display falls back to the Character's class. */
+        lootbuddyClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
+        lootbuddyMode: signup.lootbuddyMode,
+        lootbuddyVerification: signup.lootbuddyVerification,
+        canWithdraw:
+          signup.userId === user.id && !picked && canSelfWithdrawSignup(signup.status, signup.run.status),
+        canWithdrawWithReason:
+          signup.userId === user.id &&
+          picked &&
+          PICKED_WITHDRAW_RUN_STATUSES.includes(signup.run.status),
+        scheduleConflicts:
+          signup.participationType === "BOOSTER" && signup.character && signup.status !== "WITHDRAWN"
+            ? (conflictsByRunCharacter.get(`${signup.run.id}:${signup.character.id}`) ?? [])
+            : [],
+      };
+    });
 
     return {
-      pending: items.filter((item) => item.status === "PENDING"),
-      selected: items.filter((item) => item.status === "SELECTED"),
-      notSelected: items.filter((item) => item.status === "NOT_SELECTED"),
+      pending: items.filter((item) => isMyRunsPendingBucket(item.status, item)),
+      selected: items.filter((item) => isMyRunsSelectedBucket(item)),
+      notSelected: items.filter(
+        (item) => item.status === "NOT_SELECTED" && item.selectionState === "NOT_SELECTED",
+      ),
       withdrawn: items.filter((item) => item.status === "WITHDRAWN"),
     };
   },
@@ -152,13 +178,21 @@ export const signupService = {
   /** Own signups on one run for the participant-facing Run detail Signups section. */
   async listOwnForRun(user: AuthenticatedUser, runId: string) {
     const signups = await signupRepository.listByRunId(runId);
-    const draftSelectedSignupIds = (await rosterRepository.findByRunId(runId))?.selectedSignupIds ?? [];
-    return signups
-      .filter((signup) => signup.userId === user.id)
-      .map((signup) => {
-        // A picked row is withdrawn only with a reason (withdrawPickedSignup).
-        const picked = isPickedSignup(signup, draftSelectedSignupIds);
-        return {
+    const own = signups.filter((signup) => signup.userId === user.id);
+    const draftBySignupId = await rosterRepository.listDraftSelectedRolesBySignupIds(
+      own.map((signup) => signup.id),
+    );
+    return own.map((signup) => {
+      const draftSelected = draftBySignupId.has(signup.id);
+      const selectedRole = draftSelected ? (draftBySignupId.get(signup.id) ?? null) : null;
+      const participation = resolveUserRunParticipation({
+        status: signup.status,
+        draftSelected,
+        selectedRole,
+        publishedRole: signup.publishedRole,
+      });
+      const picked = participation.picked;
+      return {
         id: signup.id,
         characterName: signup.character?.name ?? null,
         characterRealm: signup.character?.realm ?? null,
@@ -166,13 +200,18 @@ export const signupService = {
         participationType: signup.participationType,
         isBackup: signup.isBackup,
         status: signup.status,
+        publishedRole: signup.publishedRole,
+        selectedRole,
+        selectionState: participation.selectionState,
+        displayRole: participation.displayRole,
+        selectedLabelTone: participation.selectedLabelTone,
         lootbuddyClass: signup.lootbuddyClass ?? signup.character?.wowClass ?? null,
         lootbuddyMode: signup.lootbuddyMode,
         lootbuddyVerification: signup.lootbuddyVerification,
         canWithdraw: !picked && canSelfWithdrawSignup(signup.status, signup.run.status),
         canWithdrawWithReason: picked && PICKED_WITHDRAW_RUN_STATUSES.includes(signup.run.status),
-        };
-      });
+      };
+    });
   },
 
   /**
