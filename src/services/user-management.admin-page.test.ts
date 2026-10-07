@@ -71,10 +71,52 @@ async function createPending(userId: string, role: "HEALER" | "TANK" | "MELEE_DP
   return id;
 }
 
+async function createCharacter(input: {
+  id: string;
+  userId: string;
+  name: string;
+  wowClass: "PRIEST" | "WARRIOR" | "MAGE";
+  specialization: string;
+  primaryRole: "HEALER" | "TANK" | "MELEE_DPS" | "RANGED_DPS";
+  isActive?: boolean;
+  playableSpecs?: string[];
+}) {
+  const now = new Date().toISOString();
+  await orm.Character.create({
+    id: input.id,
+    userId: input.userId,
+    name: input.name,
+    realm: "Blackrock",
+    region: "EU",
+    normalizedName: input.name.toLowerCase(),
+    normalizedRealm: "blackrock",
+    wowClass: input.wowClass,
+    specialization: input.specialization,
+    primaryRole: input.primaryRole,
+    itemLevel: 640,
+    isActive: input.isActive ?? true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  for (const specialization of input.playableSpecs ?? []) {
+    await orm.CharacterPlayableSpec.create({
+      id: crypto.randomUUID(),
+      characterId: input.id,
+      specialization,
+      createdAt: now,
+    });
+  }
+}
+
 async function cleanup() {
   for (const userId of Object.values(ids)) {
     for (const row of await orm.BoosterAccess.where({ userId }).all()) {
       await orm.BoosterAccess.where({ id: String(row.id) }).delete().catch(() => {});
+    }
+    const characters = (await orm.Character.where({ userId }).all()) as Array<{ id: string }>;
+    for (const character of characters) {
+      await orm.CharacterPlayableSpec.where({ characterId: character.id }).delete().catch(() => {});
+      await orm.Character.where({ id: character.id }).delete().catch(() => {});
     }
     await orm.User.where({ id: userId }).delete().catch(() => {});
   }
@@ -172,5 +214,61 @@ describe("userManagementService.getUsersAdminPage", () => {
     await expect(
       userManagementService.getUsersAdminPage(lead, parseAdminUserFilters({})),
     ).rejects.toMatchObject({ code: "USER_MANAGEMENT_FORBIDDEN" });
+  });
+
+  it("projects distinct active Character roles independently of Booster access", async () => {
+    const charHealer = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000001";
+    const charTank = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000002";
+    const charInactive = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000003";
+    const charOffspec = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000004";
+
+    await createCharacter({
+      id: charHealer,
+      userId: ids.alice,
+      name: "Umapheal",
+      wowClass: "PRIEST",
+      specialization: "Holy",
+      primaryRole: "HEALER",
+    });
+    await createCharacter({
+      id: charTank,
+      userId: ids.alice,
+      name: "Umaptank",
+      wowClass: "WARRIOR",
+      specialization: "Protection",
+      primaryRole: "TANK",
+    });
+    await createCharacter({
+      id: charInactive,
+      userId: ids.alice,
+      name: "Umapidle",
+      wowClass: "MAGE",
+      specialization: "Fire",
+      primaryRole: "RANGED_DPS",
+      isActive: false,
+    });
+    await createCharacter({
+      id: charOffspec,
+      userId: ids.bob,
+      name: "Umapoff",
+      wowClass: "PRIEST",
+      specialization: "Holy",
+      primaryRole: "HEALER",
+      playableSpecs: ["Shadow"],
+    });
+
+    const page = await userManagementService.getUsersAdminPage(
+      admin,
+      parseAdminUserFilters({ sort: "name" }),
+    );
+    const alice = page.users.find((row) => row.id === ids.alice)!;
+    const bob = page.users.find((row) => row.id === ids.bob)!;
+
+    expect(alice.isBooster).toBe(false);
+    expect(alice.characterRoles).toEqual(["TANK", "HEALER"]);
+    expect(alice.characterCount).toBe(3);
+
+    expect(bob.isBooster).toBe(true);
+    expect(bob.characterRoles).toEqual(["HEALER", "RANGED_DPS"]);
   });
 });

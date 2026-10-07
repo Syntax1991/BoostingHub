@@ -45,6 +45,7 @@ function samplePage() {
         characterCount: 2,
         isBooster: true,
         isLootbuddy: false,
+        characterRoles: ["TANK", "HEALER"] as const,
         pendingAccessCount: 0,
       },
       {
@@ -59,6 +60,7 @@ function samplePage() {
         characterCount: 0,
         isBooster: false,
         isLootbuddy: false,
+        characterRoles: [] as const,
         pendingAccessCount: 1,
       },
       {
@@ -73,6 +75,7 @@ function samplePage() {
         characterCount: 1,
         isBooster: true,
         isLootbuddy: true,
+        characterRoles: ["RANGED_DPS"] as const,
         pendingAccessCount: 0,
       },
     ],
@@ -82,30 +85,36 @@ function samplePage() {
   };
 }
 
-describe("ManageUsersView inline access controls", () => {
-  it("exposes platform role and boosting access controls while keeping Manage", () => {
+describe("ManageUsersView directory UX", () => {
+  it("renders read-only badges and Access/Manage actions without inline mutation controls", () => {
     const html = renderToStaticMarkup(
       createElement(ManageUsersView, { data: samplePage() as never }),
     );
 
-    expect(html).toContain("Change role");
-    expect(html).toContain("Grant");
-    expect(html).toContain("Revoke");
-    expect(html).toContain("1 pending request");
-    expect(html).toContain("Platform Owner · Protected");
+    expect(html).toContain("Platform Role");
+    expect(html).toContain("Boosting Access");
+    expect(html).toContain("Boosting Roles");
+    expect(html).toContain("Tank");
+    expect(html).toContain("Healer");
+    expect(html).toContain("Booster");
+    expect(html).toContain("Access");
+    expect(html).toContain("Manage");
     expect(html).toContain('href="/manage/users/user-1"');
     expect(html).toContain('href="/manage/users/user-2"');
     expect(html).toContain('href="/manage/users/user-owner"');
-    expect(html).toContain("Manage");
+
+    expect(html).not.toContain("Change role");
+    expect(html).not.toContain(">Grant<");
+    expect(html).not.toContain(">Revoke<");
+    expect(html).not.toContain("1 pending request");
   });
 
-  it("does not offer a role-change button for protected OWNER", () => {
+  it("keeps Pending count and empty boosting access as em dash", () => {
     const html = renderToStaticMarkup(
       createElement(ManageUsersView, { data: samplePage() as never }),
     );
-    // OWNER label is protected; Change role still appears for other rows.
-    expect(html).toContain("Platform Owner · Protected");
-    const ownerSlice = html.slice(html.indexOf("Platform Owner · Protected") - 200);
-    expect(ownerSlice.slice(0, 400)).not.toMatch(/Change role[\s\S]{0,80}Platform Owner · Protected/);
+    // Plain User has pendingAccessCount 1 and no booster / no character roles.
+    expect(html).toContain("Plain User");
+    expect(html).toMatch(/Pending[\s\S]*?>1</);
   });
 });
