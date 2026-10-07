@@ -18,7 +18,6 @@ import {
   type RunTemplateContentWriteSpec,
   type RunTemplateRecord,
 } from "@/repositories/run-template.repository";
-import { userRepository } from "@/repositories/user.repository";
 import {
   assertComposition,
   assertValidPlannedBossCount,
@@ -34,41 +33,25 @@ import type {
   UpdateRunTemplateInput,
 } from "@/validators/run-template";
 
-function requireManagerRole(user: AuthenticatedUser): void {
-  if (!isEligibleRaidLead(user)) {
+/** ADMIN/OWNER may create/edit/duplicate/deactivate global Run Setups. */
+function requireManageTemplates(user: AuthenticatedUser): void {
+  if (!hasAdminAccess(user.accountRole)) {
     throw new DomainError(
       "NOT_AUTHORIZED",
-      "Raid lead or admin permission is required to manage run templates.",
+      "Admin permission is required to manage run setups.",
       403,
     );
   }
 }
 
-/**
- * Decides which raidLeadId a template should be owned by, before any DB
- * lookup. RAID_LEAD may only ever own their own templates (a forged
- * different id is rejected); ADMIN must explicitly choose an owner. Mirrors
- * run.service.ts's resolveRequestedRaidLeadId, kept separate because the two
- * domains (Run creation vs. template ownership) have distinct error copy and
- * must never be coupled by a shared import.
- */
-function resolveTemplateOwnerId(user: AuthenticatedUser, requestedRaidLeadId: string | undefined): string {
-  if (hasAdminAccess(user.accountRole)) {
-    if (!requestedRaidLeadId) {
-      throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
-    }
-    return requestedRaidLeadId;
-  }
-  if (requestedRaidLeadId && requestedRaidLeadId !== user.id) {
-    throw new DomainError("RUN_RAID_LEAD_INVALID", "Raid leads can only manage their own templates.");
-  }
-  return user.id;
-}
-
-async function requireEligibleOwner(raidLeadId: string): Promise<void> {
-  const owner = await userRepository.findById(raidLeadId);
-  if (!owner || !isEligibleRaidLead(owner)) {
-    throw new DomainError("RUN_RAID_LEAD_INVALID", "Choose an eligible raid lead.");
+/** RAID_LEAD+ may list/use active global presets for Create Run. */
+function requireCanUseTemplates(user: AuthenticatedUser): void {
+  if (!isEligibleRaidLead(user) && !hasAdminAccess(user.accountRole)) {
+    throw new DomainError(
+      "NOT_AUTHORIZED",
+      "Raid lead or admin permission is required to use run setups.",
+      403,
+    );
   }
 }
 
@@ -90,12 +73,6 @@ function expandPresetOrThrow(input: {
   }
 }
 
-/**
- * Resolve every Raid referenced by template contents. Tidebound may appear as
- * a fixed Bundle companion even when availableForRuns=false — same rule as
- * Create Run. Standalone Tide is not a Create product and is rejected unless
- * it is part of the canonical Bundle classification.
- */
 async function resolveRaidsForTemplateContents(
   contents: ExpandedRunContent[],
 ): Promise<Map<string, RaidRecord>> {
@@ -123,36 +100,27 @@ async function resolveRaidsForTemplateContents(
   return byId;
 }
 
-function assertOwnsTemplate(user: AuthenticatedUser, template: RunTemplateRecord): void {
-  if (hasAdminAccess(user.accountRole)) return;
-  if (template.raidLeadId !== user.id) {
-    throw new DomainError("NOT_AUTHORIZED", "You cannot manage this template.", 403);
-  }
-}
-
-async function loadOwnedTemplate(user: AuthenticatedUser, templateId: string): Promise<RunTemplateRecord> {
+async function loadManagedTemplate(
+  user: AuthenticatedUser,
+  templateId: string,
+): Promise<RunTemplateRecord> {
+  requireManageTemplates(user);
   const template = await runTemplateRepository.findById(templateId);
   if (!template) {
     throw new DomainError("RUN_TEMPLATE_NOT_FOUND", "Run template was not found.", 404);
   }
-  assertOwnsTemplate(user, template);
   return template;
 }
 
 export type TemplateUsability = { usable: boolean; unusableReason: string | null };
 
 /**
- * A template's usability is always computed fresh from its current joined
- * Raid/User/content state — never stored. Evaluates ALL content rows.
- * Bundle Tide (availableForRuns=false) is allowed when the contents classify
- * as the canonical Season 2 Bundle product.
+ * Usability is computed fresh from joined Raid/content state — never stored.
+ * Global setups have no Raid Lead ownership check.
  */
 export function computeUsability(template: RunTemplateRecord): TemplateUsability {
   if (!template.isActive) {
     return { usable: false, unusableReason: "This template has been deactivated." };
-  }
-  if (!template.raidLeadEligible) {
-    return { usable: false, unusableReason: "This template's raid lead is no longer eligible to lead runs." };
   }
   if (!isLootTypeAllowedForDifficulty(template.difficulty, template.lootType)) {
     return { usable: false, unusableReason: "This template's loot type is no longer valid for its difficulty." };
@@ -213,7 +181,12 @@ export function computeUsability(template: RunTemplateRecord): TemplateUsability
     template.desiredDpsCount,
     template.desiredLootbuddyCount,
   ];
-  if (composition.some((count) => !Number.isInteger(count) || count < RUN_COMPOSITION_MIN || count > RUN_COMPOSITION_MAX)) {
+  if (
+    composition.some(
+      (count) =>
+        !Number.isInteger(count) || count < RUN_COMPOSITION_MIN || count > RUN_COMPOSITION_MAX,
+    )
+  ) {
     return { usable: false, unusableReason: "This template's composition is no longer valid." };
   }
   return { usable: true, unusableReason: null };
@@ -262,7 +235,6 @@ async function persistFromPreset(
     desiredDpsCount: number;
     desiredLootbuddyCount?: number;
     notes?: string | null;
-    raidLeadId: string;
     actorId: string;
   },
   mode: "create" | "update",
@@ -283,7 +255,6 @@ async function persistFromPreset(
 
   const fields = {
     name: input.name.trim(),
-    raidLeadId: input.raidLeadId,
     difficulty: input.difficulty,
     lootType: input.lootType,
     contents,
@@ -321,9 +292,10 @@ async function persistFromPreset(
 }
 
 export const runTemplateService = {
+  /** RAID_LEAD+ read-only catalog of global setups (profile / use). */
   async listOwn(user: AuthenticatedUser) {
-    requireManagerRole(user);
-    const templates = await runTemplateRepository.listByRaidLead(user.id);
+    requireCanUseTemplates(user);
+    const templates = await runTemplateRepository.listAll();
     return templates.map((template) => {
       const display = templateContentDisplay(template);
       return { ...template, ...computeUsability(template), contentDisplay: display };
@@ -331,32 +303,29 @@ export const runTemplateService = {
   },
 
   async listAll(user: AuthenticatedUser, filters: ManageTemplateFiltersInput = {}) {
-    if (!hasAdminAccess(user.accountRole)) {
-      throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to manage run templates.", 403);
-    }
-    const templates = await runTemplateRepository.listAll({ raidLeadId: filters.raidLeadId });
+    requireManageTemplates(user);
+    const templates = await runTemplateRepository.listAll();
     const withUsability = templates.map((template) => {
       const display = templateContentDisplay(template);
       return { ...template, ...computeUsability(template), contentDisplay: display };
     });
     const status = filters.status ?? "active";
     if (status === "all") return withUsability;
-    return withUsability.filter((template) => (status === "active" ? template.isActive : !template.isActive));
+    return withUsability.filter((template) =>
+      status === "active" ? template.isActive : !template.isActive,
+    );
   },
 
   async getCreateFormData(user: AuthenticatedUser) {
-    requireManagerRole(user);
+    requireManageTemplates(user);
     await raidRepository.ensureReferenceRaids();
     const contentPresets = listCreateRunContentPresets();
-    const raidLeads = hasAdminAccess(user.accountRole)
-      ? await userRepository.listEligibleRaidLeads()
-      : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
 
     return {
-      canAssignRaidLead: hasAdminAccess(user.accountRole),
+      canAssignRaidLead: false,
       contentPresets,
       venomousBossMax: venomousBossMaxFromCatalog(),
-      raidLeads,
+      raidLeads: [] as Array<{ id: string; name: string; accountRole: string }>,
     };
   },
 
@@ -365,16 +334,14 @@ export const runTemplateService = {
   },
 
   /**
-   * Create an independent copy of a RunTemplate (contents + composition).
-   * Never copies CommunityScheduleSlots or materialization history.
+   * Create an independent copy of a RunTemplate (contents + default composition).
+   * Never copies CommunityScheduleSlots, overrides, or materialization history.
    */
   async duplicateTemplate(
     user: AuthenticatedUser,
     templateId: string,
   ): Promise<{ id: string }> {
-    requireManagerRole(user);
-    const existing = await loadOwnedTemplate(user, templateId);
-    await requireEligibleOwner(existing.raidLeadId);
+    const existing = await loadManagedTemplate(user, templateId);
     await raidRepository.ensureReferenceRaids();
 
     const contents =
@@ -395,7 +362,6 @@ export const runTemplateService = {
 
     const id = await runTemplateRepository.create({
       name: `${existing.name} (copy)`.slice(0, 80),
-      raidLeadId: existing.raidLeadId,
       difficulty: existing.difficulty,
       lootType: existing.lootType,
       contents,
@@ -410,18 +376,12 @@ export const runTemplateService = {
     return { id };
   },
 
-  /**
-   * Validate + persist a RunTemplate, optionally inside an outer transaction
-   * (e.g. Community Schedule plan create). Same rules as createTemplate.
-   */
   async createTemplateInTx(
     user: AuthenticatedUser,
     input: CreateRunTemplateInput,
     txOrm?: typeof import("@/lib/prisma").orm,
   ) {
-    requireManagerRole(user);
-    const raidLeadId = resolveTemplateOwnerId(user, input.raidLeadId);
-    await requireEligibleOwner(raidLeadId);
+    requireManageTemplates(user);
     await raidRepository.ensureReferenceRaids();
 
     const { id } = await persistFromPreset(
@@ -436,7 +396,6 @@ export const runTemplateService = {
         desiredDpsCount: input.desiredDpsCount,
         desiredLootbuddyCount: input.desiredLootbuddyCount,
         notes: input.notes,
-        raidLeadId,
         actorId: user.id,
       },
       "create",
@@ -448,12 +407,7 @@ export const runTemplateService = {
   },
 
   async updateTemplate(user: AuthenticatedUser, input: UpdateRunTemplateInput) {
-    requireManagerRole(user);
-    const existing = await loadOwnedTemplate(user, input.templateId);
-    // ADMIN may reassign the owner (future use only — never touches existing
-    // Runs); a RAID_LEAD may only ever keep their own templates their own.
-    const raidLeadId = resolveTemplateOwnerId(user, input.raidLeadId ?? existing.raidLeadId);
-    await requireEligibleOwner(raidLeadId);
+    const existing = await loadManagedTemplate(user, input.templateId);
     await raidRepository.ensureReferenceRaids();
 
     const desiredLootbuddyCount = input.desiredLootbuddyCount ?? existing.desiredLootbuddyCount;
@@ -469,7 +423,6 @@ export const runTemplateService = {
         desiredDpsCount: input.desiredDpsCount,
         desiredLootbuddyCount,
         notes: input.notes,
-        raidLeadId,
         actorId: user.id,
       },
       "update",
@@ -480,8 +433,7 @@ export const runTemplateService = {
   },
 
   async deactivate(user: AuthenticatedUser, templateId: string) {
-    requireManagerRole(user);
-    const existing = await loadOwnedTemplate(user, templateId);
+    const existing = await loadManagedTemplate(user, templateId);
     if (!existing.isActive) {
       throw new DomainError("RUN_TEMPLATE_ALREADY_INACTIVE", "This template is already inactive.");
     }
@@ -489,15 +441,8 @@ export const runTemplateService = {
     return { id: existing.id };
   },
 
-  /**
-   * Reactivation must re-validate current domain state — never blindly flips
-   * the flag back on. If the raid has since gone historical, the owner is no
-   * longer eligible, or any other usability check now fails, reactivation is
-   * rejected with the same reason the selector would show.
-   */
   async reactivate(user: AuthenticatedUser, templateId: string) {
-    requireManagerRole(user);
-    const existing = await loadOwnedTemplate(user, templateId);
+    const existing = await loadManagedTemplate(user, templateId);
     if (existing.isActive) {
       throw new DomainError("RUN_TEMPLATE_ALREADY_ACTIVE", "This template is already active.");
     }
@@ -513,23 +458,20 @@ export const runTemplateService = {
   },
 
   async listUsableForCreation(user: AuthenticatedUser) {
-    requireManagerRole(user);
-    const templates = hasAdminAccess(user.accountRole)
-      ? await runTemplateRepository.listAll()
-      : await runTemplateRepository.listByRaidLead(user.id);
+    requireCanUseTemplates(user);
+    const templates = await runTemplateRepository.listAll();
     return templates
       .map((template) => ({ ...template, ...computeUsability(template) }))
       .filter((template) => template.isActive && template.usable);
   },
 
   /**
-   * Used by run.service.ts's createManyRuns integration when a templateId is
-   * present: loads the template fresh from the DB (never trusting a
-   * client-supplied DTO), authorizes the actor's use of it, and confirms it
-   * is still usable — all BEFORE any Run row is prepared or persisted. The
-   * returned record's raidLeadId is authoritative for every resulting Run.
+   * Loads a global template for Create Run / mass create. Any eligible raid
+   * lead or admin may use an active usable setup — Raid Lead is chosen on
+   * the Run/Schedule, not on the template.
    */
   async resolveTemplateForUse(user: AuthenticatedUser, templateId: string): Promise<RunTemplateRecord> {
+    requireCanUseTemplates(user);
     const template = await runTemplateRepository.findById(templateId);
     if (!template) {
       throw new DomainError(
@@ -537,9 +479,6 @@ export const runTemplateService = {
         "This template could not be found. Reload and try again.",
         404,
       );
-    }
-    if (!hasAdminAccess(user.accountRole) && template.raidLeadId !== user.id) {
-      throw new DomainError("NOT_AUTHORIZED", "You cannot use this template.", 403);
     }
     const usability = computeUsability(template);
     if (!usability.usable) {
@@ -554,4 +493,6 @@ export const runTemplateService = {
 
 export type MyRunTemplatesPage = Awaited<ReturnType<typeof runTemplateService.listOwn>>;
 export type ManageRunTemplatesPage = Awaited<ReturnType<typeof runTemplateService.listAll>>;
-export type CreateRunTemplateFormData = Awaited<ReturnType<typeof runTemplateService.getCreateFormData>>;
+export type CreateRunTemplateFormData = Awaited<
+  ReturnType<typeof runTemplateService.getCreateFormData>
+>;

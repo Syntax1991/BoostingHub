@@ -16,11 +16,9 @@ export const runTemplateNameSchema = z
   .min(1, "Enter a template name.")
   .max(RUN_TEMPLATE_NAME_MAX, "Template name is too long.");
 
-// raidLeadId is accepted here only so an ADMIN can target a specific Raid
-// Lead's template — the Service rejects/ignores it for a RAID_LEAD actor
-// (who may only ever own their own templates) rather than trusting it.
-//
-// Content uses the same commercial presets as Create Run (Venomous / Bundle).
+// Global Run Setup — no Raid Lead. Content uses the same commercial presets
+// as Create Run (Venomous / Bundle). Composition fields are DEFAULT values
+// inherited by Schedule slots unless a slot overrides them.
 export const createRunTemplateSchema = z.object({
   name: runTemplateNameSchema,
   contentPreset: runContentPresetSchema,
@@ -32,7 +30,6 @@ export const createRunTemplateSchema = z.object({
   desiredDpsCount: compositionSchema,
   desiredLootbuddyCount: compositionSchema.optional(),
   notes: notesSchema,
-  raidLeadId: entityIdSchema.optional(),
 });
 
 export const updateRunTemplateSchema = createRunTemplateSchema.extend({
@@ -44,7 +41,6 @@ export const templateIdSchema = z.object({
 });
 
 export const manageTemplateFiltersSchema = z.object({
-  raidLeadId: entityIdSchema.optional(),
   status: z.enum(["active", "inactive", "all"]).optional(),
 });
 
@@ -53,12 +49,10 @@ export type UpdateRunTemplateInput = z.infer<typeof updateRunTemplateSchema>;
 export type ManageTemplateFiltersInput = z.infer<typeof manageTemplateFiltersSchema>;
 
 export function parseManageTemplateFilters(searchParams: {
-  raidLeadId?: string | string[];
   status?: string | string[];
 }): ManageTemplateFiltersInput {
   const first = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value);
   const parsed = manageTemplateFiltersSchema.safeParse({
-    raidLeadId: first(searchParams.raidLeadId) || undefined,
     status: first(searchParams.status) || undefined,
   });
   return parsed.success ? parsed.data : {};

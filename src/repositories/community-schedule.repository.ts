@@ -2,6 +2,7 @@ import { isEligibleRaidLead } from "@/auth/authorization";
 import { orm } from "@/lib/prisma";
 import {
   asBoolean,
+  asNumberOrNull,
   asString,
   asStringOrNull,
   mapUserRole,
@@ -22,12 +23,33 @@ export type CommunityScheduleSlotRecord = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  compositionOverrideEnabled: boolean;
+  desiredTankCountOverride: number | null;
+  desiredHealerCountOverride: number | null;
+  desiredDpsCountOverride: number | null;
+  desiredLootbuddyCountOverride: number | null;
   runTemplateName: string | null;
   isActive: boolean;
   createdById: string;
   updatedById: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CommunityScheduleCompositionWrite = {
+  compositionOverrideEnabled: boolean;
+  desiredTankCountOverride: number | null;
+  desiredHealerCountOverride: number | null;
+  desiredDpsCountOverride: number | null;
+  desiredLootbuddyCountOverride: number | null;
+};
+
+const INHERIT_COMPOSITION: CommunityScheduleCompositionWrite = {
+  compositionOverrideEnabled: false,
+  desiredTankCountOverride: null,
+  desiredHealerCountOverride: null,
+  desiredDpsCountOverride: null,
+  desiredLootbuddyCountOverride: null,
 };
 
 export type CommunityScheduleSlotWrite = {
@@ -39,6 +61,8 @@ export type CommunityScheduleSlotWrite = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** Omitted → inherit RunTemplate defaults. */
+  composition?: CommunityScheduleCompositionWrite;
   createdById: string;
   updatedById: string;
 };
@@ -52,6 +76,8 @@ export type CommunityScheduleSlotUpdate = {
   runTemplateId: string | null;
   autoCreateRun: boolean;
   runMode: CommunityScheduleRunMode;
+  /** Omitted → inherit RunTemplate defaults. */
+  composition?: CommunityScheduleCompositionWrite;
   updatedById: string;
 };
 
@@ -83,6 +109,11 @@ function mapSlot(row: Record<string, unknown>): CommunityScheduleSlotRecord {
     runTemplateId: asStringOrNull(row.runTemplateId),
     autoCreateRun: asBoolean(row.autoCreateRun, false),
     runMode: mapRunMode(row.runMode),
+    compositionOverrideEnabled: asBoolean(row.compositionOverrideEnabled, false),
+    desiredTankCountOverride: asNumberOrNull(row.desiredTankCountOverride),
+    desiredHealerCountOverride: asNumberOrNull(row.desiredHealerCountOverride),
+    desiredDpsCountOverride: asNumberOrNull(row.desiredDpsCountOverride),
+    desiredLootbuddyCountOverride: asNumberOrNull(row.desiredLootbuddyCountOverride),
     runTemplateName: runTemplate ? asString(runTemplate.name) : null,
     isActive: asBoolean(row.isActive, true),
     createdById: asString(row.createdById),
@@ -174,6 +205,7 @@ export const communityScheduleRepository = {
     const client = txOrm ?? orm;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
+    const composition = input.composition ?? INHERIT_COMPOSITION;
     await client.CommunityScheduleSlot.create({
       id,
       weekday: input.weekday,
@@ -184,6 +216,11 @@ export const communityScheduleRepository = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      compositionOverrideEnabled: composition.compositionOverrideEnabled,
+      desiredTankCountOverride: composition.desiredTankCountOverride,
+      desiredHealerCountOverride: composition.desiredHealerCountOverride,
+      desiredDpsCountOverride: composition.desiredDpsCountOverride,
+      desiredLootbuddyCountOverride: composition.desiredLootbuddyCountOverride,
       isActive: true,
       createdById: input.createdById,
       updatedById: input.updatedById,
@@ -198,6 +235,7 @@ export const communityScheduleRepository = {
   },
 
   async update(id: string, input: CommunityScheduleSlotUpdate): Promise<CommunityScheduleSlotRecord> {
+    const composition = input.composition ?? INHERIT_COMPOSITION;
     await orm.CommunityScheduleSlot.where({ id }).update({
       weekday: input.weekday,
       localStartTime: input.localStartTime,
@@ -207,6 +245,11 @@ export const communityScheduleRepository = {
       runTemplateId: input.runTemplateId,
       autoCreateRun: input.autoCreateRun,
       runMode: input.runMode,
+      compositionOverrideEnabled: composition.compositionOverrideEnabled,
+      desiredTankCountOverride: composition.desiredTankCountOverride,
+      desiredHealerCountOverride: composition.desiredHealerCountOverride,
+      desiredDpsCountOverride: composition.desiredDpsCountOverride,
+      desiredLootbuddyCountOverride: composition.desiredLootbuddyCountOverride,
       updatedById: input.updatedById,
       updatedAt: new Date().toISOString(),
     });

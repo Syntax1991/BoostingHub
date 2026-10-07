@@ -2,6 +2,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import {
   canMaterializeCommunityScheduleOccurrence,
   hasAdminAccess,
+  isEligibleRaidLead,
 } from "@/auth/authorization";
 import {
   COMMUNITY_SCHEDULE_TIME_ZONE,
@@ -74,17 +75,8 @@ async function loadTemplateForSlot(
       400,
     );
   }
-  if (template.raidLeadId !== slot.raidLeadId) {
-    throw new DomainError(
-      "COMMUNITY_SCHEDULE_TEMPLATE_LEAD_MISMATCH",
-      "The run template must belong to the same raid lead as this schedule slot.",
-      400,
-    );
-  }
-  if (user) {
-    if (!hasAdminAccess(user.accountRole) && template.raidLeadId !== user.id) {
-      throw new DomainError("NOT_AUTHORIZED", "You cannot use this template.", 403);
-    }
+  if (user && !hasAdminAccess(user.accountRole) && !isEligibleRaidLead(user)) {
+    throw new DomainError("NOT_AUTHORIZED", "You cannot use this template.", 403);
   }
   const usability = computeUsability(template);
   if (!usability.usable) {
@@ -241,6 +233,14 @@ async function materializeSlotWindowsInternal(input: {
           scheduledStartAt: occurrence.scheduledStartAt,
           scheduleSlotId: slot.id,
           windowStartAt: occurrence.windowStartAt,
+          raidLeadId: slot.raidLeadId,
+          scheduleSlot: {
+            compositionOverrideEnabled: slot.compositionOverrideEnabled,
+            desiredTankCountOverride: slot.desiredTankCountOverride,
+            desiredHealerCountOverride: slot.desiredHealerCountOverride,
+            desiredDpsCountOverride: slot.desiredDpsCountOverride,
+            desiredLootbuddyCountOverride: slot.desiredLootbuddyCountOverride,
+          },
           actor: { kind: "SYSTEM" },
         });
         if (result.alreadyExisted) {
@@ -299,6 +299,14 @@ export const communityScheduleMaterializationService = {
       scheduledStartAt: occurrence.scheduledStartAt,
       scheduleSlotId: slot.id,
       windowStartAt: occurrence.windowStartAt,
+      raidLeadId: slot.raidLeadId,
+      scheduleSlot: {
+        compositionOverrideEnabled: slot.compositionOverrideEnabled,
+        desiredTankCountOverride: slot.desiredTankCountOverride,
+        desiredHealerCountOverride: slot.desiredHealerCountOverride,
+        desiredDpsCountOverride: slot.desiredDpsCountOverride,
+        desiredLootbuddyCountOverride: slot.desiredLootbuddyCountOverride,
+      },
       actor,
     });
   },
