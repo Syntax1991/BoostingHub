@@ -14,7 +14,7 @@ import {
   materializeCommunityScheduleOccurrenceSchema,
   updateCommunityScheduleSlotSchema,
 } from "@/validators/community-schedule";
-import { updateRunTemplateSchema } from "@/validators/run-template";
+import { createRunTemplateSchema, updateRunTemplateSchema } from "@/validators/run-template";
 
 function revalidateSchedule() {
   revalidatePath("/manage/schedule");
@@ -160,7 +160,7 @@ export async function deleteCommunityScheduleSlotAction(input: unknown): Promise
     const parsed = communityScheduleSlotIdSchema.parse(input);
     await communityScheduleService.deleteSlot(user, parsed.slotId);
     revalidateSchedule();
-    return { ok: true, message: "Schedule time deleted." };
+    return { ok: true, message: "Schedule time deleted. Existing Runs were not changed." };
   } catch (error) {
     return mapActionError(error);
   }
@@ -183,10 +183,42 @@ export async function deleteCommunityScheduleRunSetupAction(
       ok: true,
       message:
         result.deletedSlotCount === 0
-          ? "Run Setup deleted."
-          : `Run Setup and ${result.deletedSlotCount} Schedule time${result.deletedSlotCount === 1 ? "" : "s"} deleted.`,
+          ? "Run Setup deleted. Existing Runs were not changed."
+          : `Run Setup and ${result.deletedSlotCount} Schedule time${result.deletedSlotCount === 1 ? "" : "s"} deleted. Existing Runs were not changed.`,
       deletedSlotCount: result.deletedSlotCount,
     };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function createCommunityScheduleRunSetupAction(
+  input: unknown,
+): Promise<{ ok: true; message: string; templateId: string } | { ok: false; code: string; message: string }> {
+  try {
+    const user = await requireUser();
+    const parsed = createRunTemplateSchema.parse(input);
+    const created = await communityScheduleService.createRunSetup(user, parsed);
+    revalidateSchedule();
+    revalidatePath("/profile/templates");
+    revalidatePath("/manage/templates");
+    return { ok: true, message: "Run Setup created.", templateId: created.id };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function duplicateCommunityScheduleRunSetupAction(
+  input: unknown,
+): Promise<{ ok: true; message: string; templateId: string } | { ok: false; code: string; message: string }> {
+  try {
+    const user = await requireUser();
+    const parsed = deleteCommunityScheduleRunSetupSchema.parse(input);
+    const created = await communityScheduleService.duplicateRunSetup(user, parsed.runTemplateId);
+    revalidateSchedule();
+    revalidatePath("/profile/templates");
+    revalidatePath("/manage/templates");
+    return { ok: true, message: "Run Setup duplicated.", templateId: created.id };
   } catch (error) {
     return mapActionError(error);
   }

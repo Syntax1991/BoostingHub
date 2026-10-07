@@ -6,6 +6,7 @@ import { orm } from "@/lib/prisma";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { AccountRole } from "@/models/enums";
 import { communityScheduleRepository } from "@/repositories/community-schedule.repository";
+import { communityScheduleRunRepository } from "@/repositories/community-schedule-run.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
 import { communityScheduleMaterializationService } from "@/services/community-schedule-materialization.service";
@@ -56,6 +57,14 @@ const slotExtras = { runTemplateId: null as string | null, autoCreateRun: false,
 
 const testUserIds = new Set(Object.values(ids));
 
+async function cleanupLinkedRun(runId: string, linkId: string) {
+  await orm.RunDomainEvent.where({ runId }).delete().catch(() => {});
+  await orm.CommunityScheduleRun.where({ id: linkId }).delete().catch(() => {});
+  await orm.RunRoster.where({ runId }).delete().catch(() => {});
+  await orm.RunRaidContent.where({ runId }).delete().catch(() => {});
+  await orm.Run.where({ id: runId }).delete().catch(() => {});
+}
+
 async function cleanupSlots() {
   const rows = await orm.CommunityScheduleSlot.all();
   const ownSlots = rows.filter((row) => {
@@ -66,13 +75,20 @@ async function cleanupSlots() {
 
   const links = await orm.CommunityScheduleRun.all();
   for (const row of links) {
-    const link = row as { id: string; runId: string; scheduleSlotId: string };
-    if (!ownSlotIds.has(link.scheduleSlotId)) continue;
-    await orm.RunDomainEvent.where({ runId: link.runId }).delete().catch(() => {});
-    await orm.CommunityScheduleRun.where({ id: link.id }).delete().catch(() => {});
-    await orm.RunRoster.where({ runId: link.runId }).delete().catch(() => {});
-    await orm.RunRaidContent.where({ runId: link.runId }).delete().catch(() => {});
-    await orm.Run.where({ id: link.runId }).delete().catch(() => {});
+    const link = row as { id: string; runId: string; scheduleSlotId: string | null };
+    if (link.scheduleSlotId != null && ownSlotIds.has(link.scheduleSlotId)) {
+      await cleanupLinkedRun(link.runId, link.id);
+      continue;
+    }
+    // Orphaned provenance after slot delete (scheduleSlotId SET NULL).
+    if (link.scheduleSlotId == null) {
+      const run = (await orm.Run.where({ id: link.runId }).first()) as {
+        raidLeadId?: string;
+      } | null;
+      if (run?.raidLeadId && testUserIds.has(run.raidLeadId)) {
+        await cleanupLinkedRun(link.runId, link.id);
+      }
+    }
   }
   for (const row of ownSlots) {
     await orm.CommunityScheduleSlot.where({ id: String((row as { id: string }).id) })
@@ -723,35 +739,8 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
   });
 });
 
-describe("communityScheduleService hard delete", () => {
-  it("ADMIN/OWNER delete unused active and inactive slots; RAID_LEAD/USER rejected", async () => {
-    const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
-      runSetup: { mode: "create", ...createSetupFields, name: "Delete Slot Setup" },
-      slots: [
-        { weekday: "MONDAY", localStartTime: "18:00", runMode: "INHOUSE" },
-        { weekday: "TUESDAY", localStartTime: "18:00", runMode: "INHOUSE" },
-      ],
-      autoCreateRun: false,
-      notes: null,
-    });
-    const [activeId, inactiveId] = plan.slotIds;
-    await communityScheduleService.deactivateSlot(admin, inactiveId!);
-
-    await expectCode(communityScheduleService.deleteSlot(user, activeId!), "NOT_AUTHORIZED");
-    await expectCode(communityScheduleService.deleteSlot(lead, activeId!), "NOT_AUTHORIZED");
-
-    await communityScheduleService.deleteSlot(admin, activeId!);
-    expect(await communityScheduleRepository.findById(activeId!)).toBeNull();
-    expect(await communityScheduleRepository.findById(inactiveId!)).toBeTruthy();
-    expect(await runTemplateRepository.findById(plan.templateId)).toBeTruthy();
-
-    await communityScheduleService.deleteSlot(owner, inactiveId!);
-    expect(await communityScheduleRepository.findById(inactiveId!)).toBeNull();
-    expect(await runTemplateRepository.findById(plan.templateId)).toBeTruthy();
-  });
-
-  it("rejects missing and materialized slots; preserves Run, link, template, siblings", async () => {
+describe("communityScheduleService mutable planning delete", () => {
+  it("ADMIN/OWNER delete unused and historical slots; Runs and provenance survive", async () => {
     await expectCode(
       communityScheduleService.deleteSlot(admin, "00000000-0000-4000-8000-000000000099"),
       "COMMUNITY_SCHEDULE_NOT_FOUND",
@@ -769,32 +758,47 @@ describe("communityScheduleService hard delete", () => {
       notes: null,
     });
     const [materializedId, siblingId] = plan.slotIds;
+    await expectCode(communityScheduleService.deleteSlot(user, materializedId!), "NOT_AUTHORIZED");
+    await expectCode(communityScheduleService.deleteSlot(lead, materializedId!), "NOT_AUTHORIZED");
+
     const materialize = await communityScheduleMaterializationService.materializeOccurrence(
       { kind: "USER", user: lead },
       { scheduleSlotId: materializedId!, window: "NEXT", now },
     );
-    expect(materialize.alreadyExisted).toBe(false);
     const runId = materialize.runId;
-    const links = await orm.CommunityScheduleRun.where({ scheduleSlotId: materializedId! }).all();
-    expect(links).toHaveLength(1);
+    const runBefore = (await orm.Run.where({ id: runId }).first()) as {
+      scheduledStartAt: string;
+      status: string;
+      title: string;
+    } | null;
+    const contentBefore = await orm.RunRaidContent.where({ runId }).all();
 
-    await expectCode(
-      communityScheduleService.deleteSlot(admin, materializedId!),
-      "COMMUNITY_SCHEDULE_DELETE_BLOCKED",
+    await communityScheduleService.deleteSlot(admin, materializedId!);
+    expect(await communityScheduleRepository.findById(materializedId!)).toBeNull();
+    expect(await communityScheduleRepository.findById(siblingId!)).toBeTruthy();
+
+    const runAfter = (await orm.Run.where({ id: runId }).first()) as {
+      scheduledStartAt: string;
+      status: string;
+      title: string;
+    } | null;
+    expect(runAfter?.scheduledStartAt).toBe(runBefore?.scheduledStartAt);
+    expect(runAfter?.status).toBe(runBefore?.status);
+    expect(runAfter?.title).toBe(runBefore?.title);
+    expect(await orm.RunRaidContent.where({ runId }).all()).toHaveLength(contentBefore.length);
+
+    const provenance = await communityScheduleRunRepository.findByRunId(runId);
+    expect(provenance?.scheduleSlotId).toBeNull();
+    expect(new Date(provenance!.occurrenceStartAt).getTime()).toBe(
+      new Date(runBefore!.scheduledStartAt).getTime(),
     );
 
-    expect(await communityScheduleRepository.findById(materializedId!)).toBeTruthy();
-    expect(await communityScheduleRepository.findById(siblingId!)).toBeTruthy();
-    expect(await runTemplateRepository.findById(plan.templateId)).toBeTruthy();
-    expect(await orm.Run.where({ id: runId }).first()).toBeTruthy();
-    expect(await orm.CommunityScheduleRun.where({ scheduleSlotId: materializedId! }).all()).toHaveLength(1);
-
-    await communityScheduleService.deleteSlot(admin, siblingId!);
+    await communityScheduleService.deleteSlot(owner, siblingId!);
     expect(await communityScheduleRepository.findById(siblingId!)).toBeNull();
-    expect(await orm.Run.where({ id: runId }).first()).toBeTruthy();
+    expect(await runTemplateRepository.findById(plan.templateId)).toBeTruthy();
   });
 
-  it("deletes unused Run Setup atomically including contents; blocks when any child materialized", async () => {
+  it("deletes Run Setup after materialization; slots gone, Runs unchanged", async () => {
     const emptyTemplateId = await runTemplateRepository.create({
       ...repoTemplateFields,
       name: "Orphan Setup",
@@ -802,27 +806,40 @@ describe("communityScheduleService hard delete", () => {
       createdById: ids.admin,
       updatedById: ids.admin,
     });
-    const emptyDelete = await communityScheduleService.deleteRunSetup(admin, emptyTemplateId);
-    expect(emptyDelete.deletedSlotCount).toBe(0);
-    expect(await runTemplateRepository.findById(emptyTemplateId)).toBeNull();
+    expect((await communityScheduleService.deleteRunSetup(admin, emptyTemplateId)).deletedSlotCount).toBe(
+      0,
+    );
 
-    const plan = await communityScheduleService.createSchedulePlan(admin, {
-      raidLeadId: ids.lead,
-      runSetup: {
-        mode: "create",
-        ...createSetupFields,
-        name: "Unused Bundle Setup",
-        contentPreset: "MIDNIGHT_S2_BUNDLE",
+    const now = new Date("2027-01-15T12:00:00.000Z");
+    const plan = await communityScheduleService.createSchedulePlan(
+      admin,
+      {
+        raidLeadId: ids.lead,
+        runSetup: {
+          mode: "create",
+          ...createSetupFields,
+          name: "Historical Bundle Setup",
+          contentPreset: "MIDNIGHT_S2_BUNDLE",
+        },
+        slots: [
+          { weekday: "THURSDAY", localStartTime: "17:00", runMode: "INHOUSE" },
+          { weekday: "FRIDAY", localStartTime: "17:00", runMode: "TEAM_RUN" },
+        ],
+        autoCreateRun: true,
+        notes: null,
       },
-      slots: [
-        { weekday: "THURSDAY", localStartTime: "17:00", runMode: "INHOUSE" },
-        { weekday: "FRIDAY", localStartTime: "17:00", runMode: "TEAM_RUN" },
-      ],
-      autoCreateRun: false,
-      notes: null,
-    });
-    const template = await runTemplateRepository.findById(plan.templateId);
-    expect(template?.contents).toHaveLength(2);
+      now,
+    );
+    const links = await orm.CommunityScheduleRun.where({
+      scheduleSlotId: plan.slotIds[0]!,
+    }).all();
+    expect(links.length).toBeGreaterThan(0);
+    const runId = String((links[0] as { runId: string }).runId);
+    const runBefore = (await orm.Run.where({ id: runId }).first()) as {
+      scheduledStartAt: string;
+      status: string;
+      title: string;
+    } | null;
 
     const unrelated = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.leadB,
@@ -832,116 +849,153 @@ describe("communityScheduleService hard delete", () => {
       notes: null,
     });
 
-    const pageBefore = await communityScheduleService.getPage(admin);
-    const group = pageBefore.runSetups.find((row) => row.runTemplateId === plan.templateId);
-    expect(group?.canDelete).toBe(true);
-    expect(group?.slotCount).toBe(2);
+    const page = await communityScheduleService.getPage(admin, now);
+    expect(page.runSetupInventory.some((row) => row.id === plan.templateId && row.canDelete)).toBe(
+      true,
+    );
 
     const deleted = await communityScheduleService.deleteRunSetup(admin, plan.templateId);
     expect(deleted.deletedSlotCount).toBe(2);
     expect(await runTemplateRepository.findById(plan.templateId)).toBeNull();
-    const leftoverContents = await orm.RunTemplateRaidContent.where({
-      runTemplateId: plan.templateId,
-    }).all();
-    expect(leftoverContents).toHaveLength(0);
+    expect(
+      await orm.RunTemplateRaidContent.where({ runTemplateId: plan.templateId }).all(),
+    ).toHaveLength(0);
     for (const slotId of plan.slotIds) {
       expect(await communityScheduleRepository.findById(slotId)).toBeNull();
     }
+
+    const runAfter = (await orm.Run.where({ id: runId }).first()) as {
+      scheduledStartAt: string;
+      status: string;
+      title: string;
+    } | null;
+    expect(runAfter?.scheduledStartAt).toBe(runBefore?.scheduledStartAt);
+    expect(runAfter?.status).toBe(runBefore?.status);
+    expect(runAfter?.title).toBe(runBefore?.title);
+    expect((await communityScheduleRunRepository.findByRunId(runId))?.scheduleSlotId).toBeNull();
+
     expect(await runTemplateRepository.findById(unrelated.templateId)).toBeTruthy();
-    expect(await communityScheduleRepository.findById(unrelated.slotIds[0]!)).toBeTruthy();
-
-    const now = new Date("2027-01-15T12:00:00.000Z");
-    const historical = await communityScheduleService.createSchedulePlan(
-      admin,
-      {
-        raidLeadId: ids.lead,
-        runSetup: { mode: "create", ...createSetupFields, name: "Historical Setup" },
-        slots: [
-          { weekday: "FRIDAY", localStartTime: "21:15", runMode: "INHOUSE" },
-          { weekday: "SATURDAY", localStartTime: "21:15", runMode: "INHOUSE" },
-        ],
-        autoCreateRun: true,
-        notes: null,
-      },
-      now,
-    );
-    const histLinks = await orm.CommunityScheduleRun.where({
-      scheduleSlotId: historical.slotIds[0]!,
-    }).all();
-    expect(histLinks.length).toBeGreaterThan(0);
-    const histRunId = String((histLinks[0] as { runId: string }).runId);
-
-    await expectCode(
-      communityScheduleService.deleteRunSetup(admin, historical.templateId),
-      "COMMUNITY_SCHEDULE_SETUP_DELETE_BLOCKED",
-    );
-    expect(await runTemplateRepository.findById(historical.templateId)).toBeTruthy();
-    expect(await communityScheduleRepository.findById(historical.slotIds[0]!)).toBeTruthy();
-    expect(await communityScheduleRepository.findById(historical.slotIds[1]!)).toBeTruthy();
-    expect(await orm.Run.where({ id: histRunId }).first()).toBeTruthy();
-    expect(
-      await orm.CommunityScheduleRun.where({ scheduleSlotId: historical.slotIds[0]! }).all(),
-    ).toHaveLength(histLinks.length);
-
-    await communityScheduleService.deactivateSlot(admin, historical.slotIds[0]!);
-    await expectCode(
-      communityScheduleService.deleteRunSetup(admin, historical.templateId),
-      "COMMUNITY_SCHEDULE_SETUP_DELETE_BLOCKED",
-    );
+    expect(page.share.text.includes("Historical Bundle Setup")).toBe(false);
   });
 
-  it("read model exposes canDelete; materialize-then-delete race leaves history intact", async () => {
+  it("edit slot time after materialization leaves concrete Run snapshot unchanged", async () => {
+    const now = new Date("2027-01-15T12:00:00.000Z");
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
-      runSetup: { mode: "create", ...createSetupFields, name: "Race Setup" },
-      slots: [{ weekday: "WEDNESDAY", localStartTime: "16:30", runMode: "INHOUSE" }],
+      runSetup: { mode: "create", ...createSetupFields, name: "Edit After Mat" },
+      slots: [{ weekday: "FRIDAY", localStartTime: "23:00", runMode: "INHOUSE" }],
       autoCreateRun: false,
       notes: null,
     });
     const slotId = plan.slotIds[0]!;
-    let page = await communityScheduleService.getPage(admin);
-    let group = page.runSetups.find((row) => row.runTemplateId === plan.templateId);
-    expect(group?.canDelete).toBe(true);
-    expect(group?.slots[0]?.canDelete).toBe(true);
+    const created = await communityScheduleMaterializationService.materializeOccurrence(
+      { kind: "USER", user: lead },
+      { scheduleSlotId: slotId, window: "NEXT", now },
+    );
+    const runBefore = (await orm.Run.where({ id: created.runId }).first()) as {
+      scheduledStartAt: string;
+    } | null;
 
-    const now = new Date("2027-01-15T12:00:00.000Z");
-    await communityScheduleRepository.update(slotId, {
-      weekday: "WEDNESDAY",
-      localStartTime: "16:30",
-      label: "Race Setup",
+    await communityScheduleService.updateSlot(
+      admin,
+      {
+        slotId,
+        weekday: "FRIDAY",
+        localStartTime: "22:30",
+        label: "Edit After Mat",
+        notes: null,
+        raidLeadId: ids.lead,
+        runTemplateId: plan.templateId,
+        autoCreateRun: false,
+        runMode: "INHOUSE",
+      },
+      now,
+    );
+
+    const runAfter = (await orm.Run.where({ id: created.runId }).first()) as {
+      scheduledStartAt: string;
+    } | null;
+    expect(runAfter?.scheduledStartAt).toBe(runBefore?.scheduledStartAt);
+
+    const page = await communityScheduleService.getPage(admin, now);
+    const next = page.next.days.flatMap((d) => d.slots).find((row) => row.slot.id === slotId);
+    expect(next?.occurrence.localStartTime).toBe("22:30");
+  });
+
+  it("multiple setups per lead, zero-slot inventory, duplicate Bundle, Use existing lists all", async () => {
+    const a = await communityScheduleService.createRunSetup(admin, {
+      ...createSetupFields,
+      name: "HC VIP Bundle 9/9",
+      contentPreset: "MIDNIGHT_S2_BUNDLE",
+      venomousPlannedBossCount: 8,
+      lootType: "VIP",
+      raidLeadId: ids.lead,
+    });
+    const b = await communityScheduleService.createRunSetup(admin, {
+      ...createSetupFields,
+      name: "HC VIP Bundle 7/9",
+      contentPreset: "MIDNIGHT_S2_BUNDLE",
+      venomousPlannedBossCount: 6,
+      lootType: "VIP",
+      raidLeadId: ids.lead,
+    });
+    const c = await communityScheduleService.createRunSetup(admin, {
+      ...createSetupFields,
+      name: "HC VIP Venomous 8/8",
+      contentPreset: "VENOMOUS_ABYSS",
+      venomousPlannedBossCount: 8,
+      lootType: "VIP",
+      raidLeadId: ids.lead,
+    });
+
+    const page = await communityScheduleService.getPage(admin);
+    expect(page.runSetupInventory.filter((row) => row.raidLeadId === ids.lead).length).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(page.runSetupInventory.find((row) => row.id === a.id)?.slotCount).toBe(0);
+    expect(page.runSetups.every((group) => group.runTemplateId !== a.id)).toBe(true);
+
+    const usableIds = page.templates
+      .filter((row) => row.raidLeadId === ids.lead && row.usable)
+      .map((row) => row.id);
+    expect(usableIds).toEqual(expect.arrayContaining([a.id, b.id, c.id]));
+
+    const dup = await communityScheduleService.duplicateRunSetup(admin, a.id);
+    expect(dup.id).not.toBe(a.id);
+    const original = await runTemplateRepository.findById(a.id);
+    const copy = await runTemplateRepository.findById(dup.id);
+    expect(copy?.contents).toHaveLength(2);
+    expect(copy?.contents.map((row) => row.raidId).sort()).toEqual(
+      original?.contents.map((row) => row.raidId).sort(),
+    );
+    expect(copy?.name).toContain("(copy)");
+    expect(await communityScheduleRepository.listByTemplateId(dup.id)).toHaveLength(0);
+
+    await communityScheduleService.updateRunSetup(admin, {
+      templateId: dup.id,
+      name: "HC VIP Bundle 7/9 copy",
+      contentPreset: "MIDNIGHT_S2_BUNDLE",
+      venomousPlannedBossCount: 6,
+      difficulty: "HEROIC",
+      lootType: "VIP",
+      desiredTankCount: 2,
+      desiredHealerCount: 4,
+      desiredDpsCount: 14,
+      desiredLootbuddyCount: 0,
       notes: null,
       raidLeadId: ids.lead,
-      runTemplateId: plan.templateId,
-      autoCreateRun: true,
-      runMode: "INHOUSE",
-      updatedById: ids.admin,
     });
-    const materialized = await communityScheduleMaterializationService.materializeSlotWindows(
-      [slotId],
-      { now },
-    );
-    expect(materialized.created).toBeGreaterThan(0);
+    const originalAfter = await runTemplateRepository.findById(a.id);
+    expect(
+      originalAfter?.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID)?.plannedBossCount,
+    ).toBe(8);
 
-    page = await communityScheduleService.getPage(admin, now);
-    group = page.runSetups.find((row) => row.runTemplateId === plan.templateId);
-    expect(group?.canDelete).toBe(false);
-    expect(group?.slots[0]?.canDelete).toBe(false);
-
-    const links = await orm.CommunityScheduleRun.where({ scheduleSlotId: slotId }).all();
-    const runId = String((links[0] as { runId: string }).runId);
-
-    await expectCode(
-      communityScheduleService.deleteSlot(admin, slotId),
-      "COMMUNITY_SCHEDULE_DELETE_BLOCKED",
-    );
-    await expectCode(
-      communityScheduleService.deleteRunSetup(admin, plan.templateId),
-      "COMMUNITY_SCHEDULE_SETUP_DELETE_BLOCKED",
-    );
-    expect(await orm.Run.where({ id: runId }).first()).toBeTruthy();
-    expect(await orm.CommunityScheduleRun.where({ scheduleSlotId: slotId }).all()).toHaveLength(
-      links.length,
-    );
+    await expectCode(communityScheduleService.createRunSetup(user, {
+      ...createSetupFields,
+      name: "Nope",
+      raidLeadId: ids.lead,
+    }), "NOT_AUTHORIZED");
+    await expectCode(communityScheduleService.duplicateRunSetup(lead, a.id), "NOT_AUTHORIZED");
   });
 
   it("RAID_LEAD and USER cannot delete Run Setup; missing setup rejected", async () => {

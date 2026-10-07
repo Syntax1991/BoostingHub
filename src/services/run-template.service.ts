@@ -365,6 +365,52 @@ export const runTemplateService = {
   },
 
   /**
+   * Create an independent copy of a RunTemplate (contents + composition).
+   * Never copies CommunityScheduleSlots or materialization history.
+   */
+  async duplicateTemplate(
+    user: AuthenticatedUser,
+    templateId: string,
+  ): Promise<{ id: string }> {
+    requireManagerRole(user);
+    const existing = await loadOwnedTemplate(user, templateId);
+    await requireEligibleOwner(existing.raidLeadId);
+    await raidRepository.ensureReferenceRaids();
+
+    const contents =
+      existing.contents.length > 0
+        ? existing.contents.map((row) => ({
+            raidId: row.raidId,
+            sortOrder: row.sortOrder,
+            plannedBossCount: row.plannedBossCount,
+          }))
+        : [
+            {
+              raidId: existing.raidId,
+              sortOrder: 1,
+              plannedBossCount: existing.plannedBossCount,
+            },
+          ];
+    await resolveRaidsForTemplateContents(contents);
+
+    const id = await runTemplateRepository.create({
+      name: `${existing.name} (copy)`.slice(0, 80),
+      raidLeadId: existing.raidLeadId,
+      difficulty: existing.difficulty,
+      lootType: existing.lootType,
+      contents,
+      desiredTankCount: existing.desiredTankCount,
+      desiredHealerCount: existing.desiredHealerCount,
+      desiredDpsCount: existing.desiredDpsCount,
+      desiredLootbuddyCount: existing.desiredLootbuddyCount,
+      notes: existing.notes,
+      createdById: user.id,
+      updatedById: user.id,
+    });
+    return { id };
+  },
+
+  /**
    * Validate + persist a RunTemplate, optionally inside an outer transaction
    * (e.g. Community Schedule plan create). Same rules as createTemplate.
    */

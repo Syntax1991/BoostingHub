@@ -860,14 +860,16 @@ model CommunityScheduleSlot {
   @@map("community_schedule_slot")
 }
 
-/// Durable link: one Community Schedule slot occurrence per raid-ID window → one Run.
-/// Identity is (scheduleSlotId, windowStartAt) so editing weekday/time after
-/// materialization cannot create a second Run in the same raid-ID window.
-/// occurrenceStartAt snapshots the concrete Run time at materialization.
+/// Durable link: one Community Schedule occurrence per raid-ID window → one Run.
+/// While the planning slot exists, identity is (scheduleSlotId, windowStartAt)
+/// so editing weekday/time cannot create a second Run in the same window.
+/// When the mutable Schedule slot is deleted, scheduleSlotId is SET NULL —
+/// the concrete Run and this provenance row remain (window + occurrence times).
 model CommunityScheduleRun {
   id                 String                  @id @default(uuid())
-  scheduleSlotId     String
-  scheduleSlot       CommunityScheduleSlot   @relation(fields: [scheduleSlotId], references: [id], onDelete: Restrict)
+  /// Nullable so Admin may delete recurring planning without erasing Runs.
+  scheduleSlotId     String?
+  scheduleSlot       CommunityScheduleSlot?  @relation(fields: [scheduleSlotId], references: [id], onDelete: SetNull)
   /// Raid-ID window lower bound (Wed 06:00 Europe/Berlin) used for this occurrence.
   windowStartAt      TimestamptzString
   /// Concrete Run scheduledStartAt snapshot at materialization time.

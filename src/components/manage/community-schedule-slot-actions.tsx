@@ -16,7 +16,6 @@ export function CommunityScheduleSlotActions({
   slotId,
   isActive,
   canDelete = false,
-  deleteBlockedReason = null,
   weekday,
   localStartTime,
   runMode,
@@ -27,7 +26,6 @@ export function CommunityScheduleSlotActions({
   isActive: boolean;
   /** When omitted (e.g. Current/Next window rows), hard-delete controls are hidden. */
   canDelete?: boolean;
-  deleteBlockedReason?: string | null;
   weekday?: CommunityWeekday;
   localStartTime?: string;
   runMode?: CommunityScheduleRunMode;
@@ -91,57 +89,51 @@ export function CommunityScheduleSlotActions({
           >
             Delete
           </button>
-        ) : deleteBlockedReason ? (
-          <span
-            title={deleteBlockedReason}
-            className="inline-flex h-8 cursor-not-allowed items-center rounded-md border border-border px-2 text-xs text-muted opacity-60"
-          >
-            Delete
-          </span>
         ) : null}
       </div>
       {error ? <p className="text-xs text-danger">{error}</p> : null}
 
       {weekday && localStartTime && runMode ? (
-      <dialog
-        ref={dialogRef}
-        aria-labelledby={titleId}
-        aria-describedby={error ? errorId : undefined}
-        className="w-[min(28rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
-      >
-        <div className="flex flex-col gap-3 p-4">
-          <h2 id={titleId} className="text-sm font-semibold">
-            Delete Schedule time?
-          </h2>
-          <div className="space-y-1 text-xs text-muted">
-            <p className="font-medium text-foreground">
-              {communityWeekdayShortLabel(weekday)} {localStartTime} ·{" "}
-              {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[runMode]}
-            </p>
-            <p>
-              {runSetupName} · {raidLeadName}
-            </p>
-            <p>This permanently removes this recurring time.</p>
+        <dialog
+          ref={dialogRef}
+          aria-labelledby={titleId}
+          aria-describedby={error ? errorId : undefined}
+          className="w-[min(28rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-0 text-foreground shadow-lg backdrop:bg-black/60"
+        >
+          <div className="flex flex-col gap-3 p-4">
+            <h2 id={titleId} className="text-sm font-semibold">
+              Delete Schedule time?
+            </h2>
+            <div className="space-y-1 text-xs text-muted">
+              <p className="font-medium text-foreground">
+                {communityWeekdayShortLabel(weekday)} {localStartTime} ·{" "}
+                {COMMUNITY_SCHEDULE_RUN_MODE_LABELS[runMode]}
+              </p>
+              <p>
+                {runSetupName} · {raidLeadName}
+              </p>
+              <p>This permanently removes this recurring time.</p>
+              <p>Existing Runs already created from this time will NOT be changed.</p>
+            </div>
+            {error ? (
+              <p
+                id={errorId}
+                role="alert"
+                className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs"
+              >
+                {error}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" disabled={pending} onClick={() => dialogRef.current?.close()}>
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={pending} onClick={runDelete}>
+                {pending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
           </div>
-          {error ? (
-            <p
-              id={errorId}
-              role="alert"
-              className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs"
-            >
-              {error}
-            </p>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" disabled={pending} onClick={() => dialogRef.current?.close()}>
-              Cancel
-            </Button>
-            <Button variant="danger" disabled={pending} onClick={runDelete}>
-              {pending ? "Deleting…" : "Delete"}
-            </Button>
-          </div>
-        </div>
-      </dialog>
+        </dialog>
       ) : null}
     </div>
   );

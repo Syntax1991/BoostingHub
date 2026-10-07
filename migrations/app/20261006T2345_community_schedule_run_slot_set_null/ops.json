@@ -1,0 +1,129 @@
+[
+  {
+    "id": "dropConstraint.community_schedule_run.community_schedule_run_scheduleSlotId_fkey",
+    "label": "Drop constraint \"community_schedule_run_scheduleSlotId_fkey\" on \"community_schedule_run\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "community_schedule_run_scheduleSlotId_fkey",
+        "table": "community_schedule_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"community_schedule_run_scheduleSlotId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_run_scheduleSlotId_fkey",
+          "public",
+          "\"public\".\"community_schedule_run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop constraint \"community_schedule_run_scheduleSlotId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_run\" DROP CONSTRAINT \"community_schedule_run_scheduleSlotId_fkey\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"community_schedule_run_scheduleSlotId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_run_scheduleSlotId_fkey",
+          "public",
+          "\"public\".\"community_schedule_run\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "alterNullability.dropNotNull.community_schedule_run.scheduleSlotId",
+    "label": "Drop NOT NULL on \"community_schedule_run\".\"scheduleSlotId\"",
+    "operationClass": "widening",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "scheduleSlotId",
+        "table": "community_schedule_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"scheduleSlotId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_run",
+          "scheduleSlotId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop NOT NULL on \"scheduleSlotId\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_run\" ALTER COLUMN \"scheduleSlotId\" DROP NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"scheduleSlotId\" is nullable",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3 AND \"is_nullable\" = $4)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_run",
+          "scheduleSlotId",
+          "YES"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.community_schedule_run.community_schedule_run_scheduleSlotId_fkey",
+    "label": "Add foreign key \"community_schedule_run_scheduleSlotId_fkey\" on \"community_schedule_run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "community_schedule_run_scheduleSlotId_fkey",
+        "table": "community_schedule_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"community_schedule_run_scheduleSlotId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_run_scheduleSlotId_fkey",
+          "public",
+          "\"public\".\"community_schedule_run\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"community_schedule_run_scheduleSlotId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_run\"\nADD CONSTRAINT \"community_schedule_run_scheduleSlotId_fkey\"\nFOREIGN KEY (\"scheduleSlotId\")\nREFERENCES \"public\".\"community_schedule_slot\" (\"id\")\nON DELETE SET NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"community_schedule_run_scheduleSlotId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "community_schedule_run_scheduleSlotId_fkey",
+          "public",
+          "\"public\".\"community_schedule_run\""
+        ]
+      }
+    ]
+  }
+]

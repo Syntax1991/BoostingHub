@@ -4,7 +4,8 @@ import type { RunDomainEventActorKind } from "@/models/enums";
 
 export type CommunityScheduleRunRecord = {
   id: string;
-  scheduleSlotId: string;
+  /** Null after the mutable Schedule slot was deleted (ON DELETE SET NULL). */
+  scheduleSlotId: string | null;
   windowStartAt: string;
   occurrenceStartAt: string;
   runId: string;
@@ -18,7 +19,7 @@ type TxOrm = typeof orm;
 function mapRow(row: Record<string, unknown>): CommunityScheduleRunRecord {
   return {
     id: asString(row.id),
-    scheduleSlotId: asString(row.scheduleSlotId),
+    scheduleSlotId: row.scheduleSlotId == null ? null : asString(row.scheduleSlotId),
     // ISO normalize — Postgres/Prisma readbacks are not always `Date.toISOString()`.
     windowStartAt: asIsoTimestamp(row.windowStartAt),
     occurrenceStartAt: asIsoTimestamp(row.occurrenceStartAt),
@@ -71,8 +72,8 @@ export const communityScheduleRunRepository = {
   },
 
   /**
-   * Batch: which of the given slots already have at least one CommunityScheduleRun.
-   * Single query — never N+1 per slot.
+   * Batch: which of the given slots currently have at least one linked
+   * CommunityScheduleRun (scheduleSlotId not yet SET NULL).
    */
   async slotIdsWithMaterialization(
     slotIds: readonly string[],
@@ -86,7 +87,8 @@ export const communityScheduleRunRepository = {
     ).all();
     const out = new Set<string>();
     for (const row of rows) {
-      out.add(asString((row as Record<string, unknown>).scheduleSlotId));
+      const slotId = (row as Record<string, unknown>).scheduleSlotId;
+      if (slotId != null) out.add(asString(slotId));
     }
     return out;
   },

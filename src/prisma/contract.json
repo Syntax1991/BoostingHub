@@ -2635,7 +2635,7 @@
                 }
               },
               "scheduleSlotId": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -11421,7 +11421,7 @@
                 "scheduleSlotId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": false
+                  "nullable": true
                 },
                 "windowStartAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -11431,7 +11431,7 @@
               },
               "foreignKeys": [
                 {
-                  "onDelete": "restrict",
+                  "onDelete": "setNull",
                   "source": {
                     "columns": [
                       "scheduleSlotId"
@@ -17509,7 +17509,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "0e66c1fef0162ce4e3b958b28c3ed87e0ca500d00262092a14cb250d70b5a485"
+    "storageHash": "9a4b528d68b4bad608906c9fe9eea6e8c2d367549a41308c9dc6ffb440a30595"
   },
   "execution": {
     "executionHash": "e061fdcc9802efba48326f09b79dd1af6418648c3389cf809c91c340b41515d0",
