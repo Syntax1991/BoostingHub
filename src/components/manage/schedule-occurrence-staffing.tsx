@@ -1,4 +1,4 @@
-import { RosterAssistantTrigger } from "@/components/manage/roster-assistant-dialog";
+import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
 import {
   formatCompositionCounts,
   formatMissingCounts,
@@ -18,7 +18,7 @@ const RUN_STATUS_LABELS: Record<string, string> = {
 /**
  * Compact read-only staffing overlay for one Schedule occurrence.
  * Aggregate DPS only — Melee/Ranged split is informational.
- * Roster Assistant opens on demand for materialized shortages.
+ * Auto Build Roster opens on demand for materialized shortages.
  */
 export function ScheduleOccurrenceStaffing({
   staffing,
@@ -81,7 +81,7 @@ export function ScheduleOccurrenceStaffing({
           </p>
           {runId ? (
             <div className="pt-0.5">
-              <RosterAssistantTrigger runId={runId} />
+              <RosterBuilderTrigger runId={runId} />
             </div>
           ) : null}
         </>

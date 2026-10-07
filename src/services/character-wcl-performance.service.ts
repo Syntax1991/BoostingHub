@@ -161,9 +161,17 @@ export async function resolveRosterWclPerformance(input: {
   contents: ContentSlice[];
   boosters: BoosterPerfInput[];
   now?: Date;
+  /**
+   * When false, only use CharacterWclPerformance rows already in the DB
+   * (fresh or stale). Never fans out to the Warcraft Logs API.
+   * Roster Builder uses cache-only to keep dialog open bounded.
+   */
+  allowRemoteFetch?: boolean;
 }): Promise<Map<string, WclPerformanceRaidSegment[]>> {
   const result = new Map<string, WclPerformanceRaidSegment[]>();
-  if (!warcraftLogsApiClient.isConfigured()) {
+  const allowRemoteFetch = input.allowRemoteFetch !== false;
+  // Remote mode with no API config → empty. Cache-only still reads DB rows.
+  if (allowRemoteFetch && !warcraftLogsApiClient.isConfigured()) {
     return result;
   }
 
@@ -275,11 +283,15 @@ export async function resolveRosterWclPerformance(input: {
 
   for (const [keyId, key] of fetchKeys) {
     const hit = cacheLookup(cached, key);
-    if (hit && isFresh(hit, nowMs)) {
-      resolved.set(keyId, { bestPct: hit.bestPct, avgPct: hit.avgPct });
-    }
+    if (!hit) continue;
+    if (allowRemoteFetch && !isFresh(hit, nowMs)) continue;
+    // Cache-only: accept stale rows. Remote mode: only fresh rows here; stale go to fetch.
+    resolved.set(keyId, { bestPct: hit.bestPct, avgPct: hit.avgPct });
   }
 
+  if (!allowRemoteFetch) {
+    // Skip remote fan-out entirely.
+  } else {
   const toFetch = [...fetchKeys.entries()].filter(([keyId]) => !resolved.has(keyId));
   await mapPool(toFetch, WCL_PERFORMANCE_FETCH_CONCURRENCY, async ([keyId, key]) => {
     const stale = cacheLookup(cached, key);
@@ -336,6 +348,7 @@ export async function resolveRosterWclPerformance(input: {
       }
     }
   });
+  }
 
   for (const plan of signupPlans) {
     const segments: WclPerformanceRaidSegment[] = [];

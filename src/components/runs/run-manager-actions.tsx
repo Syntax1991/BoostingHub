@@ -13,7 +13,7 @@ import { RunCompleteDialog } from "@/components/runs/run-complete-dialog";
 import { RunEditDialog } from "@/components/runs/run-edit-dialog";
 import { ExternalBoostersDialog } from "@/components/runs/external-boosters-dialog";
 import { AddBoosterDialog } from "@/components/manage/add-booster-dialog";
-import { RosterAssistantTrigger } from "@/components/manage/roster-assistant-dialog";
+import { RosterBuilderTrigger } from "@/components/manage/roster-builder-dialog";
 import { useRosterHasUnsavedEdits } from "@/components/manage/roster-unsaved-store";
 import type { ExternalBooster } from "@/lib/external-booster";
 import { RunStartDialog } from "@/components/runs/run-start-dialog";
@@ -90,7 +90,7 @@ export function RunManagerActions({
             Add Booster
           </Button>
         ) : null}
-        <RosterAssistantTrigger runId={runId} />
+        <RosterBuilderTrigger runId={runId} />
         {externalBoosters ? (
           <Button type="button" variant="secondary" onClick={() => setExternalOpen(true)}>
             External Boosters{externalBoosters.boosters.length > 0 ? ` (${externalBoosters.boosters.length})` : ""}
