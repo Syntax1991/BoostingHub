@@ -1,58 +1,31 @@
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
-import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
-import { TemplateRowActions } from "@/components/templates/template-row-actions";
 import type { profileController } from "@/controllers/app.controller";
-import type { RunContentPresetKey } from "@/lib/run-content-presets";
 
 type MyTemplatesPage = Awaited<ReturnType<typeof profileController.getMyTemplatesPage>>;
 
-function formValuesFromTemplate(template: MyTemplatesPage["templates"][number]) {
-  const productKey = template.contentDisplay.productKey;
-  const contentPreset: RunContentPresetKey =
-    productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS";
-  const venomous =
-    template.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? template.contents[0];
-  return {
-    templateId: template.id,
-    name: template.name,
-    contentPreset,
-    venomousPlannedBossCount: venomous?.plannedBossCount ?? template.plannedBossCount,
-    difficulty: template.difficulty,
-    lootType: template.lootType,
-    desiredTankCount: template.desiredTankCount,
-    desiredHealerCount: template.desiredHealerCount,
-    desiredDpsCount: template.desiredDpsCount,
-    desiredLootbuddyCount: template.desiredLootbuddyCount,
-    notes: template.notes,
-    raidLeadId: template.raidLeadId,
-  };
-}
-
+/**
+ * Read-only catalog of global Run Setups for Raid Leads.
+ * Create/Edit/Delete remain Admin/Owner on /manage/schedule and /manage/templates.
+ */
 export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
   return (
     <div>
       <PageHeader
-        title="My Run Templates"
-        description="Reusable planning presets for your runs. A template only stores planning defaults — run content, difficulty, loot, planned bosses, composition, and notes. Schedule and status are always set per Run."
-        actions={
-          <RunTemplateFormDialog
-            mode="create"
-            contentPresets={data.contentPresets}
-            venomousBossMax={data.venomousBossMax}
-            raidLeads={data.raidLeads}
-            canAssignRaidLead={data.canAssignRaidLead}
-            defaultRaidLeadId={data.defaultRaidLeadId}
-            triggerLabel="New template"
-          />
-        }
+        title="Run Setups"
+        description="Global reusable planning presets. Admins manage these; you can apply them when creating Runs. Raid Lead and composition overrides are chosen per Schedule or Run."
       />
       <Card>
-        <CardHeader title="Templates" description={`${data.templates.length} template${data.templates.length === 1 ? "" : "s"}`} />
+        <CardHeader
+          title="Available setups"
+          description={`${data.templates.length} setup${data.templates.length === 1 ? "" : "s"}`}
+        />
         {data.templates.length === 0 ? (
-          <EmptyState title="No templates yet." description="Create one to speed up future run creation." />
+          <EmptyState
+            title="No Run Setups yet."
+            description="Ask an Admin to create global Run Setups on Manage Schedule."
+          />
         ) : (
           <ul className="divide-y divide-border">
             {data.templates.map((template) => (
@@ -80,20 +53,6 @@ export function MyTemplatesView({ data }: { data: MyTemplatesPage }) {
                   {template.isActive && !template.usable ? (
                     <p className="mt-1 text-xs text-warning">Needs attention: {template.unusableReason}</p>
                   ) : null}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <RunTemplateFormDialog
-                    mode="edit"
-                    initial={formValuesFromTemplate(template)}
-                    contentPresets={data.contentPresets}
-                    venomousBossMax={data.venomousBossMax}
-                    raidLeads={data.raidLeads}
-                    canAssignRaidLead={data.canAssignRaidLead}
-                    defaultRaidLeadId={data.defaultRaidLeadId}
-                    triggerLabel="Edit"
-                    triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
-                  />
-                  <TemplateRowActions templateId={template.id} isActive={template.isActive} />
                 </div>
               </li>
             ))}

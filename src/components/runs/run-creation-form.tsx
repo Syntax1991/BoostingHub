@@ -97,7 +97,6 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     setDesiredDpsCount(template.desiredDpsCount);
     setDesiredLootbuddyCount(template.desiredLootbuddyCount ?? 0);
     setNotes(template.notes ?? "");
-    setRaidLeadId(template.raidLeadId);
     setRows((current) =>
       current.map((row) => {
         if (row.overrides.raidLeadId === undefined) return row;

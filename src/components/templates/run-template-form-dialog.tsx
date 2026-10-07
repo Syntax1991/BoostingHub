@@ -28,13 +28,11 @@ export type RunTemplateFormValues = {
   desiredDpsCount: number;
   desiredLootbuddyCount: number;
   notes: string | null;
-  raidLeadId: string;
 };
 
 function emptyValues(
   contentPresets: ContentPresetOption[],
   venomousBossMax: number,
-  defaultRaidLeadId: string,
 ): RunTemplateFormValues {
   return {
     name: "",
@@ -47,7 +45,6 @@ function emptyValues(
     desiredDpsCount: 14,
     desiredLootbuddyCount: 0,
     notes: null,
-    raidLeadId: defaultRaidLeadId,
   };
 }
 
@@ -60,9 +57,9 @@ export function RunTemplateFormDialog({
   initial,
   contentPresets,
   venomousBossMax,
-  raidLeads,
-  canAssignRaidLead,
-  defaultRaidLeadId,
+  raidLeads = [],
+  canAssignRaidLead = false,
+  defaultRaidLeadId = "",
   triggerLabel,
   triggerClassName,
   title,
@@ -75,9 +72,10 @@ export function RunTemplateFormDialog({
   initial?: RunTemplateFormValues;
   contentPresets: ContentPresetOption[];
   venomousBossMax: number;
-  raidLeads: RaidLeadOption[];
-  canAssignRaidLead: boolean;
-  defaultRaidLeadId: string;
+  /** @deprecated Global setups have no Raid Lead — kept optional for call-site compatibility. */
+  raidLeads?: RaidLeadOption[];
+  canAssignRaidLead?: boolean;
+  defaultRaidLeadId?: string;
   triggerLabel: string;
   triggerClassName?: string;
   /** Override dialog heading (defaults to New/Edit Run Template). */
@@ -96,8 +94,8 @@ export function RunTemplateFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const initialValues = useMemo(
-    () => initial ?? emptyValues(contentPresets, venomousBossMax, defaultRaidLeadId),
-    [initial, contentPresets, venomousBossMax, defaultRaidLeadId],
+    () => initial ?? emptyValues(contentPresets, venomousBossMax),
+    [initial, contentPresets, venomousBossMax],
   );
   const [values, setValues] = useState<RunTemplateFormValues>(initialValues);
 
@@ -148,11 +146,10 @@ export function RunTemplateFormDialog({
         desiredDpsCount: values.desiredDpsCount,
         desiredLootbuddyCount: values.desiredLootbuddyCount,
         notes: values.notes,
-        // Always sent explicitly (never omitted): the Service requires an
-        // ADMIN actor to name a target owner even when that target is the
-        // ADMIN's own self-service template.
-        raidLeadId: canAssignRaidLead ? values.raidLeadId : defaultRaidLeadId,
       };
+      void canAssignRaidLead;
+      void defaultRaidLeadId;
+      void raidLeads;
       const result =
         mode === "create"
           ? await createAction(payload)
@@ -225,22 +222,6 @@ export function RunTemplateFormDialog({
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
               />
             </label>
-            {canAssignRaidLead ? (
-              <label className="block text-sm">
-                <span className="mb-1 block text-muted">Raid lead</span>
-                <select
-                  value={values.raidLeadId}
-                  onChange={(event) => update({ raidLeadId: event.target.value })}
-                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                >
-                  {raidLeads.map((lead) => (
-                    <option key={lead.id} value={lead.id}>
-                      {lead.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
             <label className="block text-sm">
               <span className="mb-1 block text-muted">Run Content</span>
               <select
@@ -320,9 +301,10 @@ export function RunTemplateFormDialog({
                 aria-label={isBundle ? "The Venomous Abyss planned bosses" : "Planned bosses"}
               />
             </label>
+            <p className="text-xs font-medium text-muted">Default composition</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <label className="block text-sm">
-                <span className="mb-1 block text-muted">Tanks</span>
+                <span className="mb-1 block text-muted">Default Tanks</span>
                 <input
                   type="number"
                   min={0}
@@ -332,7 +314,7 @@ export function RunTemplateFormDialog({
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block text-muted">Healers</span>
+                <span className="mb-1 block text-muted">Default Healers</span>
                 <input
                   type="number"
                   min={0}
@@ -342,7 +324,7 @@ export function RunTemplateFormDialog({
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block text-muted">DPS</span>
+                <span className="mb-1 block text-muted">Default DPS</span>
                 <input
                   type="number"
                   min={0}
@@ -352,7 +334,7 @@ export function RunTemplateFormDialog({
                 />
               </label>
               <label className="block text-sm">
-                <span className="mb-1 block text-muted">Lootbuddies</span>
+                <span className="mb-1 block text-muted">Default Lootbuddies</span>
                 <input
                   type="number"
                   min={0}
