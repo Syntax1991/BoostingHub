@@ -258,7 +258,6 @@ model User {
   boosterAccess  BoosterAccess[] @relation("UserBoosterAccess")
   ledRuns        Run[]           @relation("RunRaidLead")
   signups        RunSignup[]
-  ownedRunTemplates    RunTemplate[] @relation("RunTemplateRaidLead")
   createdRunTemplates  RunTemplate[] @relation("RunTemplateCreator")
   updatedRunTemplates  RunTemplate[] @relation("RunTemplateUpdater")
   communityScheduleSlots          CommunityScheduleSlot[] @relation("CommunityScheduleRaidLead")
@@ -737,8 +736,10 @@ model RunStartSnapshot {
 ///
 /// Deliberately has no relation to Run: applying a template only copies its
 /// current field values into a new Run's own concrete planning fields at
-/// creation time. A later template edit, deactivation, or reassignment never
-/// rewrites any Run created from it — there is no Run.templateId anywhere.
+/// Global reusable Run Setup (planning preset). Not owned by a Raid Lead —
+/// Schedule slots choose WHO; this row defines WHAT + default composition.
+/// A later template edit never rewrites any Run created from it — there is no
+/// Run.templateId anywhere.
 ///
 /// Authoritative raid identity is ordered `contents` (RunTemplateRaidContent),
 /// mirroring RunRaidContent. Legacy singular `raidId` / `plannedBossCount` are
@@ -747,8 +748,6 @@ model RunStartSnapshot {
 model RunTemplate {
   id                 String         @id @default(uuid())
   name               String
-  raidLeadId         String
-  raidLead           User           @relation("RunTemplateRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
   /// Legacy dual-write mirror of the primary content raid (usually Venomous).
   /// Prefer `contents` for product authority.
   raidId             String
@@ -757,6 +756,7 @@ model RunTemplate {
   lootType           RunLootType
   /// Legacy dual-write mirror of the primary content plannedBossCount.
   plannedBossCount   Int
+  /// Default composition inherited by Schedule slots unless they override.
   desiredTankCount   Int
   desiredHealerCount Int
   desiredDpsCount    Int
@@ -773,7 +773,7 @@ model RunTemplate {
   communityScheduleSlots CommunityScheduleSlot[]
   contents           RunTemplateRaidContent[]
 
-  @@index([raidLeadId, isActive])
+  @@index([isActive])
   @@index([raidId])
   @@map("run_template")
 }
@@ -823,6 +823,10 @@ enum CommunityScheduleRunMode {
 /// materialization for CURRENT/NEXT raid-ID windows. Editing/deactivating a
 /// slot must never mutate already-materialized Runs (snapshot independence).
 /// Discord Schedule remains derived only from real Runs — never from slots.
+///
+/// Composition: when compositionOverrideEnabled is false, materialization
+/// inherits live RunTemplate defaults. When true, the four override counts
+/// are a complete composition snapshot for future Runs from this slot.
 model CommunityScheduleSlot {
   id             String           @id @default(uuid())
   weekday        CommunityWeekday
@@ -832,8 +836,8 @@ model CommunityScheduleSlot {
   notes          String?
   raidLeadId     String
   raidLead       User             @relation("CommunityScheduleRaidLead", fields: [raidLeadId], references: [id], onDelete: Restrict)
-  /// Optional planning template. Required when autoCreateRun is true, and for
-  /// manual Create Run. Must be owned by the same raidLeadId (enforced in service).
+  /// Optional global Run Setup. Required when autoCreateRun is true, and for
+  /// manual Create Run from this slot (enforced in service).
   runTemplateId  String?
   runTemplate    RunTemplate?     @relation(fields: [runTemplateId], references: [id], onDelete: Restrict)
   /// When true, hourly reconciliation ensures CURRENT (if still future) and NEXT
@@ -841,6 +845,13 @@ model CommunityScheduleSlot {
   autoCreateRun  Boolean          @default(false)
   /// Management Discord Share classification (Inhouse / Team Run). Independent of Run materialization.
   runMode        CommunityScheduleRunMode @default(INHOUSE)
+  /// When false, effective composition = RunTemplate defaults. When true, use
+  /// the four override columns (all required together — complete override).
+  compositionOverrideEnabled Boolean @default(false)
+  desiredTankCountOverride       Int?
+  desiredHealerCountOverride     Int?
+  desiredDpsCountOverride        Int?
+  desiredLootbuddyCountOverride  Int?
   isActive       Boolean          @default(true)
   createdById    String
   createdBy      User             @relation("CommunityScheduleCreator", fields: [createdById], references: [id], onDelete: Restrict)

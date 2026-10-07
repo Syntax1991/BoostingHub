@@ -1,0 +1,413 @@
+[
+  {
+    "id": "dropConstraint.run_template.run_template_raidLeadId_fkey",
+    "label": "Drop constraint \"run_template_raidLeadId_fkey\" on \"run_template\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "run_template_raidLeadId_fkey",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"run_template_raidLeadId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_raidLeadId_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop constraint \"run_template_raidLeadId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\" DROP CONSTRAINT \"run_template_raidLeadId_fkey\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"run_template_raidLeadId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "run_template_raidLeadId_fkey",
+          "public",
+          "\"public\".\"run_template\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropIndex.run_template.run_template_raidLeadId_idx_e271c2cb",
+    "label": "Drop index \"run_template_raidLeadId_idx_e271c2cb\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_raidLeadId_idx_e271c2cb",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_raidLeadId_idx_e271c2cb\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_idx_e271c2cb\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop index \"run_template_raidLeadId_idx_e271c2cb\"",
+        "sql": "DROP INDEX \"public\".\"run_template_raidLeadId_idx_e271c2cb\"",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_raidLeadId_idx_e271c2cb\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_idx_e271c2cb\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropIndex.run_template.run_template_raidLeadId_isActive_idx_584288ab",
+    "label": "Drop index \"run_template_raidLeadId_isActive_idx_584288ab\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_raidLeadId_isActive_idx_584288ab",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_raidLeadId_isActive_idx_584288ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_isActive_idx_584288ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop index \"run_template_raidLeadId_isActive_idx_584288ab\"",
+        "sql": "DROP INDEX \"public\".\"run_template_raidLeadId_isActive_idx_584288ab\"",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_raidLeadId_isActive_idx_584288ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_raidLeadId_isActive_idx_584288ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropColumn.run_template.raidLeadId",
+    "label": "Drop column \"raidLeadId\" from \"run_template\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "raidLeadId",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"raidLeadId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_template",
+          "raidLeadId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop column \"raidLeadId\"",
+        "sql": "ALTER TABLE \"public\".\"run_template\" DROP COLUMN \"raidLeadId\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"raidLeadId\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "run_template",
+          "raidLeadId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.community_schedule_slot.compositionOverrideEnabled",
+    "label": "Add column \"compositionOverrideEnabled\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "compositionOverrideEnabled",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"compositionOverrideEnabled\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "compositionOverrideEnabled"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"compositionOverrideEnabled\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"compositionOverrideEnabled\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"compositionOverrideEnabled\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "compositionOverrideEnabled"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.community_schedule_slot.desiredDpsCountOverride",
+    "label": "Add column \"desiredDpsCountOverride\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "desiredDpsCountOverride",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"desiredDpsCountOverride\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredDpsCountOverride"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"desiredDpsCountOverride\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"desiredDpsCountOverride\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"desiredDpsCountOverride\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredDpsCountOverride"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.community_schedule_slot.desiredHealerCountOverride",
+    "label": "Add column \"desiredHealerCountOverride\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "desiredHealerCountOverride",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"desiredHealerCountOverride\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredHealerCountOverride"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"desiredHealerCountOverride\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"desiredHealerCountOverride\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"desiredHealerCountOverride\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredHealerCountOverride"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.community_schedule_slot.desiredLootbuddyCountOverride",
+    "label": "Add column \"desiredLootbuddyCountOverride\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "desiredLootbuddyCountOverride",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"desiredLootbuddyCountOverride\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredLootbuddyCountOverride"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"desiredLootbuddyCountOverride\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"desiredLootbuddyCountOverride\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"desiredLootbuddyCountOverride\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredLootbuddyCountOverride"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.community_schedule_slot.desiredTankCountOverride",
+    "label": "Add column \"desiredTankCountOverride\" to \"community_schedule_slot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "desiredTankCountOverride",
+        "table": "community_schedule_slot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"desiredTankCountOverride\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredTankCountOverride"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"desiredTankCountOverride\"",
+        "sql": "ALTER TABLE \"public\".\"community_schedule_slot\" ADD COLUMN \"desiredTankCountOverride\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"desiredTankCountOverride\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "community_schedule_slot",
+          "desiredTankCountOverride"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.run_template.run_template_isActive_idx_77fe3ba1",
+    "label": "Create index \"run_template_isActive_idx_77fe3ba1\" on \"run_template\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "run_template_isActive_idx_77fe3ba1",
+        "table": "run_template"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"run_template_isActive_idx_77fe3ba1\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_isActive_idx_77fe3ba1\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"run_template_isActive_idx_77fe3ba1\"",
+        "sql": "CREATE INDEX \"run_template_isActive_idx_77fe3ba1\" ON \"public\".\"run_template\" (\"isActive\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"run_template_isActive_idx_77fe3ba1\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"run_template_isActive_idx_77fe3ba1\""
+        ]
+      }
+    ]
+  }
+]
