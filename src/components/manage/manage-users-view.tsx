@@ -6,7 +6,6 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import {
   AccountRoleBadge,
   Badge,
-  OfferedRolesBadges,
 } from "@/components/ui/badges";
 import { UserAccessDialog } from "@/components/manage/user-access-dialog";
 import { PendingBoostingAccessPanel } from "@/components/manage/pending-boosting-access-panel";
@@ -41,17 +40,6 @@ function BoostingAccessBadge({ isBooster }: { isBooster: boolean }) {
     return <span className="text-xs text-muted">—</span>;
   }
   return <Badge className="bg-success/15 text-success">Booster</Badge>;
-}
-
-function CharacterRolesCell({ roles }: { roles: AdminUser["characterRoles"] }) {
-  if (roles.length === 0) {
-    return <span className="text-xs text-muted">—</span>;
-  }
-  return (
-    <div className="flex flex-wrap gap-1">
-      <OfferedRolesBadges roles={roles} />
-    </div>
-  );
 }
 
 function UserActions({ user }: { user: AdminUser }) {
@@ -121,7 +109,7 @@ export function ManageUsersView({ data }: { data: Page }) {
     <div className="min-w-0 overflow-x-hidden">
       <PageHeader
         title="Users"
-        description="Account directory, platform roles, Boosting Roles, and pending boosting-access review."
+        description="Account directory, platform roles, booster access, and pending boosting-access review."
         actions={
           <Link href="/manage" className="text-sm text-accent hover:underline">
             Management
@@ -292,13 +280,12 @@ export function ManageUsersView({ data }: { data: Page }) {
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[1040px] text-left text-sm">
+              <table className="w-full min-w-[920px] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
                     <th className="px-4 py-2 font-medium">Platform Role</th>
                     <th className="px-4 py-2 font-medium">Boosting Access</th>
-                    <th className="px-4 py-2 font-medium">Boosting Roles</th>
                     <th className="px-4 py-2 font-medium">Account Status</th>
                     <th className="px-4 py-2 font-medium">Characters</th>
                     <th className="px-4 py-2 font-medium">Pending</th>
@@ -316,9 +303,6 @@ export function ManageUsersView({ data }: { data: Page }) {
                       </td>
                       <td className="px-4 py-3">
                         <BoostingAccessBadge isBooster={user.isBooster} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <CharacterRolesCell roles={user.characterRoles} />
                       </td>
                       <td className="px-4 py-3 text-xs">
                         <span
@@ -359,12 +343,6 @@ export function ManageUsersView({ data }: { data: Page }) {
                       <dt className="text-muted">Boosting Access</dt>
                       <dd className="mt-1">
                         <BoostingAccessBadge isBooster={user.isBooster} />
-                      </dd>
-                    </div>
-                    <div className="col-span-2">
-                      <dt className="text-muted">Boosting Roles</dt>
-                      <dd className="mt-1">
-                        <CharacterRolesCell roles={user.characterRoles} />
                       </dd>
                     </div>
                     <div>

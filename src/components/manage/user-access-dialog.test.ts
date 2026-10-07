@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("UserAccessDialog", () => {
-  it("renders Access trigger for a normal user", () => {
+  it("renders Access trigger and read-only Character role context", () => {
     const html = renderToStaticMarkup(
       createElement(UserAccessDialog, {
         userId: "u1",
@@ -20,6 +20,10 @@ describe("UserAccessDialog", () => {
     );
     expect(html).toContain("Access");
     expect(html).toContain('aria-label="Manage access for Areson"');
+    expect(html).toContain("Boosting Roles");
+    expect(html).toContain("Healer");
+    expect(html).toContain("Ranged DPS");
+    expect(html).toContain("Read-only from active Characters");
   });
 
   it("renders Access trigger for OWNER (protection enforced inside dialog)", () => {

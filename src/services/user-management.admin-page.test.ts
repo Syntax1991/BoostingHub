@@ -216,7 +216,7 @@ describe("userManagementService.getUsersAdminPage", () => {
     ).rejects.toMatchObject({ code: "USER_MANAGEMENT_FORBIDDEN" });
   });
 
-  it("projects distinct active Character roles independently of Booster access", async () => {
+  it("batches Character roles for Access modal context (not a directory column)", async () => {
     const charHealer = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000001";
     const charTank = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000002";
     const charInactive = "aaaaaaaa-aaaa-4aaa-8aaa-umapc0000003";
