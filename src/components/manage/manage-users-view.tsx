@@ -3,15 +3,19 @@ import { formatDateTime } from "@/lib/datetime";
 import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { ACCOUNT_ROLES, ACCOUNT_STATUSES, CHARACTER_ROLES, RAID_DIFFICULTIES } from "@/models/enums";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { AccountRoleBadge, BoostingRoleBadges } from "@/components/ui/badges";
-import { AccountRoleAction } from "@/components/manage/account-role-action";
-import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
+import {
+  AccountRoleBadge,
+  Badge,
+  OfferedRolesBadges,
+} from "@/components/ui/badges";
+import { UserAccessDialog } from "@/components/manage/user-access-dialog";
 import { PendingBoostingAccessPanel } from "@/components/manage/pending-boosting-access-panel";
 import type { managementController } from "@/controllers/app.controller";
 
 type Page = Awaited<ReturnType<typeof managementController.getUsersPage>>;
+type AdminUser = Page["users"][number];
 
-function UserIdentity({ user }: { user: Page["users"][number] }) {
+function UserIdentity({ user }: { user: AdminUser }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-raised text-xs font-semibold">
@@ -28,6 +32,44 @@ function UserIdentity({ user }: { user: Page["users"][number] }) {
           {user.discordUsername ? `@${user.discordUsername}` : "No Discord"}
         </div>
       </div>
+    </div>
+  );
+}
+
+function BoostingAccessBadge({ isBooster }: { isBooster: boolean }) {
+  if (!isBooster) {
+    return <span className="text-xs text-muted">—</span>;
+  }
+  return <Badge className="bg-success/15 text-success">Booster</Badge>;
+}
+
+function CharacterRolesCell({ roles }: { roles: AdminUser["characterRoles"] }) {
+  if (roles.length === 0) {
+    return <span className="text-xs text-muted">—</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      <OfferedRolesBadges roles={roles} />
+    </div>
+  );
+}
+
+function UserActions({ user }: { user: AdminUser }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <UserAccessDialog
+        userId={user.id}
+        userName={user.name}
+        accountRole={user.accountRole}
+        isBooster={user.isBooster}
+        characterRoles={user.characterRoles}
+      />
+      <Link
+        href={`/manage/users/${user.id}`}
+        className="text-sm text-accent hover:underline"
+      >
+        Manage
+      </Link>
     </div>
   );
 }
@@ -68,38 +110,6 @@ function buildHref(filters: Page["filters"], patch: Partial<Record<string, strin
 
   const queryString = href.toString();
   return queryString ? `/manage/users?${queryString}` : "/manage/users";
-}
-
-function UserPlatformRoleCell({ user }: { user: Page["users"][number] }) {
-  return (
-    <div className="flex flex-col items-start gap-1.5">
-      <AccountRoleBadge role={user.accountRole} />
-      <AccountRoleAction
-        userId={user.id}
-        userName={user.name}
-        accountRole={user.accountRole}
-      />
-    </div>
-  );
-}
-
-function UserBoostingAccessCell({ user }: { user: Page["users"][number] }) {
-  return (
-    <div className="flex flex-col items-start gap-1.5">
-      <BoostingRoleBadges roles={user} emptyLabel="None" />
-      <BoostingRoleControl
-        userId={user.id}
-        userName={user.name}
-        role="BOOSTER"
-        enabled={user.isBooster}
-      />
-      {user.pendingAccessCount > 0 ? (
-        <span className="text-[11px] text-muted">
-          {user.pendingAccessCount} pending request{user.pendingAccessCount === 1 ? "" : "s"}
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 export function ManageUsersView({ data }: { data: Page }) {
@@ -282,13 +292,14 @@ export function ManageUsersView({ data }: { data: Page }) {
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[920px] text-left text-sm">
+              <table className="w-full min-w-[1040px] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
-                    <th className="px-4 py-2 font-medium">Platform role</th>
-                    <th className="px-4 py-2 font-medium">Boosting access</th>
-                    <th className="px-4 py-2 font-medium">Account status</th>
+                    <th className="px-4 py-2 font-medium">Platform Role</th>
+                    <th className="px-4 py-2 font-medium">Boosting Access</th>
+                    <th className="px-4 py-2 font-medium">Boosting Roles</th>
+                    <th className="px-4 py-2 font-medium">Account Status</th>
                     <th className="px-4 py-2 font-medium">Characters</th>
                     <th className="px-4 py-2 font-medium">Pending</th>
                     <th className="px-4 py-2 font-medium">Actions</th>
@@ -296,15 +307,18 @@ export function ManageUsersView({ data }: { data: Page }) {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id} className="border-t border-border align-top">
+                    <tr key={user.id} className="border-t border-border align-middle">
                       <td className="px-4 py-3">
                         <UserIdentity user={user} />
                       </td>
                       <td className="px-4 py-3">
-                        <UserPlatformRoleCell user={user} />
+                        <AccountRoleBadge role={user.accountRole} />
                       </td>
                       <td className="px-4 py-3">
-                        <UserBoostingAccessCell user={user} />
+                        <BoostingAccessBadge isBooster={user.isBooster} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <CharacterRolesCell roles={user.characterRoles} />
                       </td>
                       <td className="px-4 py-3 text-xs">
                         <span
@@ -320,12 +334,7 @@ export function ManageUsersView({ data }: { data: Page }) {
                         {user.pendingAccessCount > 0 ? user.pendingAccessCount : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/manage/users/${user.id}`}
-                          className="text-sm text-accent hover:underline"
-                        >
-                          Manage
-                        </Link>
+                        <UserActions user={user} />
                       </td>
                     </tr>
                   ))}
@@ -337,24 +346,25 @@ export function ManageUsersView({ data }: { data: Page }) {
                 <li key={user.id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <UserIdentity user={user} />
-                    <Link
-                      href={`/manage/users/${user.id}`}
-                      className="shrink-0 text-sm text-accent hover:underline"
-                    >
-                      Manage
-                    </Link>
+                    <UserActions user={user} />
                   </div>
                   <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                    <div className="col-span-2">
-                      <dt className="text-muted">Platform role</dt>
+                    <div>
+                      <dt className="text-muted">Platform Role</dt>
                       <dd className="mt-1">
-                        <UserPlatformRoleCell user={user} />
+                        <AccountRoleBadge role={user.accountRole} />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Boosting Access</dt>
+                      <dd className="mt-1">
+                        <BoostingAccessBadge isBooster={user.isBooster} />
                       </dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="text-muted">Boosting access</dt>
+                      <dt className="text-muted">Boosting Roles</dt>
                       <dd className="mt-1">
-                        <UserBoostingAccessCell user={user} />
+                        <CharacterRolesCell roles={user.characterRoles} />
                       </dd>
                     </div>
                     <div>

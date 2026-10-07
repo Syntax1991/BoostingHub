@@ -18,9 +18,12 @@ import {
   mapDifficulty,
   mapRegion,
   mapUserRole,
+  mapWowClass,
   asString,
   asStringOrNull,
 } from "@/lib/persistence";
+import type { ConcreteCharacterRole } from "@/lib/character-roles";
+import { unionActiveCharacterRoles } from "@/lib/user-character-roles";
 
 export type AdminUserListFilters = {
   query?: string;
@@ -43,12 +46,24 @@ export type AdminUserListRow = {
   accountStatus: AccountStatus;
   createdAt: string;
   characterCount: number;
-  /** Boosting Roles (operational), independent of accountRole. */
+  /** Boosting Access (User.isBooster), independent of accountRole. */
   isBooster: boolean;
   isLootbuddy: boolean;
+  /**
+   * Distinct concrete roles across active Characters (informational).
+   * Independent of User.isBooster.
+   */
+  characterRoles: ConcreteCharacterRole[];
   /** Unresolved legacy in-app requests (historical BoosterAccess). */
   pendingAccessCount: number;
 };
+
+function mapPlayableSpecs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => asStringOrNull((row as Record<string, unknown>).specialization))
+    .filter((spec): spec is string => Boolean(spec));
+}
 
 export type AdminUserCharacterLockout = {
   raidId: string;
@@ -478,13 +493,39 @@ export const userRepository = {
 
   async listAdminUsers(filters: AdminUserListFilters = {}): Promise<AdminUserListRow[]> {
     const users = await orm.User.orderBy((user) => user.name.asc()).all();
-    const characters = await orm.Character.select("id", "userId").all();
+    // One batched Character read for counts + active role union (no per-user query).
+    const characters = (await orm.Character.select(
+      "id",
+      "userId",
+      "wowClass",
+      "specialization",
+      "isActive",
+    )
+      .include("playableSpecs")
+      .all()) as Array<Record<string, unknown>>;
     const accessRows = await orm.BoosterAccess.select("userId", "status").all();
 
     const characterCountByUser = new Map<string, number>();
+    const charactersByUser = new Map<
+      string,
+      Array<{
+        isActive: boolean;
+        wowClass: ReturnType<typeof mapWowClass>;
+        specialization: string | null;
+        playableSpecs: string[];
+      }>
+    >();
     for (const row of characters) {
-      const userId = asString((row as Record<string, unknown>).userId);
+      const userId = asString(row.userId);
       characterCountByUser.set(userId, (characterCountByUser.get(userId) ?? 0) + 1);
+      const list = charactersByUser.get(userId) ?? [];
+      list.push({
+        isActive: asBoolean(row.isActive, true),
+        wowClass: mapWowClass(row.wowClass),
+        specialization: asStringOrNull(row.specialization),
+        playableSpecs: mapPlayableSpecs(row.playableSpecs),
+      });
+      charactersByUser.set(userId, list);
     }
 
     const pendingByUser = new Map<string, number>();
@@ -510,6 +551,7 @@ export const userRepository = {
         characterCount: characterCountByUser.get(id) ?? 0,
         isBooster: asBoolean(record.isBooster),
         isLootbuddy: asBoolean(record.isLootbuddy),
+        characterRoles: unionActiveCharacterRoles(charactersByUser.get(id) ?? []),
         pendingAccessCount: pendingByUser.get(id) ?? 0,
       };
     });
