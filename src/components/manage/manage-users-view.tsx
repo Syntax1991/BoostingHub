@@ -4,6 +4,8 @@ import { CHARACTER_ROLE_LABELS, DIFFICULTY_LABELS, ROLE_LABELS } from "@/lib/lab
 import { ACCOUNT_ROLES, ACCOUNT_STATUSES, CHARACTER_ROLES, RAID_DIFFICULTIES } from "@/models/enums";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { AccountRoleBadge, BoostingRoleBadges } from "@/components/ui/badges";
+import { AccountRoleAction } from "@/components/manage/account-role-action";
+import { BoostingRoleControl } from "@/components/manage/boosting-role-control";
 import { PendingBoostingAccessPanel } from "@/components/manage/pending-boosting-access-panel";
 import type { managementController } from "@/controllers/app.controller";
 
@@ -68,14 +70,36 @@ function buildHref(filters: Page["filters"], patch: Partial<Record<string, strin
   return queryString ? `/manage/users?${queryString}` : "/manage/users";
 }
 
-function boostingAccessSummary(user: Page["users"][number]): string {
-  const parts: string[] = [];
-  if (user.isBooster) parts.push("Booster");
-  if (user.isLootbuddy) parts.push("Lootbuddy");
-  if (user.pendingAccessCount > 0) {
-    parts.push(`${user.pendingAccessCount} pending`);
-  }
-  return parts.length > 0 ? parts.join(" · ") : "None";
+function UserPlatformRoleCell({ user }: { user: Page["users"][number] }) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <AccountRoleBadge role={user.accountRole} />
+      <AccountRoleAction
+        userId={user.id}
+        userName={user.name}
+        accountRole={user.accountRole}
+      />
+    </div>
+  );
+}
+
+function UserBoostingAccessCell({ user }: { user: Page["users"][number] }) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <BoostingRoleBadges roles={user} emptyLabel="None" />
+      <BoostingRoleControl
+        userId={user.id}
+        userName={user.name}
+        role="BOOSTER"
+        enabled={user.isBooster}
+      />
+      {user.pendingAccessCount > 0 ? (
+        <span className="text-[11px] text-muted">
+          {user.pendingAccessCount} pending request{user.pendingAccessCount === 1 ? "" : "s"}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 export function ManageUsersView({ data }: { data: Page }) {
@@ -258,14 +282,13 @@ export function ManageUsersView({ data }: { data: Page }) {
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[920px] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
                     <th className="px-4 py-2 font-medium">Platform role</th>
-                    <th className="px-4 py-2 font-medium">Account status</th>
-                    <th className="px-4 py-2 font-medium">Booster status</th>
                     <th className="px-4 py-2 font-medium">Boosting access</th>
+                    <th className="px-4 py-2 font-medium">Account status</th>
                     <th className="px-4 py-2 font-medium">Characters</th>
                     <th className="px-4 py-2 font-medium">Pending</th>
                     <th className="px-4 py-2 font-medium">Actions</th>
@@ -273,12 +296,15 @@ export function ManageUsersView({ data }: { data: Page }) {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id} className="border-t border-border align-middle">
+                    <tr key={user.id} className="border-t border-border align-top">
                       <td className="px-4 py-3">
                         <UserIdentity user={user} />
                       </td>
                       <td className="px-4 py-3">
-                        <AccountRoleBadge role={user.accountRole} />
+                        <UserPlatformRoleCell user={user} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <UserBoostingAccessCell user={user} />
                       </td>
                       <td className="px-4 py-3 text-xs">
                         <span
@@ -288,12 +314,6 @@ export function ManageUsersView({ data }: { data: Page }) {
                         >
                           {user.accountStatus === "ACTIVE" ? "Active" : "Disabled"}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <BoostingRoleBadges roles={user} emptyLabel="None" />
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted">
-                        {boostingAccessSummary(user)}
                       </td>
                       <td className="px-4 py-3 tabular-nums text-muted">{user.characterCount}</td>
                       <td className="px-4 py-3 tabular-nums text-muted">
@@ -324,11 +344,17 @@ export function ManageUsersView({ data }: { data: Page }) {
                       Manage
                     </Link>
                   </div>
-                  <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div className="col-span-2">
                       <dt className="text-muted">Platform role</dt>
-                      <dd className="mt-0.5">
-                        <AccountRoleBadge role={user.accountRole} />
+                      <dd className="mt-1">
+                        <UserPlatformRoleCell user={user} />
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-muted">Boosting access</dt>
+                      <dd className="mt-1">
+                        <UserBoostingAccessCell user={user} />
                       </dd>
                     </div>
                     <div>
@@ -347,11 +373,7 @@ export function ManageUsersView({ data }: { data: Page }) {
                         {user.pendingAccessCount > 0 ? user.pendingAccessCount : "—"}
                       </dd>
                     </div>
-                    <div className="col-span-2">
-                      <dt className="text-muted">Boosting access</dt>
-                      <dd className="mt-0.5">{boostingAccessSummary(user)}</dd>
-                    </div>
-                    <div className="col-span-2">
+                    <div>
                       <dt className="text-muted">Joined</dt>
                       <dd className="mt-0.5">{formatDateTime(user.createdAt)}</dd>
                     </div>
