@@ -1,4 +1,9 @@
 import { parseKilledBossIds } from "@/lib/lockout-bosses";
+import {
+  lockCharactersForReservationInTx,
+  type ReservationLockTx,
+} from "@/lib/character-reservation-lock";
+import { formatDateTime } from "@/lib/datetime";
 import { db, orm } from "@/lib/prisma";
 import type {
   CharacterRole,
@@ -268,6 +273,60 @@ async function assertRunPreStartInTx(txOrm: TxOrm, runId: string): Promise<void>
   }
 }
 
+/**
+ * Write-time invariant: lock Characters (sorted), re-read authoritative
+ * reservations, reject if any Character is already draft-selected or SELECTED
+ * on an overlapping Run. Must run inside the same transaction as the selection
+ * write — never trust a pre-tx conflict check alone.
+ */
+async function assertCharactersFreeForReservationInTx(
+  tx: ReservationLockTx,
+  txOrm: TxOrm,
+  input: {
+    characterIds: readonly string[];
+    excludeRunId: string;
+    scheduledStartAt: string;
+  },
+): Promise<void> {
+  const characterIds = [...new Set(input.characterIds.filter((id) => id.length > 0))];
+  if (characterIds.length === 0) return;
+
+  await lockCharactersForReservationInTx(tx, characterIds);
+
+  const conflicts = await queryReservationConflicts(txOrm, {
+    characterIds,
+    excludeRunId: input.excludeRunId,
+    scheduledStartAt: input.scheduledStartAt,
+  });
+  if (conflicts.length === 0) return;
+
+  const conflict = conflicts[0]!;
+  console.info(
+    JSON.stringify({
+      event: "character_reservation_rejected",
+      runId: input.excludeRunId,
+      characterId: conflict.characterId,
+      conflictingRunId: conflict.runId,
+      conflictType: "CROSS_RUN_RESERVATION",
+    }),
+  );
+
+  const characterRows = (await txOrm.Character.where((f) =>
+    f.id.in(conflicts.map((row) => row.characterId)),
+  ).all()) as Array<Record<string, unknown>>;
+  const labelById = new Map(
+    characterRows.map((row) => [
+      asString(row.id),
+      `${asString(row.name)}-${asString(row.realm)}`,
+    ]),
+  );
+  const label = labelById.get(conflict.characterId) ?? "That character";
+  throw new DomainError(
+    "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
+    `${label} is already selected for another overlapping Run (${conflict.runTitle} at ${formatDateTime(conflict.scheduledStartAt)}).`,
+  );
+}
+
 type DraftWriteOptions = {
   targetRunId?: string;
   scheduledStartAt?: string;
@@ -285,6 +344,7 @@ type DraftWriteOptions = {
  * optional Save Roster notifications.
  */
 async function writeDraftSelectionsInTx(
+  tx: ReservationLockTx,
   txOrm: TxOrm,
   roster: RosterRecord,
   selections: RosterSelection[],
@@ -316,17 +376,11 @@ async function writeDraftSelectionsInTx(
     options.targetRunId &&
     options.scheduledStartAt
   ) {
-    const conflicts = await queryReservationConflicts(txOrm, {
+    await assertCharactersFreeForReservationInTx(tx, txOrm, {
       characterIds: options.selectedCharacterIds,
       excludeRunId: options.targetRunId,
       scheduledStartAt: options.scheduledStartAt,
     });
-    if (conflicts.length > 0) {
-      throw new DomainError(
-        "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-        `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
-      );
-    }
   }
 
   const current = new Map(roster.selections.map((selection) => [selection.signupId, selection]));
@@ -408,22 +462,22 @@ export function publishStateSignup(row: Record<string, unknown>) {
  * publish also records one explicit post intent (postRevision + 1) so the bot
  * syncs the first roster message; republishing never adds post intents.
  */
-async function publishSelectionsInTx(txOrm: TxOrm, mapped: RosterRecord, input: PublishSelectionsInput) {
+async function publishSelectionsInTx(
+  tx: ReservationLockTx,
+  txOrm: TxOrm,
+  mapped: RosterRecord,
+  input: PublishSelectionsInput,
+) {
   // Race-safety net: the caller already checked cross-Run reservation
   // before opening this transaction, but another Run could have reserved
-  // one of these Characters in between.
+  // one of these Characters in between. Lock + revalidate before any
+  // SELECTED / draft writes so concurrent publishes cannot double-book.
   if (input.selectedCharacterIds.length > 0) {
-    const conflicts = await queryReservationConflicts(txOrm, {
+    await assertCharactersFreeForReservationInTx(tx, txOrm, {
       characterIds: input.selectedCharacterIds,
       excludeRunId: input.runId,
       scheduledStartAt: input.scheduledStartAt,
     });
-    if (conflicts.length > 0) {
-      throw new DomainError(
-        "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-        "One or more selected characters were just reserved for another run at the same time. Refresh and try again.",
-      );
-    }
   }
 
   const now = new Date().toISOString();
@@ -612,7 +666,7 @@ export const rosterRepository = {
       const roster = await lockRosterInTx(txOrm, rosterId);
       await this.assertVersion(roster, expectedVersion);
       await assertRunPreStartInTx(txOrm, roster.runId);
-      await writeDraftSelectionsInTx(txOrm, roster, selections, options);
+      await writeDraftSelectionsInTx(tx, txOrm, roster, selections, options);
     });
   },
 
@@ -736,7 +790,7 @@ export const rosterRepository = {
       );
       selections.push({ signupId, selectedRole: input.role });
 
-      await writeDraftSelectionsInTx(txOrm, roster, selections, {
+      await writeDraftSelectionsInTx(tx, txOrm, roster, selections, {
         targetRunId: input.runId,
         scheduledStartAt: input.scheduledStartAt,
         // Race-check the Character unless it already held this draft slot.
@@ -790,24 +844,22 @@ export const rosterRepository = {
         }
       }
 
-      for (const signupId of input.replaceSignupIds) {
-        if (signupId !== input.signupId) {
-          await txOrm.RunRosterEntry.where({ rosterId: input.rosterId, signupId }).delete();
-        }
-      }
-
       const existing = await txOrm.RunRosterEntry.where({ rosterId: input.rosterId, signupId: input.signupId }).first();
       if (input.selected && input.characterId && !existing) {
-        const conflicts = await queryReservationConflicts(txOrm, {
+        await assertCharactersFreeForReservationInTx(tx, txOrm, {
           characterIds: [input.characterId],
           excludeRunId: input.targetRunId,
           scheduledStartAt: input.scheduledStartAt,
         });
-        if (conflicts.length > 0) {
-          throw new DomainError(
-            "CHARACTER_ALREADY_SELECTED_OTHER_RUN",
-            `That character was just selected for ${conflicts[0].runTitle}. Please try again.`,
-          );
+      }
+      // Serialize release with any concurrent acquire of the same Character.
+      if (!input.selected && input.characterId && existing) {
+        await lockCharactersForReservationInTx(tx, [input.characterId]);
+      }
+
+      for (const signupId of input.replaceSignupIds) {
+        if (signupId !== input.signupId) {
+          await txOrm.RunRosterEntry.where({ rosterId: input.rosterId, signupId }).delete();
         }
       }
 
@@ -1015,7 +1067,7 @@ export const rosterRepository = {
         throw new DomainError("ROSTER_ALREADY_CHANGED", ROSTER_ALREADY_CHANGED_MESSAGE);
       }
       await assertRunPreStartInTx(txOrm, input.runId);
-      await publishSelectionsInTx(txOrm, mapped, input);
+      await publishSelectionsInTx(tx, txOrm, mapped, input);
     });
   },
 
@@ -1047,13 +1099,14 @@ export const rosterRepository = {
           "Publish the roster first — Update Roster changes a published roster.",
         );
       }
-      // Draft write (WITHDRAWN re-check, entry diff) without its own notify —
-      // the publish step below notifies once for the accepted roster.
-      await writeDraftSelectionsInTx(txOrm, mapped, input.draftSelections, {
+      // Draft write locks + revalidates selected Characters before entry writes;
+      // publish step notifies once for the accepted roster (and re-checks).
+      await writeDraftSelectionsInTx(tx, txOrm, mapped, input.draftSelections, {
         targetRunId: input.runId,
         scheduledStartAt: input.scheduledStartAt,
+        selectedCharacterIds: input.selectedCharacterIds,
       });
-      await publishSelectionsInTx(txOrm, mapped, input);
+      await publishSelectionsInTx(tx, txOrm, mapped, input);
     });
   },
 
