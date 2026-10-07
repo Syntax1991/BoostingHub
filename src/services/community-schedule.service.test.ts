@@ -96,9 +96,11 @@ async function cleanupSlots() {
       .catch(() => {});
   }
 
-  for (const leadId of Object.values(ids)) {
-    const templates = await orm.RunTemplate.where({ raidLeadId: leadId }).all();
-    for (const row of templates) {
+  const testCreators = new Set(Object.values(ids));
+  const templates = await orm.RunTemplate.all();
+  for (const row of templates) {
+    const createdById = String((row as { createdById: string }).createdById);
+    if (testCreators.has(createdById)) {
       await orm.RunTemplate.where({ id: String((row as { id: string }).id) }).delete().catch(() => {});
     }
   }
@@ -346,7 +348,6 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(result.slotIds).toHaveLength(4);
     const template = await runTemplateRepository.findById(result.templateId);
     expect(template?.name).toBe("Plan HC Setup");
-    expect(template?.raidLeadId).toBe(ids.lead);
 
     const slots = await Promise.all(result.slotIds.map((id) => communityScheduleRepository.findById(id)));
     expect(slots.every((slot) => slot?.label === "Plan HC Setup")).toBe(true);
@@ -358,7 +359,6 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const templateId = await runTemplateRepository.create({
       ...repoTemplateFields,
       name: "Existing Setup",
-      raidLeadId: ids.lead,
       createdById: ids.admin,
       updatedById: ids.admin,
     });
@@ -419,7 +419,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       spy.mockRestore();
     }
 
-    const templates = await orm.RunTemplate.where({ raidLeadId: ids.lead }).all();
+    const templates = await orm.RunTemplate.all();
     expect(templates.some((row) => (row as { name: string }).name === "Rollback Setup")).toBe(false);
     const slots = await orm.CommunityScheduleSlot.where({ raidLeadId: ids.lead }).all();
     expect(slots).toHaveLength(0);
@@ -513,7 +513,6 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     const templateId = await runTemplateRepository.create({
       ...repoTemplateFields,
       name: "Mixed Setup",
-      raidLeadId: ids.lead,
       createdById: ids.admin,
       updatedById: ids.admin,
     });
@@ -578,7 +577,6 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
         desiredDpsCount: 14,
         desiredLootbuddyCount: 0,
         notes: null,
-        raidLeadId: ids.lead,
       }),
       "NOT_AUTHORIZED",
     );
@@ -595,7 +593,6 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       desiredDpsCount: 14,
       desiredLootbuddyCount: 0,
       notes: "updated notes",
-      raidLeadId: ids.lead,
     });
 
     const page = await communityScheduleService.getPage(admin);
@@ -802,7 +799,6 @@ describe("communityScheduleService mutable planning delete", () => {
     const emptyTemplateId = await runTemplateRepository.create({
       ...repoTemplateFields,
       name: "Orphan Setup",
-      raidLeadId: ids.lead,
       createdById: ids.admin,
       updatedById: ids.admin,
     });
@@ -929,7 +925,6 @@ describe("communityScheduleService mutable planning delete", () => {
       contentPreset: "MIDNIGHT_S2_BUNDLE",
       venomousPlannedBossCount: 8,
       lootType: "VIP",
-      raidLeadId: ids.lead,
     });
     const b = await communityScheduleService.createRunSetup(admin, {
       ...createSetupFields,
@@ -937,7 +932,6 @@ describe("communityScheduleService mutable planning delete", () => {
       contentPreset: "MIDNIGHT_S2_BUNDLE",
       venomousPlannedBossCount: 6,
       lootType: "VIP",
-      raidLeadId: ids.lead,
     });
     const c = await communityScheduleService.createRunSetup(admin, {
       ...createSetupFields,
@@ -945,19 +939,14 @@ describe("communityScheduleService mutable planning delete", () => {
       contentPreset: "VENOMOUS_ABYSS",
       venomousPlannedBossCount: 8,
       lootType: "VIP",
-      raidLeadId: ids.lead,
     });
 
     const page = await communityScheduleService.getPage(admin);
-    expect(page.runSetupInventory.filter((row) => row.raidLeadId === ids.lead).length).toBeGreaterThanOrEqual(
-      3,
-    );
+    expect(page.runSetupInventory.length).toBeGreaterThanOrEqual(3);
     expect(page.runSetupInventory.find((row) => row.id === a.id)?.slotCount).toBe(0);
     expect(page.runSetups.every((group) => group.runTemplateId !== a.id)).toBe(true);
 
-    const usableIds = page.templates
-      .filter((row) => row.raidLeadId === ids.lead && row.usable)
-      .map((row) => row.id);
+    const usableIds = page.templates.filter((row) => row.usable).map((row) => row.id);
     expect(usableIds).toEqual(expect.arrayContaining([a.id, b.id, c.id]));
 
     const dup = await communityScheduleService.duplicateRunSetup(admin, a.id);
@@ -983,7 +972,6 @@ describe("communityScheduleService mutable planning delete", () => {
       desiredDpsCount: 14,
       desiredLootbuddyCount: 0,
       notes: null,
-      raidLeadId: ids.lead,
     });
     const originalAfter = await runTemplateRepository.findById(a.id);
     expect(
@@ -993,7 +981,6 @@ describe("communityScheduleService mutable planning delete", () => {
     await expectCode(communityScheduleService.createRunSetup(user, {
       ...createSetupFields,
       name: "Nope",
-      raidLeadId: ids.lead,
     }), "NOT_AUTHORIZED");
     await expectCode(communityScheduleService.duplicateRunSetup(lead, a.id), "NOT_AUTHORIZED");
   });

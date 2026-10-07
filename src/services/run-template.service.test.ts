@@ -131,11 +131,13 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  const stray = await orm.RunTemplate.where({ raidLeadId: ids.lead }).select("id").all();
-  for (const row of stray) {
-    const id = String((row as { id: string }).id);
-    if (!createdTemplateIds.includes(id)) {
-      await deleteIfPresent("RunTemplate", id);
+  for (const creatorId of [ids.lead, ids.admin, ids.otherLead]) {
+    const stray = await orm.RunTemplate.where({ createdById: creatorId }).select("id").all();
+    for (const row of stray) {
+      const id = String((row as { id: string }).id);
+      if (!createdTemplateIds.includes(id)) {
+        await deleteIfPresent("RunTemplate", id);
+      }
     }
   }
 });
@@ -144,9 +146,6 @@ function fakeTemplate(overrides: Partial<RunTemplateRecord> = {}): RunTemplateRe
   return {
     id: "fake",
     name: "Fake",
-    raidLeadId: ids.lead,
-    raidLeadName: "RTS Lead",
-    raidLeadEligible: true,
     raidId,
     raidName: "Venomous Abyss",
     raidSeason: "Season",
@@ -271,10 +270,6 @@ describe("computeUsability — pure boolean logic", () => {
     ).toBe(false);
   });
 
-  it("a template whose owner is no longer an eligible raid lead is unusable", () => {
-    expect(computeUsability(fakeTemplate({ raidLeadEligible: false })).usable).toBe(false);
-  });
-
   it("an invalid difficulty/lootType combination is unusable", () => {
     expect(computeUsability(fakeTemplate({ difficulty: "MYTHIC", lootType: "SAVED" })).usable).toBe(false);
   });
@@ -338,7 +333,7 @@ describe("template → VENOMOUS_ABYSS preset expansion", () => {
   });
 
   it("getCreateManyForm maps templates to VENOMOUS_ABYSS contentPreset defaults", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Preset Map", venomousPlannedBossCount: 5 }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Preset Map", venomousPlannedBossCount: 5 }));
     createdTemplateIds.push(created.id);
     const form = await runService.getCreateManyForm(lead);
     const row = form.templates.find((template) => template.id === created.id);
@@ -362,47 +357,23 @@ describe("runTemplateService.createTemplate — authorization", () => {
     await expectDomainCode(runTemplateService.createTemplate(user, inputFor()), "NOT_AUTHORIZED");
   });
 
-  it("RAID_LEAD creates for themselves when raidLeadId is omitted", async () => {
-    const result = await runTemplateService.createTemplate(lead, inputFor());
+  it("RAID_LEAD cannot manage global templates", async () => {
+    await expectDomainCode(runTemplateService.createTemplate(lead, inputFor()), "NOT_AUTHORIZED");
+  });
+
+  it("ADMIN creates a global template without raidLeadId", async () => {
+    const result = await runTemplateService.createTemplate(admin, inputFor());
     createdTemplateIds.push(result.id);
     const template = await runTemplateRepository.findById(result.id);
-    expect(template?.raidLeadId).toBe(ids.lead);
-    expect(template?.createdById).toBe(ids.lead);
-    expect(template?.updatedById).toBe(ids.lead);
-  });
-
-  it("RAID_LEAD forging a different owner is rejected", async () => {
-    await expectDomainCode(
-      runTemplateService.createTemplate(lead, inputFor({ raidLeadId: ids.otherLead })),
-      "RUN_RAID_LEAD_INVALID",
-    );
-  });
-
-  it("ADMIN must explicitly choose an owner", async () => {
-    await expectDomainCode(runTemplateService.createTemplate(admin, inputFor()), "RUN_RAID_LEAD_INVALID");
-  });
-
-  it("ADMIN creating for an eligible raid lead succeeds; createdById is the ADMIN, raidLeadId is the target", async () => {
-    const result = await runTemplateService.createTemplate(admin, inputFor({ raidLeadId: ids.otherLead }));
-    createdTemplateIds.push(result.id);
-    const template = await runTemplateRepository.findById(result.id);
-    expect(template?.raidLeadId).toBe(ids.otherLead);
     expect(template?.createdById).toBe(ids.admin);
     expect(template?.updatedById).toBe(ids.admin);
-  });
-
-  it("ADMIN assigning an ineligible owner (plain USER) is rejected", async () => {
-    await expectDomainCode(
-      runTemplateService.createTemplate(admin, inputFor({ raidLeadId: ids.user })),
-      "RUN_RAID_LEAD_INVALID",
-    );
   });
 });
 
 describe("runTemplateService.createTemplate — domain validation reuses Run planning rules", () => {
   it("creates Bundle contents with fixed Tide 1/1", async () => {
     const created = await runTemplateService.createTemplate(
-      lead,
+      admin,
       inputFor({ name: "Bundle create", contentPreset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 6 }),
     );
     createdTemplateIds.push(created.id);
@@ -414,21 +385,21 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
 
   it("an invalid difficulty/lootType combination is rejected", async () => {
     await expectDomainCode(
-      runTemplateService.createTemplate(lead, inputFor({ difficulty: "MYTHIC", lootType: "SAVED" })),
+      runTemplateService.createTemplate(admin, inputFor({ difficulty: "MYTHIC", lootType: "SAVED" })),
       "RUN_LOOT_TYPE_INVALID",
     );
   });
 
   it("a planned boss count exceeding the raid's total is rejected", async () => {
     await expectDomainCode(
-      runTemplateService.createTemplate(lead, inputFor({ venomousPlannedBossCount: 999 })),
+      runTemplateService.createTemplate(admin, inputFor({ venomousPlannedBossCount: 999 })),
       "RUN_BOSS_COUNT_INVALID",
     );
   });
 
   it("an out-of-range composition value is rejected", async () => {
     await expectDomainCode(
-      runTemplateService.createTemplate(lead, inputFor({ desiredHealerCount: -1 })),
+      runTemplateService.createTemplate(admin, inputFor({ desiredHealerCount: -1 })),
       "VALIDATION_FAILED",
     );
   });
@@ -437,7 +408,7 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
 describe("runTemplateService.duplicateTemplate", () => {
   it("copies Venomous content, composition, notes, and raid lead into a new id", async () => {
     const created = await runTemplateService.createTemplate(
-      lead,
+      admin,
       inputFor({
         name: "HC VIP Venomous 8/8",
         contentPreset: "VENOMOUS_ABYSS",
@@ -452,13 +423,12 @@ describe("runTemplateService.duplicateTemplate", () => {
     );
     createdTemplateIds.push(created.id);
 
-    const dup = await runTemplateService.duplicateTemplate(lead, created.id);
+    const dup = await runTemplateService.duplicateTemplate(admin, created.id);
     createdTemplateIds.push(dup.id);
     expect(dup.id).not.toBe(created.id);
 
     const original = await runTemplateRepository.findById(created.id);
     const copy = await runTemplateRepository.findById(dup.id);
-    expect(copy?.raidLeadId).toBe(ids.lead);
     expect(copy?.difficulty).toBe("HEROIC");
     expect(copy?.lootType).toBe("VIP");
     expect(copy?.desiredTankCount).toBe(2);
@@ -471,7 +441,7 @@ describe("runTemplateService.duplicateTemplate", () => {
     expect(copy?.contents[0]?.plannedBossCount).toBe(8);
     expect(copy?.name).toContain("copy");
 
-    await runTemplateService.updateTemplate(lead, {
+    await runTemplateService.updateTemplate(admin, {
       ...inputFor({
         name: "HC VIP Venomous 7/8",
         venomousPlannedBossCount: 7,
@@ -493,7 +463,6 @@ describe("runTemplateService.duplicateTemplate", () => {
         contentPreset: "MIDNIGHT_S2_BUNDLE",
         venomousPlannedBossCount: 8,
         lootType: "VIP",
-        raidLeadId: ids.lead,
       }),
     );
     createdTemplateIds.push(created.id);
@@ -516,7 +485,6 @@ describe("runTemplateService.duplicateTemplate", () => {
         contentPreset: "MIDNIGHT_S2_BUNDLE",
         venomousPlannedBossCount: 6,
         lootType: "VIP",
-        raidLeadId: ids.lead,
       }),
       templateId: dup.id,
     });
@@ -527,86 +495,74 @@ describe("runTemplateService.duplicateTemplate", () => {
   });
 
   it("USER cannot duplicate", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "No dup for user" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "No dup for user" }));
     createdTemplateIds.push(created.id);
     await expectDomainCode(runTemplateService.duplicateTemplate(user, created.id), "NOT_AUTHORIZED");
   });
 });
 
-describe("runTemplateService.updateTemplate — ownership authorization", () => {
-  it("RAID_LEAD may edit their own template", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Owned" }));
+describe("runTemplateService.updateTemplate — manage authorization", () => {
+  it("RAID_LEAD cannot edit global templates", async () => {
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Owned" }));
     createdTemplateIds.push(created.id);
-    const result = await runTemplateService.updateTemplate(lead, {
-      ...inputFor({ name: "Owned, edited" }),
+    await expectDomainCode(
+      runTemplateService.updateTemplate(lead, {
+        ...inputFor({ name: "Owned, edited" }),
+        templateId: created.id,
+      }),
+      "NOT_AUTHORIZED",
+    );
+    const template = await runTemplateRepository.findById(created.id);
+    expect(template?.name).toBe("Owned");
+  });
+
+  it("ADMIN may edit any global template", async () => {
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Editable" }));
+    createdTemplateIds.push(created.id);
+    const result = await runTemplateService.updateTemplate(admin, {
+      ...inputFor({ name: "Editable, updated" }),
       templateId: created.id,
     });
     expect(result.id).toBe(created.id);
     const template = await runTemplateRepository.findById(created.id);
-    expect(template?.name).toBe("Owned, edited");
-    expect(template?.updatedById).toBe(ids.lead);
-  });
-
-  it("RAID_LEAD editing another raid lead's template is forbidden", async () => {
-    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Other's", raidLeadId: ids.otherLead }));
-    createdTemplateIds.push(created.id);
-    await expectDomainCode(
-      runTemplateService.updateTemplate(lead, { ...inputFor({ name: "Hijacked" }), templateId: created.id }),
-      "NOT_AUTHORIZED",
-    );
-    const template = await runTemplateRepository.findById(created.id);
-    expect(template?.name).toBe("Other's");
-  });
-
-  it("ADMIN may edit any raid lead's template, including reassigning the owner (no Run relation to touch)", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Reassignable" }));
-    createdTemplateIds.push(created.id);
-    await runTemplateService.updateTemplate(admin, {
-      ...inputFor({ name: "Reassignable" }),
-      templateId: created.id,
-      raidLeadId: ids.otherLead,
-    });
-    const template = await runTemplateRepository.findById(created.id);
-    expect(template?.raidLeadId).toBe(ids.otherLead);
+    expect(template?.name).toBe("Editable, updated");
     expect(template?.updatedById).toBe(ids.admin);
-    // createdById is a separate audit field — it never changes on update.
-    expect(template?.createdById).toBe(ids.lead);
+    expect(template?.createdById).toBe(ids.admin);
   });
 });
 
 describe("runTemplateService — active/inactive lifecycle", () => {
   it("deactivate then reactivate round-trips isActive", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Lifecycle" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Lifecycle" }));
     createdTemplateIds.push(created.id);
 
-    await runTemplateService.deactivate(lead, created.id);
+    await runTemplateService.deactivate(admin, created.id);
     expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
 
-    await runTemplateService.reactivate(lead, created.id);
+    await runTemplateService.reactivate(admin, created.id);
     expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(true);
   });
 
   it("deactivating an already-inactive template is rejected", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Already inactive" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Already inactive" }));
     createdTemplateIds.push(created.id);
-    await runTemplateService.deactivate(lead, created.id);
-    await expectDomainCode(runTemplateService.deactivate(lead, created.id), "RUN_TEMPLATE_ALREADY_INACTIVE");
+    await runTemplateService.deactivate(admin, created.id);
+    await expectDomainCode(runTemplateService.deactivate(admin, created.id), "RUN_TEMPLATE_ALREADY_INACTIVE");
   });
 
   it("reactivating an already-active template is rejected", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Already active" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Already active" }));
     createdTemplateIds.push(created.id);
-    await expectDomainCode(runTemplateService.reactivate(lead, created.id), "RUN_TEMPLATE_ALREADY_ACTIVE");
+    await expectDomainCode(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_ALREADY_ACTIVE");
   });
 
   it("reactivation re-validates the raid and fails if it is not Run Setup selectable, without flipping isActive", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Raid goes historical" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Raid goes historical" }));
     createdTemplateIds.push(created.id);
-    await runTemplateService.deactivate(lead, created.id);
+    await runTemplateService.deactivate(admin, created.id);
 
     await runTemplateRepository.update(created.id, {
       name: "Raid goes historical",
-      raidLeadId: ids.lead,
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       contents: [{ raidId: MANAFORGE_OMEGA_RAID_ID, sortOrder: 1, plannedBossCount: 1 }],
@@ -615,96 +571,61 @@ describe("runTemplateService — active/inactive lifecycle", () => {
       desiredDpsCount: 14,
       desiredLootbuddyCount: 0,
       notes: null,
-      updatedById: ids.lead,
+      updatedById: ids.admin,
     });
     try {
-      await expectDomainCode(runTemplateService.reactivate(lead, created.id), "RUN_TEMPLATE_UNUSABLE");
+      await expectDomainCode(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_UNUSABLE");
       expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
     } finally {
       await setRaidAvailable(raidId, true);
     }
   });
-
-  it("reactivation re-validates owner eligibility and fails if the owner is no longer eligible", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Owner disabled" }));
-    createdTemplateIds.push(created.id);
-    await runTemplateService.deactivate(lead, created.id);
-
-    await setAccountStatus(ids.lead, "DISABLED");
-    try {
-      await expectDomainCode(runTemplateService.reactivate(admin, created.id), "RUN_TEMPLATE_UNUSABLE");
-      expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(false);
-    } finally {
-      await setAccountStatus(ids.lead, "ACTIVE");
-    }
-  });
 });
 
-describe("runTemplateService.listUsableForCreation — selector scoping", () => {
-  it("RAID_LEAD sees only their own active, usable templates", async () => {
-    const own = await runTemplateService.createTemplate(lead, inputFor({ name: "Selector Own" }));
-    const other = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Other", raidLeadId: ids.otherLead }));
-    createdTemplateIds.push(own.id, other.id);
+describe("runTemplateService.listUsableForCreation — global catalog", () => {
+  it("RAID_LEAD sees every active usable global template", async () => {
+    const first = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector A" }));
+    const second = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector B" }));
+    createdTemplateIds.push(first.id, second.id);
 
     const usable = await runTemplateService.listUsableForCreation(lead);
-    expect(usable.some((t) => t.id === own.id)).toBe(true);
-    expect(usable.some((t) => t.id === other.id)).toBe(false);
+    expect(usable.some((t) => t.id === first.id)).toBe(true);
+    expect(usable.some((t) => t.id === second.id)).toBe(true);
   });
 
-  it("ADMIN sees usable templates across every raid lead", async () => {
-    const own = await runTemplateService.createTemplate(lead, inputFor({ name: "Selector Admin Own" }));
-    const other = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Admin Other", raidLeadId: ids.otherLead }));
-    createdTemplateIds.push(own.id, other.id);
+  it("ADMIN sees the same usable global catalog", async () => {
+    const first = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Admin A" }));
+    const second = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Admin B" }));
+    createdTemplateIds.push(first.id, second.id);
 
     const usable = await runTemplateService.listUsableForCreation(admin);
-    expect(usable.some((t) => t.id === own.id)).toBe(true);
-    expect(usable.some((t) => t.id === other.id)).toBe(true);
+    expect(usable.some((t) => t.id === first.id)).toBe(true);
+    expect(usable.some((t) => t.id === second.id)).toBe(true);
   });
 
   it("an inactive template never appears in the selector", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Selector Inactive" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Selector Inactive" }));
     createdTemplateIds.push(created.id);
-    await runTemplateService.deactivate(lead, created.id);
+    await runTemplateService.deactivate(admin, created.id);
 
     const usable = await runTemplateService.listUsableForCreation(lead);
     expect(usable.some((t) => t.id === created.id)).toBe(false);
   });
-
-  it("a stale-but-still-active template (owner since disabled) disappears from the selector without being mutated", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Selector Stale" }));
-    createdTemplateIds.push(created.id);
-
-    await setAccountStatus(ids.lead, "DISABLED");
-    try {
-      const usable = await runTemplateService.listUsableForCreation(admin);
-      expect(usable.some((t) => t.id === created.id)).toBe(false);
-      // The row itself is untouched — still active, just filtered from the selector.
-      expect((await runTemplateRepository.findById(created.id))?.isActive).toBe(true);
-    } finally {
-      await setAccountStatus(ids.lead, "ACTIVE");
-    }
-  });
 });
 
-describe("runTemplateService.resolveTemplateForUse — the authority Run creation depends on", () => {
-  it("RAID_LEAD may resolve their own template", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Resolve Own" }));
+describe("runTemplateService.resolveTemplateForUse — global template access", () => {
+  it("RAID_LEAD may resolve any usable global template", async () => {
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Global" }));
     createdTemplateIds.push(created.id);
     const resolved = await runTemplateService.resolveTemplateForUse(lead, created.id);
-    expect(resolved.raidLeadId).toBe(ids.lead);
-  });
-
-  it("RAID_LEAD attempting to resolve another raid lead's template is rejected", async () => {
-    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Forbidden", raidLeadId: ids.otherLead }));
-    createdTemplateIds.push(created.id);
-    await expectDomainCode(runTemplateService.resolveTemplateForUse(lead, created.id), "NOT_AUTHORIZED");
+    expect(resolved.id).toBe(created.id);
   });
 
   it("ADMIN may resolve any usable template", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Resolve Admin" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Admin" }));
     createdTemplateIds.push(created.id);
     const resolved = await runTemplateService.resolveTemplateForUse(admin, created.id);
-    expect(resolved.raidLeadId).toBe(ids.lead);
+    expect(resolved.id).toBe(created.id);
   });
 
   it("resolving a nonexistent template is rejected", async () => {
@@ -712,9 +633,9 @@ describe("runTemplateService.resolveTemplateForUse — the authority Run creatio
   });
 
   it("resolving an inactive template is rejected", async () => {
-    const created = await runTemplateService.createTemplate(lead, inputFor({ name: "Resolve Inactive" }));
+    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Resolve Inactive" }));
     createdTemplateIds.push(created.id);
-    await runTemplateService.deactivate(lead, created.id);
+    await runTemplateService.deactivate(admin, created.id);
     await expectDomainCode(runTemplateService.resolveTemplateForUse(lead, created.id), "RUN_TEMPLATE_UNUSABLE");
   });
 });
