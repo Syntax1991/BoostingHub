@@ -22,6 +22,7 @@ import { parseAdminUserFilters } from "@/validators/user-management";
 import { characterOperationsService } from "@/services/character-operations.service";
 import { parseCharacterOperationsFilters } from "@/validators/character-operations";
 import { systemHealthService } from "@/services/system-health.service";
+import { contentCatalogService } from "@/services/content-catalog.service";
 import { parseSystemHealthFilters } from "@/validators/system-health";
 import { operationalAnalyticsService } from "@/services/operational-analytics.service";
 import { communityScheduleService } from "@/services/community-schedule.service";
@@ -264,6 +265,16 @@ export const managementController = {
   async getCharacterOperationsPage(characterId: string) {
     const user = await requireAdminOrRedirect("/manage/characters");
     return characterOperationsService.getDetail(user, characterId);
+  },
+
+  async getContentPage() {
+    const user = await requireAdminOrRedirect("/manage/content");
+    return contentCatalogService.getPage(user);
+  },
+
+  async getContentRaidPage(raidId: string) {
+    const user = await requireAdminOrRedirect(`/manage/content/raids/${raidId}`);
+    return contentCatalogService.getRaidDetail(user, raidId);
   },
 
   async getSystemHealthPage(searchParams: Record<string, string | string[] | undefined> = {}) {
