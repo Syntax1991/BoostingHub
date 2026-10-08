@@ -1,6 +1,6 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { assertCanManageRun, canManageRun } from "@/auth/authorization";
-import { DomainError } from "@/lib/errors";
+import { DomainError, RosterWarningConfirmationRequiredError } from "@/lib/errors";
 import {
   EXTERNAL_BOOSTERS_MAX_PER_ROSTER,
   externalBoosterInputError,
@@ -57,6 +57,16 @@ import {
 } from "@/lib/run-content-lockouts";
 import type { RunRaidContentRecord } from "@/repositories/run.repository";
 import {
+  CLEAN_ROSTER_SELECTION_RISK,
+  classifyRosterSelectionRisk,
+  rosterWarningConfirmationMessage,
+  unacknowledgedWarnings,
+  type ConfirmedRosterWarning,
+  type PendingRosterSelectionWarning,
+  type RosterSelectionRisk,
+  type RosterWarningAcknowledgement,
+} from "@/services/roster-selection-risk";
+import {
   resolveRosterWclPerformance,
   type WclPerformanceRaidSegment,
 } from "@/services/character-wcl-performance.service";
@@ -89,6 +99,12 @@ type InspectedSignup = RosterSignupRow & {
   issue: string | null;
   /** Derived schedule integrity conflicts — never auto-withdraw or auto-deselect. */
   scheduleConflicts: CharacterScheduleConflict[];
+  /**
+   * Shared CLEAN / WARNING / BLOCKED classification for NEWLY selecting this
+   * signup (roster-selection-risk). Composed from scheduleConflicts +
+   * contentSaves; BOOSTER Characters only.
+   */
+  selectionRisk: RosterSelectionRisk;
   /**
    * Informational other-Run reservations (draft-selected or published SELECTED).
    * Never blocks selection by itself — see scheduleConflicts for blockers.
@@ -349,7 +365,10 @@ function inspectSignup(
     lootType: RunLootType;
     contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
   },
-): Omit<InspectedSignup, "draftSelected" | "scheduleConflicts" | "runCommitments" | "wclPerformance"> {
+): Omit<
+  InspectedSignup,
+  "draftSelected" | "scheduleConflicts" | "selectionRisk" | "runCommitments" | "wclPerformance"
+> {
   if (run.contents.length === 0) {
     throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
   }
@@ -400,6 +419,18 @@ function inspectSignup(
     contentSaves,
     issue,
   };
+}
+
+/**
+ * Per-RunRaidContent lockouts of a roster signup against this Run — the same
+ * projection the roster cards use, exported so Auto Build feeds the shared
+ * selection risk from identical data instead of a private lockout rule.
+ */
+export function projectRosterSignupContentSaves(
+  signup: RosterSignupRow,
+  run: Parameters<typeof inspectSignup>[1],
+): RunContentRaidSaveInfo[] {
+  return inspectSignup(signup, run).contentSaves;
 }
 
 /**
@@ -457,6 +488,52 @@ function asRaidBuffParticipant(row: InspectedSignup): RaidBuffParticipant {
   };
 }
 
+type NewSelectionWarningCheck = {
+  /** Null for Add Player before the signup exists. */
+  signupId: string | null;
+  characterId: string;
+  characterLabel: string;
+  contentSaves: RunContentRaidSaveInfo[];
+  acknowledgements: readonly RosterWarningAcknowledgement[];
+};
+
+/**
+ * Server-side warning acknowledgement for NEW roster selections. Callers run
+ * this only AFTER their hard schedule-conflict assertion (BLOCKED always wins
+ * and can never be acknowledged) and BEFORE the repository write, whose
+ * in-transaction reservation re-read (PR #218) stays the final authority.
+ * The current warning is recomputed here; an acknowledgement counts only when
+ * its type and fingerprint match that current state. Nothing is persisted.
+ */
+function assertNewSelectionWarningsConfirmed(picks: readonly NewSelectionWarningCheck[]): void {
+  const pending: PendingRosterSelectionWarning[] = [];
+  for (const pick of picks) {
+    const risk = classifyRosterSelectionRisk({ scheduleConflicts: [], contentSaves: pick.contentSaves });
+    for (const warning of unacknowledgedWarnings(risk, pick.acknowledgements)) {
+      pending.push({
+        signupId: pick.signupId,
+        characterId: pick.characterId,
+        characterLabel: pick.characterLabel,
+        warning,
+      });
+    }
+  }
+  if (pending.length === 0) return;
+  pending.sort(
+    (a, b) =>
+      a.characterLabel.localeCompare(b.characterLabel) ||
+      (a.characterId ?? "").localeCompare(b.characterId ?? ""),
+  );
+  throw new RosterWarningConfirmationRequiredError(rosterWarningConfirmationMessage(pending), pending);
+}
+
+function acknowledgementsForSignup(
+  confirmedWarnings: readonly ConfirmedRosterWarning[] | undefined,
+  signupId: string,
+): RosterWarningAcknowledgement[] {
+  return (confirmedWarnings ?? []).filter((row) => row.signupId === signupId);
+}
+
 /**
  * Authoritative validation of a roster selection against the CURRENT Run —
  * difficulty, schedule/reset, content, composition — for Publish and Update:
@@ -492,6 +569,8 @@ async function planAuthoritativeRoster(
       : plannedSelectedRole(signup, selections.get(signup.id)),
     draftSelected: selections.has(signup.id),
     scheduleConflicts: [] as CharacterScheduleConflict[],
+    // Not evaluated here: publish validation checks schedule conflicts itself below.
+    selectionRisk: CLEAN_ROSTER_SELECTION_RISK,
     runCommitments: [] as CharacterRunCommitment[],
     wclPerformance: [],
   }));
@@ -732,19 +811,26 @@ export const rosterService = {
         })),
     });
 
-    const inspected = signups.map((signup) => ({
-      ...inspectSignup(signup, run),
+    const inspected = signups.map((signup) => {
+      const base = inspectSignup(signup, run);
+      const isBoosterCharacter = signup.participationType === "BOOSTER" && Boolean(signup.character);
+      const scheduleConflicts = isBoosterCharacter
+        ? (scheduleConflictsByCharacter.get(signup.character!.id) ?? [])
+        : [];
+      return {
+      ...base,
       draftSelected: roster.selectedSignupIds.includes(signup.id),
-      scheduleConflicts:
-        signup.participationType === "BOOSTER" && signup.character
-          ? (scheduleConflictsByCharacter.get(signup.character.id) ?? [])
-          : [],
+      scheduleConflicts,
+      selectionRisk: isBoosterCharacter
+        ? classifyRosterSelectionRisk({ scheduleConflicts, contentSaves: base.contentSaves })
+        : CLEAN_ROSTER_SELECTION_RISK,
       runCommitments:
         signup.participationType === "BOOSTER" && signup.character
           ? (runCommitmentsByCharacter.get(signup.character.id) ?? [])
           : [],
       wclPerformance: wclBySignup.get(signup.id) ?? [],
-    }));
+      };
+    });
 
     // Draft slots whose signup was withdrawn must not count for composition or
     // Class Buffs (UI also hides WITHDRAWN candidates). Entry cleanup on withdraw
@@ -883,6 +969,8 @@ export const rosterService = {
       version: number;
       /** Omit for a single-role offer (auto-resolved) and for LOOTBUDDY. */
       selectedRole?: CharacterRole | null;
+      /** Acknowledged selection warnings (see assertNewSelectionWarningsConfirmed). */
+      confirmedWarnings?: ConfirmedRosterWarning[];
     },
   ) {
     const run = await runRepository.findById(input.runId);
@@ -938,6 +1026,19 @@ export const rosterService = {
         `${signup.character.name}-${signup.character.realm}`,
         scheduleConflicts,
       );
+      // No server action exposes this single-slot path today; it is gated all
+      // the same so it can never become a warning-confirmation bypass.
+      if (signup.status !== "SELECTED") {
+        assertNewSelectionWarningsConfirmed([
+          {
+            signupId: signup.id,
+            characterId: signup.character.id,
+            characterLabel: `${signup.character.name}-${signup.character.realm}`,
+            contentSaves: inspectSignup(signup, run).contentSaves,
+            acknowledgements: acknowledgementsForSignup(input.confirmedWarnings, signup.id),
+          },
+        ]);
+      }
     }
 
     /**
@@ -1036,6 +1137,11 @@ export const rosterService = {
        * older clients — the saved ones are then left untouched.
        */
       externalBoosters?: ExternalBoosterInput[];
+      /**
+       * Acknowledged selection warnings for NEWLY selected signups (manual
+       * Save Roster and Auto Build Apply). Already-selected slots never need one.
+       */
+      confirmedWarnings?: ConfirmedRosterWarning[];
     },
   ) {
     const run = await runRepository.findById(input.runId);
@@ -1076,6 +1182,7 @@ export const rosterService = {
     const persistedRole = new Map(roster.selections.map((selection) => [selection.signupId, selection.selectedRole]));
     const selectedRows: RosterSignupRow[] = [];
     const selections: RosterSelection[] = [];
+    const contentSavesBySignupId = new Map<string, RunContentRaidSaveInfo[]>();
 
     for (const signupId of selectedIds) {
       const signup = byId.get(signupId);
@@ -1104,6 +1211,7 @@ export const rosterService = {
         );
       }
       selectedRows.push(signup);
+      contentSavesBySignupId.set(signupId, inspected.contentSaves);
       selections.push({
         signupId,
         selectedRole: resolveDraftWriteRole(signup, requested.get(signupId), persistedRole.get(signupId), true),
@@ -1158,6 +1266,27 @@ export const rosterService = {
       }
     }
 
+    // WARNING gate — after the hard schedule assertion above, before the write.
+    // A slot already in the saved draft (or already published SELECTED) was
+    // accepted earlier and never re-prompts.
+    assertNewSelectionWarningsConfirmed(
+      selectedRows
+        .filter(
+          (signup) =>
+            signup.participationType === "BOOSTER" &&
+            signup.character &&
+            !previouslySelected.has(signup.id) &&
+            signup.status !== "SELECTED",
+        )
+        .map((signup) => ({
+          signupId: signup.id,
+          characterId: signup.character!.id,
+          characterLabel: `${signup.character!.name}-${signup.character!.realm}`,
+          contentSaves: contentSavesBySignupId.get(signup.id) ?? [],
+          acknowledgements: acknowledgementsForSignup(input.confirmedWarnings, signup.id),
+        })),
+    );
+
     await rosterRepository.replaceSelectedSignupIds(roster.id, input.version, selections, {
       targetRunId: input.runId,
       scheduledStartAt: run.scheduledStartAt,
@@ -1203,6 +1332,11 @@ export const rosterService = {
         specialization: option.specialization,
         roles: option.roles,
         defaultRole: option.defaultRole,
+        /**
+         * Same shared risk as the roster cards. Eligible options are never
+         * BLOCKED — schedule-conflicted Characters are listed under `ineligible`.
+         */
+        selectionRisk: classifyRosterSelectionRisk({ scheduleConflicts: [], contentSaves: option.contentSaves }),
       })),
       ineligible: options.ineligible,
     };
@@ -1222,7 +1356,15 @@ export const rosterService = {
    */
   async addRegisteredParticipant(
     user: AuthenticatedUser,
-    input: { runId: string; version: number; userId: string; characterId: string; role: CharacterRole },
+    input: {
+      runId: string;
+      version: number;
+      userId: string;
+      characterId: string;
+      role: CharacterRole;
+      /** Acknowledged selection warnings for this Character. */
+      confirmedWarnings?: RosterWarningAcknowledgement[];
+    },
   ) {
     const run = await loadEditableRun(user, input.runId);
     const roster = await rosterRepository.ensure(input.runId);
@@ -1249,6 +1391,19 @@ export const rosterService = {
           character: { id: character.id, name: character.name, region: character.region },
         });
         assertCharacterSelectableForSchedule(`${character.name}-${character.realm}`, scheduleConflicts);
+      }
+      // WARNING gate — same semantics as Save Roster; an already published
+      // (SELECTED) slot is not a new pick.
+      if (candidate.existingSignupStatus !== "SELECTED") {
+        assertNewSelectionWarningsConfirmed([
+          {
+            signupId: candidate.existingSignupId,
+            characterId: input.characterId,
+            characterLabel: `${candidate.characterName}-${candidate.characterRealm}`,
+            contentSaves: candidate.contentSaves,
+            acknowledgements: input.confirmedWarnings ?? [],
+          },
+        ]);
       }
     }
 
@@ -1404,6 +1559,8 @@ export const rosterService = {
       version: number;
       selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
       acknowledgeWarnings: boolean;
+      /** Acknowledged selection warnings for picks NEW to the roster. */
+      confirmedWarnings?: ConfirmedRosterWarning[];
     },
   ) {
     const run = await loadEditableRun(user, input.runId);
@@ -1435,6 +1592,30 @@ export const rosterService = {
     }
 
     const plan = await planAuthoritativeRoster(run, roster, signups, canonical, input.acknowledgeWarnings);
+
+    // WARNING gate for picks this Update newly introduces — after the plan's
+    // hard blockers (schedule conflicts included), before the write. Slots that
+    // are already in the saved draft or already published never re-prompt.
+    const draftSelectedIds = new Set(roster.selectedSignupIds);
+    assertNewSelectionWarningsConfirmed(
+      signups
+        .filter(
+          (signup) =>
+            canonical.has(signup.id) &&
+            signup.participationType === "BOOSTER" &&
+            signup.character &&
+            signup.status !== "SELECTED" &&
+            signup.status !== "WITHDRAWN" &&
+            !draftSelectedIds.has(signup.id),
+        )
+        .map((signup) => ({
+          signupId: signup.id,
+          characterId: signup.character!.id,
+          characterLabel: `${signup.character!.name}-${signup.character!.realm}`,
+          contentSaves: inspectSignup(signup, run).contentSaves,
+          acknowledgements: acknowledgementsForSignup(input.confirmedWarnings, signup.id),
+        })),
+    );
 
     await rosterRepository.updatePublishedAtomic({
       runId: run.id,

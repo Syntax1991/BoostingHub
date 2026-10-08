@@ -9,6 +9,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS } from "@/lib/labels";
 import type { CharacterRole } from "@/models/enums";
+import {
+  acknowledgementsFor,
+  RosterWarningConfirmDialog,
+  warningDialogItemsFromPending,
+  type RosterWarningDialogItem,
+} from "@/components/manage/roster-warning-confirm-dialog";
+import {
+  formatWarningContentProgress,
+  type RosterSelectionWarning,
+} from "@/services/roster-selection-risk";
 
 type PlayerMatch = NonNullable<Awaited<ReturnType<typeof searchRosterPlayersAction>>["data"]>[number];
 type ManualAddOptions = NonNullable<Awaited<ReturnType<typeof getRosterManualAddOptionsAction>>["data"]>;
@@ -48,6 +58,11 @@ export function AddBoosterDialog({
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [characterId, setCharacterId] = useState("");
   const [role, setRole] = useState<CharacterRole | "">("");
+  /** Warnings awaiting the Raid Lead's explicit confirmation (same shared risk as the roster cards). */
+  const [warningPrompt, setWarningPrompt] = useState<{
+    items: RosterWarningDialogItem[];
+    warnings: RosterSelectionWarning[];
+  } | null>(null);
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -130,7 +145,10 @@ export function AddBoosterDialog({
 
   const canSubmit = Boolean(player && character && role && character.roles.includes(role as CharacterRole));
 
-  function submit() {
+  const characterWarnings = character?.selectionRisk.level === "WARNING" ? character.selectionRisk.warnings : [];
+
+  /** Sends the add; `confirmed` are the warnings the Raid Lead just acknowledged. The server re-validates them. */
+  function add(confirmed: RosterSelectionWarning[]) {
     if (!player || !character || !role) return;
     setError(null);
     startTransition(async () => {
@@ -140,8 +158,17 @@ export function AddBoosterDialog({
         userId: player.id,
         characterId: character.characterId,
         role,
+        confirmedWarnings: acknowledgementsFor(confirmed),
       });
       if (!result.ok) {
+        // The lockout state changed since the options were loaded: re-prompt with the server's current warnings.
+        if (result.code === "ROSTER_WARNING_CONFIRMATION_REQUIRED" && result.pendingWarnings?.length) {
+          setWarningPrompt({
+            items: warningDialogItemsFromPending(result.pendingWarnings),
+            warnings: result.pendingWarnings.map((row) => row.warning),
+          });
+          return;
+        }
         setError(result.message);
         return;
       }
@@ -150,7 +177,26 @@ export function AddBoosterDialog({
     });
   }
 
+  function submit() {
+    if (!player || !character || !role) return;
+    if (characterWarnings.length > 0) {
+      setWarningPrompt({
+        items: [
+          {
+            key: character.characterId,
+            characterLabel: `${character.characterName}-${character.realm}`,
+            warnings: characterWarnings,
+          },
+        ],
+        warnings: characterWarnings,
+      });
+      return;
+    }
+    add([]);
+  }
+
   return (
+    <>
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
@@ -257,6 +303,20 @@ export function AddBoosterDialog({
                   ))}
                 </select>
               </label>
+              {characterWarnings.length > 0 ? (
+                <div className="sm:col-span-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                  <p className="font-medium text-warning">Saved — this character already has lockout progress for this run:</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {characterWarnings.flatMap((warning) =>
+                      warning.contents.map((content) => (
+                        <li key={`${warning.type}:${content.raidId}`}>
+                          {content.raidName} · {formatWarningContentProgress(content)}
+                        </li>
+                      )),
+                    )}
+                  </ul>
+                </div>
+              ) : null}
               {options.ineligible.length > 0 ? (
                 <div className="sm:col-span-2">
                   <p className="text-xs text-muted">Not eligible for this run:</p>
@@ -282,5 +342,25 @@ export function AddBoosterDialog({
         </Button>
       </div>
     </dialog>
+    {warningPrompt ? (
+      <RosterWarningConfirmDialog
+        title="Pick saved Character?"
+        intro={
+          warningPrompt.items.length === 1
+            ? `${warningPrompt.items[0]!.characterLabel} already has lockout progress for this Run.`
+            : undefined
+        }
+        items={warningPrompt.items}
+        confirmLabel="Select anyway"
+        pending={pending}
+        onCancel={() => setWarningPrompt(null)}
+        onConfirm={() => {
+          const confirmed = warningPrompt.warnings;
+          setWarningPrompt(null);
+          add(confirmed);
+        }}
+      />
+    ) : null}
+    </>
   );
 }

@@ -33,7 +33,7 @@ import {
 } from "@/services/notification-content";
 import { quietHoursDeliveryContextFromUserRow } from "@/services/notification-delivery-context";
 import { hasUnpublishedRosterChanges } from "@/services/roster-publish-state";
-import { lockRosterInTx } from "@/repositories/roster.repository";
+import { assertCharactersFreeForReservationInTx, lockRosterInTx } from "@/repositories/roster.repository";
 
 export type AttendanceRecord = {
   id: string;
@@ -480,6 +480,22 @@ export const attendanceRepository = {
           if (attending) {
             throw new DomainError("INVALID_ROSTER_SELECTION", "That player already holds a booster slot in this run.");
           }
+        }
+
+        // Cross-Run Character reservation (PR #218 invariant). Stepping in
+        // makes this Character SELECTED on a Run that still occupies a
+        // scheduling slot, so it must not already be draft-selected or
+        // SELECTED on another overlapping Run. Same advisory lock + in-tx
+        // re-read as every roster write; this Run is excluded, so the
+        // signup's own row is never a self-conflict, and non-overlapping Runs
+        // stay allowed. Characterless Lootbuddies reserve nothing.
+        const replacementCharacterId = asStringOrNull(signup.characterId);
+        if (originalRecord.participationType === "BOOSTER" && replacementCharacterId) {
+          await assertCharactersFreeForReservationInTx(tx, txOrm, {
+            characterIds: [replacementCharacterId],
+            excludeRunId: input.runId,
+            scheduledStartAt: asString(run.scheduledStartAt),
+          });
         }
 
         await txOrm.RunSignup.where({ id: replacementSignupId }).update({

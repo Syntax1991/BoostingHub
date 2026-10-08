@@ -465,7 +465,7 @@ describe("manual registered participant (Add Player)", () => {
     expect(options.player).toEqual({ id: ids.b, name: "PreStart Player B" });
     const priest = options.eligible.find((row) => row.characterId === bChar);
     expect(priest?.roles.sort()).toEqual(["HEALER", "RANGED_DPS"]);
-    expect(Object.keys(priest!).sort()).toEqual(["characterId", "characterName", "defaultRole", "realm", "roles", "specialization", "wowClass"]);
+    expect(Object.keys(priest!).sort()).toEqual(["characterId", "characterName", "defaultRole", "realm", "roles", "selectionRisk", "specialization", "wowClass"]);
     const noAccess = await rosterService.getManualAddOptions(lead, { runId, userId: ids.noAccess });
     expect(noAccess.eligible).toHaveLength(0);
     expect(noAccess.ineligible).toHaveLength(1);

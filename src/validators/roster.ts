@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CHARACTER_ROLES, PARTICIPATION_TYPES, WOW_CLASSES } from "@/models/enums";
+import { ROSTER_SELECTION_WARNING_TYPES } from "@/services/roster-selection-risk";
 import { entityIdSchema } from "@/validators/ids";
 
 /** One hand-added external: a booster (role required) or a lootbuddy (no role). Older clients omit the type → booster. */
@@ -9,6 +10,23 @@ const externalBoosterEntrySchema = z.object({
   participationType: z.enum(PARTICIPATION_TYPES).optional(),
   role: z.enum(CHARACTER_ROLES).nullable(),
 });
+
+/**
+ * Request-scoped acknowledgement of a roster selection warning (e.g. lockout
+ * progress). The server recomputes the current warning and accepts the pick
+ * only when type AND fingerprint match — never persisted, never able to lift
+ * a hard conflict.
+ */
+const rosterWarningAcknowledgementSchema = z.object({
+  type: z.enum(ROSTER_SELECTION_WARNING_TYPES),
+  fingerprint: z.string().min(1).max(2000),
+});
+
+const confirmedRosterWarningSchema = rosterWarningAcknowledgementSchema.extend({
+  signupId: entityIdSchema,
+});
+
+const confirmedRosterWarningsSchema = z.array(confirmedRosterWarningSchema).max(200).optional();
 
 export const rosterRunSchema = z.object({
   runId: entityIdSchema,
@@ -40,6 +58,8 @@ export const saveRosterDraftSchema = z.object({
     )
     .max(100)
     .optional(),
+  /** Acknowledged warnings for NEWLY selected signups. */
+  confirmedWarnings: confirmedRosterWarningsSchema,
 });
 
 export const saveExternalBoostersSchema = z.object({
@@ -62,6 +82,8 @@ export const applyRosterBuilderSchema = z.object({
   runId: entityIdSchema,
   expectedVersion: z.number().int().positive(),
   selections: z.array(rosterSelectionSchema).max(80),
+  /** ONE aggregate acknowledgement for every proposed pick that carries a warning. */
+  confirmedWarnings: confirmedRosterWarningsSchema,
 });
 
 export const publishRosterSchema = z.object({
@@ -89,6 +111,8 @@ export const rosterAddPlayerSchema = z.object({
   userId: entityIdSchema,
   characterId: entityIdSchema,
   role: z.enum(CHARACTER_ROLES),
+  /** Acknowledged warnings for this Character (no signupId — the signup may not exist yet). */
+  confirmedWarnings: z.array(rosterWarningAcknowledgementSchema).max(20).optional(),
 });
 
 /** Update Roster: accept the manager's current selection as the published roster (one action). */
@@ -96,7 +120,10 @@ export const updateRosterSchema = z.object({
   runId: entityIdSchema,
   version: z.number().int().positive(),
   selections: z.array(rosterSelectionSchema),
+  /** Composition warnings (roster under/over target) — unrelated to confirmedWarnings. */
   acknowledgeWarnings: z.boolean(),
+  /** Acknowledged selection warnings for picks NEW to the roster. */
+  confirmedWarnings: confirmedRosterWarningsSchema,
 });
 
 /** Publish Roster on a published roster: explicit repost, compare-and-set on version AND postRevision. */

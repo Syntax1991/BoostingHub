@@ -87,7 +87,7 @@ If one BOOSTER character is `SELECTED`, the user's other active BOOSTER offers o
 **Add Booster** adds a **registered** player who did not sign up — typically a last-minute replacement. It is offered in the Run header (next to **External Boosters** / **Edit Run**) and in the Roster tab's Boosters card, to managers only, while the roster is editable (`OPEN` / `ROSTERING` / `PUBLISHED`). Flow: search a player (server-side, `ACTIVE` accounts, name or Discord username, max 10 results, only id / name / Discord username exposed) → choose one of their Characters → role → **Add to Roster**.
 
 - The player is rostered as a normal **BOOSTER `RunSignup`** — never a `RunExternalBooster` — so My Runs, commitments, reservations, notifications, Discord, Final Setup, attendance and payout treat them like any pick.
-- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass, always against the **current** Run (difficulty, schedule, content): Character owned and active, the owner's Booster role (any Run difficulty), a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts stay informational.
+- Same safeguards as a self-signup plus roster selection, no Raid Lead bypass, always against the **current** Run (difficulty, schedule, content): Character owned and active, the owner's Booster role (any Run difficulty), a role the class can play, weekly availability, cross-Run reservation / schedule conflicts, one selected Booster per User (adding a second Character replaces the first slot), roster version. Only the signup window is not required. Lockouts never block, but a saved Character needs the Raid Lead's confirmation (see [Selection risk](#selection-risk-clean--warning--blocked)).
 - An existing active offer for that Character is reused (the assigned role is added to its offered roles if missing); otherwise a normal `PENDING` offer is created. A `WITHDRAWN` offer is never revived — the player has to sign up again.
 - Atomic: the signup (reuse / role extension / creation) and the draft slot are written in one transaction with the Save Roster race checks and notifications (`rosterRepository.addManagedBoosterAtomic`). On any failure (version race, reservation race, withdrawal) nothing is left behind.
 - Works directly on a legacy published roster whose draft was never seeded (`needsPublishSeed`): the same transaction first seeds the draft from the live published lineup (A, B, C keep their published roles) and then adds the new player (D). No separate "Edit Published Roster" step is needed and no published member is dropped.
@@ -146,10 +146,49 @@ Blockers include:
 - owner no longer has the Booster role (`User.isBooster` — account-level, independent of Run difficulty; revoke is a publish blocker)
 - two selected **BOOSTER** signups for one user
 
-Raid lockouts remain informational only — never a publish blocker. Matching uses each Character's regional WoW reset containing `Run.scheduledStartAt` (not the Run date's ISO week alone). Verified `0/x` is Unsaved; no row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
+Raid lockouts are never a blocker — not for selection and not for publish. A known save on a fresh-loot Run is a selection **warning** that needs an explicit confirmation (see [Selection risk](#selection-risk-clean--warning--blocked)). Matching uses each Character's regional WoW reset containing `Run.scheduledStartAt` (not the Run date's ISO week alone). Verified `0/x` is Unsaved; no row is Unknown. `UNSAVED` and `VIP` share fresh-lockout attention presentation.
 Warnings: composition under or over target.
 
 Signup-time eligibility can rot before publish. Access and lockouts are therefore re-checked at publish.
+
+## Selection risk (CLEAN / WARNING / BLOCKED)
+
+One shared, pure classifier — `services/roster-selection-risk.ts` — answers "may this Character be **newly** selected into this Run?" for the manual roster, Add Booster, Auto Build and Update Roster. It queries nothing; it composes two existing authorities:
+
+- `scheduleConflicts` (`character-schedule-conflict`) — cross-Run Character reservation and weekly unavailability.
+- `contentSaves` (`run-content-lockouts`) — one lockout label per `RunRaidContent`, whose `label.attention` already carries the Run's loot-type semantics.
+
+| Level | When | Behaviour |
+| --- | --- | --- |
+| **CLEAN** | no schedule conflict, no known save that needs attention | select normally |
+| **WARNING** | `saved` / `fully_saved` on a content the label authority marks as attention (i.e. `UNSAVED`, `VIP`, `COMMUNITY` Runs) | explicit confirmation required |
+| **BLOCKED** | any schedule conflict | cannot be selected — **no override** |
+
+- **Unknown** lockout state (no verified row) is CLEAN for selection: it means "not synced", and prompting on it would be noise. The card may still render it yellow.
+- A `SAVED` Run expects lockout progress, so it never warns.
+- BLOCKED always wins over WARNING. A same-Character overlapping-Run reservation can never be confirmed away.
+- **Multi-content Runs:** a warning lists every affected content separately (`The Tidebound Grotto · 1/1 fully saved`, `The Venomous Abyss · 6/8 saved`) — never a summed `7/9`.
+
+**Confirmation is validated by the server.** The client sends request-scoped acknowledgements — `confirmedWarnings: [{ signupId, type: "LOCKOUT_ATTENTION", fingerprint }]` (Add Booster omits `signupId`). The fingerprint encodes the affected contents and their progress (raid, difficulty, reset, kind, `x/y`). Before accepting a **new** pick the service recomputes the current risk:
+
+1. hard schedule conflict → rejected, whatever was acknowledged;
+2. current warning without an acknowledgement of the same type **and** fingerprint → `ROSTER_WARNING_CONFIRMATION_REQUIRED`, carrying the current warnings (`pendingWarnings` on the action result) so the UI re-prompts with the real state — e.g. confirmed at 6/8, now 7/8;
+3. acknowledgements that match no current warning are ignored;
+4. then the repository write runs, with its unchanged advisory lock + in-transaction reservation re-read as the final authority.
+
+Nothing about a confirmation is persisted. Only **new** picks are checked: a slot already in the saved draft or already published `SELECTED` never re-prompts (reopening the editor, re-saving, publishing a saved draft, and deselecting need no confirmation). Deselecting and picking the Character again is a new pick.
+
+| Path | Confirmation |
+| --- | --- |
+| Roster card checkbox → **Save Roster** (`saveDraftSelection`) | "Pick saved Character?" dialog per new pick; acknowledgements sent with Save |
+| **Update Roster** (`updateRoster`) | same, for picks new to the roster |
+| **Add Booster** (`addRegisteredParticipant`) | warning shown on the Character, confirmation on Add; schedule-conflicted Characters are listed as not eligible |
+| **Auto Build Apply** (`applyRosterProposal`) | warning candidates stay eligible (not scored down), blocked ones are never proposed; **one** aggregate dialog for all warning picks |
+| **Publish Roster** of a saved draft | none — nothing new is selected |
+
+**Known limitation:** the attention rule compares the Character's save with the whole raid, not with the Run's `plannedBossCount`. A Character saved only on bosses outside a partial Run still warns.
+
+**Post-start replacement:** `attendanceRepository.replaceParticipantAtomic` (Attendance → Replace) is not a roster-draft write, but it makes a signup `SELECTED`, so it runs the same locked reservation re-read: a Character that is draft-selected or `SELECTED` on an overlapping Run cannot step in. Lockout warnings are not evaluated there.
 
 ## Run commitments (informational)
 

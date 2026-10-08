@@ -20,6 +20,11 @@ import {
 import type { RosterBuilderResult } from "@/services/roster-builder.service";
 import type { RosterBuilderProposedPick } from "@/services/roster-builder-optimizer";
 import { summarizeRaidBuffCoverageByClass } from "@/services/roster-raid-buffs";
+import {
+  confirmedWarningsFor,
+  RosterWarningConfirmDialog,
+} from "@/components/manage/roster-warning-confirm-dialog";
+import type { ConfirmedRosterWarning } from "@/services/roster-selection-risk";
 
 function PickRow({ pick }: { pick: RosterBuilderProposedPick }) {
   const label =
@@ -104,6 +109,8 @@ export function RosterBuilderDialog({
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<RosterBuilderResult | null>(null);
+  /** ONE aggregate confirmation for every proposed pick with a warning — never one dialog per Character. */
+  const [confirmingWarnings, setConfirmingWarnings] = useState(false);
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -134,15 +141,34 @@ export function RosterBuilderDialog({
 
   function handleApply() {
     if (!data || data.applySelections.length === 0) return;
+    if (data.warnings.length > 0) {
+      setConfirmingWarnings(true);
+      return;
+    }
+    apply([]);
+  }
+
+  /** `confirmed` acknowledges exactly the warnings shown; the server recomputes and re-validates them. */
+  function apply(confirmed: ConfirmedRosterWarning[]) {
+    if (!data || data.applySelections.length === 0) return;
     setApplying(true);
     startTransition(async () => {
       const result = await applyRosterBuilderAction({
         runId,
         expectedVersion: data.rosterVersion,
         selections: data.applySelections,
+        confirmedWarnings: confirmed,
       });
       setApplying(false);
       if (!result.ok || !result.data) {
+        if (!result.ok && result.code === "ROSTER_WARNING_CONFIRMATION_REQUIRED") {
+          // Lockout state changed after the proposal was shown: nothing was
+          // applied. Reload the proposal so the dialog shows the current warnings.
+          const refreshed = await proposeRosterBuilderAction({ runId });
+          if (refreshed.ok && refreshed.data) setData(refreshed.data);
+          setError("Lockout progress changed since this proposal was generated. Review the updated warnings and apply again.");
+          return;
+        }
         setError(result.message);
         return;
       }
@@ -161,6 +187,7 @@ export function RosterBuilderDialog({
   const canApply = Boolean(data && !data.fullyStaffed && data.applySelections.length > 0);
 
   return (
+    <>
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
@@ -232,7 +259,9 @@ export function RosterBuilderDialog({
 
             {data.warnings.length > 0 ? (
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-warning">Warnings</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-warning">
+                  Saved — needs confirmation on Apply
+                </p>
                 <ul className="mt-1 space-y-0.5 text-xs text-warning">
                   {data.warnings.map((row) => (
                     <li key={row.signupId}>{row.message}</li>
@@ -290,6 +319,34 @@ export function RosterBuilderDialog({
         </button>
       </div>
     </dialog>
+    {confirmingWarnings && data && data.warnings.length > 0 ? (
+      <RosterWarningConfirmDialog
+        title={
+          data.warnings.length === 1
+            ? "1 roster selection needs confirmation"
+            : `${data.warnings.length} roster selections need confirmation`
+        }
+        intro={
+          data.warnings.length === 1
+            ? `${data.warnings[0]!.characterLabel} already has lockout progress for this Run.`
+            : "These proposed Characters already have lockout progress for this Run."
+        }
+        items={data.warnings.map((row) => ({
+          key: row.signupId,
+          characterLabel: row.characterLabel,
+          warnings: [row.warning],
+        }))}
+        confirmLabel="Apply anyway"
+        pending={applying}
+        onCancel={() => setConfirmingWarnings(false)}
+        onConfirm={() => {
+          const confirmed = data.warnings.flatMap((row) => confirmedWarningsFor(row.signupId, [row.warning]));
+          setConfirmingWarnings(false);
+          apply(confirmed);
+        }}
+      />
+    ) : null}
+    </>
   );
 }
 
