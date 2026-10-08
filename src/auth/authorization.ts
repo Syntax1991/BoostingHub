@@ -92,6 +92,17 @@ export function assertCanManageCharacterOperations(user: AuthenticatedUser): voi
   }
 }
 
+/** Admin-level (ADMIN / OWNER) Content Catalog: raids, encounters and products. RAID_LEAD excluded. */
+export function canManageContentCatalog(role: AccountRole): boolean {
+  return hasAdminAccess(role);
+}
+
+export function assertCanManageContentCatalog(user: AuthenticatedUser): void {
+  if (!canManageContentCatalog(user.accountRole)) {
+    throw new DomainError("NOT_AUTHORIZED", "Admin permission is required to manage content.", 403);
+  }
+}
+
 export type ManagementNavItem = {
   href: string;
   label: string;
@@ -102,6 +113,7 @@ export type ManagementNavItem = {
     | "templates"
     | "users"
     | "characters"
+    | "content"
     | "analytics"
     | "system";
 };
@@ -125,6 +137,7 @@ export function getManagementNavItems(role: AccountRole): ManagementNavItem[] {
     items.push(
       { href: "/manage/users", label: "Users", module: "users" },
       { href: "/manage/characters", label: "Characters", module: "characters" },
+      { href: "/manage/content", label: "Content", module: "content" },
       { href: "/manage/analytics", label: "Analytics", module: "analytics" },
       { href: "/manage/system", label: "System", module: "system" },
     );

@@ -14,6 +14,7 @@ describe("management navigation and user-management gates", () => {
       "schedule",
       "users",
       "characters",
+      "content",
       "analytics",
       "system",
     ]);
@@ -23,6 +24,7 @@ describe("management navigation and user-management gates", () => {
       "/manage/schedule",
       "/manage/users",
       "/manage/characters",
+      "/manage/content",
       "/manage/analytics",
       "/manage/system",
     ]);
@@ -36,6 +38,7 @@ describe("management navigation and user-management gates", () => {
     expect(items.map((item) => item.module)).toEqual(["overview", "runs", "schedule"]);
     expect(items.some((item) => item.module === "users")).toBe(false);
     expect(items.some((item) => item.module === "system")).toBe(false);
+    expect(items.some((item) => item.module === "content")).toBe(false);
   });
 
   it("returns no manage nav for USER", () => {
