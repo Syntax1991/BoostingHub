@@ -1,4 +1,5 @@
 import { db, orm } from "@/lib/prisma";
+import { mapRaidBossRefs } from "@/lib/lockout-bosses";
 import type {
   CharacterRole,
   LootbuddyMode,
@@ -95,6 +96,7 @@ function mapSignup(row: Record<string, unknown>): SignupListRecord {
       sortOrder: asNumber(content.sortOrder),
       plannedBossCount: asNumber(content.plannedBossCount),
       totalBossCount: bosses.length,
+      bosses: mapRaidBossRefs(bosses),
     };
   });
   if (contents.length === 0) {

@@ -3,7 +3,6 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
 import { venomousCreateInput } from "@/lib/test-run-input";
-import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { characterRepository } from "@/repositories/character.repository";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -154,7 +153,7 @@ afterAll(async () => {
 describe("owner delete", () => {
   it("deletes the owner's character with its lockouts and records an activity event", async () => {
     const character = await createCharacter(owner);
-    const raid = getCurrentLockoutRaids()[0]!;
+    const raid = (await raidRepository.loadCatalog()).lockoutRaids[0]!;
     const now = new Date().toISOString();
     await orm.CharacterRaidLockout.create({
       id: crypto.randomUUID(),

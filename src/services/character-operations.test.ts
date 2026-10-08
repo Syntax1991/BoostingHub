@@ -8,7 +8,7 @@ import { orm } from "@/lib/prisma";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { releaseCharacterSyncLock, tryAcquireCharacterSyncLock } from "@/lib/character-sync-lock";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import type { AccountRole, WowRegion } from "@/models/enums";
 
 const apiMocks = vi.hoisted(() => ({
@@ -264,14 +264,15 @@ describe("authorization", () => {
 
 describe("admin list read model", () => {
   it("loads with a bounded number of SQL statements, independent of Character count", async () => {
+    const TRACKED = (await raidRepository.loadCatalog()).lockoutRaids.map((raid) => raid.id);
     const spy = vi.spyOn(pg.Client.prototype, "query");
-    await characterOperationsRepository.listAll();
+    await characterOperationsRepository.listAll(TRACKED);
     const first = spy.mock.calls.length;
     const extra = await createUser(`Ops Extra ${token}`);
     await connect(extra, "EU");
     for (let index = 0; index < 5; index += 1) await createCharacter(extra, `Bulk${String.fromCharCode(97 + index)}x`);
     spy.mockClear();
-    await characterOperationsRepository.listAll();
+    await characterOperationsRepository.listAll(TRACKED);
     expect(spy.mock.calls.length).toBe(first);
     expect(first).toBeLessThanOrEqual(3);
   });
@@ -299,7 +300,8 @@ describe("admin list read model", () => {
 
   it("projects multi-content lockouts: every current raid independently, 0/N verified, missing = UNKNOWN, old reset excluded", async () => {
     const character = await createCharacter(ownerA, "Lockouts", { lastSyncedAt: minutesAgo(5) });
-    const [first, second] = getCurrentLockoutRaids();
+    const currentRaids = (await raidRepository.loadCatalog()).lockoutRaids;
+    const [first, second] = currentRaids;
     const reset = getRegionalWeeklyReset("EU").resetIdentifier;
     const now = new Date().toISOString();
     const add = (raidId: string, difficulty: "NORMAL" | "HEROIC" | "MYTHIC", bosses: number, resetIdentifier = reset) =>
@@ -318,7 +320,7 @@ describe("admin list read model", () => {
     await add(first!.id, "MYTHIC", 0);
     await add(second!.id, "NORMAL", 7, "1999-W01"); // an old reset — never shown
     const row = await rowOf(character.id);
-    expect(row.lockoutSlots.map((slot) => slot.raidId)).toEqual(getCurrentLockoutRaids().map((raid) => raid.id));
+    expect(row.lockoutSlots.map((slot) => slot.raidId)).toEqual(currentRaids.map((raid) => raid.id));
     const [slotA, slotB] = row.lockoutSlots;
     expect(slotA!.status).toBe("VERIFIED");
     if (slotA!.status === "VERIFIED") {
@@ -397,7 +399,12 @@ function record(overrides: Partial<OperationsCharacterRecord> & { id: string; na
 const NOW = new Date("2026-09-26T12:00:00.000Z");
 const ago = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000).toISOString();
 function derive(rec: OperationsCharacterRecord, connected = true) {
-  return deriveOperationsRow(rec, { ownerHasRegionConnection: connected, now: NOW, staleMinutes: 120 });
+  return deriveOperationsRow(rec, {
+    ownerHasRegionConnection: connected,
+    now: NOW,
+    staleMinutes: 120,
+    catalog: fixtureRaidCatalog(),
+  });
 }
 
 const pureRows: OperationsRow[] = [
@@ -501,7 +508,7 @@ describe("detail", () => {
     expect(detail.weeklyAvailability).toMatchObject({ characterId: fx.error!.id, status: "AVAILABLE" });
     // The owner's account-level Boosting Roles — no per-difficulty cells.
     expect(detail.ownerBoostingRoles).toEqual({ isBooster: expect.any(Boolean), isLootbuddy: expect.any(Boolean) });
-    expect(detail.row.lockoutSlots).toHaveLength(getCurrentLockoutRaids().length);
+    expect(detail.row.lockoutSlots).toHaveLength((await raidRepository.loadCatalog()).lockoutRaids.length);
     expect(JSON.stringify(detail)).not.toMatch(/message|stack/i);
   });
 

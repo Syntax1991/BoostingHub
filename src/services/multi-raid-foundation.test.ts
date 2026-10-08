@@ -9,7 +9,6 @@ import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   findRaidCatalogById,
-  getCurrentLockoutRaids,
 } from "@/lib/wow-raid-catalog";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
@@ -84,7 +83,7 @@ describe("Tidebound / Nymrissa catalog (verified Blizzard ids)", () => {
     expect(tidebound.name).toBe("The Tidebound Grotto");
     expect(tidebound.season).toBe("Midnight Season 2");
     expect(tidebound.blizzardInstanceId).toBe(1317);
-    expect(tidebound.currentForLockouts).toBe(true);
+    expect(tidebound.trackLockouts).toBe(true);
     expect(tidebound.availableForRuns).toBe(false);
     expect(tidebound.bosses).toHaveLength(1);
     expect(tidebound.bosses[0]?.id).toBe(NYMRISSA_WAVECALLER_BOSS_ID);
@@ -92,10 +91,11 @@ describe("Tidebound / Nymrissa catalog (verified Blizzard ids)", () => {
     expect(tidebound.bosses[0]?.blizzardEncounterIds).toEqual([2849]);
   });
 
-  it("keeps Venomous current for lockouts and getCurrentLockoutRaids includes both", () => {
+  it("keeps Venomous tracked for lockouts and the DB lockout set includes both", async () => {
     const venomous = findRaidCatalogById(VENOMOUS_ABYSS_RAID_ID)!;
-    expect(venomous.currentForLockouts).toBe(true);
-    const idsInLockouts = getCurrentLockoutRaids().map((raid) => raid.id).sort();
+    expect(venomous.trackLockouts).toBe(true);
+    await raidRepository.ensureReferenceRaids();
+    const idsInLockouts = (await raidRepository.loadCatalog()).lockoutRaids.map((raid) => raid.id).sort();
     expect(idsInLockouts).toEqual([TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort());
   });
 

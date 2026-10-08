@@ -1,12 +1,14 @@
 /**
- * Production-safe WoW raid reference content.
+ * Bootstrap fixture for WoW raid reference content.
+ *
+ * The DATABASE (Raid / RaidBoss) is the runtime authority — read it through
+ * `raidRepository.loadCatalog()`. This fixture only seeds missing rows
+ * (`raidRepository.ensureReferenceRaids`, insert-only) and is the parity
+ * reference in tests. Never read it for lockout, WCL or boss data at runtime.
  *
  * Stable BoostingHub UUIDs are historical identity — never overwrite an old raid
  * id when seasons change. Blizzard journal instance/encounter ids are the
  * external identity for lockout mapping (not localized display names).
- *
- * `currentForLockouts` is the explicit lockout-refresh target. Do not infer it
- * from array order, boss count, or newest DB row.
  */
 export type WowRaidCatalogBoss = {
   id: string;
@@ -36,9 +38,11 @@ export type WowRaidCatalogEntry = {
   warcraftLogsZoneId?: number;
   /** When set, rankings are scoped to this WCL encounter within `warcraftLogsZoneId`. */
   warcraftLogsEncounterId?: number;
-  /** Explicit: Blizzard lockout refresh derives this raid. */
-  currentForLockouts: boolean;
-  /** When true, `ensureReferenceRaids` marks the Raid active for Run creation. */
+  /** Deterministic catalog order (seeded into `Raid.sortOrder`). */
+  sortOrder: number;
+  /** Explicit: Blizzard lockout refresh derives this raid (seeded into `Raid.trackLockouts`). */
+  trackLockouts: boolean;
+  /** Seeded into `Raid.isActive` (standalone Create Run product) for a missing Raid row. */
   availableForRuns: boolean;
   bosses: readonly WowRaidCatalogBoss[];
 };
@@ -70,7 +74,8 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     season: "The War Within Season 3",
     // Live Character Raid Encounters instance.id (was incorrectly 1296 = Liberation of Undermine).
     blizzardInstanceId: 1302,
-    currentForLockouts: false,
+    sortOrder: 1,
+    trackLockouts: false,
     // Historical: superseded by The Venomous Abyss. Kept in the catalog (and
     // its Raid/RaidBoss rows kept in the database) forever so existing Runs,
     // lockout history, and Discord/embed data keep resolving this raid's
@@ -142,7 +147,8 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     // Live EU Character Raid Encounters instance.id (de_DE: Der Giftige Abgrund).
     blizzardInstanceId: 1320,
     warcraftLogsZoneId: VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID,
-    currentForLockouts: true,
+    sortOrder: 2,
+    trackLockouts: true,
     availableForRuns: true,
     bosses: [
       {
@@ -212,7 +218,8 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     // Nymrissa is bundled under Venomous Abyss on WCL — encounter-scoped rankings.
     warcraftLogsZoneId: VENOMOUS_ABYSS_WARCRAFT_LOGS_ZONE_ID,
     warcraftLogsEncounterId: NYMRISSA_WARCRAFT_LOGS_ENCOUNTER_ID,
-    currentForLockouts: true,
+    sortOrder: 3,
+    trackLockouts: true,
     // Real raid identity for Bundle RunRaidContent — not a standalone Create product.
     availableForRuns: false,
     bosses: [
@@ -227,10 +234,6 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
     ],
   },
 ];
-
-export function getCurrentLockoutRaids(): readonly WowRaidCatalogEntry[] {
-  return WOW_RAID_CATALOG.filter((raid) => raid.currentForLockouts);
-}
 
 /**
  * Raids selectable for Run Setup / RunTemplate planning.

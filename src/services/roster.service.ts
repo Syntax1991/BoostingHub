@@ -363,7 +363,9 @@ function inspectSignup(
     difficulty: RaidDifficulty;
     scheduledStartAt: string;
     lootType: RunLootType;
-    contents: Array<Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">>;
+    contents: Array<
+      Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount" | "bosses">
+    >;
   },
 ): Omit<
   InspectedSignup,

@@ -23,6 +23,7 @@ const heroicRun: EligibilityRun = {
       sortOrder: 1,
       plannedBossCount: 8,
       totalBossCount: 8,
+      bosses: [],
     },
   ],
 };

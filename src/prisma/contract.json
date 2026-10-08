@@ -72,6 +72,14 @@
       "model": "IntegrationEvent",
       "namespace": "public"
     },
+    "product": {
+      "model": "Product",
+      "namespace": "public"
+    },
+    "product_raid_content": {
+      "model": "ProductRaidContent",
+      "namespace": "public"
+    },
     "raid": {
       "model": "Raid",
       "namespace": "public"
@@ -613,6 +621,19 @@
               {
                 "name": "LOOTBUDDY",
                 "value": "LOOTBUDDY"
+              }
+            ]
+          },
+          "ProductBossCountMode": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "FIXED",
+                "value": "FIXED"
+              },
+              {
+                "name": "VARIABLE",
+                "value": "VARIABLE"
               }
             ]
           },
@@ -3354,8 +3375,250 @@
               "table": "integration_event"
             }
           },
+          "Product": {
+            "fields": {
+              "active": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "key": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "selectable": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "sortOrder": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "contents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "productId"
+                  ]
+                },
+                "to": {
+                  "model": "ProductRaidContent",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "active": {
+                  "column": "active"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "key": {
+                  "column": "key"
+                },
+                "name": {
+                  "column": "name"
+                },
+                "selectable": {
+                  "column": "selectable"
+                },
+                "sortOrder": {
+                  "column": "sortOrder"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "product"
+            }
+          },
+          "ProductRaidContent": {
+            "fields": {
+              "bossCountMode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ProductBossCountMode",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "defaultBossCount": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "fixedBossCount": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "minBossCount": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "productId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "raidId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sortOrder": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "product": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "productId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Product",
+                  "namespace": "public"
+                }
+              },
+              "raid": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "raidId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Raid",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "bossCountMode": {
+                  "column": "bossCountMode"
+                },
+                "defaultBossCount": {
+                  "column": "defaultBossCount"
+                },
+                "fixedBossCount": {
+                  "column": "fixedBossCount"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "minBossCount": {
+                  "column": "minBossCount"
+                },
+                "productId": {
+                  "column": "productId"
+                },
+                "raidId": {
+                  "column": "raidId"
+                },
+                "sortOrder": {
+                  "column": "sortOrder"
+                }
+              },
+              "namespaceId": "public",
+              "table": "product_raid_content"
+            }
+          },
           "Raid": {
             "fields": {
+              "blizzardInstanceId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -3391,10 +3654,38 @@
                   "kind": "scalar"
                 }
               },
+              "sortOrder": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "trackLockouts": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "wclRankingEncounterId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "wclZoneId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               }
@@ -3427,6 +3718,21 @@
                 },
                 "to": {
                   "model": "CharacterRaidLockout",
+                  "namespace": "public"
+                }
+              },
+              "productContents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "raidId"
+                  ]
+                },
+                "to": {
+                  "model": "ProductRaidContent",
                   "namespace": "public"
                 }
               },
@@ -3478,6 +3784,9 @@
             },
             "storage": {
               "fields": {
+                "blizzardInstanceId": {
+                  "column": "blizzardInstanceId"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -3493,8 +3802,20 @@
                 "season": {
                   "column": "season"
                 },
+                "sortOrder": {
+                  "column": "sortOrder"
+                },
+                "trackLockouts": {
+                  "column": "trackLockouts"
+                },
                 "updatedAt": {
                   "column": "updatedAt"
+                },
+                "wclRankingEncounterId": {
+                  "column": "wclRankingEncounterId"
+                },
+                "wclZoneId": {
+                  "column": "wclZoneId"
                 }
               },
               "namespaceId": "public",
@@ -3503,6 +3824,13 @@
           },
           "RaidBoss": {
             "fields": {
+              "blizzardEncounterIds": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -3530,6 +3858,13 @@
                   "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
+              },
+              "wclEncounterIds": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {
@@ -3551,6 +3886,9 @@
             },
             "storage": {
               "fields": {
+                "blizzardEncounterIds": {
+                  "column": "blizzardEncounterIds"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -3562,6 +3900,9 @@
                 },
                 "sortOrder": {
                   "column": "sortOrder"
+                },
+                "wclEncounterIds": {
+                  "column": "wclEncounterIds"
                 }
               },
               "namespaceId": "public",
@@ -12113,8 +12454,217 @@
               },
               "uniques": []
             },
+            "product": {
+              "columns": {
+                "active": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "key": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "selectable": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "sortOrder": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "key"
+                  ]
+                }
+              ]
+            },
+            "product_raid_content": {
+              "checks": [
+                {
+                  "expression": "\"bossCountMode\" IN ('FIXED', 'VARIABLE')",
+                  "name": "product_raid_content_bossCountMode_check_2c6322c6",
+                  "prefix": "product_raid_content_bossCountMode_check"
+                }
+              ],
+              "columns": {
+                "bossCountMode": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ProductBossCountMode",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "defaultBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "fixedBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "minBossCount": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "productId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "raidId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sortOrder": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "productId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "product_raid_content"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "product"
+                  }
+                },
+                {
+                  "onDelete": "restrict",
+                  "source": {
+                    "columns": [
+                      "raidId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "product_raid_content"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "raid"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "productId"
+                  ],
+                  "name": "product_raid_content_productId_idx_5858600a",
+                  "prefix": "product_raid_content_productId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "raidId"
+                  ],
+                  "name": "product_raid_content_raidId_idx_996eeca9",
+                  "prefix": "product_raid_content_raidId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "productId",
+                    "sortOrder"
+                  ]
+                },
+                {
+                  "columns": [
+                    "productId",
+                    "raidId"
+                  ]
+                }
+              ]
+            },
             "raid": {
               "columns": {
+                "blizzardInstanceId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -12148,10 +12698,38 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "sortOrder": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "trackLockouts": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "wclRankingEncounterId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "wclZoneId": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
                 }
               },
               "foreignKeys": [],
@@ -12165,6 +12743,15 @@
             },
             "raid_boss": {
               "columns": {
+                "blizzardEncounterIds": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "[]"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -12183,6 +12770,15 @@
                 "sortOrder": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
+                  "nullable": false
+                },
+                "wclEncounterIds": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "[]"
+                  },
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -17373,6 +17969,13 @@
                 "LOOTBUDDY"
               ]
             },
+            "ProductBossCountMode": {
+              "kind": "valueSet",
+              "values": [
+                "FIXED",
+                "VARIABLE"
+              ]
+            },
             "RaidDifficulty": {
               "kind": "valueSet",
               "values": [
@@ -17517,10 +18120,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "8f242b35db5fe36cfdada043c58c954d14a3429ebebef3745e05e0260a6e74ee"
+    "storageHash": "88b442eebc2abf05f8e275d54d2e4f0af2e09f5143d0c164797fe29f8b22fd8f"
   },
   "execution": {
-    "executionHash": "e061fdcc9802efba48326f09b79dd1af6418648c3389cf809c91c340b41515d0",
+    "executionHash": "489f638004aa609265422276e8984e4f57fd71ad9f8ba862780ff3cc38ef2fdc",
     "mutations": {
       "defaults": [
         {
@@ -17866,6 +18469,43 @@
             "column": "id",
             "namespace": "public",
             "table": "integration_event"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "product"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "product"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "product_raid_content"
           }
         },
         {

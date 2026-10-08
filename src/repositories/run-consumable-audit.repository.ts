@@ -57,7 +57,8 @@ export type RunConsumableAuditRunContext = {
   raidLeadId: string;
   status: RunStatus;
   difficulty: RaidDifficulty;
-  contents: Array<{ id: string; raidId: string }>;
+  /** `raidName`: the content's DB Raid name (null only if the raid row is unreadable). */
+  contents: Array<{ id: string; raidId: string; raidName: string | null }>;
   /** RunStartSnapshot.startedAt / Run.completedAt — the Run's active window. */
   startedAt: string | null;
   completedAt: string | null;
@@ -117,7 +118,10 @@ async function insertChunked(
 export const runConsumableAuditRepository = {
   /** Only what authorization and fight selection need — no roster/signup payload. */
   async findRunContext(runId: string): Promise<RunConsumableAuditRunContext | null> {
-    const row = (await orm.Run.where({ id: runId }).include("contents").include("startSnapshot").first()) as Record<
+    const row = (await orm.Run.where({ id: runId })
+      .include("contents", (content) => content.include("raid", (raid) => raid.select("id", "name")))
+      .include("startSnapshot")
+      .first()) as Record<
       string,
       unknown
     > | null;
@@ -136,10 +140,11 @@ export const runConsumableAuditRepository = {
         .map((content) => ({
           id: asString(content.id),
           raidId: asString(content.raidId),
+          raidName: content.raid ? asStringOrNull((content.raid as Record<string, unknown>).name) : null,
           sortOrder: asNumber(content.sortOrder),
         }))
         .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map(({ id, raidId }) => ({ id, raidId })),
+        .map(({ id, raidId, raidName }) => ({ id, raidId, raidName })),
     };
   },
 

@@ -117,6 +117,7 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
 }): Promise<boolean> {
   try {
     await raidRepository.ensureReferenceRaids();
+    const catalog = await raidRepository.loadCatalog();
     const realmSlug = realmSlugFromDisplayName(character.realm);
     const encounters = await blizzardApiClient.getCharacterRaidEncounters(
       character.region,
@@ -126,6 +127,7 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
     const derived = deriveCurrentResetLockouts({
       region: character.region,
       encounters,
+      lockoutRaids: catalog.lockoutRaids,
       resetWindow: getRegionalWeeklyReset(character.region),
     });
     if (derived.status !== "derived") {
@@ -133,11 +135,13 @@ async function syncCurrentRaidLockoutsFromBlizzard(character: {
     }
 
     // Sequential per-raid upserts (no transaction helper in this codebase).
-    // Each call preserves other current-raid rows via getCurrentLockoutRaids().
+    // Each call preserves other tracked-raid rows via the DB catalog's tracked set.
+    const trackedRaidIds = catalog.lockoutRaids.map((raid) => raid.id);
     for (const raid of derived.raids) {
       await lockoutRepository.replaceVerifiedCurrentResetLockouts(character.id, {
         raidId: raid.raidId,
         resetIdentifier: derived.resetIdentifier,
+        trackedRaidIds,
         rows: raid.difficulties.map((row) => ({
           difficulty: row.difficulty,
           bossesDefeated: row.bossesDefeated,

@@ -11,7 +11,7 @@ import {
   withCharacterSyncLock,
 } from "@/lib/character-sync-lock";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { getCurrentLockoutRaids, VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { VENOMOUS_ABYSS_RAID_ID, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 
 const apiMocks = vi.hoisted(() => ({
   getClientCredentialsToken: vi.fn(),
@@ -463,7 +463,9 @@ describe("lockouts stay multi-content and UNKNOWN-safe around failures", () => {
       bossesDefeated: number;
     }>;
     const raidIds = new Set(rows.map((lockout) => lockout.raidId));
-    for (const raid of getCurrentLockoutRaids()) expect(raidIds.has(raid.id)).toBe(true);
+    const { lockoutRaids } = await raidRepository.loadCatalog();
+    expect(lockoutRaids.length).toBeGreaterThan(0);
+    for (const raid of lockoutRaids) expect(raidIds.has(raid.id)).toBe(true);
     // Verified zero is an explicit row (0/N), not an absence.
     expect(rows.some((lockout) => Number(lockout.bossesDefeated) === 0)).toBe(true);
     const heroic = rows.find((lockout) => lockout.raidId === VENOMOUS_ABYSS_RAID_ID && lockout.difficulty === "HEROIC");

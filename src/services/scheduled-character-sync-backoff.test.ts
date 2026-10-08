@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -289,7 +290,7 @@ describe("admin projection uses the same helper", () => {
         playableSpecs: [],
         currentLockouts: [],
       },
-      { ownerHasRegionConnection: false, now: new Date(), staleMinutes: 120 },
+      { ownerHasRegionConnection: false, now: new Date(), staleMinutes: 120, catalog: fixtureRaidCatalog() },
     );
     expect(derived.autoRetryAt).toBeNull();
   });

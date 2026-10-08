@@ -3,6 +3,7 @@ import type {
   WarcraftLogsReportActor,
   WarcraftLogsReportFight,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { identityKey } from "@/services/consumable-audit-extract";
 import {
   WCL_FIGHT_ASSIGNMENT_POLICY,
@@ -17,6 +18,8 @@ import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
+
+const WCL_ENCOUNTERS = fixtureRaidCatalog().raidIdByWclEncounterId;
 
 const at = (hhmm: string) => Date.parse(`2026-09-20T${hhmm}:00.000Z`);
 const MIN = 60_000;
@@ -86,7 +89,7 @@ const sameReport = {
 describe("absolute WCL time", () => {
   it("converts report-relative milliseconds using the report start", () => {
     expect(absoluteWclTime(REPORT_START, 3 * MIN)).toBe(at("14:08"));
-    const [first] = assignReportFights({ report: sameReport, target: runA, others: [runB] });
+    const [first] = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: runA, others: [runB] });
     expect(first!.startMs).toBe(3 * MIN);
     expect(first!.startAtMs).toBe(at("14:08"));
     expect(first!.endAtMs).toBe(at("14:13"));
@@ -94,15 +97,15 @@ describe("absolute WCL time", () => {
 
   it("never compares relative milliseconds against Run timestamps", () => {
     // Relative 3 min would be 1970 if misused as absolute: nothing would match.
-    const assigned = assignReportFights({ report: sameReport, target: runA, others: [runB] });
+    const assigned = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: runA, others: [runB] });
     expect(assigned.filter((row) => row.status === "ASSIGNED")).toHaveLength(8);
   });
 });
 
 describe("same report, two consecutive identical Runs", () => {
   it("gives Run A fights 1–8 only and Run B fights 9–16 only", () => {
-    const a = assignReportFights({ report: sameReport, target: runA, others: [runB] });
-    const b = assignReportFights({ report: sameReport, target: runB, others: [runA] });
+    const a = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: runA, others: [runB] });
+    const b = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: runB, others: [runA] });
     expect(a.map((row) => [row.wclFightId, row.status])).toEqual(
       [1, 2, 3, 4, 5, 6, 7, 8].map((id) => [id, "ASSIGNED"]),
     );
@@ -138,7 +141,7 @@ describe("time tolerance", () => {
         edge(4, window.toMs + 1),
       ],
     };
-    const result = assignReportFights({ report: { ...report, startTime: REPORT_START }, target: runA, others: [] });
+    const result = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: { ...report, startTime: REPORT_START }, target: runA, others: [] });
     expect(result.map((row) => row.wclFightId)).toEqual([2, 3]);
   });
 });
@@ -165,7 +168,7 @@ describe("RunRaidContent validation", () => {
   };
 
   it("assigns Bundle content (Tidebound + Venomous) to their RunRaidContent, still time-bounded", () => {
-    const result = assignReportFights({ report, target: bundle, others: [] });
+    const result = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target: bundle, others: [] });
     expect(result.map((row) => [row.wclFightId, row.status, row.raidContentId])).toEqual([
       [1, "ASSIGNED", "bundle-tide"],
       [2, "ASSIGNED", "bundle-va"],
@@ -174,6 +177,7 @@ describe("RunRaidContent validation", () => {
 
   it("ignores in-window encounters outside the Run's content and other difficulties", () => {
     const result = assignReportFights({
+      raidIdByWclEncounter: WCL_ENCOUNTERS,
       report: {
         ...report,
         fights: [...report.fights, fight(4, "14:24", { difficulty: 5 })],
@@ -190,6 +194,7 @@ describe("RunRaidContent validation", () => {
 
   it("keeps an encounter unknown to the catalog when time matches", () => {
     const result = assignReportFights({
+      raidIdByWclEncounter: WCL_ENCOUNTERS,
       report: { ...report, fights: [fight(1, "14:08", { encounterId: 3513, name: "Kith'ix" })] },
       target: run({ ...runA, contents: [{ id: "mfo", raidId: MANAFORGE_OMEGA_RAID_ID }] }),
       others: [],
@@ -211,7 +216,7 @@ describe("wipes", () => {
         fight(9, "15:00", { encounterId: 3492, kill: true }),
       ],
     };
-    const result = assignReportFights({ report, target: runA, others: [runB] });
+    const result = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target: runA, others: [runB] });
     expect(result.map((row) => [row.wclFightId, row.kill, row.status])).toEqual([
       [6, false, "ASSIGNED"],
       [7, false, "ASSIGNED"],
@@ -229,8 +234,8 @@ describe("ambiguity", () => {
     // Players 1–15 plus 24: A has 15/16, B has 7/16 (9–15) + 24 = 8/16.
     const boundary = fight(8, "15:35", { friendlyPlayers: [...players(1, 15), 24] });
     const report = { startTime: REPORT_START, actors, fights: [boundary] };
-    const forA = assignReportFights({ report, target: overlapA, others: [overlapB] });
-    const forB = assignReportFights({ report, target: overlapB, others: [overlapA] });
+    const forA = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target: overlapA, others: [overlapB] });
+    const forB = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target: overlapB, others: [overlapA] });
     expect(forA[0]).toMatchObject({ status: "ASSIGNED", rosterMatched: 15, rosterSize: 16 });
     expect(forA[0]!.reasons).toEqual(expect.arrayContaining(["MULTIPLE_RUN_WINDOWS", "ROSTER_RESOLVED"]));
     expect(forB[0]).toMatchObject({ status: "IGNORED", rosterMatched: 8 });
@@ -244,7 +249,7 @@ describe("ambiguity", () => {
       [overlapA, overlapB],
       [overlapB, overlapA],
     ] as const) {
-      const [result] = assignReportFights({ report, target, others: [other] });
+      const [result] = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target, others: [other] });
       expect(result).toMatchObject({ status: "NEEDS_REVIEW" });
       expect(result!.reasons).toContain("MULTIPLE_RUN_WINDOWS");
     }
@@ -253,6 +258,7 @@ describe("ambiguity", () => {
   it("does not use roster evidence it cannot compute (no fight participants)", () => {
     const boundary = fight(8, "15:35", { friendlyPlayers: null });
     const [result] = assignReportFights({
+      raidIdByWclEncounter: WCL_ENCOUNTERS,
       report: { startTime: REPORT_START, actors, fights: [boundary] },
       target: overlapA,
       others: [overlapB],
@@ -262,7 +268,7 @@ describe("ambiguity", () => {
 
   it("reviews fights of a Run whose completion time was never recorded", () => {
     const open = run({ runId: "legacy", startedAtMs: at("14:00"), completedAtMs: null, rosterKeys: keys(1, 16) });
-    const result = assignReportFights({ report: sameReport, target: open, others: [] });
+    const result = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: open, others: [] });
     expect(result.length).toBeGreaterThan(0);
     expect(result.every((row) => row.status === "NEEDS_REVIEW" && row.reasons.includes("RUN_END_UNKNOWN"))).toBe(
       true,
@@ -271,7 +277,7 @@ describe("ambiguity", () => {
 
   it("reviews every content fight of a Run with no recorded window at all", () => {
     const unknown = run({ runId: "old", rosterKeys: keys(1, 16) });
-    const result = assignReportFights({ report: sameReport, target: unknown, others: [runB] });
+    const result = assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report: sameReport, target: unknown, others: [runB] });
     expect(result).toHaveLength(16);
     expect(result.every((row) => row.status === "NEEDS_REVIEW" && row.reasons[0] === "RUN_WINDOW_UNKNOWN")).toBe(
       true,
@@ -281,6 +287,7 @@ describe("ambiguity", () => {
   it("reviews a lone time match when the Run's roster is barely in the fight", () => {
     const foreign = fight(1, "14:08", { friendlyPlayers: players(17, 24) });
     const [result] = assignReportFights({
+      raidIdByWclEncounter: WCL_ENCOUNTERS,
       report: { startTime: REPORT_START, actors, fights: [foreign] },
       target: runA,
       others: [],
@@ -291,6 +298,7 @@ describe("ambiguity", () => {
 
   it("never auto-assigns a fight another Run already holds", () => {
     const [result] = assignReportFights({
+      raidIdByWclEncounter: WCL_ENCOUNTERS,
       report: { startTime: REPORT_START, actors, fights: [fight(1, "14:08")] },
       target: runA,
       others: [],
@@ -307,7 +315,7 @@ describe("roster evidence needs enough known members on every side", () => {
     const tiny = run({ runId: "B", startedAtMs: at("15:30"), completedAtMs: at("16:50"), rosterKeys: keys(24, 24) });
     const boundary = fight(8, "15:35", { friendlyPlayers: players(1, 16) });
     const report = { startTime: REPORT_START, actors, fights: [boundary] };
-    expect(assignReportFights({ report, target: big, others: [tiny] })[0]!.status).toBe("NEEDS_REVIEW");
-    expect(assignReportFights({ report, target: tiny, others: [big] })[0]!.status).toBe("NEEDS_REVIEW");
+    expect(assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target: big, others: [tiny] })[0]!.status).toBe("NEEDS_REVIEW");
+    expect(assignReportFights({ raidIdByWclEncounter: WCL_ENCOUNTERS, report, target: tiny, others: [big] })[0]!.status).toBe("NEEDS_REVIEW");
   });
 });

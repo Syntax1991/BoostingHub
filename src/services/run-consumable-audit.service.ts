@@ -6,7 +6,7 @@ import {
 import { consumableSpellIds } from "@/lib/consumable-catalog";
 import { personalDefensiveSpellIds } from "@/lib/personal-defensive-catalog";
 import { DomainError } from "@/lib/errors";
-import { findRaidCatalogById, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import {
   warcraftLogsApiClient,
   type WarcraftLogsReportFight,
@@ -161,10 +161,10 @@ async function buildView(run: RunConsumableAuditRunContext): Promise<RunConsumab
 
   const fightRefs = buildFightRefs(fights);
   const contentLabels = new Map(
-    run.contents.map((content) => {
-      const raid = findRaidCatalogById(content.raidId);
-      return [content.id, raid ? raidContentDisplayName(raid.id, raid.name) : null] as const;
-    }),
+    run.contents.map(
+      (content) =>
+        [content.id, content.raidName ? raidContentDisplayName(content.raidId, content.raidName) : null] as const,
+    ),
   );
   const showContent = run.contents.length > 1;
   // Facts version 3: defensives recorded and the raid-wipe (boosting-team collapse) context applies.

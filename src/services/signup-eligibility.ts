@@ -1,4 +1,5 @@
 import { DomainError } from "@/lib/errors";
+import type { RaidBossRef } from "@/lib/lockout-bosses";
 import type { CharacterRunReservationConflict } from "@/models/records";
 import type {
   CharacterRole,
@@ -69,6 +70,8 @@ export type EligibilityRun = {
     sortOrder: number;
     plannedBossCount: number;
     totalBossCount: number;
+    /** The content raid's RaidBoss rows (lockout boss breakdown). */
+    bosses: readonly RaidBossRef[];
   }>;
 };
 

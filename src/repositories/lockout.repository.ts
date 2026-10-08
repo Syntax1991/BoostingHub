@@ -1,7 +1,6 @@
 import { serializeKilledBossIds } from "@/lib/lockout-bosses";
 import { orm } from "@/lib/prisma";
 import type { RaidDifficulty } from "@/models/enums";
-import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 
 export const lockoutRepository = {
   async listByCharacterIds(characterIds: string[]) {
@@ -35,14 +34,18 @@ export const lockoutRepository = {
    * Replace verified current-reset lockout rows for one raid.
    * - Upserts the provided difficulties for that raid+reset
    * - Deletes difficulties for that raid+reset that were not in `rows`
-   * - Clears same-reset rows for non-current catalog raids (stale mapping cleanup)
-   * - Never deletes other current-raid rows (Venomous vs Tidebound coexist)
+   * - Clears same-reset rows for raids outside `trackedRaidIds` (stale mapping cleanup)
+   * - Never deletes other tracked-raid rows (Venomous vs Tidebound coexist)
+   *
+   * `trackedRaidIds` is the DB catalog's lockout-tracked raid set
+   * (`RaidCatalog.lockoutRaids`), resolved once by the caller.
    */
   async replaceVerifiedCurrentResetLockouts(
     characterId: string,
     input: {
       raidId: string;
       resetIdentifier: string;
+      trackedRaidIds: readonly string[];
       rows: Array<{
         difficulty: RaidDifficulty;
         bossesDefeated: number;
@@ -102,7 +105,9 @@ export const lockoutRepository = {
       await orm.CharacterRaidLockout.where({ id: String((existing as Record<string, unknown>).id) }).delete();
     }
 
-    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
+    // An empty tracked set would wipe every same-reset row — never treat it as authoritative.
+    if (input.trackedRaidIds.length === 0) return;
+    const currentRaidIds = new Set(input.trackedRaidIds);
     const sameReset = await orm.CharacterRaidLockout
       .where({
         characterId,

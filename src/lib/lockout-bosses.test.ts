@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { lockoutBossBreakdown, parseKilledBossIds, serializeKilledBossIds } from "@/lib/lockout-bosses";
 import { formatContentLockoutTooltip, projectRunContentLockouts } from "@/lib/run-content-lockouts";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+
+const catalog = fixtureRaidCatalog();
+const bossesOf = (raidId: string) => catalog.findById(raidId)!.bosses;
 
 const FIRST = "bb000001-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const THIRD = "bb000003-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -14,8 +18,15 @@ describe("lockout boss breakdown", () => {
     }
   });
 
+  it("uses the content's DB boss rows (names follow the DB, identity is the RaidBoss id)", () => {
+    const renamed = bossesOf(VENOMOUS_ABYSS_RAID_ID).map((boss) =>
+      boss.id === FIRST ? { ...boss, name: "Renamed in DB" } : boss,
+    );
+    expect(lockoutBossBreakdown(renamed, [FIRST])![0]).toEqual({ name: "Renamed in DB", killed: true });
+  });
+
   it("lists every catalog boss in order with its kill state", () => {
-    const bosses = lockoutBossBreakdown(VENOMOUS_ABYSS_RAID_ID, [THIRD, FIRST])!;
+    const bosses = lockoutBossBreakdown(bossesOf(VENOMOUS_ABYSS_RAID_ID), [THIRD, FIRST])!;
     expect(bosses).toHaveLength(8);
     expect(bosses.slice(0, 3)).toEqual([
       { name: "Nek'zali the Soulcoiler", killed: true },
@@ -23,15 +34,16 @@ describe("lockout boss breakdown", () => {
       { name: "The Lost Explorers", killed: true },
     ]);
     expect(bosses.filter((boss) => boss.killed)).toHaveLength(2);
-    expect(lockoutBossBreakdown(VENOMOUS_ABYSS_RAID_ID, null)).toBeNull();
-    expect(lockoutBossBreakdown("unknown-raid", [FIRST])).toBeNull();
+    expect(lockoutBossBreakdown(bossesOf(VENOMOUS_ABYSS_RAID_ID), null)).toBeNull();
+    expect(lockoutBossBreakdown([], [FIRST])).toBeNull();
+    expect(lockoutBossBreakdown(undefined, [FIRST])).toBeNull();
   });
 
   it("tooltip: killed/open bosses per content, and honest fallbacks", () => {
     const rows = projectRunContentLockouts({
       contents: [
-        { raidId: TIDEBOUND_GROTTO_RAID_ID, raidName: "The Tidebound Grotto", sortOrder: 0, plannedBossCount: 1, totalBossCount: 1 },
-        { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 1, plannedBossCount: 8, totalBossCount: 8 },
+        { raidId: TIDEBOUND_GROTTO_RAID_ID, raidName: "The Tidebound Grotto", sortOrder: 0, plannedBossCount: 1, totalBossCount: 1, bosses: bossesOf(TIDEBOUND_GROTTO_RAID_ID) },
+        { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 1, plannedBossCount: 8, totalBossCount: 8, bosses: bossesOf(VENOMOUS_ABYSS_RAID_ID) },
       ],
       difficulty: "HEROIC",
       lootType: "VIP",
@@ -53,7 +65,7 @@ describe("lockout boss breakdown", () => {
     expect(lines[1]).toMatch(/^The Venomous Abyss: ✓ Nek'zali the Soulcoiler · ✗ Entombed Sentinels/);
 
     const legacy = projectRunContentLockouts({
-      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 0, plannedBossCount: 8, totalBossCount: 8 }],
+      contents: [{ raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 0, plannedBossCount: 8, totalBossCount: 8, bosses: bossesOf(VENOMOUS_ABYSS_RAID_ID) }],
       difficulty: "HEROIC",
       lootType: "VIP",
       findSave: () => ({

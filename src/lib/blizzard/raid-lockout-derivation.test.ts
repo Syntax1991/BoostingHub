@@ -7,10 +7,12 @@ import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
   WOW_RAID_CATALOG,
-  getCurrentLockoutRaids,
 } from "@/lib/wow-raid-catalog";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { defaultRaidBossTotal, formatCompactLockoutProgress } from "@/lib/lockout-display";
+import { formatCompactLockoutProgress } from "@/lib/lockout-display";
+
+const catalog = fixtureRaidCatalog();
 
 const venomous = WOW_RAID_CATALOG.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID)!;
 const tidebound = WOW_RAID_CATALOG.find((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)!;
@@ -82,7 +84,7 @@ function progressOf(
 
 describe("current raid catalog selection", () => {
   it("marks Venomous and Tidebound as current lockout raids with verified Blizzard ids", () => {
-    const currentRaids = getCurrentLockoutRaids();
+    const currentRaids = catalog.lockoutRaids;
     expect(currentRaids.map((raid) => raid.id).sort()).toEqual(
       [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),
     );
@@ -99,21 +101,22 @@ describe("current raid catalog selection", () => {
     expect(tideboundRaid.bosses[0]?.blizzardEncounterIds).toEqual([2849]);
     expect(tideboundRaid.availableForRuns).toBe(false);
 
-    expect(historical.currentForLockouts).toBe(false);
+    expect(historical.trackLockouts).toBe(false);
     expect(historical.blizzardInstanceId).toBe(1302);
     expect(historical.bosses).toHaveLength(8);
   });
 
   it("requires an explicit raid id for catalog boss totals", () => {
-    expect(defaultRaidBossTotal(VENOMOUS_ABYSS_RAID_ID)).toBe(8);
-    expect(defaultRaidBossTotal(TIDEBOUND_GROTTO_RAID_ID)).toBe(1);
-    expect(defaultRaidBossTotal(MANAFORGE_OMEGA_RAID_ID)).toBe(8);
-    expect(defaultRaidBossTotal("00000000-0000-4000-8000-000000000000")).toBe(0);
+    expect(catalog.bossTotal(VENOMOUS_ABYSS_RAID_ID)).toBe(8);
+    expect(catalog.bossTotal(TIDEBOUND_GROTTO_RAID_ID)).toBe(1);
+    expect(catalog.bossTotal(MANAFORGE_OMEGA_RAID_ID)).toBe(8);
+    expect(catalog.bossTotal("00000000-0000-4000-8000-000000000000")).toBe(0);
   });
 
   it("does not treat Manaforge as a current lockout raid", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: {
@@ -141,7 +144,7 @@ describe("current raid catalog selection", () => {
     expect(result.status).toBe("derived");
     if (result.status !== "derived") return;
     expect(result.raids.map((raid) => raid.raidId)).toEqual(
-      getCurrentLockoutRaids().map((raid) => raid.id),
+      catalog.lockoutRaids.map((raid) => raid.id),
     );
     expect(result.raids.some((raid) => raid.raidId === MANAFORGE_OMEGA_RAID_ID)).toBe(false);
     expect(progressOf(result, VENOMOUS_ABYSS_RAID_ID, "NORMAL").bossesDefeated).toBe(0);
@@ -153,6 +156,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("matches encounters by journal encounter id, not display name", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: {
@@ -187,6 +191,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("counts only timestamps inside the current reset window", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -214,6 +219,7 @@ describe("deriveCurrentResetLockouts", () => {
     }));
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -233,6 +239,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("zero-fills both current raids when only a historical raid is present", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: {
@@ -264,6 +271,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("derives Tidebound progress and still zero-fills Venomous when Venomous is absent", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: {
@@ -303,6 +311,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("treats verified zero kills and missing modes as 0/N for every tracked difficulty", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -328,6 +337,7 @@ describe("deriveCurrentResetLockouts", () => {
     const mythicOld = [{ bossIndex: 0, lastKillTimestampMs: killBeforeReset }];
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -348,6 +358,7 @@ describe("deriveCurrentResetLockouts", () => {
     }));
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([{ difficulty: "NORMAL", kills: allCurrent }]),
@@ -364,6 +375,7 @@ describe("deriveCurrentResetLockouts", () => {
     }));
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: bothRaidsEncounters({
@@ -396,6 +408,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("zero-fills Nymrissa when only Venomous is in the payload", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -417,6 +430,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("treats old-reset Venomous kills as current-reset zero", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -436,6 +450,7 @@ describe("deriveCurrentResetLockouts", () => {
   it("preserves exact current-reset 6/8 without inventing aggregate totals", () => {
     const result = deriveCurrentResetLockouts({
       region: "EU",
+      lockoutRaids: catalog.lockoutRaids,
       now,
       resetWindow: reset,
       encounters: venomousEncounters([
@@ -452,5 +467,58 @@ describe("deriveCurrentResetLockouts", () => {
     expect(heroic.bossesDefeated).toBe(6);
     expect(heroic.bossTotal).toBe(8);
     expect(heroic.isComplete).toBe(false);
+  });
+});
+
+describe("database catalog authority", () => {
+  const heroicAllKilled = (raid: typeof venomous) =>
+    raidPayload(raid, [
+      {
+        difficulty: "HEROIC",
+        kills: raid.bosses.map((_, bossIndex) => ({ bossIndex, lastKillTimestampMs: killInReset })),
+      },
+    ]);
+
+  it("derives only the raids passed as lockoutRaids (DB trackLockouts), never a code list", () => {
+    const onlyTide = catalog.lockoutRaids.filter((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID);
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      lockoutRaids: onlyTide,
+      now,
+      resetWindow: reset,
+      encounters: { raids: [heroicAllKilled(venomous), heroicAllKilled(tidebound)] },
+    });
+    expect(result.status).toBe("derived");
+    if (result.status !== "derived") return;
+    expect(result.raids.map((raid) => raid.raidId)).toEqual([TIDEBOUND_GROTTO_RAID_ID]);
+  });
+
+  it("uses DB Blizzard encounter ids and stable RaidBoss ids for kills", () => {
+    const edited = catalog.lockoutRaids.map((raid) =>
+      raid.id === TIDEBOUND_GROTTO_RAID_ID
+        ? { ...raid, bosses: raid.bosses.map((boss) => ({ ...boss, blizzardEncounterIds: [999_001] })) }
+        : raid,
+    );
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      lockoutRaids: edited,
+      now,
+      resetWindow: reset,
+      encounters: { raids: [heroicAllKilled(tidebound)] },
+    });
+    // The payload still reports encounter 2849, which the edited DB row no longer maps.
+    expect(progressOf(result, TIDEBOUND_GROTTO_RAID_ID, "HEROIC").bossesDefeated).toBe(0);
+  });
+
+  it("skips a tracked raid without a Blizzard instance id and reports unknown when none remain", () => {
+    const noInstance = catalog.lockoutRaids.map((raid) => ({ ...raid, blizzardInstanceId: null }));
+    const result = deriveCurrentResetLockouts({
+      region: "EU",
+      lockoutRaids: noInstance,
+      now,
+      resetWindow: reset,
+      encounters: { raids: [heroicAllKilled(venomous)] },
+    });
+    expect(result.status).toBe("unknown");
   });
 });

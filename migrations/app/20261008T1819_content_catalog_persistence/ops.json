@@ -1,0 +1,716 @@
+[
+  {
+    "id": "table.product",
+    "label": "Create table \"product\"",
+    "summary": "Creates table \"product\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "product"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"product\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"product\"",
+        "sql": "CREATE TABLE \"public\".\"product\" (\n  \"active\" bool DEFAULT true NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"key\" text NOT NULL,\n  \"name\" text NOT NULL,\n  \"selectable\" bool DEFAULT true NOT NULL,\n  \"sortOrder\" int4 DEFAULT 0 NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"product\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.product_raid_content",
+    "label": "Create table \"product_raid_content\"",
+    "summary": "Creates table \"product_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"product_raid_content\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"product_raid_content\"",
+        "sql": "CREATE TABLE \"public\".\"product_raid_content\" (\n  \"bossCountMode\" text NOT NULL,\n  \"defaultBossCount\" int4,\n  \"fixedBossCount\" int4,\n  \"id\" text NOT NULL,\n  \"minBossCount\" int4,\n  \"productId\" text NOT NULL,\n  \"raidId\" text NOT NULL,\n  \"sortOrder\" int4 NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"product_raid_content_bossCountMode_check_2c6322c6\" CHECK (\"bossCountMode\" IN ('FIXED', 'VARIABLE'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"product_raid_content\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid.blizzardInstanceId",
+    "label": "Add column \"blizzardInstanceId\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "blizzardInstanceId",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"blizzardInstanceId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "blizzardInstanceId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"blizzardInstanceId\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"blizzardInstanceId\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"blizzardInstanceId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "blizzardInstanceId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid.sortOrder",
+    "label": "Add column \"sortOrder\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "sortOrder",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"sortOrder\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "sortOrder"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"sortOrder\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"sortOrder\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"sortOrder\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "sortOrder"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid.trackLockouts",
+    "label": "Add column \"trackLockouts\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "trackLockouts",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"trackLockouts\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "trackLockouts"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"trackLockouts\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"trackLockouts\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"trackLockouts\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "trackLockouts"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid.wclRankingEncounterId",
+    "label": "Add column \"wclRankingEncounterId\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "wclRankingEncounterId",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"wclRankingEncounterId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "wclRankingEncounterId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"wclRankingEncounterId\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"wclRankingEncounterId\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"wclRankingEncounterId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "wclRankingEncounterId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid.wclZoneId",
+    "label": "Add column \"wclZoneId\" to \"raid\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "wclZoneId",
+        "table": "raid"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"wclZoneId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "wclZoneId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"wclZoneId\"",
+        "sql": "ALTER TABLE \"public\".\"raid\" ADD COLUMN \"wclZoneId\" int4"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"wclZoneId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid",
+          "wclZoneId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid_boss.blizzardEncounterIds",
+    "label": "Add column \"blizzardEncounterIds\" to \"raid_boss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "blizzardEncounterIds",
+        "table": "raid_boss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"blizzardEncounterIds\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid_boss",
+          "blizzardEncounterIds"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"blizzardEncounterIds\"",
+        "sql": "ALTER TABLE \"public\".\"raid_boss\" ADD COLUMN \"blizzardEncounterIds\" text DEFAULT '[]' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"blizzardEncounterIds\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid_boss",
+          "blizzardEncounterIds"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.raid_boss.wclEncounterIds",
+    "label": "Add column \"wclEncounterIds\" to \"raid_boss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "wclEncounterIds",
+        "table": "raid_boss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"wclEncounterIds\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid_boss",
+          "wclEncounterIds"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"wclEncounterIds\"",
+        "sql": "ALTER TABLE \"public\".\"raid_boss\" ADD COLUMN \"wclEncounterIds\" text DEFAULT '[]' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"wclEncounterIds\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "raid_boss",
+          "wclEncounterIds"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.product.product_key_key",
+    "label": "Add unique constraint on \"product\" (key)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "product_key_key",
+        "table": "product"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"product_key_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_key_key",
+          "public",
+          "\"public\".\"product\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"product_key_key\"",
+        "sql": "ALTER TABLE \"public\".\"product\" ADD CONSTRAINT \"product_key_key\" UNIQUE (\"key\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"product_key_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_key_key",
+          "public",
+          "\"public\".\"product\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.product_raid_content.product_raid_content_productId_sortOrder_key",
+    "label": "Add unique constraint on \"product_raid_content\" (productId, sortOrder)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "product_raid_content_productId_sortOrder_key",
+        "table": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"product_raid_content_productId_sortOrder_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_productId_sortOrder_key",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"product_raid_content_productId_sortOrder_key\"",
+        "sql": "ALTER TABLE \"public\".\"product_raid_content\" ADD CONSTRAINT \"product_raid_content_productId_sortOrder_key\" UNIQUE (\"productId\", \"sortOrder\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"product_raid_content_productId_sortOrder_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_productId_sortOrder_key",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.product_raid_content.product_raid_content_productId_raidId_key",
+    "label": "Add unique constraint on \"product_raid_content\" (productId, raidId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "product_raid_content_productId_raidId_key",
+        "table": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"product_raid_content_productId_raidId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_productId_raidId_key",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"product_raid_content_productId_raidId_key\"",
+        "sql": "ALTER TABLE \"public\".\"product_raid_content\" ADD CONSTRAINT \"product_raid_content_productId_raidId_key\" UNIQUE (\"productId\", \"raidId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"product_raid_content_productId_raidId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_productId_raidId_key",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.product_raid_content.product_raid_content_productId_idx_5858600a",
+    "label": "Create index \"product_raid_content_productId_idx_5858600a\" on \"product_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "product_raid_content_productId_idx_5858600a",
+        "table": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"product_raid_content_productId_idx_5858600a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product_raid_content_productId_idx_5858600a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"product_raid_content_productId_idx_5858600a\"",
+        "sql": "CREATE INDEX \"product_raid_content_productId_idx_5858600a\" ON \"public\".\"product_raid_content\" (\"productId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"product_raid_content_productId_idx_5858600a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product_raid_content_productId_idx_5858600a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.product_raid_content.product_raid_content_raidId_idx_996eeca9",
+    "label": "Create index \"product_raid_content_raidId_idx_996eeca9\" on \"product_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "product_raid_content_raidId_idx_996eeca9",
+        "table": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"product_raid_content_raidId_idx_996eeca9\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product_raid_content_raidId_idx_996eeca9\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"product_raid_content_raidId_idx_996eeca9\"",
+        "sql": "CREATE INDEX \"product_raid_content_raidId_idx_996eeca9\" ON \"public\".\"product_raid_content\" (\"raidId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"product_raid_content_raidId_idx_996eeca9\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"product_raid_content_raidId_idx_996eeca9\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.product_raid_content.product_raid_content_productId_fkey",
+    "label": "Add foreign key \"product_raid_content_productId_fkey\" on \"product_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "product_raid_content_productId_fkey",
+        "table": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"product_raid_content_productId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_productId_fkey",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"product_raid_content_productId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"product_raid_content\"\nADD CONSTRAINT \"product_raid_content_productId_fkey\"\nFOREIGN KEY (\"productId\")\nREFERENCES \"public\".\"product\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"product_raid_content_productId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_productId_fkey",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.product_raid_content.product_raid_content_raidId_fkey",
+    "label": "Add foreign key \"product_raid_content_raidId_fkey\" on \"product_raid_content\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "product_raid_content_raidId_fkey",
+        "table": "product_raid_content"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"product_raid_content_raidId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_raidId_fkey",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"product_raid_content_raidId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"product_raid_content\"\nADD CONSTRAINT \"product_raid_content_raidId_fkey\"\nFOREIGN KEY (\"raidId\")\nREFERENCES \"public\".\"raid\" (\"id\")\nON DELETE RESTRICT"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"product_raid_content_raidId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "product_raid_content_raidId_fkey",
+          "public",
+          "\"public\".\"product_raid_content\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.seed-content-catalog",
+    "label": "Data seed: raid catalog metadata (Blizzard/WCL ids, lockout tracking) and products",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "No existing boss holds a seeded (raid, name) under a different id (identity must be preserved)",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1 FROM \"raid_boss\" b\n  JOIN (VALUES ('ab000001-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Plexus Sentinel'), ('ab000002-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Loom''ithar'), ('ab000003-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Soulbinder Naazindhri'), ('ab000004-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Forgeweaver Araz'), ('ab000005-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'The Soul Hunters'), ('ab000006-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Fractillus'), ('ab000007-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Nexus-King Salhadaar'), ('ab000008-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Dimensius, the All-Devouring'), ('bb000001-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Nek''zali the Soulcoiler'), ('bb000002-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Entombed Sentinels'), ('bb000003-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Lost Explorers'), ('bb000004-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Vashnik the Malignant'), ('bb000005-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Sszorak'), ('bb000006-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Twin Fangs'), ('bb000007-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Coiled Altar'), ('bb000008-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Ula''tek'), ('cc000001-cccc-4ccc-8ccc-cccccccccccc', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Nymrissa Wavecaller')) AS s(id, \"raidId\", name) ON s.\"raidId\" = b.\"raidId\" AND s.name = b.name\n  WHERE b.id <> s.id\n) AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Insert missing raids; fill only the new metadata columns on existing raids",
+        "sql": "INSERT INTO \"raid\" (\"id\", \"name\", \"season\", \"isActive\", \"sortOrder\", \"trackLockouts\", \"blizzardInstanceId\", \"wclZoneId\", \"wclRankingEncounterId\", \"createdAt\", \"updatedAt\")\nVALUES\n  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Manaforge Omega', 'The War Within Season 3', false, 1, false, 1302, NULL, NULL, now(), now()),\n  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Venomous Abyss', 'Midnight Season 2', true, 2, true, 1320, 53, NULL, now(), now()),\n  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'The Tidebound Grotto', 'Midnight Season 2', false, 3, true, 1317, 53, 3379, now(), now())\nON CONFLICT (\"id\") DO UPDATE SET\n  \"sortOrder\" = EXCLUDED.\"sortOrder\",\n  \"trackLockouts\" = EXCLUDED.\"trackLockouts\",\n  \"blizzardInstanceId\" = EXCLUDED.\"blizzardInstanceId\",\n  \"wclZoneId\" = EXCLUDED.\"wclZoneId\",\n  \"wclRankingEncounterId\" = EXCLUDED.\"wclRankingEncounterId\"",
+        "params": []
+      },
+      {
+        "description": "Insert missing bosses; fill only the encounter id columns on existing bosses",
+        "sql": "INSERT INTO \"raid_boss\" (\"id\", \"raidId\", \"name\", \"sortOrder\", \"blizzardEncounterIds\", \"wclEncounterIds\")\nVALUES\n  ('ab000001-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Plexus Sentinel', 1, '[2684]', '[3129]'),\n  ('ab000002-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Loom''ithar', 2, '[2686]', '[3131]'),\n  ('ab000003-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Soulbinder Naazindhri', 3, '[2685]', '[3130]'),\n  ('ab000004-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Forgeweaver Araz', 4, '[2687]', '[3132]'),\n  ('ab000005-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'The Soul Hunters', 5, '[2688]', '[3122]'),\n  ('ab000006-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Fractillus', 6, '[2747]', '[3133]'),\n  ('ab000007-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Nexus-King Salhadaar', 7, '[2690]', '[3134]'),\n  ('ab000008-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Dimensius, the All-Devouring', 8, '[2691]', '[3135]'),\n  ('bb000001-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Nek''zali the Soulcoiler', 1, '[2888]', '[3470]'),\n  ('bb000002-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Entombed Sentinels', 2, '[2874]', '[3445]'),\n  ('bb000003-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Lost Explorers', 3, '[2894]', '[3497]'),\n  ('bb000004-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Vashnik the Malignant', 4, '[2882]', '[3455]'),\n  ('bb000005-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Sszorak', 5, '[2871]', '[3420]'),\n  ('bb000006-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Twin Fangs', 6, '[2887]', '[3421]'),\n  ('bb000007-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'The Coiled Altar', 7, '[2883]', '[3429]'),\n  ('bb000008-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Ula''tek', 8, '[2895]', '[3492]'),\n  ('cc000001-cccc-4ccc-8ccc-cccccccccccc', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Nymrissa Wavecaller', 1, '[2849]', '[3379]')\nON CONFLICT (\"id\") DO UPDATE SET\n  \"blizzardEncounterIds\" = EXCLUDED.\"blizzardEncounterIds\",\n  \"wclEncounterIds\" = EXCLUDED.\"wclEncounterIds\"",
+        "params": []
+      },
+      {
+        "description": "Insert products",
+        "sql": "INSERT INTO \"product\" (\"id\", \"key\", \"name\", \"active\", \"selectable\", \"sortOrder\", \"createdAt\", \"updatedAt\")\nVALUES\n  ('dddddddd-dddd-4ddd-8ddd-ddddddddddd1', 'VENOMOUS_ABYSS', 'The Venomous Abyss', true, true, 1, now(), now()),\n  ('dddddddd-dddd-4ddd-8ddd-ddddddddddd2', 'MIDNIGHT_S2_BUNDLE', 'Season 2 Bundle — Tide + The Venomous Abyss', true, true, 2, now(), now())\nON CONFLICT DO NOTHING",
+        "params": []
+      },
+      {
+        "description": "Insert product raid contents",
+        "sql": "INSERT INTO \"product_raid_content\" (\"id\", \"productId\", \"raidId\", \"sortOrder\", \"bossCountMode\", \"fixedBossCount\", \"minBossCount\", \"defaultBossCount\")\nVALUES\n  ('dd000001-dddd-4ddd-8ddd-dddddddddddd', 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 1, 'VARIABLE', NULL, 1, 8),\n  ('dd000002-dddd-4ddd-8ddd-dddddddddddd', 'dddddddd-dddd-4ddd-8ddd-ddddddddddd2', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 1, 'FIXED', 1, NULL, NULL),\n  ('dd000003-dddd-4ddd-8ddd-dddddddddddd', 'dddddddd-dddd-4ddd-8ddd-ddddddddddd2', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 2, 'VARIABLE', NULL, 1, 8)\nON CONFLICT DO NOTHING",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Every seeded raid carries its catalog metadata",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1 FROM (VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 1, false, 1302, NULL, NULL), ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 2, true, 1320, 53, NULL), ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 3, true, 1317, 53, 3379)) AS e(id, \"sortOrder\", \"trackLockouts\", \"blizzardInstanceId\", \"wclZoneId\", \"wclRankingEncounterId\")\n  LEFT JOIN \"raid\" r ON r.id = e.id\n  WHERE r.id IS NULL\n     OR r.\"sortOrder\" <> e.\"sortOrder\"\n     OR r.\"trackLockouts\" <> e.\"trackLockouts\"\n     OR r.\"blizzardInstanceId\" IS DISTINCT FROM e.\"blizzardInstanceId\"::int4\n     OR r.\"wclZoneId\" IS DISTINCT FROM e.\"wclZoneId\"::int4\n     OR r.\"wclRankingEncounterId\" IS DISTINCT FROM e.\"wclRankingEncounterId\"::int4\n) AS ok",
+        "params": []
+      },
+      {
+        "description": "Every seeded boss carries its Blizzard and WCL encounter ids",
+        "sql": "SELECT NOT EXISTS (\n  SELECT 1 FROM (VALUES ('ab000001-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2684]', '[3129]'), ('ab000002-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2686]', '[3131]'), ('ab000003-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2685]', '[3130]'), ('ab000004-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2687]', '[3132]'), ('ab000005-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2688]', '[3122]'), ('ab000006-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2747]', '[3133]'), ('ab000007-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2690]', '[3134]'), ('ab000008-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[2691]', '[3135]'), ('bb000001-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2888]', '[3470]'), ('bb000002-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2874]', '[3445]'), ('bb000003-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2894]', '[3497]'), ('bb000004-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2882]', '[3455]'), ('bb000005-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2871]', '[3420]'), ('bb000006-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2887]', '[3421]'), ('bb000007-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2883]', '[3429]'), ('bb000008-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '[2895]', '[3492]'), ('cc000001-cccc-4ccc-8ccc-cccccccccccc', '[2849]', '[3379]')) AS e(id, \"blizzardEncounterIds\", \"wclEncounterIds\")\n  LEFT JOIN \"raid_boss\" b ON b.id = e.id\n  WHERE b.id IS NULL\n     OR b.\"blizzardEncounterIds\" <> e.\"blizzardEncounterIds\"\n     OR b.\"wclEncounterIds\" <> e.\"wclEncounterIds\"\n) AS ok",
+        "params": []
+      },
+      {
+        "description": "Seeded products and their contents exist",
+        "sql": "SELECT (\n  (SELECT count(*) FROM \"product\" WHERE \"key\" IN ('VENOMOUS_ABYSS', 'MIDNIGHT_S2_BUNDLE')) = 2\n  AND (SELECT count(*) FROM \"product_raid_content\" WHERE \"id\" IN ('dd000001-dddd-4ddd-8ddd-dddddddddddd', 'dd000002-dddd-4ddd-8ddd-dddddddddddd', 'dd000003-dddd-4ddd-8ddd-dddddddddddd')) = 3\n) AS ok",
+        "params": []
+      }
+    ]
+  }
+]

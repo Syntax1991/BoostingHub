@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { RunLootType } from "@/models/enums";
 import type { SignupRaidSaveInfo } from "@/models/records";
@@ -20,8 +21,8 @@ import {
 
 const RESET = "2026-W41";
 
-const venomous = { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 2, plannedBossCount: 8, totalBossCount: 8 };
-const tidebound = { raidId: TIDEBOUND_GROTTO_RAID_ID, raidName: "The Tidebound Grotto", sortOrder: 1, plannedBossCount: 1, totalBossCount: 1 };
+const venomous = { raidId: VENOMOUS_ABYSS_RAID_ID, raidName: "The Venomous Abyss", sortOrder: 2, plannedBossCount: 8, totalBossCount: 8, bosses: fixtureRaidCatalog().findById(VENOMOUS_ABYSS_RAID_ID)!.bosses };
+const tidebound = { raidId: TIDEBOUND_GROTTO_RAID_ID, raidName: "The Tidebound Grotto", sortOrder: 1, plannedBossCount: 1, totalBossCount: 1, bosses: fixtureRaidCatalog().findById(TIDEBOUND_GROTTO_RAID_ID)!.bosses };
 
 function save(raidId: string, bossesDefeated: number, totalBossCount: number): SignupRaidSaveInfo {
   return {

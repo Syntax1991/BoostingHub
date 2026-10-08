@@ -67,6 +67,9 @@ beforeAll(async () => {
   });
 });
 
+/** The production tracked set (DB `Raid.trackLockouts`): Venomous + Tidebound. */
+const TRACKED_RAID_IDS = [VENOMOUS_ABYSS_RAID_ID, TIDEBOUND_GROTTO_RAID_ID];
+
 afterAll(async () => {
   await deleteCharacterCascade(ids.character);
   await deleteUser(ids.user);
@@ -79,6 +82,7 @@ describe("lockoutRepository.replaceVerifiedCurrentResetLockouts", () => {
     await lockoutRepository.replaceVerifiedCurrentResetLockouts(ids.character, {
       raidId: VENOMOUS_ABYSS_RAID_ID,
       resetIdentifier: reset.resetIdentifier,
+      trackedRaidIds: TRACKED_RAID_IDS,
       rows: [{ difficulty: "HEROIC", bossesDefeated: 2, isComplete: false, killedBossIds: killed }],
       verifiedAt: new Date().toISOString(),
     });
@@ -98,6 +102,7 @@ describe("lockoutRepository.replaceVerifiedCurrentResetLockouts", () => {
     await lockoutRepository.replaceVerifiedCurrentResetLockouts(ids.character, {
       raidId: VENOMOUS_ABYSS_RAID_ID,
       resetIdentifier: reset.resetIdentifier,
+      trackedRaidIds: TRACKED_RAID_IDS,
       rows: [
         { difficulty: "NORMAL", bossesDefeated: 0, isComplete: false },
         { difficulty: "HEROIC", bossesDefeated: 6, isComplete: false },
@@ -109,6 +114,7 @@ describe("lockoutRepository.replaceVerifiedCurrentResetLockouts", () => {
     await lockoutRepository.replaceVerifiedCurrentResetLockouts(ids.character, {
       raidId: TIDEBOUND_GROTTO_RAID_ID,
       resetIdentifier: reset.resetIdentifier,
+      trackedRaidIds: TRACKED_RAID_IDS,
       rows: [
         { difficulty: "NORMAL", bossesDefeated: 0, isComplete: false },
         { difficulty: "HEROIC", bossesDefeated: 1, isComplete: true },
@@ -131,5 +137,35 @@ describe("lockoutRepository.replaceVerifiedCurrentResetLockouts", () => {
     );
     expect(Number(venomousHc?.bossesDefeated)).toBe(6);
     expect(Number(tideboundHc?.bossesDefeated)).toBe(1);
+  });
+
+  it("clears same-reset rows only for raids outside the DB tracked set, never on an empty set", async () => {
+    const reset = getRegionalWeeklyReset("EU");
+    const verifiedAt = new Date().toISOString();
+    const heroicOnly = [{ difficulty: "HEROIC" as const, bossesDefeated: 6, isComplete: false }];
+    const tideRows = async () =>
+      (await orm.CharacterRaidLockout.where({ characterId: ids.character, raidId: TIDEBOUND_GROTTO_RAID_ID }).all())
+        .length;
+    expect(await tideRows()).toBe(3);
+
+    // An empty tracked set is never authoritative: nothing outside this raid is touched.
+    await lockoutRepository.replaceVerifiedCurrentResetLockouts(ids.character, {
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      resetIdentifier: reset.resetIdentifier,
+      trackedRaidIds: [],
+      rows: heroicOnly,
+      verifiedAt,
+    });
+    expect(await tideRows()).toBe(3);
+
+    // When the DB stops tracking Tide, its same-reset rows are stale and cleared.
+    await lockoutRepository.replaceVerifiedCurrentResetLockouts(ids.character, {
+      raidId: VENOMOUS_ABYSS_RAID_ID,
+      resetIdentifier: reset.resetIdentifier,
+      trackedRaidIds: [VENOMOUS_ABYSS_RAID_ID],
+      rows: heroicOnly,
+      verifiedAt,
+    });
+    expect(await tideRows()).toBe(0);
   });
 });

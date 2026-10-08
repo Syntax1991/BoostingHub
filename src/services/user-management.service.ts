@@ -8,8 +8,7 @@ import {
 } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/labels";
-import { defaultRaidBossTotal } from "@/lib/lockout-display";
-import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { ACCOUNT_ROLES, type AccountRole } from "@/models/enums";
 import {
@@ -17,6 +16,7 @@ import {
   type BoosterAccessAdminRecord,
 } from "@/repositories/booster-access.repository";
 import { activityRepository } from "@/repositories/activity.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository, type AdminUserListFilters } from "@/repositories/user.repository";
 import { boosterAccessService } from "@/services/booster-access.service";
 import { lockoutService } from "@/services/lockout.service";
@@ -127,13 +127,14 @@ export const userManagementService = {
     if (!detail) {
       throw new DomainError("USER_NOT_FOUND", "User was not found.", 404);
     }
-    const [strikes, pendingAccess] = await Promise.all([
+    const [strikes, pendingAccess, catalog] = await Promise.all([
       strikeService.listForUser(admin, userId),
       canReviewBoosterAccess(admin.accountRole)
         ? boosterAccessService.listLegacyRequests(admin, { userId }).then((legacy) => legacy.requests)
         : Promise.resolve([] as BoosterAccessAdminRecord[]),
+      raidRepository.loadCatalog(),
     ]);
-    const currentRaids = getCurrentLockoutRaids();
+    const currentRaids = catalog.lockoutRaids;
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const currentLockoutRaids = currentRaids.map((raid) => ({
       id: raid.id,
@@ -157,7 +158,7 @@ export const userManagementService = {
           .map((lockout) => ({
             ...lockout,
             raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
-            bossTotal: defaultRaidBossTotal(lockout.raidId),
+            bossTotal: catalog.bossTotal(lockout.raidId),
             verified: true as const,
           }));
 

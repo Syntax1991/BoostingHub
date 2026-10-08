@@ -1,4 +1,3 @@
-import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 import type {
   WarcraftLogsReportFight,
   WarcraftLogsReportMetadata,
@@ -91,12 +90,6 @@ export type FightAssignment = {
 
 const WCL_DIFFICULTY: Record<RaidDifficulty, number> = { NORMAL: 3, HEROIC: 4, MYTHIC: 5 };
 
-const RAID_ID_BY_WCL_ENCOUNTER = new Map<number, string>(
-  WOW_RAID_CATALOG.flatMap((raid) =>
-    raid.bosses.flatMap((boss) => (boss.warcraftLogsEncounterIds ?? []).map((id) => [id, raid.id] as const)),
-  ),
-);
-
 /** WCL fight times are relative to the report start; BoostingHub times are absolute. */
 export function absoluteWclTime(reportStartMs: number, relativeMs: number): number {
   return reportStartMs + relativeMs;
@@ -122,11 +115,15 @@ function inWindow(window: Window | null, atMs: number): boolean {
 
 type ContentCheck = { ok: boolean; raidContentId: string | null; reason: WclFightReason };
 
-function contentCheck(fight: WarcraftLogsReportFight, run: RunAssignmentCandidate): ContentCheck {
+function contentCheck(
+  fight: WarcraftLogsReportFight,
+  run: RunAssignmentCandidate,
+  raidIdByWclEncounter: ReadonlyMap<number, string>,
+): ContentCheck {
   if (fight.difficulty != null && fight.difficulty !== WCL_DIFFICULTY[run.difficulty]) {
     return { ok: false, raidContentId: null, reason: "DIFFICULTY_MISMATCH" };
   }
-  const raidId = RAID_ID_BY_WCL_ENCOUNTER.get(fight.encounterId);
+  const raidId = raidIdByWclEncounter.get(fight.encounterId);
   if (!raidId) return { ok: true, raidContentId: null, reason: "ENCOUNTER_NOT_IN_CATALOG" };
   const content = run.contents.find((row) => row.raidId === raidId);
   return content
@@ -167,6 +164,8 @@ export function assignReportFights(input: {
   others: RunAssignmentCandidate[];
   /** wclFightId → runId for fights already ASSIGNED to another Run. */
   assignedElsewhere?: ReadonlyMap<number, string>;
+  /** DB catalog WCL encounter id → raid id (`RaidCatalog.raidIdByWclEncounterId`). */
+  raidIdByWclEncounter: ReadonlyMap<number, string>;
   policy?: typeof WCL_FIGHT_ASSIGNMENT_POLICY;
 }): FightAssignment[] {
   const policy = input.policy ?? WCL_FIGHT_ASSIGNMENT_POLICY;
@@ -183,7 +182,7 @@ export function assignReportFights(input: {
     if (fight.encounterId <= 0) continue;
     const startAtMs = absoluteWclTime(report.startTime, fight.startTime);
     const endAtMs = absoluteWclTime(report.startTime, fight.endTime);
-    const content = contentCheck(fight, target);
+    const content = contentCheck(fight, target, input.raidIdByWclEncounter);
     const players = fightPlayerKeys(fight, actorKeyById);
     const targetOverlap = overlap(target, players);
     const base = {
@@ -215,7 +214,7 @@ export function assignReportFights(input: {
     }
 
     const rivals = otherWindows
-      .filter(({ run, window }) => inWindow(window, startAtMs) && contentCheck(fight, run).ok)
+      .filter(({ run, window }) => inWindow(window, startAtMs) && contentCheck(fight, run, input.raidIdByWclEncounter).ok)
       .map(({ run }) => ({ run, overlap: overlap(run, players) }));
     const ownerElsewhere = input.assignedElsewhere?.get(fight.id);
 
