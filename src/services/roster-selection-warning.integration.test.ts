@@ -902,6 +902,9 @@ describe("Update Roster (published)", () => {
     });
 
     // Adding a NEW saved Character through Update needs its acknowledgement…
+    // (publishing already moved this unpicked signup to NOT_SELECTED; the rejected Update must not touch it.)
+    const statusBeforeReject = (await signupRepository.findById(newSavedSignup))?.status;
+    expect(statusBeforeReject).toBe("NOT_SELECTED");
     const rejected = await captureError(
       rosterService.updateRoster(lead, {
         runId,
@@ -912,7 +915,7 @@ describe("Update Roster (published)", () => {
     );
     const pending = pendingWarningsOf(rejected);
     expect(pending.map((row) => row.signupId)).toEqual([newSavedSignup]);
-    expect((await signupRepository.findById(newSavedSignup))?.status).toBe("PENDING");
+    expect((await signupRepository.findById(newSavedSignup))?.status).toBe(statusBeforeReject);
 
     // …and only for the new pick.
     await rosterService.updateRoster(lead, {
@@ -1062,6 +1065,9 @@ describe("post-start participant replacement keeps the cross-Run reservation inv
     expect(originalRow).toBeTruthy();
     expect(attendanceBefore.replacementCandidates.some((row) => row.signupId === benchOnA)).toBe(true);
 
+    // Publishing Run A moved the unpicked bench signup to NOT_SELECTED; a rejected replacement must leave it there.
+    const benchStatusBefore = (await signupRepository.findById(benchOnA))?.status;
+    expect(benchStatusBefore).toBe("NOT_SELECTED");
     const rejected = await captureError(
       attendanceService.replaceParticipant(lead, {
         attendanceId: originalRow.id,
@@ -1071,7 +1077,7 @@ describe("post-start participant replacement keeps the cross-Run reservation inv
     expect(codeOf(rejected)).toBe("CHARACTER_ALREADY_SELECTED_OTHER_RUN");
 
     // The whole replacement rolled back: no double booking, nothing half-applied.
-    expect((await signupRepository.findById(benchOnA))?.status).toBe("PENDING");
+    expect((await signupRepository.findById(benchOnA))?.status).toBe(benchStatusBefore);
     expect((await signupRepository.findById(originalOnA))?.status).toBe("SELECTED");
     const attendanceAfterReject = await attendanceService.getManagerAttendance(lead, runA);
     expect(attendanceAfterReject.rows).toHaveLength(attendanceBefore.rows.length);
