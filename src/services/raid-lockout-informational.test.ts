@@ -9,6 +9,7 @@ import { runRepository } from "@/repositories/run.repository";
 import { signupRepository } from "@/repositories/signup.repository";
 import { lockoutService } from "@/services/lockout.service";
 import { rosterService } from "@/services/roster.service";
+import type { ConfirmedRosterWarning, RosterSelectionRisk } from "@/services/roster-selection-risk";
 import { runService } from "@/services/run.service";
 import { venomousCreateInput } from "@/lib/test-run-input";
 import { signupService } from "@/services/signup.service";
@@ -34,6 +35,15 @@ const createdLockoutIds: string[] = [];
 
 function rosterBoosters<T extends { id: string }>(view: { boosters: T[] }): T[] {
   return view.boosters;
+}
+
+/** The Raid Lead's explicit "Select anyway" for every warning the roster card currently shows. */
+function confirmWarnings(signup: { id: string; selectionRisk: RosterSelectionRisk }): ConfirmedRosterWarning[] {
+  return signup.selectionRisk.warnings.map((warning) => ({
+    signupId: signup.id,
+    type: warning.type,
+    fingerprint: warning.fingerprint,
+  }));
 }
 
 function asUser(id: string, name: string, accountRole: AuthenticatedUser["accountRole"] = "USER"): AuthenticatedUser {
@@ -257,8 +267,21 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     expect(candidate).toBeTruthy();
     expect(candidate?.contentSaves[0]?.raidSave?.bossesDefeated).toBe(8);
     expect(candidate?.issue).toBeNull();
+    // A known save on an UNSAVED Run is a WARNING: selectable, but only with
+    // the Raid Lead's explicit confirmation (never a blocker).
+    expect(candidate?.selectionRisk.level).toBe("WARNING");
+    await expectDomainCode(
+      rosterService.setDraftSelection(lead, { runId: runA, signupId: candidate!.id, selected: true, version: view.roster.version }),
+      "ROSTER_WARNING_CONFIRMATION_REQUIRED",
+    );
 
-    await rosterService.setDraftSelection(lead, { runId: runA, signupId: candidate!.id, selected: true, version: view.roster.version });
+    await rosterService.setDraftSelection(lead, {
+      runId: runA,
+      signupId: candidate!.id,
+      selected: true,
+      version: view.roster.version,
+      confirmedWarnings: confirmWarnings(candidate!),
+    });
 
     const readyToPublish = await rosterService.getRosterManagementView(lead, runA);
     expect(readyToPublish.validation.canPublish).toBe(true);
@@ -287,7 +310,13 @@ describe("raid lockouts are informational — full signup/roster/publish chain",
     await signupService.setCharacterOffers(target, { runId: runA, offers: [{ characterId: saved, offeredRoles: ["RANGED_DPS"] }] });
     const viewA = await rosterService.getRosterManagementView(lead, runA);
     const signupA = rosterBoosters(viewA).find((item) => item.character?.id === saved)!;
-    await rosterService.setDraftSelection(lead, { runId: runA, signupId: signupA.id, selected: true, version: viewA.roster.version });
+    await rosterService.setDraftSelection(lead, {
+      runId: runA,
+      signupId: signupA.id,
+      selected: true,
+      version: viewA.roster.version,
+      confirmedWarnings: confirmWarnings(signupA),
+    });
 
     // Now runB must block on the cross-run reservation reason, not lockout —
     // even though the Character is ALSO saved on runB's exact raid/difficulty/reset.

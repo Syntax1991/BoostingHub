@@ -424,11 +424,19 @@ describe("rosterService publish validation", () => {
 
     let view = await rosterService.getRosterManagementView(thorne, ids.lab);
     if (!rosterBoosters(view).find((item) => item.id === ids.labKaelResto)?.draftSelected) {
+      // A known save on this UNSAVED Run is a WARNING — the pick carries the
+      // Raid Lead's acknowledgement of the warning the roster card shows.
+      const pick = rosterBoosters(view).find((item) => item.id === ids.labKaelResto)!;
       await rosterService.setDraftSelection(thorne, {
         runId: ids.lab,
         signupId: ids.labKaelResto,
         selected: true,
         version: view.roster.version,
+        confirmedWarnings: pick.selectionRisk.warnings.map((warning) => ({
+          signupId: pick.id,
+          type: warning.type,
+          fingerprint: warning.fingerprint,
+        })),
       });
       view = await rosterService.getRosterManagementView(thorne, ids.lab);
     }
