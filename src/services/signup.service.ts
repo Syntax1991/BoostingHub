@@ -3,8 +3,10 @@ import type {
   CharacterRole,
   LootbuddyMode,
   LootbuddyVerification,
+  SignupStatus,
   WowClass,
 } from "@/models/enums";
+import type { RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import { DomainError } from "@/lib/errors";
 import { preferDefaultCharacterId } from "@/lib/default-character-preference";
@@ -1053,7 +1055,14 @@ export const signupService = {
     userId: string;
     characterId: string;
     role: CharacterRole;
-  }): Promise<{ characterName: string; characterRealm: string; existingSignupId: string | null }> {
+  }): Promise<{
+    characterName: string;
+    characterRealm: string;
+    existingSignupId: string | null;
+    existingSignupStatus: SignupStatus | null;
+    /** Per-content lockouts for this Run — input to the shared roster selection risk. */
+    contentSaves: RunContentRaidSaveInfo[];
+  }> {
     const { run } = input;
     const character = await characterRepository.findOwnedById(input.userId, input.characterId);
     if (!character) {
@@ -1080,7 +1089,13 @@ export const signupService = {
         `${character.name} was withdrawn from this run. The player needs to sign up again.`,
       );
     }
-    return { characterName: character.name, characterRealm: character.realm, existingSignupId: existing?.id ?? null };
+    return {
+      characterName: character.name,
+      characterRealm: character.realm,
+      existingSignupId: existing?.id ?? null,
+      existingSignupStatus: existing?.status ?? null,
+      contentSaves: option.contentSaves,
+    };
   },
 };
 

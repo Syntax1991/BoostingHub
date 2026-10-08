@@ -16,7 +16,6 @@ import { rosterRepository, type RosterSignupRow } from "@/repositories/roster.re
 import { runRepository } from "@/repositories/run.repository";
 import { getScheduleConflictsForCharacters } from "@/services/character-schedule-conflict.service";
 import { resolveRosterWclPerformance } from "@/services/character-wcl-performance.service";
-import { lockoutService } from "@/services/lockout.service";
 import {
   optimizeRosterProposal,
   type RosterBuilderCandidateInput,
@@ -25,7 +24,14 @@ import {
   type RosterBuilderProposedPick,
 } from "@/services/roster-builder-optimizer";
 import { isApprovedBooster } from "@/services/boosting-role.service";
-import { rosterService } from "@/services/roster.service";
+import { projectRosterSignupContentSaves, rosterService } from "@/services/roster.service";
+import {
+  classifyRosterSelectionRisk,
+  lockoutAttentionWarning,
+  type ConfirmedRosterWarning,
+  formatWarningContentProgress,
+  type RosterSelectionWarning,
+} from "@/services/roster-selection-risk";
 import { isActiveSignupOffer } from "@/services/signup-state";
 
 const EDITABLE_RUN_STATUSES: readonly RunStatus[] = ["OPEN", "ROSTERING", "PUBLISHED"];
@@ -53,8 +59,22 @@ export type RosterBuilderResult = {
   unselected: RosterBuilderOptimizeResult["unselected"];
   buffCoverage: RosterBuilderOptimizeResult["buffCoverage"];
   missingAfterProposal: RunStaffingShortage;
-  warnings: Array<{ signupId: string; message: string }>;
+  /**
+   * NEW picks that need the Raid Lead's confirmation before Apply — one entry
+   * per signup, each with per-RunRaidContent details from the shared roster
+   * selection risk. Existing (locked) selections never appear here.
+   */
+  warnings: RosterBuilderWarning[];
   observability: RosterBuilderOptimizeResult["observability"];
+};
+
+export type RosterBuilderWarning = {
+  signupId: string;
+  characterId: string;
+  /** e.g. "Synmist-Antonidas". */
+  characterLabel: string;
+  message: string;
+  warning: RosterSelectionWarning;
 };
 
 function mapAccountStatus(value: unknown): "ACTIVE" | "DISABLED" {
@@ -72,23 +92,17 @@ async function loadAccountStatusByUserIds(userIds: string[]): Promise<Map<string
   );
 }
 
-function lockoutAttentionFor(
-  character: NonNullable<RosterSignupRow["character"]>,
-  run: {
-    difficulty: import("@/models/enums").RaidDifficulty;
-    scheduledStartAt: string;
-    contents: Array<{ raidId: string; totalBossCount: number }>;
-  },
-): boolean {
-  for (const content of run.contents) {
-    const lockout = lockoutService.findExactLockout(character.lockouts, {
-      raidId: content.raidId,
-      difficulty: run.difficulty,
-      resetIdentifier: lockoutService.getResetIdentifierForRun(character.region, run.scheduledStartAt),
-    });
-    if (lockout && (lockout.isComplete || lockout.bossesDefeated > 0)) return true;
-  }
-  return false;
+/**
+ * Lockout warning for a signup's Character on this Run, from the shared roster
+ * selection risk (same per-content projection + loot-type semantics as the
+ * roster cards). Null = nothing to confirm (unsaved, unknown, or a SAVED Run).
+ */
+function lockoutWarningFor(
+  signup: RosterSignupRow,
+  run: Parameters<typeof projectRosterSignupContentSaves>[1],
+): RosterSelectionWarning | null {
+  if (signup.participationType !== "BOOSTER" || !signup.character) return null;
+  return lockoutAttentionWarning(projectRosterSignupContentSaves(signup, run));
 }
 
 function wclPctForRoles(
@@ -214,7 +228,7 @@ export const rosterBuilderService = {
         buffs: [],
       } as RosterBuilderOptimizeResult["buffCoverage"],
       missingAfterProposal: shortages,
-      warnings: [] as Array<{ signupId: string; message: string }>,
+      warnings: [] as RosterBuilderWarning[],
       observability: {
         candidateCount: 0,
         selectedCount: 0,
@@ -254,9 +268,7 @@ export const rosterBuilderService = {
         characterName: row.signup.character?.name ?? null,
         itemLevel: row.signup.character?.itemLevel ?? null,
         wclPct: null,
-        lockoutAttention: row.signup.character
-          ? lockoutAttentionFor(row.signup.character, run)
-          : false,
+        lockoutAttention: lockoutWarningFor(row.signup, run) != null,
         utilitiesProvided: [],
         reasons: ["locked_existing"],
         reasonLabels: ["Already selected"],
@@ -340,14 +352,13 @@ export const rosterBuilderService = {
         characterName: row.signup.character?.name ?? null,
         itemLevel: row.signup.character?.itemLevel ?? null,
         wclPct,
-        lockoutAttention: row.signup.character
-          ? lockoutAttentionFor(row.signup.character, run)
-          : false,
+        lockoutAttention: lockoutWarningFor(row.signup, run) != null,
         lootbuddyMode: row.signup.lootbuddyMode,
       };
     });
 
     const candidates: RosterBuilderCandidateInput[] = [];
+    const warningBySignupId = new Map<string, RosterBuilderWarning>();
     for (const signup of signups) {
       if (lockedSignupIds.has(signup.id)) continue;
       // WITHDRAWN never; NOT_SELECTED remains re-selectable (same as roster management).
@@ -377,8 +388,26 @@ export const rosterBuilderService = {
       if (!isApprovedBooster({ isBooster: signup.character.ownerIsBooster })) continue;
       if (signup.offeredRoles.length === 0) continue;
 
-      const conflicts = scheduleConflictsByCharacter.get(signup.character.id) ?? [];
-      if (conflicts.length > 0) continue;
+      // Shared CLEAN / WARNING / BLOCKED: BLOCKED (cross-Run reservation, weekly
+      // unavailability) is never proposed; WARNING stays a normal candidate —
+      // it is not scored down — and is confirmed once, in aggregate, on Apply.
+      const risk = classifyRosterSelectionRisk({
+        scheduleConflicts: scheduleConflictsByCharacter.get(signup.character.id) ?? [],
+        contentSaves: projectRosterSignupContentSaves(signup, run),
+      });
+      if (risk.level === "BLOCKED") continue;
+      const lockoutWarning = risk.warnings.find((row) => row.type === "LOCKOUT_ATTENTION") ?? null;
+      if (lockoutWarning) {
+        warningBySignupId.set(signup.id, {
+          signupId: signup.id,
+          characterId: signup.character.id,
+          characterLabel: `${signup.character.name}-${signup.character.realm}`,
+          message: `${signup.character.name}-${signup.character.realm} has lockout progress: ${lockoutWarning.contents
+            .map((content) => `${content.raidName} ${formatWarningContentProgress(content)}`)
+            .join(", ")}.`,
+          warning: lockoutWarning,
+        });
+      }
 
       const assignableRoles = resolveSignupAssignableRoles({
         offeredRoles: signup.offeredRoles,
@@ -400,7 +429,7 @@ export const rosterBuilderService = {
         characterName: signup.character.name,
         itemLevel: signup.character.itemLevel,
         wclByRole: wclPctForRoles(segments, assignableRoles),
-        lockoutAttention: lockoutAttentionFor(signup.character, run),
+        lockoutAttention: lockoutWarning != null,
         lootbuddyMode: null,
       });
     }
@@ -428,12 +457,9 @@ export const rosterBuilderService = {
       selectedRole: row.selectedRole,
     }));
 
-    const warnings = optimized.proposed
-      .filter((row) => row.lockoutAttention)
-      .map((row) => ({
-        signupId: row.signupId,
-        message: `${row.characterName ?? row.userName} has lockout progress on this Run's contents.`,
-      }));
+    const warnings = newlyProposed
+      .map((row) => warningBySignupId.get(row.signupId))
+      .filter((row): row is RosterBuilderWarning => row != null);
 
     return {
       ...emptyBase,
@@ -451,7 +477,8 @@ export const rosterBuilderService = {
   /**
    * Apply a previously generated proposal.
    * Re-proposes server-side and requires the new-pick set to match (stale guard),
-   * then persists via saveDraftSelection (existing locked + new).
+   * then persists via saveDraftSelection (existing locked + new), which
+   * validates warning acknowledgements for the new picks.
    */
   async applyRosterProposal(
     user: AuthenticatedUser,
@@ -459,6 +486,8 @@ export const rosterBuilderService = {
       runId: string;
       expectedVersion: number;
       selections: Array<{ signupId: string; selectedRole: CharacterRole | null }>;
+      /** The ONE aggregate acknowledgement for every proposed pick with a warning. */
+      confirmedWarnings?: ConfirmedRosterWarning[];
     },
   ): Promise<RosterBuilderResult> {
     const fresh = await this.proposeRoster(user, input.runId);
@@ -496,6 +525,11 @@ export const rosterBuilderService = {
       runId: input.runId,
       version: input.expectedVersion,
       selections: fresh.fullSelections,
+      // saveDraftSelection recomputes each NEW pick's current risk: a hard
+      // conflict rejects regardless, a new/changed warning needs a matching
+      // acknowledgement, and the repository's locked reservation re-read
+      // (PR #218) remains the final authority.
+      confirmedWarnings: input.confirmedWarnings,
     });
 
     return this.proposeRoster(user, input.runId);

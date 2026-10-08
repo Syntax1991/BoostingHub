@@ -1,3 +1,4 @@
+import type { PendingRosterSelectionWarning } from "@/services/roster-selection-risk";
 export const DOMAIN_ERROR_CODES = [
   "NOT_AUTHENTICATED",
   "NOT_AUTHORIZED",
@@ -35,6 +36,7 @@ export const DOMAIN_ERROR_CODES = [
   "INVALID_ROSTER_SELECTION",
   "ROSTER_VALIDATION_FAILED",
   "ROSTER_ALREADY_CHANGED",
+  "ROSTER_WARNING_CONFIRMATION_REQUIRED",
   "BOOSTER_ACCESS_INVALID",
   "BOOSTER_ACCESS_NOT_FOUND",
   "BOOSTER_ACCESS_ALREADY_PENDING",
@@ -164,6 +166,22 @@ export class DomainError extends Error {
     this.name = "DomainError";
     this.code = code;
     this.status = status;
+  }
+}
+
+/**
+ * A NEW roster selection carries a warning (e.g. lockout progress) the Raid
+ * Lead has not acknowledged for its current state. Carries the current
+ * warnings so the UI can (re-)prompt; nothing was written. Never used for
+ * hard conflicts — those stay plain DomainErrors and cannot be acknowledged.
+ */
+export class RosterWarningConfirmationRequiredError extends DomainError {
+  readonly pendingWarnings: PendingRosterSelectionWarning[];
+
+  constructor(message: string, pendingWarnings: PendingRosterSelectionWarning[]) {
+    super("ROSTER_WARNING_CONFIRMATION_REQUIRED", message);
+    this.name = "RosterWarningConfirmationRequiredError";
+    this.pendingWarnings = pendingWarnings;
   }
 }
 
