@@ -278,8 +278,13 @@ async function assertRunPreStartInTx(txOrm: TxOrm, runId: string): Promise<void>
  * reservations, reject if any Character is already draft-selected or SELECTED
  * on an overlapping Run. Must run inside the same transaction as the selection
  * write — never trust a pre-tx conflict check alone.
+ *
+ * Exported so the post-start participant replacement
+ * (attendance.repository.replaceParticipantAtomic) enforces the SAME invariant
+ * with the same lock namespace/order and the same conflict query — never a
+ * second implementation.
  */
-async function assertCharactersFreeForReservationInTx(
+export async function assertCharactersFreeForReservationInTx(
   tx: ReservationLockTx,
   txOrm: TxOrm,
   input: {
