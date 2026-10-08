@@ -1,6 +1,34 @@
 import type { RunListRecord } from "@/repositories/run.repository";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import {
+  MIDNIGHT_S2_BUNDLE_PRODUCT_ID,
+  MIDNIGHT_S2_BUNDLE_VENOMOUS_CONTENT_ID,
+  VENOMOUS_ABYSS_PRODUCT_CONTENT_ID,
+  VENOMOUS_ABYSS_PRODUCT_ID,
+} from "@/lib/product-catalog";
 import type { CreateRunInput, UpdateRunInput } from "@/validators/run";
+
+/** Seeded product keys used by integration fixtures (test-only convenience — never a runtime allowlist). */
+export type SeededProductKey = "VENOMOUS_ABYSS" | "MIDNIGHT_S2_BUNDLE";
+
+/**
+ * Product selection payload for a seeded product: `productId` + the Venomous
+ * VARIABLE count keyed by that product's content id (Tide stays server-forced).
+ */
+export function seededProductSelection(
+  key: SeededProductKey,
+  venomousPlannedBossCount = 8,
+): { productId: string; contentBossCounts: Record<string, number> } {
+  return key === "VENOMOUS_ABYSS"
+    ? {
+        productId: VENOMOUS_ABYSS_PRODUCT_ID,
+        contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: venomousPlannedBossCount },
+      }
+    : {
+        productId: MIDNIGHT_S2_BUNDLE_PRODUCT_ID,
+        contentBossCounts: { [MIDNIGHT_S2_BUNDLE_VENOMOUS_CONTENT_ID]: venomousPlannedBossCount },
+      };
+}
 
 export function futureTestIso(days = 7) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
@@ -10,14 +38,13 @@ export function futureTestIso(days = 7) {
 export function venomousCreateInput(
   overrides: Partial<CreateRunInput> & Record<string, unknown> = {},
 ): CreateRunInput {
-  const { plannedBossCount, ...rest } = overrides;
+  const { plannedBossCount, venomousPlannedBossCount: venomousOverride, ...rest } = overrides as typeof overrides & {
+    venomousPlannedBossCount?: number;
+  };
   const venomousPlannedBossCount =
-    typeof plannedBossCount === "number"
-      ? plannedBossCount
-      : ((rest as { venomousPlannedBossCount?: number }).venomousPlannedBossCount ?? 8);
+    typeof plannedBossCount === "number" ? plannedBossCount : (venomousOverride ?? 8);
   return {
-    contentPreset: "VENOMOUS_ABYSS",
-    venomousPlannedBossCount,
+    ...seededProductSelection("VENOMOUS_ABYSS", venomousPlannedBossCount),
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     scheduledStartAt: futureTestIso(),
@@ -28,22 +55,23 @@ export function venomousCreateInput(
   } as CreateRunInput;
 }
 
-/** Update payload preserving current Venomous content via contentPreset. */
+/** Update payload re-selecting the seeded Venomous product (keeps or changes its boss count). */
 export function venomousUpdateInput(
   runId: string,
   run: RunListRecord,
   overrides: Partial<UpdateRunInput> & Record<string, unknown> = {},
 ): UpdateRunInput {
   const venomousRow = run.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID);
-  const { plannedBossCount, ...rest } = overrides;
+  const { plannedBossCount, venomousPlannedBossCount: venomousOverride, ...rest } = overrides as typeof overrides & {
+    venomousPlannedBossCount?: number;
+  };
   const venomousPlannedBossCount =
     typeof plannedBossCount === "number"
       ? plannedBossCount
-      : (venomousRow?.plannedBossCount ?? 8);
+      : (venomousOverride ?? venomousRow?.plannedBossCount ?? 8);
   return {
     runId,
-    contentPreset: "VENOMOUS_ABYSS",
-    venomousPlannedBossCount,
+    ...seededProductSelection("VENOMOUS_ABYSS", venomousPlannedBossCount),
     difficulty: run.difficulty,
     lootType: run.lootType,
     scheduledStartAt: run.scheduledStartAt,

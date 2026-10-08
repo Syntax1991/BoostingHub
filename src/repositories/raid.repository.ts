@@ -9,7 +9,7 @@ import {
   type CatalogRaid,
   type RaidCatalog,
 } from "@/lib/raid-catalog";
-import { isSelectableForRunSetup, WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
+import { WOW_RAID_CATALOG } from "@/lib/wow-raid-catalog";
 
 export type RaidRecord = {
   id: string;
@@ -180,18 +180,6 @@ export const raidRepository = {
     return rows
       .map((row) => mapRaid(row as Record<string, unknown>))
       .filter((raid) => raid.availableForRuns);
-  },
-
-  /**
-   * Raids selectable for Run Setup / RunTemplate create+edit (Schedule + Templates).
-   * Includes Tide even when `availableForRuns` is false; excludes historical raids
-   * that are not on the Run Setup allowlist.
-   */
-  async listSelectableRunSetupRaids(): Promise<RaidRecord[]> {
-    const rows = await orm.Raid.include("bosses").orderBy((raid) => raid.name.asc()).all();
-    return rows
-      .map((row) => mapRaid(row as Record<string, unknown>))
-      .filter((raid) => raid.availableForRuns || isSelectableForRunSetup(raid.id));
   },
 
   /** Every raid, including historical ones — used for existing-Run reads, never for new-Run selection. */

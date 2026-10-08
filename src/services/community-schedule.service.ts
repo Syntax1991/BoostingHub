@@ -24,6 +24,12 @@ import {
 } from "@/lib/run-staffing";
 import { classifyRunWeek } from "@/lib/wow-run-week";
 import { DomainError } from "@/lib/errors";
+import {
+  matchProductForContents,
+  type ContentBossCounts,
+  type PlanningProduct,
+} from "@/lib/product-selection";
+import { isSelectableProduct, productPlanningService } from "@/services/product-planning.service";
 import { getDiscordManagementScheduleRoleId } from "@/lib/discord-config";
 import { DIFFICULTY_ABBREVIATIONS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import {
@@ -31,13 +37,6 @@ import {
   formatScheduleShareRunDescription,
   type FormatCommunityScheduleShareResult,
 } from "@/lib/community-schedule-share";
-import {
-  classifyRunContents,
-  listCreateRunContentPresets,
-  venomousBossMaxFromCatalog,
-  type RunContentPresetKey,
-} from "@/lib/run-content-presets";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { db, orm } from "@/lib/prisma";
 import {
   COMMUNITY_WEEKDAYS,
@@ -147,8 +146,9 @@ export type CommunityScheduleTemplateOption = {
   unusableReason: string | null;
   /** Authoritative RunTemplate fields for in-schedule Edit Run Setup. */
   name: string;
-  contentPreset: RunContentPresetKey;
-  venomousPlannedBossCount: number;
+  /** The active Product these contents match (edit preselection); null when none matches. */
+  productId: string | null;
+  contentBossCounts: ContentBossCounts;
   productLabel: string;
   titleCoverage: string;
   difficulty: RaidDifficulty;
@@ -207,15 +207,10 @@ export type CommunityScheduleRunSetupInventoryItem = {
   usable: boolean;
   unusableReason: string | null;
   slotCount: number;
-  contentPreset: RunContentPresetKey;
-  venomousPlannedBossCount: number;
+  productId: string | null;
+  contentBossCounts: ContentBossCounts;
   canEdit: boolean;
   canDelete: boolean;
-};
-
-export type CommunityScheduleContentPresetOption = {
-  key: RunContentPresetKey;
-  displayName: string;
 };
 
 export type CommunitySchedulePage = {
@@ -230,8 +225,8 @@ export type CommunitySchedulePage = {
   runSetupInventory: CommunityScheduleRunSetupInventoryItem[];
   eligibleRaidLeads: Array<{ id: string; name: string }>;
   templates: CommunityScheduleTemplateOption[];
-  contentPresets: CommunityScheduleContentPresetOption[];
-  venomousBossMax: number;
+  /** Run Setup product selector: active + selectable Products (DB authority). */
+  products: PlanningProduct[];
   share: FormatCommunityScheduleShareResult;
 };
 
@@ -323,9 +318,12 @@ function templateLabel(template: RunTemplateRecord): string {
   return `${template.name} · ${DIFFICULTY_ABBREVIATIONS[template.difficulty]} ${RUN_LOOT_TYPE_LABELS[template.lootType]} ${coverage.titleCoverage} · ${display.productLabel}`;
 }
 
-function templateProductFields(template: RunTemplateRecord): {
-  contentPreset: RunContentPresetKey;
-  venomousPlannedBossCount: number;
+function templateProductFields(
+  template: RunTemplateRecord,
+  activeProducts: readonly PlanningProduct[],
+): {
+  productId: string | null;
+  contentBossCounts: ContentBossCounts;
   productLabel: string;
   titleCoverage: string;
 } {
@@ -340,16 +338,12 @@ function templateProductFields(template: RunTemplateRecord): {
             totalBossCount: template.totalBossCount,
           },
         ];
-  const productKey = classifyRunContents(contentRows);
   const coverage = templateCoverage(template);
   const display = templateContentDisplay(template);
-  const venomousRow = contentRows.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? contentRows[0];
+  const selection = matchProductForContents(activeProducts, contentRows);
   return {
-    contentPreset: productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS",
-    venomousPlannedBossCount: Math.min(
-      8,
-      Math.max(1, venomousRow?.plannedBossCount ?? template.plannedBossCount),
-    ),
+    productId: selection?.productId ?? null,
+    contentBossCounts: selection?.contentBossCounts ?? {},
     productLabel: display.productLabel,
     titleCoverage: coverage.titleCoverage,
   };
@@ -377,7 +371,7 @@ async function validateTemplateLink(input: {
       400,
     );
   }
-  const usability = computeUsability(template);
+  const usability = computeUsability(template, await productPlanningService.listActive());
   if (input.autoCreateRun && !usability.usable) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",
@@ -534,6 +528,7 @@ function buildRunSetupInventory(
   templates: RunTemplateRecord[],
   slots: CommunityScheduleSlotRecord[],
   canEdit: boolean,
+  activeProducts: readonly PlanningProduct[],
 ): CommunityScheduleRunSetupInventoryItem[] {
   const slotCountByTemplate = new Map<string, number>();
   for (const slot of slots) {
@@ -545,8 +540,8 @@ function buildRunSetupInventory(
   }
 
   const items = templates.map((template) => {
-    const usability = computeUsability(template);
-    const product = templateProductFields(template);
+    const usability = computeUsability(template, activeProducts);
+    const product = templateProductFields(template, activeProducts);
     return {
       id: template.id,
       name: template.name,
@@ -563,8 +558,8 @@ function buildRunSetupInventory(
       usable: usability.usable,
       unusableReason: usability.unusableReason,
       slotCount: slotCountByTemplate.get(template.id) ?? 0,
-      contentPreset: product.contentPreset,
-      venomousPlannedBossCount: product.venomousPlannedBossCount,
+      productId: product.productId,
+      contentBossCounts: product.contentBossCounts,
       canEdit,
       canDelete: canEdit,
     };
@@ -738,21 +733,27 @@ function projectWindow(
 async function listTemplateOptions(_user: AuthenticatedUser): Promise<{
   options: CommunityScheduleTemplateOption[];
   recordsById: Map<string, RunTemplateRecord>;
+  products: PlanningProduct[];
 }> {
-  const templates = await runTemplateRepository.listAll();
+  // Templates + the product catalog: two bounded queries, no per-template lookups.
+  const [templates, products] = await Promise.all([
+    runTemplateRepository.listAll(),
+    productPlanningService.listAll(),
+  ]);
+  const activeProducts = products.filter((product) => product.active);
 
   const recordsById = new Map(templates.map((template) => [template.id, template]));
   const options = templates.map((template) => {
-    const usability = computeUsability(template);
-    const product = templateProductFields(template);
+    const usability = computeUsability(template, activeProducts);
+    const product = templateProductFields(template, activeProducts);
     return {
       id: template.id,
       label: templateLabel(template),
       usable: usability.usable,
       unusableReason: usability.unusableReason,
       name: template.name,
-      contentPreset: product.contentPreset,
-      venomousPlannedBossCount: product.venomousPlannedBossCount,
+      productId: product.productId,
+      contentBossCounts: product.contentBossCounts,
       productLabel: product.productLabel,
       titleCoverage: product.titleCoverage,
       difficulty: template.difficulty,
@@ -764,7 +765,7 @@ async function listTemplateOptions(_user: AuthenticatedUser): Promise<{
       notes: template.notes,
     };
   });
-  return { options, recordsById };
+  return { options, recordsById, products };
 }
 
 function resolveTxOrm(tx: { orm: unknown }): TxOrm {
@@ -897,7 +898,8 @@ export const communityScheduleService = {
       await raidRepository.ensureReferenceRaids();
     }
 
-    const { options: templates, recordsById: templatesById } = templateBundle;
+    const { options: templates, recordsById: templatesById, products } = templateBundle;
+    const activeProducts = products.filter((product) => product.active);
 
     const templateMetaById = new Map<
       string,
@@ -933,11 +935,10 @@ export const communityScheduleService = {
       next,
       slots: visibleSlots,
       runSetups: groupRunSetups(visibleSlots, canEdit, templatesById),
-      runSetupInventory: buildRunSetupInventory(allTemplates, visibleSlots, canEdit),
+      runSetupInventory: buildRunSetupInventory(allTemplates, visibleSlots, canEdit, activeProducts),
       eligibleRaidLeads: eligibleRaidLeads.map((lead) => ({ id: lead.id, name: lead.name })),
       templates: canEdit ? templates : templates.filter((row) => row.usable),
-      contentPresets: listCreateRunContentPresets(),
-      venomousBossMax: venomousBossMaxFromCatalog(),
+      products: products.filter(isSelectableProduct),
       share: buildShareFromSlots(visibleSlots, templatesById),
     };
   },

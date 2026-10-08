@@ -3,7 +3,7 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError, RosterWarningConfirmationRequiredError } from "@/lib/errors";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { venomousCreateInput, seededProductSelection } from "@/lib/test-run-input";
 import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import type { CharacterRole, WowClass } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
@@ -534,7 +534,7 @@ describe("manual roster selection (Save Roster)", () => {
   });
 
   it("Bundle Run: each saved RunRaidContent is reported separately (Tidebound 1/1 + Venomous 6/8, never 7/9)", async () => {
-    const runId = await createOpenRun(lead, nextRaidWeekStart(), { contentPreset: "MIDNIGHT_S2_BUNDLE" });
+    const runId = await createOpenRun(lead, nextRaidWeekStart(), { ...seededProductSelection("MIDNIGHT_S2_BUNDLE"), });
     const run = await runRepository.findById(runId);
     expect(run!.contents.map((content) => content.raidId).sort()).toEqual(
       [TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID].sort(),

@@ -10,15 +10,22 @@ import { DomainError } from "@/lib/errors";
 import { resolveEffectiveRunComposition } from "@/lib/run-composition";
 import { buildRunTitle } from "@/lib/run-title";
 import {
-  classifyRunContents,
-  expandRunContentPreset,
-  listCreateRunContentPresets,
   projectRunContentCoverage,
   projectRunContentDisplay,
   type ExpandedRunContent,
-  type RunContentPresetKey,
 } from "@/lib/run-content-presets";
-import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+import {
+  defaultContentBossCounts,
+  matchProductForContents,
+  type ContentBossCounts,
+  type PlanningProduct,
+} from "@/lib/product-selection";
+import {
+  expandSelectionOrThrow,
+  isSelectableProduct,
+  productPlanningService,
+  requireSelectableProduct,
+} from "@/services/product-planning.service";
 import { UPCOMING_RUN_STATUSES, type RaidDifficulty, type RunLootType, type RunStatus } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { attendanceRepository } from "@/repositories/attendance.repository";
@@ -80,11 +87,17 @@ function assertNewRunSchedule(iso: string): void {
 }
 
 /**
- * Resolve every Raid referenced by expanded contents. Tidebound may be
- * selected as a fixed Bundle companion even when availableForRuns=false;
- * every other raid must be available for new product selection.
+ * Resolve every Raid referenced by contents and validate planned counts.
+ *
+ * Raid availability (legacy `Raid.isActive`) only gates the legacy
+ * single-raid shape. Product contents are authorized by the Product itself
+ * (active + selectable), so bundle-only raids need no special case; Run
+ * Setup contents were authorized when the setup was saved.
  */
-async function resolveRaidsForContents(contents: ExpandedRunContent[]): Promise<Map<string, RaidRecord>> {
+async function resolveRaidsForContents(
+  contents: ExpandedRunContent[],
+  options: { requireRaidAvailability: boolean },
+): Promise<Map<string, RaidRecord>> {
   const raidIds = [...new Set(contents.map((row) => row.raidId))];
   const raids = await raidRepository.listByIds(raidIds);
   const byId = new Map(raids.map((raid) => [raid.id, raid]));
@@ -94,7 +107,7 @@ async function resolveRaidsForContents(contents: ExpandedRunContent[]): Promise<
     if (!raid) {
       throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
     }
-    if (!raid.availableForRuns && content.raidId !== TIDEBOUND_GROTTO_RAID_ID) {
+    if (options.requireRaidAvailability && !raid.availableForRuns) {
       throw new DomainError(
         "RAID_NOT_AVAILABLE_FOR_RUNS",
         "This raid is no longer available for new runs.",
@@ -104,24 +117,6 @@ async function resolveRaidsForContents(contents: ExpandedRunContent[]): Promise<
   }
 
   return byId;
-}
-
-function expandPresetOrThrow(input: {
-  contentPreset: RunContentPresetKey;
-  venomousPlannedBossCount: number;
-}): ExpandedRunContent[] {
-  try {
-    return expandRunContentPreset({
-      preset: input.contentPreset,
-      venomousPlannedBossCount: input.venomousPlannedBossCount,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid run content preset.";
-    if (message.toLowerCase().includes("planned boss count")) {
-      throw new DomainError("RUN_BOSS_COUNT_INVALID", message);
-    }
-    throw new DomainError("VALIDATION_FAILED", message);
-  }
 }
 
 async function requireEligibleRaidLead(raidLeadId: string) {
@@ -158,9 +153,10 @@ function resolveRequestedRaidLeadId(user: AuthenticatedUser, requestedRaidLeadId
  * `defaults + row.overrides` merged by `mergeMassCreateRow` below.
  */
 type EffectiveRunInput = {
-  contentPreset?: RunContentPresetKey;
-  venomousPlannedBossCount?: number;
-  /** Legacy singular create — expanded to one content row when preset absent. */
+  /** Product selection (any active + selectable Product). */
+  productId?: string;
+  contentBossCounts?: ContentBossCounts;
+  /** Legacy singular create — expanded to one content row when no product is chosen. */
   raidId?: string;
   plannedBossCount?: number;
   difficulty: RaidDifficulty;
@@ -179,23 +175,41 @@ type EffectiveRunInput = {
 
 type PreparedRunDraft = RunCreateWithContentsInput;
 
-function expandEffectiveContents(input: EffectiveRunInput): ExpandedRunContent[] {
-  if (input.contentPreset) {
-    return expandPresetOrThrow({
-      contentPreset: input.contentPreset,
-      venomousPlannedBossCount: input.venomousPlannedBossCount ?? 8,
-    });
+/**
+ * Expand one Run's content: a Product selection resolves its ordered
+ * ProductRaidContent rows from the DB catalog (counts validated, FIXED
+ * forced); the legacy shape yields one row. `viaProduct` decides whether
+ * raid availability applies.
+ */
+function expandEffectiveContents(
+  input: EffectiveRunInput,
+  products: readonly PlanningProduct[],
+): { contents: ExpandedRunContent[]; viaProduct: boolean } {
+  if (input.productId) {
+    const product = requireSelectableProduct(products, input.productId);
+    return { contents: expandSelectionOrThrow(product, input.contentBossCounts ?? {}), viaProduct: true };
   }
   if (!input.raidId || input.plannedBossCount == null) {
     throw new DomainError("VALIDATION_FAILED", "Choose a supported run product.");
   }
-  return [
-    {
-      raidId: input.raidId,
-      sortOrder: 1,
-      plannedBossCount: input.plannedBossCount,
-    },
-  ];
+  return {
+    contents: [{ raidId: input.raidId, sortOrder: 1, plannedBossCount: input.plannedBossCount }],
+    viaProduct: false,
+  };
+}
+
+/** Selector options for every product-driven planning form: active + selectable products. */
+function toProductOptions(products: readonly PlanningProduct[]): PlanningProduct[] {
+  return products.filter(isSelectableProduct);
+}
+
+/** Initial product selection for a form: the first selectable product with its default counts. */
+function defaultProductSelection(products: readonly PlanningProduct[]) {
+  const first = products.find(isSelectableProduct);
+  return {
+    productId: first?.id ?? "",
+    contentBossCounts: first ? defaultContentBossCounts(first) : {},
+  };
 }
 
 /**
@@ -277,19 +291,23 @@ function mergeMassCreateRow(defaults: MassCreateDefaults, row: MassCreateRunRow)
   const overrides = (row.overrides ?? {}) as Record<string, unknown>;
   const base = defaults as Record<string, unknown>;
 
-  const contentPreset =
-    (overrides.contentPreset as RunContentPresetKey | undefined) ??
-    (base.contentPreset as RunContentPresetKey | undefined);
-  const venomousPlannedBossCount =
-    (overrides.venomousPlannedBossCount as number | undefined) ??
-    (base.venomousPlannedBossCount as number | undefined);
+  const baseProductId = base.productId as string | undefined;
+  const overrideProductId = overrides.productId as string | undefined;
+  const productId = overrideProductId ?? baseProductId;
+  // Counts belong to one product's content ids: shared counts only apply while
+  // the row keeps the shared product.
+  const contentBossCounts =
+    (overrides.contentBossCounts as ContentBossCounts | undefined) ??
+    (overrideProductId && overrideProductId !== baseProductId
+      ? undefined
+      : (base.contentBossCounts as ContentBossCounts | undefined));
   const raidId = (overrides.raidId as string | undefined) ?? (base.raidId as string | undefined);
   const plannedBossCount =
     (overrides.plannedBossCount as number | undefined) ?? (base.plannedBossCount as number | undefined);
 
   return {
-    contentPreset,
-    venomousPlannedBossCount,
+    productId,
+    contentBossCounts,
     raidId,
     plannedBossCount,
     difficulty: (overrides.difficulty as RaidDifficulty | undefined) ?? (base.difficulty as RaidDifficulty),
@@ -477,7 +495,7 @@ export const runService = {
   async getCreateForm(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const contentPresets = listCreateRunContentPresets();
+    const products = toProductOptions(await productPlanningService.listAll());
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
       : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
@@ -490,12 +508,10 @@ export const runService = {
       canAssignRaidLead: hasAdminAccess(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
       defaultRaidLeadName: user.name,
-      contentPresets,
-      venomousBossMax: 8,
+      products,
       raidLeads,
       defaults: {
-        contentPreset: "VENOMOUS_ABYSS" as RunContentPresetKey,
-        venomousPlannedBossCount: 8,
+        ...defaultProductSelection(products),
         difficulty: "HEROIC" as RaidDifficulty,
         // Never SAVED or VIP — UNSAVED is the only loot type valid for every
         // difficulty (including MYTHIC), so it can never need a client-side
@@ -515,8 +531,9 @@ export const runService = {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
     const effective: EffectiveRunInput = { ...input };
-    const contents = expandEffectiveContents(effective);
-    const raidById = await resolveRaidsForContents(contents);
+    const products = effective.productId ? await productPlanningService.listAll() : [];
+    const { contents, viaProduct } = expandEffectiveContents(effective, products);
+    const raidById = await resolveRaidsForContents(contents, { requireRaidAvailability: !viaProduct });
     const raidLeadId = resolveRequestedRaidLeadId(user, input.raidLeadId);
     const raidLead = await requireEligibleRaidLead(raidLeadId);
 
@@ -591,7 +608,7 @@ export const runService = {
       desiredLootbuddyCount: composition.desiredLootbuddyCount,
       discordRolePing: true,
     };
-    const raidById = await resolveRaidsForContents(contents);
+    const raidById = await resolveRaidsForContents(contents, { requireRaidAvailability: false });
     const raidLead = await requireEligibleRaidLead(input.raidLeadId);
     return prepareRunDraft(effective, {
       contents,
@@ -683,7 +700,7 @@ export const runService = {
   async getCreateManyForm(user: AuthenticatedUser) {
     requireManagerRole(user);
     await raidRepository.ensureReferenceRaids();
-    const contentPresets = listCreateRunContentPresets();
+    const products = toProductOptions(await productPlanningService.listAll());
     const raidLeads = hasAdminAccess(user.accountRole)
       ? await userRepository.listEligibleRaidLeads()
       : [{ id: user.id, name: user.name, accountRole: user.accountRole }];
@@ -704,18 +721,13 @@ export const runService = {
                 totalBossCount: template.totalBossCount,
               },
             ];
-      const productKey = classifyRunContents(contentRows);
       const coverage = projectRunContentCoverage(contentRows);
-      const venomousRow = contentRows.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? contentRows[0];
-      const contentPreset: RunContentPresetKey =
-        productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS";
+      // Applying a template preselects its product while that product is still selectable.
+      const selection = matchProductForContents(products, contentRows);
       return {
         id: template.id,
-        contentPreset,
-        venomousPlannedBossCount: Math.min(
-          8,
-          Math.max(1, venomousRow?.plannedBossCount ?? template.plannedBossCount),
-        ),
+        productId: selection?.productId ?? null,
+        contentBossCounts: selection?.contentBossCounts ?? {},
         difficulty: template.difficulty,
         lootType: template.lootType,
         desiredTankCount: template.desiredTankCount,
@@ -732,14 +744,12 @@ export const runService = {
       canAssignRaidLead: hasAdminAccess(user.accountRole),
       defaultRaidLeadId: hasAdminAccess(user.accountRole) ? (raidLeads[0]?.id ?? "") : user.id,
       defaultRaidLeadName: user.name,
-      contentPresets,
-      venomousBossMax: 8,
+      products,
       raidLeads,
       templates,
       maxRuns: 25,
       defaults: {
-        contentPreset: "VENOMOUS_ABYSS" as RunContentPresetKey,
-        venomousPlannedBossCount: 8,
+        ...defaultProductSelection(products),
         difficulty: "HEROIC" as RaidDifficulty,
         lootType: "UNSAVED" as RunLootType,
         scheduledStartAt,
@@ -793,8 +803,19 @@ export const runService = {
       return merged;
     });
 
-    const expandedByRow = effectiveRows.map((row) => expandEffectiveContents(row));
-    const allRaidIds = [...new Set(expandedByRow.flatMap((contents) => contents.map((c) => c.raidId)))];
+    // One catalog read for the whole batch (no per-row / per-product queries).
+    const products = effectiveRows.some((row) => row.productId) ? await productPlanningService.listAll() : [];
+    const expandedByRow = effectiveRows.map((row, index) => {
+      try {
+        return expandEffectiveContents(row, products);
+      } catch (error) {
+        if (isDomainError(error)) {
+          throw new DomainError(error.code, `Run ${index + 1}: ${error.message}`, error.status);
+        }
+        throw error;
+      }
+    });
+    const allRaidIds = [...new Set(expandedByRow.flatMap(({ contents }) => contents.map((c) => c.raidId)))];
     const raidById = new Map(
       (await raidRepository.listByIds(allRaidIds)).map((raid) => [raid.id, raid]),
     );
@@ -805,14 +826,14 @@ export const runService = {
     const prepared: PreparedRunDraft[] = [];
     for (let index = 0; index < effectiveRows.length; index += 1) {
       const effective = effectiveRows[index]!;
-      const contents = expandedByRow[index]!;
+      const { contents, viaProduct } = expandedByRow[index]!;
       try {
         for (const content of contents) {
           const raid = raidById.get(content.raidId);
           if (!raid) {
             throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
           }
-          if (!raid.availableForRuns && content.raidId !== TIDEBOUND_GROTTO_RAID_ID) {
+          if (!viaProduct && !raid.availableForRuns) {
             throw new DomainError(
               "RAID_NOT_AVAILABLE_FOR_RUNS",
               "This raid is no longer available for new runs.",
@@ -883,18 +904,36 @@ export const runService = {
     let nextContents: ExpandedRunContent[];
     let contentChanged: boolean;
 
-    if ("contentPreset" in input) {
-      nextContents = expandPresetOrThrow({
-        contentPreset: input.contentPreset,
-        venomousPlannedBossCount: input.venomousPlannedBossCount,
-      });
-      const orderedCurrent = [...currentContents].sort((a, b) => a.sortOrder - b.sortOrder);
+    let contentViaProduct = false;
+    const orderedCurrentContents = [...currentContents].sort((a, b) => a.sortOrder - b.sortOrder);
+    if (input.productId) {
+      // New selections need an active + selectable product; keeping the Run's
+      // own current product only needs it to be active.
+      const products = await productPlanningService.listAll();
+      const current = matchProductForContents(
+        products.filter((product) => product.active),
+        orderedCurrentContents,
+      );
+      const product =
+        current?.productId === input.productId
+          ? products.find((row) => row.id === input.productId)!
+          : requireSelectableProduct(products, input.productId);
+      nextContents = expandSelectionOrThrow(product, input.contentBossCounts ?? {});
+      contentViaProduct = true;
       contentChanged =
-        orderedCurrent.length !== nextContents.length ||
+        orderedCurrentContents.length !== nextContents.length ||
         nextContents.some((next, index) => {
-          const cur = orderedCurrent[index];
+          const cur = orderedCurrentContents[index];
           return !cur || cur.raidId !== next.raidId || cur.plannedBossCount !== next.plannedBossCount;
         });
+    } else if (input.raidId === undefined || input.plannedBossCount === undefined) {
+      // No content fields: keep the current contents exactly as they are.
+      contentChanged = false;
+      nextContents = orderedCurrentContents.map((row) => ({
+        raidId: row.raidId,
+        sortOrder: row.sortOrder,
+        plannedBossCount: row.plannedBossCount,
+      }));
     } else {
       // Historical / CUSTOM singular path — replace with one content row only when
       // the content identity or planned count actually changes.
@@ -932,7 +971,7 @@ export const runService = {
       // Availability is only re-checked when content composition changes — a
       // difficulty-only edit on a historical Run must keep its existing raids.
       if (contentChanged) {
-        await resolveRaidsForContents(nextContents);
+        await resolveRaidsForContents(nextContents, { requireRaidAvailability: !contentViaProduct });
       }
     }
 

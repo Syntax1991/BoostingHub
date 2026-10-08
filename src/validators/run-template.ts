@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
-import {
-  compositionSchema,
-  notesSchema,
-  runContentPresetSchema,
-  venomousPlannedBossCountSchema,
-} from "@/validators/run";
+import { compositionSchema, notesSchema, productSelectionShape } from "@/validators/run";
 
 export const RUN_TEMPLATE_NAME_MAX = 80;
 
@@ -16,13 +11,12 @@ export const runTemplateNameSchema = z
   .min(1, "Enter a template name.")
   .max(RUN_TEMPLATE_NAME_MAX, "Template name is too long.");
 
-// Global Run Setup — no Raid Lead. Content uses the same commercial presets
-// as Create Run (Venomous / Bundle). Composition fields are DEFAULT values
+// Global Run Setup — no Raid Lead. Content is a persisted Product selection
+// (same authority as Create Run). Composition fields are DEFAULT values
 // inherited by Schedule slots unless a slot overrides them.
 export const createRunTemplateSchema = z.object({
   name: runTemplateNameSchema,
-  contentPreset: runContentPresetSchema,
-  venomousPlannedBossCount: venomousPlannedBossCountSchema,
+  ...productSelectionShape,
   difficulty: z.enum(RAID_DIFFICULTIES),
   lootType: z.enum(RUN_LOOT_TYPES),
   desiredTankCount: compositionSchema,

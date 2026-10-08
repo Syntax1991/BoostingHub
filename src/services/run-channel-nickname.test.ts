@@ -8,7 +8,7 @@ import {
   effectiveRaidLeadChannelName,
 } from "@/lib/discord-channel-name";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { venomousCreateInput, seededProductSelection } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { discordSyncService } from "@/services/discord-sync.service";
@@ -226,8 +226,7 @@ describe("Run channel nickname in Discord sync projection", () => {
       desiredTankCount: before!.desiredTankCount,
       desiredHealerCount: before!.desiredHealerCount,
       desiredDpsCount: before!.desiredDpsCount,
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       raidLeadId: ids.otherLead,
     });
 

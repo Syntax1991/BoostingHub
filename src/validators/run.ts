@@ -2,7 +2,6 @@ import { z } from "zod";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES } from "@/models/enums";
 import { entityIdSchema } from "@/validators/ids";
 import { RUN_COMPOSITION_MAX, RUN_COMPOSITION_MIN, RUN_NOTES_MAX } from "@/services/run-state";
-import { RUN_CONTENT_PRESET_KEYS } from "@/lib/run-content-presets";
 
 // Exported so create-many (and any other Run-adjacent validator) can reuse
 // the exact same field rules instead of drifting into a second definition.
@@ -31,14 +30,21 @@ export const plannedBossCountSchema = z.coerce
   .int("Boss count must be a whole number.")
   .min(1, "Boss count must be at least 1.");
 
-/** Commercial Venomous slot on Create/Edit products (1–8). */
-export const venomousPlannedBossCountSchema = z.coerce
-  .number()
-  .int("Boss count must be a whole number.")
-  .min(1, "Venomous boss count must be at least 1.")
-  .max(8, "Venomous boss count cannot exceed 8.");
+/**
+ * Planned boss count per VARIABLE ProductRaidContent id. Bounds (product
+ * minimum, raid encounter count) are enforced by the server against the DB
+ * catalog; FIXED contents are server-forced and never read from here.
+ */
+export const contentBossCountsSchema = z.record(z.string().min(1).max(64), plannedBossCountSchema);
 
-export const runContentPresetSchema = z.enum(RUN_CONTENT_PRESET_KEYS);
+/**
+ * Product-driven content selection: any persisted active + selectable Product
+ * by id (no key enum). Ordered contents are resolved server-side.
+ */
+export const productSelectionShape = {
+  productId: entityIdSchema,
+  contentBossCounts: contentBossCountsSchema.optional(),
+};
 
 const createRunCommonSchema = z.object({
   difficulty: z.enum(RAID_DIFFICULTIES),
@@ -56,20 +62,23 @@ const createRunCommonSchema = z.object({
 });
 
 /**
- * Preferred commercial Create shape (Product presets).
- * Legacy `raidId` + `plannedBossCount` remains accepted for fixtures / transitional callers.
+ * Create shape: a Product selection (`productId` + per-content counts).
+ * Legacy single-raid `raidId` + `plannedBossCount` remains accepted for
+ * fixtures / transitional callers (PR4 legacy).
  */
 export const createRunSchema = z.union([
-  createRunCommonSchema.extend({
-    contentPreset: runContentPresetSchema,
-    venomousPlannedBossCount: venomousPlannedBossCountSchema,
-  }),
+  createRunCommonSchema.extend(productSelectionShape),
   createRunCommonSchema.extend({
     raidId: entityIdSchema,
     plannedBossCount: plannedBossCountSchema,
   }),
 ]);
 
+/**
+ * Edit Run. Content is one of: a product re-selection (`productId` +
+ * counts), the legacy single-raid shape (`raidId` + `plannedBossCount`),
+ * or neither — the Run keeps its current contents unchanged.
+ */
 export const updateRunSchema = z
   .object({
     runId: entityIdSchema,
@@ -84,19 +93,22 @@ export const updateRunSchema = z
     /** Omitted → the Run keeps its current Lootbuddy target. */
     desiredLootbuddyCount: compositionSchema.optional(),
     discordRolePing: z.boolean().optional(),
+    productId: productSelectionShape.productId.optional(),
+    contentBossCounts: productSelectionShape.contentBossCounts,
+    raidId: entityIdSchema.optional(),
+    plannedBossCount: plannedBossCountSchema.optional(),
   })
-  .and(
-    z.union([
-      z.object({
-        contentPreset: runContentPresetSchema,
-        venomousPlannedBossCount: venomousPlannedBossCountSchema,
-      }),
-      z.object({
-        raidId: entityIdSchema,
-        plannedBossCount: plannedBossCountSchema,
-      }),
-    ]),
-  );
+  .superRefine((value, ctx) => {
+    if (value.productId && value.raidId) {
+      ctx.addIssue({ code: "custom", message: "Choose either a product or a single raid, not both.", path: ["productId"] });
+    }
+    if (value.contentBossCounts && !value.productId) {
+      ctx.addIssue({ code: "custom", message: "Boss counts require a product.", path: ["contentBossCounts"] });
+    }
+    if ((value.raidId === undefined) !== (value.plannedBossCount === undefined)) {
+      ctx.addIssue({ code: "custom", message: "A single raid needs both a raid and a boss count.", path: ["raidId"] });
+    }
+  });
 
 export const runIdSchema = z.object({
   runId: entityIdSchema,

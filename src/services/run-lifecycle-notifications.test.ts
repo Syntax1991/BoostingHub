@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { orm } from "@/lib/prisma";
-import { venomousCreateInput } from "@/lib/test-run-input";
+import { venomousCreateInput, seededProductSelection } from "@/lib/test-run-input";
 import { ACTIVE_SIGNUP_STATUSES } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import {
@@ -321,8 +321,7 @@ describe("run lifecycle notifications", () => {
       desiredHealerCount: 1,
       desiredDpsCount: 1,
       notes: null,
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
     });
 
     const after = await runRepository.findById(created.id);
@@ -345,8 +344,7 @@ describe("run lifecycle notifications", () => {
       desiredHealerCount: 1,
       desiredDpsCount: 1,
       notes: "planning note only",
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
     });
     const still = await runRepository.findById(created.id);
     expect(still?.scheduleRevision).toBe(1);
@@ -366,8 +364,7 @@ describe("run lifecycle notifications", () => {
       desiredHealerCount: 1,
       desiredDpsCount: 1,
       notes: "planning note only",
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
     });
     const again = await runRepository.findById(created.id);
     expect(again?.scheduleRevision).toBe(2);

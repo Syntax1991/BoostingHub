@@ -5,11 +5,9 @@ import { updateRunAction } from "@/controllers/run.actions";
 import { Button } from "@/components/ui/button";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import {
-  projectRunContentCoverage,
-  titleCoverageFromPreset,
-  type RunContentPresetKey,
-} from "@/lib/run-content-presets";
+import { projectRunContentCoverage } from "@/lib/run-content-presets";
+import { selectionCoveragePreview, type ProductSelection } from "@/lib/product-selection";
+import { KEEP_CURRENT_CONTENTS, ProductContentPicker } from "@/components/runs/product-content-picker";
 import { buildRunTitle } from "@/lib/run-title";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
@@ -32,15 +30,10 @@ export function RunEditDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const isCustom = editor.contentPreset === "CUSTOM";
-  const primaryContent = editor.contents[0];
-  const identityLocked = isCustom && !capabilities.canEditIdentity;
-
-  const [contentPreset, setContentPreset] = useState<RunContentPresetKey>(
-    editor.contentPreset === "CUSTOM" ? "VENOMOUS_ABYSS" : editor.contentPreset,
+  // Runs whose contents match no active Product keep them unless a product is chosen.
+  const [selection, setSelection] = useState<ProductSelection>(
+    editor.currentSelection ?? { productId: KEEP_CURRENT_CONTENTS, contentBossCounts: {} },
   );
-  const [venomousPlannedBossCount, setVenomousPlannedBossCount] = useState(editor.venomousPlannedBossCount);
-  const [raidId, setRaidId] = useState(primaryContent?.raidId ?? editor.raids[0]?.id ?? "");
   const [difficulty, setDifficulty] = useState<RaidDifficulty>(run.difficulty);
   const [lootType, setLootType] = useState<RunLootType>(run.lootType);
   const [scheduledLocal, setScheduledLocal] = useState(toDatetimeLocalValue(run.scheduledStartAt));
@@ -51,10 +44,6 @@ export function RunEditDialog({
   const [desiredDpsCount, setDesiredDpsCount] = useState(run.desiredDpsCount);
   const [desiredLootbuddyCount, setDesiredLootbuddyCount] = useState(run.desiredLootbuddyCount ?? 0);
   const [discordRolePing, setDiscordRolePing] = useState(run.discordRolePing);
-  const [plannedBossCount, setPlannedBossCount] = useState(primaryContent?.plannedBossCount ?? 1);
-
-  const selectedRaid = editor.raids.find((raid) => raid.id === raidId);
-  const totalBossCount = selectedRaid?.totalBossCount ?? primaryContent?.totalBossCount ?? 1;
 
   const raidLeadName =
     editor.raidLeads.find((lead) => lead.id === raidLeadId)?.name ?? run.raidLeadName;
@@ -73,14 +62,6 @@ export function RunEditDialog({
     onClose();
   }
 
-  function selectRaid(nextRaidId: string) {
-    setRaidId(nextRaidId);
-    const raid = editor.raids.find((candidate) => candidate.id === nextRaidId);
-    if (raid) {
-      setPlannedBossCount(raid.totalBossCount);
-    }
-  }
-
   function selectDifficulty(nextDifficulty: RaidDifficulty) {
     setDifficulty(nextDifficulty);
     if (!isLootTypeAllowedForDifficulty(nextDifficulty, lootType)) {
@@ -91,22 +72,10 @@ export function RunEditDialog({
   const generatedTitle = useMemo(() => {
     try {
       const scheduledStartAt = fromDatetimeLocalValue(scheduledLocal);
-      const titleCoverage = isCustom
-        ? identityLocked
-          ? projectRunContentCoverage(editor.contents).titleCoverage
-          : projectRunContentCoverage([
-              {
-                raidId,
-                sortOrder: 1,
-                plannedBossCount,
-                totalBossCount,
-              },
-            ]).titleCoverage
-        : titleCoverageFromPreset({
-            preset: contentPreset,
-            venomousPlannedBossCount,
-            venomousTotalBossCount: editor.venomousBossMax,
-          });
+      const selected = editor.products.find((product) => product.id === selection.productId);
+      const titleCoverage = selected
+        ? selectionCoveragePreview(selected, selection.contentBossCounts)
+        : projectRunContentCoverage(editor.contents).titleCoverage;
       return buildRunTitle({
         scheduledStartAt,
         difficulty,
@@ -117,21 +86,7 @@ export function RunEditDialog({
     } catch {
       return "—";
     }
-  }, [
-    scheduledLocal,
-    difficulty,
-    lootType,
-    plannedBossCount,
-    venomousPlannedBossCount,
-    totalBossCount,
-    editor.venomousBossMax,
-    editor.contents,
-    identityLocked,
-    isCustom,
-    contentPreset,
-    raidLeadName,
-    raidId,
-  ]);
+  }, [scheduledLocal, difficulty, lootType, editor.contents, editor.products, selection, raidLeadName]);
 
   function submit(event: { preventDefault(): void }) {
     event.preventDefault();
@@ -159,10 +114,11 @@ export function RunEditDialog({
         discordRolePing,
       };
 
+      // No product (or a locked identity) → the server keeps the current contents.
       const result = await updateRunAction(
-        isCustom
-          ? { ...base, raidId, plannedBossCount }
-          : { ...base, contentPreset, venomousPlannedBossCount },
+        selection.productId && capabilities.canEditIdentity
+          ? { ...base, productId: selection.productId, contentBossCounts: selection.contentBossCounts }
+          : base,
       );
       if (!result.ok) {
         setError(result.message);
@@ -194,93 +150,17 @@ export function RunEditDialog({
           </p>
         ) : null}
 
-        {isCustom ? (
-          identityLocked ? (
-            <div className="space-y-2 rounded-md border border-border bg-surface-raised px-3 py-2 text-sm">
-              <div>
-                <span className="block text-xs text-muted">Product</span>
-                <span className="font-medium">{run.productLabel}</span>
-              </div>
-              <div>
-                <span className="block text-xs text-muted">Content</span>
-                <span>{editor.contentSummary}</span>
-              </div>
-            </div>
-          ) : (
-            <>
-              <label className="block text-sm">
-                <span className="mb-1 block text-muted">Raid</span>
-                <select
-                  aria-label="Raid"
-                  value={raidId}
-                  onChange={(event) => selectRaid(event.target.value)}
-                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                >
-                  {editor.raids.map((raid) => (
-                    <option key={raid.id} value={raid.id} disabled={!raid.availableForRuns}>
-                      {raid.name} · {raid.season}
-                      {raid.availableForRuns ? "" : " (Historical)"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-muted">Planned bosses</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalBossCount}
-                  value={plannedBossCount}
-                  onChange={(event) => setPlannedBossCount(Number(event.target.value))}
-                  className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                  aria-label="Planned bosses"
-                />
-                <span className="mt-1 block text-xs text-muted">Out of {totalBossCount} total bosses in this raid.</span>
-              </label>
-            </>
-          )
-        ) : (
-          <>
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted">Product</span>
-              <select
-                aria-label="Product"
-                value={contentPreset}
-                disabled={!capabilities.canEditIdentity}
-                title={!capabilities.canEditIdentity ? "The run has started — details are locked." : undefined}
-                onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {editor.contentPresets.map((preset) => (
-                  <option key={preset.key} value={preset.key}>
-                    {preset.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {contentPreset === "MIDNIGHT_S2_BUNDLE" ? (
-              <p className="rounded-md border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
-                Tide 1/1 (fixed)
-              </p>
-            ) : null}
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted">The Venomous Abyss bosses</span>
-              <input
-                type="number"
-                min={1}
-                max={editor.venomousBossMax}
-                value={venomousPlannedBossCount}
-                disabled={!capabilities.canEditIdentity}
-                onChange={(event) => setVenomousPlannedBossCount(Number(event.target.value))}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2 disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label="Venomous planned bosses"
-              />
-              <span className="mt-1 block text-xs text-muted">
-                Out of {editor.venomousBossMax} bosses in The Venomous Abyss.
-              </span>
-            </label>
-          </>
-        )}
+        <ProductContentPicker
+          products={editor.products}
+          value={selection}
+          onChange={setSelection}
+          ariaPrefix="Run"
+          disabled={!capabilities.canEditIdentity}
+          keepCurrentLabel={editor.currentSelection ? undefined : `Keep current contents (${editor.contentSummary})`}
+        />
+        {!capabilities.canEditIdentity ? (
+          <p className="text-xs text-muted">The run has started — content and difficulty are locked.</p>
+        ) : null}
 
         <label className="block text-sm">
           <span className="mb-1 block text-muted">Difficulty</span>

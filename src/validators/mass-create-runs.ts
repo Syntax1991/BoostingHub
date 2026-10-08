@@ -4,10 +4,10 @@ import { entityIdSchema } from "@/validators/ids";
 import {
   compositionSchema,
   notesSchema,
+  contentBossCountsSchema,
   plannedBossCountSchema,
-  runContentPresetSchema,
+  productSelectionShape,
   scheduledStartAtSchema,
-  venomousPlannedBossCountSchema,
 } from "@/validators/run";
 
 /** Hard batch bounds — enforced here (structural) and again in the Service (authoritative). */
@@ -15,8 +15,7 @@ export const MASS_CREATE_MIN_RUNS = 1;
 export const MASS_CREATE_MAX_RUNS = 25;
 
 const massCreateDefaultsCommercialSchema = z.object({
-  contentPreset: runContentPresetSchema,
-  venomousPlannedBossCount: venomousPlannedBossCountSchema,
+  ...productSelectionShape,
   difficulty: z.enum(RAID_DIFFICULTIES),
   lootType: z.enum(RUN_LOOT_TYPES),
   raidLeadId: entityIdSchema.optional(),
@@ -48,8 +47,10 @@ const massCreateDefaultsSchema = z.union([
 ]);
 
 const massCreateRowOverridesCommercialSchema = z.object({
-  contentPreset: runContentPresetSchema.optional(),
-  venomousPlannedBossCount: venomousPlannedBossCountSchema.optional(),
+  /** Row product override (any active + selectable Product id). */
+  productId: productSelectionShape.productId.optional(),
+  /** Row counts for the row's effective product (VARIABLE contents only). */
+  contentBossCounts: contentBossCountsSchema.optional(),
   difficulty: z.enum(RAID_DIFFICULTIES).optional(),
   lootType: z.enum(RUN_LOOT_TYPES).optional(),
   raidLeadId: entityIdSchema.optional(),

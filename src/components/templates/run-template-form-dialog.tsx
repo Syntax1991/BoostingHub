@@ -6,21 +6,23 @@ import { createRunTemplateAction, updateRunTemplateAction } from "@/controllers/
 import { Button } from "@/components/ui/button";
 import { DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import {
-  titleCoverageFromPreset,
-  type RunContentPresetKey,
-} from "@/lib/run-content-presets";
+  defaultContentBossCounts,
+  selectionCoveragePreview,
+  type PlanningProduct,
+  type ProductSelection,
+} from "@/lib/product-selection";
+import { ProductContentPicker } from "@/components/runs/product-content-picker";
 import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootType } from "@/models/enums";
 
 type FormMode = "create" | "edit";
 
-type ContentPresetOption = { key: RunContentPresetKey; displayName: string };
 type RaidLeadOption = { id: string; name: string };
 
 export type RunTemplateFormValues = {
   templateId?: string;
   name: string;
-  contentPreset: RunContentPresetKey;
-  venomousPlannedBossCount: number;
+  /** Product selection; productId "" when the setup matches no active Product (must choose one). */
+  product: ProductSelection;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
   desiredTankCount: number;
@@ -30,14 +32,11 @@ export type RunTemplateFormValues = {
   notes: string | null;
 };
 
-function emptyValues(
-  contentPresets: ContentPresetOption[],
-  venomousBossMax: number,
-): RunTemplateFormValues {
+function emptyValues(products: readonly PlanningProduct[]): RunTemplateFormValues {
+  const first = products[0];
   return {
     name: "",
-    contentPreset: contentPresets[0]?.key ?? "VENOMOUS_ABYSS",
-    venomousPlannedBossCount: venomousBossMax,
+    product: { productId: first?.id ?? "", contentBossCounts: first ? defaultContentBossCounts(first) : {} },
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     desiredTankCount: 2,
@@ -55,8 +54,7 @@ type TemplateMutationResult =
 export function RunTemplateFormDialog({
   mode,
   initial,
-  contentPresets,
-  venomousBossMax,
+  products,
   raidLeads = [],
   canAssignRaidLead = false,
   defaultRaidLeadId = "",
@@ -70,8 +68,8 @@ export function RunTemplateFormDialog({
 }: {
   mode: FormMode;
   initial?: RunTemplateFormValues;
-  contentPresets: ContentPresetOption[];
-  venomousBossMax: number;
+  /** Active + selectable Products (plus the setup's own current Product when editing). */
+  products: PlanningProduct[];
   /** @deprecated Global setups have no Raid Lead — kept optional for call-site compatibility. */
   raidLeads?: RaidLeadOption[];
   canAssignRaidLead?: boolean;
@@ -94,17 +92,15 @@ export function RunTemplateFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const initialValues = useMemo(
-    () => initial ?? emptyValues(contentPresets, venomousBossMax),
-    [initial, contentPresets, venomousBossMax],
+    () => initial ?? emptyValues(products),
+    [initial, products],
   );
   const [values, setValues] = useState<RunTemplateFormValues>(initialValues);
 
-  const isBundle = values.contentPreset === "MIDNIGHT_S2_BUNDLE";
-  const coveragePreview = titleCoverageFromPreset({
-    preset: values.contentPreset,
-    venomousPlannedBossCount: values.venomousPlannedBossCount,
-    venomousTotalBossCount: venomousBossMax,
-  });
+  const selectedProduct = products.find((product) => product.id === values.product.productId);
+  const coveragePreview = selectedProduct
+    ? selectionCoveragePreview(selectedProduct, values.product.contentBossCounts)
+    : "—";
 
   useEffect(() => {
     if (!open) return;
@@ -137,8 +133,8 @@ export function RunTemplateFormDialog({
     startTransition(async () => {
       const payload = {
         name: values.name,
-        contentPreset: values.contentPreset,
-        venomousPlannedBossCount: values.venomousPlannedBossCount,
+        productId: values.product.productId,
+        contentBossCounts: values.product.contentBossCounts,
         difficulty: values.difficulty,
         lootType: values.lootType,
         desiredTankCount: values.desiredTankCount,
@@ -222,41 +218,16 @@ export function RunTemplateFormDialog({
                 className="h-9 w-full rounded-md border border-border bg-surface px-2"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted">Run Content</span>
-              <select
-                value={values.contentPreset}
-                onChange={(event) =>
-                  update({ contentPreset: event.target.value as RunContentPresetKey })
-                }
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                aria-label="Run Content"
-              >
-                {contentPresets.map((preset) => (
-                  <option key={preset.key} value={preset.key}>
-                    {preset.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {isBundle ? (
-              <div className="space-y-2 rounded-md border border-border bg-surface-raised px-3 py-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span>Tidebound Grotto</span>
-                  <span className="text-muted">1/1 · Included</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span>The Venomous Abyss</span>
-                  <span>
-                    {values.venomousPlannedBossCount}/{venomousBossMax}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2 border-t border-border pt-2 font-medium">
-                  <span>Total coverage</span>
-                  <span>{coveragePreview}</span>
-                </div>
-              </div>
-            ) : null}
+            <ProductContentPicker
+              products={products}
+              value={values.product}
+              onChange={(product) => update({ product })}
+              ariaPrefix="Run Setup"
+            />
+            <p className="flex items-center justify-between rounded-md border border-border bg-surface-raised px-3 py-2 text-xs font-medium">
+              <span>Total coverage</span>
+              <span>{coveragePreview}</span>
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm">
                 <span className="mb-1 block text-muted">Difficulty</span>
@@ -287,20 +258,6 @@ export function RunTemplateFormDialog({
                 </select>
               </label>
             </div>
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted">
-                {isBundle ? "The Venomous Abyss bosses" : "Planned bosses"} (max {venomousBossMax})
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={venomousBossMax}
-                value={values.venomousPlannedBossCount}
-                onChange={(event) => update({ venomousPlannedBossCount: Number(event.target.value) })}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                aria-label={isBundle ? "The Venomous Abyss planned bosses" : "Planned bosses"}
-              />
-            </label>
             <p className="text-xs font-medium text-muted">Default composition</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <label className="block text-sm">
@@ -358,7 +315,7 @@ export function RunTemplateFormDialog({
               <Button type="button" variant="secondary" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending || !values.name.trim() || contentPresets.length === 0}>
+              <Button type="submit" disabled={pending || !values.name.trim() || !values.product.productId}>
                 {pending ? "Saving…" : dialogSubmitLabel}
               </Button>
             </div>

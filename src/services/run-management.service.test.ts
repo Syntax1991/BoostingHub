@@ -862,13 +862,17 @@ describe("historical raid availability", () => {
     expect(available.some((raid) => raid.id === TIDEBOUND_GROTTO_RAID_ID)).toBe(false);
   });
 
-  it("the Create Run form offers commercial products and omits Tidebound standalone", async () => {
+  it("the Create Run form offers the persisted selectable products and no standalone Tidebound product", async () => {
     const form = await runService.getCreateForm(lead);
-    expect(form.contentPresets.map((preset) => preset.key)).toEqual([
+    expect(form.products.map((product) => product.key).slice(0, 2)).toEqual([
       "VENOMOUS_ABYSS",
       "MIDNIGHT_S2_BUNDLE",
     ]);
-    expect(form.contentPresets.some((preset) => preset.displayName.includes("Tidebound"))).toBe(false);
+    expect(
+      form.products.some(
+        (product) => product.contents.length === 1 && product.contents[0]!.raidId === TIDEBOUND_GROTTO_RAID_ID,
+      ),
+    ).toBe(false);
   });
 
   it("rejects creating a new Run targeting a historical raid, with no Run row created", async () => {
@@ -952,21 +956,16 @@ describe("historical raid availability", () => {
     expect(primaryRaidIdFromRun(after)).toBe(VENOMOUS_ABYSS_RAID_ID);
   });
 
-  it("Edit Run editor data represents the historical current selection without offering other historical raids as alternatives", async () => {
+  it("Edit Run editor keeps a historical Run's contents and only offers selectable products as alternatives", async () => {
     const id = await createHistoricalDraft();
     const detail = await runDetailService.getRunDetail(lead, id);
-    const raids = detail.editor?.raids ?? [];
-
-    const current = raids.find((raid) => raid.id === MANAFORGE_OMEGA_RAID_ID);
-    expect(current).toBeTruthy();
-    expect(current?.availableForRuns).toBe(false);
-
-    const unavailableEntries = raids.filter((raid) => !raid.availableForRuns);
-    expect(unavailableEntries).toHaveLength(1);
-    expect(unavailableEntries[0]?.id).toBe(MANAFORGE_OMEGA_RAID_ID);
-
-    const venomous = raids.find((raid) => raid.id === VENOMOUS_ABYSS_RAID_ID);
-    expect(venomous?.availableForRuns).toBe(true);
+    // Manaforge contents match no active product → "keep current contents".
+    expect(detail.editor?.currentSelection).toBeNull();
+    expect(detail.editor?.contents.map((row) => row.raidId)).toEqual([MANAFORGE_OMEGA_RAID_ID]);
+    const offered = detail.editor?.products ?? [];
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.every((product) => product.active && product.selectable)).toBe(true);
+    expect(offered.some((product) => product.contents.some((row) => row.raidId === MANAFORGE_OMEGA_RAID_ID))).toBe(false);
   });
 
   it("opening a Draft still works even if its raid has since become historical", async () => {

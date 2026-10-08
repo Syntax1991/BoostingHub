@@ -3,11 +3,11 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { canManageRun } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import {
-  classifyRunContents,
-  listCreateRunContentPresets,
-  type RunContentPresetKey,
-} from "@/lib/run-content-presets";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
+  matchProductForContents,
+  type PlanningProduct,
+  type ProductSelection,
+} from "@/lib/product-selection";
+import { isSelectableProduct, productPlanningService } from "@/services/product-planning.service";
 import { runRepository } from "@/repositories/run.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { userRepository } from "@/repositories/user.repository";
@@ -78,23 +78,6 @@ function toFinalSetupParticipant(signup: {
     participationType: signup.participationType,
     selectedRole: signup.publishedRole,
   };
-}
-
-/**
- * Options for the Edit Run raid selector: every currently-available raid,
- * plus the Run's own current raid even if it has since become historical —
- * so an existing historical selection always renders correctly as the
- * current value, without offering any OTHER historical raid as a fresh
- * alternative. Each entry is annotated with availableForRuns so the View can
- * mark the historical one distinctly.
- */
-async function listEditableRaidOptions(currentRaidId: string) {
-  const available = await raidRepository.listAvailableForRuns();
-  if (available.some((raid) => raid.id === currentRaidId)) {
-    return available;
-  }
-  const current = await raidRepository.findById(currentRaidId);
-  return current ? [current, ...available] : available;
 }
 
 function canViewRunDetail(
@@ -230,10 +213,13 @@ export const runDetailService = {
 
     let editor: {
       canAssignRaidLead: boolean;
-      contentPresets: Array<{ key: RunContentPresetKey; displayName: string }>;
-      contentPreset: RunContentPresetKey | "CUSTOM";
-      venomousPlannedBossCount: number;
-      venomousBossMax: number;
+      /**
+       * Product selector: active + selectable Products, plus the Run's own
+       * current Product when it is active but hidden from selection.
+       */
+      products: PlanningProduct[];
+      /** The active Product the Run's contents match; null → "keep current contents". */
+      currentSelection: ProductSelection | null;
       contentSummary: string;
       contents: Array<{
         raidId: string;
@@ -241,14 +227,6 @@ export const runDetailService = {
         sortOrder: number;
         plannedBossCount: number;
         totalBossCount: number;
-      }>;
-      /** Historical CUSTOM Runs still expose singular raid options. */
-      raids: Array<{
-        id: string;
-        name: string;
-        season: string;
-        totalBossCount: number;
-        availableForRuns: boolean;
       }>;
       raidLeads: Array<{ id: string; name: string }>;
     } | null = null;
@@ -259,20 +237,21 @@ export const runDetailService = {
       if (contents.length === 0) {
         throw new DomainError("VALIDATION_FAILED", "Run has no configured raid contents.");
       }
-      const product = classifyRunContents(contents);
-      const venomousRow = contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID);
-      const primaryContent = contents[0]!;
-      const raids =
-        product === "CUSTOM" ? await listEditableRaidOptions(primaryContent.raidId) : [];
+      const allProducts = await productPlanningService.listAll();
+      const currentSelection = matchProductForContents(
+        allProducts.filter((product) => product.active),
+        contents,
+      );
+      const products = allProducts.filter(
+        (product) => isSelectableProduct(product) || product.id === currentSelection?.productId,
+      );
       const raidLeads = capabilities.canReassignRaidLead
         ? await userRepository.listEligibleRaidLeads()
         : [{ id: run.raidLeadId, name: run.raidLeadName }];
       editor = {
         canAssignRaidLead: capabilities.canReassignRaidLead,
-        contentPresets: listCreateRunContentPresets(),
-        contentPreset: product === "CUSTOM" ? "CUSTOM" : product,
-        venomousPlannedBossCount: venomousRow?.plannedBossCount ?? primaryContent?.plannedBossCount ?? 1,
-        venomousBossMax: 8,
+        products,
+        currentSelection,
         contentSummary: run.contentDisplay.summary,
         contents: contents.map((row) => ({
           raidId: row.raidId,
@@ -281,7 +260,6 @@ export const runDetailService = {
           plannedBossCount: row.plannedBossCount,
           totalBossCount: row.totalBossCount,
         })),
-        raids,
         raidLeads,
       };
     }

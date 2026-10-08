@@ -18,6 +18,7 @@ import {
 import { runTemplateRepository, type RunTemplateRecord } from "@/repositories/run-template.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { computeUsability } from "@/services/run-template.service";
+import { productPlanningService } from "@/services/product-planning.service";
 import { integrationEventService } from "@/services/integration-event.service";
 import { runService } from "@/services/run.service";
 
@@ -78,7 +79,7 @@ async function loadTemplateForSlot(
   if (user && !hasAdminAccess(user.accountRole) && !isEligibleRaidLead(user)) {
     throw new DomainError("NOT_AUTHORIZED", "You cannot use this template.", 403);
   }
-  const usability = computeUsability(template);
+  const usability = computeUsability(template, await productPlanningService.listActive());
   if (!usability.usable) {
     throw new DomainError(
       "COMMUNITY_SCHEDULE_TEMPLATE_INVALID",

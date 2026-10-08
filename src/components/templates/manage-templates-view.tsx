@@ -1,26 +1,25 @@
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DifficultyBadge } from "@/components/ui/badges";
 import { RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { RunTemplateFormDialog } from "@/components/templates/run-template-form-dialog";
 import { TemplateRowActions } from "@/components/templates/template-row-actions";
 import { ManageTemplatesFilters } from "@/components/templates/manage-templates-filters";
 import type { managementController } from "@/controllers/app.controller";
-import type { RunContentPresetKey } from "@/lib/run-content-presets";
+import type { PlanningProduct } from "@/lib/product-selection";
 
 type ManageTemplatesPage = Awaited<ReturnType<typeof managementController.getManageTemplatesPage>>;
 
-function formValuesFromTemplate(template: ManageTemplatesPage["templates"][number]) {
-  const productKey = template.contentDisplay.productKey;
-  const contentPreset: RunContentPresetKey =
-    productKey === "MIDNIGHT_S2_BUNDLE" ? "MIDNIGHT_S2_BUNDLE" : "VENOMOUS_ABYSS";
-  const venomous =
-    template.contents.find((row) => row.raidId === VENOMOUS_ABYSS_RAID_ID) ?? template.contents[0];
+/** Edit preselects the setup's matched Product when it is selectable; otherwise a product must be chosen. */
+function formValuesFromTemplate(
+  template: ManageTemplatesPage["templates"][number],
+  products: readonly PlanningProduct[],
+) {
+  const selection = template.productSelection;
+  const selectable = selection && products.some((product) => product.id === selection.productId);
   return {
     templateId: template.id,
     name: template.name,
-    contentPreset,
-    venomousPlannedBossCount: venomous?.plannedBossCount ?? template.plannedBossCount,
+    product: selectable ? selection : { productId: "", contentBossCounts: {} },
     difficulty: template.difficulty,
     lootType: template.lootType,
     desiredTankCount: template.desiredTankCount,
@@ -40,8 +39,7 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
         actions={
           <RunTemplateFormDialog
             mode="create"
-            contentPresets={data.contentPresets}
-            venomousBossMax={data.venomousBossMax}
+            products={data.products}
             triggerLabel="New template"
           />
         }
@@ -85,9 +83,8 @@ export function ManageTemplatesView({ data }: { data: ManageTemplatesPage }) {
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <RunTemplateFormDialog
                     mode="edit"
-                    initial={formValuesFromTemplate(template)}
-                    contentPresets={data.contentPresets}
-                    venomousBossMax={data.venomousBossMax}
+                    initial={formValuesFromTemplate(template, data.products)}
+                    products={data.products}
                     triggerLabel="Edit"
                     triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
                   />

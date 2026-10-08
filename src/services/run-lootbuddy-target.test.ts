@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
-import { futureTestIso, venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
+import { futureTestIso, venomousCreateInput, venomousUpdateInput, seededProductSelection } from "@/lib/test-run-input";
 import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import { runTemplateRepository } from "@/repositories/run-template.repository";
@@ -109,8 +109,7 @@ async function addLootbuddySignup(runId: string, userId: string, status: "PENDIN
 
 function massDefaults(overrides: Partial<CreateManyRunsInput["defaults"]> = {}): CreateManyRunsInput["defaults"] {
   return {
-    contentPreset: "VENOMOUS_ABYSS" as const,
-    venomousPlannedBossCount: 8,
+    ...seededProductSelection("VENOMOUS_ABYSS", 8),
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     desiredTankCount: 2,
@@ -236,10 +235,9 @@ describe("templates", () => {
   it("create stores the target, update changes it, omitted update keeps it, and the create form exposes it", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Lootbuddy Target Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 12,
@@ -252,10 +250,9 @@ describe("templates", () => {
     const baseUpdate = {
       templateId: template.id,
       name: "Lootbuddy Target Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC" as const,
       lootType: "UNSAVED" as const,
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 12,
@@ -277,10 +274,9 @@ describe("templates", () => {
   it("a template created without the field defaults to 0", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Legacy Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
