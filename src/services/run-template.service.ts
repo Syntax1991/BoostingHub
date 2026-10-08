@@ -2,17 +2,22 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import { hasAdminAccess, isEligibleRaidLead } from "@/auth/authorization";
 import { DomainError } from "@/lib/errors";
 import {
-  classifyRunContents,
-  expandRunContentPreset,
-  listCreateRunContentPresets,
   projectRunContentCoverage,
   projectRunContentDisplay,
-  venomousBossMaxFromCatalog,
   type ExpandedRunContent,
-  type RunContentPresetKey,
 } from "@/lib/run-content-presets";
-import { TIDEBOUND_GROTTO_RAID_ID } from "@/lib/wow-raid-catalog";
-import { raidRepository, type RaidRecord } from "@/repositories/raid.repository";
+import {
+  matchProductForContents,
+  type ContentBossCounts,
+  type PlanningProduct,
+} from "@/lib/product-selection";
+import { raidRepository } from "@/repositories/raid.repository";
+import {
+  expandSelectionOrThrow,
+  isSelectableProduct,
+  productPlanningService,
+  requireSelectableProduct,
+} from "@/services/product-planning.service";
 import {
   runTemplateRepository,
   type RunTemplateContentWriteSpec,
@@ -55,49 +60,49 @@ function requireCanUseTemplates(user: AuthenticatedUser): void {
   }
 }
 
-function expandPresetOrThrow(input: {
-  contentPreset: RunContentPresetKey;
-  venomousPlannedBossCount: number;
-}): ExpandedRunContent[] {
-  try {
-    return expandRunContentPreset({
-      preset: input.contentPreset,
-      venomousPlannedBossCount: input.venomousPlannedBossCount,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid run content preset.";
-    if (message.toLowerCase().includes("planned boss count")) {
-      throw new DomainError("RUN_BOSS_COUNT_INVALID", message);
-    }
-    throw new DomainError("VALIDATION_FAILED", message);
-  }
+/** Template contents as ordered rows (falls back to the legacy singular mirror). */
+function templateContentRows(template: RunTemplateRecord) {
+  return template.contents.length > 0
+    ? template.contents
+    : [
+        {
+          raidId: template.raidId,
+          sortOrder: 1,
+          plannedBossCount: template.plannedBossCount,
+          totalBossCount: template.totalBossCount,
+          raidAvailableForRuns: template.raidAvailableForRuns,
+          raidName: template.raidName,
+          raidSeason: template.raidSeason,
+          id: "legacy",
+        },
+      ];
 }
 
-async function resolveRaidsForTemplateContents(
+/**
+ * Validate existing contents for a copy (duplicate): planned counts inside the
+ * raid totals, and the contents still covered by an active Product or made of
+ * raids that are still available for new Runs.
+ */
+async function assertCopyableContents(
   contents: ExpandedRunContent[],
-): Promise<Map<string, RaidRecord>> {
-  const raidIds = [...new Set(contents.map((row) => row.raidId))];
-  const raids = await raidRepository.listByIds(raidIds);
+  activeProducts: readonly PlanningProduct[],
+): Promise<void> {
+  const raids = await raidRepository.listByIds([...new Set(contents.map((row) => row.raidId))]);
   const byId = new Map(raids.map((raid) => [raid.id, raid]));
-  const productKey = classifyRunContents(contents);
-
   for (const content of contents) {
     const raid = byId.get(content.raidId);
     if (!raid) {
       throw new DomainError("VALIDATION_FAILED", "Choose a supported raid.");
     }
-    const tideInBundle =
-      content.raidId === TIDEBOUND_GROTTO_RAID_ID && productKey === "MIDNIGHT_S2_BUNDLE";
-    if (!raid.availableForRuns && !tideInBundle) {
-      throw new DomainError(
-        "RAID_NOT_AVAILABLE_FOR_RUNS",
-        "This raid is no longer available for new templates.",
-      );
-    }
     assertValidPlannedBossCount(content.plannedBossCount, raid.totalBossCount);
   }
-
-  return byId;
+  const coveredByProduct = matchProductForContents(activeProducts, contents) !== null;
+  if (!coveredByProduct && contents.some((content) => !byId.get(content.raidId)!.availableForRuns)) {
+    throw new DomainError(
+      "RAID_NOT_AVAILABLE_FOR_RUNS",
+      "This raid is no longer available for new templates.",
+    );
+  }
 }
 
 async function loadManagedTemplate(
@@ -117,8 +122,17 @@ export type TemplateUsability = { usable: boolean; unusableReason: string | null
 /**
  * Usability is computed fresh from joined Raid/content state — never stored.
  * Global setups have no Raid Lead ownership check.
+ *
+ * Content is usable when it is still covered by an ACTIVE Product (generic
+ * match: same raids in order, FIXED counts equal, VARIABLE counts in range —
+ * selectable is not required, hiding a product never breaks existing setups)
+ * or when every content raid is still available for new Runs (legacy
+ * single-raid setups). No product keys, no bundle / Tide special cases.
  */
-export function computeUsability(template: RunTemplateRecord): TemplateUsability {
+export function computeUsability(
+  template: RunTemplateRecord,
+  activeProducts: readonly PlanningProduct[],
+): TemplateUsability {
   if (!template.isActive) {
     return { usable: false, unusableReason: "This template has been deactivated." };
   }
@@ -126,31 +140,19 @@ export function computeUsability(template: RunTemplateRecord): TemplateUsability
     return { usable: false, unusableReason: "This template's loot type is no longer valid for its difficulty." };
   }
 
-  const contents =
-    template.contents.length > 0
-      ? template.contents
-      : [
-          {
-            raidId: template.raidId,
-            sortOrder: 1,
-            plannedBossCount: template.plannedBossCount,
-            totalBossCount: template.totalBossCount,
-            raidAvailableForRuns: template.raidAvailableForRuns,
-            raidName: template.raidName,
-            raidSeason: template.raidSeason,
-            id: "legacy",
-          },
-        ];
+  const contents = templateContentRows(template);
 
   if (contents.length === 0) {
     return { usable: false, unusableReason: "This template has no raid content." };
   }
 
-  const productKey = classifyRunContents(contents);
+  const coveredByProduct =
+    matchProductForContents(
+      activeProducts.filter((product) => product.active),
+      contents,
+    ) !== null;
   for (const content of contents) {
-    const tideInBundle =
-      content.raidId === TIDEBOUND_GROTTO_RAID_ID && productKey === "MIDNIGHT_S2_BUNDLE";
-    if (!content.raidAvailableForRuns && !tideInBundle) {
+    if (!coveredByProduct && !content.raidAvailableForRuns) {
       return {
         usable: false,
         unusableReason: "This template's raid is no longer available for new runs.",
@@ -166,13 +168,6 @@ export function computeUsability(template: RunTemplateRecord): TemplateUsability
         unusableReason: "This template's planned boss count is no longer valid for its raid.",
       };
     }
-  }
-
-  if (productKey === "CUSTOM") {
-    return {
-      usable: false,
-      unusableReason: "This template's content combination is no longer a supported run product.",
-    };
   }
 
   const composition = [
@@ -223,11 +218,10 @@ export function templateCoverage(template: RunTemplateRecord) {
   return projectRunContentCoverage(contents);
 }
 
-async function persistFromPreset(
+async function persistFromProduct(
   input: {
     name: string;
-    contentPreset: RunContentPresetKey;
-    venomousPlannedBossCount: number;
+    contents: ExpandedRunContent[];
     difficulty: CreateRunTemplateInput["difficulty"];
     lootType: CreateRunTemplateInput["lootType"];
     desiredTankCount: number;
@@ -241,11 +235,7 @@ async function persistFromPreset(
   templateId: string | undefined,
   txOrm?: typeof import("@/lib/prisma").orm,
 ): Promise<{ id: string; contents: RunTemplateContentWriteSpec[] }> {
-  const contents = expandPresetOrThrow({
-    contentPreset: input.contentPreset,
-    venomousPlannedBossCount: input.venomousPlannedBossCount,
-  });
-  await resolveRaidsForTemplateContents(contents);
+  const contents = input.contents;
 
   assertComposition(input.desiredTankCount, "Desired tanks");
   assertComposition(input.desiredHealerCount, "Desired healers");
@@ -291,23 +281,57 @@ async function persistFromPreset(
   return { id: templateId, contents };
 }
 
+/**
+ * Editing a Run Setup: choosing a NEW product requires active + selectable;
+ * keeping the setup's own current product only requires it to be active
+ * (a hidden product must not block unrelated edits).
+ */
+function resolveProductForTemplateEdit(
+  products: readonly PlanningProduct[],
+  existing: RunTemplateRecord,
+  productId: string,
+): PlanningProduct {
+  const activeProducts = products.filter((product) => product.active);
+  const current = matchProductForContents(activeProducts, templateContentRows(existing));
+  if (current?.productId === productId) {
+    return activeProducts.find((product) => product.id === productId)!;
+  }
+  return requireSelectableProduct(products, productId);
+}
+
+export type { ContentBossCounts };
+
 export const runTemplateService = {
   /** RAID_LEAD+ read-only catalog of global setups (profile / use). */
   async listOwn(user: AuthenticatedUser) {
     requireCanUseTemplates(user);
-    const templates = await runTemplateRepository.listAll();
+    const [templates, activeProducts] = await Promise.all([
+      runTemplateRepository.listAll(),
+      productPlanningService.listActive(),
+    ]);
     return templates.map((template) => {
       const display = templateContentDisplay(template);
-      return { ...template, ...computeUsability(template), contentDisplay: display };
+      return { ...template, ...computeUsability(template, activeProducts), contentDisplay: display };
     });
   },
 
   async listAll(user: AuthenticatedUser, filters: ManageTemplateFiltersInput = {}) {
     requireManageTemplates(user);
-    const templates = await runTemplateRepository.listAll();
+    const [templates, products] = await Promise.all([
+      runTemplateRepository.listAll(),
+      productPlanningService.listAll(),
+    ]);
+    const activeProducts = products.filter((product) => product.active);
     const withUsability = templates.map((template) => {
       const display = templateContentDisplay(template);
-      return { ...template, ...computeUsability(template), contentDisplay: display };
+      // The product (and counts) the edit form preselects; null when no active product matches.
+      const productSelection = matchProductForContents(activeProducts, templateContentRows(template));
+      return {
+        ...template,
+        ...computeUsability(template, activeProducts),
+        contentDisplay: display,
+        productSelection,
+      };
     });
     const status = filters.status ?? "active";
     if (status === "all") return withUsability;
@@ -319,12 +343,11 @@ export const runTemplateService = {
   async getCreateFormData(user: AuthenticatedUser) {
     requireManageTemplates(user);
     await raidRepository.ensureReferenceRaids();
-    const contentPresets = listCreateRunContentPresets();
+    const products = (await productPlanningService.listAll()).filter(isSelectableProduct);
 
     return {
       canAssignRaidLead: false,
-      contentPresets,
-      venomousBossMax: venomousBossMaxFromCatalog(),
+      products,
       raidLeads: [] as Array<{ id: string; name: string; accountRole: string }>,
     };
   },
@@ -358,7 +381,7 @@ export const runTemplateService = {
               plannedBossCount: existing.plannedBossCount,
             },
           ];
-    await resolveRaidsForTemplateContents(contents);
+    await assertCopyableContents(contents, await productPlanningService.listActive());
 
     const id = await runTemplateRepository.create({
       name: `${existing.name} (copy)`.slice(0, 80),
@@ -383,12 +406,13 @@ export const runTemplateService = {
   ) {
     requireManageTemplates(user);
     await raidRepository.ensureReferenceRaids();
+    // New Run Setups may only use active + selectable products.
+    const product = requireSelectableProduct(await productPlanningService.listAll(), input.productId);
 
-    const { id } = await persistFromPreset(
+    const { id } = await persistFromProduct(
       {
         name: input.name,
-        contentPreset: input.contentPreset,
-        venomousPlannedBossCount: input.venomousPlannedBossCount,
+        contents: expandSelectionOrThrow(product, input.contentBossCounts ?? {}),
         difficulty: input.difficulty,
         lootType: input.lootType,
         desiredTankCount: input.desiredTankCount,
@@ -409,13 +433,17 @@ export const runTemplateService = {
   async updateTemplate(user: AuthenticatedUser, input: UpdateRunTemplateInput) {
     const existing = await loadManagedTemplate(user, input.templateId);
     await raidRepository.ensureReferenceRaids();
+    const product = resolveProductForTemplateEdit(
+      await productPlanningService.listAll(),
+      existing,
+      input.productId,
+    );
 
     const desiredLootbuddyCount = input.desiredLootbuddyCount ?? existing.desiredLootbuddyCount;
-    await persistFromPreset(
+    await persistFromProduct(
       {
         name: input.name,
-        contentPreset: input.contentPreset,
-        venomousPlannedBossCount: input.venomousPlannedBossCount,
+        contents: expandSelectionOrThrow(product, input.contentBossCounts ?? {}),
         difficulty: input.difficulty,
         lootType: input.lootType,
         desiredTankCount: input.desiredTankCount,
@@ -446,7 +474,7 @@ export const runTemplateService = {
     if (existing.isActive) {
       throw new DomainError("RUN_TEMPLATE_ALREADY_ACTIVE", "This template is already active.");
     }
-    const usability = computeUsability({ ...existing, isActive: true });
+    const usability = computeUsability({ ...existing, isActive: true }, await productPlanningService.listActive());
     if (!usability.usable) {
       throw new DomainError(
         "RUN_TEMPLATE_UNUSABLE",
@@ -459,9 +487,12 @@ export const runTemplateService = {
 
   async listUsableForCreation(user: AuthenticatedUser) {
     requireCanUseTemplates(user);
-    const templates = await runTemplateRepository.listAll();
+    const [templates, activeProducts] = await Promise.all([
+      runTemplateRepository.listAll(),
+      productPlanningService.listActive(),
+    ]);
     return templates
-      .map((template) => ({ ...template, ...computeUsability(template) }))
+      .map((template) => ({ ...template, ...computeUsability(template, activeProducts) }))
       .filter((template) => template.isActive && template.usable);
   },
 
@@ -480,7 +511,7 @@ export const runTemplateService = {
         404,
       );
     }
-    const usability = computeUsability(template);
+    const usability = computeUsability(template, await productPlanningService.listActive());
     if (!usability.usable) {
       throw new DomainError(
         "RUN_TEMPLATE_UNUSABLE",

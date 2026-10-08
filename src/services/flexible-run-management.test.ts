@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { db, orm } from "@/lib/prisma";
-import { venomousCreateInput, venomousUpdateInput } from "@/lib/test-run-input";
+import { venomousCreateInput, venomousUpdateInput, seededProductSelection } from "@/lib/test-run-input";
 import type { CharacterRole, RaidDifficulty } from "@/models/enums";
 import { raidRepository } from "@/repositories/raid.repository";
 import { lockRosterInTx, rosterRepository } from "@/repositories/roster.repository";
@@ -355,8 +355,8 @@ describe("roster acknowledgement after Run edits (runChangedSinceAck)", () => {
   it("each roster-relevant field marks a published roster changed without bumping the version; Start waits; Update clears it", async () => {
     const { runId } = await publishedRunWithPost();
     const relevantEdits: Array<Record<string, unknown>> = [
-      { contentPreset: "MIDNIGHT_S2_BUNDLE" },
-      { contentPreset: "VENOMOUS_ABYSS", plannedBossCount: 5 },
+      { ...seededProductSelection("MIDNIGHT_S2_BUNDLE"), },
+      { ...seededProductSelection("VENOMOUS_ABYSS"), plannedBossCount: 5 },
       { scheduledStartAt: futureIso() },
       { lootType: "VIP" },
       { lootType: "COMMUNITY" },

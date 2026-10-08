@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { seededProductSelection } from "@/lib/test-run-input";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ManageCommunityScheduleView } from "@/components/manage/manage-community-schedule-view";
@@ -113,8 +114,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         usable: true,
         unusableReason: null,
         slotCount: 3,
-        contentPreset: "VENOMOUS_ABYSS",
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         canEdit,
         canDelete: canEdit,
       },
@@ -134,8 +134,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         usable: true,
         unusableReason: null,
         slotCount: 0,
-        contentPreset: "MIDNIGHT_S2_BUNDLE",
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
         canEdit,
         canDelete: canEdit,
       },
@@ -198,8 +197,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         usable: true,
         unusableReason: null,
         name: "Default HC",
-        contentPreset: "VENOMOUS_ABYSS" as const,
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         productLabel: "The Venomous Abyss",
         titleCoverage: "8/8",
         difficulty: "HEROIC",
@@ -216,8 +214,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         usable: true,
         unusableReason: null,
         name: "Zero Slot Setup",
-        contentPreset: "MIDNIGHT_S2_BUNDLE" as const,
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
         productLabel: "Season 2 Bundle",
         titleCoverage: "9/9",
         difficulty: "HEROIC",
@@ -229,11 +226,7 @@ function samplePage(canEdit: boolean): CommunitySchedulePage {
         notes: null,
       },
     ],
-    contentPresets: [
-      { key: "VENOMOUS_ABYSS", displayName: "The Venomous Abyss" },
-      { key: "MIDNIGHT_S2_BUNDLE", displayName: "Season 2 Bundle" },
-    ],
-    venomousBossMax: 8,
+    products: [],
     share: { text: "share", warnings: [] },
     current: {
       window: "CURRENT",

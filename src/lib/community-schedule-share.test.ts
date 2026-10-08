@@ -3,17 +3,6 @@ import {
   formatCommunityScheduleShare,
   formatScheduleShareRunDescription,
 } from "@/lib/community-schedule-share";
-import { TIDEBOUND_GROTTO_RAID_ID, VENOMOUS_ABYSS_RAID_ID, isSelectableForRunSetup } from "@/lib/wow-raid-catalog";
-import { MANAFORGE_OMEGA_RAID_ID } from "@/lib/wow-raid-catalog";
-
-describe("isSelectableForRunSetup", () => {
-  it("includes Tide and Venomous; excludes Manaforge", () => {
-    expect(isSelectableForRunSetup(VENOMOUS_ABYSS_RAID_ID)).toBe(true);
-    expect(isSelectableForRunSetup(TIDEBOUND_GROTTO_RAID_ID)).toBe(true);
-    expect(isSelectableForRunSetup(MANAFORGE_OMEGA_RAID_ID)).toBe(false);
-  });
-});
-
 describe("formatScheduleShareRunDescription", () => {
   it("formats coverage difficulty loot canonically", () => {
     expect(

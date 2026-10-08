@@ -135,8 +135,11 @@ function EditRunSetupButton({
       initial={{
         templateId: source.id,
         name: source.name,
-        contentPreset: source.contentPreset,
-        venomousPlannedBossCount: source.venomousPlannedBossCount,
+        // Preselect the setup's matched Product only while it is selectable.
+        product:
+          source.productId && page.products.some((product) => product.id === source.productId)
+            ? { productId: source.productId, contentBossCounts: source.contentBossCounts }
+            : { productId: "", contentBossCounts: {} },
         difficulty: source.difficulty,
         lootType: source.lootType,
         desiredTankCount: source.desiredTankCount,
@@ -145,8 +148,7 @@ function EditRunSetupButton({
         desiredLootbuddyCount: source.desiredLootbuddyCount,
         notes: source.notes,
       }}
-      contentPresets={page.contentPresets}
-      venomousBossMax={page.venomousBossMax}
+      products={page.products}
       triggerLabel={triggerLabel}
       triggerClassName="inline-flex h-8 items-center rounded-md border border-border bg-surface-raised px-2 text-xs font-medium hover:bg-[#222a3b]"
       title="Edit Run Setup"
@@ -324,8 +326,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
             {page.canEdit ? (
               <RunTemplateFormDialog
                 mode="create"
-                contentPresets={page.contentPresets}
-                venomousBossMax={page.venomousBossMax}
+                products={page.products}
                 triggerLabel="Create Run Setup"
                 triggerClassName="inline-flex h-9 items-center rounded-md border border-border bg-surface-raised px-3 text-sm font-medium hover:bg-[#222a3b]"
                 title="Create Run Setup"
@@ -338,8 +339,7 @@ export function ManageCommunityScheduleView({ page }: { page: CommunityScheduleP
               <CommunitySchedulePlanDialog
                 raidLeads={page.eligibleRaidLeads}
                 templates={page.templates}
-                contentPresets={page.contentPresets}
-                venomousBossMax={page.venomousBossMax}
+                products={page.products}
                 defaultRaidLeadId={page.eligibleRaidLeads[0]?.id}
               />
             ) : null}

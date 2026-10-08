@@ -235,17 +235,6 @@ export const WOW_RAID_CATALOG: readonly WowRaidCatalogEntry[] = [
   },
 ];
 
-/**
- * Raids selectable for Run Setup / RunTemplate planning.
- * Broader than `availableForRuns` (Create Run product picker): Tide is a valid
- * Schedule/Run Setup target while remaining unavailable as a standalone Create
- * Run product (`availableForRuns: false`). Manaforge and other historical raids
- * stay excluded.
- */
-export function isSelectableForRunSetup(raidId: string): boolean {
-  return raidId === VENOMOUS_ABYSS_RAID_ID || raidId === TIDEBOUND_GROTTO_RAID_ID;
-}
-
 /** Short product-facing raid label (Tidebound → Tide). */
 export function raidContentDisplayName(raidId: string, raidName: string): string {
   if (raidId === TIDEBOUND_GROTTO_RAID_ID) return "Tide";

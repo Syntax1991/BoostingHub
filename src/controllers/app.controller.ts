@@ -174,8 +174,7 @@ export const profileController = {
     ]);
     return {
       templates,
-      contentPresets: formData.contentPresets,
-      venomousBossMax: formData.venomousBossMax,
+      products: formData.products,
       raidLeads: [{ id: user.id, name: user.name, accountRole: user.accountRole }],
       canAssignRaidLead: false,
       defaultRaidLeadId: user.id,

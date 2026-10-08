@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { VENOMOUS_ABYSS_PRODUCT_CONTENT_ID } from "@/lib/product-catalog";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -12,8 +13,7 @@ import { createManyRunsSchema, type CreateManyRunsInput } from "@/validators/mas
 import {
   primaryRaidIdFromRun,
   venomousCreateInput,
-  venomousPlannedFromRun,
-} from "@/lib/test-run-input";
+  venomousPlannedFromRun, seededProductSelection } from "@/lib/test-run-input";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -94,8 +94,7 @@ const admin = asUser(ids.admin, "MassCreate Admin", "ADMIN");
 
 function defaultsFor(overrides: Partial<CreateManyRunsInput["defaults"]> = {}): CreateManyRunsInput["defaults"] {
   return {
-    contentPreset: "VENOMOUS_ABYSS" as const,
-    venomousPlannedBossCount: 8,
+    ...seededProductSelection("VENOMOUS_ABYSS", 8),
     difficulty: "HEROIC",
     lootType: "UNSAVED",
     desiredTankCount: 2,
@@ -397,7 +396,7 @@ describe("runService.createManyRuns — boss count rules", () => {
         defaults: defaultsFor(),
         runs: [
           { scheduledStartAt: futureIso(450) },
-          { scheduledStartAt: futureIso(451), overrides: { venomousPlannedBossCount: 999 } },
+          { scheduledStartAt: futureIso(451), overrides: { contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 999 }} },
         ],
       }),
       "RUN_BOSS_COUNT_INVALID",
@@ -416,11 +415,11 @@ describe("runService.createManyRuns — boss count rules", () => {
     // other stale total).
     const raid = await raidRepository.findById(raidId);
     const result = await runService.createManyRuns(lead, {
-      defaults: defaultsFor({ venomousPlannedBossCount: 1 }),
+      defaults: defaultsFor({ contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 1 }}),
       runs: [
         {
           scheduledStartAt: futureIso(460),
-          overrides: { venomousPlannedBossCount: raid!.totalBossCount },
+          overrides: { contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: raid!.totalBossCount }},
         },
       ],
     });
@@ -489,7 +488,7 @@ describe("runService.createManyRuns — title derivation", () => {
         { scheduledStartAt: futureIso(500) },
         {
           scheduledStartAt: futureIso(501),
-          overrides: { difficulty: "MYTHIC", lootType: "VIP", venomousPlannedBossCount: 3 },
+          overrides: { difficulty: "MYTHIC", lootType: "VIP", contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 3 }},
         },
       ],
     });
@@ -558,7 +557,7 @@ describe("runService.createManyRuns — single vs one-row bulk equivalence", () 
         difficulty: "HEROIC",
         lootType: "VIP",
         scheduledStartAt,
-        venomousPlannedBossCount: 6,
+        contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 6 },
         desiredTankCount: 3,
         desiredHealerCount: 5,
         desiredDpsCount: 12,
@@ -570,7 +569,7 @@ describe("runService.createManyRuns — single vs one-row bulk equivalence", () 
     const bulk = await runService.createManyRuns(lead, {
       defaults: defaultsFor({
         lootType: "VIP",
-        venomousPlannedBossCount: 6,
+        contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 6 },
         desiredTankCount: 3,
         desiredHealerCount: 5,
         desiredDpsCount: 12,
@@ -674,10 +673,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("RAID_LEAD applying a global template creates Runs they lead", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Own Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -705,10 +703,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("ADMIN applying a global template uses the selected raid lead from defaults", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Admin-Applied Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -730,10 +727,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("RAID_LEAD may use any usable global template", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Global Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -753,10 +749,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("ADMIN may choose a different raid lead in defaults while a template is selected", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Defaults Lead Choice",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -777,10 +772,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("RAID_LEAD forging another lead via row override is rejected, 0 Runs created", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Row Lead Forge",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -806,10 +800,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("using an inactive template is rejected before any row is prepared, 0 Runs created", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Inactive Template",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -829,10 +822,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("a row may still override other template-derived values while the raid lead stays the actor", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Row Override",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -856,10 +848,9 @@ describe("runService.createManyRuns — templateId integration", () => {
   it("a multi-row batch via a template shares the selected raid lead across every row, atomically", async () => {
     const template = await runTemplateService.createTemplate(admin, {
       name: "Integration Multi-Row",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 8,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -889,10 +880,9 @@ describe("runService.createManyRuns — templateId integration", () => {
     it("editing the template after Run creation leaves the existing Run's fields unchanged", async () => {
       const template = await runTemplateService.createTemplate(admin, {
         name: "Snapshot Independence",
-        contentPreset: "VENOMOUS_ABYSS" as const,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-        venomousPlannedBossCount: 8,
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
@@ -911,8 +901,7 @@ describe("runService.createManyRuns — templateId integration", () => {
       await runTemplateService.updateTemplate(admin, {
         templateId: template.id,
         name: "Snapshot Independence (edited)",
-        contentPreset: "VENOMOUS_ABYSS",
-        venomousPlannedBossCount: 3,
+        ...seededProductSelection("VENOMOUS_ABYSS", 3),
         difficulty: "MYTHIC",
         lootType: "VIP",
         desiredTankCount: 5,
@@ -935,10 +924,9 @@ describe("runService.createManyRuns — templateId integration", () => {
     it("deactivating the template after Run creation leaves the existing Run fully manageable and unchanged", async () => {
       const template = await runTemplateService.createTemplate(admin, {
         name: "Deactivation Independence",
-        contentPreset: "VENOMOUS_ABYSS" as const,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-        venomousPlannedBossCount: 8,
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,

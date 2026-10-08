@@ -6,14 +6,14 @@ import type { CommunityScheduleRunMode, RaidDifficulty, RunLootType } from "@/mo
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
 import { COMMUNITY_SCHEDULE_RUN_MODE_LABELS, DIFFICULTY_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
 import {
-  titleCoverageFromPreset,
-  type RunContentPresetKey,
-} from "@/lib/run-content-presets";
+  defaultContentBossCounts,
+  selectionCoveragePreview,
+  type PlanningProduct,
+  type ProductSelection,
+} from "@/lib/product-selection";
+import { ProductContentPicker } from "@/components/runs/product-content-picker";
 import { createCommunitySchedulePlanAction } from "@/controllers/community-schedule.actions";
-import type {
-  CommunityScheduleContentPresetOption,
-  CommunityScheduleTemplateOption,
-} from "@/services/community-schedule.service";
+import type { CommunityScheduleTemplateOption } from "@/services/community-schedule.service";
 
 const WEEKDAY_LABELS: Record<(typeof COMMUNITY_WEEKDAYS)[number], string> = {
   MONDAY: "Monday",
@@ -45,14 +45,13 @@ function newSlotRow(
 export function CommunitySchedulePlanDialog({
   raidLeads,
   templates,
-  contentPresets,
-  venomousBossMax,
+  products,
   defaultRaidLeadId,
 }: {
   raidLeads: RaidLeadOption[];
   templates: CommunityScheduleTemplateOption[];
-  contentPresets: CommunityScheduleContentPresetOption[];
-  venomousBossMax: number;
+  /** Active + selectable Products for an in-context new Run Setup. */
+  products: PlanningProduct[];
   defaultRaidLeadId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -64,12 +63,13 @@ export function CommunitySchedulePlanDialog({
   const [autoCreateRun, setAutoCreateRun] = useState(false);
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow()]);
   const [name, setName] = useState("");
-  const [contentPreset, setContentPreset] = useState<RunContentPresetKey>(
-    contentPresets[0]?.key ?? "VENOMOUS_ABYSS",
-  );
+  const initialProduct = (): ProductSelection => {
+    const first = products[0];
+    return { productId: first?.id ?? "", contentBossCounts: first ? defaultContentBossCounts(first) : {} };
+  };
+  const [product, setProduct] = useState<ProductSelection>(initialProduct);
   const [difficulty, setDifficulty] = useState<RaidDifficulty>("HEROIC");
   const [lootType, setLootType] = useState<RunLootType>("UNSAVED");
-  const [venomousPlannedBossCount, setVenomousPlannedBossCount] = useState(venomousBossMax);
   const [desiredTankCount, setDesiredTankCount] = useState(2);
   const [desiredHealerCount, setDesiredHealerCount] = useState(4);
   const [desiredDpsCount, setDesiredDpsCount] = useState(14);
@@ -91,12 +91,10 @@ export function CommunitySchedulePlanDialog({
     [templatesForLead, templateId],
   );
 
-  const isBundle = contentPreset === "MIDNIGHT_S2_BUNDLE";
-  const coveragePreview = titleCoverageFromPreset({
-    preset: contentPreset,
-    venomousPlannedBossCount,
-    venomousTotalBossCount: venomousBossMax,
-  });
+  const selectedProduct = products.find((row) => row.id === product.productId);
+  const coveragePreview = selectedProduct
+    ? selectionCoveragePreview(selectedProduct, product.contentBossCounts)
+    : "—";
 
   function resetForm() {
     setError(null);
@@ -106,10 +104,9 @@ export function CommunitySchedulePlanDialog({
     setAutoCreateRun(false);
     setSlots([newSlotRow()]);
     setName("");
-    setContentPreset(contentPresets[0]?.key ?? "VENOMOUS_ABYSS");
+    setProduct(initialProduct());
     setDifficulty("HEROIC");
     setLootType("UNSAVED");
-    setVenomousPlannedBossCount(venomousBossMax);
     setDesiredTankCount(2);
     setDesiredHealerCount(4);
     setDesiredDpsCount(14);
@@ -152,8 +149,8 @@ export function CommunitySchedulePlanDialog({
             runSetup: {
               mode: "create" as const,
               name,
-              contentPreset,
-              venomousPlannedBossCount,
+              productId: product.productId,
+              contentBossCounts: product.contentBossCounts,
               difficulty,
               lootType,
               desiredTankCount,
@@ -280,40 +277,17 @@ export function CommunitySchedulePlanDialog({
                       className="h-9 rounded-md border border-border bg-surface-raised px-2"
                     />
                   </label>
-                  <label className="grid gap-1 text-sm">
-                    <span className="text-xs text-muted">Run Content</span>
-                    <select
-                      required
-                      value={contentPreset}
-                      onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
-                      className="h-9 rounded-md border border-border bg-surface-raised px-2"
-                      aria-label="Run Content"
-                    >
-                      {contentPresets.map((preset) => (
-                        <option key={preset.key} value={preset.key}>
-                          {preset.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {isBundle ? (
-                    <div className="space-y-1.5 rounded-md border border-border bg-surface px-3 py-2 text-xs">
-                      <div className="flex justify-between gap-2">
-                        <span>Tidebound Grotto</span>
-                        <span className="text-muted">1/1 · Included</span>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <span>The Venomous Abyss</span>
-                        <span>
-                          {venomousPlannedBossCount}/{venomousBossMax}
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-2 border-t border-border pt-1.5 font-medium">
-                        <span>Total coverage</span>
-                        <span>{coveragePreview}</span>
-                      </div>
-                    </div>
-                  ) : null}
+                  <ProductContentPicker
+                    products={products}
+                    value={product}
+                    onChange={setProduct}
+                    ariaPrefix="New Run Setup"
+                    compact
+                  />
+                  <p className="flex justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2 text-xs font-medium">
+                    <span>Total coverage</span>
+                    <span>{coveragePreview}</span>
+                  </p>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="grid gap-1 text-sm">
                       <span className="text-xs text-muted">Difficulty</span>
@@ -344,20 +318,6 @@ export function CommunitySchedulePlanDialog({
                       </select>
                     </label>
                   </div>
-                  <label className="grid gap-1 text-sm">
-                    <span className="text-xs text-muted">
-                      {isBundle ? "The Venomous Abyss bosses" : "Planned bosses"} (max {venomousBossMax})
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={venomousBossMax}
-                      value={venomousPlannedBossCount}
-                      onChange={(event) => setVenomousPlannedBossCount(Number(event.target.value))}
-                      className="h-9 rounded-md border border-border bg-surface-raised px-2"
-                      aria-label={isBundle ? "The Venomous Abyss planned bosses" : "Planned bosses"}
-                    />
-                  </label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <label className="grid gap-1 text-sm">
                       <span className="text-xs text-muted">Tanks</span>

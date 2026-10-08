@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifyRunContents,
-  expandRunContentPreset,
-  listCreateRunContentPresets,
-  projectRunContentDisplay,
-} from "@/lib/run-content-presets";
+import { seededProductSelection } from "@/lib/test-run-input";
+import { projectRunContentDisplay } from "@/lib/run-content-presets";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
@@ -39,62 +35,7 @@ function futureIso(days = 14) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-describe("run content presets — pure expansion", () => {
-  it("expands Venomous 8 to one content row", () => {
-    expect(expandRunContentPreset({ preset: "VENOMOUS_ABYSS", venomousPlannedBossCount: 8 })).toEqual([
-      { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 },
-    ]);
-  });
-
-  it("expands Bundle 8 and Bundle 6 with fixed Tidebound 1", () => {
-    expect(expandRunContentPreset({ preset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 8 })).toEqual([
-      { raidId: TIDEBOUND_GROTTO_RAID_ID, sortOrder: 1, plannedBossCount: 1 },
-      { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 2, plannedBossCount: 8 },
-    ]);
-    expect(expandRunContentPreset({ preset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 6 })).toEqual([
-      { raidId: TIDEBOUND_GROTTO_RAID_ID, sortOrder: 1, plannedBossCount: 1 },
-      { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 2, plannedBossCount: 6 },
-    ]);
-  });
-
-  it("rejects Venomous 0 and 9", () => {
-    expect(() => expandRunContentPreset({ preset: "VENOMOUS_ABYSS", venomousPlannedBossCount: 0 })).toThrow();
-    expect(() => expandRunContentPreset({ preset: "VENOMOUS_ABYSS", venomousPlannedBossCount: 9 })).toThrow();
-  });
-
-  it("exposes only Venomous and Bundle products", () => {
-    expect(listCreateRunContentPresets().map((row) => row.key)).toEqual([
-      "VENOMOUS_ABYSS",
-      "MIDNIGHT_S2_BUNDLE",
-    ]);
-  });
-});
-
-describe("run content classification + display", () => {
-  it("classifies Venomous and Bundle by identity, not length alone", () => {
-    expect(
-      classifyRunContents([{ raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 }]),
-    ).toBe("VENOMOUS_ABYSS");
-    expect(
-      classifyRunContents([
-        { raidId: TIDEBOUND_GROTTO_RAID_ID, sortOrder: 1, plannedBossCount: 1 },
-        { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 2, plannedBossCount: 8 },
-      ]),
-    ).toBe("MIDNIGHT_S2_BUNDLE");
-    expect(
-      classifyRunContents([
-        { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 },
-        { raidId: TIDEBOUND_GROTTO_RAID_ID, sortOrder: 2, plannedBossCount: 1 },
-      ]),
-    ).toBe("MIDNIGHT_S2_BUNDLE");
-    expect(
-      classifyRunContents([
-        { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 8 },
-        { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 2, plannedBossCount: 8 },
-      ]),
-    ).toBe("CUSTOM");
-  });
-
+describe("run content display (persisted contents)", () => {
   it("renders per-raid summaries and summed Bundle title/channel coverage", () => {
     const venomous = projectRunContentDisplay([
       {
@@ -217,8 +158,7 @@ describe("run content products — create / mass-create / edit", () => {
 
   it("creates Venomous 8 with one content row and Venomous authoritative contents", async () => {
     const { id } = await runService.createRun(lead, {
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(20),
@@ -235,8 +175,7 @@ describe("run content products — create / mass-create / edit", () => {
 
   it("creates Bundle 8 with Tidebound 1 + Venomous 8 and Venomous authoritative contents", async () => {
     const { id } = await runService.createRun(lead, {
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(21),
@@ -261,8 +200,7 @@ describe("run content products — create / mass-create / edit", () => {
 
   it("creates partial Bundle 6 with display summary Tide 1/1 · Venomous 6/8", async () => {
     const { id } = await runService.createRun(lead, {
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 6,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(22),
@@ -280,8 +218,7 @@ describe("run content products — create / mass-create / edit", () => {
   it("mass-creates mixed Venomous + Bundle rows atomically (3 runs / 5 contents)", async () => {
     const result = await runService.createManyRuns(lead, {
       defaults: {
-        contentPreset: "VENOMOUS_ABYSS",
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         difficulty: "HEROIC",
         lootType: "UNSAVED",
         desiredTankCount: 2,
@@ -292,11 +229,11 @@ describe("run content products — create / mass-create / edit", () => {
         { scheduledStartAt: futureIso(30) },
         {
           scheduledStartAt: futureIso(31),
-          overrides: { contentPreset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 8 },
+          overrides: { ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8), },
         },
         {
           scheduledStartAt: futureIso(32),
-          overrides: { contentPreset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 6 },
+          overrides: { ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6), },
         },
       ],
     });
@@ -309,8 +246,7 @@ describe("run content products — create / mass-create / edit", () => {
 
   it("allows Venomous → Bundle 6 before freeze and Bundle → Venomous after", async () => {
     const { id } = await runService.createRun(lead, {
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(40),
@@ -322,8 +258,7 @@ describe("run content products — create / mass-create / edit", () => {
 
     await runService.updateRun(lead, {
       runId: id,
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 6,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(40),
@@ -340,8 +275,7 @@ describe("run content products — create / mass-create / edit", () => {
 
     await runService.updateRun(lead, {
       runId: id,
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(40),
@@ -357,8 +291,7 @@ describe("run content products — create / mass-create / edit", () => {
 
   it("keeps content identity editable after signup history — the signup rows stay attached", async () => {
     const { id } = await runService.createRun(lead, {
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(41),
@@ -384,8 +317,7 @@ describe("run content products — create / mass-create / edit", () => {
 
     await runService.updateRun(lead, {
       runId: id,
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(41),
@@ -403,8 +335,7 @@ describe("run content products — create / mass-create / edit", () => {
     // And back: Bundle → Venomous with a different boss count.
     await runService.updateRun(lead, {
       runId: id,
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 6,
+      ...seededProductSelection("VENOMOUS_ABYSS", 6),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(41),
@@ -420,8 +351,7 @@ describe("run content products — create / mass-create / edit", () => {
 
   it("notes-only update leaves Bundle contents untouched", async () => {
     const { id } = await runService.createRun(lead, {
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 7,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 7),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(42),
@@ -434,8 +364,7 @@ describe("run content products — create / mass-create / edit", () => {
 
     await runService.updateRun(lead, {
       runId: id,
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 7,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 7),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
       scheduledStartAt: futureIso(42),

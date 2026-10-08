@@ -37,6 +37,10 @@ export type ProductDefinition = {
 
 export const VENOMOUS_ABYSS_PRODUCT_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1";
 export const MIDNIGHT_S2_BUNDLE_PRODUCT_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd2";
+/** Seeded ProductRaidContent ids (bootstrap fixture identity; tests / seed only). */
+export const VENOMOUS_ABYSS_PRODUCT_CONTENT_ID = "dd000001-dddd-4ddd-8ddd-dddddddddddd";
+export const MIDNIGHT_S2_BUNDLE_TIDE_CONTENT_ID = "dd000002-dddd-4ddd-8ddd-dddddddddddd";
+export const MIDNIGHT_S2_BUNDLE_VENOMOUS_CONTENT_ID = "dd000003-dddd-4ddd-8ddd-dddddddddddd";
 
 export const PRODUCT_CATALOG_FIXTURE: readonly ProductDefinition[] = [
   {
@@ -48,7 +52,7 @@ export const PRODUCT_CATALOG_FIXTURE: readonly ProductDefinition[] = [
     sortOrder: 1,
     contents: [
       {
-        id: "dd000001-dddd-4ddd-8ddd-dddddddddddd",
+        id: VENOMOUS_ABYSS_PRODUCT_CONTENT_ID,
         raidId: VENOMOUS_ABYSS_RAID_ID,
         sortOrder: 1,
         bossCountMode: "VARIABLE",
@@ -67,7 +71,7 @@ export const PRODUCT_CATALOG_FIXTURE: readonly ProductDefinition[] = [
     sortOrder: 2,
     contents: [
       {
-        id: "dd000002-dddd-4ddd-8ddd-dddddddddddd",
+        id: MIDNIGHT_S2_BUNDLE_TIDE_CONTENT_ID,
         raidId: TIDEBOUND_GROTTO_RAID_ID,
         sortOrder: 1,
         bossCountMode: "FIXED",
@@ -76,7 +80,7 @@ export const PRODUCT_CATALOG_FIXTURE: readonly ProductDefinition[] = [
         defaultBossCount: null,
       },
       {
-        id: "dd000003-dddd-4ddd-8ddd-dddddddddddd",
+        id: MIDNIGHT_S2_BUNDLE_VENOMOUS_CONTENT_ID,
         raidId: VENOMOUS_ABYSS_RAID_ID,
         sortOrder: 2,
         bossCountMode: "VARIABLE",

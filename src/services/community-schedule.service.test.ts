@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { VENOMOUS_ABYSS_PRODUCT_CONTENT_ID, VENOMOUS_ABYSS_PRODUCT_ID } from "@/lib/product-catalog";
+import { seededProductSelection } from "@/lib/test-run-input";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { MAX_SLOTS_PER_PLAN } from "@/lib/community-schedule";
@@ -308,10 +310,9 @@ describe("communityScheduleService domain", () => {
 
 const createSetupFields = {
   name: "Plan HC Setup",
-  contentPreset: "VENOMOUS_ABYSS" as const,
+  ...seededProductSelection("VENOMOUS_ABYSS", 8),
   difficulty: "HEROIC" as const,
   lootType: "UNSAVED" as const,
-  venomousPlannedBossCount: 8,
   desiredTankCount: 2,
   desiredHealerCount: 4,
   desiredDpsCount: 14,
@@ -536,7 +537,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(unconfigured?.runSetupName).toBe("Unconfigured Schedule");
     const mixed = page.runSetups.find((row) => row.runTemplateId === templateId);
     expect(mixed?.autoCreateSummary).toBe("MIXED");
-    expect(page.contentPresets.length).toBeGreaterThan(0);
+    expect(page.products.length).toBeGreaterThan(0);
   });
 
   it("RAID_LEAD cannot create schedule plans", async () => {
@@ -568,10 +569,9 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
       communityScheduleService.updateRunSetup(lead, {
         templateId: plan.templateId,
         name: "Hacked",
-        contentPreset: "VENOMOUS_ABYSS" as const,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         difficulty: "HEROIC",
         lootType: "UNSAVED",
-        venomousPlannedBossCount: 8,
         desiredTankCount: 2,
         desiredHealerCount: 4,
         desiredDpsCount: 14,
@@ -584,10 +584,9 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     await communityScheduleService.updateRunSetup(admin, {
       templateId: plan.templateId,
       name: "Edited Setup Name",
-      contentPreset: "VENOMOUS_ABYSS" as const,
+      ...seededProductSelection("VENOMOUS_ABYSS", 7),
       difficulty: "HEROIC",
       lootType: "UNSAVED",
-      venomousPlannedBossCount: 7,
       desiredTankCount: 2,
       desiredHealerCount: 4,
       desiredDpsCount: 14,
@@ -600,16 +599,17 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
     expect(group?.runSetupName).toContain("The Venomous Abyss");
     expect(group?.slots).toHaveLength(2);
     const option = page.templates.find((row) => row.id === plan.templateId);
-    expect(option?.venomousPlannedBossCount).toBe(7);
+    expect(option?.productId).toBe(VENOMOUS_ABYSS_PRODUCT_ID);
+    expect(option?.contentBossCounts).toEqual({ [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 7 });
     expect(option?.notes).toBe("updated notes");
-    expect(page.contentPresets.some((preset) => preset.key === "VENOMOUS_ABYSS")).toBe(true);
-    expect(page.contentPresets.some((preset) => preset.key === "MIDNIGHT_S2_BUNDLE")).toBe(true);
+    expect(page.products.some((product) => product.key === "VENOMOUS_ABYSS")).toBe(true);
+    expect(page.products.some((product) => product.key === "MIDNIGHT_S2_BUNDLE")).toBe(true);
   });
 
   it("exposes Season 2 Bundle product and materializes multi-content DRAFT Runs", async () => {
     await raidRepository.ensureReferenceRaids();
     const page = await communityScheduleService.getPage(admin);
-    expect(page.contentPresets.map((preset) => preset.key)).toEqual([
+    expect(page.products.map((product) => product.key).slice(0, 2)).toEqual([
       "VENOMOUS_ABYSS",
       "MIDNIGHT_S2_BUNDLE",
     ]);
@@ -622,8 +622,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
         runSetup: {
           mode: "create",
           name: "Bundle Setup",
-          contentPreset: "MIDNIGHT_S2_BUNDLE",
-          venomousPlannedBossCount: 8,
+          ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
           difficulty: "HEROIC",
           lootType: "VIP",
           desiredTankCount: 2,
@@ -676,8 +675,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
         runSetup: {
           mode: "create",
           name: "Wed Boundary Bundle",
-          contentPreset: "MIDNIGHT_S2_BUNDLE",
-          venomousPlannedBossCount: 8,
+          ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
           difficulty: "HEROIC",
           lootType: "VIP",
           desiredTankCount: 2,
@@ -717,7 +715,7 @@ describe("communityScheduleService createSchedulePlan / addTimesToSetup", () => 
   it("persists per-row Run Mode and Share uses authoritative template description", async () => {
     const plan = await communityScheduleService.createSchedulePlan(admin, {
       raidLeadId: ids.lead,
-      runSetup: { mode: "create", ...createSetupFields, name: "Share Setup", venomousPlannedBossCount: 7, lootType: "VIP" },
+      runSetup: { mode: "create", ...createSetupFields, name: "Share Setup", contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 7 }, lootType: "VIP" },
       slots: [
         { weekday: "FRIDAY", localStartTime: "23:00", runMode: "TEAM_RUN" },
         { weekday: "SATURDAY", localStartTime: "23:00", runMode: "INHOUSE" },
@@ -815,7 +813,7 @@ describe("communityScheduleService mutable planning delete", () => {
           mode: "create",
           ...createSetupFields,
           name: "Historical Bundle Setup",
-          contentPreset: "MIDNIGHT_S2_BUNDLE",
+          ...seededProductSelection("MIDNIGHT_S2_BUNDLE"),
         },
         slots: [
           { weekday: "THURSDAY", localStartTime: "17:00", runMode: "INHOUSE" },
@@ -922,22 +920,19 @@ describe("communityScheduleService mutable planning delete", () => {
     const a = await communityScheduleService.createRunSetup(admin, {
       ...createSetupFields,
       name: "HC VIP Bundle 9/9",
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
       lootType: "VIP",
     });
     const b = await communityScheduleService.createRunSetup(admin, {
       ...createSetupFields,
       name: "HC VIP Bundle 7/9",
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 6,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
       lootType: "VIP",
     });
     const c = await communityScheduleService.createRunSetup(admin, {
       ...createSetupFields,
       name: "HC VIP Venomous 8/8",
-      contentPreset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 8,
+      ...seededProductSelection("VENOMOUS_ABYSS", 8),
       lootType: "VIP",
     });
 
@@ -963,8 +958,7 @@ describe("communityScheduleService mutable planning delete", () => {
     await communityScheduleService.updateRunSetup(admin, {
       templateId: dup.id,
       name: "HC VIP Bundle 7/9 copy",
-      contentPreset: "MIDNIGHT_S2_BUNDLE",
-      venomousPlannedBossCount: 6,
+      ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
       difficulty: "HEROIC",
       lootType: "VIP",
       desiredTankCount: 2,

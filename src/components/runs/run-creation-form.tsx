@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetime";
 import { DIFFICULTY_LABELS, ROLE_LABELS, RUN_LOOT_TYPE_LABELS } from "@/lib/labels";
-import { titleCoverageFromPreset, type RunContentPresetKey } from "@/lib/run-content-presets";
+import { selectionCoveragePreview, type ProductSelection } from "@/lib/product-selection";
+import {
+  ProductContentPicker,
+  selectionForProduct,
+  selectionSummary,
+} from "@/components/runs/product-content-picker";
 import { buildRunTitle } from "@/lib/run-title";
 import { runCreateSuccessPath } from "@/lib/run-routes";
 import { isLootTypeAllowedForDifficulty } from "@/services/run-state";
@@ -15,8 +20,8 @@ import { RAID_DIFFICULTIES, RUN_LOOT_TYPES, type RaidDifficulty, type RunLootTyp
 import type { CreateManyRunsForm } from "@/services/run.service";
 
 type RowOverrides = {
-  contentPreset?: RunContentPresetKey;
-  venomousPlannedBossCount?: number;
+  /** Row product + counts override (both together: counts belong to one product). */
+  product?: ProductSelection;
   difficulty?: RaidDifficulty;
   lootType?: RunLootType;
   raidLeadId?: string;
@@ -45,8 +50,8 @@ function nextDefaultLocal(afterLocal: string): string {
   }
 }
 
-function presetLabel(form: CreateManyRunsForm, key: RunContentPresetKey): string {
-  return form.contentPresets.find((preset) => preset.key === key)?.displayName ?? key;
+function productName(form: CreateManyRunsForm, productId: string): string {
+  return form.products.find((product) => product.id === productId)?.name ?? "—";
 }
 
 export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
@@ -57,12 +62,10 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
 
   const [templateId, setTemplateId] = useState("");
   const templateLocked = Boolean(templateId);
-  const [contentPreset, setContentPreset] = useState<RunContentPresetKey>(
-    form.defaults.contentPreset ?? "VENOMOUS_ABYSS",
-  );
-  const [venomousPlannedBossCount, setVenomousPlannedBossCount] = useState(
-    form.defaults.venomousPlannedBossCount ?? form.venomousBossMax,
-  );
+  const [product, setProduct] = useState<ProductSelection>({
+    productId: form.defaults.productId,
+    contentBossCounts: form.defaults.contentBossCounts,
+  });
   const [difficulty, setDifficulty] = useState<RaidDifficulty>(form.defaults.difficulty);
   const [lootType, setLootType] = useState<RunLootType>(form.defaults.lootType);
   const [raidLeadId, setRaidLeadId] = useState(form.defaultRaidLeadId);
@@ -88,8 +91,10 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     const template = form.templates.find((candidate) => candidate.id === nextTemplateId);
     if (!template) return;
 
-    setContentPreset(template.contentPreset);
-    setVenomousPlannedBossCount(template.venomousPlannedBossCount);
+    // A template whose product is no longer selectable keeps the current product choice.
+    if (template.productId) {
+      setProduct({ productId: template.productId, contentBossCounts: template.contentBossCounts });
+    }
     setDifficulty(template.difficulty);
     setLootType(template.lootType);
     setDesiredTankCount(template.desiredTankCount);
@@ -135,11 +140,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     );
   }
 
-  function effectivePreset(row: Row): RunContentPresetKey {
-    return row.overrides.contentPreset ?? contentPreset;
-  }
-  function effectiveVenomous(row: Row): number {
-    return row.overrides.venomousPlannedBossCount ?? venomousPlannedBossCount;
+  function effectiveProduct(row: Row): ProductSelection {
+    return row.overrides.product ?? product;
   }
   function effectiveDifficulty(row: Row): RaidDifficulty {
     return row.overrides.difficulty ?? difficulty;
@@ -157,13 +159,10 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
 
   function previewTitle(row: Row) {
     try {
-      const preset = row.overrides.contentPreset ?? contentPreset;
-      const venomous = effectiveVenomous(row);
-      const titleCoverage = titleCoverageFromPreset({
-        preset,
-        venomousPlannedBossCount: venomous,
-        venomousTotalBossCount: form.venomousBossMax,
-      });
+      const selection = effectiveProduct(row);
+      const selected = form.products.find((option) => option.id === selection.productId);
+      if (!selected) return "—";
+      const titleCoverage = selectionCoveragePreview(selected, selection.contentBossCounts);
       return buildRunTitle({
         scheduledStartAt: fromDatetimeLocalValue(row.scheduledLocal),
         difficulty: effectiveDifficulty(row),
@@ -239,8 +238,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     startTransition(async () => {
       const result = await createManyRunsAction({
         defaults: {
-          contentPreset,
-          venomousPlannedBossCount,
+          productId: product.productId,
+          contentBossCounts: product.contentBossCounts,
           difficulty,
           lootType,
           raidLeadId: form.canAssignRaidLead ? raidLeadId : undefined,
@@ -251,10 +250,19 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           desiredLootbuddyCount,
           discordRolePing,
         },
-        runs: rows.map((row, index) => ({
-          scheduledStartAt: scheduledByRow[index],
-          overrides: Object.keys(row.overrides).length > 0 ? row.overrides : undefined,
-        })),
+        runs: rows.map((row, index) => {
+          const { product: rowProduct, ...rest } = row.overrides;
+          const overrides = {
+            ...rest,
+            ...(rowProduct
+              ? { productId: rowProduct.productId, contentBossCounts: rowProduct.contentBossCounts }
+              : {}),
+          };
+          return {
+            scheduledStartAt: scheduledByRow[index],
+            overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+          };
+        }),
         templateId: templateId || undefined,
       });
 
@@ -268,8 +276,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
     });
   }
 
-  const canSubmit = form.contentPresets.length > 0 && rows.length >= 1 && rows.length <= form.maxRuns;
-  const sharedIsBundle = contentPreset === "MIDNIGHT_S2_BUNDLE";
+  const canSubmit =
+    form.products.length > 0 && Boolean(product.productId) && rows.length >= 1 && rows.length <= form.maxRuns;
 
   return (
     <form className="space-y-4" onSubmit={submit}>
@@ -278,7 +286,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
           {error}
         </p>
       ) : null}
-      {form.contentPresets.length === 0 ? (
+      {form.products.length === 0 ? (
         <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm">
           No run products are available.
         </p>
@@ -314,42 +322,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
       <Card>
         <CardHeader title="Shared defaults" description="Applied to every run below unless a row overrides it." />
         <div className="space-y-3 px-4 py-4">
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted">Product</span>
-            <select
-              aria-label="Shared product"
-              value={contentPreset}
-              onChange={(event) => setContentPreset(event.target.value as RunContentPresetKey)}
-              className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              required
-            >
-              {form.contentPresets.map((preset) => (
-                <option key={preset.key} value={preset.key}>
-                  {preset.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          {sharedIsBundle ? (
-            <p className="rounded-md border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
-              Tide 1/1 (fixed) · The Venomous Abyss selectable below
-            </p>
-          ) : null}
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted">The Venomous Abyss bosses</span>
-            <input
-              type="number"
-              min={1}
-              max={form.venomousBossMax}
-              value={venomousPlannedBossCount}
-              onChange={(event) => setVenomousPlannedBossCount(Number(event.target.value))}
-              className="h-9 w-full rounded-md border border-border bg-surface px-2"
-              aria-label="Shared Venomous planned bosses"
-            />
-            <span className="mt-1 block text-xs text-muted">
-              Out of {form.venomousBossMax} bosses in The Venomous Abyss.
-            </span>
-          </label>
+          <ProductContentPicker products={form.products} value={product} onChange={setProduct} ariaPrefix="Shared" />
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">
               <span className="mb-1 block text-muted">Difficulty</span>
@@ -506,7 +479,7 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
         <ul className="divide-y divide-border">
           {rows.map((row, index) => {
             const hasOverrides = Object.keys(row.overrides).length > 0;
-            const rowPreset = effectivePreset(row);
+            const rowProduct = effectiveProduct(row);
             return (
               <li key={row.key} className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -519,10 +492,8 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
                     aria-label={`Run ${index + 1} scheduled start`}
                     required
                   />
-                  <span className="text-sm">{presetLabel(form, rowPreset)}</span>
-                  <span className="text-sm text-muted">
-                    VA {effectiveVenomous(row)}/{form.venomousBossMax}
-                  </span>
+                  <span className="text-sm">{productName(form, rowProduct.productId)}</span>
+                  <span className="text-sm text-muted">{selectionSummary(form.products, rowProduct)}</span>
                   <span className="text-sm text-muted">{DIFFICULTY_LABELS[effectiveDifficulty(row)]}</span>
                   <span className="text-sm text-muted">{RUN_LOOT_TYPE_LABELS[effectiveLootType(row)]}</span>
                   <span className="text-sm text-muted">{effectiveRaidLeadName(row) || "—"}</span>
@@ -556,52 +527,33 @@ export function RunCreationForm({ form }: { form: CreateManyRunsForm }) {
 
                 {row.expanded ? (
                   <div className="mt-3 space-y-3 rounded-md border border-border bg-surface-raised p-3">
-                    <OverrideField
-                      label="Product"
-                      active={row.overrides.contentPreset !== undefined}
-                      onReset={() => resetOverride(row.key, "contentPreset")}
-                    >
-                      <select
-                        aria-label={`Run ${index + 1} product override`}
-                        value={rowPreset}
-                        onChange={(event) =>
+                    <div className="block text-sm">
+                      <span className="mb-1 flex items-center justify-between gap-2">
+                        <span className="text-muted">Product &amp; bosses</span>
+                        {row.overrides.product !== undefined ? (
+                          <button
+                            type="button"
+                            onClick={() => resetOverride(row.key, "product")}
+                            className="text-xs text-accent hover:underline"
+                          >
+                            Use shared
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted">Inherited</span>
+                        )}
+                      </span>
+                      <ProductContentPicker
+                        products={form.products}
+                        value={rowProduct}
+                        onChange={(next) =>
                           updateOverrides(row.key, {
-                            contentPreset: event.target.value as RunContentPresetKey,
+                            product: next.productId ? next : selectionForProduct(form.products, product.productId),
                           })
                         }
-                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                      >
-                        {form.contentPresets.map((preset) => (
-                          <option key={preset.key} value={preset.key}>
-                            {preset.displayName}
-                          </option>
-                        ))}
-                      </select>
-                    </OverrideField>
-
-                    {rowPreset === "MIDNIGHT_S2_BUNDLE" ? (
-                      <p className="text-xs text-muted">Tide 1/1 is fixed for the Season 2 Bundle.</p>
-                    ) : null}
-
-                    <OverrideField
-                      label="Venomous bosses"
-                      active={row.overrides.venomousPlannedBossCount !== undefined}
-                      onReset={() => resetOverride(row.key, "venomousPlannedBossCount")}
-                    >
-                      <input
-                        type="number"
-                        min={1}
-                        max={form.venomousBossMax}
-                        value={effectiveVenomous(row)}
-                        onChange={(event) =>
-                          updateOverrides(row.key, {
-                            venomousPlannedBossCount: Number(event.target.value),
-                          })
-                        }
-                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                        aria-label={`Run ${index + 1} Venomous bosses override`}
+                        ariaPrefix={`Run ${index + 1}`}
+                        compact
                       />
-                    </OverrideField>
+                    </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <OverrideField

@@ -1,4 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { PRODUCT_CATALOG_FIXTURE } from "@/lib/product-catalog";
+import type { PlanningProduct } from "@/lib/product-selection";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
+import { seededProductSelection } from "@/lib/test-run-input";
 import type { AuthenticatedUser } from "@/auth/authorization";
 import { isDomainError } from "@/lib/errors";
 import { orm } from "@/lib/prisma";
@@ -10,7 +14,9 @@ import type { RunTemplateRecord } from "@/repositories/run-template.repository";
 import type { CreateRunTemplateInput } from "@/validators/run-template";
 import { createRunTemplateSchema } from "@/validators/run-template";
 import { runService } from "@/services/run.service";
-import { expandRunContentPreset } from "@/lib/run-content-presets";
+import { expandProductSelection } from "@/lib/product-selection";
+import { productPlanningService } from "@/services/product-planning.service";
+import { VENOMOUS_ABYSS_PRODUCT_CONTENT_ID, VENOMOUS_ABYSS_PRODUCT_ID } from "@/lib/product-catalog";
 
 const raidId = VENOMOUS_ABYSS_RAID_ID;
 const ids = {
@@ -94,10 +100,9 @@ const admin = asUser(ids.admin, "RTS Admin", "ADMIN");
 function inputFor(overrides: Partial<CreateRunTemplateInput> = {}): CreateRunTemplateInput {
   return {
     name: "Service Test Template",
-    contentPreset: "VENOMOUS_ABYSS" as const,
+    ...seededProductSelection("VENOMOUS_ABYSS", 8),
     difficulty: "HEROIC",
     lootType: "UNSAVED",
-    venomousPlannedBossCount: 8,
     desiredTankCount: 2,
     desiredHealerCount: 4,
     desiredDpsCount: 14,
@@ -182,18 +187,46 @@ function fakeTemplate(overrides: Partial<RunTemplateRecord> = {}): RunTemplateRe
   };
 }
 
+/**
+ * Pure usability checks against the SEEDED catalog shape (Venomous; Tide 1 +
+ * Venomous). Built from the bootstrap fixtures — the runtime reads the DB.
+ */
+const SEEDED_ACTIVE_PRODUCTS: PlanningProduct[] = PRODUCT_CATALOG_FIXTURE.map((product) => ({
+  id: product.id,
+  key: product.key,
+  name: product.name,
+  active: product.active,
+  selectable: product.selectable,
+  sortOrder: product.sortOrder,
+  contents: product.contents.map((content) => ({
+    productRaidContentId: content.id,
+    raidId: content.raidId,
+    raidName: fixtureRaidCatalog().findById(content.raidId)!.name,
+    sortOrder: content.sortOrder,
+    bossCountMode: content.bossCountMode,
+    fixedBossCount: content.fixedBossCount,
+    minBossCount: content.minBossCount,
+    defaultBossCount: content.defaultBossCount,
+    totalBossCount: fixtureRaidCatalog().bossTotal(content.raidId),
+  })),
+}));
+
+function usabilityWithSeededProducts(template: Parameters<typeof computeUsability>[0]) {
+  return computeUsability(template, SEEDED_ACTIVE_PRODUCTS);
+}
+
 describe("computeUsability — pure boolean logic", () => {
   it("a fully valid template is usable", () => {
-    expect(computeUsability(fakeTemplate())).toEqual({ usable: true, unusableReason: null });
+    expect(usabilityWithSeededProducts(fakeTemplate())).toEqual({ usable: true, unusableReason: null });
   });
 
   it("an inactive template is unusable", () => {
-    expect(computeUsability(fakeTemplate({ isActive: false })).usable).toBe(false);
+    expect(usabilityWithSeededProducts(fakeTemplate({ isActive: false })).usable).toBe(false);
   });
 
   it("a template whose raid is no longer available for Run Setup is unusable", () => {
     expect(
-      computeUsability(
+      usabilityWithSeededProducts(
         fakeTemplate({
           raidId: MANAFORGE_OMEGA_RAID_ID,
           raidAvailableForRuns: false,
@@ -216,7 +249,7 @@ describe("computeUsability — pure boolean logic", () => {
 
   it("Bundle Tide remains usable even when Tide availableForRuns is false", () => {
     expect(
-      computeUsability(
+      usabilityWithSeededProducts(
         fakeTemplate({
           contents: [
             {
@@ -247,7 +280,7 @@ describe("computeUsability — pure boolean logic", () => {
 
   it("standalone Tide content is not a supported product", () => {
     expect(
-      computeUsability(
+      usabilityWithSeededProducts(
         fakeTemplate({
           raidId: TIDEBOUND_GROTTO_RAID_ID,
           raidAvailableForRuns: false,
@@ -271,12 +304,12 @@ describe("computeUsability — pure boolean logic", () => {
   });
 
   it("an invalid difficulty/lootType combination is unusable", () => {
-    expect(computeUsability(fakeTemplate({ difficulty: "MYTHIC", lootType: "SAVED" })).usable).toBe(false);
+    expect(usabilityWithSeededProducts(fakeTemplate({ difficulty: "MYTHIC", lootType: "SAVED" })).usable).toBe(false);
   });
 
   it("a planned boss count outside the raid's current total is unusable", () => {
     expect(
-      computeUsability(
+      usabilityWithSeededProducts(
         fakeTemplate({
           plannedBossCount: 99,
           contents: [
@@ -295,7 +328,7 @@ describe("computeUsability — pure boolean logic", () => {
       ).usable,
     ).toBe(false);
     expect(
-      computeUsability(
+      usabilityWithSeededProducts(
         fakeTemplate({
           plannedBossCount: 0,
           contents: [
@@ -316,29 +349,29 @@ describe("computeUsability — pure boolean logic", () => {
   });
 
   it("an out-of-range composition value is unusable", () => {
-    expect(computeUsability(fakeTemplate({ desiredTankCount: -1 })).usable).toBe(false);
-    expect(computeUsability(fakeTemplate({ desiredDpsCount: 999 })).usable).toBe(false);
+    expect(usabilityWithSeededProducts(fakeTemplate({ desiredTankCount: -1 })).usable).toBe(false);
+    expect(usabilityWithSeededProducts(fakeTemplate({ desiredDpsCount: 999 })).usable).toBe(false);
   });
 });
 
-describe("template → VENOMOUS_ABYSS preset expansion", () => {
-  it("expands a Venomous-shaped template into content rows without a Run.raidId column", () => {
-    const contents = expandRunContentPreset({
-      preset: "VENOMOUS_ABYSS",
-      venomousPlannedBossCount: 6,
-    });
-    expect(contents).toEqual([
+describe("template → DB product expansion", () => {
+  it("expands the persisted Venomous product into content rows without a Run.raidId column", async () => {
+    const product = (await productPlanningService.listAll()).find((row) => row.id === VENOMOUS_ABYSS_PRODUCT_ID)!;
+    expect(expandProductSelection(product, { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 6 })).toEqual([
       { raidId: VENOMOUS_ABYSS_RAID_ID, sortOrder: 1, plannedBossCount: 6 },
     ]);
   });
 
-  it("getCreateManyForm maps templates to VENOMOUS_ABYSS contentPreset defaults", async () => {
-    const created = await runTemplateService.createTemplate(admin, inputFor({ name: "Preset Map", venomousPlannedBossCount: 5 }));
+  it("getCreateManyForm maps templates back to their matching product selection", async () => {
+    const created = await runTemplateService.createTemplate(
+      admin,
+      inputFor({ name: "Preset Map", contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 5 } }),
+    );
     createdTemplateIds.push(created.id);
     const form = await runService.getCreateManyForm(lead);
     const row = form.templates.find((template) => template.id === created.id);
-    expect(row?.contentPreset).toBe("VENOMOUS_ABYSS");
-    expect(row?.venomousPlannedBossCount).toBe(5);
+    expect(row?.productId).toBe(VENOMOUS_ABYSS_PRODUCT_ID);
+    expect(row?.contentBossCounts).toEqual({ [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 5 });
   });
 });
 
@@ -374,7 +407,7 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
   it("creates Bundle contents with fixed Tide 1/1", async () => {
     const created = await runTemplateService.createTemplate(
       admin,
-      inputFor({ name: "Bundle create", contentPreset: "MIDNIGHT_S2_BUNDLE", venomousPlannedBossCount: 6 }),
+      inputFor({ name: "Bundle create", ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6), }),
     );
     createdTemplateIds.push(created.id);
     const template = await runTemplateRepository.findById(created.id);
@@ -392,7 +425,7 @@ describe("runTemplateService.createTemplate — domain validation reuses Run pla
 
   it("a planned boss count exceeding the raid's total is rejected", async () => {
     await expectDomainCode(
-      runTemplateService.createTemplate(admin, inputFor({ venomousPlannedBossCount: 999 })),
+      runTemplateService.createTemplate(admin, inputFor({ contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 999 } })),
       "RUN_BOSS_COUNT_INVALID",
     );
   });
@@ -411,8 +444,7 @@ describe("runTemplateService.duplicateTemplate", () => {
       admin,
       inputFor({
         name: "HC VIP Venomous 8/8",
-        contentPreset: "VENOMOUS_ABYSS",
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("VENOMOUS_ABYSS", 8),
         lootType: "VIP",
         desiredTankCount: 2,
         desiredHealerCount: 4,
@@ -444,7 +476,7 @@ describe("runTemplateService.duplicateTemplate", () => {
     await runTemplateService.updateTemplate(admin, {
       ...inputFor({
         name: "HC VIP Venomous 7/8",
-        venomousPlannedBossCount: 7,
+        contentBossCounts: { [VENOMOUS_ABYSS_PRODUCT_CONTENT_ID]: 7 },
         lootType: "VIP",
         notes: "edited copy",
       }),
@@ -460,8 +492,7 @@ describe("runTemplateService.duplicateTemplate", () => {
       admin,
       inputFor({
         name: "HC VIP Bundle 9/9",
-        contentPreset: "MIDNIGHT_S2_BUNDLE",
-        venomousPlannedBossCount: 8,
+        ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 8),
         lootType: "VIP",
       }),
     );
@@ -482,8 +513,7 @@ describe("runTemplateService.duplicateTemplate", () => {
     await runTemplateService.updateTemplate(admin, {
       ...inputFor({
         name: "HC VIP Bundle 7/9",
-        contentPreset: "MIDNIGHT_S2_BUNDLE",
-        venomousPlannedBossCount: 6,
+        ...seededProductSelection("MIDNIGHT_S2_BUNDLE", 6),
         lootType: "VIP",
       }),
       templateId: dup.id,
