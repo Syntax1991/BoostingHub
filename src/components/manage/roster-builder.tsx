@@ -62,6 +62,17 @@ import {
   summarizeRaidBuffCoverageByClass,
 } from "@/services/roster-raid-buffs";
 import { validateRosterDraft } from "@/services/roster-validation";
+import {
+  confirmedWarningsFor,
+  RosterWarningConfirmDialog,
+  warningDialogItemsFromPending,
+  type RosterWarningDialogItem,
+} from "@/components/manage/roster-warning-confirm-dialog";
+import {
+  unacknowledgedWarnings,
+  type ConfirmedRosterWarning,
+  type PendingRosterSelectionWarning,
+} from "@/services/roster-selection-risk";
 
 type RosterView = Awaited<ReturnType<typeof rosterService.getRosterManagementView>>;
 type SignupRow = RosterView["groups"]["tanks"][number];
@@ -155,6 +166,24 @@ function RosterBuilderEditor({
   /** Which confirmation the roster dialog shows: first Publish, Update, or an explicit repost. */
   const [dialogMode, setDialogMode] = useState<"publish" | "update" | "repost">("publish");
   const dialogRef = useRef<HTMLDialogElement>(null);
+  /**
+   * Selection warnings (saved / fully-saved lockout) the Raid Lead explicitly
+   * confirmed in this editor session, by signup. Request-scoped: sent with
+   * Save / Update and re-validated by the server; never persisted.
+   */
+  const [confirmedWarnings, setConfirmedWarnings] = useState<Map<string, ConfirmedRosterWarning[]>>(
+    () => new Map(),
+  );
+  /**
+   * Open warning confirmation: a single pick awaiting "Select anyway", or the
+   * server's current warnings after it rejected a Save / Update whose
+   * acknowledgements were missing or stale.
+   */
+  const [warningPrompt, setWarningPrompt] = useState<
+    | { kind: "pick"; signup: SignupRow; items: RosterWarningDialogItem[] }
+    | { kind: "server"; action: "save" | "update"; pending: PendingRosterSelectionWarning[] }
+    | null
+  >(null);
 
   const domainSignups = useMemo(() => domainSignupsFrom(data), [data]);
   const [stagedSelections, setStagedSelections] = useState<StagedSelections>(() => new Map(savedSelections));
@@ -371,10 +400,35 @@ function RosterBuilderEditor({
   function toggleRoleCopy(signup: SignupRow, checked: boolean) {
     if (!data.roster.canEdit || data.roster.needsPublishSeed || pending) return;
     if (signup.status === "WITHDRAWN") return;
-    // Unselected schedule-conflicted Boosters cannot be newly staged.
+    // Unselected schedule-conflicted Boosters cannot be newly staged (BLOCKED — no override).
     if (checked && !stagedSelections.has(signup.id) && (signup.scheduleConflicts?.length ?? 0) > 0) {
       return;
     }
+    // WARNING: a NEW pick with saved / fully-saved lockout progress needs an
+    // explicit confirmation first. Slots already in the saved draft or the
+    // published roster, role reassignments and deselects never prompt.
+    if (checked && !stagedSelections.has(signup.id)) {
+      const unconfirmed = warningsNeedingConfirmation(signup);
+      if (unconfirmed.length > 0) {
+        setWarningPrompt({
+          kind: "pick",
+          signup,
+          items: [{ key: signup.id, characterLabel: signupDisplayName(signup), warnings: unconfirmed }],
+        });
+        return;
+      }
+    }
+    stageRoleCopy(signup, checked);
+  }
+
+  /** Warnings of this signup the Raid Lead still has to confirm before it can be newly selected. */
+  function warningsNeedingConfirmation(signup: SignupRow) {
+    if (savedSelections.has(signup.id) || signup.status === "SELECTED") return [];
+    if (signup.selectionRisk?.level !== "WARNING") return [];
+    return unacknowledgedWarnings(signup.selectionRisk, confirmedWarnings.get(signup.id) ?? []);
+  }
+
+  function stageRoleCopy(signup: SignupRow, checked: boolean) {
     setError(null);
     setErrorCode(null);
     const replaceBoosterSignupIds =
@@ -428,7 +482,40 @@ function RosterBuilderEditor({
     setStagedSelections(new Map(savedSelections));
   }
 
-  function saveRoster() {
+  /** Acknowledgements for the currently staged slots only — a deselected pick's confirmation is not sent. */
+  function stagedConfirmedWarnings(confirmed: Map<string, ConfirmedRosterWarning[]>): ConfirmedRosterWarning[] {
+    return [...stagedSelections.keys()].flatMap((signupId) => confirmed.get(signupId) ?? []);
+  }
+
+  /** Adds the given acknowledgements (replacing older ones of the same signup + type) and returns the new map. */
+  function withConfirmedWarnings(additions: ConfirmedRosterWarning[]): Map<string, ConfirmedRosterWarning[]> {
+    const next = new Map(confirmedWarnings);
+    for (const addition of additions) {
+      const kept = (next.get(addition.signupId) ?? []).filter((row) => row.type !== addition.type);
+      next.set(addition.signupId, [...kept, addition]);
+    }
+    setConfirmedWarnings(next);
+    return next;
+  }
+
+  /**
+   * The server recomputes warnings before accepting new picks. When it still
+   * needs a confirmation (lockout changed since this page loaded, or the pick
+   * was staged another way), show its CURRENT warnings instead of an error.
+   */
+  function handleRosterWriteFailure(
+    action: "save" | "update",
+    result: { code: string; message: string; pendingWarnings?: PendingRosterSelectionWarning[] },
+  ) {
+    if (result.code === "ROSTER_WARNING_CONFIRMATION_REQUIRED" && result.pendingWarnings?.length) {
+      setWarningPrompt({ kind: "server", action, pending: result.pendingWarnings });
+      return;
+    }
+    setError(result.message);
+    setErrorCode(result.code);
+  }
+
+  function saveRoster(confirmed: Map<string, ConfirmedRosterWarning[]> = confirmedWarnings) {
     if (!isDirty || pending) return;
     setError(null);
     setErrorCode(null);
@@ -437,14 +524,37 @@ function RosterBuilderEditor({
         runId: data.run.id,
         version: data.roster.version,
         selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
+        confirmedWarnings: stagedConfirmedWarnings(confirmed),
       });
       if (!result.ok) {
-        setError(result.message);
-        setErrorCode(result.code);
+        handleRosterWriteFailure("save", result);
         return;
       }
       router.refresh();
     });
+  }
+
+  function cancelWarningPrompt() {
+    // Cancel never mutates: a pending pick stays unselected, a rejected write stays unsent.
+    setWarningPrompt(null);
+  }
+
+  function confirmWarningPrompt() {
+    const prompt = warningPrompt;
+    if (!prompt) return;
+    setWarningPrompt(null);
+    if (prompt.kind === "pick") {
+      withConfirmedWarnings(
+        prompt.items.flatMap((item) => confirmedWarningsFor(prompt.signup.id, item.warnings)),
+      );
+      stageRoleCopy(prompt.signup, true);
+      return;
+    }
+    const confirmed = withConfirmedWarnings(
+      prompt.pending.flatMap((row) => (row.signupId ? confirmedWarningsFor(row.signupId, [row.warning]) : [])),
+    );
+    if (prompt.action === "save") saveRoster(confirmed);
+    else confirmDialog(confirmed);
   }
 
   function seedPublished() {
@@ -472,7 +582,7 @@ function RosterBuilderEditor({
    * message; Update accepts the CURRENT selection in one step and edits the
    * same message; repost asks the bot to refresh that same Roster message.
    */
-  function confirmDialog() {
+  function confirmDialog(confirmed: Map<string, ConfirmedRosterWarning[]> = confirmedWarnings) {
     setError(null);
     setErrorCode(null);
     const acknowledgeWarnings = acknowledge || liveValidation.warnings.length === 0;
@@ -484,6 +594,7 @@ function RosterBuilderEditor({
               version: data.roster.version,
               selections: [...stagedSelections].map(([signupId, selectedRole]) => ({ signupId, selectedRole })),
               acknowledgeWarnings,
+              confirmedWarnings: stagedConfirmedWarnings(confirmed),
             })
           : dialogMode === "repost"
             ? await repostRosterAction({
@@ -493,8 +604,7 @@ function RosterBuilderEditor({
               })
             : await publishRosterAction({ runId: data.run.id, version: data.roster.version, acknowledgeWarnings });
       if (!result.ok) {
-        setError(result.message);
-        setErrorCode(result.code);
+        handleRosterWriteFailure("update", result);
         return;
       }
       dialogRef.current?.close();
@@ -802,7 +912,7 @@ function RosterBuilderEditor({
               </Button>
             ) : null}
             {actions.save ? (
-              <Button type="button" disabled={pending || !editing} onClick={saveRoster}>
+              <Button type="button" disabled={pending || !editing} onClick={() => saveRoster()}>
                 {pending ? "Saving…" : "Save Roster"}
               </Button>
             ) : null}
@@ -934,7 +1044,7 @@ function RosterBuilderEditor({
               (dialogMode !== "repost" &&
                 (!liveValidation.canPublish || (liveValidation.warnings.length > 0 && !acknowledge)))
             }
-            onClick={confirmDialog}
+            onClick={() => confirmDialog()}
           >
             {pending
               ? "Working…"
@@ -946,6 +1056,31 @@ function RosterBuilderEditor({
           </Button>
         </div>
       </dialog>
+      {warningPrompt ? (
+        <RosterWarningConfirmDialog
+          title={
+            warningPrompt.kind === "pick" || warningPrompt.pending.length === 1
+              ? "Pick saved Character?"
+              : `${warningDialogItemsFromPending(warningPrompt.pending).length} roster selections need confirmation`
+          }
+          intro={
+            warningPrompt.kind === "pick"
+              ? `${warningPrompt.items[0]!.characterLabel} already has lockout progress for this Run.`
+              : warningPrompt.pending.length === 1
+                ? `${warningPrompt.pending[0]!.characterLabel} already has lockout progress for this Run.`
+                : "These Characters already have lockout progress for this Run."
+          }
+          items={
+            warningPrompt.kind === "pick"
+              ? warningPrompt.items
+              : warningDialogItemsFromPending(warningPrompt.pending)
+          }
+          confirmLabel="Select anyway"
+          pending={pending}
+          onCancel={cancelWarningPrompt}
+          onConfirm={confirmWarningPrompt}
+        />
+      ) : null}
       {addBoosterOpen ? (
         <AddBoosterDialog
           runId={data.run.id}
