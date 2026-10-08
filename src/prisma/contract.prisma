@@ -573,11 +573,24 @@ model BoosterAccess {
   @@map("booster_access")
 }
 
+/// Raid content catalog (database authority). Stable UUIDs are historical
+/// identity: Runs, templates and lockouts reference them forever.
+/// `isActive` keeps its legacy meaning (standalone Create Run product).
 model Raid {
   id        String   @id @default(uuid())
   name      String
   season    String
   isActive  Boolean  @default(true)
+  /// Deterministic catalog order (lockout derivation, admin lists).
+  sortOrder Int      @default(0)
+  /// Blizzard lockout refresh derives this raid (replaces code currentForLockouts).
+  trackLockouts Boolean @default(false)
+  /// Blizzard journal instance id (Character Raid Encounters `instance.id`).
+  blizzardInstanceId Int?
+  /// Warcraft Logs zone id for roster Best/Avg percentiles.
+  wclZoneId Int?
+  /// When set, WCL rankings are scoped to this encounter within `wclZoneId`.
+  wclRankingEncounterId Int?
   createdAt TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
 
@@ -586,6 +599,7 @@ model Raid {
   runContents RunRaidContent[]
   templateContents RunTemplateRaidContent[]
   templates RunTemplate[]
+  productContents ProductRaidContent[]
 
   @@map("raid")
 }
@@ -596,9 +610,60 @@ model RaidBoss {
   raid      Raid   @relation(fields: [raidId], references: [id], onDelete: Cascade)
   name      String
   sortOrder Int
+  /// JSON number array: Blizzard journal encounter ids (lockout match key).
+  blizzardEncounterIds String @default("[]")
+  /// JSON number array: Warcraft Logs encounter ids (`ReportFight.encounterID`).
+  wclEncounterIds String @default("[]")
 
   @@index([raidId])
   @@map("raid_boss")
+}
+
+/// How a product content determines its planned boss count.
+enum ProductBossCountMode {
+  @@type("pg/text@1")
+  FIXED = "FIXED"
+  VARIABLE = "VARIABLE"
+}
+
+/// Sellable BoostingHub product (e.g. a raid or a multi-raid Bundle).
+/// Catalog data only in this phase — Run Setup still reads run-content-presets.
+model Product {
+  id         String  @id @default(uuid())
+  key        String  @unique
+  name       String
+  active     Boolean @default(true)
+  selectable Boolean @default(true)
+  sortOrder  Int     @default(0)
+  createdAt  TimestamptzString @default(now())
+  updatedAt  temporal.updatedAtString()
+
+  contents ProductRaidContent[]
+
+  @@map("product")
+}
+
+/// Ordered real raid contents of one Product.
+model ProductRaidContent {
+  id               String  @id @default(uuid())
+  productId        String
+  product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  raidId           String
+  raid             Raid    @relation(fields: [raidId], references: [id], onDelete: Restrict)
+  /// 1-based deterministic order within the Product.
+  sortOrder        Int
+  bossCountMode    ProductBossCountMode
+  /// FIXED mode: exact planned boss count.
+  fixedBossCount   Int?
+  /// VARIABLE mode: lowest selectable boss count.
+  minBossCount     Int?
+  /// VARIABLE mode: preselected boss count.
+  defaultBossCount Int?
+
+  @@unique([productId, sortOrder])
+  @@unique([productId, raidId])
+  @@index([raidId])
+  @@map("product_raid_content")
 }
 
 /// Lockouts are scoped to character + raid + difficulty + weekly reset.

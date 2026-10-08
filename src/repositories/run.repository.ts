@@ -1,5 +1,6 @@
 import { mapExternalBoosters, type ExternalBooster } from "@/lib/external-booster";
 import { db, orm } from "@/lib/prisma";
+import { mapRaidBossRefs, type RaidBossRef } from "@/lib/lockout-bosses";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { DomainError } from "@/lib/errors";
 import { normalizeOfferedRoles } from "@/lib/offered-roles";
@@ -175,6 +176,8 @@ export type RunRaidContentRecord = {
   sortOrder: number;
   plannedBossCount: number;
   totalBossCount: number;
+  /** The content raid's RaidBoss rows, ordered (lockout boss breakdown). */
+  bosses: RaidBossRef[];
 };
 
 type TxOrm = typeof orm;
@@ -191,6 +194,7 @@ function mapRaidContent(row: Record<string, unknown>): RunRaidContentRecord {
     sortOrder: asNumber(row.sortOrder),
     plannedBossCount: asNumber(row.plannedBossCount),
     totalBossCount: bosses.length,
+    bosses: mapRaidBossRefs(bosses),
   };
 }
 

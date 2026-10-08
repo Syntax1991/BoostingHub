@@ -1180,6 +1180,7 @@ function toEligibilityRun(run: LoadedRun) {
       sortOrder: row.sortOrder,
       plannedBossCount: row.plannedBossCount,
       totalBossCount: row.totalBossCount,
+      bosses: row.bosses,
     })),
   };
 }

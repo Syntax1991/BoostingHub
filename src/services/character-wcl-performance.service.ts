@@ -3,7 +3,9 @@ import {
   type WarcraftLogsRankingMetric,
   type WarcraftLogsRankingRole,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
-import { findRaidCatalogById, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import type { RaidCatalog } from "@/lib/raid-catalog";
+import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { raidRepository } from "@/repositories/raid.repository";
 import { findSpecialization } from "@/lib/wow-specializations";
 import type { CharacterRole, RaidDifficulty, WowClass } from "@/models/enums";
 import {
@@ -167,6 +169,8 @@ export async function resolveRosterWclPerformance(input: {
    * Roster Builder uses cache-only to keep dialog open bounded.
    */
   allowRemoteFetch?: boolean;
+  /** DB raid catalog (WCL zone / ranking encounter); loaded once when omitted. */
+  catalog?: RaidCatalog;
 }): Promise<Map<string, WclPerformanceRaidSegment[]>> {
   const result = new Map<string, WclPerformanceRaidSegment[]>();
   const allowRemoteFetch = input.allowRemoteFetch !== false;
@@ -179,17 +183,18 @@ export async function resolveRosterWclPerformance(input: {
   const now = input.now ?? new Date();
   const nowMs = now.getTime();
   const nowIso = now.toISOString();
+  const catalog = input.catalog ?? (await raidRepository.loadCatalog());
 
   const contentsWithWcl = [...input.contents]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((content) => {
-      const catalog = findRaidCatalogById(content.raidId);
-      if (!catalog?.warcraftLogsZoneId) return null;
+      const raid = catalog.findById(content.raidId);
+      if (!raid?.wclZoneId) return null;
       return {
         raidId: content.raidId,
         raidName: raidContentDisplayName(content.raidId, content.raidName),
-        zoneId: catalog.warcraftLogsZoneId,
-        encounterId: catalog.warcraftLogsEncounterId ?? 0,
+        zoneId: raid.wclZoneId,
+        encounterId: raid.wclRankingEncounterId ?? 0,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row != null);

@@ -2,8 +2,8 @@ import type { AuthenticatedUser } from "@/auth/authorization";
 import type { WowClass, WowRegion } from "@/models/enums";
 import { DomainError, isDomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { defaultRaidBossTotal } from "@/lib/lockout-display";
-import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { raidRepository } from "@/repositories/raid.repository";
 import {
   isValidCharacterName,
   isValidRealmName,
@@ -138,11 +138,12 @@ function characterLabel(character: { name: string; realm: string; region: WowReg
 
 export const characterService = {
   async getCharacterPage(user: AuthenticatedUser) {
-    const [characters, boostingRoles] = await Promise.all([
+    const [characters, boostingRoles, catalog] = await Promise.all([
       characterRepository.listByUserId(user.id),
       userRepository.findBoostingRoles(user.id),
+      raidRepository.loadCatalog(),
     ]);
-    const currentRaids = getCurrentLockoutRaids();
+    const currentRaids = catalog.lockoutRaids;
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const weeklyAvailabilityById = await characterWeeklyAvailabilityService.projectCurrentForCharacters(
       characters,
@@ -174,7 +175,7 @@ export const characterService = {
           .map((lockout) => ({
             ...lockout,
             raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
-            bossTotal: defaultRaidBossTotal(lockout.raidId),
+            bossTotal: catalog.bossTotal(lockout.raidId),
             verified: true,
           }));
 
@@ -219,7 +220,8 @@ export const characterService = {
     assertOwned(user, character);
 
     const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
-    const currentRaids = getCurrentLockoutRaids();
+    const catalog = await raidRepository.loadCatalog();
+    const currentRaids = catalog.lockoutRaids;
     const currentRaidIds = new Set(currentRaids.map((raid) => raid.id));
     const currentLockouts = lockoutService
       .summarize(
@@ -231,7 +233,7 @@ export const characterService = {
       .map((lockout) => ({
         ...lockout,
         raidName: raidContentDisplayName(lockout.raidId, lockout.raidName),
-        bossTotal: defaultRaidBossTotal(lockout.raidId),
+        bossTotal: catalog.bossTotal(lockout.raidId),
         verified: true,
       }));
 

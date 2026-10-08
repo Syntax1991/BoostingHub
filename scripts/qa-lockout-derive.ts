@@ -4,7 +4,8 @@
  */
 import { deriveCurrentResetLockouts } from "../src/lib/blizzard/raid-lockout-derivation";
 import { formatCompactLockoutProgress } from "../src/lib/lockout-display";
-import { getCurrentLockoutRaids } from "../src/lib/wow-raid-catalog";
+// Offline QA tool (no database): uses the bootstrap fixture catalog.
+import { fixtureRaidCatalog } from "../src/lib/raid-catalog";
 import { getRegionalWeeklyReset } from "../src/lib/wow-weekly-reset";
 import { mapBlizzardRaidDifficulty } from "../src/lib/blizzard/raid-difficulty";
 import type { BlizzardCharacterRaidEncounters } from "../src/lib/blizzard/types";
@@ -102,7 +103,7 @@ async function main() {
     console.error("missing blizzard env");
     process.exit(1);
   }
-  const currentRaids = getCurrentLockoutRaids();
+  const currentRaids = fixtureRaidCatalog().lockoutRaids;
   const reset = getRegionalWeeklyReset(REGION);
   console.log(
     JSON.stringify(
@@ -134,7 +135,12 @@ async function main() {
       continue;
     }
     const encounters = mapPayload(await response.json());
-    const derived = deriveCurrentResetLockouts({ region: REGION, encounters, resetWindow: reset });
+    const derived = deriveCurrentResetLockouts({
+      region: REGION,
+      encounters,
+      lockoutRaids: currentRaids,
+      resetWindow: reset,
+    });
     const currentInstanceIds = new Set(currentRaids.map((raid) => raid.blizzardInstanceId));
     const currentRaidPayloads = encounters.raids.filter((raid) =>
       currentInstanceIds.has(Number(raid.instanceId)),

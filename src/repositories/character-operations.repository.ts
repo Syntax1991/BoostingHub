@@ -10,7 +10,6 @@ import {
   mapRegion,
   mapWowClass,
 } from "@/lib/persistence";
-import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type {
   CharacterRole,
@@ -112,9 +111,10 @@ function mapRecord(row: Record<string, unknown>, resets: Record<WowRegion, strin
   };
 }
 
-function characterQuery() {
+/** `trackedRaidIds`: the DB catalog's lockout-tracked raids (`RaidCatalog.lockoutRaids`). */
+function characterQuery(trackedRaidIds: readonly string[]) {
   const resets = currentResetByRegion();
-  const currentRaidIds = getCurrentLockoutRaids().map((raid) => raid.id);
+  const currentRaidIds = [...trackedRaidIds];
   return {
     resets,
     query: orm.Character.include("user", (user) => user.select("id", "name", "discordUsername"))
@@ -132,8 +132,10 @@ function characterQuery() {
 
 export const characterOperationsRepository = {
   /** Every Character for the operations list (2 queries total). Easy to paginate later via limit/offset. */
-  async listAll(): Promise<{ characters: OperationsCharacterRecord[]; connections: Set<ConnectionKey> }> {
-    const { resets, query } = characterQuery();
+  async listAll(
+    trackedRaidIds: readonly string[],
+  ): Promise<{ characters: OperationsCharacterRecord[]; connections: Set<ConnectionKey> }> {
+    const { resets, query } = characterQuery(trackedRaidIds);
     const rows = (await query.orderBy((character) => character.name.asc()).all()) as Array<Record<string, unknown>>;
     const connectionRows = (await orm.BattleNetConnection.select("userId", "region").all()) as Array<
       Record<string, unknown>
@@ -146,8 +148,9 @@ export const characterOperationsRepository = {
 
   async findById(
     characterId: string,
+    trackedRaidIds: readonly string[],
   ): Promise<{ character: OperationsCharacterRecord; ownerHasRegionConnection: boolean } | null> {
-    const { resets, query } = characterQuery();
+    const { resets, query } = characterQuery(trackedRaidIds);
     const row = (await query.where({ id: characterId }).first()) as Record<string, unknown> | null;
     if (!row) return null;
     const character = mapRecord(row, resets);

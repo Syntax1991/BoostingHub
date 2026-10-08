@@ -51,6 +51,8 @@ export function evaluateReportDiscovery(input: {
   candidates: RunAssignmentCandidate[];
   /** wclFightId → runId of this report's fights already ASSIGNED (e.g. by a manager). */
   assignedFights?: ReadonlyMap<number, string>;
+  /** DB catalog WCL encounter id → raid id (`RaidCatalog.raidIdByWclEncounterId`). */
+  raidIdByWclEncounter: ReadonlyMap<number, string>;
   postedAtMs: number;
   nowMs: number;
   /** Evaluations so far (backoff). */
@@ -97,7 +99,13 @@ function decide(input: Parameters<typeof evaluateReportDiscovery>[0]): Discovery
       const assignedElsewhere = new Map(
         [...(input.assignedFights ?? new Map<number, string>())].filter(([, runId]) => runId !== target.runId),
       );
-      const fights = assignReportFights({ report, target, others: candidates, assignedElsewhere });
+      const fights = assignReportFights({
+        report,
+        target,
+        others: candidates,
+        assignedElsewhere,
+        raidIdByWclEncounter: input.raidIdByWclEncounter,
+      });
       return {
         runId: target.runId,
         assigned: fights.filter((fight) => fight.status === "ASSIGNED").length,

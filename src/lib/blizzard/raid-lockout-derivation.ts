@@ -1,11 +1,7 @@
 import type { RaidDifficulty, WowRegion } from "@/models/enums";
 import type { BlizzardCharacterRaidEncounters, BlizzardRaidInstanceProgress } from "@/lib/blizzard/types";
 import { mapBlizzardRaidDifficulty } from "@/lib/blizzard/raid-difficulty";
-import {
-  getCurrentLockoutRaids,
-  type WowRaidCatalogBoss,
-  type WowRaidCatalogEntry,
-} from "@/lib/wow-raid-catalog";
+import type { CatalogBoss, CatalogRaid } from "@/lib/raid-catalog";
 import {
   getRegionalWeeklyReset,
   isTimestampInRegionalReset,
@@ -45,9 +41,9 @@ export type DerivedRaidLockoutResult =
   | { status: "unknown"; reason: string };
 
 function matchBossByEncounterId(
-  bosses: readonly WowRaidCatalogBoss[],
+  bosses: readonly CatalogBoss[],
   encounterId: string,
-): WowRaidCatalogBoss | null {
+): CatalogBoss | null {
   const numericId = Number(encounterId);
   if (!Number.isFinite(numericId)) return null;
   return bosses.find((boss) => boss.blizzardEncounterIds.includes(numericId)) ?? null;
@@ -63,7 +59,7 @@ function findBlizzardRaidByInstanceId(
 }
 
 function deriveDifficulty(input: {
-  catalog: WowRaidCatalogEntry;
+  catalog: CatalogRaid;
   difficulty: RaidDifficulty;
   resetIdentifier: string;
   window: RegionalWeeklyReset;
@@ -111,7 +107,7 @@ function encountersForDifficulty(
 }
 
 function deriveRaidSnapshot(input: {
-  catalog: WowRaidCatalogEntry;
+  catalog: CatalogRaid & { blizzardInstanceId: number };
   resetIdentifier: string;
   window: RegionalWeeklyReset;
   blizzardRaid: BlizzardRaidInstanceProgress | null;
@@ -132,23 +128,28 @@ function deriveRaidSnapshot(input: {
 }
 
 /**
- * Derive a complete current-reset lockout snapshot for every catalog raid marked
- * currentForLockouts. After a successful Blizzard encounters response, every
+ * Derive a complete current-reset lockout snapshot for every tracked raid
+ * (`Raid.trackLockouts`, passed in as `lockoutRaids` from the DB catalog).
+ * Raids without a Blizzard instance id cannot be matched and are skipped. After a successful Blizzard encounters response, every
  * tracked difficulty (NORMAL/HEROIC/MYTHIC) is verified — missing raids or modes
  * become explicit 0/N. Callers must not invoke this on a failed request.
  */
 export function deriveCurrentResetLockouts(input: {
   region: WowRegion;
   encounters: BlizzardCharacterRaidEncounters;
+  /** `RaidCatalog.lockoutRaids` — the tracked raids, in catalog order. */
+  lockoutRaids: readonly CatalogRaid[];
   now?: Date;
   resetWindow?: RegionalWeeklyReset;
 }): DerivedRaidLockoutResult {
   const window = input.resetWindow ?? getRegionalWeeklyReset(input.region, input.now ?? new Date());
   const verifiedAt = (input.now ?? new Date()).toISOString();
-  const currentRaids = getCurrentLockoutRaids();
+  const currentRaids = input.lockoutRaids.filter(
+    (raid): raid is CatalogRaid & { blizzardInstanceId: number } => raid.trackLockouts && raid.blizzardInstanceId != null,
+  );
 
   if (currentRaids.length === 0) {
-    return { status: "unknown", reason: "No catalog raid is marked currentForLockouts." };
+    return { status: "unknown", reason: "No catalog raid tracks lockouts." };
   }
 
   const raids = currentRaids.map((catalog) =>

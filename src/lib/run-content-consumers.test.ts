@@ -10,6 +10,7 @@ import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,
 } from "@/lib/wow-raid-catalog";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { buildSignupEmbed } from "@/discord-bot/embeds/signup-embed";
 import { buildRosterEmbed } from "@/discord-bot/embeds/roster-embed";
 import { formatFinalSetup, renderFinalSetupText } from "@/lib/run-start-message";
@@ -21,6 +22,7 @@ const tidebound = {
   sortOrder: 1,
   plannedBossCount: 1,
   totalBossCount: 1,
+  bosses: fixtureRaidCatalog().findById(TIDEBOUND_GROTTO_RAID_ID)!.bosses,
 };
 
 const venomous = {
@@ -29,6 +31,7 @@ const venomous = {
   sortOrder: 2,
   plannedBossCount: 8,
   totalBossCount: 8,
+  bosses: fixtureRaidCatalog().findById(VENOMOUS_ABYSS_RAID_ID)!.bosses,
 };
 
 describe("run content lockout projection", () => {

@@ -5,7 +5,7 @@ import {
   type RaidLockoutLabel,
 } from "@/lib/raid-lockout-label";
 import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
-import { lockoutBossBreakdown, type LockoutBossState } from "@/lib/lockout-bosses";
+import { lockoutBossBreakdown, type LockoutBossState, type RaidBossRef } from "@/lib/lockout-bosses";
 import type { RunRaidContentRecord } from "@/repositories/run.repository";
 
 /**
@@ -14,7 +14,10 @@ import type { RunRaidContentRecord } from "@/repositories/run.repository";
  */
 export type RunContentRaidSaveInfo = {
   raidId: string;
+  /** Compact product-facing label (Tidebound → "Tide"). */
   raidName: string;
+  /** The content's full DB Raid name ("The Tidebound Grotto") for confirmation dialogs. */
+  raidFullName: string;
   sortOrder: number;
   plannedBossCount: number;
   totalBossCount: number;
@@ -39,7 +42,10 @@ export type LockoutMatchInput = {
  */
 export function projectRunContentLockouts(input: {
   contents: ReadonlyArray<
-    Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount">
+    Pick<RunRaidContentRecord, "raidId" | "raidName" | "sortOrder" | "plannedBossCount" | "totalBossCount"> & {
+      /** The content raid's RaidBoss rows (already loaded with the content). */
+      bosses: readonly RaidBossRef[];
+    }
   >;
   difficulty: RaidDifficulty;
   lootType: RunLootType;
@@ -60,12 +66,13 @@ export function projectRunContentLockouts(input: {
     return {
       raidId: content.raidId,
       raidName: raidContentDisplayName(content.raidId, content.raidName),
+      raidFullName: content.raidName,
       sortOrder: content.sortOrder,
       plannedBossCount: content.plannedBossCount,
       totalBossCount: content.totalBossCount,
       raidSave,
       label,
-      bosses: raidSave ? lockoutBossBreakdown(content.raidId, raidSave.killedBossIds) : null,
+      bosses: raidSave ? lockoutBossBreakdown(content.bosses, raidSave.killedBossIds) : null,
     };
   });
 }

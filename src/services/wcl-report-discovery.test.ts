@@ -3,6 +3,7 @@ import type {
   WarcraftLogsReportActor,
   WarcraftLogsReportFight,
 } from "@/integrations/warcraft-logs/warcraft-logs-api-client";
+import { fixtureRaidCatalog } from "@/lib/raid-catalog";
 import { VENOMOUS_ABYSS_RAID_ID } from "@/lib/wow-raid-catalog";
 import { identityKey } from "@/services/consumable-audit-extract";
 import type { RunAssignmentCandidate } from "@/services/wcl-fight-assignment";
@@ -46,7 +47,11 @@ const runA = run({ runId: "A", startedAtMs: at("14:00"), completedAtMs: at("15:2
 const runB = run({ runId: "B", startedAtMs: at("15:30"), completedAtMs: at("16:50"), rosterKeys: keys(9, 24) });
 const fightsA = ["14:08", "14:16", "14:24"].map((clock, i) => fight(i + 1, clock));
 const fightsB = ["15:42", "15:51"].map((clock, i) => fight(i + 4, clock, players(9, 24)));
-const base = { postedAtMs: at("14:05"), attempts: 0 };
+const base = {
+  postedAtMs: at("14:05"),
+  attempts: 0,
+  raidIdByWclEncounter: fixtureRaidCatalog().raidIdByWclEncounterId,
+};
 
 describe("evaluateReportDiscovery — which Runs a centrally posted report belongs to", () => {
   it("one clear completed Run → MATCHED, linked to that Run only; settled once the report is idle", () => {

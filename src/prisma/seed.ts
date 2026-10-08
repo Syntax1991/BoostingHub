@@ -265,6 +265,13 @@ async function wipe() {
   for (const row of await orm.RunTemplate.select("id").all()) {
     await orm.RunTemplate.where({ id: row.id }).delete();
   }
+  // Product contents reference Raid (Restrict); clear products before raids.
+  for (const row of await orm.ProductRaidContent.select("id").all()) {
+    await orm.ProductRaidContent.where({ id: row.id }).delete();
+  }
+  for (const row of await orm.Product.select("id").all()) {
+    await orm.Product.where({ id: row.id }).delete();
+  }
   for (const row of await orm.RaidBoss.select("id").all()) {
     await orm.RaidBoss.where({ id: row.id }).delete();
   }

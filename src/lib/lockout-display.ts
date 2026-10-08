@@ -1,6 +1,6 @@
 import type { RaidDifficulty } from "@/models/enums";
 import { COMPACT_DIFFICULTY_LABELS } from "@/lib/blizzard/raid-difficulty";
-import { findRaidCatalogById, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 
 export type LockoutDisplayRow = {
   difficulty: RaidDifficulty;
@@ -12,7 +12,7 @@ export type LockoutDisplayRow = {
   verified?: boolean;
 };
 
-/** Authoritative current-reset raid slots from `getCurrentLockoutRaids()`. */
+/** Authoritative current-reset raid slots from the DB catalog (`RaidCatalog.lockoutRaids`). */
 export type CurrentLockoutRaidDescriptor = {
   id: string;
   name: string;
@@ -92,11 +92,6 @@ export function formatCompactMultiRaidLockoutProgress(
       return progress ? `${slot.raidName}: ${progress}` : `${slot.raidName}: Unknown`;
     })
     .join(" · ");
-}
-
-/** Catalog boss count for an explicit raid id — never an implicit "current" raid. */
-export function defaultRaidBossTotal(raidId: string): number {
-  return findRaidCatalogById(raidId)?.bosses.length ?? 0;
 }
 
 /** Re-export for callers that still resolve display names at the service boundary. */

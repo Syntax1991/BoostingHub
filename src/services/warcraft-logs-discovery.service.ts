@@ -1,6 +1,7 @@
 import { DomainError } from "@/lib/errors";
 import { snowflakeTime } from "@/lib/discord-snowflake";
 import { trustedWarcraftLogsReportAuthorIds, warcraftLogsReportChannelIds } from "@/lib/warcraft-logs/config";
+import { raidRepository } from "@/repositories/raid.repository";
 import { runWarcraftLogsRepository } from "@/repositories/run-warcraft-logs.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import {
@@ -125,6 +126,7 @@ async function evaluateOne(discovery: WarcraftLogsDiscoveryRecord, now: Date) {
       report: report.metadata,
       candidates,
       assignedFights: await runWarcraftLogsRepository.assignedElsewhere(report.id, ""),
+      raidIdByWclEncounter: (await raidRepository.loadCatalog()).raidIdByWclEncounterId,
       postedAtMs: Date.parse(discovery.postedAt),
       nowMs: now.getTime(),
       attempts: discovery.attempts,

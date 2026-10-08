@@ -17,6 +17,7 @@ import {
   type WarcraftLogsReportRecord,
   type WarcraftLogsReportSource,
 } from "@/repositories/run-warcraft-logs.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
 import {
   WCL_FIGHT_ASSIGNMENT_POLICY,
@@ -170,6 +171,7 @@ async function scan(
     target,
     others,
     assignedElsewhere: await runWarcraftLogsRepository.assignedElsewhere(report.id, run.id),
+    raidIdByWclEncounter: (await raidRepository.loadCatalog()).raidIdByWclEncounterId,
   });
   await runWarcraftLogsRepository.applyScan({
     runId: run.id,

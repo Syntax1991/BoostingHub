@@ -22,7 +22,6 @@
  */
 
 import type { RunContentRaidSaveInfo } from "@/lib/run-content-lockouts";
-import { findRaidCatalogById } from "@/lib/wow-raid-catalog";
 import type { CharacterScheduleConflict } from "@/services/character-schedule-conflict";
 
 export type RosterSelectionRiskLevel = "CLEAN" | "WARNING" | "BLOCKED";
@@ -123,8 +122,8 @@ export function lockoutAttentionWarning(
     contents: affected.map((row) => ({
       raidId: row.raidId,
       // Full raid name for confirmation dialogs ("The Tidebound Grotto"), not
-      // the compact card label; falls back to the Run content's own name.
-      raidName: findRaidCatalogById(row.raidId)?.name ?? row.raidName,
+      // the compact card label — the content's DB Raid name.
+      raidName: row.raidFullName,
       sortOrder: row.sortOrder,
       kind: row.label.kind === "fully_saved" ? "fully_saved" : "saved",
       bossesDefeated: row.raidSave.bossesDefeated,

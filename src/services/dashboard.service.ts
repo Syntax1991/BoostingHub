@@ -3,6 +3,7 @@ import { hasAdminAccess, hasRaidLeadAccess } from "@/auth/authorization";
 import { UPCOMING_RUN_STATUSES } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { runRepository } from "@/repositories/run.repository";
 import {
   projectDashboardOperations,
@@ -13,7 +14,6 @@ import { listManagedRunOperationalHandoffs } from "@/services/managed-run-operat
 import { isSignupWindowOpen } from "@/services/run-state";
 import { signupService } from "@/services/signup.service";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
-import { getCurrentLockoutRaids } from "@/lib/wow-raid-catalog";
 
 /**
  * Role-aware operational attention Dashboard.
@@ -24,13 +24,14 @@ export const dashboardService = {
     const showOperations = hasRaidLeadAccess(user.accountRole);
     const isAdmin = hasAdminAccess(user.accountRole);
 
-    const [runs, myRuns, characters, activity, managedOps] = await Promise.all([
+    const [runs, myRuns, characters, activity, managedOps, catalog] = await Promise.all([
       runRepository.listUpcoming(),
       signupService.getMyRuns(user),
       characterRepository.listByUserId(user.id),
       // Community-wide operational events are for Raid Leads and Admins only.
       showOperations ? activityRepository.listRecent() : Promise.resolve([]),
       showOperations ? listManagedRunOperationalHandoffs(user) : Promise.resolve([]),
+      raidRepository.loadCatalog(),
     ]);
 
     const personal = projectPersonalDashboardAttention(myRuns);
@@ -48,7 +49,7 @@ export const dashboardService = {
         .map((character) => character.id),
     );
 
-    const currentRaidIds = new Set(getCurrentLockoutRaids().map((raid) => raid.id));
+    const currentRaidIds = new Set(catalog.lockoutRaids.map((raid) => raid.id));
     const lockoutAttention = characters.flatMap((character) => {
       const currentReset = getRegionalWeeklyReset(character.region).resetIdentifier;
       return lockoutService

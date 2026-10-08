@@ -11,13 +11,13 @@ import {
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { DomainError, isDomainError } from "@/lib/errors";
 import {
-  defaultRaidBossTotal,
   projectCurrentRaidLockoutSlots,
   type LockoutDisplayRow,
   type RaidLockoutSlot,
 } from "@/lib/lockout-display";
 import { CHARACTER_SYNC_ERROR_LABELS } from "@/lib/labels";
-import { getCurrentLockoutRaids, raidContentDisplayName } from "@/lib/wow-raid-catalog";
+import type { RaidCatalog } from "@/lib/raid-catalog";
+import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { CharacterSyncErrorCode, WowClass, WowRegion } from "@/models/enums";
 import { activityRepository } from "@/repositories/activity.repository";
@@ -28,6 +28,7 @@ import {
   type OperationsCharacterRecord,
 } from "@/repositories/character-operations.repository";
 import { characterRepository } from "@/repositories/character.repository";
+import { raidRepository } from "@/repositories/raid.repository";
 import { scheduledJobLockRepository } from "@/repositories/scheduled-job-lock.repository";
 import { userRepository } from "@/repositories/user.repository";
 import {
@@ -131,16 +132,16 @@ export type OperationsSummary = {
   notLinked: number;
 };
 
-function currentRaidDescriptors() {
-  return getCurrentLockoutRaids().map((raid) => ({ id: raid.id, name: raidContentDisplayName(raid.id, raid.name) }));
+function currentRaidDescriptors(catalog: RaidCatalog) {
+  return catalog.lockoutRaids.map((raid) => ({ id: raid.id, name: raidContentDisplayName(raid.id, raid.name) }));
 }
 
-function lockoutRows(record: OperationsCharacterRecord): LockoutDisplayRow[] {
+function lockoutRows(record: OperationsCharacterRecord, catalog: RaidCatalog): LockoutDisplayRow[] {
   return record.currentLockouts.map((lockout) => ({
     raidId: lockout.raidId,
     difficulty: lockout.difficulty,
     bossesDefeated: lockout.bossesDefeated,
-    bossTotal: defaultRaidBossTotal(lockout.raidId),
+    bossTotal: catalog.bossTotal(lockout.raidId),
     isComplete: lockout.isComplete,
     verified: true,
   }));
@@ -153,7 +154,7 @@ export function syncIneligibleReason(input: { isActive: boolean }): SyncIneligib
 /** The one row derivation used by the table, filters, sorting and summary. */
 export function deriveOperationsRow(
   record: OperationsCharacterRecord,
-  context: { ownerHasRegionConnection: boolean; now: Date; staleMinutes: number },
+  context: { ownerHasRegionConnection: boolean; now: Date; staleMinutes: number; catalog: RaidCatalog },
 ): OperationsRow {
   const status = deriveCharacterSyncStatus(record, context);
   // Retired Characters show "Retired" — they are not scheduled, so no health.
@@ -180,7 +181,10 @@ export function deriveOperationsRow(
     retired: status.retired,
     linkage: status.linkage,
     health,
-    lockoutSlots: projectCurrentRaidLockoutSlots(lockoutRows(record), currentRaidDescriptors()),
+    lockoutSlots: projectCurrentRaidLockoutSlots(
+      lockoutRows(record, context.catalog),
+      currentRaidDescriptors(context.catalog),
+    ),
     syncIneligibleReason: syncIneligibleReason({ isActive: record.isActive }),
     cooldownRemainingMs: manualCooldownRemainingMs(record, context.now.getTime()),
     autoRetryAt: autoRetryInMs > 0 && retryAt ? retryAt.toISOString() : null,
@@ -326,8 +330,10 @@ function canDeleteCharacterOf(
 export const characterOperationsService = {
   async getListPage(admin: AuthenticatedUser, filters: CharacterOperationsFilters, now: Date = new Date()) {
     assertCanManageCharacterOperations(admin);
+    const catalog = await raidRepository.loadCatalog();
+    const trackedRaidIds = catalog.lockoutRaids.map((raid) => raid.id);
     const [{ characters, connections }, platformOwnerIds] = await Promise.all([
-      characterOperationsRepository.listAll(),
+      characterOperationsRepository.listAll(trackedRaidIds),
       userRepository.listIdsByRole("OWNER"),
     ]);
     const staleMinutes = resolveSyncHealthStaleMinutes();
@@ -336,6 +342,7 @@ export const characterOperationsService = {
         ownerHasRegionConnection: connections.has(connectionKey(record.userId, record.region)),
         now,
         staleMinutes,
+        catalog,
       }),
     );
     const ownerIds = new Set(platformOwnerIds);
@@ -360,7 +367,11 @@ export const characterOperationsService = {
 
   async getDetail(admin: AuthenticatedUser, characterId: string, now: Date = new Date()) {
     assertCanManageCharacterOperations(admin);
-    const found = await characterOperationsRepository.findById(characterId);
+    const catalog = await raidRepository.loadCatalog();
+    const found = await characterOperationsRepository.findById(
+      characterId,
+      catalog.lockoutRaids.map((raid) => raid.id),
+    );
     if (!found) {
       throw new DomainError("CHARACTER_NOT_FOUND", "Character was not found.", 404);
     }
@@ -369,6 +380,7 @@ export const characterOperationsService = {
       ownerHasRegionConnection,
       now,
       staleMinutes: resolveSyncHealthStaleMinutes(),
+      catalog,
     });
     const [availabilityById, ownerRoles, owner] = await Promise.all([
       characterWeeklyAvailabilityService.projectCurrentForCharacters([{ id: character.id, region: character.region }]),
