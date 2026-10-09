@@ -500,8 +500,8 @@ describe("query shape", () => {
     try {
       await raidCatalogService.getPage(admin);
       const baseline = spy.mock.calls.length;
-      // 1 raid catalog + 5 grouped reference counts + 1 product catalog + 1 distinct seasons.
-      expect(baseline).toBe(8);
+      // 1 raid catalog + 4 grouped reference counts + 1 product catalog + 1 distinct seasons.
+      expect(baseline).toBe(7);
       const raidId = await newRaid("QA Query Shape Raid");
       await addEncounter(raidId, "Q1");
       await addEncounter(raidId, "Q2");
