@@ -14,10 +14,10 @@ export function formatBlizzard(raid: { blizzardInstanceId: number | null }): str
 }
 
 export function formatWarcraftLogs(raid: { wclZoneId: number | null; wclRankingEncounterId: number | null }): string {
-  if (raid.wclZoneId == null) return "Not mapped";
+  if (raid.wclZoneId == null) return "Not resolved";
   return raid.wclRankingEncounterId == null
-    ? `Zone ${raid.wclZoneId}`
-    : `Zone ${raid.wclZoneId} · Encounter ${raid.wclRankingEncounterId}`;
+    ? `Connected · Zone ${raid.wclZoneId}`
+    : `Connected · Zone ${raid.wclZoneId} · Encounter ${raid.wclRankingEncounterId}`;
 }
 
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {

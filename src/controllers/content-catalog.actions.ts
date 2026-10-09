@@ -49,6 +49,35 @@ export async function updateRaidAction(input: unknown): Promise<ActionResult> {
   }
 }
 
+export async function retryWclDetectionAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    const { resolved } = await contentCatalogService.retryWclDetection(admin, raidId);
+    revalidateContent(raidId);
+    return {
+      ok: true,
+      message: resolved
+        ? "Warcraft Logs mapping updated."
+        : "Warcraft Logs still not resolved. Try again later or check the raid name.",
+    };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function clearWclMappingAction(input: unknown): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin();
+    const { raidId } = raidIdSchema.parse(input);
+    await contentCatalogService.clearWclMapping(admin, raidId);
+    revalidateContent(raidId);
+    return { ok: true, message: "Warcraft Logs mapping cleared." };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
 export async function deleteRaidAction(input: unknown): Promise<ActionResult> {
   try {
     const admin = await requireAdmin();

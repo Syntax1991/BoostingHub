@@ -273,7 +273,11 @@ export const managementController = {
 
   async getContentRaidPage(raidId: string) {
     const user = await requireAdminOrRedirect(`/manage/content/raids/${raidId}`);
-    return contentCatalogService.getRaidDetail(user, raidId);
+    const [raid, seasons] = await Promise.all([
+      contentCatalogService.getRaidDetail(user, raidId),
+      contentCatalogService.listSeasons(user),
+    ]);
+    return { raid, seasons };
   },
 
   async getSystemHealthPage(searchParams: Record<string, string | string[] | undefined> = {}) {

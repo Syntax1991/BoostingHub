@@ -16,6 +16,7 @@ import {
 } from "@/lib/wow-raid-catalog";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import type { AccountRole } from "@/models/enums";
+import { contentCatalogRepository } from "@/repositories/content-catalog.repository";
 import { productRepository } from "@/repositories/product.repository";
 import { raidRepository } from "@/repositories/raid.repository";
 import { contentCatalogService } from "@/services/content-catalog.service";
@@ -74,8 +75,6 @@ async function newRaid(name: string, overrides: Partial<Parameters<typeof conten
     sortOrder: 90,
     trackLockouts: false,
     blizzardInstanceId: null,
-    wclZoneId: null,
-    wclRankingEncounterId: null,
     ...overrides,
   });
   createdRaidIds.push(raidId);
@@ -103,10 +102,9 @@ function fixed(raidId: string, count: number): ProductContentInput {
   return { raidId, bossCountMode: "FIXED", fixedBossCount: count, minBossCount: null, defaultBossCount: null };
 }
 
-async function newProduct(key: string, contents: ProductContentInput[]) {
+async function newProduct(name: string, contents: ProductContentInput[]) {
   const { productId } = await contentCatalogService.createProduct(admin, {
-    key,
-    name: `QA ${key}`,
+    name,
     active: true,
     selectable: true,
     sortOrder: 50,
@@ -131,12 +129,14 @@ async function restoreSeededCatalog() {
     trackLockouts: true,
     availableForRuns: false,
     blizzardInstanceId: 1317,
+  });
+  await contentCatalogRepository.updateRaidWclMapping(TIDEBOUND_GROTTO_RAID_ID, {
     wclZoneId: 53,
     wclRankingEncounterId: 3379,
+    now: new Date().toISOString(),
   });
   const nymrissa = tide.bosses[0]!;
-  await contentCatalogService.updateEncounter(admin, {
-    bossId: nymrissa.id,
+  await contentCatalogRepository.updateEncounter(nymrissa.id, {
     name: "Nymrissa Wavecaller",
     blizzardEncounterIds: [2849],
     wclEncounterIds: [3379],
@@ -217,8 +217,6 @@ describe("authorization", () => {
           sortOrder: 1,
           trackLockouts: false,
           blizzardInstanceId: null,
-          wclZoneId: null,
-          wclRankingEncounterId: null,
         }),
         "NOT_AUTHORIZED",
       );
@@ -228,7 +226,6 @@ describe("authorization", () => {
           bossId: NYMRISSA_WAVECALLER_BOSS_ID,
           name: "x",
           blizzardEncounterIds: [],
-          wclEncounterIds: [],
         }),
         "NOT_AUTHORIZED",
       );
@@ -247,8 +244,6 @@ describe("authorization", () => {
         sortOrder: 91,
         trackLockouts: false,
         blizzardInstanceId: null,
-        wclZoneId: null,
-        wclRankingEncounterId: null,
       })
     ).raidId;
     createdRaidIds.push(raidId);
@@ -275,7 +270,7 @@ describe("raids", () => {
 
   it("creates a raid with no encounters, not offered for new Runs, and no product", async () => {
     const productsBefore = (await productRepository.listAll()).length;
-    const raidId = await newRaid("QA Created Raid", { blizzardInstanceId: 990001, wclZoneId: 990, trackLockouts: true });
+    const raidId = await newRaid("QA Created Raid", { blizzardInstanceId: 990001, trackLockouts: true });
     const detail = await contentCatalogService.getRaidDetail(admin, raidId);
     expect(detail).toMatchObject({
       name: "QA Created Raid",
@@ -284,7 +279,7 @@ describe("raids", () => {
       availableForRuns: false,
       trackLockouts: true,
       blizzardInstanceId: 990001,
-      wclZoneId: 990,
+      wclZoneId: null,
       wclRankingEncounterId: null,
       referenced: false,
       seeded: false,
@@ -293,8 +288,13 @@ describe("raids", () => {
     expect((await productRepository.listAll()).length).toBe(productsBefore);
   });
 
-  it("edits safe metadata", async () => {
+  it("edits safe metadata without touching WCL mapping", async () => {
     const raidId = await newRaid("QA Edit Raid");
+    await contentCatalogRepository.updateRaidWclMapping(raidId, {
+      wclZoneId: 991,
+      wclRankingEncounterId: 990777,
+      now: new Date().toISOString(),
+    });
     await contentCatalogService.updateRaid(admin, {
       raidId,
       name: "QA Edited Raid",
@@ -303,8 +303,6 @@ describe("raids", () => {
       trackLockouts: true,
       availableForRuns: true,
       blizzardInstanceId: 990002,
-      wclZoneId: 991,
-      wclRankingEncounterId: 990777,
     });
     expect(await contentCatalogService.getRaidDetail(admin, raidId)).toMatchObject({
       name: "QA Edited Raid",
@@ -316,6 +314,16 @@ describe("raids", () => {
       wclZoneId: 991,
       wclRankingEncounterId: 990777,
     });
+  });
+
+  it("lists distinct seasons from persisted raids without a hardcoded list", async () => {
+    await newRaid("QA Season Source Raid", { });
+    const seasons = await contentCatalogService.listSeasons(admin);
+    expect(seasons).toEqual([...seasons].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" })));
+    expect(seasons).toContain("Midnight Season 2");
+    expect(seasons).toContain("The War Within Season 3");
+    expect(seasons).toContain("QA");
+    expect(seasons.every((season) => season.trim() === season && season.length > 0)).toBe(true);
   });
 
   it("manages encounters of an unused raid: create, edit, reorder, delete — ids never regenerated", async () => {
@@ -409,8 +417,6 @@ describe("raids", () => {
       trackLockouts: false,
       availableForRuns: false,
       blizzardInstanceId: null,
-      wclZoneId: null,
-      wclRankingEncounterId: null,
     });
     const bosses = await bossesOf(raidId);
     expect(bosses.map((boss) => boss.sortOrder)).toEqual([1, 2]);
@@ -450,8 +456,6 @@ describe("raids", () => {
       trackLockouts: true,
       availableForRuns: false,
       blizzardInstanceId: 1317,
-      wclZoneId: 53,
-      wclRankingEncounterId: 3379,
     });
     await contentCatalogService.updateEncounter(admin, {
       bossId: NYMRISSA_WAVECALLER_BOSS_ID,
@@ -478,8 +482,6 @@ describe("raids", () => {
       trackLockouts: false,
       availableForRuns: tide.availableForRuns,
       blizzardInstanceId: tide.blizzardInstanceId,
-      wclZoneId: tide.wclZoneId,
-      wclRankingEncounterId: tide.wclRankingEncounterId,
     });
     expect(await lockoutCount()).toBe(before);
     expect((await raidRepository.loadCatalog()).lockoutRaids.map((raid) => raid.id)).not.toContain(TIDEBOUND_GROTTO_RAID_ID);
@@ -498,8 +500,8 @@ describe("query shape", () => {
     try {
       await contentCatalogService.getPage(admin);
       const baseline = spy.mock.calls.length;
-      // 1 raid catalog + 5 grouped reference counts + 1 product catalog.
-      expect(baseline).toBe(7);
+      // 1 raid catalog + 5 grouped reference counts + 1 product catalog + 1 distinct seasons.
+      expect(baseline).toBe(8);
       const raidId = await newRaid("QA Query Shape Raid");
       await addEncounter(raidId, "Q1");
       await addEncounter(raidId, "Q2");
@@ -565,7 +567,12 @@ describe("integration metadata", () => {
   });
 
   it("WCL fight mapping reads the admin-updated DB ids", async () => {
-    const raidId = await newRaid("QA WCL Raid", { wclZoneId: 992 });
+    const raidId = await newRaid("QA WCL Raid");
+    await contentCatalogRepository.updateRaidWclMapping(raidId, {
+      wclZoneId: 992,
+      wclRankingEncounterId: null,
+      now: new Date().toISOString(),
+    });
     const { bossId } = await addEncounter(raidId, "WCL Boss", [], [990210]);
     expect((await raidRepository.loadCatalog()).raidIdByWclEncounterId.get(990210)).toBe(raidId);
     await contentCatalogService.updateEncounter(admin, {
@@ -603,8 +610,6 @@ describe("integration metadata", () => {
         trackLockouts: false,
         availableForRuns: false,
         blizzardInstanceId: 1317,
-        wclZoneId: null,
-        wclRankingEncounterId: null,
       }),
       "CONTENT_BLIZZARD_INSTANCE_CONFLICT",
     );
@@ -641,15 +646,16 @@ describe("products", () => {
     await addEncounter(raidA, "A3");
     const raidB = await newRaid("QA Product Raid B");
     await addEncounter(raidB, "B1");
-    const productId = await newProduct("QA_LIFECYCLE", [variable(raidA, 1, 3), fixed(raidB, 1)]);
-    const created = (await productRepository.findByKey("QA_LIFECYCLE"))!;
+    const productId = await newProduct("QA Lifecycle", [variable(raidA, 1, 3), fixed(raidB, 1)]);
+    const created = (await productRepository.listAll()).find((product) => product.id === productId)!;
+    expect(created.key).toBe("QA_LIFECYCLE");
     expect(created.contents.map((content) => [content.raidId, content.sortOrder, content.bossCountMode])).toEqual([
       [raidA, 1, "VARIABLE"],
       [raidB, 2, "FIXED"],
     ]);
     const contentIdByRaid = new Map(created.contents.map((content) => [content.raidId, content.id]));
 
-    // Edit: rename + reorder + change counts — content row ids are kept per raid.
+    // Edit: rename + reorder + change counts — content row ids are kept per raid; key stays immutable.
     await contentCatalogService.updateProduct(admin, {
       productId,
       name: "QA Lifecycle (renamed)",
@@ -660,6 +666,7 @@ describe("products", () => {
     });
     const edited = (await productRepository.findByKey("QA_LIFECYCLE"))!;
     expect(edited.name).toBe("QA Lifecycle (renamed)");
+    expect(edited.key).toBe("QA_LIFECYCLE");
     expect(edited.contents.map((content) => [content.id, content.raidId, content.sortOrder])).toEqual([
       [contentIdByRaid.get(raidB), raidB, 1],
       [contentIdByRaid.get(raidA), raidA, 2],
@@ -716,11 +723,13 @@ describe("products", () => {
     await newProduct("QA_VALID_VARIABLE", [variable(raidId, 2, 2)]);
   });
 
-  it("keeps product keys unique and immutable; never deletes core products", async () => {
-    await expectCode(newProduct("VENOMOUS_ABYSS", [variable(VENOMOUS_ABYSS_RAID_ID, 1, 8)]), "CONTENT_PRODUCT_KEY_CONFLICT");
+  it("generates unique keys, keeps them immutable, and never deletes core products", async () => {
+    // Collision against the seeded VENOMOUS_ABYSS key → deterministic suffix (no user prompt).
+    const collidedId = await newProduct("Venomous Abyss", [variable(VENOMOUS_ABYSS_RAID_ID, 1, 8)]);
+    expect((await productRepository.listAll()).find((product) => product.id === collidedId)?.key).toBe("VENOMOUS_ABYSS_2");
     await expectCode(contentCatalogService.deleteProduct(admin, VENOMOUS_ABYSS_PRODUCT_ID), "CONTENT_PRODUCT_IN_USE");
     await expectCode(contentCatalogService.deleteProduct(admin, MIDNIGHT_S2_BUNDLE_PRODUCT_ID), "CONTENT_PRODUCT_IN_USE");
-    // An update carries no key: the stored key never changes.
+    // An update carries no key: the stored key never changes when the name does.
     await contentCatalogService.updateProduct(admin, {
       productId: VENOMOUS_ABYSS_PRODUCT_ID,
       name: "Venomous (QA)",
@@ -729,7 +738,10 @@ describe("products", () => {
       sortOrder: 1,
       contents: [variable(VENOMOUS_ABYSS_RAID_ID, 1, 8)],
     });
-    expect((await productRepository.findByKey("VENOMOUS_ABYSS"))!.id).toBe(VENOMOUS_ABYSS_PRODUCT_ID);
+    expect((await productRepository.findByKey("VENOMOUS_ABYSS"))!).toMatchObject({
+      id: VENOMOUS_ABYSS_PRODUCT_ID,
+      name: "Venomous (QA)",
+    });
     await restoreSeededCatalog();
   });
 

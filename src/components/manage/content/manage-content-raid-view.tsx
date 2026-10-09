@@ -4,11 +4,11 @@ import type { ContentRaidRow } from "@/services/content-catalog.service";
 import {
   formatBlizzard,
   formatIdList,
-  formatWarcraftLogs,
   pluralize,
   runAvailabilityLabel,
 } from "@/components/manage/content/content-format";
 import { RaidFormDialog } from "@/components/manage/content/raid-form-dialog";
+import { RaidWclIntegration } from "@/components/manage/content/raid-wcl-integration";
 import { DeleteRaidButton } from "@/components/manage/content/delete-raid-button";
 import {
   DeleteEncounterButton,
@@ -28,7 +28,7 @@ function referenceLines(raid: ContentRaidRow): string[] {
 }
 
 /** One raid: identity-preserving metadata, usage, and its encounters (structure locked when in use). */
-export function ManageContentRaidView({ raid }: { raid: ContentRaidRow }) {
+export function ManageContentRaidView({ raid, seasons }: { raid: ContentRaidRow; seasons: readonly string[] }) {
   const usage = referenceLines(raid);
   const canDelete = !raid.referenced && !raid.seeded;
 
@@ -43,6 +43,7 @@ export function ManageContentRaidView({ raid }: { raid: ContentRaidRow }) {
         actions={
           <div className="flex flex-wrap gap-2">
             <RaidFormDialog
+              seasons={seasons}
               raid={{
                 raidId: raid.id,
                 name: raid.name,
@@ -51,8 +52,6 @@ export function ManageContentRaidView({ raid }: { raid: ContentRaidRow }) {
                 trackLockouts: raid.trackLockouts,
                 availableForRuns: raid.availableForRuns,
                 blizzardInstanceId: raid.blizzardInstanceId,
-                wclZoneId: raid.wclZoneId,
-                wclRankingEncounterId: raid.wclRankingEncounterId,
               }}
             />
             {canDelete ? <DeleteRaidButton raidId={raid.id} name={raid.name} /> : null}
@@ -60,7 +59,7 @@ export function ManageContentRaidView({ raid }: { raid: ContentRaidRow }) {
         }
       />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-2">
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
         <Card className="px-4 py-3">
           <h2 className="mb-2 text-sm font-semibold">Details</h2>
           <dl className="grid grid-cols-[9rem_1fr] gap-y-1 text-sm">
@@ -72,9 +71,15 @@ export function ManageContentRaidView({ raid }: { raid: ContentRaidRow }) {
             <dd>{runAvailabilityLabel(raid.availableForRuns)}</dd>
             <dt className="text-muted">Blizzard</dt>
             <dd>{formatBlizzard(raid)}</dd>
-            <dt className="text-muted">Warcraft Logs</dt>
-            <dd>{formatWarcraftLogs(raid)}</dd>
           </dl>
+        </Card>
+        <Card className="px-4 py-3">
+          <h2 className="mb-2 text-sm font-semibold">Integrations</h2>
+          <RaidWclIntegration
+            raidId={raid.id}
+            wclZoneId={raid.wclZoneId}
+            wclRankingEncounterId={raid.wclRankingEncounterId}
+          />
         </Card>
         <Card className="px-4 py-3">
           <h2 className="mb-2 text-sm font-semibold">Usage</h2>
