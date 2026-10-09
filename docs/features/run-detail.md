@@ -91,16 +91,13 @@ No second roster or signup implementation.
 
 ## Future Extensions
 
-Architectural space only (not implemented):
+Architectural space only (not productized as a booster-facing surface yet):
 
-- Post-completion attendance correction
-- History analytics
-- Wallet / escrow / extra organizational cuts
+- History analytics beyond ADMIN operational analytics
+- Wallet / escrow / extra organizational cuts (rejected with the financial domain)
 
 ## Deferred
 
-- Battle.net / Blizzard API
-- Warcraft Logs beyond the Consumables Audit (e.g. performance audits)
-- Post-completion attendance corrections
-- Wallets, escrow, payment automation, extra Raid Lead / collector / advertiser cuts
-- Discord bot / notifications
+- Broader Warcraft Logs performance / reputation products beyond consumables audit and Auto Build Roster rankings
+- Wallets, escrow, payment automation, extra Raid Lead / collector / advertiser cuts (no financial domain)
+- Customer bookings / boost market

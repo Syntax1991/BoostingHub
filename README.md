@@ -2,9 +2,9 @@
 
 Internal World of Warcraft boosting operations platform for boosters, lootbuddies, raid leads, and administrators.
 
-Boostting Bot is a **web application**. A Discord bot is a later integration, not the product.
+Boostting Bot is a **web application** with a production Discord bot for run channels, signups, roster embeds, schedule posts, and DMs. The web app remains the source of truth for roster selection, attendance, and admin ops.
 
-This repository is on **main**. Character Management, Boosting Roles, Canonical Run detail, Run Management, and Run lifecycle/attendance are implemented.
+This repository is on **main**. Character Management, Boosting Roles, Canonical Run detail, Run Management, Run lifecycle/attendance, Blizzard sync, Discord bot, notifications, and Warcraft Logs consumables audit are implemented.
 
 Existing boosting-community platforms inspired workflow thinking only. Their branding, assets, source, and visual identity are not copied.
 
@@ -20,6 +20,14 @@ Existing boosting-community platforms inspired workflow thinking only. Their bra
 - **Run Management — Complete**
 - **Run lifecycle and attendance — Complete**
 - **Battle.net character linking — Complete** (optional; requires `BLIZZARD_*`)
+- **Blizzard character / lockout sync — Complete** (current-raid lockouts; informational for signup/roster)
+- **Discord bot — Complete** (run channels, signup/roster embeds, schedule, WCL discovery, DMs)
+- **User notifications — Complete** (in-app + Discord DM preferences / quiet hours)
+- **Warcraft Logs consumables audit — Complete** (manual + Discord auto-link; ADMIN / assigned RAID_LEAD)
+- **Post-completion attendance correction — Complete** (audited **Correct Attendance**)
+- **Operational analytics / system health — Complete** (ADMIN; no financial metrics)
+- **Community Schedule — Complete** (admin mutations; RAID_LEAD read-only)
+- **Payout / settlement — Removed** (BoostingHub does not pay boosters; see domain model)
 
 Phase 1 delivered the application shell, auth, MVCS, and seeded domain models.
 
@@ -39,14 +47,13 @@ Run Management lets a raid lead create a self-led draft (or an admin assign an e
 
 Run lifecycle and attendance lets the assigned raid lead or an admin start a published run, record attendance, and complete it when every participant is marked.
 
-Not implemented (intentionally deferred):
-- Post-completion attendance corrections, wallets, escrow, payment automation
-- Extra Raid Lead / collector / advertiser cuts
-- Blizzard lockout sync and automatic realm-transfer handling
-- Warcraft Logs API
-- Discord bot and notifications
+Not implemented (intentionally deferred or out of scope):
+- Wallets, escrow, payment automation, extra Raid Lead / collector / advertiser cuts (no financial domain)
+- Automatic realm-transfer handling; boss-level lockout eligibility redesign
 - Customer bookings / boost market
-- Priority system and statistics products
+- Discord-side Raid Lead roster builder / Strike management (stay web-only)
+- Preferred / ranked character offers among multi-character signups
+- Next ops epic: [Lead Ops Confidence](docs/roadmap/lead-ops-confidence.md)
 
 ## Tech stack
 

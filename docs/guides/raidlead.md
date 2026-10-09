@@ -64,7 +64,7 @@ Attendance: Present / Late / No show / Standby / Excused · Mark all unmarked as
 
 Sind alle Teilnehmer markiert: **Complete Run**. Attendance ist danach read-only; spätere Fehler über **Correct Attendance** (Begründung Pflicht, steht in der Run History). Nach Complete gibt es den Consumables-(WCL)-Audit.
 
-Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed → Paid
+Lifecycle: Draft → Open → Rostering → Published → In Progress → Completed
 
 ![Abgeschlossener Run](./screenshots/rl-06-run-overview.png)
 
