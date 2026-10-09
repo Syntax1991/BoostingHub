@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isActiveSignupOffer,
+  isListedSignup,
   isPickedSignup,
   normalizeWithdrawReason,
   PICKED_WITHDRAW_RUN_STATUSES,
@@ -25,6 +26,15 @@ describe("isActiveSignupOffer", () => {
     expect(isActiveSignupOffer("SELECTED")).toBe(true);
     expect(isActiveSignupOffer("WITHDRAWN")).toBe(false);
     expect(isActiveSignupOffer("NOT_SELECTED")).toBe(false);
+  });
+});
+
+describe("isListedSignup", () => {
+  it("includes NOT_SELECTED so published-unpicked signups stay on the public board", () => {
+    expect(isListedSignup("PENDING")).toBe(true);
+    expect(isListedSignup("SELECTED")).toBe(true);
+    expect(isListedSignup("NOT_SELECTED")).toBe(true);
+    expect(isListedSignup("WITHDRAWN")).toBe(false);
   });
 });
 
