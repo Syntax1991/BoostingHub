@@ -195,12 +195,12 @@ afterAll(async () => {
 /* ------------------------------------------------------------------ auth */
 
 describe("authorization", () => {
-  it("lists Content only in the ADMIN / OWNER management navigation", () => {
+  it("lists Raid Catalog only in the ADMIN / OWNER management navigation", () => {
     expect(canManageRaidCatalog("ADMIN")).toBe(true);
     expect(canManageRaidCatalog("OWNER")).toBe(true);
     expect(canManageRaidCatalog("RAID_LEAD")).toBe(false);
     expect(canManageRaidCatalog("USER")).toBe(false);
-    expect(getManagementNavItems("ADMIN").some((item) => item.href === "/manage/raid-catalog")).toBe(true);
+    expect(getManagementNavItems("ADMIN").some((item) => item.href === "/manage/raid-catalog" && item.label === "Raid Catalog")).toBe(true);
     expect(getManagementNavItems("OWNER").some((item) => item.href === "/manage/raid-catalog")).toBe(true);
     expect(getManagementNavItems("RAID_LEAD").some((item) => item.href === "/manage/raid-catalog")).toBe(false);
     expect(getManagementNavItems("USER")).toEqual([]);
