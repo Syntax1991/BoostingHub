@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededProductSelection } from "@/lib/test-run-input";
-import { projectRunContentDisplay } from "@/lib/run-content-presets";
+import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,

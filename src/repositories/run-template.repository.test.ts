@@ -83,9 +83,9 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
     const template = await runTemplateRepository.findById(id);
     expect(template).toBeTruthy();
     expect(template?.name).toBe("Repo Test Template");
-    expect(template?.raidId).toBe(raidId);
-    expect(template?.raidAvailableForRuns).toBe(true);
-    expect(template?.totalBossCount).toBe(8);
+    expect(template?.contents[0]?.raidId).toBe(raidId);
+    expect(template?.contents[0]?.raidAvailableForRuns).toBe(true);
+    expect(template?.contents[0]?.totalBossCount).toBe(8);
     expect(template?.isActive).toBe(true);
     expect(template?.createdById).toBe(ids.lead);
     expect(template?.createdByName).toBe("RT Lead");
@@ -118,7 +118,7 @@ describe("runTemplateRepository — CRUD and joined reads", () => {
     expect(after?.name).toBe("After update");
     expect(after?.difficulty).toBe("MYTHIC");
     expect(after?.lootType).toBe("VIP");
-    expect(after?.plannedBossCount).toBe(5);
+    expect(after?.contents[0]?.plannedBossCount).toBe(5);
     expect(after?.desiredTankCount).toBe(3);
     expect(after?.desiredHealerCount).toBe(5);
     expect(after?.desiredDpsCount).toBe(12);

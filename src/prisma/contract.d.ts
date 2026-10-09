@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'88b442eebc2abf05f8e275d54d2e4f0af2e09f5143d0c164797fe29f8b22fd8f'>;
+  StorageHashBase<'cf6ac14eb6dc83ff8424bce619ba8a279407cbad759ef3a4ff3269f83e271e39'>;
 export type ExecutionHash =
   ExecutionHashBase<'489f638004aa609265422276e8984e4f57fd71ad9f8ba862780ff3cc38ef2fdc'>;
 export type ProfileHash =
@@ -837,10 +837,8 @@ export type FieldOutputTypes = {
     readonly RunTemplate: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
-      readonly raidId: CodecTypes['pg/text@1']['output'];
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
-      readonly plannedBossCount: CodecTypes['pg/int4@1']['output'];
       readonly desiredTankCount: CodecTypes['pg/int4@1']['output'];
       readonly desiredHealerCount: CodecTypes['pg/int4@1']['output'];
       readonly desiredDpsCount: CodecTypes['pg/int4@1']['output'];
@@ -1608,10 +1606,8 @@ export type FieldInputTypes = {
     readonly RunTemplate: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
-      readonly raidId: CodecTypes['pg/text@1']['input'];
       readonly difficulty: 'NORMAL' | 'HEROIC' | 'MYTHIC';
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
-      readonly plannedBossCount: CodecTypes['pg/int4@1']['input'];
       readonly desiredTankCount: CodecTypes['pg/int4@1']['input'];
       readonly desiredHealerCount: CodecTypes['pg/int4@1']['input'];
       readonly desiredDpsCount: CodecTypes['pg/int4@1']['input'];
@@ -2389,8 +2385,6 @@ export type StorageColumnTypes = {
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly notes: CodecTypes['pg/text@1']['output'] | null;
-      readonly plannedBossCount: CodecTypes['pg/int4@1']['output'];
-      readonly raidId: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedById: CodecTypes['pg/text@1']['output'];
     };
@@ -3160,8 +3154,6 @@ export type StorageColumnInputTypes = {
       readonly lootType: 'SAVED' | 'UNSAVED' | 'VIP' | 'COMMUNITY';
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly notes: CodecTypes['pg/text@1']['input'] | null;
-      readonly plannedBossCount: CodecTypes['pg/int4@1']['input'];
-      readonly raidId: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedById: CodecTypes['pg/text@1']['input'];
     };
@@ -7415,11 +7407,6 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
-                readonly raidId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
                 readonly difficulty: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -7428,11 +7415,6 @@ type ContractBase = Omit<
                 readonly lootType: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly plannedBossCount: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
                   readonly nullable: false;
                 };
                 readonly desiredTankCount: {
@@ -7505,12 +7487,6 @@ type ContractBase = Omit<
                   readonly unique: false;
                 },
                 {
-                  readonly name: 'run_template_raidId_idx_996eeca9';
-                  readonly prefix: 'run_template_raidId_idx';
-                  readonly columns: readonly ['raidId'];
-                  readonly unique: false;
-                },
-                {
                   readonly name: 'run_template_createdById_idx_8bf640ed';
                   readonly prefix: 'run_template_createdById_idx';
                   readonly columns: readonly ['createdById'];
@@ -7524,18 +7500,6 @@ type ContractBase = Omit<
                 },
               ];
               foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'run_template';
-                    readonly columns: readonly ['raidId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'raid';
-                    readonly columns: readonly ['id'];
-                  };
-                },
                 {
                   readonly source: {
                     readonly namespaceId: 'public' & NamespaceId;
@@ -10897,17 +10861,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['raidId'];
                 };
               };
-              readonly templates: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RunTemplate';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['raidId'];
-                };
-              };
             };
             readonly storage: {
               readonly table: 'raid';
@@ -13279,10 +13232,6 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly raidId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly difficulty: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -13290,10 +13239,6 @@ type ContractBase = Omit<
               readonly lootType: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly plannedBossCount: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
               readonly desiredTankCount: {
                 readonly nullable: false;
@@ -13373,14 +13318,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['id'];
                 };
               };
-              readonly raid: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'Raid' };
-                readonly cardinality: 'N:1';
-                readonly on: {
-                  readonly localFields: readonly ['raidId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
               readonly updatedBy: {
                 readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
                 readonly cardinality: 'N:1';
@@ -13396,10 +13333,8 @@ type ContractBase = Omit<
               readonly fields: {
                 readonly id: { readonly column: 'id' };
                 readonly name: { readonly column: 'name' };
-                readonly raidId: { readonly column: 'raidId' };
                 readonly difficulty: { readonly column: 'difficulty' };
                 readonly lootType: { readonly column: 'lootType' };
-                readonly plannedBossCount: { readonly column: 'plannedBossCount' };
                 readonly desiredTankCount: { readonly column: 'desiredTankCount' };
                 readonly desiredHealerCount: { readonly column: 'desiredHealerCount' };
                 readonly desiredDpsCount: { readonly column: 'desiredDpsCount' };

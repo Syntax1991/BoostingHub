@@ -35,8 +35,8 @@ import {
  * solely to know which rows are seeded (the insert-only bootstrap would
  * re-create a deleted seed row, so seeded rows are never hard-deleted).
  *
- * Historical safety: a Raid referenced by Runs, Run Setups (contents or the
- * legacy mirror), Products or Character lockouts keeps its encounter structure
+ * Historical safety: a Raid referenced by Runs, Run Setups (contents),
+ * Products or Character lockouts keeps its encounter structure
  * (count, order, ids) frozen — boss totals and `killedBossIds` depend on it.
  * Identity-preserving metadata (names, season, order, lockout tracking,
  * Blizzard / Warcraft Logs ids) stays editable.
@@ -106,7 +106,7 @@ function toProductRow(product: ProductDefinition, catalog: RaidCatalog): RaidCat
 function referenceSummary(references: RaidReferenceCounts): string {
   const parts = [
     [references.runContents, "Run content"],
-    [references.templateContents + references.templates, "Run Setup reference"],
+    [references.templateContents, "Run Setup reference"],
     [references.productContents, "Product content"],
     [references.lockouts, "Character lockout"],
   ] as const;
@@ -309,7 +309,7 @@ async function applyWclDiscovery(
       });
     }
   } catch (error) {
-    console.error("[content-catalog] WCL discovery failed", { raidId }, error);
+    console.error("[raid-catalog] WCL discovery failed", { raidId }, error);
   }
 }
 

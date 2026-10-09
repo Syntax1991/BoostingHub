@@ -20,7 +20,7 @@ function referenceLines(raid: RaidCatalogRaidRow): string[] {
   const { references } = raid;
   const lines: string[] = [];
   if (references.runContents > 0) lines.push(pluralize(references.runContents, "Run content"));
-  const setups = references.templateContents + references.templates;
+  const setups = references.templateContents;
   if (setups > 0) lines.push(pluralize(setups, "Run Setup reference"));
   if (references.productContents > 0) lines.push(pluralize(references.productContents, "Product content"));
   if (references.lockouts > 0) lines.push(pluralize(references.lockouts, "Character lockout"));

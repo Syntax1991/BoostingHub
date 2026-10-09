@@ -5,7 +5,7 @@ import {
   projectRunContentLockouts,
 } from "@/lib/run-content-lockouts";
 import { formatCompactMultiRaidLockoutProgress } from "@/lib/lockout-display";
-import { projectRunContentDisplay } from "@/lib/run-content-presets";
+import { projectRunContentDisplay } from "@/lib/run-content-display";
 import {
   TIDEBOUND_GROTTO_RAID_ID,
   VENOMOUS_ABYSS_RAID_ID,

@@ -13,8 +13,6 @@ import { serializeEncounterIds } from "@/lib/raid-catalog";
 export type RaidReferenceCounts = {
   runContents: number;
   templateContents: number;
-  /** Legacy singular `RunTemplate.raidId` mirror. */
-  templates: number;
   productContents: number;
   lockouts: number;
 };
@@ -22,7 +20,6 @@ export type RaidReferenceCounts = {
 export const EMPTY_RAID_REFERENCES: RaidReferenceCounts = {
   runContents: 0,
   templateContents: 0,
-  templates: 0,
   productContents: 0,
   lockouts: 0,
 };
@@ -107,19 +104,17 @@ export const raidCatalogRepository = {
     return [...seen].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
   },
 
-  /** Reference counts for every Raid — five grouped COUNT queries, independent of row counts. */
+  /** Reference counts for every Raid — four grouped COUNT queries, independent of row counts. */
   async listRaidReferenceCounts(): Promise<Map<string, RaidReferenceCounts>> {
-    const [runContents, templateContents, templates, productContents, lockouts] = await Promise.all([
+    const [runContents, templateContents, productContents, lockouts] = await Promise.all([
       orm.RunRaidContent.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
       orm.RunTemplateRaidContent.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
-      orm.RunTemplate.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
       orm.ProductRaidContent.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
       orm.CharacterRaidLockout.groupBy("raidId").aggregate((aggregate) => ({ count: aggregate.count() })),
     ]);
     const maps = {
       runContents: toCountMap(runContents as GroupedCount[]),
       templateContents: toCountMap(templateContents as GroupedCount[]),
-      templates: toCountMap(templates as GroupedCount[]),
       productContents: toCountMap(productContents as GroupedCount[]),
       lockouts: toCountMap(lockouts as GroupedCount[]),
     };
@@ -130,7 +125,6 @@ export const raidCatalogRepository = {
         {
           runContents: maps.runContents.get(raidId) ?? 0,
           templateContents: maps.templateContents.get(raidId) ?? 0,
-          templates: maps.templates.get(raidId) ?? 0,
           productContents: maps.productContents.get(raidId) ?? 0,
           lockouts: maps.lockouts.get(raidId) ?? 0,
         },
@@ -140,10 +134,9 @@ export const raidCatalogRepository = {
 
   /** Authoritative server-side reference check for one Raid (guards deletes / encounter structure). */
   async raidReferenceCounts(raidId: string): Promise<RaidReferenceCounts> {
-    const [runContents, templateContents, templates, productContents, lockouts] = await Promise.all([
+    const [runContents, templateContents, productContents, lockouts] = await Promise.all([
       orm.RunRaidContent.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
       orm.RunTemplateRaidContent.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
-      orm.RunTemplate.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
       orm.ProductRaidContent.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
       orm.CharacterRaidLockout.where({ raidId }).aggregate((aggregate) => ({ count: aggregate.count() })),
     ]);
@@ -151,7 +144,6 @@ export const raidCatalogRepository = {
     return {
       runContents: value(runContents),
       templateContents: value(templateContents),
-      templates: value(templates),
       productContents: value(productContents),
       lockouts: value(lockouts),
     };

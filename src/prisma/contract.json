@@ -3765,21 +3765,6 @@
                   "model": "RunTemplateRaidContent",
                   "namespace": "public"
                 }
-              },
-              "templates": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "raidId"
-                  ]
-                },
-                "to": {
-                  "model": "RunTemplate",
-                  "namespace": "public"
-                }
               }
             },
             "storage": {
@@ -7889,20 +7874,6 @@
                   "kind": "scalar"
                 }
               },
-              "plannedBossCount": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "raidId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
@@ -7964,21 +7935,6 @@
                   "namespace": "public"
                 }
               },
-              "raid": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "raidId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "Raid",
-                  "namespace": "public"
-                }
-              },
               "updatedBy": {
                 "cardinality": "N:1",
                 "on": {
@@ -8032,12 +7988,6 @@
                 },
                 "notes": {
                   "column": "notes"
-                },
-                "plannedBossCount": {
-                  "column": "plannedBossCount"
-                },
-                "raidId": {
-                  "column": "raidId"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -16070,16 +16020,6 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "plannedBossCount": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "raidId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "nativeType": "timestamptz",
@@ -16092,23 +16032,6 @@
                 }
               },
               "foreignKeys": [
-                {
-                  "onDelete": "restrict",
-                  "source": {
-                    "columns": [
-                      "raidId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "run_template"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "raid"
-                  }
-                },
                 {
                   "onDelete": "restrict",
                   "source": {
@@ -16159,14 +16082,6 @@
                   ],
                   "name": "run_template_isActive_idx_77fe3ba1",
                   "prefix": "run_template_isActive_idx",
-                  "unique": false
-                },
-                {
-                  "columns": [
-                    "raidId"
-                  ],
-                  "name": "run_template_raidId_idx_996eeca9",
-                  "prefix": "run_template_raidId_idx",
                   "unique": false
                 },
                 {
@@ -18120,7 +18035,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "88b442eebc2abf05f8e275d54d2e4f0af2e09f5143d0c164797fe29f8b22fd8f"
+    "storageHash": "cf6ac14eb6dc83ff8424bce619ba8a279407cbad759ef3a4ff3269f83e271e39"
   },
   "execution": {
     "executionHash": "489f638004aa609265422276e8984e4f57fd71ad9f8ba862780ff3cc38ef2fdc",

@@ -747,7 +747,7 @@ export const warcraftLogsApiClient = {
   },
 
   /**
-   * All WCL zones with encounters (authoritative catalog metadata for Content Catalog discovery).
+   * All WCL zones with encounters (authoritative catalog metadata for Raid Catalog discovery).
    * Never throws for business outcomes.
    */
   async fetchZones(): Promise<WarcraftLogsZonesResult> {
