@@ -21,6 +21,9 @@ import {
   isLegacyRaidleadGuideMessage,
   LEGACY_RAIDLEAD_GUIDE_FINGERPRINTS,
   planRaidleadGuidePublish,
+  RAIDLEAD_GUIDE_CARD_KEY_RENAMES,
+  resolveRaidleadGuideCardKey,
+  validateRaidleadGuideCardKeyRenames,
   validateRaidleadGuideCards,
   verifyCanonicalRaidleadGuideState,
   type DiscordMessageLike,
@@ -484,6 +487,236 @@ describe("publisher dry-run", () => {
       type: "create",
       cardKey: "raid-lead-basics",
     });
+  });
+});
+
+describe("canonical card key renames", () => {
+  const currentGuide = () =>
+    RAIDLEAD_GUIDE_CARDS.map((card, i) => marked(card.key, `m${i}`, assetRevisions[card.key]));
+
+  /** The completion card as published before the payout removal (old key + old copy). */
+  function publishedCompletePayout(id: string): DiscordMessageLike {
+    const message = marked("complete-run", id, assetRevisions["complete-run"]);
+    const embed = message.embeds![0]!;
+    return {
+      ...message,
+      embeds: [
+        {
+          ...embed,
+          title: "💰 Complete & Payout",
+          description: "After **Complete**, open the **Payout** tab.",
+          footer: {
+            text: embed.footer!.text!.replace(
+              `${RAIDLEAD_GUIDE_MARKER_PREFIX}complete-run`,
+              `${RAIDLEAD_GUIDE_MARKER_PREFIX}complete-payout`,
+            ),
+          },
+        },
+      ],
+    };
+  }
+
+  /** Production state before republish: basics with payout wording + complete-payout. */
+  function productionBeforeRepublish(): DiscordMessageLike[] {
+    const messages = currentGuide();
+    const basics = messages[0]!;
+    messages[0] = {
+      ...basics,
+      embeds: [
+        {
+          ...basics.embeds![0]!,
+          description: `${basics.embeds![0]!.description} Use the Dashboard for Build Roster / Start / Attendance / Payout hand-offs.`,
+        },
+      ],
+    };
+    messages[5] = publishedCompletePayout("1554676249627070554");
+    return messages;
+  }
+
+  it("declares complete-payout → complete-run and the declared renames are valid", () => {
+    expect(RAIDLEAD_GUIDE_CARD_KEY_RENAMES).toContainEqual({ from: "complete-payout", to: "complete-run" });
+    expect(validateRaidleadGuideCardKeyRenames()).toEqual([]);
+    expect(resolveRaidleadGuideCardKey("complete-payout")).toBe("complete-run");
+    expect(resolveRaidleadGuideCardKey("create-run")).toBe("create-run");
+  });
+
+  it("leaves a plan over current canonical keys only unchanged (no-op)", () => {
+    const plan = planRaidleadGuidePublish({ channelId: "ch", botUserId: BOT, messages: currentGuide(), assetRevisions });
+    expect(plan.errors).toEqual([]);
+    expect(plan.actions).toHaveLength(6);
+    expect(plan.actions.every((a) => a.type === "unchanged")).toBe(true);
+  });
+
+  it("resolves an existing complete-payout message to the complete-run card", () => {
+    const { byKey } = indexCanonicalGuideMessages(productionBeforeRepublish(), BOT);
+    expect(byKey.get("complete-run")?.map((m) => m.id)).toEqual(["1554676249627070554"]);
+    expect(byKey.has("complete-payout")).toBe(false);
+  });
+
+  it("plans UPDATE of the renamed message and of the basics card, with no create and no orphan", () => {
+    const plan = planRaidleadGuidePublish({
+      channelId: "ch",
+      botUserId: BOT,
+      messages: productionBeforeRepublish(),
+      assetRevisions,
+    });
+    expect(plan.errors).toEqual([]);
+    expect(plan.actions).toHaveLength(6);
+    expect(plan.actions.filter((a) => a.type === "create")).toEqual([]);
+    expect(plan.actions.filter((a) => a.type === "update")).toEqual([
+      { type: "update", cardKey: "raid-lead-basics", messageId: "m0" },
+      { type: "update", cardKey: "complete-run", messageId: "1554676249627070554" },
+    ]);
+    expect(plan.actions.some((a) => a.cardKey === "complete-payout")).toBe(false);
+  });
+
+  it("plans UPDATE for a renamed card even when its content already matches (footer migrates)", () => {
+    const messages = currentGuide();
+    const current = messages[5]!;
+    const footer = current.embeds![0]!.footer!.text!;
+    messages[5] = {
+      ...current,
+      id: "renamed",
+      embeds: [{ ...current.embeds![0]!, footer: { text: footer.replace(":complete-run", ":complete-payout") } }],
+    };
+    const plan = planRaidleadGuidePublish({ channelId: "ch", botUserId: BOT, messages, assetRevisions });
+    expect(plan.actions.find((a) => a.cardKey === "complete-run")).toEqual({
+      type: "update",
+      cardKey: "complete-run",
+      messageId: "renamed",
+    });
+  });
+
+  it("publishes the update in place with the complete-run footer, and verification then passes", async () => {
+    const edits: Array<{ messageId: string; footer: string; title: string }> = [];
+    const client: GuideDiscordClient = {
+      listMessages: vi.fn(async () => []),
+      createMessage: vi.fn(async () => ({ id: "created" })),
+      editMessage: vi.fn(async ({ messageId, embed }) => {
+        edits.push({ messageId, footer: embed.footer.text, title: embed.title });
+        return { id: messageId };
+      }),
+      deleteMessage: vi.fn(),
+    };
+    const cardsNoImage = RAIDLEAD_GUIDE_CARDS.map((c) => ({ ...c, imageFile: null }));
+    const nullAssets = Object.fromEntries(cardsNoImage.map((c) => [c.key, null])) as Record<string, string | null>;
+    const before = cardsNoImage.map((card, i) => {
+      const embed = buildRaidleadGuideEmbed(card, { assetRevision: null });
+      const footer =
+        card.key === "complete-run" ? embed.footer.text.replace(":complete-run", ":complete-payout") : embed.footer.text;
+      return {
+        id: card.key === "complete-run" ? "1554676249627070554" : `m${i}`,
+        author: { id: BOT, bot: true },
+        content: "",
+        embeds: [{ title: embed.title, description: embed.description, footer: { text: footer }, fields: embed.fields }],
+        attachments: [],
+        components: card.linkButton ? [{ type: 1 }] : [],
+      } satisfies DiscordMessageLike;
+    });
+    const plan = planRaidleadGuidePublish({
+      channelId: "ch",
+      botUserId: BOT,
+      messages: before,
+      assetRevisions: nullAssets,
+      cards: cardsNoImage,
+    });
+    expect(plan.errors).toEqual([]);
+
+    const result = await executeRaidleadGuidePublish({
+      client,
+      channelId: "ch",
+      plan,
+      screenshotsDir: ".",
+      botUserId: BOT,
+      cards: cardsNoImage,
+      dryRun: false,
+    });
+
+    expect(result).toMatchObject({ created: 0, updated: 1, unchanged: 5, retiredLegacy: 0 });
+    expect(client.createMessage).not.toHaveBeenCalled();
+    expect(client.deleteMessage).not.toHaveBeenCalled();
+    expect(edits).toHaveLength(1);
+    expect(edits[0]!.messageId).toBe("1554676249627070554");
+    expect(parseRaidleadGuideCardKey(edits[0]!.footer)).toBe("complete-run");
+    expect(edits[0]!.footer).toContain(`${RAIDLEAD_GUIDE_MARKER_PREFIX}complete-run`);
+    expect(result.messageIdsByCard["complete-run"]).toBe("1554676249627070554");
+
+    // Re-read after the edit: the migrated footer satisfies canonical verification.
+    const after = before.map((m) =>
+      m.id === "1554676249627070554"
+        ? { ...m, embeds: [{ ...m.embeds[0]!, footer: { text: edits[0]!.footer } }] }
+        : m,
+    );
+    const verified = verifyCanonicalRaidleadGuideState({
+      messages: after,
+      botUserId: BOT,
+      cards: cardsNoImage,
+      assetRevisions: nullAssets,
+    });
+    expect(verified.ok).toBe(true);
+  });
+
+  it("refuses when both the renamed and the current card are present (no orphan, no guess)", () => {
+    const messages = [...currentGuide(), publishedCompletePayout("old")];
+    const plan = planRaidleadGuidePublish({ channelId: "ch", botUserId: BOT, messages, assetRevisions });
+    expect(plan.errors.join(" ")).toMatch(/Ambiguous state: card key "complete-run" appears on 2 messages/);
+    expect(plan.actions).toEqual([]);
+  });
+
+  it("still refuses an unknown key that is not a declared rename", () => {
+    const messages = currentGuide();
+    const stray = marked("create-run", "stray", assetRevisions["create-run"]);
+    const footer = stray.embeds![0]!.footer!.text!;
+    messages.push({
+      ...stray,
+      embeds: [{ ...stray.embeds![0]!, footer: { text: footer.replace(":create-run", ":some-random-old-key") } }],
+    });
+    const plan = planRaidleadGuidePublish({ channelId: "ch", botUserId: BOT, messages, assetRevisions });
+    expect(plan.errors.join(" ")).toMatch(/Unknown canonical key "some-random-old-key"/);
+    expect(plan.actions).toEqual([]);
+  });
+
+  it("fails validation for a rename whose target is not a current card", () => {
+    const renames = [{ from: "complete-payout", to: "complete-gold" }];
+    expect(validateRaidleadGuideCardKeyRenames(RAIDLEAD_GUIDE_CARDS, renames).join(" ")).toMatch(
+      /target is not a current card/,
+    );
+    const plan = planRaidleadGuidePublish({
+      channelId: "ch",
+      botUserId: BOT,
+      messages: currentGuide(),
+      assetRevisions,
+      renames,
+    });
+    expect(plan.errors.join(" ")).toMatch(/target is not a current card/);
+    expect(plan.actions).toEqual([]);
+  });
+
+  it("fails validation for ambiguous, self, current-key and chained renames", () => {
+    const errors = (renames: Array<{ from: string; to: string }>) =>
+      validateRaidleadGuideCardKeyRenames(RAIDLEAD_GUIDE_CARDS, renames).join(" ");
+    expect(
+      errors([
+        { from: "complete-payout", to: "complete-run" },
+        { from: "complete-payout", to: "run-attendance" },
+      ]),
+    ).toMatch(/declared more than once/);
+    expect(errors([{ from: "complete-run", to: "complete-run" }])).toMatch(/maps to itself/);
+    expect(errors([{ from: "create-run", to: "complete-run" }])).toMatch(/source is still a current card key/);
+    expect(
+      errors([
+        { from: "older-key", to: "complete-payout" },
+        { from: "complete-payout", to: "complete-run" },
+      ]),
+    ).toMatch(/no chaining/);
+  });
+
+  it("does not affect the legacy six-message set (renames are v2-footer only)", () => {
+    const legacy = ([1, 2, 3, 4, 5, 6] as const).map((slot) => legacyMessage(slot, `old-${slot}`));
+    const set = identifyKnownLegacyRaidleadGuideSet([...productionBeforeRepublish(), ...legacy], BOT);
+    expect(set.complete).toBe(true);
+    expect(set.messageIds).toEqual(["old-1", "old-2", "old-3", "old-4", "old-5", "old-6"]);
+    expect(isLegacyRaidleadGuideMessage(publishedCompletePayout("x"), BOT)).toBe(false);
   });
 });
 
