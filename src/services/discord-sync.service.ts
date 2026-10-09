@@ -47,7 +47,7 @@ import {
 import { projectRunContentLockouts } from "@/lib/run-content-lockouts";
 import { lockoutService } from "@/services/lockout.service";
 import { isSignupWindowOpen, SIGNUP_WINDOW_STATUSES } from "@/services/run-state";
-import { isActiveSignupOffer } from "@/services/signup-state";
+import { isActiveSignupOffer, isListedSignup } from "@/services/signup-state";
 import { parseRescheduleHrefTimestamps } from "@/services/notification-content";
 
 /**
@@ -134,8 +134,8 @@ export type SignupEmbedData = {
   runStatus: RunStatus;
   signupWindowOpen: boolean;
   /**
-   * Distinct Users with an active (PENDING or SELECTED) offer — never a row
-   * count, never WITHDRAWN/NOT_SELECTED, and never the sum of per-role signed.
+   * Distinct Users with a listed signup (PENDING, SELECTED, or NOT_SELECTED) —
+   * never a row count, never WITHDRAWN, and never the sum of per-role signed.
    */
   uniqueSignupCount: number;
   /**
@@ -149,9 +149,10 @@ export type SignupEmbedData = {
     lootbuddy: SignupEmbedLootbuddyStatus;
   };
   /**
-   * Participants behind those counts. Signups lists every active offer
-   * (PENDING or SELECTED) by offered role — multi-role boosters appear in
-   * every offered role. Selected lineup is rendered on the separate Roster
+   * Participants behind those counts. Signups lists every non-withdrawn offer
+   * (PENDING, SELECTED, or NOT_SELECTED) by offered role — multi-role boosters
+   * appear in every offered role. Roster publication must not drop unpicked
+   * rows from this list. Selected lineup is rendered on the separate Roster
    * Discord message; `picked` is kept for roleStatus counts / signatures only.
    * External boosters never appear here.
    */
@@ -595,8 +596,11 @@ export function shouldRetireDiscordChannel(run: { status?: string; archivedAt?: 
  * old hand-maintained signature field list).
  */
 function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
-  const active = run.signups.filter((signup) => isActiveSignupOffer(signup.status));
-  const projection = buildSignupRoleProjection(run, active);
+  // Public board = every non-withdrawn signup, including NOT_SELECTED after
+  // roster publish. Do not use isActiveSignupOffer here — that excludes
+  // unpicked published outcomes and incorrectly empties Discord role lists.
+  const listed = run.signups.filter((signup) => isListedSignup(signup.status));
+  const projection = buildSignupRoleProjection(run, listed);
 
   const productLabel = run.contentDisplay.productLabel;
   return {
@@ -613,7 +617,7 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
     scheduledStartAt: run.scheduledStartAt,
     runStatus: run.status,
     signupWindowOpen: isSignupWindowOpen(run.status, run.signupsOpen),
-    uniqueSignupCount: new Set(active.map((signup) => signup.userId)).size,
+    uniqueSignupCount: new Set(listed.map((signup) => signup.userId)).size,
     roleStatus: projection.roleStatus,
     members: projection.members,
     discordRolePing: run.discordRolePing,
@@ -623,13 +627,14 @@ function toSignupEmbedData(run: RunListRecord): SignupEmbedData {
 /**
  * OPEN / ROSTERING (and pre-publish): roster picks = saved draft selections.
  * PUBLISHED+: roster picks = live SELECTED signups + publishedRole (replacement drafts stay private).
- * Signups lists every active offer (including already-selected Users) — the
- * separate Roster Discord message owns the selected lineup.
+ * Signups lists every non-withdrawn offer (PENDING / SELECTED / NOT_SELECTED),
+ * including already-selected and published-unpicked Users — the separate Roster
+ * Discord message owns the selected lineup.
  * Counts are length-derived from the same member lists rendered in the embeds.
  */
 function buildSignupRoleProjection(
   run: RunListRecord,
-  activeSignups: RunListRecord["signups"],
+  listedSignups: RunListRecord["signups"],
 ): Pick<SignupEmbedData, "roleStatus" | "members"> {
   const usePublishedPicks =
     run.status === "PUBLISHED" || run.status === "IN_PROGRESS" || run.status === "COMPLETED";
@@ -661,17 +666,17 @@ function buildSignupRoleProjection(
       .map(externalSignupEmbedMember);
 
   const signedTanks = sortSignupEmbedMembers(
-    activeSignups
+    listedSignups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("TANK"))
       .map(toSignupEmbedMember),
   );
   const signedHealers = sortSignupEmbedMembers(
-    activeSignups
+    listedSignups
       .filter((signup) => signup.participationType === "BOOSTER" && signup.offeredRoles.includes("HEALER"))
       .map(toSignupEmbedMember),
   );
   const signedDps = sortSignupEmbedMembers(
-    activeSignups
+    listedSignups
       .filter(
         (signup) =>
           signup.participationType === "BOOSTER" && signup.offeredRoles.some((role) => isDpsRole(role)),
@@ -679,7 +684,7 @@ function buildSignupRoleProjection(
       .map(toSignupEmbedMember),
   );
   const signedLoot = sortSignupEmbedMembers(
-    activeSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
+    listedSignups.filter((signup) => signup.participationType === "LOOTBUDDY").map(toSignupEmbedMember),
   );
 
   // External boosters are roster-only — never fabricated as Signup rows.

@@ -239,7 +239,7 @@ Quick Signup offers all eligible Booster characters (same `evaluateBoosterOption
 
 Public signup embed Roles field:
 
-- **Signups** = every active offer (PENDING or SELECTED) by offered role — hybrids count once per offered role. Selected Users remain listed here; selection does not remove them from the signup pool.
+- **Signups** = every non-withdrawn offer (PENDING, SELECTED, or NOT_SELECTED) by offered role — hybrids count once per offered role. Selected Users remain listed here; selection does not remove them from the signup pool. Roster publication must not hide unpicked (`NOT_SELECTED`) signups while the signup window remains open.
 - Selected lineup is **not** rendered on this message — it lives on the separate **Roster** Discord message (`rosterMessageId`).
 - External boosters never appear on the Signup embed.
 - Lootbuddy signup column is a volunteered count only (planned Lootbuddy target lives on Roster).

@@ -321,7 +321,7 @@ describe("discordSyncService.getSignupEmbedData", () => {
     expect(data).toBeNull();
   });
 
-  it("drops a User from the count once their only offer is WITHDRAWN, and never counts a NOT_SELECTED-only User", async () => {
+  it("drops a User from the count once their only offer is WITHDRAWN, but keeps NOT_SELECTED on the board", async () => {
     // A dedicated run so mutating these signups cannot affect the shared runId
     // that later tests in this file (and getRosterEmbedData) depend on.
     const countRunId = await runService
@@ -350,8 +350,104 @@ describe("discordSyncService.getSignupEmbedData", () => {
     await orm.RunSignup.where({ id: tankSignupId }).update({ status: "WITHDRAWN" });
     expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(1);
 
+    // NOT_SELECTED is a roster outcome, not a withdrawal — still a signed user.
     await orm.RunSignup.where({ id: healerSignupId }).update({ status: "NOT_SELECTED" });
-    expect((await discordSyncService.getSignupEmbedData(countRunId))?.uniqueSignupCount).toBe(0);
+    const afterNotSelected = await discordSyncService.getSignupEmbedData(countRunId);
+    expect(afterNotSelected?.uniqueSignupCount).toBe(1);
+    expect(afterNotSelected?.members.signed.healers.some((m) => m.signupId === healerSignupId)).toBe(true);
+  });
+
+  it("keeps NOT_SELECTED RANGED_DPS under DPS after roster publish while signups stay open", async () => {
+    // Dedicated characters/users so SELECTED on this run cannot schedule-conflict
+    // the shared suite runId that later roster embed tests still mutate.
+    const pubRunId = await runService
+      .createRun(
+        lead,
+        venomousCreateInput({
+          difficulty: "HEROIC",
+          lootType: "UNSAVED",
+          venomousPlannedBossCount: 8,
+          scheduledStartAt: futureIso(21),
+          desiredTankCount: 1,
+          desiredHealerCount: 0,
+          desiredDpsCount: 0,
+        }),
+      )
+      .then((run) => run.id);
+    createdRunIds.push(pubRunId);
+    await runService.openRun(lead, pubRunId);
+
+    const pubTankChar = await createCharacter(ids.extra, "PubTankLab", "PALADIN", "Protection", "TANK");
+    await grantQualification(ids.extra);
+    const tankSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.extra,
+      characterId: pubTankChar,
+      participationType: "BOOSTER",
+      role: "TANK",
+    });
+    const rangedOnly = await createCharacter(ids.ranged, "SakamutoLab", "HUNTER", "Marksmanship", "RANGED_DPS");
+    const rangedSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.ranged,
+      characterId: rangedOnly,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+    });
+    const meleeOnly = await createCharacter(ids.melee, "MeleePendingLab", "WARRIOR", "Fury", "MELEE_DPS");
+    const meleeSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.melee,
+      characterId: meleeOnly,
+      participationType: "BOOSTER",
+      role: "MELEE_DPS",
+    });
+
+    let view = await rosterService.getRosterManagementView(lead, pubRunId);
+    await rosterService.saveDraftSelection(lead, {
+      runId: pubRunId,
+      version: view.roster.version,
+      selections: [{ signupId: tankSignupId, selectedRole: "TANK" }],
+    });
+    view = await rosterService.getRosterManagementView(lead, pubRunId);
+    await rosterService.publishRoster(lead, {
+      runId: pubRunId,
+      version: view.roster.version,
+      acknowledgeWarnings: true,
+    });
+
+    expect((await orm.RunSignup.where({ id: rangedSignupId }).first())?.status).toBe("NOT_SELECTED");
+    expect((await orm.RunSignup.where({ id: meleeSignupId }).first())?.status).toBe("NOT_SELECTED");
+    expect((await orm.RunSignup.where({ id: tankSignupId }).first())?.status).toBe("SELECTED");
+
+    const embed = await discordSyncService.getSignupEmbedData(pubRunId);
+    expect(embed?.runStatus).toBe("PUBLISHED");
+    expect(embed?.signupWindowOpen).toBe(true);
+    // Unique users: tank + ranged + melee — never a projected role-row sum.
+    expect(embed?.uniqueSignupCount).toBe(3);
+    expect(embed?.members.signed.tanks.some((m) => m.signupId === tankSignupId)).toBe(true);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
+    expect(embed?.members.signed.dps.some((m) => m.signupId === meleeSignupId)).toBe(true);
+    expect(embed?.roleStatus.dps.signed).toBe(2);
+    expect(embed?.members.picked.tanks.some((m) => m.signupId === tankSignupId)).toBe(true);
+    expect(embed?.members.picked.dps).toHaveLength(0);
+
+    // Late PENDING signup after publish must also appear and refresh the board.
+    // Use the loot user — ids.extra is already the selected tank on this run.
+    const lateChar = await createCharacter(ids.loot, "LateDpsLab", "MAGE", "Frost", "RANGED_DPS");
+    await grantQualification(ids.loot);
+    const lateSignupId = await createSignup({
+      runId: pubRunId,
+      userId: ids.loot,
+      characterId: lateChar,
+      participationType: "BOOSTER",
+      role: "RANGED_DPS",
+    });
+    expect((await orm.RunSignup.where({ id: lateSignupId }).first())?.status).toBe("PENDING");
+    const afterLate = await discordSyncService.getSignupEmbedData(pubRunId);
+    expect(afterLate?.uniqueSignupCount).toBe(4);
+    expect(afterLate?.members.signed.dps.some((m) => m.signupId === lateSignupId)).toBe(true);
+    expect(afterLate?.members.signed.dps.some((m) => m.signupId === rangedSignupId)).toBe(true);
   });
 
   it("PUBLISHED picked counts use publishedRole, not a mutated replacement draft role", async () => {

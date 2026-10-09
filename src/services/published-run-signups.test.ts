@@ -249,6 +249,12 @@ describe("published-run signups", () => {
     );
     expect(lateBooster?.status).toBe("PENDING");
 
+    // Late PENDING + published SELECTED both appear on Discord Signups by role.
+    const afterLateEmbed = await discordSyncService.getSignupEmbedData(runId);
+    expect(afterLateEmbed?.uniqueSignupCount).toBe(2);
+    expect(afterLateEmbed?.members.signed.dps.some((m) => m.signupId === earlySignupId)).toBe(true);
+    expect(afterLateEmbed?.members.signed.dps.some((m) => m.signupId === lateBooster!.id)).toBe(true);
+
     // M — Lootbuddy signup after publish
     const loot = await signupService.setLootbuddies(late, {
       runId,

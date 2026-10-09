@@ -51,15 +51,26 @@ export function isBlockingDuplicate(status: SignupStatus): boolean {
 }
 
 /**
- * A current, counted Character offer — PENDING or SELECTED. WITHDRAWN and
- * NOT_SELECTED are historical outcomes: still persisted for audit, but never
- * an active offer for signup lists, "also offered" alternates, or signup
- * counts. Roster re-selection is a separate concern (a NOT_SELECTED row from
- * an earlier publish remains a legitimate re-roster candidate) and does not
- * use this predicate.
+ * A current, counted Character offer — PENDING or SELECTED. WITHDRAWN is a
+ * terminal exit. NOT_SELECTED is a published-roster outcome: still a legitimate
+ * re-roster candidate, but no longer an open "waiting" offer for mutation /
+ * alternate-offer eligibility. Do not use this for the public Discord signup
+ * board — see `isListedSignup`.
  */
 export function isActiveSignupOffer(status: SignupStatus): boolean {
   return status === "PENDING" || status === "SELECTED";
+}
+
+/**
+ * Still on the Run's public signup board (Discord "Signups by role", unique
+ * signed-user count). PENDING, SELECTED, and NOT_SELECTED all count —
+ * NOT_SELECTED is "considered and not picked", not a withdrawal. WITHDRAWN is
+ * the only status that removes a row from the board.
+ *
+ * Roster publication must not hide unpicked signups while signups remain open.
+ */
+export function isListedSignup(status: SignupStatus): boolean {
+  return status === "PENDING" || status === "SELECTED" || status === "NOT_SELECTED";
 }
 
 export type OfferReconciliationSignup = {
