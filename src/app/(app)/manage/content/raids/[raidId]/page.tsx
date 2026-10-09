@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Legacy bookmark: /manage/raid-catalog/raids/[raidId] → Raid Catalog raid detail. */
+/** Legacy bookmark: /manage/content/raids/[raidId] → /manage/raid-catalog/raids/[raidId]. */
 export default async function ManageContentRaidRedirectPage({
   params,
 }: {
