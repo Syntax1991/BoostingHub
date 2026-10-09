@@ -3,6 +3,7 @@ import {
   canManageRun,
   type AuthenticatedUser,
 } from "@/auth/authorization";
+import { deriveCharacterSyncHealth, resolveSyncHealthStaleMinutes } from "@/lib/blizzard/sync-health";
 import { DomainError } from "@/lib/errors";
 import { integrationEventRepository } from "@/repositories/integration-event.repository";
 import { runDiscordPostRepository } from "@/repositories/run-discord-post.repository";
@@ -46,7 +47,115 @@ export type RunPreflightContext = {
     signupMessageId: string | null;
   } | null;
   recentDiscordHasError: boolean;
+  /** Reference time for Blizzard sync freshness. */
+  now: Date;
+  /** Blizzard sync stale threshold (BLIZZARD_SYNC_STALE_MINUTES). */
+  syncStaleMinutes: number;
 };
+
+type SelectedBooster = RosterManagementView["boosters"][number];
+
+const MAX_LISTED_NAMES = 5;
+
+function characterLabel(signup: SelectedBooster): string {
+  return signup.character ? `${signup.character.name}-${signup.character.realm}` : signup.userName;
+}
+
+function listNames(names: string[]): string {
+  if (names.length <= MAX_LISTED_NAMES) return names.join(", ");
+  return `${names.slice(0, MAX_LISTED_NAMES).join(", ")} +${names.length - MAX_LISTED_NAMES} more`;
+}
+
+/**
+ * Registered BOOSTER Characters that Start will snapshot: the selected roster
+ * (draft equals published once there are no unpublished changes). External
+ * Boosters carry no Character and are never checked here.
+ */
+function selectedBoosterCharacters(manager: RosterManagementView): SelectedBooster[] {
+  return manager.boosters.filter(
+    (signup) => signup.character && signup.status !== "WITHDRAWN" && (signup.draftSelected || signup.status === "SELECTED"),
+  );
+}
+
+/**
+ * Soft per-Character risks of the selected roster — WARNING only. Schedule
+ * conflicts hard-block selection and Publish, but a conflict that appears
+ * after Publish must not silently strand a Start; the lead decides.
+ */
+function selectedCharacterChecks(ctx: RunPreflightContext): PreflightCheck[] {
+  const selected = selectedBoosterCharacters(ctx.manager);
+  const checks: PreflightCheck[] = [];
+
+  const conflicted = selected.filter((signup) => signup.scheduleConflicts.length > 0);
+  checks.push(
+    conflicted.length > 0
+      ? {
+          id: "selected_schedule_conflicts",
+          label: "Schedule conflicts",
+          status: "WARNING",
+          summary: `${conflicted.length} selected Character(s) are reserved on another Run or unavailable: ${listNames(
+            conflicted.map(characterLabel),
+          )}.`,
+        }
+      : {
+          id: "selected_schedule_conflicts",
+          label: "Schedule conflicts",
+          status: "PASS",
+          summary: "No selected Character has a schedule conflict.",
+        },
+  );
+
+  const saved = selected.filter((signup) => signup.selectionRisk.warnings.length > 0);
+  checks.push(
+    saved.length > 0
+      ? {
+          id: "selected_lockouts",
+          label: "Lockouts",
+          status: "WARNING",
+          summary: `${saved.length} selected Character(s) are already saved: ${listNames(
+            saved.map(
+              (signup) =>
+                `${characterLabel(signup)} (${signup.selectionRisk.warnings
+                  .flatMap((warning) => warning.contents.map((content) => content.labelText))
+                  .join(", ")})`,
+            ),
+          )}.`,
+        }
+      : {
+          id: "selected_lockouts",
+          label: "Lockouts",
+          status: "PASS",
+          summary: "No selected Character has a known lockout needing attention.",
+        },
+  );
+
+  const unsynced = selected.filter(
+    (signup) =>
+      deriveCharacterSyncHealth(
+        { lastSyncedAt: signup.character!.lastSyncedAt, lastSyncErrorAt: signup.character!.lastSyncErrorAt },
+        { now: ctx.now, staleMinutes: ctx.syncStaleMinutes },
+      ) !== "HEALTHY",
+  );
+  checks.push(
+    unsynced.length > 0
+      ? {
+          id: "selected_blizzard_sync",
+          label: "Blizzard sync",
+          status: "WARNING",
+          summary: `${unsynced.length} selected Character(s) have no fresh Blizzard sync — lockouts and item level may be outdated: ${listNames(
+            unsynced.map(characterLabel),
+          )}.`,
+        }
+      : {
+          id: "selected_blizzard_sync",
+          label: "Blizzard sync",
+          status: "PASS",
+          summary: "Every selected Character has a fresh Blizzard sync.",
+        },
+  );
+
+  return checks;
+}
 
 function overallFromChecks(checks: PreflightCheck[]): {
   overall: PreflightOverall;
@@ -192,6 +301,9 @@ export function buildRunPreflight(ctx: RunPreflightContext): RunPreflightResult 
     });
   }
 
+  // Selected Characters — schedule conflicts, lockouts, Blizzard sync freshness.
+  checks.push(...selectedCharacterChecks(ctx));
+
   // External boosters — informational.
   const externalCount = manager.roster.externalBoosters.length;
   checks.push({
@@ -310,6 +422,8 @@ export const runPreflightService = {
       manager,
       discordPost,
       recentDiscordHasError: await recentDiscordHasError(),
+      now: new Date(),
+      syncStaleMinutes: resolveSyncHealthStaleMinutes(),
     });
   },
 
@@ -340,6 +454,8 @@ export const runPreflightService = {
       manager,
       discordPost,
       recentDiscordHasError: await recentDiscordHasError(),
+      now: new Date(),
+      syncStaleMinutes: resolveSyncHealthStaleMinutes(),
     });
   },
 };
