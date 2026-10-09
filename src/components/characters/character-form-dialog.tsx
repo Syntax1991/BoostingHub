@@ -714,39 +714,51 @@ export function CharacterFormDialog({
                       key={row.id}
                       className="space-y-2 border-b border-border pb-4 last:border-b-0 last:pb-0"
                     >
-                      <div className="flex items-start gap-2">
-                        <span className="mt-2 w-5 shrink-0 text-xs text-muted">{index + 1}.</span>
-                        <label className="min-w-0 flex-1 block text-sm">
+                      <div className="flex gap-2">
+                        <span className="flex h-9 w-5 shrink-0 items-center self-end text-xs text-muted">
+                          {index + 1}.
+                        </span>
+                        <div className="min-w-0 flex-1">
                           {index === 0 ? (
-                            <span className="mb-1 block text-muted">Raider.IO character link</span>
+                            <label
+                              htmlFor={`raiderIoUrl-${row.id}`}
+                              className="mb-1 block text-sm text-muted"
+                            >
+                              Raider.IO character link
+                            </label>
                           ) : (
-                            <span className="sr-only">Raider.IO character link {index + 1}</span>
+                            <label htmlFor={`raiderIoUrl-${row.id}`} className="sr-only">
+                              Raider.IO character link {index + 1}
+                            </label>
                           )}
-                          <input
-                            name={`raiderIoUrl-${row.id}`}
-                            autoComplete="off"
-                            placeholder="Paste Raider.IO character link"
-                            value={row.url}
-                            disabled={row.createStatus === "added" || lookingUp || pending}
-                            onChange={(event) => changeRowUrl(row.id, event.target.value)}
-                            onKeyDown={onRaiderIoKeyDown}
-                            aria-invalid={Boolean(row.lookupError || row.createError)}
-                            className="h-9 w-full rounded-md border border-border bg-surface px-2"
-                          />
-                        </label>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={
-                            lookingUp ||
-                            pending ||
-                            (rows.length === 1 && !row.url.trim() && row.lookupStatus === "idle")
-                          }
-                          onClick={() => removeRow(row.id)}
-                          className="mt-0 shrink-0"
-                        >
-                          Remove
-                        </Button>
+                          <div className="flex items-center gap-2">
+                            <input
+                              id={`raiderIoUrl-${row.id}`}
+                              name={`raiderIoUrl-${row.id}`}
+                              autoComplete="off"
+                              placeholder="Paste Raider.IO character link"
+                              value={row.url}
+                              disabled={row.createStatus === "added" || lookingUp || pending}
+                              onChange={(event) => changeRowUrl(row.id, event.target.value)}
+                              onKeyDown={onRaiderIoKeyDown}
+                              aria-invalid={Boolean(row.lookupError || row.createError)}
+                              className="h-9 min-w-0 flex-1 rounded-md border border-border bg-surface px-2"
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={
+                                lookingUp ||
+                                pending ||
+                                (rows.length === 1 && !row.url.trim() && row.lookupStatus === "idle")
+                              }
+                              onClick={() => removeRow(row.id)}
+                              className="h-9 shrink-0"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
                       </div>
 
                       {statusLabel ? (
