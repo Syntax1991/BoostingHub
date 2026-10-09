@@ -96,6 +96,17 @@ async function writeProductContents(txOrm: TxOrm, productId: string, contents: r
 }
 
 export const contentCatalogRepository = {
+  /** Distinct non-empty `Raid.season` values for the Season selector (newest / lexical order). */
+  async listDistinctSeasons(): Promise<string[]> {
+    const rows = (await orm.Raid.select("season").all()) as Array<{ season: unknown }>;
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const season = asString(row.season).trim();
+      if (season) seen.add(season);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  },
+
   /** Reference counts for every Raid — five grouped COUNT queries, independent of row counts. */
   async listRaidReferenceCounts(): Promise<Map<string, RaidReferenceCounts>> {
     const [runContents, templateContents, templates, productContents, lockouts] = await Promise.all([
@@ -182,13 +193,23 @@ export const contentCatalogRepository = {
       sortOrder: number;
       trackLockouts: boolean;
       blizzardInstanceId: number | null;
-      wclZoneId: number | null;
-      wclRankingEncounterId: number | null;
       now: string;
     },
   ): Promise<void> {
     const { now, ...values } = input;
     await orm.Raid.where({ id: raidId }).update({ ...values, updatedAt: now });
+  },
+
+  /** Persist Warcraft Logs raid-level mapping (or clear with nulls). Does not touch Blizzard ids. */
+  async updateRaidWclMapping(
+    raidId: string,
+    input: { wclZoneId: number | null; wclRankingEncounterId: number | null; now: string },
+  ): Promise<void> {
+    await orm.Raid.where({ id: raidId }).update({
+      wclZoneId: input.wclZoneId,
+      wclRankingEncounterId: input.wclRankingEncounterId,
+      updatedAt: input.now,
+    });
   },
 
   /** Hard delete — callers must have proven the Raid unreferenced. Its RaidBoss rows go with it. */

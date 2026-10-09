@@ -112,7 +112,7 @@ beforeAll(async () => {
   }
 
   // Two new raids (not offered for new Runs on their own, like Tide / Kith'ix).
-  const metadata = { season: "QA", sortOrder: 80, trackLockouts: false, blizzardInstanceId: null, wclZoneId: null, wclRankingEncounterId: null };
+  const metadata = { season: "QA", sortOrder: 80, trackLockouts: false, blizzardInstanceId: null };
   raidA = (await contentCatalogService.createRaid(admin, { name: "QA Dynamic Raid A", ...metadata })).raidId;
   raidB = (await contentCatalogService.createRaid(admin, { name: "QA Dynamic Raid B", ...metadata })).raidId;
   created.raids.push(raidA, raidB);
@@ -128,7 +128,6 @@ beforeAll(async () => {
   // Persisted order: Venomous (VARIABLE) → Raid A (FIXED 1) → Raid B (FIXED 2).
   created.productId = (
     await contentCatalogService.createProduct(admin, {
-      key: "QA_DYNAMIC_THREE_CONTENT",
       name: "QA Dynamic Three Content",
       active: true,
       selectable: true,
@@ -322,7 +321,6 @@ describe("dynamic three-content product", () => {
       const baseline = spy.mock.calls.length;
       expect(baseline).toBeLessThanOrEqual(4);
       const extra = await contentCatalogService.createProduct(admin, {
-        key: "QA_DYNAMIC_EXTRA",
         name: "QA Dynamic Extra",
         active: true,
         selectable: true,

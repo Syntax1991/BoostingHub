@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createRaidAction, updateRaidAction } from "@/controllers/content-catalog.actions";
 import { CheckboxField, ContentDialog, Field, fieldInputClass } from "@/components/manage/content/content-dialog";
+import { SeasonSelector } from "@/components/manage/content/season-selector";
 
 export type RaidFormValues = {
   raidId?: string;
@@ -13,8 +14,6 @@ export type RaidFormValues = {
   trackLockouts: boolean;
   availableForRuns: boolean;
   blizzardInstanceId: number | null;
-  wclZoneId: number | null;
-  wclRankingEncounterId: number | null;
 };
 
 const EMPTY: RaidFormValues = {
@@ -24,14 +23,12 @@ const EMPTY: RaidFormValues = {
   trackLockouts: false,
   availableForRuns: false,
   blizzardInstanceId: null,
-  wclZoneId: null,
-  wclRankingEncounterId: null,
 };
 
 const text = (value: number | null) => (value == null ? "" : String(value));
 
 /** Create a Raid (no encounters, no Product) or edit a Raid's identity-preserving metadata. */
-export function RaidFormDialog({ raid }: { raid?: RaidFormValues }) {
+export function RaidFormDialog({ raid, seasons }: { raid?: RaidFormValues; seasons: readonly string[] }) {
   const router = useRouter();
   const editing = Boolean(raid?.raidId);
   const initial = raid ?? EMPTY;
@@ -41,8 +38,7 @@ export function RaidFormDialog({ raid }: { raid?: RaidFormValues }) {
   const [trackLockouts, setTrackLockouts] = useState(initial.trackLockouts);
   const [availableForRuns, setAvailableForRuns] = useState(initial.availableForRuns);
   const [blizzardInstanceId, setBlizzardInstanceId] = useState(text(initial.blizzardInstanceId));
-  const [wclZoneId, setWclZoneId] = useState(text(initial.wclZoneId));
-  const [wclRankingEncounterId, setWclRankingEncounterId] = useState(text(initial.wclRankingEncounterId));
+  const [showAdvanced, setShowAdvanced] = useState(Boolean(initial.blizzardInstanceId));
 
   function reset() {
     setName(initial.name);
@@ -51,11 +47,10 @@ export function RaidFormDialog({ raid }: { raid?: RaidFormValues }) {
     setTrackLockouts(initial.trackLockouts);
     setAvailableForRuns(initial.availableForRuns);
     setBlizzardInstanceId(text(initial.blizzardInstanceId));
-    setWclZoneId(text(initial.wclZoneId));
-    setWclRankingEncounterId(text(initial.wclRankingEncounterId));
+    setShowAdvanced(Boolean(initial.blizzardInstanceId));
   }
 
-  const fields = { name, season, sortOrder, trackLockouts, blizzardInstanceId, wclZoneId, wclRankingEncounterId };
+  const fields = { name, season, sortOrder, trackLockouts, blizzardInstanceId };
 
   return (
     <ContentDialog
@@ -65,7 +60,7 @@ export function RaidFormDialog({ raid }: { raid?: RaidFormValues }) {
       title={editing ? `Edit raid · ${initial.name}` : "New raid"}
       description={
         editing
-          ? "Names, order and integration ids are safe to change: existing Runs, Run Setups and lockouts keep pointing at the same raid."
+          ? "Names, season, order and lockout tracking are safe to change. Warcraft Logs ids are detected automatically."
           : "A new raid starts without encounters, is not tracked for lockouts unless you enable it, and is not offered for new Runs. No Product is created."
       }
       submitLabel={editing ? "Save raid" : "Create raid"}
@@ -83,9 +78,7 @@ export function RaidFormDialog({ raid }: { raid?: RaidFormValues }) {
       <Field label="Name">
         <input className={fieldInputClass} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="Season">
-        <input className={fieldInputClass} value={season} maxLength={100} onChange={(e) => setSeason(e.target.value)} />
-      </Field>
+      <SeasonSelector seasons={seasons} value={season} onChange={setSeason} />
       <Field label="Order" hint="Lower numbers come first (lockout views, lists).">
         <input
           className={fieldInputClass}
@@ -109,34 +102,30 @@ export function RaidFormDialog({ raid }: { raid?: RaidFormValues }) {
           onChange={setAvailableForRuns}
         />
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Blizzard instance id">
-          <input
-            className={fieldInputClass}
-            inputMode="numeric"
-            placeholder="e.g. 1320"
-            value={blizzardInstanceId}
-            onChange={(e) => setBlizzardInstanceId(e.target.value)}
-          />
-        </Field>
-        <Field label="WCL zone id">
-          <input
-            className={fieldInputClass}
-            inputMode="numeric"
-            placeholder="e.g. 53"
-            value={wclZoneId}
-            onChange={(e) => setWclZoneId(e.target.value)}
-          />
-        </Field>
-        <Field label="WCL ranking encounter">
-          <input
-            className={fieldInputClass}
-            inputMode="numeric"
-            placeholder="optional"
-            value={wclRankingEncounterId}
-            onChange={(e) => setWclRankingEncounterId(e.target.value)}
-          />
-        </Field>
+      <div>
+        <button
+          type="button"
+          className="text-xs text-muted hover:text-foreground"
+          onClick={() => setShowAdvanced((open) => !open)}
+        >
+          {showAdvanced ? "Hide advanced" : "Advanced / Integrations"}
+        </button>
+        {showAdvanced ? (
+          <div className="mt-2">
+            <Field
+              label="Blizzard instance id"
+              hint="Journal instance id for lockout sync. Leave empty if unknown — Warcraft Logs ids are detected automatically."
+            >
+              <input
+                className={fieldInputClass}
+                inputMode="numeric"
+                placeholder="e.g. 1320"
+                value={blizzardInstanceId}
+                onChange={(e) => setBlizzardInstanceId(e.target.value)}
+              />
+            </Field>
+          </div>
+        ) : null}
       </div>
     </ContentDialog>
   );

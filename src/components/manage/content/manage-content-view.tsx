@@ -59,7 +59,7 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
           <CardHeader
             title="Raids"
             description="Raid identity is permanent. Raids used by Runs, Run Setups, Products or lockouts keep their encounters fixed."
-            action={<RaidFormDialog />}
+            action={<RaidFormDialog seasons={page.seasons} />}
           />
         </div>
         {page.raids.length === 0 ? (
@@ -128,7 +128,6 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
               <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Product</th>
-                  <th className="px-4 py-2 font-medium">Key</th>
                   <th className="px-4 py-2 font-medium">Contents</th>
                   <th className="px-4 py-2 font-medium">Active</th>
                   <th className="px-4 py-2 font-medium">Selectable</th>
@@ -139,7 +138,6 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
                 {page.products.map((product) => (
                   <tr key={product.id} className="border-t border-border align-top">
                     <td className="px-4 py-3 font-medium">{product.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted">{product.key}</td>
                     <td className="px-4 py-3">
                       <ol className="space-y-0.5">
                         {product.contents.map((content) => (
@@ -161,7 +159,6 @@ export function ManageContentView({ page }: { page: ContentCatalogPage }) {
                           raids={raidOptions}
                           product={{
                             productId: product.id,
-                            key: product.key,
                             name: product.name,
                             active: product.active,
                             selectable: product.selectable,
