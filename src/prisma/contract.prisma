@@ -216,12 +216,20 @@ model User {
   discordUsername String?
   accountStatus   AccountStatus @default(ACTIVE)
   accountRole     AccountRole   @default(USER)
-  /// Boosting Role: approved to sign up and be rostered as a Booster. Account-level,
-  /// never scoped by RaidDifficulty, and independent of accountRole (authorization).
+  /// Manual Boosting Role: approved to sign up and be rostered as a Booster.
+  /// Account-level, never scoped by RaidDifficulty, independent of accountRole.
+  /// Never overwritten by Discord sync — see discordRaidBooster for Discord-derived grant.
   isBooster       Boolean       @default(false)
-  /// Boosting Role: recognised Lootbuddy. Independent of isBooster and accountRole.
+  /// Manual Boosting Role: recognised Lootbuddy. Independent of isBooster and accountRole.
   /// Management/display only — Lootbuddy signups are not gated by it.
+  /// Never overwritten by Discord sync — see discordLootbuddy for Discord-derived grant.
   isLootbuddy     Boolean       @default(false)
+  /// Last authoritative Discord guild membership held the Raid Booster role.
+  /// Independent of isBooster. Cleared on authoritative role absence, guild departure, or unlink.
+  discordRaidBooster Boolean @default(false)
+  /// Last authoritative Discord guild membership held the Lootbuddy role.
+  /// Independent of isLootbuddy. Cleared on authoritative role absence, guild departure, or unlink.
+  discordLootbuddy   Boolean @default(false)
   /// Master override for Discord DMs. Does not rewrite per-event toggles.
   discordDmEnabled            Boolean @default(true)
   /// When true, newly published roster picks may request a Discord DM.

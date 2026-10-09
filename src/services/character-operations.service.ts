@@ -402,7 +402,12 @@ export const characterOperationsService = {
       currentReset: getRegionalWeeklyReset(character.region).resetIdentifier,
       weeklyAvailability: availabilityById.get(character.id) ?? null,
       /** The owner's account-level Boosting Roles (never stored on the Character). */
-      ownerBoostingRoles: ownerRoles ?? { isBooster: false, isLootbuddy: false },
+      ownerBoostingRoles: ownerRoles ?? {
+        isBooster: false,
+        isLootbuddy: false,
+        discordRaidBooster: false,
+        discordLootbuddy: false,
+      },
     };
   },
 

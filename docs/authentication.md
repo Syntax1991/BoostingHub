@@ -20,7 +20,7 @@ A new Discord user has no characters, signups, or roster rows. Pages must render
 
 ### Discord Booster role sync
 
-When `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, and `DISCORD_BOOSTER_ROLE_ID` are all set, every completed sign-in checks the persisted user's Discord guild membership. Holding the configured Discord role grants the account-level Booster role (`User.isBooster = true`). The production `raidbooster` role is `1527022823103791104`.
+When `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_BOOSTER_ROLE_ID`, and `DISCORD_LOOTBUDDY_ROLE_ID` are all set, every completed sign-in reconciles Discord guild roles into `User.discordRaidBooster` / `User.discordLootbuddy` (never overwriting manual `isBooster` / `isLootbuddy`). Production Manawyrm Boosting: Raid Booster `1527022823103791104`, Lootbuddy `1527024325306220704`.
 
 The sync is deliberately additive. A missing Discord member, an absent or later removed Discord role, incomplete configuration, or a Discord API failure never revokes Booster access and never blocks sign-in. ADMIN / OWNER can still grant and revoke Booster manually; if they revoke a user who still holds the configured Discord role, that role grants Booster again on the user's next Discord sign-in.
 

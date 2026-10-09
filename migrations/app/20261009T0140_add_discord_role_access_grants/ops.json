@@ -1,0 +1,86 @@
+[
+  {
+    "id": "column.public.user.discordLootbuddy",
+    "label": "Add column \"discordLootbuddy\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordLootbuddy",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordLootbuddy\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordLootbuddy"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordLootbuddy\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordLootbuddy\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordLootbuddy\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordLootbuddy"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.discordRaidBooster",
+    "label": "Add column \"discordRaidBooster\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "discordRaidBooster",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"discordRaidBooster\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordRaidBooster"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"discordRaidBooster\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"discordRaidBooster\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"discordRaidBooster\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "discordRaidBooster"
+        ]
+      }
+    ]
+  }
+]

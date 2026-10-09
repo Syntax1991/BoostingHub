@@ -26,13 +26,34 @@ export type BoosterAccessRecord = {
 };
 
 /**
- * A User's Boosting Roles — operational participation, independent of
- * accountRole (authorization). Booster is account-level and never scoped by
- * raid difficulty. See User.isBooster / User.isLootbuddy.
+ * A User's Boosting access sources — operational participation, independent of
+ * accountRole (authorization). Manual flags (isBooster / isLootbuddy) are
+ * admin-controlled; Discord flags are last-known authoritative guild role
+ * grants. Effective access is manual ∨ Discord for each capability separately.
  */
 export type BoostingRoles = {
+  /** Manual Booster grant — never overwritten by Discord sync. */
   isBooster: boolean;
+  /** Manual Lootbuddy grant — never overwritten by Discord sync. */
   isLootbuddy: boolean;
+  /** Discord Raid Booster role (last authoritative sync). */
+  discordRaidBooster: boolean;
+  /** Discord Lootbuddy role (last authoritative sync). */
+  discordLootbuddy: boolean;
+};
+
+export const EMPTY_BOOSTING_ROLES: BoostingRoles = {
+  isBooster: false,
+  isLootbuddy: false,
+  discordRaidBooster: false,
+  discordLootbuddy: false,
+};
+
+/** Effective access with independent source flags (for admin / diagnostics). */
+export type BoostingAccessGrant = {
+  granted: boolean;
+  manual: boolean;
+  discord: boolean;
 };
 
 /**

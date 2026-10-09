@@ -302,7 +302,7 @@ export function ManageUsersView({ data }: { data: Page }) {
                         <AccountRoleBadge role={user.accountRole} />
                       </td>
                       <td className="px-4 py-3">
-                        <BoostingAccessBadge isBooster={user.isBooster} />
+                        <BoostingAccessBadge isBooster={user.effectiveBooster} />
                       </td>
                       <td className="px-4 py-3 text-xs">
                         <span
@@ -342,7 +342,7 @@ export function ManageUsersView({ data }: { data: Page }) {
                     <div>
                       <dt className="text-muted">Boosting Access</dt>
                       <dd className="mt-1">
-                        <BoostingAccessBadge isBooster={user.isBooster} />
+                        <BoostingAccessBadge isBooster={user.effectiveBooster} />
                       </dd>
                     </div>
                     <div>

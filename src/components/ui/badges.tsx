@@ -207,23 +207,30 @@ export function AccessBadge({ status }: { status: BoosterAccessStatus }) {
 }
 
 /**
- * Boosting Roles held by a User (account-level, not per Character). Only
- * enabled roles are shown; `emptyLabel` renders when the User holds neither.
+ * Effective Boosting access held by a User (account-level, not per Character).
+ * Manual ∨ Discord for each capability; `emptyLabel` when neither is granted.
  */
 export function BoostingRoleBadges({
   roles,
   emptyLabel,
 }: {
-  roles: { isBooster: boolean; isLootbuddy: boolean };
+  roles: {
+    isBooster: boolean;
+    isLootbuddy: boolean;
+    discordRaidBooster?: boolean;
+    discordLootbuddy?: boolean;
+  };
   emptyLabel?: string;
 }) {
-  if (!roles.isBooster && !roles.isLootbuddy) {
+  const booster = roles.isBooster || roles.discordRaidBooster === true;
+  const lootbuddy = roles.isLootbuddy || roles.discordLootbuddy === true;
+  if (!booster && !lootbuddy) {
     return emptyLabel ? <span className="text-xs text-muted">{emptyLabel}</span> : null;
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      {roles.isBooster ? <Badge className="bg-success/15 text-success">Booster</Badge> : null}
-      {roles.isLootbuddy ? <Badge className="bg-info/15 text-info">Lootbuddy</Badge> : null}
+      {booster ? <Badge className="bg-success/15 text-success">Booster</Badge> : null}
+      {lootbuddy ? <Badge className="bg-info/15 text-info">Lootbuddy</Badge> : null}
     </span>
   );
 }

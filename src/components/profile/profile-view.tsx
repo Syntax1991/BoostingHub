@@ -63,9 +63,9 @@ export function ProfileView({ data }: { data: Profile }) {
           />
           <div className="flex flex-wrap items-center gap-2 px-4 py-4 text-sm">
             <BoostingRoleBadges roles={data.boostingRoles} emptyLabel="No boosting role yet" />
-            {data.boostingRoles.isBooster ? null : (
+            {data.boostingRoles.isBooster || data.boostingRoles.discordRaidBooster ? null : (
               <p className="w-full text-xs text-muted">
-                Booster signups need the Booster role — apply through Discord. Lootbuddy signups are open to everyone.
+                Booster signups need Booster access — apply through Discord. Lootbuddy signups are open to everyone.
               </p>
             )}
           </div>

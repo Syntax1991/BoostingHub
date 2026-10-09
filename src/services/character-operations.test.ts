@@ -507,7 +507,12 @@ describe("detail", () => {
     expect(detail.identity).toMatchObject({ primaryRole: "RANGED_DPS", ownerHasRegionConnection: true });
     expect(detail.weeklyAvailability).toMatchObject({ characterId: fx.error!.id, status: "AVAILABLE" });
     // The owner's account-level Boosting Roles — no per-difficulty cells.
-    expect(detail.ownerBoostingRoles).toEqual({ isBooster: expect.any(Boolean), isLootbuddy: expect.any(Boolean) });
+    expect(detail.ownerBoostingRoles).toEqual({
+      isBooster: expect.any(Boolean),
+      isLootbuddy: expect.any(Boolean),
+      discordRaidBooster: expect.any(Boolean),
+      discordLootbuddy: expect.any(Boolean),
+    });
     expect(detail.row.lockoutSlots).toHaveLength((await raidRepository.loadCatalog()).lockoutRaids.length);
     expect(JSON.stringify(detail)).not.toMatch(/message|stack/i);
   });

@@ -62,12 +62,12 @@ export function CharactersView({ data }: { data: Page }) {
             <span className="font-medium">Your boosting roles</span>
             <BoostingRoleBadges roles={data.boostingRoles} emptyLabel="None yet" />
             <span className="text-xs text-muted">
-              {data.boostingRoles.isBooster
+              {data.boostingRoles.isBooster || data.boostingRoles.discordRaidBooster
                 ? "Account-level — every eligible character can sign up as a Booster on any difficulty."
-                : "Booster signups need the Booster role on your account. Lootbuddy signups are open to everyone."}
+                : "Booster signups need Booster access on your account. Lootbuddy signups are open to everyone."}
             </span>
           </div>
-          {data.boostingRoles.isBooster ? null : (
+          {data.boostingRoles.isBooster || data.boostingRoles.discordRaidBooster ? null : (
             <DiscordBoosterApplicationCta discordTicketUrl={data.discordTicketUrl} />
           )}
         </div>

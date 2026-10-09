@@ -46,9 +46,18 @@ export type AdminUserListRow = {
   accountStatus: AccountStatus;
   createdAt: string;
   characterCount: number;
-  /** Boosting Access (User.isBooster), independent of accountRole. */
+  /** Manual Booster grant (User.isBooster). */
   isBooster: boolean;
+  /** Manual Lootbuddy grant (User.isLootbuddy). */
   isLootbuddy: boolean;
+  /** Discord Raid Booster derived grant. */
+  discordRaidBooster: boolean;
+  /** Discord Lootbuddy derived grant. */
+  discordLootbuddy: boolean;
+  /** Effective Booster access (manual ∨ Discord Raid Booster). */
+  effectiveBooster: boolean;
+  /** Effective Lootbuddy access (manual ∨ Discord Lootbuddy). */
+  effectiveLootbuddy: boolean;
   /**
    * Distinct concrete roles across active Characters (informational).
    * Independent of User.isBooster. Used by Access modal context — not a
@@ -156,7 +165,20 @@ const TARGETED_AUDIT_TYPES: readonly string[] = [
 const BOOSTING_ROLE_COLUMN = { BOOSTER: "isBooster", LOOTBUDDY: "isLootbuddy" } as const;
 
 function mapBoostingRoles(record: Record<string, unknown>): BoostingRoles {
-  return { isBooster: asBoolean(record.isBooster), isLootbuddy: asBoolean(record.isLootbuddy) };
+  return {
+    isBooster: asBoolean(record.isBooster),
+    isLootbuddy: asBoolean(record.isLootbuddy),
+    discordRaidBooster: asBoolean(record.discordRaidBooster),
+    discordLootbuddy: asBoolean(record.discordLootbuddy),
+  };
+}
+
+function effectiveBoosterFrom(roles: BoostingRoles): boolean {
+  return roles.isBooster || roles.discordRaidBooster;
+}
+
+function effectiveLootbuddyFrom(roles: BoostingRoles): boolean {
+  return roles.isLootbuddy || roles.discordLootbuddy;
 }
 
 export const userRepository = {
@@ -233,7 +255,9 @@ export const userRepository = {
 
   /** A User's Boosting Roles; null when the User does not exist. */
   async findBoostingRoles(userId: string): Promise<BoostingRoles | null> {
-    const row = await orm.User.where({ id: userId }).select("isBooster", "isLootbuddy").first();
+    const row = await orm.User.where({ id: userId })
+      .select("isBooster", "isLootbuddy", "discordRaidBooster", "discordLootbuddy")
+      .first();
     return row ? mapBoostingRoles(row as Record<string, unknown>) : null;
   },
 
@@ -242,7 +266,7 @@ export const userRepository = {
     const unique = [...new Set(userIds)];
     if (unique.length === 0) return new Map();
     const rows = await orm.User.where((user) => user.id.in(unique))
-      .select("id", "isBooster", "isLootbuddy")
+      .select("id", "isBooster", "isLootbuddy", "discordRaidBooster", "discordLootbuddy")
       .all();
     return new Map(
       rows.map((row) => {
@@ -252,9 +276,34 @@ export const userRepository = {
     );
   },
 
-  /** Sets one Boosting Role flag. Never touches accountRole. */
+  /** Sets one *manual* Boosting Role flag. Never touches Discord grants or accountRole. */
   async setBoostingRole(userId: string, role: BoostingRole, enabled: boolean): Promise<void> {
     await orm.User.where({ id: userId }).update({ [BOOSTING_ROLE_COLUMN[role]]: enabled });
+  },
+
+  /**
+   * Persists Discord-derived access grants from an authoritative guild member
+   * response. Never touches manual isBooster / isLootbuddy.
+   */
+  async setDiscordRoleAccess(
+    userId: string,
+    grants: { discordRaidBooster: boolean; discordLootbuddy: boolean },
+  ): Promise<void> {
+    await orm.User.where({ id: userId }).update({
+      discordRaidBooster: grants.discordRaidBooster,
+      discordLootbuddy: grants.discordLootbuddy,
+    });
+  },
+
+  /**
+   * Clears Discord-derived grants after an explicit Discord unlink (or when
+   * discord identity is removed). Manual grants remain.
+   */
+  async clearDiscordRoleAccess(userId: string): Promise<void> {
+    await this.setDiscordRoleAccess(userId, {
+      discordRaidBooster: false,
+      discordLootbuddy: false,
+    });
   },
 
   /** Ids of every account with this role — small (e.g. the Platform Owner). */
@@ -290,13 +339,15 @@ export const userRepository = {
 
   /** How many Users hold each Boosting Role (a User may hold both). */
   async countBoostingRoles(): Promise<{ boosters: number; lootbuddies: number }> {
-    const users = await orm.User.select("isBooster", "isLootbuddy").all();
+    const users = await orm.User
+      .select("isBooster", "isLootbuddy", "discordRaidBooster", "discordLootbuddy")
+      .all();
     let boosters = 0;
     let lootbuddies = 0;
     for (const row of users) {
       const roles = mapBoostingRoles(row as Record<string, unknown>);
-      if (roles.isBooster) boosters += 1;
-      if (roles.isLootbuddy) lootbuddies += 1;
+      if (effectiveBoosterFrom(roles)) boosters += 1;
+      if (effectiveLootbuddyFrom(roles)) lootbuddies += 1;
     }
     return { boosters, lootbuddies };
   },
@@ -552,6 +603,10 @@ export const userRepository = {
         characterCount: characterCountByUser.get(id) ?? 0,
         isBooster: asBoolean(record.isBooster),
         isLootbuddy: asBoolean(record.isLootbuddy),
+        discordRaidBooster: asBoolean(record.discordRaidBooster),
+        discordLootbuddy: asBoolean(record.discordLootbuddy),
+        effectiveBooster: effectiveBoosterFrom(mapBoostingRoles(record)),
+        effectiveLootbuddy: effectiveLootbuddyFrom(mapBoostingRoles(record)),
         characterRoles: unionActiveCharacterRoles(charactersByUser.get(id) ?? []),
         pendingAccessCount: pendingByUser.get(id) ?? 0,
       };
@@ -564,13 +619,13 @@ export const userRepository = {
       rows = rows.filter((row) => matchesQuery(row, filters.query!));
     }
     if (filters.boostingRole === "BOOSTER") {
-      rows = rows.filter((row) => row.isBooster);
+      rows = rows.filter((row) => row.effectiveBooster);
     }
     if (filters.boostingRole === "LOOTBUDDY") {
-      rows = rows.filter((row) => row.isLootbuddy);
+      rows = rows.filter((row) => row.effectiveLootbuddy);
     }
     if (filters.boostingRole === "NONE") {
-      rows = rows.filter((row) => !row.isBooster && !row.isLootbuddy);
+      rows = rows.filter((row) => !row.effectiveBooster && !row.effectiveLootbuddy);
     }
     if (filters.accountStatus) {
       rows = rows.filter((row) => row.accountStatus === filters.accountStatus);

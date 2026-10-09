@@ -159,7 +159,12 @@ export const characterService = {
         name: raidContentDisplayName(raid.id, raid.name),
       })),
       /** Account-level Boosting Roles — shown once for the account, not per Character. */
-      boostingRoles: boostingRoles ?? { isBooster: false, isLootbuddy: false },
+      boostingRoles: boostingRoles ?? {
+        isBooster: false,
+        isLootbuddy: false,
+        discordRaidBooster: false,
+        discordLootbuddy: false,
+      },
       discordTicketUrl: getDiscordBoosterTicketUrl(),
       totalCharacters: characters.length,
       activeCharacters: characters.filter((character) => character.isActive).length,
