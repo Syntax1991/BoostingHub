@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   discordGuildMemberClient,
-  type DiscordBoosterRoleSyncConfig,
+  type DiscordRoleAccessSyncConfig,
 } from "@/integrations/discord/discord-guild-member.client";
-import { getDiscordBoosterRoleSyncConfig } from "@/lib/discord-config";
+import { getDiscordRoleAccessSyncConfig } from "@/lib/discord-config";
 
 const fetchMock = vi.fn();
 
-const config: DiscordBoosterRoleSyncConfig = {
+const config: DiscordRoleAccessSyncConfig = {
   botToken: "test-bot-token",
   guildId: "123456789012345678",
-  boosterRoleId: "1527022823103791104",
+  raidBoosterRoleId: "1527022823103791104",
+  lootbuddyRoleId: "1527024325306220704",
 };
 
 function memberResponse(roles: string[]): Response {
@@ -50,6 +51,7 @@ beforeEach(() => {
   vi.stubEnv("DISCORD_BOT_TOKEN", " test-bot-token ");
   vi.stubEnv("DISCORD_GUILD_ID", " 123456789012345678 ");
   vi.stubEnv("DISCORD_BOOSTER_ROLE_ID", " 1527022823103791104 ");
+  vi.stubEnv("DISCORD_LOOTBUDDY_ROLE_ID", " 1527024325306220704 ");
 });
 
 afterEach(() => {
@@ -57,27 +59,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("getDiscordBoosterRoleSyncConfig", () => {
+describe("getDiscordRoleAccessSyncConfig", () => {
   it("returns trimmed server-only Discord configuration when every value is present", () => {
-    expect(getDiscordBoosterRoleSyncConfig()).toEqual(config);
+    expect(getDiscordRoleAccessSyncConfig()).toEqual(config);
   });
 
-  it.each(["DISCORD_BOT_TOKEN", "DISCORD_GUILD_ID", "DISCORD_BOOSTER_ROLE_ID"])(
-    "returns null when %s is blank",
-    (key) => {
-      vi.stubEnv(key, "   ");
-      expect(getDiscordBoosterRoleSyncConfig()).toBeNull();
-    },
-  );
+  it.each([
+    "DISCORD_BOT_TOKEN",
+    "DISCORD_GUILD_ID",
+    "DISCORD_BOOSTER_ROLE_ID",
+    "DISCORD_LOOTBUDDY_ROLE_ID",
+  ])("returns null when %s is blank", (key) => {
+    vi.stubEnv(key, "   ");
+    expect(getDiscordRoleAccessSyncConfig()).toBeNull();
+  });
 });
 
 describe("discordGuildMemberClient.listRoleIds", () => {
   it("requests the configured guild member with bot authentication and returns role ids", async () => {
-    fetchMock.mockResolvedValueOnce(memberResponse(["111", config.boosterRoleId]));
+    fetchMock.mockResolvedValueOnce(memberResponse(["111", config.raidBoosterRoleId]));
 
     await expect(discordGuildMemberClient.listRoleIds("987654321098765432", config)).resolves.toEqual([
       "111",
-      config.boosterRoleId,
+      config.raidBoosterRoleId,
     ]);
 
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];

@@ -1,11 +1,15 @@
 const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
 const REQUEST_TIMEOUT_MS = 10_000;
 
-export type DiscordBoosterRoleSyncConfig = {
+export type DiscordRoleAccessSyncConfig = {
   botToken: string;
   guildId: string;
-  boosterRoleId: string;
+  raidBoosterRoleId: string;
+  lootbuddyRoleId: string;
 };
+
+/** @deprecated Use DiscordRoleAccessSyncConfig. */
+export type DiscordBoosterRoleSyncConfig = DiscordRoleAccessSyncConfig;
 
 function invalidRoleData(): Error {
   return new Error("Discord returned invalid role data.");
@@ -16,9 +20,14 @@ function invalidRoleData(): Error {
  * or includes the bot token in errors.
  */
 export const discordGuildMemberClient = {
+  /**
+   * Returns guild role IDs for the member, or `null` when the member is not in
+   * the guild (HTTP 404). Throws on transport / non-authoritative failures so
+   * callers can preserve last-known Discord grants.
+   */
   async listRoleIds(
     discordUserId: string,
-    config: DiscordBoosterRoleSyncConfig,
+    config: Pick<DiscordRoleAccessSyncConfig, "botToken" | "guildId">,
   ): Promise<string[] | null> {
     const url = new URL(
       `${DISCORD_API_BASE_URL}/guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,

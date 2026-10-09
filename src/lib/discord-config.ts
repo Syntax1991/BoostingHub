@@ -1,28 +1,47 @@
-import type { DiscordBoosterRoleSyncConfig } from "@/integrations/discord/discord-guild-member.client";
+import type { DiscordRoleAccessSyncConfig } from "@/integrations/discord/discord-guild-member.client";
 
 /**
  * Central Discord destination links. Public URLs only — never secrets.
- * Booster applications are reviewed in Discord; BoostingHub remains the
- * authoritative store of Boosting Roles (User.isBooster / User.isLootbuddy).
+ * Manual Boosting Roles remain on User.isBooster / User.isLootbuddy;
+ * Discord-derived grants are independent (User.discordRaidBooster /
+ * User.discordLootbuddy).
  */
 export function getDiscordBoosterTicketUrl(): string | null {
   const value = process.env.DISCORD_BOOSTER_TICKET_URL?.trim();
   return value && value.length > 0 ? value : null;
 }
 
-/** Server-only configuration for additive Discord-role Booster grants. */
-export function getDiscordBoosterRoleSyncConfig(): DiscordBoosterRoleSyncConfig | null {
+/**
+ * Server-only configuration for Discord-derived Raid Booster / Lootbuddy
+ * access grants. Role IDs authorize; names are never used for access.
+ *
+ * Env names:
+ * - DISCORD_BOOSTER_ROLE_ID — Raid Booster role (existing production key)
+ * - DISCORD_LOOTBUDDY_ROLE_ID — Lootbuddy role
+ */
+export function getDiscordRoleAccessSyncConfig(): DiscordRoleAccessSyncConfig | null {
   const botToken = process.env.DISCORD_BOT_TOKEN?.trim();
   const guildId = process.env.DISCORD_GUILD_ID?.trim();
-  const boosterRoleId = process.env.DISCORD_BOOSTER_ROLE_ID?.trim();
-  if (!botToken || !guildId || !boosterRoleId) {
+  const raidBoosterRoleId = process.env.DISCORD_BOOSTER_ROLE_ID?.trim();
+  const lootbuddyRoleId = process.env.DISCORD_LOOTBUDDY_ROLE_ID?.trim();
+  if (!botToken || !guildId || !raidBoosterRoleId || !lootbuddyRoleId) {
     return null;
   }
-  return { botToken, guildId, boosterRoleId };
+  return { botToken, guildId, raidBoosterRoleId, lootbuddyRoleId };
+}
+
+/** @deprecated Prefer getDiscordRoleAccessSyncConfig — kept for transitional imports. */
+export function getDiscordBoosterRoleSyncConfig(): DiscordRoleAccessSyncConfig | null {
+  return getDiscordRoleAccessSyncConfig();
 }
 
 /** Management role ping for Community Schedule Share copy (not auto-posted). */
 export function getDiscordManagementScheduleRoleId(): string | null {
   const value = process.env.DISCORD_MANAGEMENT_SCHEDULE_ROLE_ID?.trim();
   return value && value.length > 0 ? value : null;
+}
+
+/** Whether Discord role-access sync is fully configured (both role IDs present). */
+export function isDiscordRoleAccessConfigured(): boolean {
+  return getDiscordRoleAccessSyncConfig() !== null;
 }
