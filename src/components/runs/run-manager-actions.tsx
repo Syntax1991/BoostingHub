@@ -27,6 +27,7 @@ export function RunManagerActions({
   unmarkedCount = 0,
   finalSetupPreview,
   rosterHasUnpublishedChanges = false,
+  preflight = null,
   externalBoosters = null,
   addBooster = null,
 }: {
@@ -37,6 +38,8 @@ export function RunManagerActions({
   finalSetupPreview?: FinalSetupInput | null;
   /** Saved roster draft differs from the published roster — Start will be refused server-side. */
   rosterHasUnpublishedChanges?: boolean;
+  /** Advisory Start checklist shown in the Start dialog. */
+  preflight?: RunDetailView["preflight"];
   /** Set while registered Boosters can be added (OPEN / ROSTERING / PUBLISHED) — opens Add Booster. */
   addBooster?: { rosterVersion: number } | null;
   /** Set while the roster is editable — opens the External Boosters dialog. */
@@ -191,6 +194,7 @@ export function RunManagerActions({
           runId={runId}
           finalSetup={finalSetupPreview}
           rosterHasUnpublishedChanges={rosterHasUnpublishedChanges}
+          preflight={preflight}
           onClose={() => setStartOpen(false)}
         />
       ) : null}

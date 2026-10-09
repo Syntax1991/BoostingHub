@@ -38,6 +38,18 @@ These checks run inside the Start transaction after it has locked the `RunRoster
 
 Scheduled start time is **not** a blocker. Runs may start early or late.
 
+### Preflight ("Ready to start?")
+
+`runPreflightService` (`src/services/run-preflight.service.ts`) assembles an advisory checklist from the already-loaded roster management view. It is shown as the Preflight panel on Run Detail and inside the **Start Run** dialog, split into **Start will be refused** (ERROR — mirrors the hard rules above) and **Check before starting** (WARNING). Warnings never block Start; the server checks above stay authoritative.
+
+Warnings cover desired composition, Discord channel / signup message / integration health, and the selected registered Booster Characters:
+
+- **Schedule conflicts** — reserved on another Run or weekly unavailable (can appear after Publish)
+- **Lockouts** — known saved content needing attention (same `roster-selection-risk` classification as selection)
+- **Blizzard sync** — no fresh successful sync (`deriveCharacterSyncHealth`: ERROR / NEVER_SYNCED / STALE), so lockouts and item level may be outdated
+
+External Boosters carry no Character and are not part of these checks.
+
 ## Roster Freeze
 
 Once the Run is `IN_PROGRESS` (and after `COMPLETED`):
