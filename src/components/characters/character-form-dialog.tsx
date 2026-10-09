@@ -9,10 +9,15 @@ import {
 } from "@/controllers/character.actions";
 import { Button } from "@/components/ui/button";
 import { CHARACTER_ROLE_LABELS, CLASS_LABELS, REGION_LABELS } from "@/lib/labels";
-import { remainingSpecsForClass } from "@/lib/character-capabilities";
+import { availableRoles, remainingSpecsForClass } from "@/lib/character-capabilities";
 import { normalizeCharacterIdentity } from "@/lib/character-identity";
 import { RAIDER_IO_BULK_MAX } from "@/lib/map-with-concurrency";
-import { WOW_REGIONS, type WowClass, type WowRegion } from "@/models/enums";
+import {
+  WOW_REGIONS,
+  type CharacterRole,
+  type WowClass,
+  type WowRegion,
+} from "@/models/enums";
 import { specializationsForClass } from "@/lib/wow-specializations";
 
 type FormMode = "create" | "edit";
@@ -25,6 +30,7 @@ type CharacterFormValues = {
   wowClass: WowClass;
   specialization: string;
   playableSpecs: string[];
+  offspecRoles: CharacterRole[];
   itemLevel: number | null;
 };
 
@@ -46,6 +52,7 @@ export type CreateRow = {
   alreadyOwned: boolean;
   specialization: string;
   playableSpecs: string[];
+  offspecRoles: CharacterRole[];
   createStatus: CreateStatus;
   createError: string | null;
 };
@@ -71,9 +78,35 @@ export function emptyRow(id?: string): CreateRow {
     alreadyOwned: false,
     specialization: "",
     playableSpecs: [],
+    offspecRoles: [],
     createStatus: "idle",
     createError: null,
   };
+}
+
+function offspecOptionsFor(input: {
+  wowClass: WowClass | null;
+  specialization: string;
+  playableSpecs: readonly string[];
+}): CharacterRole[] {
+  if (!input.wowClass || !input.specialization) return [];
+  const roles = availableRoles({
+    wowClass: input.wowClass,
+    specialization: input.specialization,
+    playableSpecs: input.playableSpecs,
+  });
+  const primary =
+    specializationsForClass(input.wowClass).find((spec) => spec.name === input.specialization)
+      ?.role ?? null;
+  return roles.filter((role) => role !== primary);
+}
+
+function pruneOffspecRoles(
+  roles: readonly CharacterRole[],
+  allowed: readonly CharacterRole[],
+): CharacterRole[] {
+  const allowedSet = new Set(allowed);
+  return roles.filter((role) => allowedSet.has(role));
 }
 
 /** Unused trailing input: blank URL and no lookup/create lifecycle worth keeping. */
@@ -129,6 +162,7 @@ function clearRowPreview(row: CreateRow): CreateRow {
     alreadyOwned: false,
     specialization: "",
     playableSpecs: [],
+    offspecRoles: [],
     createStatus: row.createStatus === "added" ? "added" : "idle",
     createError: null,
   };
@@ -164,6 +198,7 @@ export function CharacterFormDialog({
   );
   const [specialization, setSpecialization] = useState(initial?.specialization ?? "");
   const [playableSpecs, setPlayableSpecs] = useState<string[]>(initial?.playableSpecs ?? []);
+  const [offspecRoles, setOffspecRoles] = useState<CharacterRole[]>(initial?.offspecRoles ?? []);
 
   // Create mode bulk rows — stable SSR id avoids crypto hydration mismatch.
   const [rows, setRows] = useState<CreateRow[]>(() => [emptyRow("create-row-0")]);
@@ -183,6 +218,15 @@ export function CharacterFormDialog({
       return { name, role };
     });
   }, [editClass, specialization, editSpecs]);
+  const editOffspecOptions = useMemo(
+    () =>
+      offspecOptionsFor({
+        wowClass: editClass,
+        specialization,
+        playableSpecs,
+      }),
+    [editClass, specialization, playableSpecs],
+  );
 
   const batchDuplicateIds = useMemo(() => {
     const firstByKey = new Map<string, string>();
@@ -222,6 +266,7 @@ export function CharacterFormDialog({
     setIdentity(initial ? { name: initial.name, realm: initial.realm, region: initial.region } : EMPTY_IDENTITY);
     setSpecialization(initial?.specialization ?? "");
     setPlayableSpecs(initial?.playableSpecs ?? []);
+    setOffspecRoles(initial?.offspecRoles ?? []);
     resetCreateRows();
   }
 
@@ -275,15 +320,24 @@ export function CharacterFormDialog({
   }
 
   function changeRowPrimarySpec(id: string, next: string) {
-    updateRow(id, (row) => ({
-      ...row,
-      specialization: next,
-      playableSpecs: row.playableSpecs.filter(
+    updateRow(id, (row) => {
+      const playableSpecs = row.playableSpecs.filter(
         (spec) => spec.toLocaleLowerCase("en-US") !== next.toLocaleLowerCase("en-US"),
-      ),
-      createStatus: row.createStatus === "added" ? "added" : "idle",
-      createError: null,
-    }));
+      );
+      const allowed = offspecOptionsFor({
+        wowClass: row.wowClass,
+        specialization: next,
+        playableSpecs,
+      });
+      return {
+        ...row,
+        specialization: next,
+        playableSpecs,
+        offspecRoles: pruneOffspecRoles(row.offspecRoles, allowed),
+        createStatus: row.createStatus === "added" ? "added" : "idle",
+        createError: null,
+      };
+    });
   }
 
   function toggleRowPlayableSpec(id: string, specName: string, checked: boolean) {
@@ -293,13 +347,32 @@ export function CharacterFormDialog({
           ? row.playableSpecs
           : [...row.playableSpecs, specName]
         : row.playableSpecs.filter((spec) => spec !== specName);
+      const allowed = offspecOptionsFor({
+        wowClass: row.wowClass,
+        specialization: row.specialization,
+        playableSpecs,
+      });
       return {
         ...row,
         playableSpecs,
+        offspecRoles: pruneOffspecRoles(row.offspecRoles, allowed),
         createStatus: row.createStatus === "added" ? "added" : "idle",
         createError: null,
       };
     });
+  }
+
+  function toggleRowOffspecRole(id: string, role: CharacterRole, checked: boolean) {
+    updateRow(id, (row) => ({
+      ...row,
+      offspecRoles: checked
+        ? row.offspecRoles.includes(role)
+          ? row.offspecRoles
+          : [...row.offspecRoles, role]
+        : row.offspecRoles.filter((entry) => entry !== role),
+      createStatus: row.createStatus === "added" ? "added" : "idle",
+      createError: null,
+    }));
   }
 
   function rowsNeedingLookup(list: CreateRow[]) {
@@ -379,6 +452,7 @@ export function CharacterFormDialog({
           alreadyOwned: item.data.alreadyOwned,
           specialization: "",
           playableSpecs: [],
+          offspecRoles: [],
           createStatus: "idle",
           createError: null,
         };
@@ -403,6 +477,7 @@ export function CharacterFormDialog({
         ...identity,
         specialization,
         playableSpecs,
+        offspecRoles,
       });
       if (!result.ok) {
         setError(result.message);
@@ -439,6 +514,7 @@ export function CharacterFormDialog({
           region: row.region!,
           specialization: row.specialization,
           playableSpecs: row.playableSpecs,
+          offspecRoles: row.offspecRoles,
         })),
       });
 
@@ -485,17 +561,51 @@ export function CharacterFormDialog({
 
   function changeEditPrimarySpec(next: string) {
     setSpecialization(next);
-    setPlayableSpecs((current) =>
-      current.filter((spec) => spec.toLocaleLowerCase("en-US") !== next.toLocaleLowerCase("en-US")),
-    );
+    setPlayableSpecs((current) => {
+      const nextPlayable = current.filter(
+        (spec) => spec.toLocaleLowerCase("en-US") !== next.toLocaleLowerCase("en-US"),
+      );
+      setOffspecRoles((roles) =>
+        pruneOffspecRoles(
+          roles,
+          offspecOptionsFor({
+            wowClass: editClass,
+            specialization: next,
+            playableSpecs: nextPlayable,
+          }),
+        ),
+      );
+      return nextPlayable;
+    });
   }
 
   function toggleEditPlayableSpec(specName: string, checked: boolean) {
     setPlayableSpecs((current) => {
+      const nextPlayable = checked
+        ? current.includes(specName)
+          ? current
+          : [...current, specName]
+        : current.filter((spec) => spec !== specName);
+      setOffspecRoles((roles) =>
+        pruneOffspecRoles(
+          roles,
+          offspecOptionsFor({
+            wowClass: editClass,
+            specialization,
+            playableSpecs: nextPlayable,
+          }),
+        ),
+      );
+      return nextPlayable;
+    });
+  }
+
+  function toggleEditOffspecRole(role: CharacterRole, checked: boolean) {
+    setOffspecRoles((current) => {
       if (checked) {
-        return current.includes(specName) ? current : [...current, specName];
+        return current.includes(role) ? current : [...current, role];
       }
-      return current.filter((spec) => spec !== specName);
+      return current.filter((entry) => entry !== role);
     });
   }
 
@@ -746,6 +856,45 @@ export function CharacterFormDialog({
                                   {derivedRole ? CHARACTER_ROLE_LABELS[derivedRole] : "—"}
                                 </span>
                               </p>
+                              {(() => {
+                                const options = offspecOptionsFor({
+                                  wowClass: row.wowClass,
+                                  specialization: row.specialization,
+                                  playableSpecs: row.playableSpecs,
+                                });
+                                if (options.length === 0) return null;
+                                return (
+                                  <fieldset className="space-y-2">
+                                    <legend className="text-sm text-muted">Offspec roles</legend>
+                                    <ul className="space-y-1.5">
+                                      {options.map((role) => {
+                                        const checked = row.offspecRoles.includes(role);
+                                        return (
+                                          <li key={role}>
+                                            <label className="flex items-center gap-2 text-sm">
+                                              <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                disabled={
+                                                  isDuplicate || row.alreadyOwned || pending
+                                                }
+                                                onChange={(event) =>
+                                                  toggleRowOffspecRole(
+                                                    row.id,
+                                                    role,
+                                                    event.target.checked,
+                                                  )
+                                                }
+                                              />
+                                              <span>{CHARACTER_ROLE_LABELS[role]}</span>
+                                            </label>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  </fieldset>
+                                );
+                              })()}
                             </>
                           ) : null}
                         </div>
@@ -931,9 +1080,34 @@ export function CharacterFormDialog({
                 </span>
                 <span className="mt-1 block text-xs text-muted">
                   Signup roles come only from the specializations you configure here, and only if
-                  your account has the Booster role.
+                  your account has the Booster role. Preferred offspecs guide Auto Build; they are
+                  optional.
                 </span>
               </p>
+              {editOffspecOptions.length > 0 ? (
+                <fieldset className="space-y-2">
+                  <legend className="text-sm text-muted">Offspec roles</legend>
+                  <ul className="space-y-1.5">
+                    {editOffspecOptions.map((role) => {
+                      const checked = offspecRoles.includes(role);
+                      return (
+                        <li key={role}>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                toggleEditOffspecRole(role, event.target.checked)
+                              }
+                            />
+                            <span>{CHARACTER_ROLE_LABELS[role]}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </fieldset>
+              ) : null}
 
               <div className="flex justify-end gap-2 border-t border-border px-4 py-3 -mx-4 -mb-4 mt-4">
                 <Button type="button" variant="secondary" onClick={close}>

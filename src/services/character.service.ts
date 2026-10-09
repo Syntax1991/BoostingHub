@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@/auth/authorization";
-import type { WowClass, WowRegion } from "@/models/enums";
+import type { CharacterRole, WowClass, WowRegion } from "@/models/enums";
 import { DomainError, isDomainError } from "@/lib/errors";
 import { getRegionalWeeklyReset } from "@/lib/wow-weekly-reset";
 import { raidContentDisplayName } from "@/lib/wow-raid-catalog";
@@ -11,7 +11,7 @@ import {
   prepareCharacterName,
   prepareRealmName,
 } from "@/lib/character-identity";
-import { normalizePlayableSpecs } from "@/lib/character-capabilities";
+import { normalizeOffspecRoles, normalizePlayableSpecs } from "@/lib/character-capabilities";
 import { resolveClassSpecialization } from "@/lib/wow-specializations";
 import { parseRaiderIoCharacterUrl } from "@/lib/raiderio-character-url";
 import { recordRaiderIoParseResult } from "@/lib/integration-provider-events";
@@ -46,6 +46,8 @@ export type CharacterWriteInput = {
   specialization: string;
   /** Additional playable specs excluding primary. */
   playableSpecs?: readonly string[];
+  /** Preferred offspec roles (concrete, not primary). */
+  offspecRoles?: readonly CharacterRole[];
   itemLevel: number | null;
 };
 
@@ -61,6 +63,7 @@ export type CharacterCreateFromBlizzardInput = {
   region: WowRegion;
   specialization: string;
   playableSpecs?: readonly string[];
+  offspecRoles?: readonly CharacterRole[];
 };
 
 function uniqueViolation(error: unknown): boolean {
@@ -192,6 +195,7 @@ export const characterService = {
           wowClass: character.wowClass,
           specialization: character.specialization,
           playableSpecs: character.playableSpecs,
+          offspecRoles: character.offspecRoles,
           primaryRole: character.primaryRole,
           itemLevel: character.itemLevel,
           isActive: character.isActive,
@@ -256,6 +260,7 @@ export const characterService = {
       specialization: character.specialization,
       primaryRole: character.primaryRole,
       playableSpecs: character.playableSpecs,
+      offspecRoles: character.offspecRoles,
       itemLevel: character.itemLevel,
       isActive: character.isActive,
       createdAt: character.createdAt,
@@ -289,6 +294,15 @@ export const characterService = {
       primarySpecialization: spec.specialization,
       playableSpecs: input.playableSpecs ?? [],
     });
+    const offspecRoles = normalizeOffspecRoles({
+      capability: {
+        wowClass: input.wowClass,
+        specialization: spec.specialization,
+        playableSpecs,
+      },
+      primaryRole: spec.primaryRole,
+      offspecRoles: input.offspecRoles ?? [],
+    });
     await assertIdentityAvailable({
       userId: user.id,
       region: identity.region,
@@ -305,6 +319,7 @@ export const characterService = {
         specialization: spec.specialization,
         primaryRole: spec.primaryRole,
         playableSpecs,
+        offspecRoles,
         itemLevel: input.itemLevel,
         isActive: true,
       });
@@ -455,6 +470,7 @@ export const characterService = {
       wowClass: resolved.wowClass,
       specialization: input.specialization,
       playableSpecs: input.playableSpecs ?? [],
+      offspecRoles: input.offspecRoles ?? [],
       itemLevel: resolved.itemLevel,
     });
   },
@@ -559,6 +575,15 @@ export const characterService = {
       primarySpecialization: spec.specialization,
       playableSpecs: input.playableSpecs ?? [],
     });
+    const offspecRoles = normalizeOffspecRoles({
+      capability: {
+        wowClass: character.wowClass,
+        specialization: spec.specialization,
+        playableSpecs,
+      },
+      primaryRole: spec.primaryRole,
+      offspecRoles: input.offspecRoles ?? [],
+    });
     // wowClass is taken from the stored row, not the write payload, so class
     // stays immutable even if a client forges a class field. Item level is
     // Blizzard-authoritative and is never part of an edit.
@@ -576,6 +601,7 @@ export const characterService = {
         specialization: spec.specialization,
         primaryRole: spec.primaryRole,
         playableSpecs,
+        offspecRoles,
       });
     } catch (error) {
       if (uniqueViolation(error)) {

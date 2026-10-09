@@ -197,6 +197,7 @@ export function CharactersView({ data }: { data: Page }) {
                             wowClass: character.wowClass,
                             specialization: character.specialization ?? "",
                             playableSpecs: character.playableSpecs ?? [],
+                            offspecRoles: character.offspecRoles ?? [],
                             itemLevel: character.itemLevel,
                           }}
                         />

@@ -160,3 +160,66 @@ export function assertOfferedRolesAllowed(
   }
   return normalized as ConcreteCharacterRole[];
 }
+
+/**
+ * Preferred offspec roles: concrete, capability-valid, never primary.
+ * Empty is allowed (no preferred offspec).
+ */
+export function normalizeOffspecRoles(input: {
+  capability: CharacterCapabilityInput;
+  primaryRole: CharacterRole;
+  offspecRoles: readonly CharacterRole[];
+}): ConcreteCharacterRole[] {
+  const allowed = new Set(availableRoles(input.capability));
+  if (!isConcreteCharacterRole(input.primaryRole) || !allowed.has(input.primaryRole)) {
+    throw new DomainError(
+      "INVALID_CHARACTER_ROLE",
+      "Primary role must be a valid playable role for this character.",
+    );
+  }
+
+  const seen = new Set<ConcreteCharacterRole>();
+  const normalized: ConcreteCharacterRole[] = [];
+  for (const raw of input.offspecRoles) {
+    if (!isConcreteCharacterRole(raw)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_ROLE",
+        "Offspec roles must be concrete (Tank, Healer, Melee DPS, or Ranged DPS).",
+      );
+    }
+    if (raw === input.primaryRole) {
+      throw new DomainError(
+        "INVALID_CHARACTER_ROLE",
+        "Primary role cannot also appear in the offspec list.",
+      );
+    }
+    if (!allowed.has(raw)) {
+      throw new DomainError(
+        "INVALID_CHARACTER_ROLE",
+        `Offspec ${raw} is not available for this character's configured specializations.`,
+      );
+    }
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    normalized.push(raw);
+  }
+  return CONCRETE_CHARACTER_ROLES.filter((role) => seen.has(role));
+}
+
+/** True when the assignment role matches the Character's primary role. */
+export function isPrimaryRoleAssignment(
+  primaryRole: CharacterRole | null | undefined,
+  assignedRole: CharacterRole | null | undefined,
+): boolean {
+  return primaryRole != null && assignedRole != null && primaryRole === assignedRole;
+}
+
+/** True when the assignment is a preferred offspec (not primary). */
+export function isOffspecRoleAssignment(
+  primaryRole: CharacterRole | null | undefined,
+  offspecRoles: readonly CharacterRole[] | null | undefined,
+  assignedRole: CharacterRole | null | undefined,
+): boolean {
+  if (assignedRole == null || isPrimaryRoleAssignment(primaryRole, assignedRole)) return false;
+  return (offspecRoles ?? []).includes(assignedRole);
+}

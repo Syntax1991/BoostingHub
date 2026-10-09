@@ -31,6 +31,8 @@ export type CharacterPageRecord = {
   primaryRole: ReturnType<typeof mapCharacterRole>;
   /** Additional playable specializations beyond primary (never includes primary). */
   playableSpecs: string[];
+  /** Preferred offspec roster roles (never includes primaryRole). */
+  offspecRoles: CharacterRole[];
   /** Blizzard-authoritative equipped item level. Null when Blizzard has not supplied one. */
   itemLevel: number | null;
   isActive: boolean;
@@ -75,6 +77,8 @@ export type CharacterCreateInput = {
   primaryRole: CharacterRole;
   /** Additional playable specs (excluding primary). Default []. */
   playableSpecs?: readonly string[];
+  /** Preferred offspec roles. Default []. */
+  offspecRoles?: readonly CharacterRole[];
   /** Blizzard-authoritative; null when Blizzard has not supplied one yet. */
   itemLevel: number | null;
   isActive: boolean;
@@ -94,6 +98,8 @@ export type CharacterUpdateInput = {
   primaryRole: CharacterRole;
   /** Replaces the full additional playable-spec set. */
   playableSpecs: readonly string[];
+  /** Replaces the full preferred offspec-role set. */
+  offspecRoles: readonly CharacterRole[];
 };
 
 export type CharacterBlizzardLinkInput = {
@@ -122,6 +128,21 @@ function mapPlayableSpecs(value: unknown): string[] {
     .sort((a, b) => a.localeCompare(b, "en-US"));
 }
 
+function mapOffspecRoles(value: unknown): CharacterRole[] {
+  if (!Array.isArray(value)) return [];
+  const roles = value
+    .map((row) => {
+      try {
+        return mapCharacterRole((row as Record<string, unknown>).role);
+      } catch {
+        return null;
+      }
+    })
+    .filter((role): role is CharacterRole => role != null);
+  const order = ["TANK", "HEALER", "MELEE_DPS", "RANGED_DPS"] as const;
+  return order.filter((role) => roles.includes(role));
+}
+
 function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
   const lockouts = Array.isArray(character.lockouts) ? character.lockouts : [];
 
@@ -137,6 +158,7 @@ function mapCharacter(character: Record<string, unknown>): CharacterPageRecord {
     specialization: asStringOrNull(character.specialization),
     primaryRole: mapCharacterRole(character.primaryRole),
     playableSpecs: mapPlayableSpecs(character.playableSpecs),
+    offspecRoles: mapOffspecRoles(character.offspecRoles),
     itemLevel: asNumberOrNull(character.itemLevel),
     isActive: asBoolean(character.isActive, true),
     lastSyncedAt: asStringOrNull(character.lastSyncedAt),
@@ -180,6 +202,22 @@ async function replacePlayableSpecs(characterId: string, specs: readonly string[
   }
 }
 
+async function replaceOffspecRoles(
+  characterId: string,
+  roles: readonly CharacterRole[],
+): Promise<void> {
+  await orm.CharacterOffspecRole.where({ characterId }).delete();
+  const now = new Date().toISOString();
+  for (const role of roles) {
+    await orm.CharacterOffspecRole.create({
+      id: crypto.randomUUID(),
+      characterId,
+      role,
+      createdAt: now,
+    });
+  }
+}
+
 /**
  * Attach each Character owner's *effective* Booster access (manual ∨ Discord
  * Raid Booster). Eligibility is per User — not per Character, class, or difficulty.
@@ -204,6 +242,7 @@ export const characterRepository = {
     const characters = await orm.Character
       .where({ userId })
       .include("playableSpecs")
+      .include("offspecRoles")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .orderBy((character) => character.name.asc())
       .all();
@@ -234,6 +273,7 @@ export const characterRepository = {
     const characters = await orm.Character.where({ isActive: true })
       .where((character) => character.userId.in(boosterIds))
       .include("playableSpecs")
+      .include("offspecRoles")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .orderBy((character) => character.name.asc())
       .all();
@@ -251,6 +291,7 @@ export const characterRepository = {
     const character = await orm.Character
       .where({ id: characterId })
       .include("playableSpecs")
+      .include("offspecRoles")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
@@ -264,6 +305,7 @@ export const characterRepository = {
     const character = await orm.Character
       .where({ id: characterId, userId })
       .include("playableSpecs")
+      .include("offspecRoles")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
@@ -288,6 +330,7 @@ export const characterRepository = {
         blizzardCharacterId,
       })
       .include("playableSpecs")
+      .include("offspecRoles")
       .include("lockouts", (lockout) => lockout.include("raid"))
       .first();
     if (!character) return null;
@@ -357,6 +400,9 @@ export const characterRepository = {
     if (input.playableSpecs && input.playableSpecs.length > 0) {
       await replacePlayableSpecs(input.id, input.playableSpecs);
     }
+    if (input.offspecRoles && input.offspecRoles.length > 0) {
+      await replaceOffspecRoles(input.id, input.offspecRoles);
+    }
 
     const created = await this.findById(input.id);
     if (!created) {
@@ -377,6 +423,7 @@ export const characterRepository = {
       updatedAt: new Date().toISOString(),
     });
     await replacePlayableSpecs(characterId, input.playableSpecs);
+    await replaceOffspecRoles(characterId, input.offspecRoles);
   },
 
   async applyBlizzardLink(characterId: string, input: CharacterBlizzardLinkInput): Promise<void> {

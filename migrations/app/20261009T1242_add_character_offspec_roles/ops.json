@@ -1,0 +1,164 @@
+[
+  {
+    "id": "table.character_offspec_role",
+    "label": "Create table \"character_offspec_role\"",
+    "summary": "Creates table \"character_offspec_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "character_offspec_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"character_offspec_role\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_offspec_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"character_offspec_role\"",
+        "sql": "CREATE TABLE \"public\".\"character_offspec_role\" (\n  \"characterId\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"role\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"character_offspec_role_role_check_e8a47be4\" CHECK (\"role\" IN ('TANK', 'HEALER', 'MELEE_DPS', 'RANGED_DPS', 'DPS'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"character_offspec_role\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_offspec_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.character_offspec_role.character_offspec_role_characterId_role_key",
+    "label": "Add unique constraint on \"character_offspec_role\" (characterId, role)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "character_offspec_role_characterId_role_key",
+        "table": "character_offspec_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"character_offspec_role_characterId_role_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_offspec_role_characterId_role_key",
+          "public",
+          "\"public\".\"character_offspec_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"character_offspec_role_characterId_role_key\"",
+        "sql": "ALTER TABLE \"public\".\"character_offspec_role\" ADD CONSTRAINT \"character_offspec_role_characterId_role_key\" UNIQUE (\"characterId\", \"role\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"character_offspec_role_characterId_role_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_offspec_role_characterId_role_key",
+          "public",
+          "\"public\".\"character_offspec_role\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.character_offspec_role.character_offspec_role_characterId_idx_2423fe9d",
+    "label": "Create index \"character_offspec_role_characterId_idx_2423fe9d\" on \"character_offspec_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "character_offspec_role_characterId_idx_2423fe9d",
+        "table": "character_offspec_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"character_offspec_role_characterId_idx_2423fe9d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_offspec_role_characterId_idx_2423fe9d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"character_offspec_role_characterId_idx_2423fe9d\"",
+        "sql": "CREATE INDEX \"character_offspec_role_characterId_idx_2423fe9d\" ON \"public\".\"character_offspec_role\" (\"characterId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"character_offspec_role_characterId_idx_2423fe9d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"character_offspec_role_characterId_idx_2423fe9d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.character_offspec_role.character_offspec_role_characterId_fkey",
+    "label": "Add foreign key \"character_offspec_role_characterId_fkey\" on \"character_offspec_role\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "character_offspec_role_characterId_fkey",
+        "table": "character_offspec_role"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"character_offspec_role_characterId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_offspec_role_characterId_fkey",
+          "public",
+          "\"public\".\"character_offspec_role\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"character_offspec_role_characterId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"character_offspec_role\"\nADD CONSTRAINT \"character_offspec_role_characterId_fkey\"\nFOREIGN KEY (\"characterId\")\nREFERENCES \"public\".\"character\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"character_offspec_role_characterId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "character_offspec_role_characterId_fkey",
+          "public",
+          "\"public\".\"character_offspec_role\""
+        ]
+      }
+    ]
+  }
+]
